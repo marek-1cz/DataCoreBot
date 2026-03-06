@@ -2,12 +2,14 @@ import os
 import discord
 from discord.ext import commands
 from discord.ui import Button, View, Select
-from flask import Flask, render_template_string, request, redirect, url_for, session, flash
+from flask import Flask, render_template_string, request, redirect, url_for, session, flash, Response, stream_with_context
 from threading import Thread
 from supabase import create_client
 from datetime import datetime
 import asyncio
 import uuid
+import urllib.request
+import re
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
@@ -608,7 +610,7 @@ def secure_download(token):
         
     v_data = v_resp.data[0]
     
-    # Skryté stahovací tlačítko napojené na /api/get_file
+    # Odkazuje na náš vlastní proxy router
     html = f"""
     <div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);">
         <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2>
@@ -628,6 +630,9 @@ def secure_download(token):
     """
     return render_public(html)
 
+# ==========================================
+# PROXY DOWNLOADER (SKRYTÍ GOOGLE DRIVE ODKAZU)
+# ==========================================
 @app.route('/api/get_file/<token>')
 def api_get_file(token):
     db = get_db()
@@ -646,7 +651,31 @@ def api_get_file(token):
     if not v_resp.data:
         return "Verze nenalezena."
         
-    return redirect(v_resp.data[0]['file_url'])
+    file_url = v_resp.data[0]['file_url']
+    version_name = v_resp.data[0]['version_name'].replace(" ", "_")
+    
+    # Pokud je vložen klasický GDrive odkaz, skript se ho pokusí automaticky převést na direct link
+    gdrive_match = re.search(r'drive\.google\.com/file/d/([a-zA-Z0-9_-]+)', file_url)
+    if gdrive_match:
+        file_id = gdrive_match.group(1)
+        file_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+        
+    try:
+        req = urllib.request.Request(file_url, headers={'User-Agent': 'Mozilla/5.0'})
+        
+        def generate():
+            with urllib.request.urlopen(req) as response:
+                while True:
+                    chunk = response.read(8192)
+                    if not chunk:
+                        break
+                    yield chunk
+
+        # Tento kus kódu zajistí, že se to uživateli stáhne rovnou z tvého webu pod správným názvem
+        return Response(stream_with_context(generate()), 
+                        headers={'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name}.zip"'})
+    except Exception as e:
+        return f"Chyba při komunikaci se vzdáleným serverem úložiště: {e}"
 
 @app.route('/team')
 def team():
@@ -924,7 +953,7 @@ class VersionSelect(discord.ui.Select):
         super().__init__(placeholder="Vyber verzi k instalaci...", min_values=1, max_values=1, options=options[:25])
 
     async def callback(self, interaction: discord.Interaction):
-        # Okamžitá odpověď Discordu = žádný error "Interakce se nezdařila"
+        # Okamžitá odpověď Discordu = žádný error
         await interaction.response.edit_message(content="<a:loading:123> Generuji zabezpečený odkaz, prosím čekejte...", view=None)
         
         if self.values[0] == "none":
