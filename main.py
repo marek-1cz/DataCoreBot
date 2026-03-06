@@ -483,6 +483,21 @@ def get_db():
     if not url or not key: return None
     return create_client(url, key)
 
+def send_dm_from_flask(discord_id, message):
+    if not discord_id: return
+    async def send():
+        try:
+            # Bot nejdřív zkusí najít uživatele v paměti, pokud tam není, vyžádá si ho ze serveru
+            user = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+            if user:
+                await user.send(message)
+                print(f"[OK] DM odesláno uživateli {discord_id}", flush=True)
+        except Exception as e:
+            print(f"[CHYBA] Nepodařilo se odeslat DM uživateli {discord_id}: {e}", flush=True)
+            
+    if bot.loop and bot.loop.is_running():
+        asyncio.run_coroutine_threadsafe(send(), bot.loop)
+
 @app.route('/')
 def home():
     return render_public(HTML_HOME)
@@ -550,7 +565,6 @@ def dashboard_ids():
     users_data = []
     if db:
         try:
-            # Zobrazí úplně všechny pro správu ID
             resp = db.table("users").select("*").order("app_id").execute()
             users_data = resp.data
         except Exception as e:
@@ -659,20 +673,24 @@ def edit_user():
                 
             elif action == 'ban':
                 db.table("users").update({"is_banned": True}).eq("discord_id", discord_id).execute()
-                flash('Uživatel dostal BAN!', 'warning')
+                send_dm_from_flask(discord_id, "Vážený uživateli, oznamujeme Vám, že Vám byl udělen trvalý zákaz přístupu (BAN) administrátorem Projektu OIS IDPK.")
+                flash('Uživatel dostal BAN a byla mu odeslána zpráva do DM!', 'warning')
                 
             elif action == 'unban':
                 db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
-                flash('BAN byl zrušen.', 'success')
+                send_dm_from_flask(discord_id, "Vážený uživateli, Váš zákaz přístupu (BAN) na Projektu OIS IDPK byl administrací zrušen. Nyní můžete software opět využívat.")
+                flash('BAN byl zrušen a uživateli byla odeslána notifikace do DM.', 'success')
                 
             elif action == 'delete':
                 now = datetime.now().strftime("%d.%m.%Y %H:%M")
                 db.table("users").update({"is_deleted": True, "deleted_at": now}).eq("discord_id", discord_id).execute()
-                flash('Účet byl smazán (Soft Delete). Původní ID je zachováno v záloze.', 'danger')
+                send_dm_from_flask(discord_id, "Vážený uživateli, Váš stávající účet v Projektu OIS IDPK byl administrací smazán. Pokud máte nadále zájem o naše služby, můžete si vytvořit novou registraci.")
+                flash('Účet byl smazán (Soft Delete). Původní ID je zachováno v záloze. Zpráva odeslána do DM.', 'danger')
                 
             elif action == 'restore':
                 db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute()
-                flash('Účet byl úspěšně obnoven ze zálohy!', 'success')
+                send_dm_from_flask(discord_id, "Vážený uživateli, Váš účet v Projektu OIS IDPK byl administrací úspěšně obnoven ze zálohy.")
+                flash('Účet byl úspěšně obnoven ze zálohy a uživateli byla odeslána notifikace do DM!', 'success')
                 
             elif action == 'hard_delete':
                 db.table("users").delete().eq("discord_id", discord_id).execute()
@@ -706,7 +724,6 @@ class VersionView(discord.ui.View):
     ])
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
         version = select.values[0]
-        # Vygenerujeme odkaz (zatím odkazuje na web)
         link = f"https://{request.host}/download?v={version}" if hasattr(request, 'host') else "Odkaz se připravuje..."
         await interaction.response.edit_message(content=f"**Projekt OIS IDPK - Odkaz připraven**\n\nTady je Váš vygenerovaný odkaz pro verzi **{version}**:\n🔗 {link}\n\n*Upozornění: Tento odkaz nikomu nesdělujte, je svázán s Vaším profilem.*", view=None)
 
@@ -716,7 +733,6 @@ class RulesView(discord.ui.View):
         
     @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, custom_id="btn_agree", emoji="✅")
     async def agree_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Registrační logika po souhlasu
         db = get_db()
         discord_id = str(interaction.user.id)
         nick = interaction.user.display_name
@@ -729,7 +745,6 @@ class RulesView(discord.ui.View):
                     await interaction.response.edit_message(content="**Přístup zamítnut:** Máte udělený BAN na Projektu OIS IDPK. 🛑", view=None)
                     return
             else:
-                # Vytvoření uživatele pokud neexistuje
                 highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
                 new_app_id = 1000
                 if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
@@ -767,7 +782,6 @@ class DownloadView(discord.ui.View):
             "3. Administrace si vyhrazuje právo omezit přístup v případě porušení pravidel.\n\n"
             "*Souhlasíte s těmito podmínkami?*"
         )
-        # Zpráva se pošle jako ephemeral (vidí ji jen ten, kdo kliknul)
         await interaction.response.send_message(pravidla_text, view=RulesView(), ephemeral=True)
 
 intents = discord.Intents.default()
@@ -776,23 +790,19 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def on_ready():
-    # Zaregistrujeme tlačítka, aby fungovala i po restartu bota
     bot.add_view(DownloadView())
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
 
 @bot.command()
 async def setup_download(ctx):
-    # Příkaz, kterým administrátor pošle panel do chatu
     embed = discord.Embed(
         title="📥 Projekt OIS IDPK - Instalace", 
         description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a generování osobního odkazu ke stažení.", 
         color=0x38bdf8
     )
-    # Generic download ikonka z webu jako miniatura
     embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/8205/8205562.png")
     
     await ctx.send(embed=embed, view=DownloadView())
-    # Smaže příkaz !setup_download, aby zůstal chat čistý
     await ctx.message.delete()
 
 if __name__ == "__main__":
