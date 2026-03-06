@@ -1,6 +1,7 @@
 import os
 import discord
 from discord.ext import commands
+from discord.ui import Button, View, Select
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash
 from threading import Thread
 from supabase import create_client
@@ -57,7 +58,7 @@ BASE_HTML = """
         .btn-dark { background-color: #334155; color: white; }
         .btn-dark:hover { background-color: #475569; }
         
-        input[type="text"], input[type="password"], input[type="url"], textarea { width: 100%; padding: 10px; margin: 8px 0 15px 0; background-color: #0f172a; border: 1px solid #334155; color: white; border-radius: 5px; box-sizing: border-box; }
+        input[type="text"], input[type="number"], input[type="password"], input[type="url"], textarea { width: 100%; padding: 10px; margin: 8px 0 15px 0; background-color: #0f172a; border: 1px solid #334155; color: white; border-radius: 5px; box-sizing: border-box; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 10px; background-color: var(--bg-panel); border-radius: 10px; overflow: hidden; }
         th, td { padding: 15px; text-align: left; border-bottom: 1px solid #334155; }
@@ -125,6 +126,7 @@ DASHBOARD_LAYOUT = """
         </div>
         <div class="sidebar-menu">
             <a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a>
+            <a href="/dashboard/ids" class="sidebar-link"><i class="fas fa-id-badge"></i> Správa ID</a>
             <a href="/dashboard/team" class="sidebar-link"><i class="fas fa-user-plus"></i> Správa Týmu</a>
             <a href="/dashboard?filter=banned" class="sidebar-link" style="color: var(--warning);"><i class="fas fa-ban"></i> Seznam BANů</a>
             <a href="/dashboard?filter=deleted" class="sidebar-link" style="color: var(--danger);"><i class="fas fa-trash-alt"></i> Smazaní (Záloha)</a>
@@ -356,6 +358,51 @@ HTML_TEAM_ADD = """
 </script>
 """
 
+HTML_IDS = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">Správa Aplikačních ID</h2>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">Zde můžete ručně změnit ID libovolnému uživateli. Tímto způsobem lze také znovu obsadit ID, které bylo dříve zablokováno smazaným uživatelem.</p>
+    
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>App ID</th>
+                <th>Nick</th>
+                <th>Discord ID</th>
+                <th>Status Účtu</th>
+                <th>Změnit ID na:</th>
+            </tr>
+            {% for user in users %}
+            <tr style="opacity: {{ '0.6' if user.is_deleted else '1' }};">
+                <td style="font-weight: bold; color: var(--blue-main);">#{{ user.app_id }}</td>
+                <td><strong>{{ user.nick }}</strong></td>
+                <td style="font-size: 12px; color: var(--text-muted);">{{ user.discord_id }}</td>
+                <td>
+                    {% if user.is_deleted %}
+                        <span style="color: var(--danger); font-size: 12px; font-weight: bold;">Smazán (Blokuje ID)</span>
+                    {% else %}
+                        <span style="color: var(--success); font-size: 12px;">Aktivní</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <form action="/dashboard/change_id" method="POST" style="display: flex; gap: 5px;">
+                        <input type="hidden" name="discord_id" value="{{ user.discord_id }}">
+                        <input type="number" name="new_app_id" placeholder="Nové ID" required style="width: 100px; margin: 0; padding: 5px;">
+                        <button type="submit" class="btn" style="padding: 5px 10px; font-size: 12px;">Změnit</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+"""
+
 HTML_DASHBOARD_MAIN = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
@@ -436,19 +483,6 @@ def get_db():
     if not url or not key: return None
     return create_client(url, key)
 
-def send_dm_from_flask(discord_id, message):
-    if not discord_id: return
-    async def send():
-        try:
-            user = await bot.fetch_user(int(discord_id))
-            if user:
-                await user.send(message)
-        except Exception as e:
-            print(f"Nepodařilo se odeslat DM: {e}", flush=True)
-            
-    if bot.loop and bot.loop.is_running():
-        asyncio.run_coroutine_threadsafe(send(), bot.loop)
-
 @app.route('/')
 def home():
     return render_public(HTML_HOME)
@@ -508,6 +542,39 @@ def dashboard_main():
 
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title=title)
 
+@app.route('/dashboard/ids', methods=['GET'])
+def dashboard_ids():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    
+    db = get_db()
+    users_data = []
+    if db:
+        try:
+            # Zobrazí úplně všechny pro správu ID
+            resp = db.table("users").select("*").order("app_id").execute()
+            users_data = resp.data
+        except Exception as e:
+            flash(f'Chyba načítání databáze: {e}', 'error')
+            
+    return render_dashboard(HTML_IDS, users=users_data)
+
+@app.route('/dashboard/change_id', methods=['POST'])
+def change_id():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    
+    discord_id = request.form.get("discord_id")
+    new_app_id = request.form.get("new_app_id")
+    db = get_db()
+    
+    if db and discord_id and new_app_id:
+        try:
+            db.table("users").update({"app_id": int(new_app_id)}).eq("discord_id", discord_id).execute()
+            flash(f'ID úspěšně změněno na #{new_app_id}.', 'success')
+        except Exception as e:
+            flash(f'Chyba při změně ID: {e}', 'error')
+            
+    return redirect(url_for('dashboard_ids'))
+
 @app.route('/dashboard/team', methods=['GET'])
 def dashboard_team_page():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
@@ -529,7 +596,6 @@ def add_team():
     db = get_db()
     if db:
         try:
-            # Zpracování dynamicky přidávaných rolí
             role_names = request.form.getlist("role_name[]")
             role_colors = request.form.getlist("role_color[]")
             
@@ -593,8 +659,7 @@ def edit_user():
                 
             elif action == 'ban':
                 db.table("users").update({"is_banned": True}).eq("discord_id", discord_id).execute()
-                send_dm_from_flask(discord_id, "Vážený uživateli, oznamujeme Vám, že Vám byl udělen trvalý zákaz přístupu (BAN) administrátorem Projektu OIS IDPK.")
-                flash('Uživatel dostal BAN a byla mu odeslána zpráva do DM!', 'warning')
+                flash('Uživatel dostal BAN!', 'warning')
                 
             elif action == 'unban':
                 db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
@@ -603,8 +668,7 @@ def edit_user():
             elif action == 'delete':
                 now = datetime.now().strftime("%d.%m.%Y %H:%M")
                 db.table("users").update({"is_deleted": True, "deleted_at": now}).eq("discord_id", discord_id).execute()
-                send_dm_from_flask(discord_id, "Vážený uživateli, Váš stávající účet v Projektu OIS IDPK byl administrací smazán. Pokud máte nadále zájem o naše služby, můžete si vytvořit novou registraci.")
-                flash('Účet byl smazán (Soft Delete). Původní ID je zachováno v záloze. Zpráva odeslána do DM.', 'danger')
+                flash('Účet byl smazán (Soft Delete). Původní ID je zachováno v záloze.', 'danger')
                 
             elif action == 'restore':
                 db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute()
@@ -629,70 +693,107 @@ def run_web():
     app.run(host='0.0.0.0', port=port)
 
 # ==========================================
-# 3. DISCORD BOT
+# 3. DISCORD BOT & INTERAKTIVNÍ TLAČÍTKA
 # ==========================================
+
+class VersionView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+    @discord.ui.select(placeholder="Vyber verzi softwaru...", options=[
+        discord.SelectOption(label="Verze 1.0 (Stabilní)", description="Doporučená verze pro všechny", value="v1.0", emoji="✅"),
+        discord.SelectOption(label="Verze 2.0 (Beta)", description="Testovací verze s novými funkcemi", value="v2.0", emoji="🛠️")
+    ])
+    async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+        version = select.values[0]
+        # Vygenerujeme odkaz (zatím odkazuje na web)
+        link = f"https://{request.host}/download?v={version}" if hasattr(request, 'host') else "Odkaz se připravuje..."
+        await interaction.response.edit_message(content=f"**Projekt OIS IDPK - Odkaz připraven**\n\nTady je Váš vygenerovaný odkaz pro verzi **{version}**:\n🔗 {link}\n\n*Upozornění: Tento odkaz nikomu nesdělujte, je svázán s Vaším profilem.*", view=None)
+
+class RulesView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+    @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, custom_id="btn_agree", emoji="✅")
+    async def agree_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Registrační logika po souhlasu
+        db = get_db()
+        discord_id = str(interaction.user.id)
+        nick = interaction.user.display_name
+        
+        if db:
+            check = db.table("users").select("*").eq("discord_id", discord_id).execute()
+            if len(check.data) > 0:
+                user_data = check.data[0]
+                if user_data.get('is_banned'):
+                    await interaction.response.edit_message(content="**Přístup zamítnut:** Máte udělený BAN na Projektu OIS IDPK. 🛑", view=None)
+                    return
+            else:
+                # Vytvoření uživatele pokud neexistuje
+                highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                new_app_id = 1000
+                if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
+                    new_app_id = highest_id_resp.data[0]["app_id"] + 1
+
+                novy = {
+                    "app_id": new_app_id,
+                    "discord_id": discord_id, 
+                    "nick": nick, 
+                    "role": "User", 
+                    "hwid": "",
+                    "is_banned": False,
+                    "is_deleted": False,
+                    "deleted_at": ""
+                }
+                db.table("users").insert(novy).execute()
+        
+        await interaction.response.edit_message(content="**Ověření úspěšné.**\nNyní si prosím vyberte verzi softwaru k instalaci:", view=VersionView())
+
+    @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, custom_id="btn_disagree", emoji="❌")
+    async def disagree_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="**Akce zrušena.**\nPro stažení softwaru je nutné vyjádřit souhlas s pravidly Projektu OIS IDPK.", view=None)
+
+class DownloadView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Zahájit instalaci softwaru", style=discord.ButtonStyle.primary, custom_id="btn_start_download", emoji="📥")
+    async def download_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pravidla_text = (
+            "**Projekt OIS IDPK - Podmínky užití**\n\n"
+            "Pokračováním souhlasíte s následujícími pravidly:\n"
+            "1. Je přísně zakázáno jakkoli modifikovat nebo šířit tento software třetím stranám.\n"
+            "2. Vygenerovaný odkaz a HWID je vázáno pouze na Váš osobní přístroj.\n"
+            "3. Administrace si vyhrazuje právo omezit přístup v případě porušení pravidel.\n\n"
+            "*Souhlasíte s těmito podmínkami?*"
+        )
+        # Zpráva se pošle jako ephemeral (vidí ji jen ten, kdo kliknul)
+        await interaction.response.send_message(pravidla_text, view=RulesView(), ephemeral=True)
+
 intents = discord.Intents.default()
 intents.message_content = True 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def on_ready():
+    # Zaregistrujeme tlačítka, aby fungovala i po restartu bota
+    bot.add_view(DownloadView())
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
 
 @bot.command()
-async def register(ctx, nick: str = None):
-    if not nick:
-        await ctx.send("Použití: `!register HerniNick`")
-        return
-    try:
-        db = get_db()
-        if not db:
-            await ctx.send("Chybí klíče k databázi!")
-            return
-            
-        discord_id = str(ctx.author.id)
-        check = db.table("users").select("*").eq("discord_id", discord_id).execute()
-        
-        if len(check.data) > 0:
-            user_data = check.data[0]
-            if user_data.get('is_banned'):
-                await ctx.send("Vážený uživateli, na Projektu OIS IDPK Vám byl udělen zákaz přístupu (BAN). 🛑")
-            elif user_data.get('is_deleted'):
-                highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
-                new_app_id = 1000
-                if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
-                    new_app_id = highest_id_resp.data[0]["app_id"] + 1
-
-                updates = {
-                    "app_id": new_app_id,
-                    "nick": nick,
-                    "is_deleted": False,
-                    "deleted_at": ""
-                }
-                db.table("users").update(updates).eq("discord_id", discord_id).execute()
-                await ctx.send(f"Byla Vám úspěšně obnovena registrace do Projektu OIS IDPK! Tvé nové Aplikační ID je **#{new_app_id}**. Vítej, **{nick}**! ✅")
-            else:
-                await ctx.send(f"Už jsi zaregistrovaný s ID #{user_data.get('app_id')}! ✅")
-        else:
-            highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
-            new_app_id = 1000
-            if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
-                new_app_id = highest_id_resp.data[0]["app_id"] + 1
-
-            novy = {
-                "app_id": new_app_id,
-                "discord_id": discord_id, 
-                "nick": nick, 
-                "role": "User", 
-                "hwid": "",
-                "is_banned": False,
-                "is_deleted": False,
-                "deleted_at": ""
-            }
-            db.table("users").insert(novy).execute()
-            await ctx.send(f"Registrace do Projektu OIS IDPK hotova! Tvé Aplikační ID je **#{new_app_id}**. Vítej, **{nick}**! ✅")
-    except Exception as e:
-        await ctx.send(f"Chyba při registraci: {e}")
+async def setup_download(ctx):
+    # Příkaz, kterým administrátor pošle panel do chatu
+    embed = discord.Embed(
+        title="📥 Projekt OIS IDPK - Instalace", 
+        description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a generování osobního odkazu ke stažení.", 
+        color=0x38bdf8
+    )
+    # Generic download ikonka z webu jako miniatura
+    embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/8205/8205562.png")
+    
+    await ctx.send(embed=embed, view=DownloadView())
+    # Smaže příkaz !setup_download, aby zůstal chat čistý
+    await ctx.message.delete()
 
 if __name__ == "__main__":
     Thread(target=run_web).start()
