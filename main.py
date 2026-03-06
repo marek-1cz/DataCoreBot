@@ -608,7 +608,7 @@ def secure_download(token):
         
     v_data = v_resp.data[0]
     
-    # ÚPRAVA: Tlačítko teď odkazuje na náš tajný /api/get_file router, ne na Google Drive!
+    # Skryté stahovací tlačítko napojené na /api/get_file
     html = f"""
     <div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);">
         <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2>
@@ -628,7 +628,6 @@ def secure_download(token):
     """
     return render_public(html)
 
-# ROUTA PRO BEZPEČNÉ PŘESMĚROVÁNÍ (SKRYTÍ URL PŘED UŽIVATELEM)
 @app.route('/api/get_file/<token>')
 def api_get_file(token):
     db = get_db()
@@ -647,7 +646,6 @@ def api_get_file(token):
     if not v_resp.data:
         return "Verze nenalezena."
         
-    # Pokud je vše OK, skrytě přesměrujeme na originální soubor
     return redirect(v_resp.data[0]['file_url'])
 
 @app.route('/team')
@@ -699,9 +697,6 @@ def dashboard_main():
 
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title=title)
 
-# ==========================================
-# SPRÁVA STAHOVÁNÍ (DOWNLOAD CONTROL CENTER)
-# ==========================================
 @app.route('/dashboard/downloads', methods=['GET'])
 def dashboard_downloads():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
@@ -928,9 +923,10 @@ class VersionSelect(discord.ui.Select):
             
         super().__init__(placeholder="Vyber verzi k instalaci...", min_values=1, max_values=1, options=options[:25])
 
-    # ZMĚNA: Přepis logiky výběru do nového stabilnějšího formátu.
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+        # Okamžitá odpověď Discordu = žádný error "Interakce se nezdařila"
+        await interaction.response.edit_message(content="<a:loading:123> Generuji zabezpečený odkaz, prosím čekejte...", view=None)
+        
         if self.values[0] == "none":
             await interaction.edit_original_response(content="Aktuálně nejsou dostupné žádné soubory.", view=None)
             return
@@ -963,7 +959,8 @@ class RulesView(discord.ui.View):
         
     @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, custom_id="btn_agree", emoji="✅")
     async def agree_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
+        # Okamžitá odpověď Discordu
+        await interaction.response.edit_message(content="<a:loading:123> Ověřuji profil v databázi, prosím čekejte...", view=None)
         try:
             db = get_db()
             discord_id = str(interaction.user.id)
