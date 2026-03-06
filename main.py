@@ -7,6 +7,7 @@ from threading import Thread
 from supabase import create_client
 from datetime import datetime
 import asyncio
+import uuid
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
@@ -487,7 +488,6 @@ def send_dm_from_flask(discord_id, message):
     if not discord_id: return
     async def send():
         try:
-            # Bot nejdřív zkusí najít uživatele v paměti, pokud tam není, vyžádá si ho ze serveru
             user = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
             if user:
                 await user.send(message)
@@ -503,8 +503,52 @@ def home():
     return render_public(HTML_HOME)
 
 @app.route('/download')
-def download():
-    return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--blue-main);'>Stažení</h2><p>Připojte se na Discord pro získání přístupu.</p></div>")
+def download_home():
+    return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--blue-main);'>Stažení</h2><p>Pro stažení softwaru se prosím připojte na náš Discord a využijte instalační panel k vygenerování osobního odkazu.</p></div>")
+
+# ==========================================
+# NOVÁ STRÁNKA - ZPRACOVÁNÍ JEDNORÁZOVÉHO ODKAZU
+# ==========================================
+@app.route('/download/<token>')
+def secure_download(token):
+    db = get_db()
+    if not db: 
+        return "Chyba připojení k databázi."
+    
+    resp = db.table("users").select("*").eq("download_token", token).execute()
+    if len(resp.data) == 0:
+        return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Neplatný nebo vypršený odkaz!</h2><p>Tento odkaz neexistuje nebo již byl použit. Vygenerujte si nový na našem Discord serveru.</p></div>")
+        
+    user = resp.data[0]
+    
+    if user.get("is_banned"):
+        return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Přístup zamítnut</h2><p>Váš účet byl administrátorem zablokován (BAN).</p></div>")
+    elif user.get("is_deleted"):
+        return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Účet neexistuje</h2><p>Váš účet byl smazán administrátorem.</p></div>")
+        
+    version = request.args.get('v', 'Neznámá verze')
+    
+    html = f"""
+    <div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);">
+        <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření proběhlo úspěšně</h2>
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">
+            Vítejte zpět, <strong>{user['nick']}</strong> (ID: #{user['app_id']})
+        </p>
+        
+        <div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;">
+            <h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3>
+            <p style="margin: 0; color: var(--text-main);">Vybraná verze k instalaci: <strong>{version}</strong></p>
+        </div>
+        
+        <button class="btn btn-success" style="font-size: 18px; padding: 15px 30px; width: 100%; border-radius: 8px;" onclick="alert('Zde se v budoucnu spustí stahování souboru!')"><i class="fas fa-download"></i> Stáhnout aplikaci</button>
+        
+        <p style="color: var(--text-muted); font-size: 12px; margin-top: 20px;">
+            <i class="fas fa-exclamation-triangle" style="color: var(--warning);"></i> 
+            Upozornění: Software bude při prvním spuštění uzamčen na Váš osobní přístroj (HWID).
+        </p>
+    </div>
+    """
+    return render_public(html)
 
 @app.route('/team')
 def team():
@@ -724,8 +768,20 @@ class VersionView(discord.ui.View):
     ])
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
         version = select.values[0]
-        link = f"https://{request.host}/download?v={version}" if hasattr(request, 'host') else "Odkaz se připravuje..."
-        await interaction.response.edit_message(content=f"**Projekt OIS IDPK - Odkaz připraven**\n\nTady je Váš vygenerovaný odkaz pro verzi **{version}**:\n🔗 {link}\n\n*Upozornění: Tento odkaz nikomu nesdělujte, je svázán s Vaším profilem.*", view=None)
+        discord_id = str(interaction.user.id)
+        
+        # 1. Vygenerování unikátního tokenu pro tohoto uživatele
+        token = str(uuid.uuid4())
+        db = get_db()
+        if db:
+            db.table("users").update({"download_token": token}).eq("discord_id", discord_id).execute()
+            
+        # 2. Sestavení zabezpečeného odkazu
+        # Render používá RENDER_EXTERNAL_URL, pokud tam není, fallbackne se to
+        base_url = os.environ.get("RENDER_EXTERNAL_URL", "https://tvojestranka.onrender.com")
+        link = f"{base_url}/download/{token}?v={version}"
+        
+        await interaction.response.edit_message(content=f"**Projekt OIS IDPK - Odkaz připraven**\n\nTady je Váš vygenerovaný zabezpečený odkaz pro verzi **{version}**:\n🔗 {link}\n\n*Upozornění: Tento odkaz nikomu nesdělujte, je svázán s Vaším profilem.*", view=None)
 
 class RulesView(discord.ui.View):
     def __init__(self):
@@ -744,6 +800,21 @@ class RulesView(discord.ui.View):
                 if user_data.get('is_banned'):
                     await interaction.response.edit_message(content="**Přístup zamítnut:** Máte udělený BAN na Projektu OIS IDPK. 🛑", view=None)
                     return
+                elif user_data.get('is_deleted'):
+                    # Zpracování uživatele se smazaným účtem - přepíše se
+                    highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                    new_app_id = 1000
+                    if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
+                        new_app_id = highest_id_resp.data[0]["app_id"] + 1
+
+                    updates = {
+                        "app_id": new_app_id,
+                        "nick": nick,
+                        "is_deleted": False,
+                        "deleted_at": "",
+                        "role": "User"
+                    }
+                    db.table("users").update(updates).eq("discord_id", discord_id).execute()
             else:
                 highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
                 new_app_id = 1000
