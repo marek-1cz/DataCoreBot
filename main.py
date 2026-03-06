@@ -602,13 +602,13 @@ def secure_download(token):
         
     version_id = request.args.get('v')
     
-    # Najdeme reálný odkaz na soubor podle ID verze
     v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
     if not v_resp.data:
         return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--warning);'>Chyba verze</h2><p>Vybraná verze již není k dispozici.</p></div>")
         
     v_data = v_resp.data[0]
     
+    # ÚPRAVA: Tlačítko teď odkazuje na náš tajný /api/get_file router, ne na Google Drive!
     html = f"""
     <div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);">
         <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2>
@@ -619,7 +619,7 @@ def secure_download(token):
             <h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3>
             <p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{v_data['version_name']}</strong></p>
         </div>
-        <a href="{v_data['file_url']}" class="btn btn-success" style="font-size: 18px; padding: 15px 30px; display: block; border-radius: 8px; text-decoration: none;"><i class="fas fa-download"></i> Stáhnout Soubor</a>
+        <a href="/api/get_file/{token}?v={version_id}" class="btn btn-success" style="font-size: 18px; padding: 15px 30px; display: block; border-radius: 8px; text-decoration: none;"><i class="fas fa-download"></i> Stáhnout Soubor</a>
         <p style="color: var(--text-muted); font-size: 12px; margin-top: 20px;">
             <i class="fas fa-exclamation-triangle" style="color: var(--warning);"></i> 
             Software bude uzamčen na Vaše HWID.
@@ -627,6 +627,28 @@ def secure_download(token):
     </div>
     """
     return render_public(html)
+
+# ROUTA PRO BEZPEČNÉ PŘESMĚROVÁNÍ (SKRYTÍ URL PŘED UŽIVATELEM)
+@app.route('/api/get_file/<token>')
+def api_get_file(token):
+    db = get_db()
+    if not db: return "Chyba databáze."
+    
+    resp = db.table("users").select("*").eq("download_token", token).execute()
+    if len(resp.data) == 0:
+        return "Neplatný token."
+        
+    user = resp.data[0]
+    if user.get("is_banned") or user.get("is_deleted"):
+        return "Přístup zamítnut."
+        
+    version_id = request.args.get('v')
+    v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
+    if not v_resp.data:
+        return "Verze nenalezena."
+        
+    # Pokud je vše OK, skrytě přesměrujeme na originální soubor
+    return redirect(v_resp.data[0]['file_url'])
 
 @app.route('/team')
 def team():
@@ -690,12 +712,10 @@ def dashboard_downloads():
     
     if db:
         try:
-            # Check global switch status
             set_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute()
             if set_resp.data and set_resp.data[0]['setting_value'] == 'False':
                 enabled = False
                 
-            # Get versions
             v_resp = db.table("software_versions").select("*").order("id").execute()
             versions = v_resp.data
         except Exception as e:
@@ -711,8 +731,6 @@ def toggle_downloads():
     db = get_db()
     if db:
         try:
-            # Zkusí updatnout. Pokud to nejde (protože klíč ještě neexistuje), tak se to nepovede, proto se v praxi
-            # používá upsert, ale upsert Supabase knihovna občas složitěji přijímá. Pro jednoduchost:
             db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute()
             flash('Status stahování byl změněn.', 'success')
         except: pass
@@ -885,12 +903,9 @@ def run_web():
 # 3. DISCORD BOT & INTERAKTIVNÍ TLAČÍTKA
 # ==========================================
 
-class VersionView(discord.ui.View):
+class VersionSelect(discord.ui.Select):
     def __init__(self, user_role):
-        super().__init__(timeout=None)
-        
-        # Výpočet "síly" role uživatele
-        user_level = 1 # Výchozí User
+        user_level = 1
         if 'BT' in user_role: user_level = 2
         if 'DEV' in user_role or 'SA' in user_role: user_level = 3
         
@@ -900,32 +915,28 @@ class VersionView(discord.ui.View):
             try:
                 v_resp = db.table("software_versions").select("*").order("id").execute()
                 for v in v_resp.data:
-                    # Kontrola, jestli má uživatel dostatečnou roli na to, aby verzi viděl
                     req_level = 1
                     if v['target_role'] == 'BT': req_level = 2
                     if v['target_role'] == 'DEV_SA': req_level = 3
                     
                     if user_level >= req_level:
-                        options.append(discord.SelectOption(label=v['version_name'], description="Verze dostupná pro tvou roli", value=str(v['id']), emoji="📦"))
+                        options.append(discord.SelectOption(label=v['version_name'], description="Dostupné pro tvou roli", value=str(v['id']), emoji="📦"))
             except: pass
             
         if not options:
             options.append(discord.SelectOption(label="Žádná verze nenalezena", value="none"))
             
-        # Select menu v Discordu zvládne max 25 položek
-        select = discord.ui.Select(placeholder="Vyber verzi k instalaci...", options=options[:25])
-        select.callback = self.select_callback
-        self.add_item(select)
+        super().__init__(placeholder="Vyber verzi k instalaci...", min_values=1, max_values=1, options=options[:25])
 
-    async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+    # ZMĚNA: Přepis logiky výběru do nového stabilnějšího formátu.
+    async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        
-        if select.values[0] == "none":
+        if self.values[0] == "none":
             await interaction.edit_original_response(content="Aktuálně nejsou dostupné žádné soubory.", view=None)
             return
             
         try:
-            version_id = select.values[0]
+            version_id = self.values[0]
             discord_id = str(interaction.user.id)
             
             token = str(uuid.uuid4())
@@ -938,7 +949,13 @@ class VersionView(discord.ui.View):
             
             await interaction.edit_original_response(content=f"**Projekt OIS IDPK - Odkaz připraven**\n\nZde je Váš zabezpečený odkaz ke stažení. Kliknutím budete přesměrováni na náš portál.\n🔗 {link}\n\n*Tento odkaz funguje pouze pro Vás.*", view=None)
         except Exception as e:
+            print(e, flush=True)
             await interaction.edit_original_response(content="Chyba při generování odkazu.", view=None)
+
+class VersionView(discord.ui.View):
+    def __init__(self, user_role):
+        super().__init__(timeout=None)
+        self.add_item(VersionSelect(user_role))
 
 class RulesView(discord.ui.View):
     def __init__(self):
@@ -954,13 +971,11 @@ class RulesView(discord.ui.View):
             user_roles = "User"
             
             if db:
-                # 1. KONTROLA HLAVNÍHO VYPÍNAČE
                 set_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute()
                 if set_resp.data and set_resp.data[0]['setting_value'] == 'False':
                     await interaction.edit_original_response(content="**Stahování softwaru je aktuálně nedostupné.**\nObraťte se prosím na admin team.", view=None)
                     return
                 
-                # 2. LOGIKA UŽIVATELE
                 check = db.table("users").select("*").eq("discord_id", discord_id).execute()
                 if len(check.data) > 0:
                     user_data = check.data[0]
@@ -990,7 +1005,6 @@ class RulesView(discord.ui.View):
                     }
                     db.table("users").insert(novy).execute()
             
-            # Pošleme view s dynmickým výběrem verzí podle role uživatele
             await interaction.edit_original_response(content="**Ověření úspěšné.**\nNyní si prosím vyberte soubor k instalaci:", view=VersionView(user_roles))
         except Exception as e:
             print(e, flush=True)
