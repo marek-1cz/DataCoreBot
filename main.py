@@ -52,15 +52,19 @@ BASE_HTML = """
         .btn-danger:hover { background-color: #dc2626; }
         .btn-warning { background-color: var(--warning); color: #000; }
         .btn-warning:hover { background-color: #d97706; }
+        .btn-success { background-color: var(--success); }
+        .btn-success:hover { background-color: #059669; }
+        .btn-dark { background-color: #334155; color: white; }
+        .btn-dark:hover { background-color: #475569; }
         
-        input, select, textarea { width: 100%; padding: 10px; margin: 8px 0 15px 0; background-color: #0f172a; border: 1px solid #334155; color: white; border-radius: 5px; box-sizing: border-box; }
+        input[type="text"], input[type="password"], input[type="url"], textarea { width: 100%; padding: 10px; margin: 8px 0 15px 0; background-color: #0f172a; border: 1px solid #334155; color: white; border-radius: 5px; box-sizing: border-box; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 10px; background-color: var(--bg-panel); border-radius: 10px; overflow: hidden; }
         th, td { padding: 15px; text-align: left; border-bottom: 1px solid #334155; }
         th { background-color: #0f172a; color: var(--blue-main); font-weight: 600; text-transform: uppercase; font-size: 13px; }
         tr:hover { background-color: #334155; }
         
-        .role-tag { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); border: 1px solid var(--blue-main); margin: 2px; }
+        .role-tag { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; margin: 2px; }
         
         .dashboard-wrapper { display: flex; min-height: 100vh; }
         .sidebar { width: 250px; background-color: var(--bg-panel); border-right: 1px solid #334155; display: flex; flex-direction: column; }
@@ -79,6 +83,9 @@ BASE_HTML = """
         .alert-success { background-color: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid var(--success); }
         .alert-error { background-color: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
         .alert-warning { background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
+        
+        .checkbox-group { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
+        .checkbox-group label { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -120,10 +127,11 @@ DASHBOARD_LAYOUT = """
             <a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a>
             <a href="/dashboard/team" class="sidebar-link"><i class="fas fa-user-plus"></i> Správa Týmu</a>
             <a href="/dashboard?filter=banned" class="sidebar-link" style="color: var(--warning);"><i class="fas fa-ban"></i> Seznam BANů</a>
+            <a href="/dashboard?filter=deleted" class="sidebar-link" style="color: var(--danger);"><i class="fas fa-trash-alt"></i> Smazaní (Záloha)</a>
             <div style="padding: 15px 20px 5px 20px; font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: bold;">Hledat roli</div>
-            <a href="/dashboard?filter=SA" class="sidebar-link"><i class="fas fa-crown"></i> SA (Super Admini)</a>
-            <a href="/dashboard?filter=DEV" class="sidebar-link"><i class="fas fa-code"></i> DEV (Vývojáři)</a>
-            <a href="/dashboard?filter=BT" class="sidebar-link"><i class="fas fa-bug"></i> BT (Beta Testeři)</a>
+            <a href="/dashboard?filter=SA" class="sidebar-link"><i class="fas fa-crown"></i> SA (SERVER ADMIN)</a>
+            <a href="/dashboard?filter=DEV" class="sidebar-link"><i class="fas fa-code"></i> DEV (DEVELOPER)</a>
+            <a href="/dashboard?filter=BT" class="sidebar-link"><i class="fas fa-bug"></i> BT (BETA TESTER)</a>
         </div>
         <div style="padding: 20px;">
             <a href="/logout" class="btn btn-danger" style="width: 100%; text-align: center; box-sizing: border-box;"><i class="fas fa-sign-out-alt"></i> Odhlásit</a>
@@ -155,20 +163,34 @@ DASHBOARD_LAYOUT = """
                 <label>Herní Nick:</label>
                 <input type="text" name="nick" id="modalNick" required>
                 
-                <label>Role (lze psát více rolí oddělených čárkou, např: SA, DEV, VIP):</label>
-                <input type="text" name="roles" id="modalRoles" placeholder="User">
+                <label>Role:</label>
+                <div class="checkbox-group">
+                    <label style="color: #ef4444;"><input type="checkbox" name="roles" value="SA"> SA</label>
+                    <label style="color: #10b981;"><input type="checkbox" name="roles" value="DEV"> DEV</label>
+                    <label style="color: #3b82f6;"><input type="checkbox" name="roles" value="BT"> BT</label>
+                    <label style="color: #94a3b8;"><input type="checkbox" name="roles" value="User"> User</label>
+                </div>
                 
                 <label>HWID (Zámek na PC):</label>
                 <input type="text" name="hwid" id="modalHwid" placeholder="Pro odblokování smažte text zde">
                 
-                <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="submit" name="action" value="save" class="btn" style="flex: 2;"><i class="fas fa-save"></i> Uložit</button>
-                    <button type="submit" name="action" value="ban" id="btnBan" class="btn btn-warning" style="flex: 1;"><i class="fas fa-ban"></i> Dát BAN</button>
-                    <button type="submit" name="action" value="unban" id="btnUnban" class="btn" style="flex: 1; background-color: var(--success); display: none;"><i class="fas fa-check"></i> Un-BAN</button>
+                <div id="activeActions">
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button type="submit" name="action" value="save" class="btn" style="flex: 2;"><i class="fas fa-save"></i> Uložit</button>
+                        <button type="submit" name="action" value="ban" id="btnBan" class="btn btn-warning" style="flex: 1;"><i class="fas fa-ban"></i> Dát BAN</button>
+                        <button type="submit" name="action" value="unban" id="btnUnban" class="btn btn-success" style="flex: 1; display: none;"><i class="fas fa-check"></i> Un-BAN</button>
+                    </div>
+                    <div style="margin-top: 15px; border-top: 1px solid #334155; padding-top: 15px;">
+                        <button type="submit" name="action" value="delete" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Smazat účet? (Zablokuje ID, umožní novou registraci)')"><i class="fas fa-trash"></i> Smazat účet (Soft Delete)</button>
+                    </div>
                 </div>
-                
-                <div style="margin-top: 15px; border-top: 1px solid #334155; padding-top: 15px;">
-                    <button type="submit" name="action" value="delete" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Opravdu SMAZAT účet? Uživatel si bude moci vytvořit nový.')"><i class="fas fa-trash"></i> Smazat účet (Umožní novou registraci)</button>
+
+                <div id="deletedActions" style="display: none; margin-top: 20px; border-top: 1px solid #334155; padding-top: 15px;">
+                    <p style="color: var(--danger); font-weight: bold; text-align: center; margin-top: 0;">Tento účet je smazaný.</p>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="submit" name="action" value="restore" class="btn btn-success" style="flex: 1;"><i class="fas fa-undo"></i> Obnovit účet</button>
+                        <button type="submit" name="action" value="hard_delete" class="btn btn-dark" style="flex: 1;" onclick="return confirm('PERMANENTNÍ SMAZÁNÍ: Tato akce kompletně vymaže veškerá data o tomto uživateli. Pokračovat?')"><i class="fas fa-skull"></i> Smazat permanentně</button>
+                    </div>
                 </div>
             </form>
             <button class="btn" onclick="closeModal()" style="background: transparent; color: var(--text-muted); width: 100%; margin-top: 10px; border: 1px solid #334155;">Zrušit</button>
@@ -177,20 +199,32 @@ DASHBOARD_LAYOUT = """
 </div>
 
 <script>
-    function openModal(app_id, discord_id, nick, roles, hwid, is_banned) {
+    function openModal(app_id, discord_id, nick, roles, hwid, is_banned, is_deleted) {
         document.getElementById('editModal').style.display = 'flex';
         document.getElementById('modalAppId').innerText = "#" + app_id;
         document.getElementById('modalDiscordId').value = discord_id;
         document.getElementById('modalNick').value = nick;
-        document.getElementById('modalRoles').value = roles;
         document.getElementById('modalHwid').value = hwid === 'None' ? '' : hwid;
         
-        if (is_banned === 'True') {
-            document.getElementById('btnBan').style.display = 'none';
-            document.getElementById('btnUnban').style.display = 'block';
+        document.querySelectorAll('input[name="roles"]').forEach(cb => cb.checked = false);
+        roles.split(',').forEach(r => {
+            let el = document.querySelector(`input[name="roles"][value="${r.trim()}"]`);
+            if(el) el.checked = true;
+        });
+        
+        if (is_deleted === 'True') {
+            document.getElementById('activeActions').style.display = 'none';
+            document.getElementById('deletedActions').style.display = 'block';
         } else {
-            document.getElementById('btnBan').style.display = 'block';
-            document.getElementById('btnUnban').style.display = 'none';
+            document.getElementById('activeActions').style.display = 'block';
+            document.getElementById('deletedActions').style.display = 'none';
+            if (is_banned === 'True') {
+                document.getElementById('btnBan').style.display = 'none';
+                document.getElementById('btnUnban').style.display = 'block';
+            } else {
+                document.getElementById('btnBan').style.display = 'block';
+                document.getElementById('btnUnban').style.display = 'none';
+            }
         }
     }
     function closeModal() {
@@ -220,6 +254,31 @@ HTML_LOGIN = """
 </div>
 """
 
+HTML_TEAM = """
+<h2 style="color: var(--blue-main); border-bottom: 2px solid #334155; padding-bottom: 10px;">Náš Tým</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+    {% for member in team %}
+    <div style="background-color: var(--bg-panel); border-radius: 10px; padding: 20px; text-align: center; border-top: 4px solid var(--blue-main);">
+        <img src="{{ member.image_url }}" alt="Fotka" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; border: 3px solid #334155;" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+        <h3 style="font-size: 20px; font-weight: bold; margin: 0 0 5px 0;">{{ member.name }}</h3>
+        <div style="color: var(--blue-main); font-size: 14px; margin-bottom: 15px;">@{{ member.discord_nick }}</div>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 15px;">{{ member.description }}</p>
+        <div>
+            {% set roles_input = member.role_name.split(',') if member.role_name else [] %}
+            {% for r in roles_input %}
+                {% set parts = r.split('|') %}
+                {% set r_name = parts[0].strip() %}
+                {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
+                <span class="role-tag" style="background-color: {{ r_color }}33; color: {{ r_color }}; border: 1px solid {{ r_color }};">{{ r_name }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <p style="color: var(--text-muted);">Zatím nebyli přidáni žádní členové týmu.</p>
+    {% endfor %}
+</div>
+"""
+
 HTML_TEAM_ADD = """
 <div style="display: flex; gap: 20px; flex-wrap: wrap;">
     <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
@@ -230,11 +289,8 @@ HTML_TEAM_ADD = """
             <input type="url" name="image_url" placeholder="URL obrázku (odkaz na fotku)" required>
             <textarea name="description" placeholder="Něco o něm..." rows="3" required></textarea>
             
-            <label style="color: var(--text-muted); font-size: 14px;">Role (Lze psát více rolí oddělených čárkou):</label>
-            <div style="display: flex; gap: 10px;">
-                <input type="text" name="role_name" placeholder="Např. SA, Developer" required style="flex: 2;">
-                <input type="color" name="role_color" value="#38bdf8" style="flex: 1; padding: 2px; height: 40px;">
-            </div>
+            <label style="color: var(--text-muted); font-size: 13px;">Role a jejich barvy (Oddělujte čárkou ve formátu Rolička|#barva):</label>
+            <input type="text" name="role_name" placeholder="Např.: SA|#ff0000, Web Dev|#00ff00" required>
             
             <button type="submit" class="btn" style="width: 100%;">Přidat do týmu</button>
         </form>
@@ -255,9 +311,12 @@ HTML_TEAM_ADD = """
                     <td><strong>{{ member.name }}</strong></td>
                     <td>{{ member.discord_nick }}</td>
                     <td>
-                        {% set role_list = member.role_name.split(',') if member.role_name else ['User'] %}
-                        {% for r in role_list %}
-                            <span class="role-tag" style="border-color: {{ member.role_color }}; color: {{ member.role_color }};">{{ r.strip() }}</span>
+                        {% set roles_input = member.role_name.split(',') if member.role_name else [] %}
+                        {% for r in roles_input %}
+                            {% set parts = r.split('|') %}
+                            {% set r_name = parts[0].strip() %}
+                            {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
+                            <span class="role-tag" style="color: {{ r_color }}; border: 1px solid {{ r_color }}; background-color: {{ r_color }}33;">{{ r_name }}</span>
                         {% endfor %}
                     </td>
                     <td>
@@ -295,25 +354,36 @@ HTML_DASHBOARD_MAIN = """
             <th>Akce</th>
         </tr>
         {% for user in users %}
-        <tr>
+        <tr style="opacity: {{ '0.5' if user.is_deleted else '1' }};">
             <td style="font-weight: bold; color: var(--blue-main);">#{{ user.app_id }}</td>
             <td style="font-size: 12px; color: var(--text-muted);">{{ user.discord_id }}</td>
             <td><strong>{{ user.nick }}</strong></td>
             <td>
                 {% set role_list = user.role.split(',') if user.role else ['User'] %}
                 {% for r in role_list %}
-                    <span class="role-tag">{{ r.strip() }}</span>
+                    {% set r_clean = r.strip() %}
+                    {% if r_clean == 'SA' %}
+                        <span class="role-tag" style="color: white; background-color: #ef4444; border-color: #ef4444;">SERVER ADMIN</span>
+                    {% elif r_clean == 'DEV' %}
+                        <span class="role-tag" style="color: white; background-color: #10b981; border-color: #10b981;">DEVELOPER</span>
+                    {% elif r_clean == 'BT' %}
+                        <span class="role-tag" style="color: white; background-color: #3b82f6; border-color: #3b82f6;">BETA TESTER</span>
+                    {% elif r_clean == 'User' %}
+                        <span class="role-tag" style="color: white; background-color: #64748b; border-color: #64748b;">User</span>
+                    {% endif %}
                 {% endfor %}
             </td>
             <td>
-                {% if user.is_banned %}
+                {% if user.is_deleted %}
+                    <span style="color: var(--danger); font-weight: bold;"><i class="fas fa-skull"></i> Smazán</span>
+                {% elif user.is_banned %}
                     <span style="color: var(--warning); font-weight: bold;"><i class="fas fa-ban"></i> BANNED</span>
                 {% else %}
                     <span style="color: var(--success);"><i class="fas fa-check-circle"></i> Aktivní</span>
                 {% endif %}
             </td>
             <td>
-                <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="openModal('{{ user.app_id }}', '{{ user.discord_id }}', '{{ user.nick }}', '{{ user.role }}', '{{ user.hwid }}', '{{ user.is_banned }}')"><i class="fas fa-cog"></i> Spravovat</button>
+                <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="openModal('{{ user.app_id }}', '{{ user.discord_id }}', '{{ user.nick }}', '{{ user.role }}', '{{ user.hwid }}', '{{ user.is_banned }}', '{{ user.is_deleted }}')"><i class="fas fa-cog"></i> Spravovat</button>
             </td>
         </tr>
         {% else %}
@@ -345,7 +415,6 @@ def get_db():
     if not url or not key: return None
     return create_client(url, key)
 
-# --- Pomocná funkce pro odeslání DM přes běžícího Discord bota ---
 def send_dm_from_flask(discord_id, message):
     if not discord_id: return
     async def send():
@@ -400,13 +469,16 @@ def dashboard_main():
             filter_type = request.args.get('filter')
             
             if filter_type == 'banned':
-                query = query.eq("is_banned", True)
+                query = query.eq("is_banned", True).eq("is_deleted", False)
                 title = "Seznam zabanovaných"
+            elif filter_type == 'deleted':
+                query = query.eq("is_deleted", True)
+                title = "Smazané účty (Záloha)"
             elif filter_type:
-                query = query.ilike("role", f"%{filter_type}%").eq("is_banned", False)
+                query = query.ilike("role", f"%{filter_type}%").eq("is_deleted", False)
                 title = f"Uživatelé s rolí: {filter_type}"
             else:
-                query = query.eq("is_banned", False).order("app_id")
+                query = query.eq("is_deleted", False).order("app_id")
                 
             resp = query.execute()
             users_data = resp.data
@@ -441,8 +513,7 @@ def add_team():
                 "discord_nick": request.form.get("discord_nick"),
                 "image_url": request.form.get("image_url"),
                 "description": request.form.get("description"),
-                "role_name": request.form.get("role_name"),
-                "role_color": request.form.get("role_color")
+                "role_name": request.form.get("role_name") # Nyní zpracováváme i barvy v tomto textu
             }
             db.table("team").insert(new_member).execute()
             flash('Člen týmu byl úspěšně přidán!', 'success')
@@ -477,9 +548,13 @@ def edit_user():
     if db and discord_id:
         try:
             if action == 'save':
+                # Získáme všechny zaškrtnuté role z formuláře a spojíme je
+                roles_list = request.form.getlist("roles")
+                roles_str = ",".join(roles_list) if roles_list else "User"
+                
                 updates = {
                     "nick": request.form.get("nick"),
-                    "role": request.form.get("roles"),
+                    "role": roles_str,
                     "hwid": request.form.get("hwid")
                 }
                 db.table("users").update(updates).eq("discord_id", discord_id).execute()
@@ -487,7 +562,7 @@ def edit_user():
                 
             elif action == 'ban':
                 db.table("users").update({"is_banned": True}).eq("discord_id", discord_id).execute()
-                send_dm_from_flask(discord_id, "Dostal jsi ban od uživatele zatím SERVER ADMIN")
+                send_dm_from_flask(discord_id, "Vážený uživateli, oznamujeme Vám, že Vám byl udělen trvalý zákaz přístupu (BAN) administrátorem Projektu OIS IDPK.")
                 flash('Uživatel dostal BAN a byla mu odeslána zpráva do DM!', 'warning')
                 
             elif action == 'unban':
@@ -495,9 +570,18 @@ def edit_user():
                 flash('BAN byl zrušen.', 'success')
                 
             elif action == 'delete':
+                now = datetime.now().strftime("%d.%m.%Y %H:%M")
+                db.table("users").update({"is_deleted": True, "deleted_at": now}).eq("discord_id", discord_id).execute()
+                send_dm_from_flask(discord_id, "Vážený uživateli, Váš stávající účet v Projektu OIS IDPK byl administrací smazán. Pokud máte nadále zájem o naše služby, můžete si vytvořit novou registraci.")
+                flash('Účet byl smazán (Soft Delete). Původní ID je zachováno v záloze. Zpráva odeslána do DM.', 'danger')
+                
+            elif action == 'restore':
+                db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute()
+                flash('Účet byl úspěšně obnoven ze zálohy!', 'success')
+                
+            elif action == 'hard_delete':
                 db.table("users").delete().eq("discord_id", discord_id).execute()
-                send_dm_from_flask(discord_id, "Tvůj účet byl smazán, ale můžeš si založit nový.")
-                flash('Účet byl trvale smazán. Uživatel si nyní může vytvořit nový účet. Zpráva odeslána do DM.', 'danger')
+                flash('Veškerá data o uživateli byla PERMANENTNĚ a nevratně smazána.', 'dark')
                 
         except Exception as e:
             flash(f'Chyba při úpravě: {e}', 'error')
@@ -541,7 +625,25 @@ async def register(ctx, nick: str = None):
         if len(check.data) > 0:
             user_data = check.data[0]
             if user_data.get('is_banned'):
-                await ctx.send("Máš udělený BAN na tomto projektu! 🛑")
+                await ctx.send("Vážený uživateli, na Projektu OIS IDPK Vám byl udělen zákaz přístupu (BAN). 🛑")
+            elif user_data.get('is_deleted'):
+                # Pokud má uživatel smazaný účet (soft delete), vytvoříme mu NOVÝ řádek a nové ID
+                highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                new_app_id = 1000
+                if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
+                    new_app_id = highest_id_resp.data[0]["app_id"] + 1
+
+                novy = {
+                    "app_id": new_app_id,
+                    "discord_id": discord_id, 
+                    "nick": nick, 
+                    "role": "User", 
+                    "hwid": "",
+                    "is_banned": False,
+                    "is_deleted": False
+                }
+                db.table("users").insert(novy).execute()
+                await ctx.send(f"Byla Vám úspěšně vytvořena nová registrace do Projektu OIS IDPK! Tvé nové Aplikační ID je **#{new_app_id}**. Vítej, **{nick}**! ✅")
             else:
                 await ctx.send(f"Už jsi zaregistrovaný s ID #{user_data.get('app_id')}! ✅")
         else:
@@ -556,7 +658,8 @@ async def register(ctx, nick: str = None):
                 "nick": nick, 
                 "role": "User", 
                 "hwid": "",
-                "is_banned": False
+                "is_banned": False,
+                "is_deleted": False
             }
             db.table("users").insert(novy).execute()
             await ctx.send(f"Registrace do Projektu OIS IDPK hotova! Tvé Aplikační ID je **#{new_app_id}**. Vítej, **{nick}**! ✅")
