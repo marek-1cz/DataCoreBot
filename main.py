@@ -8,7 +8,7 @@ from supabase import create_client
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
 app = Flask(__name__)
-app.secret_key = "ois_idpk_super_tajny_klic" # Nutné pro přihlášení a chybové hlášky
+app.secret_key = "ois_idpk_super_tajny_klic" 
 
 # ==========================================
 # 1. HTML ŠABLONY (MODERNÍ TECH-BLUE DESIGN)
@@ -23,9 +23,9 @@ BASE_HTML = """
     <title>Projekt OIS IDPK</title>
     <style>
         :root {
-            --bg-dark: #0f172a; /* Temně modro-šedá */
-            --bg-panel: #1e293b; /* Světlejší panel */
-            --blue-main: #38bdf8; /* Tech modrá */
+            --bg-dark: #0f172a; 
+            --bg-panel: #1e293b; 
+            --blue-main: #38bdf8; 
             --blue-hover: #0284c7;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
@@ -34,17 +34,14 @@ BASE_HTML = """
         }
         body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-dark); color: var(--text-main); margin: 0; padding: 0; }
         
-        /* Navigační lišta */
         nav { background-color: rgba(15, 23, 42, 0.9); padding: 15px 40px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; backdrop-filter: blur(10px); z-index: 100; }
         .logo { font-size: 24px; font-weight: 800; color: var(--blue-main); text-decoration: none; letter-spacing: 1px; }
         .nav-links a { color: var(--text-main); text-decoration: none; margin-left: 20px; font-weight: 500; transition: color 0.3s; }
         .nav-links a:hover { color: var(--blue-main); }
         .nav-links .admin-link { color: var(--text-muted); font-size: 12px; margin-left: 40px; }
 
-        /* Hlavní kontejner */
         .container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
         
-        /* Tlačítka a formuláře */
         .btn { display: inline-block; background-color: var(--blue-main); color: #fff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: bold; border: none; cursor: pointer; transition: 0.3s; }
         .btn:hover { background-color: var(--blue-hover); }
         .btn-danger { background-color: var(--danger); }
@@ -52,13 +49,11 @@ BASE_HTML = """
         
         input, select, textarea { width: 100%; padding: 10px; margin: 8px 0 15px 0; background-color: #0f172a; border: 1px solid #334155; color: white; border-radius: 5px; box-sizing: border-box; }
         
-        /* Tabulky */
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: var(--bg-panel); border-radius: 10px; overflow: hidden; }
         th, td { padding: 15px; text-align: left; border-bottom: 1px solid #334155; }
         th { background-color: #0f172a; color: var(--blue-main); font-weight: 600; text-transform: uppercase; font-size: 13px; }
         tr:hover { background-color: #334155; }
         
-        /* Týmové karty */
         .team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
         .team-card { background-color: var(--bg-panel); border-radius: 10px; padding: 20px; text-align: center; border-top: 4px solid var(--blue-main); transition: transform 0.3s; }
         .team-card:hover { transform: translateY(-5px); }
@@ -68,7 +63,6 @@ BASE_HTML = """
         .team-desc { color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 15px; }
         .team-role { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
         
-        /* Flash zprávy */
         .alert { padding: 15px; border-radius: 5px; margin-bottom: 20px; font-weight: bold; }
         .alert-success { background-color: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid var(--success); }
         .alert-error { background-color: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
@@ -99,10 +93,7 @@ BASE_HTML = """
 </html>
 """
 
-# HTML Obsah pro jednotlivé stránky (vkládá se do BASE_HTML)
 HTML_HOME = """
-{% extends 'base' %}
-{% block content %}
 <div style="text-align: center; padding: 50px 0;">
     <h1 style="font-size: 3em; color: var(--blue-main); margin-bottom: 10px;">Projekt OIS IDPK</h1>
     <p style="font-size: 1.2em; color: var(--text-muted); max-width: 600px; margin: 0 auto 30px auto;">
@@ -110,12 +101,9 @@ HTML_HOME = """
     </p>
     <a href="/download" class="btn" style="font-size: 18px; padding: 15px 30px;">Získat Software</a>
 </div>
-{% endblock %}
 """
 
 HTML_DOWNLOAD = """
-{% extends 'base' %}
-{% block content %}
 <div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center;">
     <h2>Stažení Softwaru</h2>
     <p style="color: var(--text-muted); margin-bottom: 30px;">
@@ -123,12 +111,9 @@ HTML_DOWNLOAD = """
     </p>
     <a href="#" class="btn" style="background-color: #5865F2;">Připojit se na Discord</a>
 </div>
-{% endblock %}
 """
 
 HTML_TEAM = """
-{% extends 'base' %}
-{% block content %}
 <h2 style="color: var(--blue-main); border-bottom: 2px solid #334155; padding-bottom: 10px;">Náš Tým</h2>
 <div class="team-grid">
     {% for member in team %}
@@ -145,12 +130,9 @@ HTML_TEAM = """
     <p style="color: var(--text-muted);">Zatím nebyli přidáni žádní členové týmu.</p>
     {% endfor %}
 </div>
-{% endblock %}
 """
 
 HTML_LOGIN = """
-{% extends 'base' %}
-{% block content %}
 <div style="max-width: 400px; margin: 50px auto; background-color: var(--bg-panel); padding: 30px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="text-align: center; color: var(--blue-main);">Admin Login</h2>
     <form method="POST">
@@ -159,19 +141,16 @@ HTML_LOGIN = """
         <button type="submit" class="btn" style="width: 100%;">Přihlásit se do Dashboardu</button>
     </form>
 </div>
-{% endblock %}
 """
 
 HTML_ADMIN = """
-{% extends 'base' %}
-{% block content %}
 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 10px; margin-bottom: 20px;">
     <h2>⚙️ Dashboard - Projekt OIS IDPK</h2>
     <a href="/logout" class="btn btn-danger" style="padding: 5px 10px; font-size: 14px;">Odhlásit</a>
 </div>
 
-<div style="display: flex; gap: 20px;">
-    <div style="flex: 1; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
         <h3 style="color: var(--blue-main); margin-top: 0;">➕ Přidat člena týmu</h3>
         <form action="/admin/add_team" method="POST">
             <input type="text" name="name" placeholder="Jméno / Přezdívka" required>
@@ -188,7 +167,7 @@ HTML_ADMIN = """
         </form>
     </div>
 
-    <div style="flex: 2; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
         <h3 style="color: var(--blue-main); margin-top: 0;">👥 Registrovaní uživatelé</h3>
         <div style="overflow-x: auto;">
             <table>
@@ -206,7 +185,7 @@ HTML_ADMIN = """
                     <td>{{ user.role }}</td>
                     <td>{{ user.hwid if user.hwid else '-' }}</td>
                     <td>
-                        <button class="btn" style="padding: 5px 10px; font-size: 12px; margin-right: 5px;" onclick="alert('Úprava uživatele {{ user.nick }} se připravuje v další verzi!')">Upravit</button>
+                        <button class="btn" style="padding: 5px 10px; font-size: 12px; margin-right: 5px;" onclick="alert('Úprava uživatele {{ user.nick }} se připravuje!')">Upravit</button>
                         <form action="/admin/delete_user" method="POST" style="display: inline;">
                             <input type="hidden" name="discord_id" value="{{ user.discord_id }}">
                             <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu smazat?')">Smazat</button>
@@ -218,17 +197,13 @@ HTML_ADMIN = """
         </div>
     </div>
 </div>
-{% endblock %}
 """
 
 # ==========================================
 # 2. FLASK ROUTES (LOGIKA WEBU)
 # ==========================================
 
-# Pomocná funkce pro sestavení stránky
 def render_page(template_string, **kwargs):
-    # Flask render_template_string neumí nativně extends z jiného stringu jednoduše,
-    # tak to složíme dohromady ručně.
     full_html = BASE_HTML.replace('{% block content %}{% endblock %}', template_string)
     return render_template_string(full_html, **kwargs)
 
@@ -252,17 +227,15 @@ def team():
     team_members = []
     if db:
         try:
-            # Zkusíme načíst data z tabulky team (pokud existuje)
             response = db.table("team").select("*").execute()
             team_members = response.data
         except:
-            pass # Pokud tabulka ještě neexistuje, prostě ukážeme prázdný seznam
+            pass 
             
     return render_page(HTML_TEAM, team=team_members)
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
-    # Zpracování loginu
     if request.method == 'POST':
         pwd = request.form.get('password')
         if pwd == os.environ.get("ADMIN_PASSWORD", "admin"):
@@ -272,11 +245,9 @@ def admin():
         else:
             flash('Špatné heslo!', 'error')
             
-    # Ochrana stránky
     if not session.get('logged_in'):
         return render_page(HTML_LOGIN)
         
-    # Načtení dat pro dashboard
     db = get_db()
     users_data = []
     if db:
