@@ -289,8 +289,14 @@ HTML_TEAM_ADD = """
             <input type="url" name="image_url" placeholder="URL obrázku (odkaz na fotku)" required>
             <textarea name="description" placeholder="Něco o něm..." rows="3" required></textarea>
             
-            <label style="color: var(--text-muted); font-size: 13px;">Role a jejich barvy (Oddělujte čárkou ve formátu Rolička|#barva):</label>
-            <input type="text" name="role_name" placeholder="Např.: SA|#ff0000, Web Dev|#00ff00" required>
+            <label style="color: var(--text-muted); font-size: 13px; display: block; margin-bottom: 8px;">Role a jejich barvy:</label>
+            <div id="roles-container">
+                <div class="role-entry" style="display: flex; gap: 10px; margin-bottom: 5px;">
+                    <input type="text" name="role_name[]" placeholder="Název Role (např. SA)" required style="flex: 2; margin: 0;">
+                    <input type="color" name="role_color[]" value="#ef4444" style="flex: 1; padding: 2px; height: 40px; margin: 0;">
+                </div>
+            </div>
+            <button type="button" class="btn btn-dark" onclick="addRoleField()" style="width: 100%; margin-bottom: 15px; margin-top: 5px; padding: 5px; font-size: 12px;">+ Přidat další roli</button>
             
             <button type="submit" class="btn" style="width: 100%;">Přidat do týmu</button>
         </form>
@@ -333,6 +339,21 @@ HTML_TEAM_ADD = """
         </div>
     </div>
 </div>
+
+<script>
+    function addRoleField() {
+        const container = document.getElementById('roles-container');
+        const div = document.createElement('div');
+        div.className = 'role-entry';
+        div.style = 'display: flex; gap: 10px; margin-bottom: 5px;';
+        div.innerHTML = `
+            <input type="text" name="role_name[]" placeholder="Název Role" required style="flex: 2; margin: 0;">
+            <input type="color" name="role_color[]" value="#38bdf8" style="flex: 1; padding: 2px; height: 40px; margin: 0;">
+            <button type="button" class="btn btn-danger" onclick="this.parentElement.remove()" style="padding: 0 10px; margin: 0;">X</button>
+        `;
+        container.appendChild(div);
+    }
+</script>
 """
 
 HTML_DASHBOARD_MAIN = """
@@ -508,12 +529,23 @@ def add_team():
     db = get_db()
     if db:
         try:
+            # Zpracování dynamicky přidávaných rolí
+            role_names = request.form.getlist("role_name[]")
+            role_colors = request.form.getlist("role_color[]")
+            
+            combined_roles = []
+            for n, c in zip(role_names, role_colors):
+                if n.strip():
+                    combined_roles.append(f"{n.strip()}|{c.strip()}")
+            
+            roles_str = ",".join(combined_roles)
+
             new_member = {
                 "name": request.form.get("name"),
                 "discord_nick": request.form.get("discord_nick"),
                 "image_url": request.form.get("image_url"),
                 "description": request.form.get("description"),
-                "role_name": request.form.get("role_name") # Nyní zpracováváme i barvy v tomto textu
+                "role_name": roles_str
             }
             db.table("team").insert(new_member).execute()
             flash('Člen týmu byl úspěšně přidán!', 'success')
@@ -548,7 +580,6 @@ def edit_user():
     if db and discord_id:
         try:
             if action == 'save':
-                # Získáme všechny zaškrtnuté role z formuláře a spojíme je
                 roles_list = request.form.getlist("roles")
                 roles_str = ",".join(roles_list) if roles_list else "User"
                 
@@ -627,23 +658,19 @@ async def register(ctx, nick: str = None):
             if user_data.get('is_banned'):
                 await ctx.send("Vážený uživateli, na Projektu OIS IDPK Vám byl udělen zákaz přístupu (BAN). 🛑")
             elif user_data.get('is_deleted'):
-                # Pokud má uživatel smazaný účet (soft delete), vytvoříme mu NOVÝ řádek a nové ID
                 highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
                 new_app_id = 1000
                 if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
                     new_app_id = highest_id_resp.data[0]["app_id"] + 1
 
-                novy = {
+                updates = {
                     "app_id": new_app_id,
-                    "discord_id": discord_id, 
-                    "nick": nick, 
-                    "role": "User", 
-                    "hwid": "",
-                    "is_banned": False,
-                    "is_deleted": False
+                    "nick": nick,
+                    "is_deleted": False,
+                    "deleted_at": ""
                 }
-                db.table("users").insert(novy).execute()
-                await ctx.send(f"Byla Vám úspěšně vytvořena nová registrace do Projektu OIS IDPK! Tvé nové Aplikační ID je **#{new_app_id}**. Vítej, **{nick}**! ✅")
+                db.table("users").update(updates).eq("discord_id", discord_id).execute()
+                await ctx.send(f"Byla Vám úspěšně obnovena registrace do Projektu OIS IDPK! Tvé nové Aplikační ID je **#{new_app_id}**. Vítej, **{nick}**! ✅")
             else:
                 await ctx.send(f"Už jsi zaregistrovaný s ID #{user_data.get('app_id')}! ✅")
         else:
@@ -659,7 +686,8 @@ async def register(ctx, nick: str = None):
                 "role": "User", 
                 "hwid": "",
                 "is_banned": False,
-                "is_deleted": False
+                "is_deleted": False,
+                "deleted_at": ""
             }
             db.table("users").insert(novy).execute()
             await ctx.send(f"Registrace do Projektu OIS IDPK hotova! Tvé Aplikační ID je **#{new_app_id}**. Vítej, **{nick}**! ✅")
