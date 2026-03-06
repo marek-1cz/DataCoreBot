@@ -1,73 +1,92 @@
-import discord
-from discord.ext import commands
-import os
-from flask import Flask
-from threading import Thread
-from supabase import create_client, Client
+import sys
+print("=== START BOTA ===", flush=True)
 
-# ==========================================
-# 1. ČÁST: WEBOVÝ SERVER (PROTI USPÁNÍ)
-# ==========================================
-app = Flask(__name__)
+try:
+    import os
+    print("[OK] OS knihovna načtena", flush=True)
+    
+    import discord
+    from discord.ext import commands
+    print("[OK] Discord knihovna načtena", flush=True)
+    
+    from flask import Flask
+    from threading import Thread
+    print("[OK] Flask webserver načten", flush=True)
+    
+    from supabase import create_client, Client
+    print("[OK] Supabase knihovna načtena", flush=True)
 
-@app.route('/')
-def home():
-    # Tento text uvidí UptimeRobot, když bota "prozvoní"
-    return "DataCoreBot běží 24/7 a nespí!"
+    # ==========================================
+    # 1. ČÁST: WEBOVÝ SERVER (PROTI USPÁNÍ)
+    # ==========================================
+    app = Flask(__name__)
 
-def run():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+    @app.route('/')
+    def home():
+        return "DataCoreBot běží 24/7 a nespí!"
 
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
+    def run():
+        port = int(os.environ.get("PORT", 8080))
+        app.run(host='0.0.0.0', port=port)
 
-# ==========================================
-# 2. ČÁST: SUPABASE DATABÁZE
-# ==========================================
-url: str = os.environ.get("SUPABASE_URL")
-key: str = os.environ.get("SUPABASE_KEY")
+    def keep_alive():
+        t = Thread(target=run)
+        t.start()
 
-# Připojíme databázi pouze pokud máme klíče z Renderu
-if url and key:
-    supabase: Client = create_client(url, key)
-    print("Supabase databáze úspěšně připojena!")
-else:
-    supabase = None
-    print("POZOR: Supabase klíče nebyly nalezeny. Přidej SUPABASE_URL a SUPABASE_KEY na Render.")
+    # ==========================================
+    # 2. ČÁST: SUPABASE DATABÁZE
+    # ==========================================
+    print("[INFO] Načítám Supabase klíče z Renderu...", flush=True)
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_KEY")
 
-# ==========================================
-# 3. ČÁST: DISCORD BOT
-# ==========================================
-intents = discord.Intents.default()
-intents.message_content = True 
-
-bot = commands.Bot(command_prefix='!', intents=intents)
-
-@bot.event
-async def on_ready():
-    print(f'Úspěšně přihlášen jako {bot.user}')
-
-@bot.command()
-async def ping(ctx):
-    await ctx.send('Pong! Běžím, nespím a jsem připraven na MRWEB!')
-
-@bot.command()
-async def db(ctx):
-    # Testovací příkaz pro ověření spojení s databází
-    if supabase:
-        await ctx.send('Databáze Supabase je připojena a připravena na ukládání uživatelů! 🟢')
+    if url and key:
+        supabase = create_client(url, key)
+        print("[OK] Supabase databáze úspěšně připojena!", flush=True)
     else:
-        await ctx.send('Databáze není připojena! Chybí klíče na Renderu. 🔴')
+        supabase = None
+        print("[CHYBA] Supabase klíče nebyly nalezeny!", flush=True)
 
-# ==========================================
-# SPUŠTĚNÍ VŠEHO
-# ==========================================
-if __name__ == "__main__":
-    keep_alive()
-    token = os.environ.get("DISCORD_TOKEN")
-    if token:
-        bot.run(token)
-    else:
-        print("CHYBA: Nebyl nalezen DISCORD_TOKEN!")
+    # ==========================================
+    # 3. ČÁST: DISCORD BOT
+    # ==========================================
+    print("[INFO] Nastavuji Discord bota...", flush=True)
+    intents = discord.Intents.default()
+    intents.message_content = True 
+
+    bot = commands.Bot(command_prefix='!', intents=intents)
+
+    @bot.event
+    async def on_ready():
+        print(f'[OK] Úspěšně přihlášen jako {bot.user}', flush=True)
+
+    @bot.command()
+    async def ping(ctx):
+        await ctx.send('Pong! Běžím, nespím a jsem připraven na MRWEB!')
+
+    @bot.command()
+    async def db(ctx):
+        if supabase:
+            await ctx.send('Databáze Supabase je připojena a připravena na ukládání uživatelů! 🟢')
+        else:
+            await ctx.send('Databáze není připojena! Chybí klíče na Renderu. 🔴')
+
+    # ==========================================
+    # SPUŠTĚNÍ VŠEHO
+    # ==========================================
+    if __name__ == "__main__":
+        print("[INFO] Zapínám webový server...", flush=True)
+        keep_alive()
+        
+        print("[INFO] Získávám Discord Token...", flush=True)
+        token = os.environ.get("DISCORD_TOKEN")
+        
+        if token:
+            print("[INFO] Spouštím připojení na Discord...", flush=True)
+            bot.run(token)
+        else:
+            print("[CHYBA] Nebyl nalezen DISCORD_TOKEN!", flush=True)
+
+except Exception as e:
+    # Pokud se cokoliv pokazí, tahle část to okamžitě práskne do logu!
+    print(f"\n!!! KRITICKÁ CHYBA PŘI STARTU: {e} !!!\n", flush=True)
