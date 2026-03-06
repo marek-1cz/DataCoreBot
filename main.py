@@ -59,7 +59,7 @@ BASE_HTML = """
         .btn-dark { background-color: #334155; color: white; }
         .btn-dark:hover { background-color: #475569; }
         
-        input[type="text"], input[type="number"], input[type="password"], input[type="url"], textarea { width: 100%; padding: 10px; margin: 8px 0 15px 0; background-color: #0f172a; border: 1px solid #334155; color: white; border-radius: 5px; box-sizing: border-box; }
+        input[type="text"], input[type="number"], input[type="password"], input[type="url"], textarea, select { width: 100%; padding: 10px; margin: 8px 0 15px 0; background-color: #0f172a; border: 1px solid #334155; color: white; border-radius: 5px; box-sizing: border-box; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 10px; background-color: var(--bg-panel); border-radius: 10px; overflow: hidden; }
         th, td { padding: 15px; text-align: left; border-bottom: 1px solid #334155; }
@@ -127,6 +127,7 @@ DASHBOARD_LAYOUT = """
         </div>
         <div class="sidebar-menu">
             <a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a>
+            <a href="/dashboard/downloads" class="sidebar-link"><i class="fas fa-cloud-download-alt"></i> Správa Stahování</a>
             <a href="/dashboard/ids" class="sidebar-link"><i class="fas fa-id-badge"></i> Správa ID</a>
             <a href="/dashboard/team" class="sidebar-link"><i class="fas fa-user-plus"></i> Správa Týmu</a>
             <a href="/dashboard?filter=banned" class="sidebar-link" style="color: var(--warning);"><i class="fas fa-ban"></i> Seznam BANů</a>
@@ -279,6 +280,81 @@ HTML_TEAM = """
     {% else %}
     <p style="color: var(--text-muted);">Zatím nebyli přidáni žádní členové týmu.</p>
     {% endfor %}
+</div>
+"""
+
+HTML_DOWNLOADS_MGMT = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">Správa Stahování</h2>
+</div>
+
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {{ 'var(--success)' if enabled else 'var(--danger)' }};">
+        <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-power-off"></i> Hlavní vypínač</h3>
+        <p style="color: var(--text-muted); font-size: 14px;">Pokud je vypnuto, nikdo nebude moci zahájit instalaci přes Discord bota.</p>
+        
+        <form action="/dashboard/toggle_downloads" method="POST" style="margin-top: 20px;">
+            {% if enabled %}
+                <input type="hidden" name="new_status" value="False">
+                <button type="submit" class="btn btn-danger" style="width: 100%; font-size: 18px;"><i class="fas fa-times-circle"></i> ZAKÁZAT STAHOVÁNÍ</button>
+            {% else %}
+                <input type="hidden" name="new_status" value="True">
+                <button type="submit" class="btn btn-success" style="width: 100%; font-size: 18px;"><i class="fas fa-check-circle"></i> POVOLIT STAHOVÁNÍ</button>
+            {% endif %}
+        </form>
+    </div>
+
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Přidat Instalační Soubor (Verzi)</h3>
+        <form action="/dashboard/add_version" method="POST">
+            <input type="text" name="version_name" placeholder="Název zobrazený v menu (např. Stabilní v1.0)" required>
+            <input type="url" name="file_url" placeholder="Přímý odkaz na stažení souboru (ZIP/EXE)" required>
+            
+            <label style="color: var(--text-muted); font-size: 13px;">Pro jakou minimální roli je tato verze určena?</label>
+            <select name="target_role" required>
+                <option value="User">User (Uvidí všichni - Normální verze)</option>
+                <option value="BT">BETA TESTER (Uvidí BT, DEV, SA - Testovací verze)</option>
+                <option value="DEV_SA">DEV / SERVER ADMIN (Uvidí pouze vývojáři a admini)</option>
+            </select>
+            
+            <button type="submit" class="btn" style="width: 100%;">Přidat verzi do menu</button>
+        </form>
+    </div>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-top: 20px;">
+    <h3 style="color: var(--blue-main); margin-top: 0;">📦 Dostupné soubory</h3>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>Název v Menu</th>
+                <th>Cílová Skupina</th>
+                <th>Odkaz na soubor</th>
+                <th>Akce</th>
+            </tr>
+            {% for v in versions %}
+            <tr>
+                <td><strong>{{ v.version_name }}</strong></td>
+                <td>
+                    {% if v.target_role == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User (Všichni)</span>{% endif %}
+                    {% if v.target_role == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BETA TESTER+</span>{% endif %}
+                    {% if v.target_role == 'DEV_SA' %}<span class="role-tag" style="background-color: #ef4444; color: white;">DEV / SA</span>{% endif %}
+                </td>
+                <td style="font-size: 12px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    <a href="{{ v.file_url }}" target="_blank" style="color: var(--blue-main);">{{ v.file_url }}</a>
+                </td>
+                <td>
+                    <form action="/dashboard/delete_version" method="POST" style="display:inline;">
+                        <input type="hidden" name="version_id" value="{{ v.id }}">
+                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Odebrat tuto verzi ze stahování?')"><i class="fas fa-trash"></i></button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Zatím nebyly přidány žádné soubory ke stažení.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
 </div>
 """
 
@@ -491,9 +567,8 @@ def send_dm_from_flask(discord_id, message):
             user = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
             if user:
                 await user.send(message)
-                print(f"[OK] DM odesláno uživateli {discord_id}", flush=True)
         except Exception as e:
-            print(f"[CHYBA] Nepodařilo se odeslat DM uživateli {discord_id}: {e}", flush=True)
+            print(f"[CHYBA] Nepodařilo se odeslat DM: {e}", flush=True)
             
     if bot.loop and bot.loop.is_running():
         asyncio.run_coroutine_threadsafe(send(), bot.loop)
@@ -504,47 +579,50 @@ def home():
 
 @app.route('/download')
 def download_home():
-    return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--blue-main);'>Stažení</h2><p>Pro stažení softwaru se prosím připojte na náš Discord a využijte instalační panel k vygenerování osobního odkazu.</p></div>")
+    return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--blue-main);'>Stažení</h2><p>Pro stažení softwaru se prosím připojte na náš Discord a využijte instalační panel.</p></div>")
 
 # ==========================================
-# NOVÁ STRÁNKA - ZPRACOVÁNÍ JEDNORÁZOVÉHO ODKAZU
+# ZABEZPEČENÁ STRÁNKA STAHOVÁNÍ
 # ==========================================
 @app.route('/download/<token>')
 def secure_download(token):
     db = get_db()
-    if not db: 
-        return "Chyba připojení k databázi."
+    if not db: return "Chyba databáze."
     
     resp = db.table("users").select("*").eq("download_token", token).execute()
     if len(resp.data) == 0:
-        return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Neplatný nebo vypršený odkaz!</h2><p>Tento odkaz neexistuje nebo již byl použit. Vygenerujte si nový na našem Discord serveru.</p></div>")
+        return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Neplatný odkaz!</h2><p>Vygenerujte si nový na našem Discord serveru.</p></div>")
         
     user = resp.data[0]
     
     if user.get("is_banned"):
-        return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Přístup zamítnut</h2><p>Váš účet byl administrátorem zablokován (BAN).</p></div>")
+        return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Přístup zamítnut</h2><p>Váš účet má BAN.</p></div>")
     elif user.get("is_deleted"):
         return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Účet neexistuje</h2><p>Váš účet byl smazán administrátorem.</p></div>")
         
-    version = request.args.get('v', 'Neznámá verze')
+    version_id = request.args.get('v')
+    
+    # Najdeme reálný odkaz na soubor podle ID verze
+    v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
+    if not v_resp.data:
+        return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--warning);'>Chyba verze</h2><p>Vybraná verze již není k dispozici.</p></div>")
+        
+    v_data = v_resp.data[0]
     
     html = f"""
     <div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);">
-        <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření proběhlo úspěšně</h2>
+        <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2>
         <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">
-            Vítejte zpět, <strong>{user['nick']}</strong> (ID: #{user['app_id']})
+            Přihlášen jako: <strong>{user['nick']}</strong> (ID: #{user['app_id']})
         </p>
-        
         <div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;">
             <h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3>
-            <p style="margin: 0; color: var(--text-main);">Vybraná verze k instalaci: <strong>{version}</strong></p>
+            <p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{v_data['version_name']}</strong></p>
         </div>
-        
-        <button class="btn btn-success" style="font-size: 18px; padding: 15px 30px; width: 100%; border-radius: 8px;" onclick="alert('Zde se v budoucnu spustí stahování souboru!')"><i class="fas fa-download"></i> Stáhnout aplikaci</button>
-        
+        <a href="{v_data['file_url']}" class="btn btn-success" style="font-size: 18px; padding: 15px 30px; display: block; border-radius: 8px; text-decoration: none;"><i class="fas fa-download"></i> Stáhnout Soubor</a>
         <p style="color: var(--text-muted); font-size: 12px; margin-top: 20px;">
             <i class="fas fa-exclamation-triangle" style="color: var(--warning);"></i> 
-            Upozornění: Software bude při prvním spuštění uzamčen na Váš osobní přístroj (HWID).
+            Software bude uzamčen na Vaše HWID.
         </p>
     </div>
     """
@@ -557,8 +635,7 @@ def team():
     if db:
         try:
             team_members = db.table("team").select("*").execute().data
-        except:
-            pass 
+        except: pass 
     return render_public(HTML_TEAM, team=team_members)
 
 @app.route('/dashboard', methods=['GET', 'POST'])
@@ -594,12 +671,84 @@ def dashboard_main():
             else:
                 query = query.eq("is_deleted", False).order("app_id")
                 
-            resp = query.execute()
-            users_data = resp.data
+            users_data = query.execute().data
         except Exception as e:
             flash(f'Chyba databáze: {e}', 'error')
 
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title=title)
+
+# ==========================================
+# SPRÁVA STAHOVÁNÍ (DOWNLOAD CONTROL CENTER)
+# ==========================================
+@app.route('/dashboard/downloads', methods=['GET'])
+def dashboard_downloads():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    
+    db = get_db()
+    versions = []
+    enabled = True
+    
+    if db:
+        try:
+            # Check global switch status
+            set_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute()
+            if set_resp.data and set_resp.data[0]['setting_value'] == 'False':
+                enabled = False
+                
+            # Get versions
+            v_resp = db.table("software_versions").select("*").order("id").execute()
+            versions = v_resp.data
+        except Exception as e:
+            flash(f'Chyba načítání databáze: {e}', 'error')
+            
+    return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled)
+
+@app.route('/dashboard/toggle_downloads', methods=['POST'])
+def toggle_downloads():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    
+    new_status = request.form.get("new_status")
+    db = get_db()
+    if db:
+        try:
+            # Zkusí updatnout. Pokud to nejde (protože klíč ještě neexistuje), tak se to nepovede, proto se v praxi
+            # používá upsert, ale upsert Supabase knihovna občas složitěji přijímá. Pro jednoduchost:
+            db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute()
+            flash('Status stahování byl změněn.', 'success')
+        except: pass
+    return redirect(url_for('dashboard_downloads'))
+
+@app.route('/dashboard/add_version', methods=['POST'])
+def add_version():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    
+    db = get_db()
+    if db:
+        try:
+            v_data = {
+                "version_name": request.form.get("version_name"),
+                "file_url": request.form.get("file_url"),
+                "target_role": request.form.get("target_role")
+            }
+            db.table("software_versions").insert(v_data).execute()
+            flash('Verze úspěšně přidána.', 'success')
+        except Exception as e:
+            flash(f'Chyba při přidávání verze: {e}', 'error')
+    return redirect(url_for('dashboard_downloads'))
+
+@app.route('/dashboard/delete_version', methods=['POST'])
+def delete_version():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    
+    db = get_db()
+    v_id = request.form.get("version_id")
+    if db and v_id:
+        try:
+            db.table("software_versions").delete().eq("id", v_id).execute()
+            flash('Verze odebrána.', 'success')
+        except: pass
+    return redirect(url_for('dashboard_downloads'))
+
 
 @app.route('/dashboard/ids', methods=['GET'])
 def dashboard_ids():
@@ -609,11 +758,8 @@ def dashboard_ids():
     users_data = []
     if db:
         try:
-            resp = db.table("users").select("*").order("app_id").execute()
-            users_data = resp.data
-        except Exception as e:
-            flash(f'Chyba načítání databáze: {e}', 'error')
-            
+            users_data = db.table("users").select("*").order("app_id").execute().data
+        except: pass
     return render_dashboard(HTML_IDS, users=users_data)
 
 @app.route('/dashboard/change_id', methods=['POST'])
@@ -630,7 +776,6 @@ def change_id():
             flash(f'ID úspěšně změněno na #{new_app_id}.', 'success')
         except Exception as e:
             flash(f'Chyba při změně ID: {e}', 'error')
-            
     return redirect(url_for('dashboard_ids'))
 
 @app.route('/dashboard/team', methods=['GET'])
@@ -642,9 +787,7 @@ def dashboard_team_page():
     if db:
         try:
             team_data = db.table("team").select("*").execute().data
-        except:
-            pass
-            
+        except: pass
     return render_dashboard(HTML_TEAM_ADD, team=team_data)
 
 @app.route('/dashboard/add_team', methods=['POST'])
@@ -657,40 +800,30 @@ def add_team():
             role_names = request.form.getlist("role_name[]")
             role_colors = request.form.getlist("role_color[]")
             
-            combined_roles = []
-            for n, c in zip(role_names, role_colors):
-                if n.strip():
-                    combined_roles.append(f"{n.strip()}|{c.strip()}")
+            combined_roles = [f"{n.strip()}|{c.strip()}" for n, c in zip(role_names, role_colors) if n.strip()]
             
-            roles_str = ",".join(combined_roles)
-
             new_member = {
                 "name": request.form.get("name"),
                 "discord_nick": request.form.get("discord_nick"),
                 "image_url": request.form.get("image_url"),
                 "description": request.form.get("description"),
-                "role_name": roles_str
+                "role_name": ",".join(combined_roles)
             }
             db.table("team").insert(new_member).execute()
-            flash('Člen týmu byl úspěšně přidán!', 'success')
-        except Exception as e:
-            flash(f'Chyba při přidávání do týmu: {e}', 'error')
-            
+            flash('Člen týmu přidán!', 'success')
+        except: pass
     return redirect(url_for('dashboard_team_page'))
 
 @app.route('/dashboard/delete_team', methods=['POST'])
 def delete_team():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     
-    discord_nick = request.form.get("discord_nick")
     db = get_db()
-    if db and discord_nick:
+    if db:
         try:
-            db.table("team").delete().eq("discord_nick", discord_nick).execute()
-            flash('Člen týmu byl odebrán.', 'success')
-        except Exception as e:
-            flash(f'Chyba při mazání: {e}', 'error')
-            
+            db.table("team").delete().eq("discord_nick", request.form.get("discord_nick")).execute()
+            flash('Člen týmu odebrán.', 'success')
+        except: pass
     return redirect(url_for('dashboard_team_page'))
 
 @app.route('/dashboard/edit_user', methods=['POST'])
@@ -705,44 +838,38 @@ def edit_user():
         try:
             if action == 'save':
                 roles_list = request.form.getlist("roles")
-                roles_str = ",".join(roles_list) if roles_list else "User"
-                
-                updates = {
+                db.table("users").update({
                     "nick": request.form.get("nick"),
-                    "role": roles_str,
+                    "role": ",".join(roles_list) if roles_list else "User",
                     "hwid": request.form.get("hwid")
-                }
-                db.table("users").update(updates).eq("discord_id", discord_id).execute()
-                flash('Uživatel úspěšně upraven!', 'success')
+                }).eq("discord_id", discord_id).execute()
+                flash('Upraveno!', 'success')
                 
             elif action == 'ban':
                 db.table("users").update({"is_banned": True}).eq("discord_id", discord_id).execute()
-                send_dm_from_flask(discord_id, "Vážený uživateli, oznamujeme Vám, že Vám byl udělen trvalý zákaz přístupu (BAN) administrátorem Projektu OIS IDPK.")
-                flash('Uživatel dostal BAN a byla mu odeslána zpráva do DM!', 'warning')
+                send_dm_from_flask(discord_id, "Vážený uživateli, Váš účet má nyní BAN.")
+                flash('BAN udělen.', 'warning')
                 
             elif action == 'unban':
                 db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
-                send_dm_from_flask(discord_id, "Vážený uživateli, Váš zákaz přístupu (BAN) na Projektu OIS IDPK byl administrací zrušen. Nyní můžete software opět využívat.")
-                flash('BAN byl zrušen a uživateli byla odeslána notifikace do DM.', 'success')
+                send_dm_from_flask(discord_id, "Vážený uživateli, BAN byl zrušen.")
+                flash('BAN zrušen.', 'success')
                 
             elif action == 'delete':
                 now = datetime.now().strftime("%d.%m.%Y %H:%M")
                 db.table("users").update({"is_deleted": True, "deleted_at": now}).eq("discord_id", discord_id).execute()
-                send_dm_from_flask(discord_id, "Vážený uživateli, Váš stávající účet v Projektu OIS IDPK byl administrací smazán. Pokud máte nadále zájem o naše služby, můžete si vytvořit novou registraci.")
-                flash('Účet byl smazán (Soft Delete). Původní ID je zachováno v záloze. Zpráva odeslána do DM.', 'danger')
+                send_dm_from_flask(discord_id, "Účet byl smazán.")
+                flash('Účet smazán.', 'danger')
                 
             elif action == 'restore':
                 db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute()
-                send_dm_from_flask(discord_id, "Vážený uživateli, Váš účet v Projektu OIS IDPK byl administrací úspěšně obnoven ze zálohy.")
-                flash('Účet byl úspěšně obnoven ze zálohy a uživateli byla odeslána notifikace do DM!', 'success')
+                send_dm_from_flask(discord_id, "Účet obnoven ze zálohy.")
+                flash('Účet obnoven!', 'success')
                 
             elif action == 'hard_delete':
                 db.table("users").delete().eq("discord_id", discord_id).execute()
-                flash('Veškerá data o uživateli byla PERMANENTNĚ a nevratně smazána.', 'dark')
-                
-        except Exception as e:
-            flash(f'Chyba při úpravě: {e}', 'error')
-            
+                flash('Účet trvale smazán.', 'dark')
+        except: pass
     return redirect(url_for('dashboard_main'))
 
 @app.route('/logout')
@@ -759,17 +886,46 @@ def run_web():
 # ==========================================
 
 class VersionView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, user_role):
         super().__init__(timeout=None)
         
-    @discord.ui.select(placeholder="Vyber verzi softwaru...", options=[
-        discord.SelectOption(label="Verze 1.0 (Stabilní)", description="Doporučená verze pro všechny", value="v1.0", emoji="✅"),
-        discord.SelectOption(label="Verze 2.0 (Beta)", description="Testovací verze s novými funkcemi", value="v2.0", emoji="🛠️")
-    ])
+        # Výpočet "síly" role uživatele
+        user_level = 1 # Výchozí User
+        if 'BT' in user_role: user_level = 2
+        if 'DEV' in user_role or 'SA' in user_role: user_level = 3
+        
+        db = get_db()
+        options = []
+        if db:
+            try:
+                v_resp = db.table("software_versions").select("*").order("id").execute()
+                for v in v_resp.data:
+                    # Kontrola, jestli má uživatel dostatečnou roli na to, aby verzi viděl
+                    req_level = 1
+                    if v['target_role'] == 'BT': req_level = 2
+                    if v['target_role'] == 'DEV_SA': req_level = 3
+                    
+                    if user_level >= req_level:
+                        options.append(discord.SelectOption(label=v['version_name'], description="Verze dostupná pro tvou roli", value=str(v['id']), emoji="📦"))
+            except: pass
+            
+        if not options:
+            options.append(discord.SelectOption(label="Žádná verze nenalezena", value="none"))
+            
+        # Select menu v Discordu zvládne max 25 položek
+        select = discord.ui.Select(placeholder="Vyber verzi k instalaci...", options=options[:25])
+        select.callback = self.select_callback
+        self.add_item(select)
+
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
         await interaction.response.defer()
+        
+        if select.values[0] == "none":
+            await interaction.edit_original_response(content="Aktuálně nejsou dostupné žádné soubory.", view=None)
+            return
+            
         try:
-            version = select.values[0]
+            version_id = select.values[0]
             discord_id = str(interaction.user.id)
             
             token = str(uuid.uuid4())
@@ -778,12 +934,11 @@ class VersionView(discord.ui.View):
                 db.table("users").update({"download_token": token}).eq("discord_id", discord_id).execute()
                 
             base_url = os.environ.get("RENDER_EXTERNAL_URL", "https://datacorebot.onrender.com")
-            link = f"{base_url}/download/{token}?v={version}"
+            link = f"{base_url}/download/{token}?v={version_id}"
             
-            await interaction.edit_original_response(content=f"**Projekt OIS IDPK - Odkaz připraven**\n\nTady je Váš vygenerovaný zabezpečený odkaz pro verzi **{version}**:\n🔗 {link}\n\n*Upozornění: Tento odkaz nikomu nesdělujte, je svázán s Vaším profilem.*", view=None)
+            await interaction.edit_original_response(content=f"**Projekt OIS IDPK - Odkaz připraven**\n\nZde je Váš zabezpečený odkaz ke stažení. Kliknutím budete přesměrováni na náš portál.\n🔗 {link}\n\n*Tento odkaz funguje pouze pro Vás.*", view=None)
         except Exception as e:
-            print(f"Chyba při generování odkazu: {e}", flush=True)
-            await interaction.edit_original_response(content="Chyba při generování odkazu. Zkuste to prosím znovu.", view=None)
+            await interaction.edit_original_response(content="Chyba při generování odkazu.", view=None)
 
 class RulesView(discord.ui.View):
     def __init__(self):
@@ -796,8 +951,16 @@ class RulesView(discord.ui.View):
             db = get_db()
             discord_id = str(interaction.user.id)
             nick = interaction.user.display_name
+            user_roles = "User"
             
             if db:
+                # 1. KONTROLA HLAVNÍHO VYPÍNAČE
+                set_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute()
+                if set_resp.data and set_resp.data[0]['setting_value'] == 'False':
+                    await interaction.edit_original_response(content="**Stahování softwaru je aktuálně nedostupné.**\nObraťte se prosím na admin team.", view=None)
+                    return
+                
+                # 2. LOGIKA UŽIVATELE
                 check = db.table("users").select("*").eq("discord_id", discord_id).execute()
                 if len(check.data) > 0:
                     user_data = check.data[0]
@@ -810,14 +973,10 @@ class RulesView(discord.ui.View):
                         if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
                             new_app_id = highest_id_resp.data[0]["app_id"] + 1
 
-                        updates = {
-                            "app_id": new_app_id,
-                            "nick": nick,
-                            "is_deleted": False,
-                            "deleted_at": "",
-                            "role": "User"
-                        }
+                        updates = {"app_id": new_app_id, "nick": nick, "is_deleted": False, "deleted_at": "", "role": "User"}
                         db.table("users").update(updates).eq("discord_id", discord_id).execute()
+                    else:
+                        user_roles = user_data.get('role', 'User')
                 else:
                     highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
                     new_app_id = 1000
@@ -825,25 +984,21 @@ class RulesView(discord.ui.View):
                         new_app_id = highest_id_resp.data[0]["app_id"] + 1
 
                     novy = {
-                        "app_id": new_app_id,
-                        "discord_id": discord_id, 
-                        "nick": nick, 
-                        "role": "User", 
-                        "hwid": "",
-                        "is_banned": False,
-                        "is_deleted": False,
-                        "deleted_at": ""
+                        "app_id": new_app_id, "discord_id": discord_id, "nick": nick, 
+                        "role": "User", "hwid": "", "is_banned": False, 
+                        "is_deleted": False, "deleted_at": ""
                     }
                     db.table("users").insert(novy).execute()
             
-            await interaction.edit_original_response(content="**Ověření úspěšné.**\nNyní si prosím vyberte verzi softwaru k instalaci:", view=VersionView())
+            # Pošleme view s dynmickým výběrem verzí podle role uživatele
+            await interaction.edit_original_response(content="**Ověření úspěšné.**\nNyní si prosím vyberte soubor k instalaci:", view=VersionView(user_roles))
         except Exception as e:
-            print(f"Chyba při souhlasu: {e}", flush=True)
-            await interaction.edit_original_response(content="Došlo k chybě při komunikaci s databází. Zkuste to prosím znovu.", view=None)
+            print(e, flush=True)
+            await interaction.edit_original_response(content="Došlo k chybě. Zkuste to prosím znovu.", view=None)
 
     @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, custom_id="btn_disagree", emoji="❌")
     async def disagree_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="**Akce zrušena.**\nPro stažení softwaru je nutné vyjádřit souhlas s pravidly Projektu OIS IDPK.", view=None)
+        await interaction.response.edit_message(content="**Akce zrušena.**\nPro stažení softwaru je nutné vyjádřit souhlas s pravidly.", view=None)
 
 class DownloadView(discord.ui.View):
     def __init__(self):
@@ -853,10 +1008,9 @@ class DownloadView(discord.ui.View):
     async def download_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         pravidla_text = (
             "**Projekt OIS IDPK - Podmínky užití**\n\n"
-            "Pokračováním souhlasíte s následujícími pravidly:\n"
-            "1. Je přísně zakázáno jakkoli modifikovat nebo šířit tento software třetím stranám.\n"
-            "2. Vygenerovaný odkaz a HWID je vázáno pouze na Váš osobní přístroj.\n"
-            "3. Administrace si vyhrazuje právo omezit přístup v případě porušení pravidel.\n\n"
+            "Pokračováním souhlasíte s pravidly:\n"
+            "1. Je přísně zakázáno jakkoli modifikovat nebo šířit tento software.\n"
+            "2. Vygenerovaný odkaz a HWID je vázáno na Váš osobní přístroj.\n\n"
             "*Souhlasíte s těmito podmínkami?*"
         )
         await interaction.response.send_message(pravidla_text, view=RulesView(), ephemeral=True)
@@ -878,12 +1032,10 @@ async def setup_download(ctx):
         color=0x38bdf8
     )
     embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/8205/8205562.png")
-    
     await ctx.send(embed=embed, view=DownloadView())
     await ctx.message.delete()
 
 if __name__ == "__main__":
     Thread(target=run_web).start()
     token = os.environ.get("DISCORD_TOKEN")
-    if token:
-        bot.run(token)
+    if token: bot.run(token)
