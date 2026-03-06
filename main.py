@@ -767,21 +767,23 @@ class VersionView(discord.ui.View):
         discord.SelectOption(label="Verze 2.0 (Beta)", description="Testovací verze s novými funkcemi", value="v2.0", emoji="🛠️")
     ])
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
-        version = select.values[0]
-        discord_id = str(interaction.user.id)
-        
-        # 1. Vygenerování unikátního tokenu pro tohoto uživatele
-        token = str(uuid.uuid4())
-        db = get_db()
-        if db:
-            db.table("users").update({"download_token": token}).eq("discord_id", discord_id).execute()
+        await interaction.response.defer()
+        try:
+            version = select.values[0]
+            discord_id = str(interaction.user.id)
             
-        # 2. Sestavení zabezpečeného odkazu
-        # Render používá RENDER_EXTERNAL_URL, pokud tam není, fallbackne se to
-        base_url = os.environ.get("RENDER_EXTERNAL_URL", "https://tvojestranka.onrender.com")
-        link = f"{base_url}/download/{token}?v={version}"
-        
-        await interaction.response.edit_message(content=f"**Projekt OIS IDPK - Odkaz připraven**\n\nTady je Váš vygenerovaný zabezpečený odkaz pro verzi **{version}**:\n🔗 {link}\n\n*Upozornění: Tento odkaz nikomu nesdělujte, je svázán s Vaším profilem.*", view=None)
+            token = str(uuid.uuid4())
+            db = get_db()
+            if db:
+                db.table("users").update({"download_token": token}).eq("discord_id", discord_id).execute()
+                
+            base_url = os.environ.get("RENDER_EXTERNAL_URL", "https://datacorebot.onrender.com")
+            link = f"{base_url}/download/{token}?v={version}"
+            
+            await interaction.edit_original_response(content=f"**Projekt OIS IDPK - Odkaz připraven**\n\nTady je Váš vygenerovaný zabezpečený odkaz pro verzi **{version}**:\n🔗 {link}\n\n*Upozornění: Tento odkaz nikomu nesdělujte, je svázán s Vaším profilem.*", view=None)
+        except Exception as e:
+            print(f"Chyba při generování odkazu: {e}", flush=True)
+            await interaction.edit_original_response(content="Chyba při generování odkazu. Zkuste to prosím znovu.", view=None)
 
 class RulesView(discord.ui.View):
     def __init__(self):
@@ -789,51 +791,55 @@ class RulesView(discord.ui.View):
         
     @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, custom_id="btn_agree", emoji="✅")
     async def agree_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        db = get_db()
-        discord_id = str(interaction.user.id)
-        nick = interaction.user.display_name
-        
-        if db:
-            check = db.table("users").select("*").eq("discord_id", discord_id).execute()
-            if len(check.data) > 0:
-                user_data = check.data[0]
-                if user_data.get('is_banned'):
-                    await interaction.response.edit_message(content="**Přístup zamítnut:** Máte udělený BAN na Projektu OIS IDPK. 🛑", view=None)
-                    return
-                elif user_data.get('is_deleted'):
-                    # Zpracování uživatele se smazaným účtem - přepíše se
+        await interaction.response.defer()
+        try:
+            db = get_db()
+            discord_id = str(interaction.user.id)
+            nick = interaction.user.display_name
+            
+            if db:
+                check = db.table("users").select("*").eq("discord_id", discord_id).execute()
+                if len(check.data) > 0:
+                    user_data = check.data[0]
+                    if user_data.get('is_banned'):
+                        await interaction.edit_original_response(content="**Přístup zamítnut:** Máte udělený BAN na Projektu OIS IDPK. 🛑", view=None)
+                        return
+                    elif user_data.get('is_deleted'):
+                        highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                        new_app_id = 1000
+                        if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
+                            new_app_id = highest_id_resp.data[0]["app_id"] + 1
+
+                        updates = {
+                            "app_id": new_app_id,
+                            "nick": nick,
+                            "is_deleted": False,
+                            "deleted_at": "",
+                            "role": "User"
+                        }
+                        db.table("users").update(updates).eq("discord_id", discord_id).execute()
+                else:
                     highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
                     new_app_id = 1000
                     if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
                         new_app_id = highest_id_resp.data[0]["app_id"] + 1
 
-                    updates = {
+                    novy = {
                         "app_id": new_app_id,
-                        "nick": nick,
+                        "discord_id": discord_id, 
+                        "nick": nick, 
+                        "role": "User", 
+                        "hwid": "",
+                        "is_banned": False,
                         "is_deleted": False,
-                        "deleted_at": "",
-                        "role": "User"
+                        "deleted_at": ""
                     }
-                    db.table("users").update(updates).eq("discord_id", discord_id).execute()
-            else:
-                highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
-                new_app_id = 1000
-                if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
-                    new_app_id = highest_id_resp.data[0]["app_id"] + 1
-
-                novy = {
-                    "app_id": new_app_id,
-                    "discord_id": discord_id, 
-                    "nick": nick, 
-                    "role": "User", 
-                    "hwid": "",
-                    "is_banned": False,
-                    "is_deleted": False,
-                    "deleted_at": ""
-                }
-                db.table("users").insert(novy).execute()
-        
-        await interaction.response.edit_message(content="**Ověření úspěšné.**\nNyní si prosím vyberte verzi softwaru k instalaci:", view=VersionView())
+                    db.table("users").insert(novy).execute()
+            
+            await interaction.edit_original_response(content="**Ověření úspěšné.**\nNyní si prosím vyberte verzi softwaru k instalaci:", view=VersionView())
+        except Exception as e:
+            print(f"Chyba při souhlasu: {e}", flush=True)
+            await interaction.edit_original_response(content="Došlo k chybě při komunikaci s databází. Zkuste to prosím znovu.", view=None)
 
     @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, custom_id="btn_disagree", emoji="❌")
     async def disagree_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
