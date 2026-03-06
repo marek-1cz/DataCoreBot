@@ -37,7 +37,6 @@ BASE_HTML = """
         }
         body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-dark); color: var(--text-main); margin: 0; padding: 0; }
         
-        /* Navigace pro veřejný web */
         .top-nav { background-color: rgba(15, 23, 42, 0.9); padding: 15px 40px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; backdrop-filter: blur(10px); z-index: 100; }
         .logo { font-size: 24px; font-weight: 800; color: var(--blue-main); text-decoration: none; letter-spacing: 1px; }
         .nav-links a { color: var(--text-main); text-decoration: none; margin-left: 20px; font-weight: 500; transition: color 0.3s; }
@@ -60,10 +59,8 @@ BASE_HTML = """
         th { background-color: #0f172a; color: var(--blue-main); font-weight: 600; text-transform: uppercase; font-size: 13px; }
         tr:hover { background-color: #334155; }
         
-        /* Role Tags */
         .role-tag { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); border: 1px solid var(--blue-main); margin: 2px; }
         
-        /* Dashboard Layout */
         .dashboard-wrapper { display: flex; min-height: 100vh; }
         .sidebar { width: 250px; background-color: var(--bg-panel); border-right: 1px solid #334155; display: flex; flex-direction: column; }
         .sidebar-header { padding: 20px; border-bottom: 1px solid #334155; text-align: center; }
@@ -73,12 +70,10 @@ BASE_HTML = """
         .sidebar-link i { width: 25px; }
         .dashboard-content { flex-grow: 1; padding: 30px; background-color: var(--bg-dark); overflow-y: auto; }
         
-        /* Modal Window (Fancy Popup) */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); z-index: 1000; align-items: center; justify-content: center; }
         .modal { background: var(--bg-panel); padding: 30px; border-radius: 15px; width: 500px; max-width: 90%; border-top: 5px solid var(--blue-main); box-shadow: 0 15px 30px rgba(0,0,0,0.5); transform: translateY(20px); transition: 0.3s; }
         .modal.active { display: flex; }
         
-        /* Flash Zprávy */
         .alert { padding: 15px; border-radius: 5px; margin-bottom: 20px; font-weight: bold; }
         .alert-success { background-color: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid var(--success); }
         .alert-error { background-color: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
@@ -90,10 +85,7 @@ BASE_HTML = """
 </html>
 """
 
-# Wrapper pro veřejný web
 PUBLIC_LAYOUT = """
-{% extends 'base' %}
-{% block layout %}
 <nav class="top-nav">
     <a href="/" class="logo">OIS IDPK</a>
     <div class="nav-links">
@@ -113,13 +105,9 @@ PUBLIC_LAYOUT = """
     {% endwith %}
     {% block content %}{% endblock %}
 </div>
-{% endblock %}
 """
 
-# Wrapper pro Dashboard (bez horní lišty, má sidebar)
 DASHBOARD_LAYOUT = """
-{% extends 'base' %}
-{% block layout %}
 <div class="dashboard-wrapper">
     <div class="sidebar">
         <div class="sidebar-header">
@@ -155,33 +143,35 @@ DASHBOARD_LAYOUT = """
 
 <div class="modal-overlay" id="editModal">
     <div class="modal" id="modalContent">
-        <h2 style="color: var(--blue-main); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">
-            <i class="fas fa-user-edit"></i> Úprava Uživatele <span id="modalAppId" style="color: var(--text-muted); font-size: 16px;"></span>
-        </h2>
-        
-        <form action="/dashboard/edit_user" method="POST">
-            <input type="hidden" name="discord_id" id="modalDiscordId">
+        <div style="width: 100%;">
+            <h2 style="color: var(--blue-main); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+                <i class="fas fa-user-edit"></i> Úprava Uživatele <span id="modalAppId" style="color: var(--text-muted); font-size: 16px;"></span>
+            </h2>
             
-            <label>Herní Nick:</label>
-            <input type="text" name="nick" id="modalNick" required>
-            
-            <label>Role (lze psát více rolí oddělených čárkou, např: SA, DEV, VIP):</label>
-            <input type="text" name="roles" id="modalRoles" placeholder="User">
-            
-            <label>HWID (Zámek na PC):</label>
-            <input type="text" name="hwid" id="modalHwid" placeholder="Pro odblokování smažte text zde">
-            
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button type="submit" name="action" value="save" class="btn" style="flex: 2;"><i class="fas fa-save"></i> Uložit změny</button>
-                <button type="submit" name="action" value="ban" id="btnBan" class="btn btn-warning" style="flex: 1;"><i class="fas fa-ban"></i> Dát BAN</button>
-                <button type="submit" name="action" value="unban" id="btnUnban" class="btn btn-success" style="flex: 1; background-color: var(--success); border: none; display: none;"><i class="fas fa-check"></i> Un-BAN</button>
-            </div>
-            
-            <div style="margin-top: 15px; border-top: 1px solid #334155; padding-top: 15px;">
-                <button type="submit" name="action" value="delete" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Smazat účet? ID zůstane zablokováno pro nové hráče.')"><i class="fas fa-trash"></i> Smazat účet (Soft Delete)</button>
-            </div>
-        </form>
-        <button class="btn" onclick="closeModal()" style="background: transparent; color: var(--text-muted); width: 100%; margin-top: 10px; border: 1px solid #334155;">Zrušit</button>
+            <form action="/dashboard/edit_user" method="POST">
+                <input type="hidden" name="discord_id" id="modalDiscordId">
+                
+                <label>Herní Nick:</label>
+                <input type="text" name="nick" id="modalNick" required>
+                
+                <label>Role (lze psát více rolí oddělených čárkou, např: SA, DEV, VIP):</label>
+                <input type="text" name="roles" id="modalRoles" placeholder="User">
+                
+                <label>HWID (Zámek na PC):</label>
+                <input type="text" name="hwid" id="modalHwid" placeholder="Pro odblokování smažte text zde">
+                
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" name="action" value="save" class="btn" style="flex: 2;"><i class="fas fa-save"></i> Uložit</button>
+                    <button type="submit" name="action" value="ban" id="btnBan" class="btn btn-warning" style="flex: 1;"><i class="fas fa-ban"></i> BAN</button>
+                    <button type="submit" name="action" value="unban" id="btnUnban" class="btn" style="flex: 1; background-color: var(--success); display: none;"><i class="fas fa-check"></i> Un-BAN</button>
+                </div>
+                
+                <div style="margin-top: 15px; border-top: 1px solid #334155; padding-top: 15px;">
+                    <button type="submit" name="action" value="delete" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Opravdu smazat účet? (ID zůstane blokované)')"><i class="fas fa-trash"></i> Smazat účet (Soft Delete)</button>
+                </div>
+            </form>
+            <button class="btn" onclick="closeModal()" style="background: transparent; color: var(--text-muted); width: 100%; margin-top: 10px; border: 1px solid #334155;">Zrušit</button>
+        </div>
     </div>
 </div>
 
@@ -206,13 +196,9 @@ DASHBOARD_LAYOUT = """
         document.getElementById('editModal').style.display = 'none';
     }
 </script>
-{% endblock %}
 """
 
-# --- STRÁNKY ---
 HTML_HOME = """
-{% extends 'public' %}
-{% block content %}
 <div style="text-align: center; padding: 50px 0;">
     <h1 style="font-size: 3.5em; color: var(--blue-main); margin-bottom: 10px; letter-spacing: 2px;">Projekt OIS IDPK</h1>
     <p style="font-size: 1.2em; color: var(--text-muted); max-width: 600px; margin: 0 auto 30px auto;">
@@ -220,12 +206,9 @@ HTML_HOME = """
     </p>
     <a href="/download" class="btn" style="font-size: 18px; padding: 15px 30px; border-radius: 30px;"><i class="fas fa-download"></i> Získat Software</a>
 </div>
-{% endblock %}
 """
 
 HTML_LOGIN = """
-{% extends 'public' %}
-{% block content %}
 <div style="max-width: 400px; margin: 50px auto; background-color: var(--bg-panel); padding: 30px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border-top: 4px solid var(--blue-main);">
     <h2 style="text-align: center; color: var(--blue-main);"><i class="fas fa-lock"></i> Dashboard Login</h2>
     <form method="POST">
@@ -234,12 +217,28 @@ HTML_LOGIN = """
         <button type="submit" class="btn" style="width: 100%;">Odemknout</button>
     </form>
 </div>
-{% endblock %}
+"""
+
+HTML_TEAM_ADD = """
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; max-width: 600px;">
+    <h3 style="color: var(--blue-main); margin-top: 0;">➕ Přidat člena týmu</h3>
+    <form action="/dashboard/add_team" method="POST">
+        <input type="text" name="name" placeholder="Jméno / Přezdívka" required>
+        <input type="text" name="discord_nick" placeholder="Discord Nick (bez @)" required>
+        <input type="url" name="image_url" placeholder="URL obrázku (odkaz na fotku)" required>
+        <textarea name="description" placeholder="Něco o něm..." rows="3" required></textarea>
+        
+        <div style="display: flex; gap: 10px;">
+            <input type="text" name="role_name" placeholder="Název Role (např. Developer)" required style="flex: 2;">
+            <input type="color" name="role_color" value="#38bdf8" style="flex: 1; padding: 2px; height: 40px;">
+        </div>
+        
+        <button type="submit" class="btn" style="width: 100%;">Přidat do týmu</button>
+    </form>
+</div>
 """
 
 HTML_DASHBOARD_MAIN = """
-{% extends 'dashboard' %}
-{% block content %}
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
     <div style="background: var(--bg-panel); padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #334155;">
@@ -292,7 +291,6 @@ HTML_DASHBOARD_MAIN = """
         {% endfor %}
     </table>
 </div>
-{% endblock %}
 """
 
 # ==========================================
@@ -300,12 +298,12 @@ HTML_DASHBOARD_MAIN = """
 # ==========================================
 
 def render_public(template_string, **kwargs):
-    html = PUBLIC_LAYOUT.replace('{% block layout %}{% endblock %}', template_string)
+    html = PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
     html = BASE_HTML.replace('{% block layout %}{% endblock %}', html)
     return render_template_string(html, **kwargs)
 
 def render_dashboard(template_string, **kwargs):
-    html = DASHBOARD_LAYOUT.replace('{% block layout %}{% endblock %}', template_string)
+    html = DASHBOARD_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
     html = BASE_HTML.replace('{% block layout %}{% endblock %}', html)
     return render_template_string(html, **kwargs)
 
@@ -322,6 +320,11 @@ def home():
 @app.route('/download')
 def download():
     return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--blue-main);'>Stažení</h2><p>Připojte se na Discord pro získání přístupu.</p></div>")
+
+@app.route('/team')
+def team():
+    # Tady by byla stránka Náš tým (prozatím public placeholder)
+    return render_public("<h2 style='color: var(--blue-main); text-align: center;'>Náš Tým</h2><p style='text-align: center;'>Zatím prázdné.</p>")
 
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard_main():
@@ -351,7 +354,6 @@ def dashboard_main():
                 query = query.eq("is_deleted", True)
                 title = "Smazané účty (Historie)"
             elif filter_type:
-                # Jednoduché hledání role v textu
                 query = query.ilike("role", f"%{filter_type}%").eq("is_deleted", False)
                 title = f"Uživatelé s rolí: {filter_type}"
             else:
@@ -363,6 +365,33 @@ def dashboard_main():
             flash(f'Chyba databáze: {e}', 'error')
 
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title=title)
+
+@app.route('/dashboard/team', methods=['GET'])
+def dashboard_team_page():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    return render_dashboard(HTML_TEAM_ADD)
+
+@app.route('/dashboard/add_team', methods=['POST'])
+def add_team():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    
+    db = get_db()
+    if db:
+        try:
+            new_member = {
+                "name": request.form.get("name"),
+                "discord_nick": request.form.get("discord_nick"),
+                "image_url": request.form.get("image_url"),
+                "description": request.form.get("description"),
+                "role_name": request.form.get("role_name"),
+                "role_color": request.form.get("role_color")
+            }
+            db.table("team").insert(new_member).execute()
+            flash('Člen týmu byl úspěšně přidán!', 'success')
+        except Exception as e:
+            flash(f'Chyba při přidávání do týmu: {e}', 'error')
+            
+    return redirect(url_for('dashboard_main'))
 
 @app.route('/dashboard/edit_user', methods=['POST'])
 def edit_user():
@@ -444,7 +473,6 @@ async def register(ctx, nick: str = None):
             else:
                 await ctx.send(f"Už jsi zaregistrovaný s ID #{user_data.get('app_id')}! ✅")
         else:
-            # Zjištění nejvyššího aktuálního App ID
             highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
             new_app_id = 1000
             if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
@@ -462,7 +490,7 @@ async def register(ctx, nick: str = None):
             db.table("users").insert(novy).execute()
             await ctx.send(f"Registrace do Projektu OIS IDPK hotova! Tvé Aplikační ID je **#{new_app_id}**. Vítej, **{nick}**! ✅")
     except Exception as e:
-        await ctx.send(f"Chyba při registraci: {e}")
+        await ctx.send(f"Chyba při registraci (Máš v Supabase přidané nové sloupce?): {e}")
 
 if __name__ == "__main__":
     Thread(target=run_web).start()
