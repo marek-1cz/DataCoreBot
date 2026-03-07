@@ -91,7 +91,6 @@ BASE_HTML = """
         .checkbox-group { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
         .checkbox-group label { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: bold; cursor: pointer; }
         
-        /* Nové styly pro profil */
         .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
         .profile-card { background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; }
         .profile-stat { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
@@ -1428,6 +1427,7 @@ class RulesView(discord.ui.View):
             discord_id = str(interaction.user.id)
             nick = interaction.user.display_name
             user_roles = "User"
+            now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
             
             if db:
                 set_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute()
@@ -1456,7 +1456,7 @@ class RulesView(discord.ui.View):
                             new_app_id = highest_id_resp.data[0]["app_id"] + 1
 
                         new_role = matched_pending['roles'] if matched_pending else "User"
-                        updates = {"app_id": new_app_id, "nick": nick, "is_deleted": False, "deleted_at": "", "role": new_role}
+                        updates = {"app_id": new_app_id, "nick": nick, "is_deleted": False, "deleted_at": "", "role": new_role, "registered_at": now_str}
                         db.table("users").update(updates).eq("discord_id", discord_id).execute()
                         user_roles = new_role
                         if matched_pending: db.table("pending_roles").delete().eq("id", matched_pending['id']).execute()
@@ -1471,7 +1471,6 @@ class RulesView(discord.ui.View):
                         new_app_id = highest_id_resp.data[0]["app_id"] + 1
 
                     new_role = matched_pending['roles'] if matched_pending else "User"
-                    now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
                     novy = {
                         "app_id": new_app_id, "discord_id": discord_id, "nick": nick, 
                         "role": new_role, "hwid": "", "is_banned": False, 
@@ -1511,6 +1510,32 @@ class DownloadView(discord.ui.View):
         )
         await interaction.response.send_message(pravidla_text, view=RulesView(), ephemeral=True)
 
+# Tlačítka pro perdelete ověření
+class PerDeleteConfirm(discord.ui.View):
+    def __init__(self, target_id, author_id):
+        super().__init__(timeout=60)
+        self.target_id = target_id
+        self.author_id = author_id
+
+    @discord.ui.button(label="Ano, trvale smazat", style=discord.ButtonStyle.danger, emoji="⚠️")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+            return
+        await interaction.response.defer()
+        db = get_db()
+        if db:
+            db.table("users").delete().eq("discord_id", self.target_id).execute()
+            await interaction.edit_original_response(content=f"✅ Účet `{self.target_id}` byl z databáze PERMANENTNĚ smazán.", view=None, embed=None)
+            await async_send_log_to_discord("🔥 Permanentní smazání", f"Admin {interaction.user.mention} trvale smazal účet `{self.target_id}` přes Discord příkaz.", 0x000000)
+
+    @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+            return
+        await interaction.response.edit_message(content="❌ Akce zrušena. Účet smazán nebyl.", view=None, embed=None)
+
 @bot.event
 async def on_ready():
     bot.add_view(DownloadView())
@@ -1533,6 +1558,8 @@ async def on_command_error(ctx, error):
             await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!SM @uživatel`", delete_after=15)
         elif cmd == "db":
             await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!DB 123456789012345678`", delete_after=15)
+        elif cmd in ["ban", "unban", "delete", "perdelete"]:
+            await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!{cmd} 123456789012345678`", delete_after=15)
         else:
             await ctx.send(f"{ctx.author.mention} ❌ **Chybí argument:** Zkontroluj si `!help` pro správný formát.", delete_after=15)
     elif isinstance(error, commands.MemberNotFound):
@@ -1615,7 +1642,86 @@ async def db_cmd(ctx, discord_id: str):
     
     stav_text = "POVOLEN ✅" if new_status else "ODEBRÁN ❌"
     await ctx.send(f"⚙️ Přístup do administrace pro uživatele **{nick}** byl úspěšně **{stav_text}**.")
-    await async_send_log_to_discord("💻 Přístup do DB", f"Manažer {ctx.author.mention} změnil přístup uživateli **{nick}** na: **{stav_text}**", 0xf59e0b)
+    await async_send_log_to_discord("💻 Přístup do DB", f"Manažer {ctx.author.mention} změnil přístup uživateli **{nick}** (`{discord_id}`) na: **{stav_text}**", 0xf59e0b)
+
+@bot.command(name="ban")
+@check_sm_role()
+async def ban_cmd(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    user_data = db.table("users").select("nick").eq("discord_id", discord_id).execute().data
+    if not user_data:
+        await ctx.send(f"❌ {ctx.author.mention} Uživatel s ID `{discord_id}` nebyl v databázi nalezen.", delete_after=10)
+        return
+    nick = user_data[0].get("nick", "Neznámý")
+    db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+    await ctx.send(f"🔨 Uživatel **{nick}** dostal BAN.")
+    await async_send_log_to_discord("🔨 Udělen BAN", f"Manažer {ctx.author.mention} udělil BAN uživateli **{nick}** (`{discord_id}`).", 0xf59e0b)
+    
+    # DM zpráva
+    try:
+        u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+        if u: await u.send("Vážený uživateli, Váš účet na Projektu OIS IDPK má nyní BAN a přístup do administrace Vám byl zablokován.")
+    except: pass
+
+@bot.command(name="unban")
+@check_sm_role()
+async def unban_cmd(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    user_data = db.table("users").select("nick").eq("discord_id", discord_id).execute().data
+    if not user_data:
+        await ctx.send(f"❌ {ctx.author.mention} Uživatel s ID `{discord_id}` nebyl v databázi nalezen.", delete_after=10)
+        return
+    nick = user_data[0].get("nick", "Neznámý")
+    db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
+    await ctx.send(f"🕊️ Uživateli **{nick}** byl zrušen BAN.")
+    await async_send_log_to_discord("🕊️ Zrušen BAN", f"Manažer {ctx.author.mention} zrušil BAN uživateli **{nick}** (`{discord_id}`).", 0x10b981)
+    
+    # DM zpráva
+    try:
+        u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+        if u: await u.send("Vážený uživateli, Váš BAN na Projektu OIS IDPK byl úspěšně zrušen.")
+    except: pass
+
+@bot.command(name="delete")
+@check_sm_role()
+async def delete_cmd(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    user_data = db.table("users").select("nick").eq("discord_id", discord_id).execute().data
+    if not user_data:
+        await ctx.send(f"❌ {ctx.author.mention} Uživatel s ID `{discord_id}` nebyl v databázi nalezen.", delete_after=10)
+        return
+    now = datetime.now().strftime("%d.%m.%Y %H:%M")
+    nick = user_data[0].get("nick", "Neznámý")
+    db.table("users").update({"is_deleted": True, "deleted_at": now, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+    await ctx.send(f"☠️ Účet uživatele **{nick}** byl smazán.")
+    await async_send_log_to_discord("☠️ Účet Smazán", f"Manažer {ctx.author.mention} smazal (Soft Delete) účet uživatele **{nick}** (`{discord_id}`).", 0xef4444)
+    
+    # DM zpráva
+    try:
+        u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+        if u: await u.send("Váš účet na Projektu OIS IDPK byl administrátorem smazán a přístup odepřen.")
+    except: pass
+
+@bot.command(name="perdelete")
+@check_sm_role()
+async def perdelete_cmd(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    user_data = db.table("users").select("nick").eq("discord_id", discord_id).execute().data
+    if not user_data:
+        await ctx.send(f"❌ {ctx.author.mention} Uživatel s ID `{discord_id}` nebyl v databázi nalezen.", delete_after=10)
+        return
+    
+    nick = user_data[0].get("nick", "Neznámý")
+    embed = discord.Embed(
+        title="⚠️ Varování: Permanentní smazání", 
+        description=f"Opravdu chceš nevratně smazat účet **{nick}** (`{discord_id}`)?\n\nTato akce vymaže veškerá data z databáze a nelze ji vzít zpět!", 
+        color=0xef4444
+    )
+    await ctx.send(embed=embed, view=PerDeleteConfirm(discord_id, ctx.author.id))
 
 @bot.command()
 async def ping(ctx):
@@ -1630,7 +1736,7 @@ async def help(ctx):
         color=0x38bdf8
     )
     embed.add_field(name="🌍 Veřejné příkazy", value="`!help` - Zobrazí tuto nápovědu.\n`!verze` - Vypíše dostupné verze aplikace.\n`!ping` - Odezva serveru bota.\n`!info [ID]` - Informace o účtu z databáze.", inline=False)
-    embed.add_field(name="🛡️ Správa Discordu (Pro roli SM)", value="`!message #kanál text` - Odešle libovolnou zprávu do vybraného kanálu.\n`!dm @uživatel text` - Odešle uživateli soukromou zprávu.\n`!DB [ID]` - Přepne (povolí/zakáže) uživateli přístup do webové administrace.", inline=False)
+    embed.add_field(name="🛡️ Správa DB a Discordu (Pro roli SM)", value="`!message #kanál text` - Odešle zprávu do kanálu.\n`!dm @uživatel text` - Odešle soukromou zprávu.\n`!DB [ID]` - Povolí/zakáže přístup do administrace.\n`!ban [ID]` - Zabanuje uživatele.\n`!unban [ID]` - Zruší BAN uživatele.\n`!delete [ID]` - Smaže uživatele z databáze.\n`!perdelete [ID]` - Trvale vymaže veškerá data uživatele.", inline=False)
     embed.add_field(name="⚙️ Administrace (Pro roli web-sa)", value="`!setup_download` - Vytvoří instalační panel pro uživatele.\n`!SM @uživatel` - Rychle přidělí/odebere uživateli roli SM.", inline=False)
     await ctx.send(embed=embed)
 
