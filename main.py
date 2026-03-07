@@ -193,9 +193,11 @@ DASHBOARD_LAYOUT = """
                     <div class="profile-val" id="profRegistered"></div>
                     <div class="profile-stat" style="margin-top: 10px;">Aktivita v aplikaci (Status):</div>
                     <div class="profile-val" style="color: #64748b;"><i>Připravuje se...</i></div>
+                    <div class="profile-stat" style="margin-top: 10px;">Přístup do webové DB:</div>
+                    <div class="profile-val" id="profDbAccess"></div>
                 </div>
                 
-                <div class="profile-card" style="max-height: 150px; overflow-y: auto;">
+                <div class="profile-card" style="max-height: 180px; overflow-y: auto;">
                     <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--blue-main);">Historie stahování:</div>
                     <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent; border-radius: 0;">
                         <tbody id="profDownloads">
@@ -263,6 +265,7 @@ DASHBOARD_LAYOUT = """
         document.getElementById('profRegistered').innerText = registered_at && registered_at !== 'None' ? registered_at : 'Neznámé (Starý účet)';
         
         document.getElementById('modalDashboardAccess').checked = (dashboard_access === 'True');
+        document.getElementById('profDbAccess').innerHTML = dashboard_access === 'True' ? '<span style="color: var(--success);"><i class="fas fa-check-circle"></i> Povoleno</span>' : '<span style="color: var(--danger);"><i class="fas fa-times-circle"></i> Zakázáno</span>';
         
         document.querySelectorAll('input[name="roles"]').forEach(cb => cb.checked = false);
         roles.split(',').forEach(r => {
@@ -285,7 +288,6 @@ DASHBOARD_LAYOUT = """
             }
         }
 
-        // Fetch Discord Status & Downloads
         document.getElementById('profJoined').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         document.getElementById('modalStatusDot').innerHTML = '';
         document.getElementById('profDownloads').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
@@ -667,7 +669,7 @@ HTML_DASHBOARD_MAIN = """
             <th>Discord ID</th>
             <th>Nick</th>
             <th>Role</th>
-            <th>Přístup k DB</th>
+            <th>Zaregistrován</th>
             <th>Status</th>
             <th>Akce</th>
         </tr>
@@ -691,12 +693,8 @@ HTML_DASHBOARD_MAIN = """
                     {% endif %}
                 {% endfor %}
             </td>
-            <td style="text-align: center;">
-                {% if user.dashboard_access %}
-                    <span style="color: var(--success);"><i class="fas fa-check"></i></span>
-                {% else %}
-                    <span style="color: var(--danger);"><i class="fas fa-times"></i></span>
-                {% endif %}
+            <td style="color: var(--text-muted); font-size: 13px;">
+                {{ user.registered_at if user.registered_at else 'Neznámé' }}
             </td>
             <td>
                 {% if user.is_deleted %}
@@ -844,7 +842,23 @@ def home():
 
 @app.route('/download')
 def download_home():
-    return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--blue-main);'>Stažení</h2><p>Pro stažení softwaru se prosím připojte na náš Discord a využijte instalační panel.</p></div>")
+    html = """
+    <div style="text-align: center; padding: 60px 20px; max-width: 700px; margin: 50px auto; background-color: var(--bg-panel); border-radius: 15px; box-shadow: 0 15px 30px rgba(0,0,0,0.5); border-top: 5px solid #5865F2;">
+        <h2 style="color: var(--text-main); font-size: 2.2em; margin-top: 0;"><i class="fas fa-shield-alt" style="color: var(--blue-main);"></i> Oficiální distribuce softwaru</h2>
+        <p style="color: var(--text-muted); font-size: 1.1em; line-height: 1.6; margin-bottom: 20px; text-align: left; padding: 0 20px;">
+            Vážený uživateli,<br><br>
+            velice si vážíme Vašeho zájmu o <b>Projekt OIS IDPK</b>. Z důvodu zachování maximální bezpečnosti, spolehlivé autorizace uživatelů a poskytování kvalitní technické podpory jsme se rozhodli přesunout veškerou distribuci našeho softwaru na naši zabezpečenou komunikační platformu.
+        </p>
+        <div style="background-color: rgba(88, 101, 242, 0.1); border: 1px solid #5865F2; padding: 30px 20px; border-radius: 10px; margin: 30px 20px;">
+            <p style="color: var(--text-main); font-weight: bold; font-size: 1.2em; margin-top: 0;">Pro stažení softwaru se prosím připojte na náš Discord.</p>
+            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Kliknutím na logo níže budete přesměrováni přímo na náš server, kde naleznete instalační panel a další pokyny.</p>
+            <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; text-decoration: none; transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                <i class="fab fa-discord" style="font-size: 120px; color: #5865F2; filter: drop-shadow(0px 10px 15px rgba(88,101,242,0.4));"></i>
+            </a>
+        </div>
+    </div>
+    """
+    return render_public(html)
 
 @app.route('/download/<token>')
 def secure_download(token):
@@ -1305,10 +1319,41 @@ intents.presences = True
 bot = commands.Bot(command_prefix='!', intents=intents, case_insensitive=True)
 
 bot.remove_command('help')
+bot.invites_cache = {}
+
+# Načtení pozvánek po spuštění bota
+@bot.event
+async def on_ready():
+    bot.add_view(DownloadView())
+    keep_pixeldrain_alive.start()
+    sync_discord_roles.start()
+    for guild in bot.guilds:
+        try:
+            bot.invites_cache[guild.id] = await guild.invites()
+        except: pass
+    print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
 
 @bot.event
 async def on_member_join(member):
-    await async_send_log_to_discord("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {datetime.now().strftime('%d.%m.%Y %H:%M')}", 0x10b981)
+    used_invite = None
+    try:
+        new_invites = await member.guild.invites()
+        old_invites = bot.invites_cache.get(member.guild.id, [])
+        for invite in new_invites:
+            for old_invite in old_invites:
+                if invite.code == old_invite.code and invite.uses > old_invite.uses:
+                    used_invite = invite
+                    break
+            if used_invite:
+                break
+        bot.invites_cache[member.guild.id] = new_invites
+    except: pass
+    
+    link_info = ""
+    if used_invite and used_invite.code == "vmTagbC9mF":
+        link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!"
+        
+    await async_send_log_to_discord("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {datetime.now().strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
 
 async def update_member_roles(member, role_string):
     if not member: return
@@ -1428,7 +1473,7 @@ class VersionSelect(discord.ui.Select):
             await interaction.edit_original_response(content=f"**Projekt OIS IDPK - Odkaz připraven**\n\nZde je Váš zabezpečený odkaz ke stažení. Kliknutím budete přesměrováni na náš portál.\n🔗 {link}\n\n*Tento odkaz funguje pouze pro Vás.*", view=None)
         except Exception as e:
             print(e, flush=True)
-            await interaction.edit_original_response(content=f"Došlo k chybě. Zkuste to prosím znovu.\n*(Technický detail: {str(e)})*", view=None)
+            await interaction.edit_original_response(content=f"Došlo k chybě databáze. Zkuste to prosím znovu.\n*(Technický detail: {str(e)})*", view=None)
 
 class VersionView(discord.ui.View):
     def __init__(self, user_role):
@@ -1530,6 +1575,7 @@ class DownloadView(discord.ui.View):
         )
         await interaction.response.send_message(pravidla_text, view=RulesView(), ephemeral=True)
 
+
 # Tlačítka pro perdelete ověření
 class PerDeleteConfirm(discord.ui.View):
     def __init__(self, target_id, author_id):
@@ -1555,13 +1601,6 @@ class PerDeleteConfirm(discord.ui.View):
             await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
             return
         await interaction.response.edit_message(content="❌ Akce zrušena. Účet smazán nebyl.", view=None, embed=None)
-
-@bot.event
-async def on_ready():
-    bot.add_view(DownloadView())
-    keep_pixeldrain_alive.start()
-    sync_discord_roles.start()
-    print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
 
 # --- CHYTRÉ ZACHYTÁVÁNÍ CHYB PŘÍKAZŮ ---
 @bot.event
@@ -1615,21 +1654,37 @@ def check_sm_role():
 # --- DISCORD PŘÍKAZY ---
 
 @bot.command()
-async def register(ctx):
+async def register(ctx, target_id: str = None):
     db = get_db()
     if not db:
         await ctx.send("❌ Chyba připojení k databázi.")
         return
         
-    discord_id = str(ctx.author.id)
-    nick = ctx.author.display_name
+    if target_id:
+        is_admin = discord.utils.get(ctx.author.roles, name="web-sa") or discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator
+        if not is_admin:
+            await ctx.send(f"❌ {ctx.author.mention} Nemáš oprávnění registrovat cizí účty.")
+            return
+            
+        discord_id = target_id
+        target_member = ctx.guild.get_member(int(discord_id)) if discord_id.isdigit() else None
+        if not target_member and discord_id.isdigit():
+            try: target_member = await ctx.guild.fetch_member(int(discord_id))
+            except: pass
+            
+        nick = target_member.display_name if target_member else f"Uživatel {discord_id}"
+    else:
+        discord_id = str(ctx.author.id)
+        nick = ctx.author.display_name
+        target_member = ctx.author
+        
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
     
     check = db.table("users").select("*").eq("discord_id", discord_id).execute()
     if len(check.data) > 0:
         user_data = check.data[0]
         if user_data.get('is_banned'):
-            await ctx.send("❌ Nemůžete se zaregistrovat, Váš účet má BAN.")
+            await ctx.send("❌ Nemůžete se zaregistrovat, tento účet má BAN.")
             return
         elif user_data.get('is_deleted'):
             highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
@@ -1651,12 +1706,12 @@ async def register(ctx):
             if matched_pending: db.table("pending_roles").delete().eq("id", matched_pending['id']).execute()
             
             await async_send_log_to_discord("♻️ Znovuregistrace (Příkaz)", f"Uživatel **{nick}** ({discord_id}) si obnovil smazaný účet pomocí příkazu.\nPřiřazená role: **{new_role}**", 0x10b981)
-            await ctx.send(f"✅ Váš smazaný účet byl úspěšně obnoven! Vaše nové App ID je **#{new_app_id}**.")
+            await ctx.send(f"✅ Smazaný účet byl úspěšně obnoven! Nové App ID je **#{new_app_id}**.")
             
-            if isinstance(ctx.author, discord.Member):
-                await update_member_roles(ctx.author, new_role)
+            if target_member and isinstance(target_member, discord.Member):
+                await update_member_roles(target_member, new_role)
         else:
-            await ctx.send("ℹ️ Vy už jste v databázi zaregistrováni!")
+            await ctx.send(f"ℹ️ {'Tento uživatel' if target_id else 'Vy'} už {'je' if target_id else 'jste'} v databázi zaregistrován!")
     else:
         highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
         new_app_id = 1000
@@ -1683,10 +1738,10 @@ async def register(ctx):
             if matched_pending: db.table("pending_roles").delete().eq("id", matched_pending['id']).execute()
             
             await async_send_log_to_discord("👤 Nová registrace (Příkaz)", f"**Uživatel:** {nick}\n**ID:** `{discord_id}`\n**App ID:** #{new_app_id}\n**Přiřazená role:** {new_role}", 0x10b981)
-            await ctx.send(f"✅ Úspěšně zaregistrován do databáze! Vaše App ID je **#{new_app_id}**.")
+            await ctx.send(f"✅ Úspěšně zaregistrován do databáze! App ID je **#{new_app_id}**.")
             
-            if isinstance(ctx.author, discord.Member):
-                await update_member_roles(ctx.author, new_role)
+            if target_member and isinstance(target_member, discord.Member):
+                await update_member_roles(target_member, new_role)
         except Exception as e:
             await ctx.send(f"❌ Chyba databáze při ukládání: {e}")
 
@@ -1817,14 +1872,19 @@ async def perdelete_cmd(ctx, discord_id: str):
     await ctx.send(embed=embed, view=PerDeleteConfirm(discord_id, ctx.author.id))
 
 @bot.command()
+async def ping(ctx):
+    latency = round(bot.latency * 1000)
+    await ctx.send(f"🏓 Pong! Odezva serveru je **{latency}ms**.")
+
+@bot.command()
 async def help(ctx):
     embed = discord.Embed(
         title="🤖 Nápověda - IDPK OIS PROJEKT", 
         description="Jsem systémový bot spravující databázi a infrastrukturu Projektu OIS IDPK. Níže najdeš seznam dostupných příkazů.", 
         color=0x38bdf8
     )
-    embed.add_field(name="🌍 Veřejné příkazy", value="`!register` - Manuální registrace účtu do databáze.\n`!help` - Zobrazí tuto nápovědu.\n`!verze` - Vypíše dostupné verze aplikace.\n`!ping` - Odezva serveru bota.\n`!info [ID]` - Informace o účtu z databáze.", inline=False)
-    embed.add_field(name="🛡️ Správa DB a Discordu (Pro roli SM)", value="`!message #kanál text` - Odešle zprávu do kanálu.\n`!dm @uživatel text` - Odešle soukromou zprávu.\n`!DB [ID]` - Povolí/zakáže přístup do administrace.\n`!ban [ID]` - Zabanuje uživatele.\n`!unban [ID]` - Zruší BAN uživatele.\n`!delete [ID]` - Smaže uživatele z databáze.\n`!perdelete [ID]` - Trvale vymaže veškerá data uživatele.", inline=False)
+    embed.add_field(name="🌍 Veřejné příkazy", value="`!register` - Registruje tě do databáze.\n`!help` - Zobrazí tuto nápovědu.\n`!verze` - Vypíše dostupné verze aplikace.\n`!ping` - Odezva serveru bota.\n`!info [ID]` - Informace o účtu z databáze.", inline=False)
+    embed.add_field(name="🛡️ Správa DB a Discordu (Pro roli SM)", value="`!message #kanál text` - Odešle zprávu do kanálu.\n`!dm @uživatel text` - Odešle soukromou zprávu.\n`!DB [ID]` - Povolí/zakáže přístup do administrace.\n`!ban [ID]` - Zabanuje uživatele.\n`!unban [ID]` - Zruší BAN uživatele.\n`!delete [ID]` - Smaže uživatele z databáze.\n`!perdelete [ID]` - Trvale vymaže veškerá data uživatele.\n`!register [ID]` - Zaregistruje někoho cizího do DB.", inline=False)
     embed.add_field(name="⚙️ Administrace (Pro roli web-sa)", value="`!setup_download` - Vytvoří instalační panel pro uživatele.\n`!SM @uživatel` - Rychle přidělí/odebere uživateli roli SM.", inline=False)
     await ctx.send(embed=embed)
 
