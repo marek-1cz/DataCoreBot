@@ -17,7 +17,7 @@ app = Flask(__name__)
 app.secret_key = "ois_idpk_super_tajny_klic" 
 
 # ==========================================
-# NASTAVENÍ LOGA (ZDE VLOŽ ODKAZY NA SVÉ OBRÁZKY)
+# NASTAVENÍ LOGA (ZDE VLOŽ ODKAZY NA SVÉ OBRÁZKY ZE SUPABASE)
 # ==========================================
 URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf.png" 
 URL_VELKE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png"
@@ -115,7 +115,7 @@ BASE_HTML = """
 PUBLIC_LAYOUT = """
 <nav class="top-nav">
     <a href="/" class="logo">
-        <img src="{{ logo_male }}" alt="Logo" style="height: 30px; width: auto; border-radius: 4px;">
+        <img src="{{ logo_male }}" alt="Logo" style="height: 45px; width: auto; object-fit: contain;">
         OIS IDPK
     </a>
     <div class="nav-links">
@@ -142,7 +142,7 @@ DASHBOARD_LAYOUT = """
     <div class="sidebar">
         <div class="sidebar-header">
             <a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;">
-                <img src="{{ logo_male }}" alt="Logo" style="height: 24px; width: auto; border-radius: 4px;">
+                <img src="{{ logo_male }}" alt="Logo" style="height: 35px; width: auto; object-fit: contain;">
                 OIS IDPK
             </a>
             <div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div>
@@ -285,7 +285,6 @@ DASHBOARD_LAYOUT = """
             }
         }
 
-        // Fetch Discord Status & Downloads
         document.getElementById('profJoined').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         document.getElementById('modalStatusDot').innerHTML = '';
         document.getElementById('profDownloads').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
@@ -1817,11 +1816,6 @@ async def perdelete_cmd(ctx, discord_id: str):
     await ctx.send(embed=embed, view=PerDeleteConfirm(discord_id, ctx.author.id))
 
 @bot.command()
-async def ping(ctx):
-    latency = round(bot.latency * 1000)
-    await ctx.send(f"🏓 Pong! Odezva serveru je **{latency}ms**.")
-
-@bot.command()
 async def help(ctx):
     embed = discord.Embed(
         title="🤖 Nápověda - IDPK OIS PROJEKT", 
@@ -1899,4 +1893,3 @@ if __name__ == "__main__":
     Thread(target=run_web).start()
     token = os.environ.get("DISCORD_TOKEN")
     if token: bot.run(token)
-
