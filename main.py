@@ -673,18 +673,17 @@ def get_db():
 # --- AUTO LOGOUT & KONTROLA BANŮ PŘI KLIKNUTÍ V DASHBOARDU ---
 @app.before_request
 def check_session_validity():
-    # Zkontroluje, jestli je člověk na nějaké dashboard podstránce a je "přihlášený"
     if request.path.startswith('/dashboard') and request.path != '/dashboard/wait_auth' and session.get('logged_in'):
         discord_id = session.get('discord_id')
+        if discord_id == 'admin': 
+            return # Master heslo projde vždy bez ohledu na databázi
         if discord_id:
-            if discord_id == 'admin': return # Master heslo projde vždy
             db = get_db()
             if db:
                 user = db.table("users").select("dashboard_access, is_banned, is_deleted").eq("discord_id", discord_id).execute().data
-                # Pokud uživatel ztratil přístup, dostal ban nebo byl smazán -> vykopnutí
                 if not user or not user[0].get("dashboard_access") or user[0].get("is_banned") or user[0].get("is_deleted"):
                     session.clear()
-                    flash('Váš přístup do administrace byl zablokován nebo ukončen administrátorem.', 'error')
+                    flash('Váš přístup do administrace byl zablokován, zrušen nebo Váš účet neexistuje.', 'error')
                     return redirect(url_for('dashboard_main'))
 
 # Okamžitá synchronizace z webu do Discordu
@@ -904,11 +903,10 @@ def team():
 # ==========================================
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard_main():
-    # Záložní login pro master heslo
     if request.method == 'POST' and 'password' in request.form:
         if request.form.get('password') == os.environ.get("ADMIN_PASSWORD", "admin"):
             session['logged_in'] = True
-            session['discord_id'] = 'admin' # Bezpečnostní bypass heslem
+            session['discord_id'] = 'admin' # Master heslo
             return redirect(url_for('dashboard_main'))
         else:
             flash('Špatné heslo!', 'error')
@@ -976,7 +974,7 @@ def check_auth(discord_id):
             token_status = user[0].get("login_token")
             if token_status == "approved":
                 session['logged_in'] = True
-                session['discord_id'] = discord_id # Pro kontrolu auto-odhlašování
+                session['discord_id'] = discord_id # Zapsání pro auto-vyhazov
                 db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
                 return {"status": "approved"}
             elif token_status == "rejected":
@@ -1167,21 +1165,19 @@ def edit_user():
                 flash('Údaje byly úspěšně upraveny!', 'success')
                 
             elif action == 'ban':
-                # Při BANu odebereme i přístup do dashboardu
                 db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
-                send_dm_from_flask(discord_id, "Vážený uživateli, Váš účet na Projektu OIS IDPK má nyní BAN.")
+                send_dm_from_flask(discord_id, "Vážený uživateli, Váš účet na Projektu OIS IDPK má nyní BAN a přístup do administrace Vám byl zablokován.")
                 flash('BAN udělen a přístup do administrace zrušen.', 'warning')
                 
             elif action == 'unban':
                 db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
-                send_dm_from_flask(discord_id, "Vážený uživateli, Váš BAN na Projektu OIS IDPK byl zrušen.")
+                send_dm_from_flask(discord_id, "Vážený uživateli, Váš BAN na Projektu OIS IDPK byl úspěšně zrušen.")
                 flash('BAN zrušen.', 'success')
                 
             elif action == 'delete':
-                # Při smazání odebereme i přístup do dashboardu
                 now = datetime.now().strftime("%d.%m.%Y %H:%M")
                 db.table("users").update({"is_deleted": True, "deleted_at": now, "dashboard_access": False}).eq("discord_id", discord_id).execute()
-                send_dm_from_flask(discord_id, "Váš účet na Projektu OIS IDPK byl administrátorem smazán.")
+                send_dm_from_flask(discord_id, "Váš účet na Projektu OIS IDPK byl administrátorem smazán a přístup odepřen.")
                 flash('Účet smazán a přístup do administrace zrušen.', 'danger')
                 
             elif action == 'restore':
@@ -1212,11 +1208,11 @@ def run_web():
 intents = discord.Intents.default()
 intents.message_content = True 
 intents.members = True 
-bot = commands.Bot(command_prefix='!', intents=intents)
+# Zapneme ignorování velikosti písmen pro příkazy (!sm i !SM funguje stejně)
+bot = commands.Bot(command_prefix='!', intents=intents, case_insensitive=True)
 
 bot.remove_command('help')
 
-# --- LOGIKA PŘIŘAZOVÁNÍ ROLÍ NA SERVERU ---
 async def update_member_roles(member, role_string):
     if not member: return
     guild = member.guild
@@ -1427,41 +1423,39 @@ async def on_ready():
     sync_discord_roles.start()
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
 
+
 # --- CHYTRÉ ZACHYTÁVÁNÍ CHYB PŘÍKAZŮ ---
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        if ctx.command.name == "message":
-            await ctx.send("❌ **Špatný formát!** Správně to je: `!message #kanál tvůj dlouhý text`")
-        elif ctx.command.name == "dm":
-            await ctx.send("❌ **Špatný formát!** Správně to je: `!dm @uživatel tvůj dlouhý text`")
-        elif ctx.command.name == "info":
-            await ctx.send("❌ **Špatný formát!** Správně to je: `!info 123456789012345678`")
-        elif ctx.command.name == "SM":
-            await ctx.send("❌ **Špatný formát!** Správně to je: `!SM @uživatel`")
-        elif ctx.command.name == "DB":
-            await ctx.send("❌ **Špatný formát!** Správně to je: `!DB 123456789012345678`")
+        cmd = ctx.command.name.lower()
+        if cmd == "message":
+            await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!message #kanál tvůj text`")
+        elif cmd == "dm":
+            await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!dm @uživatel tvůj text`")
+        elif cmd == "info":
+            await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!info 123456789012345678`")
+        elif cmd == "sm":
+            await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!SM @uživatel`")
+        elif cmd == "db":
+            await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!DB 123456789012345678`")
         else:
-            await ctx.send(f"❌ **Chybí argument:** {error.param.name}")
+            await ctx.send(f"{ctx.author.mention} ❌ **Chybí argument:** Zkontroluj si `!help` pro správný formát.")
     elif isinstance(error, commands.MemberNotFound):
-        await ctx.send("❌ **Cíl nenalezen!** Ujisti se, že označuješ správného uživatele (@jméno).")
+        await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!** Ujisti se, že zadáváš platné ID uživatele nebo ho označuješ přes zavináč (@jméno).")
     elif isinstance(error, commands.ChannelNotFound):
-        await ctx.send("❌ **Kanál nenalezen!** Ujisti se, že označuješ správný kanál (#název-kanálu).")
+        await ctx.send(f"{ctx.author.mention} ❌ **Kanál nenalezen!** Ujisti se, že označuješ správný kanál (#název).")
     elif isinstance(error, commands.CheckFailure):
-        # Ignorujeme, práva už hlásí funkce níže
-        pass
+        pass # Už zachyceno v našem checku
     else:
-        print(f"[CMD ERROR] {error}")
+        print(f"[CMD ERROR] {error}", flush=True)
 
 # --- VLASTNÍ OPRÁVNĚNÍ PRO PŘÍKAZY ---
 def check_web_sa():
     async def predicate(ctx):
         if discord.utils.get(ctx.author.roles, name="web-sa") or ctx.author.guild_permissions.administrator:
             return True
-        try:
-            await ctx.author.send("❌ K tomuto příkazu nemáš oprávnění (vyžadována role `web-sa`).")
-            await ctx.message.delete()
-        except: pass
+        await ctx.send(f"❌ {ctx.author.mention}, k tomuto příkazu nemáš oprávnění (vyžadována role `web-sa`).", delete_after=10)
         return False
     return commands.check(predicate)
 
@@ -1469,10 +1463,7 @@ def check_sm_role():
     async def predicate(ctx):
         if discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator:
             return True
-        try:
-            await ctx.author.send("❌ K tomuto příkazu nemáš oprávnění (vyžadována role `SM`).")
-            await ctx.message.delete()
-        except: pass
+        await ctx.send(f"❌ {ctx.author.mention}, k tomuto příkazu nemáš oprávnění (vyžadována role `SM`).", delete_after=10)
         return False
     return commands.check(predicate)
 
@@ -1490,12 +1481,12 @@ async def setup_download(ctx):
     await ctx.send(embed=embed, view=DownloadView())
     await ctx.message.delete()
 
-@bot.command()
+@bot.command(name="sm") # Název funkce musí být malými písmeny, ale díky case_insensitive zareaguje na !SM
 @check_web_sa()
-async def SM(ctx, member: discord.Member):
+async def sm_cmd(ctx, member: discord.Member):
     role = discord.utils.get(ctx.guild.roles, name="SM")
     if not role:
-        await ctx.send("❌ Role `SM` na tomto serveru neexistuje. Vytvoř ji prosím.")
+        await ctx.send(f"❌ {ctx.author.mention} Role `SM` na tomto serveru neexistuje. Vytvoř ji prosím.")
         return
     if role in member.roles:
         await member.remove_roles(role)
@@ -1504,14 +1495,14 @@ async def SM(ctx, member: discord.Member):
         await member.add_roles(role)
         await ctx.send(f"➕ Role **SM** byla uživateli {member.mention} úspěšně přidělena.")
 
-@bot.command()
+@bot.command(name="db")
 @check_sm_role()
-async def DB(ctx, discord_id: str):
+async def db_cmd(ctx, discord_id: str):
     db = get_db()
     if not db: return
     user_data = db.table("users").select("dashboard_access, nick").eq("discord_id", discord_id).execute().data
     if not user_data:
-        await ctx.send(f"❌ Uživatel s ID `{discord_id}` nebyl v databázi nalezen.")
+        await ctx.send(f"❌ {ctx.author.mention} Uživatel s ID `{discord_id}` nebyl v databázi nalezen.")
         return
     
     current_status = user_data[0].get("dashboard_access", False)
@@ -1521,7 +1512,7 @@ async def DB(ctx, discord_id: str):
     db.table("users").update({"dashboard_access": new_status}).eq("discord_id", discord_id).execute()
     
     stav_text = "POVOLEN ✅" if new_status else "ODEBRÁN ❌"
-    await ctx.send(f"Přístup do administrace pro uživatele **{nick}** byl úspěšně **{stav_text}**.")
+    await ctx.send(f"⚙️ Přístup do administrace pro uživatele **{nick}** byl úspěšně **{stav_text}**.")
 
 @bot.command()
 async def ping(ctx):
@@ -1559,13 +1550,13 @@ async def verze(ctx):
 @bot.command()
 async def info(ctx, discord_id: str = None):
     if not discord_id:
-        await ctx.send("❌ **Špatný formát!** Zadejte prosím platné ID Discordu, např.: `!info 123456789012345678`")
+        await ctx.send(f"❌ {ctx.author.mention} **Špatný formát!** Zadejte prosím platné ID Discordu, např.: `!info 123456789012345678`")
         return
     db = get_db()
     if not db: return
     user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
     if not user:
-        await ctx.send(f"❌ Uživatel s Discord ID `{discord_id}` nebyl v databázi nalezen.")
+        await ctx.send(f"❌ {ctx.author.mention} Uživatel s Discord ID `{discord_id}` nebyl v databázi nalezen.")
         return
     u = user[0]
     status = "Aktivní"
@@ -1587,7 +1578,7 @@ async def dm(ctx, user: discord.Member, *, text: str):
         await user.send(text)
         await ctx.send(f"✅ Zpráva úspěšně odeslána do DM uživateli **{user.display_name}**.")
     except Exception:
-        await ctx.send(f"❌ Nelze odeslat zprávu. Uživatel má pravděpodobně zablokované soukromé zprávy na serveru.")
+        await ctx.send(f"❌ {ctx.author.mention} Nelze odeslat zprávu. Uživatel má pravděpodobně zablokované soukromé zprávy na serveru.")
 
 @bot.command()
 @check_sm_role()
@@ -1596,7 +1587,7 @@ async def message(ctx, channel: discord.TextChannel, *, text: str):
         await channel.send(text)
         await ctx.send(f"✅ Zpráva úspěšně odeslána do kanálu {channel.mention}.")
     except Exception:
-        await ctx.send("❌ Nemám oprávnění posílat zprávy do tohoto kanálu.")
+        await ctx.send(f"❌ {ctx.author.mention} Nemám oprávnění posílat zprávy do tohoto kanálu.")
 
 if __name__ == "__main__":
     Thread(target=run_web).start()
