@@ -670,6 +670,24 @@ def get_db():
     if not url or not key: return None
     return create_client(url, key)
 
+# Okamžitá synchronizace z webu do Discordu
+def sync_roles_from_flask(discord_id, role_string):
+    async def sync():
+        try:
+            for guild in bot.guilds:
+                member = guild.get_member(int(discord_id))
+                if not member:
+                    try:
+                        member = await guild.fetch_member(int(discord_id))
+                    except: pass
+                if member:
+                    await update_member_roles(member, role_string)
+        except Exception as e:
+            print(f"[CHYBA] Okamžitý sync rolí selhal: {e}", flush=True)
+            
+    if bot.loop and bot.loop.is_running():
+        asyncio.run_coroutine_threadsafe(sync(), bot.loop)
+
 # --- 2FA DISCORD LOGIKA TLAČÍTEK ---
 class AuthView(discord.ui.View):
     def __init__(self, token, discord_id):
@@ -1097,12 +1115,18 @@ def edit_user():
             if action == 'save':
                 roles_list = request.form.getlist("roles")
                 db_access = True if request.form.get("dashboard_access") else False
+                new_roles_str = ",".join(roles_list) if roles_list else "User"
+                
                 db.table("users").update({
                     "nick": request.form.get("nick"),
-                    "role": ",".join(roles_list) if roles_list else "User",
+                    "role": new_roles_str,
                     "hwid": request.form.get("hwid"),
                     "dashboard_access": db_access
                 }).eq("discord_id", discord_id).execute()
+                
+                # Okamžitá synchronizace role na Discord
+                sync_roles_from_flask(discord_id, new_roles_str)
+                
                 flash('Údaje byly úspěšně upraveny!', 'success')
             elif action == 'ban':
                 db.table("users").update({"is_banned": True}).eq("discord_id", discord_id).execute()
@@ -1139,10 +1163,10 @@ def run_web():
 # Nutné povolit intents pro správu rolí uživatelů
 intents = discord.Intents.default()
 intents.message_content = True 
-intents.members = True # <--- MUSÍ BÝT ZAPNUTO V DISCORD DEVELOPER PORTALU!
+intents.members = True 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Odstraníme defaultní help příkaz, abychom mohli vytvořit vlastní
+# Odstraníme defaultní help příkaz, abychom mohli vytvořit vlastní, hezčí
 bot.remove_command('help')
 
 # --- LOGIKA PŘIŘAZOVÁNÍ ROLÍ NA SERVERU ---
@@ -1172,7 +1196,7 @@ async def update_member_roles(member, role_string):
     except Exception as e:
         print(f"[CHYBA ROLÍ] Nemám oprávnění měnit role na serveru: {e}", flush=True)
 
-# Loop pro průběžnou kontrolu a synchronizaci rolí každých 15 minut
+# Loop pro průběžnou kontrolu (záloha)
 @tasks.loop(minutes=15)
 async def sync_discord_roles():
     db = get_db()
@@ -1279,7 +1303,6 @@ class RulesView(discord.ui.View):
                     await interaction.edit_original_response(content="**Stahování softwaru je aktuálně nedostupné.**\nObraťte se prosím na admin team.", view=None)
                     return
                 
-                # Zjištění, jestli má uživatel rezervovanou roli
                 pending_resp = db.table("pending_roles").select("*").execute().data
                 matched_pending = None
                 if pending_resp:
@@ -1324,7 +1347,6 @@ class RulesView(discord.ui.View):
                     user_roles = new_role
                     if matched_pending: db.table("pending_roles").delete().eq("id", matched_pending['id']).execute()
             
-            # Okamžitě synchronizuje role na discord serveru
             if isinstance(interaction.user, discord.Member):
                 await update_member_roles(interaction.user, user_roles)
             
@@ -1359,10 +1381,34 @@ async def on_ready():
     sync_discord_roles.start()
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
 
-# --- VLASTNÍ OPRÁVNĚNÍ ---
+# --- CHYTRÉ ZACHYTÁVÁNÍ CHYB PŘÍKAZŮ ---
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        if ctx.command.name == "message":
+            await ctx.send("❌ **Špatný formát!** Správně to je: `!message #kanál tvůj dlouhý text`")
+        elif ctx.command.name == "dm":
+            await ctx.send("❌ **Špatný formát!** Správně to je: `!dm @uživatel tvůj dlouhý text`")
+        elif ctx.command.name == "info":
+            await ctx.send("❌ **Špatný formát!** Správně to je: `!info 123456789012345678`")
+        elif ctx.command.name == "SM":
+            await ctx.send("❌ **Špatný formát!** Správně to je: `!SM @uživatel`")
+        else:
+            await ctx.send(f"❌ **Chybí argument:** {error.param.name}")
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("❌ **Cíl nenalezen!** Ujisti se, že označuješ správného uživatele (@jméno).")
+    elif isinstance(error, commands.ChannelNotFound):
+        await ctx.send("❌ **Kanál nenalezen!** Ujisti se, že označuješ správný kanál (#název-kanálu).")
+    elif isinstance(error, commands.CheckFailure):
+        # Ignorujeme, práva už hlásí funkce níže
+        pass
+    else:
+        print(f"[CMD ERROR] {error}")
+
+# --- VLASTNÍ OPRÁVNĚNÍ PRO PŘÍKAZY ---
 def check_web_sa():
     async def predicate(ctx):
-        if discord.utils.get(ctx.author.roles, name="web-sa"):
+        if discord.utils.get(ctx.author.roles, name="web-sa") or ctx.author.guild_permissions.administrator:
             return True
         try:
             await ctx.author.send("❌ K tomuto příkazu nemáš oprávnění (vyžadována role `web-sa`).")
@@ -1371,12 +1417,12 @@ def check_web_sa():
         return False
     return commands.check(predicate)
 
-def check_dm_role():
+def check_sm_role():
     async def predicate(ctx):
-        if discord.utils.get(ctx.author.roles, name="DM"):
+        if discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator:
             return True
         try:
-            await ctx.author.send("❌ K tomuto příkazu nemáš oprávnění (vyžadována role `DM`).")
+            await ctx.author.send("❌ K tomuto příkazu nemáš oprávnění (vyžadována role `SM`).")
             await ctx.message.delete()
         except: pass
         return False
@@ -1397,6 +1443,20 @@ async def setup_download(ctx):
     await ctx.message.delete()
 
 @bot.command()
+@check_web_sa()
+async def SM(ctx, member: discord.Member):
+    role = discord.utils.get(ctx.guild.roles, name="SM")
+    if not role:
+        await ctx.send("❌ Role `SM` na tomto serveru neexistuje. Vytvoř ji prosím.")
+        return
+    if role in member.roles:
+        await member.remove_roles(role)
+        await ctx.send(f"➖ Role **SM** byla uživateli {member.mention} úspěšně odebrána.")
+    else:
+        await member.add_roles(role)
+        await ctx.send(f"➕ Role **SM** byla uživateli {member.mention} úspěšně přidělena.")
+
+@bot.command()
 async def ping(ctx):
     latency = round(bot.latency * 1000)
     await ctx.send(f"🏓 Pong! Odezva serveru je **{latency}ms**.")
@@ -1405,13 +1465,12 @@ async def ping(ctx):
 async def help(ctx):
     embed = discord.Embed(
         title="🤖 Nápověda - IDPK OIS PROJEKT", 
-        description="Jsem systémový bot, který plně spravuje databázi pro IDPK OIS PROJEKT. Skrz mě si můžeš stáhnout nejnovější verze naší aplikace a ověřit svůj profil.", 
+        description="Jsem systémový bot spravující databázi a infrastrukturu Projektu OIS IDPK. Níže najdeš seznam dostupných příkazů.", 
         color=0x38bdf8
     )
-    embed.add_field(name="!help", value="Zobrazí tuto nápovědu.", inline=False)
-    embed.add_field(name="!verze", value="Vypíše dostupné verze aplikace ke stažení a jejich požadavky.", inline=False)
-    embed.add_field(name="!ping", value="Zobrazí odezvu bota.", inline=False)
-    embed.add_field(name="!info [ID]", value="Zobrazí základní data uživatele z databáze.", inline=False)
+    embed.add_field(name="🌍 Veřejné příkazy", value="`!help` - Zobrazí tuto nápovědu.\n`!verze` - Vypíše dostupné verze aplikace.\n`!ping` - Odezva serveru bota.\n`!info [ID]` - Informace o účtu z databáze.", inline=False)
+    embed.add_field(name="🛡️ Správa Discordu (Pro roli SM)", value="`!message #kanál text` - Odešle libovolnou zprávu do vybraného kanálu.\n`!dm @uživatel text` - Odešle uživateli soukromou zprávu jménem bota.", inline=False)
+    embed.add_field(name="⚙️ Administrace (Pro roli web-sa)", value="`!setup_download` - Vytvoří instalační panel pro uživatele.\n`!SM @uživatel` - Rychle přidělí/odebere uživateli roli SM.", inline=False)
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -1433,7 +1492,7 @@ async def verze(ctx):
 @bot.command()
 async def info(ctx, discord_id: str = None):
     if not discord_id:
-        await ctx.send("Zadejte prosím platné ID Discordu, např.: `!info 1234567890`")
+        await ctx.send("❌ **Špatný formát!** Zadejte prosím platné ID Discordu, např.: `!info 123456789012345678`")
         return
     db = get_db()
     if not db: return
@@ -1455,19 +1514,19 @@ async def info(ctx, discord_id: str = None):
     await ctx.send(embed=embed)
 
 @bot.command()
-@check_dm_role()
-async def dm(ctx, user: discord.Member, *, message: str):
+@check_sm_role()
+async def dm(ctx, user: discord.Member, *, text: str):
     try:
-        await user.send(message)
+        await user.send(text)
         await ctx.send(f"✅ Zpráva úspěšně odeslána do DM uživateli **{user.display_name}**.")
     except Exception:
         await ctx.send(f"❌ Nelze odeslat zprávu. Uživatel má pravděpodobně zablokované soukromé zprávy na serveru.")
 
 @bot.command()
-@check_dm_role()
-async def send(ctx, channel: discord.TextChannel, *, message: str):
+@check_sm_role()
+async def message(ctx, channel: discord.TextChannel, *, text: str):
     try:
-        await channel.send(message)
+        await channel.send(text)
         await ctx.send(f"✅ Zpráva úspěšně odeslána do kanálu {channel.mention}.")
     except Exception:
         await ctx.send("❌ Nemám oprávnění posílat zprávy do tohoto kanálu.")
