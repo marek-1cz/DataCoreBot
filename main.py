@@ -19,7 +19,7 @@ app.secret_key = "ois_idpk_super_tajny_klic"
 # ==========================================
 # NASTAVENÍ LOGA
 # ==========================================
-URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf.png"
+URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png"
 URL_VELKE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png"
 
 
@@ -1893,3 +1893,4 @@ if __name__ == "__main__":
     Thread(target=run_web).start()
     token = os.environ.get("DISCORD_TOKEN")
     if token: bot.run(token)
+
