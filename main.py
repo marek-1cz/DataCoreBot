@@ -670,6 +670,23 @@ def get_db():
     if not url or not key: return None
     return create_client(url, key)
 
+# --- AUTO LOGOUT & KONTROLA BANŮ PŘI KLIKNUTÍ V DASHBOARDU ---
+@app.before_request
+def check_session_validity():
+    # Zkontroluje, jestli je člověk na nějaké dashboard podstránce a je "přihlášený"
+    if request.path.startswith('/dashboard') and request.path != '/dashboard/wait_auth' and session.get('logged_in'):
+        discord_id = session.get('discord_id')
+        if discord_id:
+            if discord_id == 'admin': return # Master heslo projde vždy
+            db = get_db()
+            if db:
+                user = db.table("users").select("dashboard_access, is_banned, is_deleted").eq("discord_id", discord_id).execute().data
+                # Pokud uživatel ztratil přístup, dostal ban nebo byl smazán -> vykopnutí
+                if not user or not user[0].get("dashboard_access") or user[0].get("is_banned") or user[0].get("is_deleted"):
+                    session.clear()
+                    flash('Váš přístup do administrace byl zablokován nebo ukončen administrátorem.', 'error')
+                    return redirect(url_for('dashboard_main'))
+
 # Okamžitá synchronizace z webu do Discordu
 def sync_roles_from_flask(discord_id, role_string):
     async def sync():
@@ -687,6 +704,19 @@ def sync_roles_from_flask(discord_id, role_string):
             
     if bot.loop and bot.loop.is_running():
         asyncio.run_coroutine_threadsafe(sync(), bot.loop)
+
+def send_dm_from_flask(discord_id, message):
+    if not discord_id: return
+    async def send():
+        try:
+            user = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+            if user:
+                await user.send(message)
+        except Exception as e:
+            print(f"[CHYBA] Nepodařilo se odeslat DM: {e}", flush=True)
+            
+    if bot.loop and bot.loop.is_running():
+        asyncio.run_coroutine_threadsafe(send(), bot.loop)
 
 # --- 2FA DISCORD LOGIKA TLAČÍTEK ---
 class AuthView(discord.ui.View):
@@ -714,7 +744,6 @@ class AuthView(discord.ui.View):
         if db:
             db.table("users").update({"login_token": "rejected"}).eq("discord_id", self.discord_id).execute()
         await interaction.edit_original_response(content="⛔ **Žádost o přihlášení byla úspěšně zamítnuta.** Přístup zablokován.", view=None)
-
 
 def send_login_dm_from_flask(discord_id, token):
     async def send():
@@ -873,8 +902,17 @@ def team():
 # ==========================================
 # 2FA DASHBOARD LOGIN
 # ==========================================
-@app.route('/dashboard', methods=['GET'])
+@app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard_main():
+    # Záložní login pro master heslo
+    if request.method == 'POST' and 'password' in request.form:
+        if request.form.get('password') == os.environ.get("ADMIN_PASSWORD", "admin"):
+            session['logged_in'] = True
+            session['discord_id'] = 'admin' # Bezpečnostní bypass heslem
+            return redirect(url_for('dashboard_main'))
+        else:
+            flash('Špatné heslo!', 'error')
+
     if not session.get('logged_in'):
         return render_public(HTML_LOGIN)
         
@@ -912,13 +950,13 @@ def login_request():
     if db and discord_id:
         try:
             user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
-            if user and user[0].get("dashboard_access") == True:
+            if user and user[0].get("dashboard_access") == True and not user[0].get("is_banned") and not user[0].get("is_deleted"):
                 token = str(uuid.uuid4())
                 db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
                 send_login_dm_from_flask(discord_id, token)
                 return redirect(url_for('wait_auth', discord_id=discord_id))
             else:
-                flash('Účet neexistuje, nebo nemá povolený přístup do administrace.', 'error')
+                flash('Účet neexistuje, nemá povolený přístup, nebo byl zablokován.', 'error')
         except Exception as e:
             flash(f'Chyba při komunikaci s databází: {e}', 'error')
     return redirect(url_for('dashboard_main'))
@@ -938,6 +976,7 @@ def check_auth(discord_id):
             token_status = user[0].get("login_token")
             if token_status == "approved":
                 session['logged_in'] = True
+                session['discord_id'] = discord_id # Pro kontrolu auto-odhlašování
                 db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
                 return {"status": "approved"}
             elif token_status == "rejected":
@@ -1124,23 +1163,32 @@ def edit_user():
                     "dashboard_access": db_access
                 }).eq("discord_id", discord_id).execute()
                 
-                # Okamžitá synchronizace role na Discord
                 sync_roles_from_flask(discord_id, new_roles_str)
-                
                 flash('Údaje byly úspěšně upraveny!', 'success')
+                
             elif action == 'ban':
-                db.table("users").update({"is_banned": True}).eq("discord_id", discord_id).execute()
-                flash('BAN udělen.', 'warning')
+                # Při BANu odebereme i přístup do dashboardu
+                db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                send_dm_from_flask(discord_id, "Vážený uživateli, Váš účet na Projektu OIS IDPK má nyní BAN.")
+                flash('BAN udělen a přístup do administrace zrušen.', 'warning')
+                
             elif action == 'unban':
                 db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
+                send_dm_from_flask(discord_id, "Vážený uživateli, Váš BAN na Projektu OIS IDPK byl zrušen.")
                 flash('BAN zrušen.', 'success')
+                
             elif action == 'delete':
+                # Při smazání odebereme i přístup do dashboardu
                 now = datetime.now().strftime("%d.%m.%Y %H:%M")
-                db.table("users").update({"is_deleted": True, "deleted_at": now}).eq("discord_id", discord_id).execute()
-                flash('Účet smazán.', 'danger')
+                db.table("users").update({"is_deleted": True, "deleted_at": now, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                send_dm_from_flask(discord_id, "Váš účet na Projektu OIS IDPK byl administrátorem smazán.")
+                flash('Účet smazán a přístup do administrace zrušen.', 'danger')
+                
             elif action == 'restore':
                 db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute()
+                send_dm_from_flask(discord_id, "Váš smazaný účet na Projektu OIS IDPK byl administrátorem obnoven ze zálohy.")
                 flash('Účet obnoven!', 'success')
+                
             elif action == 'hard_delete':
                 db.table("users").delete().eq("discord_id", discord_id).execute()
                 flash('Účet trvale smazán.', 'dark')
@@ -1150,6 +1198,7 @@ def edit_user():
 @app.route('/logout')
 def logout():
     session.pop('logged_in', None)
+    session.pop('discord_id', None)
     return redirect(url_for('home'))
 
 def run_web():
@@ -1160,13 +1209,11 @@ def run_web():
 # 3. DISCORD BOT & INTERAKTIVNÍ TLAČÍTKA
 # ==========================================
 
-# Nutné povolit intents pro správu rolí uživatelů
 intents = discord.Intents.default()
 intents.message_content = True 
 intents.members = True 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Odstraníme defaultní help příkaz, abychom mohli vytvořit vlastní, hezčí
 bot.remove_command('help')
 
 # --- LOGIKA PŘIŘAZOVÁNÍ ROLÍ NA SERVERU ---
@@ -1196,7 +1243,6 @@ async def update_member_roles(member, role_string):
     except Exception as e:
         print(f"[CHYBA ROLÍ] Nemám oprávnění měnit role na serveru: {e}", flush=True)
 
-# Loop pro průběžnou kontrolu (záloha)
 @tasks.loop(minutes=15)
 async def sync_discord_roles():
     db = get_db()
@@ -1393,6 +1439,8 @@ async def on_command_error(ctx, error):
             await ctx.send("❌ **Špatný formát!** Správně to je: `!info 123456789012345678`")
         elif ctx.command.name == "SM":
             await ctx.send("❌ **Špatný formát!** Správně to je: `!SM @uživatel`")
+        elif ctx.command.name == "DB":
+            await ctx.send("❌ **Špatný formát!** Správně to je: `!DB 123456789012345678`")
         else:
             await ctx.send(f"❌ **Chybí argument:** {error.param.name}")
     elif isinstance(error, commands.MemberNotFound):
@@ -1457,6 +1505,25 @@ async def SM(ctx, member: discord.Member):
         await ctx.send(f"➕ Role **SM** byla uživateli {member.mention} úspěšně přidělena.")
 
 @bot.command()
+@check_sm_role()
+async def DB(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    user_data = db.table("users").select("dashboard_access, nick").eq("discord_id", discord_id).execute().data
+    if not user_data:
+        await ctx.send(f"❌ Uživatel s ID `{discord_id}` nebyl v databázi nalezen.")
+        return
+    
+    current_status = user_data[0].get("dashboard_access", False)
+    new_status = not current_status
+    nick = user_data[0].get("nick", "Neznámý")
+    
+    db.table("users").update({"dashboard_access": new_status}).eq("discord_id", discord_id).execute()
+    
+    stav_text = "POVOLEN ✅" if new_status else "ODEBRÁN ❌"
+    await ctx.send(f"Přístup do administrace pro uživatele **{nick}** byl úspěšně **{stav_text}**.")
+
+@bot.command()
 async def ping(ctx):
     latency = round(bot.latency * 1000)
     await ctx.send(f"🏓 Pong! Odezva serveru je **{latency}ms**.")
@@ -1469,7 +1536,7 @@ async def help(ctx):
         color=0x38bdf8
     )
     embed.add_field(name="🌍 Veřejné příkazy", value="`!help` - Zobrazí tuto nápovědu.\n`!verze` - Vypíše dostupné verze aplikace.\n`!ping` - Odezva serveru bota.\n`!info [ID]` - Informace o účtu z databáze.", inline=False)
-    embed.add_field(name="🛡️ Správa Discordu (Pro roli SM)", value="`!message #kanál text` - Odešle libovolnou zprávu do vybraného kanálu.\n`!dm @uživatel text` - Odešle uživateli soukromou zprávu jménem bota.", inline=False)
+    embed.add_field(name="🛡️ Správa Discordu (Pro roli SM)", value="`!message #kanál text` - Odešle libovolnou zprávu do vybraného kanálu.\n`!dm @uživatel text` - Odešle uživateli soukromou zprávu.\n`!DB [ID]` - Přepne (povolí/zakáže) uživateli přístup do webové administrace.", inline=False)
     embed.add_field(name="⚙️ Administrace (Pro roli web-sa)", value="`!setup_download` - Vytvoří instalační panel pro uživatele.\n`!SM @uživatel` - Rychle přidělí/odebere uživateli roli SM.", inline=False)
     await ctx.send(embed=embed)
 
