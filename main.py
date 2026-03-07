@@ -308,10 +308,10 @@ HTML_DOWNLOADS_MGMT = """
 
     <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
         <h3 style="color: var(--blue-main); margin-top: 0;">➕ Přidat Instalační Soubor (Verzi)</h3>
-        <p style="color: var(--warning); font-size: 12px; margin-top: -5px;">Můžete vložit odkaz na Google Drive, nebo pro 100% jistotu použít <b>Dropbox</b> (systém si odkaz sám převede na přímé stažení).</p>
+        <p style="color: var(--warning); font-size: 12px; margin-top: -5px;">Můžete vložit odkaz na GitHub Releases, Google Drive, nebo Dropbox.</p>
         <form action="/dashboard/add_version" method="POST">
             <input type="text" name="version_name" placeholder="Název zobrazený v menu (např. Stabilní v1.0)" required>
-            <input type="url" name="file_url" placeholder="Přímý odkaz na stažení souboru (Google Drive nebo Dropbox)" required>
+            <input type="url" name="file_url" placeholder="Přímý odkaz na stažení souboru (např. z GitHubu)" required>
             
             <label style="color: var(--text-muted); font-size: 13px;">Pro jakou minimální roli je tato verze určena?</label>
             <select name="target_role" required>
@@ -631,7 +631,7 @@ def secure_download(token):
     return render_public(html)
 
 # ==========================================
-# OPRAVENÝ PROXY DOWNLOADER (SKRYTÍ ODKAZU & GOOGLE DRIVE BYPASS)
+# OPRAVENÝ PROXY DOWNLOADER (SKRYTÍ ODKAZU & DETEKCE GITHUB/7Z)
 # ==========================================
 @app.route('/api/get_file/<token>')
 def api_get_file(token):
@@ -654,11 +654,19 @@ def api_get_file(token):
     file_url = v_resp.data[0]['file_url']
     version_name = v_resp.data[0]['version_name'].replace(" ", "_")
     
-    # 1. Automatická oprava pro Dropbox (pokud ho uživatel použije jako alternativu)
+    # 1. Automatická detekce správné koncovky souboru (např. ze souboru IDPK-PANEL.V1.0.7z si vezme "7z")
+    file_ext = "zip"
+    if "." in file_url.split("/")[-1]:
+        extracted_ext = file_url.split("/")[-1].split(".")[-1]
+        # Jednoduchá kontrola, aby to nebyl nesmysl z URL adresy
+        if len(extracted_ext) <= 4 and extracted_ext.isalnum():
+            file_ext = extracted_ext
+
+    # 2. Automatická oprava pro Dropbox
     if "dropbox.com" in file_url:
         file_url = file_url.replace("dl=0", "dl=1")
 
-    # 2. Převod klasického Google Drive odkazu na stahovací odkaz
+    # 3. Detekce Google Drive
     gdrive_match = re.search(r'drive\.google\.com/file/d/([a-zA-Z0-9_-]+)', file_url)
     if not gdrive_match and 'drive.google.com' in file_url:
         gdrive_match = re.search(r'id=([a-zA-Z0-9_-]+)', file_url)
@@ -668,44 +676,34 @@ def api_get_file(token):
         file_url = f"https://drive.google.com/uc?export=download&id={file_id}"
 
     try:
-        # Použití CookieJaru pro obejití Google "Virus scan" hlášky
-        import http.cookiejar
-        cj = http.cookiejar.CookieJar()
-        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
-        
-        req = urllib.request.Request(file_url, headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-            'Accept': '*/*'
-        })
-        remote_response = opener.open(req)
-        
-        # Detekce a obejití Google varovné stránky (To, co ti stahovalo 3 KB HTML soubor místo ZIPu)
-        content_type = remote_response.headers.get('Content-Type', '')
-        if gdrive_match and 'text/html' in content_type:
-            confirm_token = None
+        # LOGIKA PRO GOOGLE DRIVE (S obejitím antiviru)
+        if gdrive_match:
+            import http.cookiejar
+            cj = http.cookiejar.CookieJar()
+            opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+            req = urllib.request.Request(file_url, headers={'User-Agent': 'Mozilla/5.0'})
+            remote_response = opener.open(req)
             
-            # Krok A: Pokus vytáhnout bypass kód z Cookie
-            for cookie in cj:
-                if cookie.name.startswith('download_warning'):
-                    confirm_token = cookie.value
-                    break
-            
-            # Krok B: Pokus vytáhnout bypass kód přímo z HTML obsahu (záloha)
-            if not confirm_token:
+            content_type = remote_response.headers.get('Content-Type', '')
+            if 'text/html' in content_type:
                 html_content = remote_response.read().decode('utf-8', errors='ignore')
                 token_match = re.search(r'confirm=([0-9A-Za-z_-]+)', html_content)
                 if token_match:
-                    confirm_token = token_match.group(1)
-            
-            # Pokud máme tajný kód, vyžádáme si soubor podruhé natvrdo!
-            if confirm_token:
-                confirm_url = f"https://drive.google.com/uc?export=download&confirm={confirm_token}&id={file_id}"
-                req = urllib.request.Request(confirm_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-                remote_response = opener.open(req)
-            else:
-                return "CHYBA: Google Drive systém zablokoval stažení. Odkaz na stažení neobsahoval správný bypass token. Doporučujeme nahrát soubor na Dropbox.com (je to zdarma a funguje to 100% bez těchto Google omezení)."
+                    confirm_url = f"https://drive.google.com/uc?export=download&confirm={token_match.group(1)}&id={file_id}"
+                    req = urllib.request.Request(confirm_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    remote_response = opener.open(req)
+                else:
+                    return "CHYBA STAHVOÁNÍ: Google Drive systém zablokoval stažení. Odkaz neobsahuje správný bypass token. Doporučujeme nahrát soubor přes GitHub Releases."
+        
+        # LOGIKA PRO GITHUB A OSTATNÍ (Čistá proxy bez cookiejaru, aby nevyhazovala error 404)
+        else:
+            req = urllib.request.Request(file_url, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                'Accept': '*/*'
+            })
+            remote_response = urllib.request.urlopen(req)
 
-        # Pokud se povedlo překonat obranu, posíláme skutečný soubor do PC
+        # Společný generátor pro plynulé stahování do PC
         def generate():
             while True:
                 chunk = remote_response.read(8192)
@@ -713,11 +711,16 @@ def api_get_file(token):
                     break
                 yield chunk
 
+        content_type = remote_response.headers.get('Content-Type', 'application/octet-stream')
         return Response(stream_with_context(generate()), 
                         headers={
-                            'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name}.zip"',
-                            'Content-Type': 'application/zip'
+                            'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name}.{file_ext}"',
+                            'Content-Type': content_type
                         })
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return "HTTP Error 404: Not Found. Odkazovaný soubor neexistuje. (Ujisti se, že pokud používáš GitHub, repozitář musí být nastaven jako PUBLIC / Veřejný!)"
+        return f"Chyba HTTP: {e}"
     except Exception as e:
         return f"Chyba při komunikaci se vzdáleným serverem: Zkontrolujte prosím, zda je odkaz v Dashboardu platný. (Detaily: {e})"
 
