@@ -631,7 +631,7 @@ def secure_download(token):
     return render_public(html)
 
 # ==========================================
-# OPRAVENÝ PROXY DOWNLOADER
+# OPRAVENÝ PROXY DOWNLOADER (CHYTRÁ DETEKCE HLAVIČEK)
 # ==========================================
 @app.route('/api/get_file/<token>')
 def api_get_file(token):
@@ -654,23 +654,23 @@ def api_get_file(token):
     file_url = v_resp.data[0]['file_url']
     version_name = v_resp.data[0]['version_name'].replace(" ", "_")
     
-    # 1. OPRAVENÁ DETEKCE KONCOVKY (ignoruje parametry jako ?dl=1)
-    file_ext = "zip" # Výchozí záloha
-    clean_url = file_url.split("?")[0] # Odsekne vše za otazníkem
+    # Prvotní detekce z odkazu pro případ nouze
+    file_ext = "zip" 
+    clean_url = file_url.split("?")[0] 
     if "." in clean_url.split("/")[-1]:
         extracted_ext = clean_url.split("/")[-1].split(".")[-1]
         if len(extracted_ext) <= 4 and extracted_ext.isalnum():
             file_ext = extracted_ext
 
-    # 2. Automatická oprava pro Pixeldrain.com
+    # Úprava URL pro PixelDrain
     if "pixeldrain.com/u/" in file_url:
         file_url = file_url.replace("/u/", "/api/file/")
 
-    # 3. Automatická oprava pro OneDrive
+    # Úprava URL pro OneDrive
     if "1drv.ms" in file_url or "onedrive.live.com" in file_url or "1drv.com" in file_url:
         file_url = file_url.split("?")[0] + "?download=1"
 
-    # 4. Automatická oprava pro Dropbox
+    # Úprava URL pro Dropbox
     if "dropbox.com" in file_url:
         file_url = file_url.replace("dl=0", "dl=1")
         if "dl=1" not in file_url:
@@ -683,7 +683,13 @@ def api_get_file(token):
         })
         remote_response = urllib.request.urlopen(req)
 
-        # Společný generátor pro plynulé stahování do PC
+        # 1. ZKUSÍME ZJISTIT SKUTEČNÝ NÁZEV PŘÍMO ZE SERVERU (PixelDrain to posílá v hlavičce Content-Disposition)
+        remote_filename = remote_response.info().get_filename()
+        if remote_filename and '.' in remote_filename:
+            ext = remote_filename.split('.')[-1]
+            if len(ext) <= 4 and ext.isalnum():
+                file_ext = ext # Přepíše "zip" na správné "7z" nebo cokoliv jiného!
+
         def generate():
             while True:
                 chunk = remote_response.read(8192)
