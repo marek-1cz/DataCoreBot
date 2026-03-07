@@ -308,9 +308,10 @@ HTML_DOWNLOADS_MGMT = """
 
     <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
         <h3 style="color: var(--blue-main); margin-top: 0;">➕ Přidat Instalační Soubor (Verzi)</h3>
+        <p style="color: var(--warning); font-size: 12px; margin-top: -5px;">Zde vložte odkaz na Váš Google Drive.</p>
         <form action="/dashboard/add_version" method="POST">
             <input type="text" name="version_name" placeholder="Název zobrazený v menu (např. Stabilní v1.0)" required>
-            <input type="url" name="file_url" placeholder="Přímý odkaz na stažení souboru (ZIP/EXE)" required>
+            <input type="url" name="file_url" placeholder="Přímý odkaz na stažení souboru (Google Drive)" required>
             
             <label style="color: var(--text-muted); font-size: 13px;">Pro jakou minimální roli je tato verze určena?</label>
             <select name="target_role" required>
@@ -610,7 +611,6 @@ def secure_download(token):
         
     v_data = v_resp.data[0]
     
-    # Odkazuje na náš vlastní proxy router
     html = f"""
     <div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);">
         <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2>
@@ -631,7 +631,7 @@ def secure_download(token):
     return render_public(html)
 
 # ==========================================
-# PROXY DOWNLOADER (SKRYTÍ GOOGLE DRIVE ODKAZU)
+# ROBUSTNÍ PROXY STAHOVÁNÍ (BEZPEČNÝ BYPASS)
 # ==========================================
 @app.route('/api/get_file/<token>')
 def api_get_file(token):
@@ -654,26 +654,48 @@ def api_get_file(token):
     file_url = v_resp.data[0]['file_url']
     version_name = v_resp.data[0]['version_name'].replace(" ", "_")
     
-    # Pokud je vložen klasický GDrive odkaz, skript se ho pokusí automaticky převést na direct link
+    import http.cookiejar
+    cj = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+
     gdrive_match = re.search(r'drive\.google\.com/file/d/([a-zA-Z0-9_-]+)', file_url)
     if gdrive_match:
         file_id = gdrive_match.group(1)
         file_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-        
-    try:
-        req = urllib.request.Request(file_url, headers={'User-Agent': 'Mozilla/5.0'})
-        
-        def generate():
-            with urllib.request.urlopen(req) as response:
-                while True:
-                    chunk = response.read(8192)
-                    if not chunk:
-                        break
-                    yield chunk
 
-        # Tento kus kódu zajistí, že se to uživateli stáhne rovnou z tvého webu pod správným názvem
+    try:
+        req = urllib.request.Request(file_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+        remote_response = opener.open(req)
+        
+        # Ochrana před uložením HTML varování od Googlu jako ZIP souboru
+        content_type = remote_response.headers.get('Content-Type', '')
+        if 'text/html' in content_type and gdrive_match:
+            # Google blokuje velké soubory varováním o virech - vytáhneme tajný potvrzovací klíč
+            html_content = remote_response.read().decode('utf-8', errors='ignore')
+            token_match = re.search(r'confirm=([0-9A-Za-z_-]+)', html_content)
+            
+            if token_match:
+                confirm_token = token_match.group(1)
+                # Obejít varování a stáhnout soubor napřímo
+                file_url = f"https://drive.google.com/uc?export=download&confirm={confirm_token}&id={file_id}"
+                req = urllib.request.Request(file_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                remote_response = opener.open(req)
+            else:
+                return "CHYBA STAHVOÁNÍ: Google Drive blokuje tento soubor, protože je moc velký na kontrolu virů. Nahraj soubor prosím např. na svůj Discord a do administrace použij přímý odkaz z přílohy."
+
+        def generate():
+            while True:
+                chunk = remote_response.read(8192)
+                if not chunk:
+                    break
+                yield chunk
+
+        # Nuceně pošleme data z Google Drive jako ZIP přes náš web (čímž skryjeme zdroj)
         return Response(stream_with_context(generate()), 
-                        headers={'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name}.zip"'})
+                        headers={
+                            'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name}.zip"',
+                            'Content-Type': 'application/zip'
+                        })
     except Exception as e:
         return f"Chyba při komunikaci se vzdáleným serverem úložiště: {e}"
 
@@ -953,7 +975,6 @@ class VersionSelect(discord.ui.Select):
         super().__init__(placeholder="Vyber verzi k instalaci...", min_values=1, max_values=1, options=options[:25])
 
     async def callback(self, interaction: discord.Interaction):
-        # Okamžitá odpověď Discordu = žádný error
         await interaction.response.edit_message(content="<a:loading:123> Generuji zabezpečený odkaz, prosím čekejte...", view=None)
         
         if self.values[0] == "none":
@@ -988,7 +1009,6 @@ class RulesView(discord.ui.View):
         
     @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, custom_id="btn_agree", emoji="✅")
     async def agree_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Okamžitá odpověď Discordu
         await interaction.response.edit_message(content="<a:loading:123> Ověřuji profil v databázi, prosím čekejte...", view=None)
         try:
             db = get_db()
