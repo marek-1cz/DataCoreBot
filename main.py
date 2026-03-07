@@ -51,7 +51,7 @@ BASE_HTML = """
         body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-dark); color: var(--text-main); margin: 0; padding: 0; }
         
         .top-nav { background-color: rgba(15, 23, 42, 0.9); padding: 15px 40px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; backdrop-filter: blur(10px); z-index: 100; }
-        .logo { font-size: 24px; font-weight: 800; color: var(--blue-main); text-decoration: none; letter-spacing: 1px; display: flex; align-items: center; gap: 15px; }
+        .logo { font-size: 24px; font-weight: 800; color: var(--blue-main); text-decoration: none; letter-spacing: 1px; display: flex; align-items: center; gap: 10px; }
         .nav-links a { color: var(--text-main); text-decoration: none; margin-left: 20px; font-weight: 500; transition: color 0.3s; }
         .nav-links a:hover { color: var(--blue-main); }
         .nav-links .admin-link { color: var(--text-muted); font-size: 12px; margin-left: 40px; border: 1px solid #334155; padding: 5px 10px; border-radius: 5px; }
@@ -115,8 +115,8 @@ BASE_HTML = """
 PUBLIC_LAYOUT = """
 <nav class="top-nav">
     <a href="/" class="logo">
-        <img src="{{ logo_male }}" alt="Logo" style="height: 50px; width: auto; object-fit: contain; transform: scale(1.8); transform-origin: center left; margin-left: 10px;">
-        <span style="z-index: 2;">OIS IDPK</span>
+        <img src="{{ logo_male }}" alt="Logo" style="height: 30px; width: auto; border-radius: 4px;">
+        OIS IDPK
     </a>
     <div class="nav-links">
         <a href="/">Domů</a>
@@ -142,10 +142,10 @@ DASHBOARD_LAYOUT = """
     <div class="sidebar">
         <div class="sidebar-header">
             <a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;">
-                <img src="{{ logo_male }}" alt="Logo" style="height: 40px; width: auto; object-fit: contain; transform: scale(1.8); transform-origin: center;">
-                <span style="z-index: 2;">OIS IDPK</span>
+                <img src="{{ logo_male }}" alt="Logo" style="height: 24px; width: auto; border-radius: 4px;">
+                OIS IDPK
             </a>
-            <div style="font-size: 11px; color: var(--text-muted); margin-top: 15px;">Dashboard</div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div>
         </div>
         <div class="sidebar-menu">
             <a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a>
@@ -285,6 +285,7 @@ DASHBOARD_LAYOUT = """
             }
         }
 
+        // Fetch Discord Status & Downloads
         document.getElementById('profJoined').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         document.getElementById('modalStatusDot').innerHTML = '';
         document.getElementById('profDownloads').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
@@ -314,8 +315,8 @@ DASHBOARD_LAYOUT = """
 
 HTML_HOME = """
 <div style="text-align: center; padding: 50px 0;">
-    <img src="{{ logo_velke }}" alt="DataCoreBot Logo" style="max-width: 450px; width: 100%; height: auto; margin-bottom: 20px; filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.5)); transform: scale(1.5);">
-    <p style="font-size: 1.2em; color: var(--text-muted); max-width: 600px; margin: 30px auto 30px auto;">
+    <img src="{{ logo_velke }}" alt="DataCoreBot Logo" style="max-width: 450px; width: 100%; height: auto; margin-bottom: 20px; filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.5));">
+    <p style="font-size: 1.2em; color: var(--text-muted); max-width: 600px; margin: 0 auto 30px auto;">
         Moderní, rychlý a bezpečný software s nejlepším zabezpečením.
     </p>
     <a href="/download" class="btn" style="font-size: 18px; padding: 15px 30px; border-radius: 30px;"><i class="fas fa-download"></i> Získat Software</a>
@@ -1893,4 +1894,3 @@ if __name__ == "__main__":
     Thread(target=run_web).start()
     token = os.environ.get("DISCORD_TOKEN")
     if token: bot.run(token)
-
