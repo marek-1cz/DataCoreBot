@@ -17,6 +17,13 @@ app = Flask(__name__)
 app.secret_key = "ois_idpk_super_tajny_klic" 
 
 # ==========================================
+# NASTAVENÍ LOGA (ZDE VLOŽ ODKAZY NA SVÉ OBRÁZKY)
+# ==========================================
+URL_MALE_LOGO = "https://cdn-icons-png.flaticon.com/512/8205/8205562.png" # <--- ZDE VLOŽ ODKAZ NA "datacorebot pf.png"
+URL_VELKE_LOGO = "https://cdn-icons-png.flaticon.com/512/8205/8205562.png" # <--- ZDE VLOŽ ODKAZ NA "datacorebot n.png"
+
+
+# ==========================================
 # 1. HTML ŠABLONY
 # ==========================================
 
@@ -27,6 +34,7 @@ BASE_HTML = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Projekt OIS IDPK</title>
+    <link rel="icon" type="image/png" href="{{ logo_male }}">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         :root {
@@ -43,7 +51,7 @@ BASE_HTML = """
         body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-dark); color: var(--text-main); margin: 0; padding: 0; }
         
         .top-nav { background-color: rgba(15, 23, 42, 0.9); padding: 15px 40px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; backdrop-filter: blur(10px); z-index: 100; }
-        .logo { font-size: 24px; font-weight: 800; color: var(--blue-main); text-decoration: none; letter-spacing: 1px; }
+        .logo { font-size: 24px; font-weight: 800; color: var(--blue-main); text-decoration: none; letter-spacing: 1px; display: flex; align-items: center; gap: 10px; }
         .nav-links a { color: var(--text-main); text-decoration: none; margin-left: 20px; font-weight: 500; transition: color 0.3s; }
         .nav-links a:hover { color: var(--blue-main); }
         .nav-links .admin-link { color: var(--text-muted); font-size: 12px; margin-left: 40px; border: 1px solid #334155; padding: 5px 10px; border-radius: 5px; }
@@ -106,7 +114,10 @@ BASE_HTML = """
 
 PUBLIC_LAYOUT = """
 <nav class="top-nav">
-    <a href="/" class="logo">OIS IDPK</a>
+    <a href="/" class="logo">
+        <img src="{{ logo_male }}" alt="Logo" style="height: 30px; width: auto; border-radius: 4px;">
+        OIS IDPK
+    </a>
     <div class="nav-links">
         <a href="/">Domů</a>
         <a href="/download">Download</a>
@@ -130,7 +141,10 @@ DASHBOARD_LAYOUT = """
 <div class="dashboard-wrapper">
     <div class="sidebar">
         <div class="sidebar-header">
-            <a href="/" class="logo" style="font-size: 20px;">OIS IDPK</a>
+            <a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                <img src="{{ logo_male }}" alt="Logo" style="height: 24px; width: auto; border-radius: 4px;">
+                OIS IDPK
+            </a>
             <div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div>
         </div>
         <div class="sidebar-menu">
@@ -301,7 +315,7 @@ DASHBOARD_LAYOUT = """
 
 HTML_HOME = """
 <div style="text-align: center; padding: 50px 0;">
-    <h1 style="font-size: 3.5em; color: var(--blue-main); margin-bottom: 10px; letter-spacing: 2px;">Projekt OIS IDPK</h1>
+    <img src="{{ logo_velke }}" alt="DataCoreBot Logo" style="max-width: 450px; width: 100%; height: auto; margin-bottom: 20px; filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.5));">
     <p style="font-size: 1.2em; color: var(--text-muted); max-width: 600px; margin: 0 auto 30px auto;">
         Moderní, rychlý a bezpečný software s nejlepším zabezpečením.
     </p>
@@ -311,12 +325,18 @@ HTML_HOME = """
 
 HTML_LOGIN = """
 <div style="max-width: 400px; margin: 50px auto; background-color: var(--bg-panel); padding: 30px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border-top: 4px solid var(--blue-main);">
-    <h2 style="text-align: center; color: var(--blue-main);"><i class="fas fa-lock"></i> Dashboard 2FA</h2>
+    <h2 style="text-align: center; color: var(--blue-main); margin-top: 0;"><i class="fas fa-lock"></i> Dashboard 2FA</h2>
+    
+    <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--danger); padding: 12px; margin-bottom: 20px; border-radius: 0 5px 5px 0;">
+        <p style="color: var(--danger); margin: 0; font-size: 13px; font-weight: 800; text-transform: uppercase;"><i class="fas fa-shield-alt"></i> Zabezpečená zóna</p>
+        <p style="color: var(--text-muted); margin: 5px 0 0 0; font-size: 12px; line-height: 1.4;">Tato databáze je přísně vyhrazena <b>pouze pro administrátory a pověřené správce</b> projektu. Běžní uživatelé sem nemají přístup. Každý pokus o neoprávněné přihlášení je monitorován a logován.</p>
+    </div>
+
     <p style="color: var(--text-muted); text-align: center; font-size: 13px;">Pro přístup do systému zadejte své <b>Discord ID</b>. Systém Vám obratem zašle potvrzovací zprávu.</p>
     <form method="POST" action="/login_request">
-        <label>Discord ID</label>
+        <label style="font-weight: bold; font-size: 12px; color: var(--text-muted);">VAŠE DISCORD ID</label>
         <input type="text" name="discord_id" placeholder="Např. 123456789012345678" required>
-        <button type="submit" class="btn" style="width: 100%;"><i class="fab fa-discord"></i> Odeslat žádost o přihlášení</button>
+        <button type="submit" class="btn" style="width: 100%; margin-top: 10px;"><i class="fab fa-discord"></i> Odeslat žádost o přihlášení</button>
     </form>
 </div>
 """
@@ -727,12 +747,12 @@ def send_log_from_flask(title, description, color=0x38bdf8):
 def render_public(template_string, **kwargs):
     html = PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
     html = BASE_HTML.replace('{% block layout %}{% endblock %}', html)
-    return render_template_string(html, **kwargs)
+    return render_template_string(html, logo_male=URL_MALE_LOGO, logo_velke=URL_VELKE_LOGO, **kwargs)
 
 def render_dashboard(template_string, **kwargs):
     html = DASHBOARD_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
     html = BASE_HTML.replace('{% block layout %}{% endblock %}', html)
-    return render_template_string(html, **kwargs)
+    return render_template_string(html, logo_male=URL_MALE_LOGO, logo_velke=URL_VELKE_LOGO, **kwargs)
 
 @app.before_request
 def check_session_validity():
@@ -1489,7 +1509,7 @@ class RulesView(discord.ui.View):
             await interaction.edit_original_response(content="**Ověření úspěšné.**\nNyní si prosím vyberte soubor k instalaci:", view=VersionView(user_roles))
         except Exception as e:
             print(e, flush=True)
-            await interaction.edit_original_response(content=f"Došlo k chybě. Zkuste to prosím znovu.\n*(Technický detail: {str(e)})*", view=None)
+            await interaction.edit_original_response(content=f"Došlo k chybě databáze. Zkuste to prosím znovu.\n*(Technický detail: {str(e)})*", view=None)
 
     @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, custom_id="btn_disagree", emoji="❌")
     async def disagree_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1658,14 +1678,17 @@ async def register(ctx):
             "is_deleted": False, "deleted_at": "",
             "dashboard_access": False, "login_token": "", "registered_at": now_str
         }
-        db.table("users").insert(novy).execute()
-        if matched_pending: db.table("pending_roles").delete().eq("id", matched_pending['id']).execute()
-        
-        await async_send_log_to_discord("👤 Nová registrace (Příkaz)", f"**Uživatel:** {nick}\n**ID:** `{discord_id}`\n**App ID:** #{new_app_id}\n**Přiřazená role:** {new_role}", 0x10b981)
-        await ctx.send(f"✅ Úspěšně zaregistrován do databáze! Vaše App ID je **#{new_app_id}**.")
-        
-        if isinstance(ctx.author, discord.Member):
-            await update_member_roles(ctx.author, new_role)
+        try:
+            db.table("users").insert(novy).execute()
+            if matched_pending: db.table("pending_roles").delete().eq("id", matched_pending['id']).execute()
+            
+            await async_send_log_to_discord("👤 Nová registrace (Příkaz)", f"**Uživatel:** {nick}\n**ID:** `{discord_id}`\n**App ID:** #{new_app_id}\n**Přiřazená role:** {new_role}", 0x10b981)
+            await ctx.send(f"✅ Úspěšně zaregistrován do databáze! Vaše App ID je **#{new_app_id}**.")
+            
+            if isinstance(ctx.author, discord.Member):
+                await update_member_roles(ctx.author, new_role)
+        except Exception as e:
+            await ctx.send(f"❌ Chyba databáze při ukládání: {e}")
 
 @bot.command()
 @check_web_sa()
@@ -1792,6 +1815,11 @@ async def perdelete_cmd(ctx, discord_id: str):
         color=0xef4444
     )
     await ctx.send(embed=embed, view=PerDeleteConfirm(discord_id, ctx.author.id))
+
+@bot.command()
+async def ping(ctx):
+    latency = round(bot.latency * 1000)
+    await ctx.send(f"🏓 Pong! Odezva serveru je **{latency}ms**.")
 
 @bot.command()
 async def help(ctx):
