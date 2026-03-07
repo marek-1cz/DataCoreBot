@@ -284,6 +284,8 @@ HTML_WAIT_AUTH = """
         .then(data => {
             if(data.status === 'approved') {
                 window.location.href = '/dashboard';
+            } else if(data.status === 'rejected') {
+                window.location.href = '/dashboard';
             }
         });
     }, 2000);
@@ -668,14 +670,14 @@ def get_db():
     if not url or not key: return None
     return create_client(url, key)
 
-# --- 2FA DISCORD LOGIKA TLAČÍTKA ---
+# --- 2FA DISCORD LOGIKA TLAČÍTEK ---
 class AuthView(discord.ui.View):
     def __init__(self, token, discord_id):
         super().__init__(timeout=300)
         self.token = token
         self.discord_id = discord_id
 
-    @discord.ui.button(label="Ověřit přístup", style=discord.ButtonStyle.success, emoji="🔐")
+    @discord.ui.button(label="Ověřit přístup", style=discord.ButtonStyle.success, emoji="✅")
     async def verify_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         db = get_db()
@@ -687,6 +689,15 @@ class AuthView(discord.ui.View):
             else:
                 await interaction.edit_original_response(content="❌ **Platnost požadavku vypršela nebo je neplatný.** Zkuste to znovu na webu.", view=None)
 
+    @discord.ui.button(label="Zamítnout", style=discord.ButtonStyle.danger, emoji="❌")
+    async def decline_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        db = get_db()
+        if db:
+            db.table("users").update({"login_token": "rejected"}).eq("discord_id", self.discord_id).execute()
+        await interaction.edit_original_response(content="⛔ **Žádost o přihlášení byla úspěšně zamítnuta.** Přístup zablokován.", view=None)
+
+
 def send_login_dm_from_flask(discord_id, token):
     async def send():
         try:
@@ -694,7 +705,7 @@ def send_login_dm_from_flask(discord_id, token):
             if user:
                 embed = discord.Embed(
                     title="🔐 Bezpečnostní ověření - Dashboard", 
-                    description="Byl zaznamenán pokus o přihlášení do administračního panelu Projektu OIS IDPK z prohlížeče.\n\nPokud jste to Vy, potvrďte přístup kliknutím na tlačítko níže.", 
+                    description="Byl zaznamenán pokus o přihlášení do administračního panelu Projektu OIS IDPK z prohlížeče.\n\nPokud jste to Vy, potvrďte přístup kliknutím na tlačítko níže. Pokud jste žádost nepodali, klikněte na **Zamítnout**.", 
                     color=0x38bdf8
                 )
                 await user.send(embed=embed, view=AuthView(token, discord_id))
@@ -905,10 +916,15 @@ def check_auth(discord_id):
     db = get_db()
     if db:
         user = db.table("users").select("login_token").eq("discord_id", discord_id).execute().data
-        if user and user[0].get("login_token") == "approved":
-            session['logged_in'] = True
-            db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-            return {"status": "approved"}
+        if user:
+            token_status = user[0].get("login_token")
+            if token_status == "approved":
+                session['logged_in'] = True
+                db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
+                return {"status": "approved"}
+            elif token_status == "rejected":
+                db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
+                return {"status": "rejected"}
     return {"status": "waiting"}
 
 
@@ -1120,6 +1136,59 @@ def run_web():
 # 3. DISCORD BOT & INTERAKTIVNÍ TLAČÍTKA
 # ==========================================
 
+# Nutné povolit intents pro správu rolí uživatelů
+intents = discord.Intents.default()
+intents.message_content = True 
+intents.members = True # <--- MUSÍ BÝT ZAPNUTO V DISCORD DEVELOPER PORTALU!
+bot = commands.Bot(command_prefix='!', intents=intents)
+
+# Odstraníme defaultní help příkaz, abychom mohli vytvořit vlastní
+bot.remove_command('help')
+
+# --- LOGIKA PŘIŘAZOVÁNÍ ROLÍ NA SERVERU ---
+async def update_member_roles(member, role_string):
+    if not member: return
+    guild = member.guild
+    if not guild: return
+    
+    u_roles = [r.strip() for r in role_string.split(',')]
+    
+    role_sa = discord.utils.get(guild.roles, name="web-sa")
+    role_dev = discord.utils.get(guild.roles, name="web-dev")
+    role_bt = discord.utils.get(guild.roles, name="web-bt")
+    
+    try:
+        if role_sa:
+            if "SA" in u_roles and role_sa not in member.roles: await member.add_roles(role_sa)
+            elif "SA" not in u_roles and role_sa in member.roles: await member.remove_roles(role_sa)
+            
+        if role_dev:
+            if "DEV" in u_roles and role_dev not in member.roles: await member.add_roles(role_dev)
+            elif "DEV" not in u_roles and role_dev in member.roles: await member.remove_roles(role_dev)
+            
+        if role_bt:
+            if "BT" in u_roles and role_bt not in member.roles: await member.add_roles(role_bt)
+            elif "BT" not in u_roles and role_bt in member.roles: await member.remove_roles(role_bt)
+    except Exception as e:
+        print(f"[CHYBA ROLÍ] Nemám oprávnění měnit role na serveru: {e}", flush=True)
+
+# Loop pro průběžnou kontrolu a synchronizaci rolí každých 15 minut
+@tasks.loop(minutes=15)
+async def sync_discord_roles():
+    db = get_db()
+    if not db: return
+    try:
+        db_users = db.table("users").select("discord_id", "role", "is_deleted", "is_banned").execute().data
+        if not db_users: return
+        user_dict = {u['discord_id']: u for u in db_users if not u.get('is_deleted') and not u.get('is_banned')}
+        
+        for guild in bot.guilds:
+            for member in guild.members:
+                if str(member.id) in user_dict:
+                    await update_member_roles(member, user_dict[str(member.id)]['role'])
+    except Exception as e:
+        print(f"[ROLE SYNC ERROR] {e}", flush=True)
+
 @tasks.loop(hours=24)
 async def keep_pixeldrain_alive():
     db = get_db()
@@ -1134,11 +1203,8 @@ async def keep_pixeldrain_alive():
                     req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
                     with urllib.request.urlopen(req) as response:
                         response.read(10)
-                    print(f"[KEEPALIVE] PixelDrain soubor oživen: {url}", flush=True)
-                except Exception as e:
-                    print(f"[KEEPALIVE] Chyba oživení {url}: {e}", flush=True)
-    except Exception as e:
-        print(f"[KEEPALIVE] Chyba databáze: {e}", flush=True)
+                except: pass
+    except: pass
 
 class VersionSelect(discord.ui.Select):
     def __init__(self, user_role):
@@ -1200,7 +1266,7 @@ class RulesView(discord.ui.View):
         
     @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, custom_id="btn_agree", emoji="✅")
     async def agree_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="<a:loading:123> Ověřuji profil v databázi, prosím čekejte...", view=None)
+        await interaction.response.edit_message(content="<a:loading:123> Ověřuji profil v databázi a synchronizuji role...", view=None)
         try:
             db = get_db()
             discord_id = str(interaction.user.id)
@@ -1213,7 +1279,7 @@ class RulesView(discord.ui.View):
                     await interaction.edit_original_response(content="**Stahování softwaru je aktuálně nedostupné.**\nObraťte se prosím na admin team.", view=None)
                     return
                 
-                # Zjištění, jestli má uživatel rezervovanou roli (přihlašuje se poprvé)
+                # Zjištění, jestli má uživatel rezervovanou roli
                 pending_resp = db.table("pending_roles").select("*").execute().data
                 matched_pending = None
                 if pending_resp:
@@ -1258,6 +1324,10 @@ class RulesView(discord.ui.View):
                     user_roles = new_role
                     if matched_pending: db.table("pending_roles").delete().eq("id", matched_pending['id']).execute()
             
+            # Okamžitě synchronizuje role na discord serveru
+            if isinstance(interaction.user, discord.Member):
+                await update_member_roles(interaction.user, user_roles)
+            
             await interaction.edit_original_response(content="**Ověření úspěšné.**\nNyní si prosím vyberte soubor k instalaci:", view=VersionView(user_roles))
         except Exception as e:
             print(e, flush=True)
@@ -1282,17 +1352,40 @@ class DownloadView(discord.ui.View):
         )
         await interaction.response.send_message(pravidla_text, view=RulesView(), ephemeral=True)
 
-intents = discord.Intents.default()
-intents.message_content = True 
-bot = commands.Bot(command_prefix='!', intents=intents)
-
 @bot.event
 async def on_ready():
     bot.add_view(DownloadView())
     keep_pixeldrain_alive.start()
+    sync_discord_roles.start()
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
 
+# --- VLASTNÍ OPRÁVNĚNÍ ---
+def check_web_sa():
+    async def predicate(ctx):
+        if discord.utils.get(ctx.author.roles, name="web-sa"):
+            return True
+        try:
+            await ctx.author.send("❌ K tomuto příkazu nemáš oprávnění (vyžadována role `web-sa`).")
+            await ctx.message.delete()
+        except: pass
+        return False
+    return commands.check(predicate)
+
+def check_dm_role():
+    async def predicate(ctx):
+        if discord.utils.get(ctx.author.roles, name="DM"):
+            return True
+        try:
+            await ctx.author.send("❌ K tomuto příkazu nemáš oprávnění (vyžadována role `DM`).")
+            await ctx.message.delete()
+        except: pass
+        return False
+    return commands.check(predicate)
+
+# --- DISCORD PŘÍKAZY ---
+
 @bot.command()
+@check_web_sa()
 async def setup_download(ctx):
     embed = discord.Embed(
         title="📥 Projekt OIS IDPK - Instalace", 
@@ -1302,6 +1395,82 @@ async def setup_download(ctx):
     embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/8205/8205562.png")
     await ctx.send(embed=embed, view=DownloadView())
     await ctx.message.delete()
+
+@bot.command()
+async def ping(ctx):
+    latency = round(bot.latency * 1000)
+    await ctx.send(f"🏓 Pong! Odezva serveru je **{latency}ms**.")
+
+@bot.command()
+async def help(ctx):
+    embed = discord.Embed(
+        title="🤖 Nápověda - IDPK OIS PROJEKT", 
+        description="Jsem systémový bot, který plně spravuje databázi pro IDPK OIS PROJEKT. Skrz mě si můžeš stáhnout nejnovější verze naší aplikace a ověřit svůj profil.", 
+        color=0x38bdf8
+    )
+    embed.add_field(name="!help", value="Zobrazí tuto nápovědu.", inline=False)
+    embed.add_field(name="!verze", value="Vypíše dostupné verze aplikace ke stažení a jejich požadavky.", inline=False)
+    embed.add_field(name="!ping", value="Zobrazí odezvu bota.", inline=False)
+    embed.add_field(name="!info [ID]", value="Zobrazí základní data uživatele z databáze.", inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def verze(ctx):
+    db = get_db()
+    if not db: return
+    v_resp = db.table("software_versions").select("*").order("id").execute().data
+    if not v_resp:
+        await ctx.send("Aktuálně nejsou v databázi k dispozici žádné verze.")
+        return
+    embed = discord.Embed(title="📦 Dostupné verze aplikace", color=0x10b981)
+    for v in v_resp:
+        role_text = "Všichni (User)"
+        if v['target_role'] == 'BT': role_text = "BT, DEV, SA"
+        if v['target_role'] == 'DEV_SA': role_text = "DEV, SA"
+        embed.add_field(name=v['version_name'], value=f"Dostupnost: **{role_text}**", inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def info(ctx, discord_id: str = None):
+    if not discord_id:
+        await ctx.send("Zadejte prosím platné ID Discordu, např.: `!info 1234567890`")
+        return
+    db = get_db()
+    if not db: return
+    user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+    if not user:
+        await ctx.send(f"❌ Uživatel s Discord ID `{discord_id}` nebyl v databázi nalezen.")
+        return
+    u = user[0]
+    status = "Aktivní"
+    if u.get('is_deleted'): status = "Smazán"
+    if u.get('is_banned'): status = "BANNED"
+    
+    embed = discord.Embed(title=f"Informace o uživateli: {u.get('nick')}", color=0x38bdf8)
+    embed.add_field(name="App ID", value=f"#{u.get('app_id')}", inline=True)
+    embed.add_field(name="Discord ID", value=u.get('discord_id'), inline=True)
+    embed.add_field(name="Zapsané Role", value=u.get('role'), inline=False)
+    embed.add_field(name="Status Účtu", value=status, inline=True)
+    embed.add_field(name="2FA Dashboard", value="Povolen" if u.get('dashboard_access') else "Zakázán", inline=True)
+    await ctx.send(embed=embed)
+
+@bot.command()
+@check_dm_role()
+async def dm(ctx, user: discord.Member, *, message: str):
+    try:
+        await user.send(message)
+        await ctx.send(f"✅ Zpráva úspěšně odeslána do DM uživateli **{user.display_name}**.")
+    except Exception:
+        await ctx.send(f"❌ Nelze odeslat zprávu. Uživatel má pravděpodobně zablokované soukromé zprávy na serveru.")
+
+@bot.command()
+@check_dm_role()
+async def send(ctx, channel: discord.TextChannel, *, message: str):
+    try:
+        await channel.send(message)
+        await ctx.send(f"✅ Zpráva úspěšně odeslána do kanálu {channel.mention}.")
+    except Exception:
+        await ctx.send("❌ Nemám oprávnění posílat zprávy do tohoto kanálu.")
 
 if __name__ == "__main__":
     Thread(target=run_web).start()
