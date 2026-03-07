@@ -771,7 +771,9 @@ def send_dm_from_flask(discord_id, message):
             user = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
             if user:
                 await user.send(message)
-        except: pass
+        except Exception as e:
+            print(f"[CHYBA] Nepodařilo se odeslat DM: {e}", flush=True)
+            
     if bot.loop and bot.loop.is_running():
         asyncio.run_coroutine_threadsafe(send(), bot.loop)
 
@@ -884,7 +886,6 @@ def api_get_file(token):
     file_url = v_resp.data[0]['file_url']
     version_name = v_resp.data[0]['version_name']
     
-    # Logování do databáze stahování
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
     try:
         db.table("download_logs").insert({
@@ -1069,7 +1070,7 @@ def toggle_downloads():
         try:
             db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute()
             flash('Status stahování byl změněn.', 'success')
-            send_log_from_flask("⚙️ Nastavení Stahování", f"Globální stahování bylo přenastaveno na: **{'Povoleno' if new_status == 'True' else 'Zakázáno'}**", 0xwarning)
+            send_log_from_flask("⚙️ Nastavení Stahování", f"Globální stahování bylo přenastaveno na: **{'Povoleno' if new_status == 'True' else 'Zakázáno'}**", 0xf59e0b)
         except: pass
     return redirect(url_for('dashboard_downloads'))
 
@@ -1281,12 +1282,11 @@ def run_web():
 intents = discord.Intents.default()
 intents.message_content = True 
 intents.members = True 
-intents.presences = True # <--- NUTNÉ PRO VIDĚNÍ ONLINE/OFFLINE STATUSU V DASHBOARDU!
+intents.presences = True
 bot = commands.Bot(command_prefix='!', intents=intents, case_insensitive=True)
 
 bot.remove_command('help')
 
-# Logování nových členů na Discord serveru
 @bot.event
 async def on_member_join(member):
     await async_send_log_to_discord("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {datetime.now().strftime('%d.%m.%Y %H:%M')}", 0x10b981)
