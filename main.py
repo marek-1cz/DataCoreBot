@@ -15,7 +15,7 @@ print("=== START PROJEKTU OIS IDPK ===", flush=True)
 app = Flask(__name__)
 app.secret_key = "ois_idpk_super_tajny_klic" 
 
-# ZCELA BEZPEČNÝ VÝPOČET ČESKÉHO ČASU (BEZ RIZIKA PÁDU SERVERU)
+# ZCELA BEZPEČNÝ VÝPOČET ČESKÉHO ČASU
 def get_prague_time():
     return datetime.utcnow() + timedelta(hours=1)
 
@@ -394,7 +394,7 @@ DASHBOARD_LAYOUT = """
 </script>
 """
 
-# NOVÁ ŠABLONA PRO SÍŇ SLÁVY (MODRÝ GLOW + ELEGANTNÍ JEMNÁ EMOJI ANIMACE)
+# NOVÁ ŠABLONA PRO SÍŇ SLÁVY (ČISTÝ DESIGN)
 HTML_SUPPORTERS = """
 <style>
     .glowing-btn-blue {
@@ -432,23 +432,6 @@ HTML_SUPPORTERS = """
     .supporter-card-blue:hover {
         transform: translateY(-5px);
         box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4), inset 0 0 15px rgba(56, 189, 248, 0.1);
-    }
-    
-    /* KLIDNÁ ELEGANTNÍ ANIMACE ZESPODU */
-    @keyframes gentlePop { 
-        0% { transform: translateY(50px) scale(0.8); opacity: 0; } 
-        20% { opacity: 1; transform: translateY(-30px) scale(1.1); }
-        80% { opacity: 0.8; transform: translateY(-120px) scale(1); }
-        100% { transform: translateY(-150px) scale(0.9); opacity: 0; } 
-    }
-    .emoji-pop { 
-        position: fixed; 
-        bottom: 0; 
-        z-index: 9999; 
-        pointer-events: none; 
-        animation: gentlePop 3.5s ease-out forwards; 
-        will-change: transform, opacity;
-        filter: drop-shadow(0 2px 5px rgba(0,0,0,0.5));
     }
 </style>
 
@@ -488,35 +471,6 @@ HTML_SUPPORTERS = """
         {% endfor %}
     </div>
 </div>
-
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const emojis = ['🎉', '🍕', '💙', '✨', '💎'];
-        // Jemný efekt pouze na okrajích obrazovky
-        for(let i = 0; i < 25; i++) {
-            let el = document.createElement('div');
-            el.className = 'emoji-pop';
-            el.innerText = emojis[Math.floor(Math.random() * emojis.length)];
-            
-            // Rozdělení na levý okraj (2-15%) a pravý okraj (85-98%) šířky
-            let isLeft = Math.random() > 0.5;
-            let pos = isLeft ? (Math.random() * 13 + 2) : (Math.random() * 13 + 85);
-            el.style.left = pos + 'vw';
-            
-            // Původní menší velikost
-            el.style.fontSize = (Math.random() * 15 + 20) + 'px';
-            
-            // Klidná a pomalejší rychlost (2.5s až 4s)
-            el.style.animationDuration = (Math.random() * 1.5 + 2.5) + 's';
-            // Rozptyl, aby nevyletěly všechny úplně naráz
-            el.style.animationDelay = (Math.random() * 1.5) + 's';
-            
-            document.body.appendChild(el);
-            // Vyčištění z paměti prohlížeče po skončení animace
-            setTimeout(() => el.remove(), 6000);
-        }
-    });
-</script>
 """
 
 HTML_HOME = """
@@ -532,12 +486,10 @@ HTML_HOME = """
 HTML_LOGIN = """
 <div style="max-width: 400px; margin: 50px auto; background-color: var(--bg-panel); padding: 30px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border-top: 4px solid var(--blue-main);">
     <h2 style="text-align: center; color: var(--blue-main); margin-top: 0;"><i class="fas fa-lock"></i> Dashboard 2FA</h2>
-    
     <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--danger); padding: 12px; margin-bottom: 20px; border-radius: 0 5px 5px 0;">
         <p style="color: var(--danger); margin: 0; font-size: 13px; font-weight: 800; text-transform: uppercase;"><i class="fas fa-shield-alt"></i> Zabezpečená zóna</p>
         <p style="color: var(--text-muted); margin: 5px 0 0 0; font-size: 12px; line-height: 1.4;">Tato databáze je přísně vyhrazena <b>pouze pro administrátory a pověřené správce</b> projektu. Běžní uživatelé sem nemají přístup. Každý pokus o neoprávněné přihlášení je monitorován a logován.</p>
     </div>
-
     <p style="color: var(--text-muted); text-align: center; font-size: 13px;">Pro přístup do systému zadejte své <b>Discord ID</b>.</p>
     <form method="POST" action="/login_request">
         <label style="font-weight: bold; font-size: 12px; color: var(--text-muted);">VAŠE DISCORD ID</label>
@@ -555,14 +507,9 @@ HTML_WAIT_AUTH = """
 </div>
 <script>
     setInterval(() => {
-        fetch('/api/check_auth/{{ discord_id }}')
-        .then(r => r.json())
-        .then(data => {
-            if(data.status === 'approved') {
-                window.location.href = '/dashboard';
-            } else if(data.status === 'rejected') {
-                window.location.href = '/dashboard';
-            }
+        fetch('/api/check_auth/{{ discord_id }}').then(r => r.json()).then(data => {
+            if(data.status === 'approved') { window.location.href = '/dashboard'; } 
+            else if(data.status === 'rejected') { window.location.href = '/dashboard'; }
         });
     }, 2000);
 </script>
@@ -584,7 +531,6 @@ HTML_APP_SETTINGS = """
             <button type="submit" class="btn {{ 'btn-danger' if soft_enabled else 'btn-success' }}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {{ 'VYPNOUT SOFTWARE GLOBÁLNĚ' if soft_enabled else 'ZAPNOUT SOFTWARE' }}</button>
         </form>
     </div>
-
     <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {{ 'var(--success)' if dl_enabled else 'var(--danger)' }}; text-align: center;">
         <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-cloud-download-alt"></i> Status Stahování</h3>
         <div style="font-size: 50px; margin: 15px 0; color: {{ 'var(--success)' if dl_enabled else 'var(--danger)' }}; text-shadow: 0 0 15px {{ 'rgba(16, 185, 129, 0.5)' if dl_enabled else 'rgba(239, 68, 68, 0.5)' }};">
@@ -617,18 +563,16 @@ HTML_DOWNLOADS_MGMT = """
             <button type="submit" class="btn {{ 'btn-danger' if enabled else 'btn-success' }}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {{ 'ZAKÁZAT STAHOVÁNÍ' if enabled else 'POVOLIT STAHOVÁNÍ' }}</button>
         </form>
     </div>
-
     <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
         <h3 style="color: var(--blue-main); margin-top: 0;">➕ Přidat Instalační Soubor (Verzi)</h3>
-        <p style="color: var(--warning); font-size: 12px; margin-top: -5px;">Můžete vložit odkaz na <b>PixelDrain.com</b>, <b>OneDrive</b>, nebo Dropbox.</p>
         <form action="/dashboard/add_version" method="POST">
             <input type="text" name="version_name" placeholder="Název zobrazený v menu (např. Stabilní v1.0)" required>
             <input type="url" name="file_url" placeholder="Přímý odkaz na stažení souboru" required>
             <label style="color: var(--text-muted); font-size: 13px;">Pro jakou minimální roli je tato verze určena?</label>
             <select name="target_role" required>
-                <option value="User">User (Uvidí všichni - Normální verze)</option>
-                <option value="BT">BETA TESTER (Uvidí BT, DEV, SA - Testovací verze)</option>
-                <option value="DEV_SA">DEV / SERVER ADMIN (Uvidí pouze vývojáři a admini)</option>
+                <option value="User">User (Všichni)</option>
+                <option value="BT">BETA TESTER</option>
+                <option value="DEV_SA">DEV / SERVER ADMIN</option>
             </select>
             <button type="submit" class="btn" style="width: 100%;">Přidat verzi do menu</button>
         </form>
@@ -638,19 +582,14 @@ HTML_DOWNLOADS_MGMT = """
     <h3 style="color: var(--blue-main); margin-top: 0;">📦 Dostupné soubory</h3>
     <div style="overflow-x: auto;">
         <table>
-            <tr>
-                <th>Název v Menu</th>
-                <th>Cílová Skupina</th>
-                <th>Odkaz na soubor</th>
-                <th>Akce</th>
-            </tr>
+            <tr><th>Název v Menu</th><th>Cílová Skupina</th><th>Odkaz na soubor</th><th>Akce</th></tr>
             {% for v in versions %}
             <tr>
                 <td><strong>{{ v.get('version_name', '') }}</strong></td>
                 <td>
-                    {% if v.get('target_role') == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User (Všichni)</span>{% endif %}
-                    {% if v.get('target_role') == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BETA TESTER+</span>{% endif %}
-                    {% if v.get('target_role') == 'DEV_SA' %}<span class="role-tag" style="background-color: #ef4444; color: white;">DEV / SA</span>{% endif %}
+                    {% if v.get('target_role') == 'User' %}<span class="role-tag" style="background-color: #64748b;">User</span>{% endif %}
+                    {% if v.get('target_role') == 'BT' %}<span class="role-tag" style="background-color: #3b82f6;">BETA TESTER+</span>{% endif %}
+                    {% if v.get('target_role') == 'DEV_SA' %}<span class="role-tag" style="background-color: #ef4444;">DEV / SA</span>{% endif %}
                 </td>
                 <td style="font-size: 12px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                     <a href="{{ v.get('file_url', '') }}" target="_blank" style="color: var(--blue-main);">{{ v.get('file_url', '') }}</a>
@@ -667,267 +606,6 @@ HTML_DOWNLOADS_MGMT = """
             {% endfor %}
         </table>
     </div>
-</div>
-"""
-
-HTML_TEAM = """
-<h2 style="color: var(--blue-main); border-bottom: 2px solid #334155; padding-bottom: 10px;">Náš Tým</h2>
-<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
-    {% for member in team %}
-    <div style="background-color: var(--bg-panel); border-radius: 10px; padding: 20px; text-align: center; border-top: 4px solid var(--blue-main);">
-        <img src="{{ member.get('image_url', '') }}" alt="Fotka" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; border: 3px solid #334155;" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-        <h3 style="font-size: 20px; font-weight: bold; margin: 0 0 5px 0;">{{ member.get('name', '') }}</h3>
-        <div style="color: var(--blue-main); font-size: 14px; margin-bottom: 15px;">@{{ member.get('discord_nick', '') }}</div>
-        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 15px;">{{ member.get('description', '') }}</p>
-        <div>
-            {% set roles_input = member.get('role_name', '').split(',') if member.get('role_name') else [] %}
-            {% for r in roles_input %}
-                {% set parts = r.split('|') %}
-                {% set r_name = parts[0].strip() %}
-                {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
-                <span class="role-tag" style="background-color: {{ r_color }}33; color: {{ r_color }}; border: 1px solid {{ r_color }};">{{ r_name }}</span>
-            {% endfor %}
-        </div>
-    </div>
-    {% else %}
-    <p style="color: var(--text-muted);">Zatím nebyli přidáni žádní členové týmu.</p>
-    {% endfor %}
-</div>
-"""
-
-HTML_PENDING_ROLES = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);">Rezervace Rolí (Nezaregistrovaní)</h2>
-</div>
-<div style="display: flex; gap: 20px; flex-wrap: wrap;">
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Předpřipravit Roli</h3>
-        <p style="color: var(--text-muted); font-size: 13px;">Jakmile uživatel s tímto ID nebo Nickem na Discordu klikne na instalaci, systém mu automaticky přiřadí vybranou roli místo základního "User".</p>
-        <form action="/dashboard/add_pending_role" method="POST">
-            <input type="text" name="discord_identifier" placeholder="Discord Nick (nebo Discord ID)" required>
-            <label style="color: var(--text-muted); font-size: 13px; display: block; margin-bottom: 8px;">Vyberte roli pro rezervaci:</label>
-            <div class="checkbox-group">
-                <label style="color: #ef4444;"><input type="checkbox" name="roles" value="SA"> SA</label>
-                <label style="color: #10b981;"><input type="checkbox" name="roles" value="DEV"> DEV</label>
-                <label style="color: #3b82f6;"><input type="checkbox" name="roles" value="BT"> BT</label>
-                <label style="color: #94a3b8;"><input type="checkbox" name="roles" value="User"> User</label>
-            </div>
-            <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Vytvořit Rezervaci</button>
-        </form>
-    </div>
-    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">⏳ Čekající rezervace</h3>
-        <div style="overflow-x: auto;">
-            <table>
-                <tr>
-                    <th>Discord Identifikátor</th>
-                    <th>Rezervovaná Role</th>
-                    <th>Akce</th>
-                </tr>
-                {% for p in pending %}
-                <tr>
-                    <td><strong>{{ p.get('discord_identifier', '') }}</strong></td>
-                    <td>
-                        {% set role_list = p.get('roles', '').split(',') if p.get('roles') else ['User'] %}
-                        {% for r in role_list %}
-                            {% set r_clean = r.strip() %}
-                            {% if r_clean == 'SA' %}
-                                <span class="role-tag" style="color: white; background-color: #ef4444; border-color: #ef4444;">SERVER ADMIN</span>
-                            {% elif r_clean == 'DEV' %}
-                                <span class="role-tag" style="color: white; background-color: #10b981; border-color: #10b981;">DEVELOPER</span>
-                            {% elif r_clean == 'BT' %}
-                                <span class="role-tag" style="color: white; background-color: #3b82f6; border-color: #3b82f6;">BETA TESTER</span>
-                            {% elif r_clean == 'User' %}
-                                <span class="role-tag" style="color: white; background-color: #64748b; border-color: #64748b;">User</span>
-                            {% endif %}
-                        {% endfor %}
-                    </td>
-                    <td>
-                        <form action="/dashboard/delete_pending_role" method="POST" style="display:inline;">
-                            <input type="hidden" name="pending_id" value="{{ p.get('id', '') }}">
-                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Zrušit tuto rezervaci?')"><i class="fas fa-trash"></i></button>
-                        </form>
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Zatím žádné čekající rezervace.</td></tr>
-                {% endfor %}
-            </table>
-        </div>
-    </div>
-</div>
-"""
-
-HTML_TEAM_ADD = """
-<div style="display: flex; gap: 20px; flex-wrap: wrap;">
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Přidat člena týmu</h3>
-        <form action="/dashboard/add_team" method="POST">
-            <input type="text" name="name" placeholder="Jméno / Přezdívka" required>
-            <input type="text" name="discord_nick" placeholder="Discord Nick (bez @)" required>
-            <input type="url" name="image_url" placeholder="URL obrázku (odkaz na fotku)" required>
-            <textarea name="description" placeholder="Něco o něm..." rows="3" required></textarea>
-            <label style="color: var(--text-muted); font-size: 13px; display: block; margin-bottom: 8px;">Role a jejich barvy:</label>
-            <div id="roles-container">
-                <div class="role-entry" style="display: flex; gap: 10px; margin-bottom: 5px;">
-                    <input type="text" name="role_name[]" placeholder="Název Role (např. SA)" required style="flex: 2; margin: 0;">
-                    <input type="color" name="role_color[]" value="#ef4444" style="flex: 1; padding: 2px; height: 40px; margin: 0;">
-                </div>
-            </div>
-            <button type="button" class="btn btn-dark" onclick="addRoleField()" style="width: 100%; margin-bottom: 15px; margin-top: 5px; padding: 5px; font-size: 12px;">+ Přidat další roli</button>
-            <button type="submit" class="btn" style="width: 100%;">Přidat do týmu</button>
-        </form>
-    </div>
-    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">👥 Aktuální členové týmu</h3>
-        <div style="overflow-x: auto;">
-            <table>
-                <tr>
-                    <th>Jméno</th>
-                    <th>Discord Nick</th>
-                    <th>Role</th>
-                    <th>Akce</th>
-                </tr>
-                {% for member in team %}
-                <tr>
-                    <td><strong>{{ member.get('name', '') }}</strong></td>
-                    <td>{{ member.get('discord_nick', '') }}</td>
-                    <td>
-                        {% set roles_input = member.get('role_name', '').split(',') if member.get('role_name') else [] %}
-                        {% for r in roles_input %}
-                            {% set parts = r.split('|') %}
-                            {% set r_name = parts[0].strip() %}
-                            {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
-                            <span class="role-tag" style="color: {{ r_color }}; border: 1px solid {{ r_color }}; background-color: {{ r_color }}33;">{{ r_name }}</span>
-                        {% endfor %}
-                    </td>
-                    <td>
-                        <form action="/dashboard/delete_team" method="POST" style="display:inline;">
-                            <input type="hidden" name="discord_nick" value="{{ member.get('discord_nick', '') }}">
-                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Odebrat tohoto člena z týmu?')"><i class="fas fa-trash"></i></button>
-                        </form>
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Zatím nebyl přidán žádný člen týmu.</td></tr>
-                {% endfor %}
-            </table>
-        </div>
-    </div>
-</div>
-<script>
-    function addRoleField() {
-        const container = document.getElementById('roles-container');
-        const div = document.createElement('div');
-        div.className = 'role-entry';
-        div.style = 'display: flex; gap: 10px; margin-bottom: 5px;';
-        div.innerHTML = `<input type="text" name="role_name[]" placeholder="Název Role" required style="flex: 2; margin: 0;"><input type="color" name="role_color[]" value="#38bdf8" style="flex: 1; padding: 2px; height: 40px; margin: 0;"><button type="button" class="btn btn-danger" onclick="this.parentElement.remove()" style="padding: 0 10px; margin: 0;">X</button>`;
-        container.appendChild(div);
-    }
-</script>
-"""
-
-HTML_IDS = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);">Správa Aplikačních ID</h2>
-</div>
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-    <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">Zde můžete ručně změnit ID libovolnému uživateli. Tímto způsobem lze také znovu obsadit ID, které bylo dříve zablokováno smazaným uživatelem.</p>
-    <div style="overflow-x: auto;">
-        <table>
-            <tr>
-                <th>App ID</th>
-                <th>Nick</th>
-                <th>Discord ID</th>
-                <th>Status Účtu</th>
-                <th>Změnit ID na:</th>
-            </tr>
-            {% for user in users %}
-            <tr style="opacity: {{ '0.6' if user.get('is_deleted') else '1' }};">
-                <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
-                <td><strong>{{ user.get('nick', '') }}</strong></td>
-                <td style="font-size: 12px; color: var(--text-muted);">{{ user.get('discord_id', '') }}</td>
-                <td>
-                    {% if user.get('is_deleted') %}
-                        <span style="color: var(--danger); font-size: 12px; font-weight: bold;">Smazán (Blokuje ID)</span>
-                    {% else %}
-                        <span style="color: var(--success); font-size: 12px;">Aktivní</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <form action="/dashboard/change_id" method="POST" style="display: flex; gap: 5px;">
-                        <input type="hidden" name="discord_id" value="{{ user.get('discord_id', '') }}">
-                        <input type="number" name="new_app_id" placeholder="Nové ID" required style="width: 100px; margin: 0; padding: 5px;">
-                        <button type="submit" class="btn" style="padding: 5px 10px; font-size: 12px;">Změnit</button>
-                    </form>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-</div>
-"""
-
-HTML_DASHBOARD_MAIN = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
-    <div style="background: var(--bg-panel); padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #334155;">
-        Celkem uživatelů: <span style="color: var(--blue-main);">{{ users|length }}</span>
-    </div>
-</div>
-<div style="overflow-x: auto;">
-    <table>
-        <tr>
-            <th>App ID</th>
-            <th>Discord ID</th>
-            <th>Nick</th>
-            <th>Role</th>
-            <th>Zaregistrován</th>
-            <th>Status</th>
-            <th>Akce</th>
-        </tr>
-        {% for user in users %}
-        <tr style="opacity: {{ '0.5' if user.get('is_deleted') else '1' }};">
-            <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
-            <td style="font-size: 12px; color: var(--text-muted);">{{ user.get('discord_id', '') }}</td>
-            <td><strong>{{ user.get('nick', '') }}</strong></td>
-            <td>
-                {% set role_list = user.get('role').split(',') if user.get('role') else ['User'] %}
-                {% for r in role_list %}
-                    {% set r_clean = r.strip() %}
-                    {% if r_clean == 'SA' %}
-                        <span class="role-tag" style="color: white; background-color: #ef4444; border-color: #ef4444;">SERVER ADMIN</span>
-                    {% elif r_clean == 'DEV' %}
-                        <span class="role-tag" style="color: white; background-color: #10b981; border-color: #10b981;">DEVELOPER</span>
-                    {% elif r_clean == 'BT' %}
-                        <span class="role-tag" style="color: white; background-color: #3b82f6; border-color: #3b82f6;">BETA TESTER</span>
-                    {% elif r_clean == 'User' %}
-                        <span class="role-tag" style="color: white; background-color: #64748b; border-color: #64748b;">User</span>
-                    {% endif %}
-                {% endfor %}
-            </td>
-            <td style="color: var(--text-muted); font-size: 13px;">
-                {{ user.get('registered_at', 'Neznámé') if user.get('registered_at') else 'Neznámé' }}
-            </td>
-            <td>
-                {% if user.get('is_deleted') %}
-                    <span style="color: var(--danger); font-weight: bold;"><i class="fas fa-skull"></i> Smazán</span>
-                {% elif user.get('is_banned') %}
-                    <span style="color: var(--warning); font-weight: bold;"><i class="fas fa-ban"></i> BANNED</span>
-                {% else %}
-                    <span style="color: var(--success);"><i class="fas fa-check-circle"></i> Aktivní</span>
-                {% endif %}
-            </td>
-            <td>
-                <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', 'User') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-cog"></i> Profil</button>
-            </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
-        {% endfor %}
-    </table>
 </div>
 """
 
@@ -974,7 +652,6 @@ def check_session_validity():
     if request.path.startswith('/dashboard/') and request.path != '/dashboard/wait_auth':
         if not session.get('logged_in'):
             return redirect(url_for('dashboard_main'))
-            
     if request.path.startswith('/dashboard') and request.path != '/dashboard/wait_auth' and session.get('logged_in'):
         discord_id = session.get('discord_id')
         if discord_id == 'admin': return 
@@ -1598,6 +1275,36 @@ intents.members = True; intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 bot.invites_cache = {}
 
+# --- PIXELDRAIN ANTI-DELETE OCHRANA ---
+@tasks.loop(hours=24)
+async def pixeldrain_keepalive():
+    db = get_db()
+    if not db: return
+    try:
+        versions = db.table("software_versions").select("version_name, file_url").execute().data
+        refreshed = []
+        for v in versions:
+            url = v.get("file_url", "")
+            name = v.get("version_name", "Neznámá verze")
+            if "pixeldrain.com/u/" in url:
+                api_url = url.replace("/u/", "/api/file/")
+                try:
+                    req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Range': 'bytes=0-10'})
+                    urllib.request.urlopen(req, timeout=15)
+                    refreshed.append(name)
+                except Exception as e:
+                    print(f"Ping chyba {name}: {e}")
+        
+        if refreshed:
+            files_str = "\n• ".join(refreshed)
+            await async_send_log(
+                "🔄 Anti-Delete Ochrana (Pixeldrain)", 
+                f"Systém právě úspěšně nasimuloval stažení u uložených souborů na Pixeldrainu. Tyto soubory jsou nyní chráněny před smazáním (resetován 60denní odpočet).\n\n**Ochráněné soubory:**\n• {files_str}", 
+                0x3b82f6
+            )
+    except Exception as e:
+        print(f"Keepalive chyba: {e}")
+
 @bot.event
 async def on_ready():
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
@@ -1609,6 +1316,9 @@ async def on_ready():
         for guild in bot.guilds:
             bot.invites_cache[guild.id] = await guild.invites()
     except: pass
+    
+    if not pixeldrain_keepalive.is_running():
+        pixeldrain_keepalive.start()
 
 @bot.event
 async def on_member_join(member):
