@@ -24,7 +24,7 @@ URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/publ
 URL_VELKE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png"
 
 # ==========================================
-# 1. HTML ŠABLONY (NÁDHERNÝ VZHLED + WIDGET BMAC)
+# 1. HTML ŠABLONY (NÁDHERNÝ VZHLED)
 # ==========================================
 
 BASE_HTML = """
@@ -783,67 +783,6 @@ HTML_IDS = """
 </div>
 """
 
-HTML_DASHBOARD_MAIN = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
-    <div style="background: var(--bg-panel); padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #334155;">
-        Celkem uživatelů: <span style="color: var(--blue-main);">{{ users|length }}</span>
-    </div>
-</div>
-<div style="overflow-x: auto;">
-    <table>
-        <tr>
-            <th>App ID</th>
-            <th>Discord ID</th>
-            <th>Nick</th>
-            <th>Role</th>
-            <th>Zaregistrován</th>
-            <th>Status</th>
-            <th>Akce</th>
-        </tr>
-        {% for user in users %}
-        <tr style="opacity: {{ '0.5' if user.get('is_deleted') else '1' }};">
-            <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
-            <td style="font-size: 12px; color: var(--text-muted);">{{ user.get('discord_id', '') }}</td>
-            <td><strong>{{ user.get('nick', '') }}</strong></td>
-            <td>
-                {% set role_list = user.get('role').split(',') if user.get('role') else ['User'] %}
-                {% for r in role_list %}
-                    {% set r_clean = r.strip() %}
-                    {% if r_clean == 'SA' %}
-                        <span class="role-tag" style="color: white; background-color: #ef4444; border-color: #ef4444;">SERVER ADMIN</span>
-                    {% elif r_clean == 'DEV' %}
-                        <span class="role-tag" style="color: white; background-color: #10b981; border-color: #10b981;">DEVELOPER</span>
-                    {% elif r_clean == 'BT' %}
-                        <span class="role-tag" style="color: white; background-color: #3b82f6; border-color: #3b82f6;">BETA TESTER</span>
-                    {% elif r_clean == 'User' %}
-                        <span class="role-tag" style="color: white; background-color: #64748b; border-color: #64748b;">User</span>
-                    {% endif %}
-                {% endfor %}
-            </td>
-            <td style="color: var(--text-muted); font-size: 13px;">
-                {{ user.get('registered_at', 'Neznámé') if user.get('registered_at') else 'Neznámé' }}
-            </td>
-            <td>
-                {% if user.get('is_deleted') %}
-                    <span style="color: var(--danger); font-weight: bold;"><i class="fas fa-skull"></i> Smazán</span>
-                {% elif user.get('is_banned') %}
-                    <span style="color: var(--warning); font-weight: bold;"><i class="fas fa-ban"></i> BANNED</span>
-                {% else %}
-                    <span style="color: var(--success);"><i class="fas fa-check-circle"></i> Aktivní</span>
-                {% endif %}
-            </td>
-            <td>
-                <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', 'User') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-cog"></i> Profil</button>
-            </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
-        {% endfor %}
-    </table>
-</div>
-"""
-
 # ==========================================
 # GLOBÁLNÍ FUNKCE
 # ==========================================
@@ -935,18 +874,24 @@ def supporters():
         support_data = []
     return render_public(HTML_SUPPORTERS, supporters=support_data)
 
-@app.route('/webhook/bmac', methods=['POST'])
+# >>> TADY JE TVŮJ NOVÝ TESTOVACÍ WEBHOOK (MŮŽEŠ NA NĚJ KLIKNOUT Z PROHLÍŽEČE) <<<
+@app.route('/webhook/bmac', methods=['GET', 'POST'])
 def bmac_webhook():
     try:
-        payload = request.json
-        data = payload.get('data', payload) if isinstance(payload, dict) else {}
-        
-        name = data.get('supporter_name') or data.get('payer_name') or 'Anonymní dárce'
-        message = data.get('support_note') or ''
+        # 1. Zpracování dat (Ať už přijdou z BMAC přes POST nebo přes tvůj odkaz v prohlížeči přes GET)
+        if request.method == 'POST':
+            payload = request.json or {}
+            data = payload.get('data', payload) if isinstance(payload, dict) else {}
+        else:
+            data = request.args
+            
+        name = data.get('supporter_name') or data.get('payer_name') or data.get('name') or 'Anonymní dárce'
+        message = data.get('support_note') or data.get('message') or ''
         amount_val = data.get('amount') or data.get('support_coffees') or 1
         currency = data.get('currency') or 'CZK'
         amount_str = f"{amount_val} {currency}"
         
+        # 2. Zápis do databáze (pokud je RLS vyplé, tohle projde)
         db = get_db()
         if db:
             db.table("supporters").insert({
@@ -957,10 +902,16 @@ def bmac_webhook():
             }).execute()
             send_log("🍕 Nový dárce!", f"Uživatel **{name}** právě poslal **{amount_str}**.\n\n*Vzkaz: {message}*", 0xF4CC17)
             
+        # 3. Odpověď
+        if request.method == 'GET':
+            return f"<h1>ÚSPĚCH! 🎉</h1><p>Testovací podpora od <b>{name}</b> byla zapsána do databáze a odeslána na Discord!</p><a href='/supporters'>Zpět na stránku podporovatelů</a>"
         return jsonify({"status": "success"}), 200
+        
     except Exception as e:
-        print(f"Webhook Error: {e}")
-        return jsonify({"status": "error"}), 400
+        print(f"Webhook Error: {e}", flush=True)
+        if request.method == 'GET':
+            return f"<h1>❌ CHYBA DATABÁZE</h1><p><b>Důvod:</b> {str(e)}</p><p>Zkontroluj, zda jsi v Supabase opravdu vypnul RLS u tabulky 'supporters' a zda je 'created_at' nastavený jako text.</p>"
+        return jsonify({"status": "error", "message": str(e)}), 400
 
 @app.route('/download')
 def download_home():
@@ -1051,7 +1002,7 @@ def api_get_file(token):
     except Exception as e: return f"Chyba odkazu: {e}"
 
 # ==========================================
-# API PRO SOFTWARE
+# API PRO SOFTWARE A DASHBOARD
 # ==========================================
 
 @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
@@ -1507,6 +1458,10 @@ bot.invites_cache = {}
 async def on_ready():
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
     try:
+        bot.add_view(DynamicDownloadView())
+    except: pass
+    
+    try:
         for guild in bot.guilds:
             bot.invites_cache[guild.id] = await guild.invites()
     except Exception as e: pass
@@ -1527,6 +1482,49 @@ async def on_member_join(member):
     link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!" if used_invite and used_invite.code == "vmTagbC9mF" else ""
     await async_send_log("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {datetime.now(prague_tz).strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
 
+async def update_member_roles(member, role_string):
+    if not member or not member.guild: return
+    u_roles = [r.strip() for r in role_string.split(',')]
+    try:
+        r_sa = discord.utils.get(member.guild.roles, name="web-sa")
+        r_dev = discord.utils.get(member.guild.roles, name="web-dev")
+        r_bt = discord.utils.get(member.guild.roles, name="web-bt")
+        if r_sa:
+            if "SA" in u_roles and r_sa not in member.roles: await member.add_roles(r_sa)
+            elif "SA" not in u_roles and r_sa in member.roles: await member.remove_roles(r_sa)
+        if r_dev:
+            if "DEV" in u_roles and r_dev not in member.roles: await member.add_roles(r_dev)
+            elif "DEV" not in u_roles and r_dev in member.roles: await member.remove_roles(r_dev)
+        if r_bt:
+            if "BT" in u_roles and r_bt not in member.roles: await member.add_roles(r_bt)
+            elif "BT" not in u_roles and r_bt in member.roles: await member.remove_roles(r_bt)
+    except: pass
+
+class PerDeleteConfirm(discord.ui.View):
+    def __init__(self, target_id, author_id):
+        super().__init__(timeout=60)
+        self.target_id = target_id; self.author_id = author_id
+    @discord.ui.button(label="Ano, trvale smazat", style=discord.ButtonStyle.danger, emoji="⚠️")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        await interaction.response.defer()
+        db = get_db()
+        if db:
+            db.table("users").delete().eq("discord_id", self.target_id).execute()
+            await interaction.edit_original_response(content=f"✅ Účet `{self.target_id}` byl z databáze PERMANENTNĚ smazán.", view=None, embed=None)
+    @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        await interaction.response.edit_message(content="❌ Akce zrušena. Účet smazán nebyl.", view=None, embed=None)
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Zkontroluj si `!help`.", delete_after=15)
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
+    elif isinstance(error, commands.CheckFailure): pass 
+
 def check_web_sa():
     async def predicate(ctx):
         if discord.utils.get(ctx.author.roles, name="web-sa") or ctx.author.guild_permissions.administrator: return True
@@ -1539,70 +1537,73 @@ def check_sm_role():
         await ctx.send(f"❌ {ctx.author.mention}, k tomuto příkazu nemáš oprávnění.", delete_after=10); return False
     return commands.check(predicate)
 
+class DynamicDownloadView(discord.ui.View):
+    def __init__(self): super().__init__(timeout=None)
+    @discord.ui.button(label="Zahájit instalaci softwaru", style=discord.ButtonStyle.primary, emoji="📥", custom_id="persistent_install_main_btn")
+    async def dl_btn(self, interaction, button):
+        class DynamicRulesView(discord.ui.View):
+            def __init__(self): super().__init__(timeout=None)
+            @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, emoji="✅")
+            async def agree(self, i2, b2):
+                await i2.response.edit_message(content="<a:loading:123> Ověřuji profil...", view=None)
+                try:
+                    db = get_db(); d_id = str(i2.user.id); n = i2.user.display_name; u_role = "User"
+                    if str(db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data[0].get('setting_value')).lower() == 'false':
+                        return await i2.edit_original_response(content="**Stahování je globálně vypnuto.**")
+                    chk = db.table("users").select("*").eq("discord_id", d_id).execute()
+                    pend = next((p for p in db.table("pending_roles").select("*").execute().data if p['discord_identifier'] in [d_id, n]), None)
+                    if chk.data:
+                        if chk.data[0].get('is_banned'): return await i2.edit_original_response(content="**Přístup zamítnut:** Máte BAN.")
+                        if chk.data[0].get('is_deleted'):
+                            hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                            nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
+                            r = pend['roles'] if pend else "User"
+                            db.table("users").update({"app_id": nid, "nick": n, "is_deleted": False, "role": r}).eq("discord_id", d_id).execute()
+                            u_role = r
+                            if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
+                        else: u_role = chk.data[0].get('role', 'User')
+                    else:
+                        hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                        nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
+                        r = pend['roles'] if pend else "User"
+                        db.table("users").insert({"app_id": nid, "discord_id": d_id, "nick": n, "role": r, "hwid": "", "is_banned": False, "is_deleted": False, "dashboard_access": False, "login_token": "", "registered_at": datetime.now(prague_tz).strftime("%d.%m.%Y %H:%M")}).execute()
+                        u_role = r
+                        if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
+                    if isinstance(i2.user, discord.Member): 
+                        try: await update_member_roles(i2.user, u_role)
+                        except: pass
+                    
+                    class DynamicVersionSelect(discord.ui.Select):
+                        def __init__(self, u_lvl):
+                            opts = []
+                            for v in get_db().table("software_versions").select("*").order("id").execute().data:
+                                req = 2 if v['target_role'] == 'BT' else (3 if v['target_role'] == 'DEV_SA' else 1)
+                                if u_lvl >= req: opts.append(discord.SelectOption(label=v['version_name'], value=str(v['id']), emoji="📦"))
+                            if not opts: opts.append(discord.SelectOption(label="Nic není k dispozici", value="none"))
+                            super().__init__(placeholder="Vyber verzi k instalaci...", options=opts)
+                        async def callback(self, i3):
+                            if self.values[0] == "none": return await i3.response.send_message("Nic tu není.", ephemeral=True)
+                            await i3.response.send_message("<a:loading:123> Generuji odkaz...", ephemeral=True)
+                            t = str(uuid.uuid4())
+                            get_db().table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
+                            await i3.edit_original_response(content=f"**Odkaz připraven:**\n🔗 {os.environ.get('RENDER_EXTERNAL_URL', 'https://datacorebot.onrender.com')}/download/{t}?v={self.values[0]}\n*Platí jen pro Vás.*")
+                    
+                    v_view = discord.ui.View()
+                    v_view.add_item(DynamicVersionSelect(3 if 'SA' in u_role or 'DEV' in u_role else (2 if 'BT' in u_role else 1)))
+                    await i2.edit_original_response(content="**Ověření úspěšné.** Vyberte soubor:", view=v_view)
+                except Exception as e: await i2.edit_original_response(content=f"Chyba DB: {e}")
+            @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, emoji="❌")
+            async def disagree(self, i2, b2):
+                await i2.response.edit_message(content="**Akce zrušena.**", view=None)
+
+        await interaction.response.send_message("**Podmínky užití:**\n1. Zákaz úprav a šíření.\n2. Zámek na Váš PC (HWID).\n\nSouhlasíte?", view=DynamicRulesView(), ephemeral=True)
+
 @bot.command()
 @check_web_sa()
 async def setup_download(ctx):
     embed = discord.Embed(title="📥 Projekt OIS IDPK - Instalace", description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a generování osobního odkazu ke stažení.", color=0x38bdf8)
-    
-    class DynamicDownloadView(discord.ui.View):
-        def __init__(self): super().__init__(timeout=None)
-        @discord.ui.button(label="Zahájit instalaci softwaru", style=discord.ButtonStyle.primary, emoji="📥")
-        async def dl_btn(self, interaction, button):
-            class DynamicRulesView(discord.ui.View):
-                def __init__(self): super().__init__(timeout=None)
-                @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, emoji="✅")
-                async def agree(self, i2, b2):
-                    await i2.response.send_message("<a:loading:123> Ověřuji profil...", ephemeral=True)
-                    try:
-                        db = get_db(); d_id = str(i2.user.id); n = i2.user.display_name; u_role = "User"
-                        if str(db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data[0].get('setting_value')).lower() == 'false':
-                            return await i2.edit_original_response(content="**Stahování je vypnuto.**")
-                        chk = db.table("users").select("*").eq("discord_id", d_id).execute()
-                        pend = next((p for p in db.table("pending_roles").select("*").execute().data if p['discord_identifier'] in [d_id, n]), None)
-                        if chk.data:
-                            if chk.data[0].get('is_banned'): return await i2.edit_original_response(content="**Přístup zamítnut:** Máte BAN.")
-                            if chk.data[0].get('is_deleted'):
-                                hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
-                                nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
-                                r = pend['roles'] if pend else "User"
-                                db.table("users").update({"app_id": nid, "nick": n, "is_deleted": False, "role": r}).eq("discord_id", d_id).execute()
-                                u_role = r
-                                if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
-                            else: u_role = chk.data[0].get('role', 'User')
-                        else:
-                            hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
-                            nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
-                            r = pend['roles'] if pend else "User"
-                            db.table("users").insert({"app_id": nid, "discord_id": d_id, "nick": n, "role": r, "hwid": "", "is_banned": False, "is_deleted": False, "dashboard_access": False, "login_token": "", "registered_at": datetime.now(prague_tz).strftime("%d.%m.%Y %H:%M")}).execute()
-                            u_role = r
-                            if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
-                        if isinstance(i2.user, discord.Member): 
-                            try: await update_member_roles(i2.user, u_role)
-                            except: pass
-                        
-                        class DynamicVersionSelect(discord.ui.Select):
-                            def __init__(self, u_lvl):
-                                opts = []
-                                for v in get_db().table("software_versions").select("*").order("id").execute().data:
-                                    req = 2 if v['target_role'] == 'BT' else (3 if v['target_role'] == 'DEV_SA' else 1)
-                                    if u_lvl >= req: opts.append(discord.SelectOption(label=v['version_name'], value=str(v['id']), emoji="📦"))
-                                if not opts: opts.append(discord.SelectOption(label="Nic není", value="none"))
-                                super().__init__(placeholder="Vyber verzi k instalaci...", options=opts)
-                            async def callback(self, i3):
-                                if self.values[0] == "none": return await i3.response.send_message("Nic tu není.", ephemeral=True)
-                                await i3.response.send_message("<a:loading:123> Generuji odkaz...", ephemeral=True)
-                                t = str(uuid.uuid4())
-                                get_db().table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
-                                await i3.edit_original_response(content=f"🔗 {os.environ.get('RENDER_EXTERNAL_URL', 'https://datacorebot.onrender.com')}/download/{t}?v={self.values[0]}")
-                        
-                        v_view = discord.ui.View()
-                        v_view.add_item(DynamicVersionSelect(3 if 'SA' in u_role or 'DEV' in u_role else (2 if 'BT' in u_role else 1)))
-                        await i2.edit_original_response(content="**Ověření úspěšné.** Vyberte soubor:", view=v_view)
-                    except Exception as e: await i2.edit_original_response(content=f"Chyba DB: {e}")
-            await interaction.response.send_message("**Podmínky:** Zákaz šíření a úprav. Souhlasíte?", view=DynamicRulesView(), ephemeral=True)
-            
     await ctx.send(embed=embed, view=DynamicDownloadView())
-    send_log("🛠️ Setup Download", f"Nový panel vytvořen v {ctx.channel.mention}.", 0xf59e0b)
+    send_log("🛠️ Setup Download", f"Uživatel {ctx.author.mention} vytvořil nový instalační panel v kanálu {ctx.channel.mention}.", 0xf59e0b)
     try: await ctx.message.delete()
     except: pass
 
@@ -1614,7 +1615,7 @@ async def auth(ctx):
     if u and u[0].get('login_token'):
         await ctx.send(f"🛡️ {ctx.author.mention}, potvrďte přihlášení do aplikace:", view=AppAuthView(u[0]['login_token'], str(ctx.author.id), False), delete_after=60)
     else:
-        msg = await ctx.send(f"❌ {ctx.author.mention} Nemáš čekající požadavek.")
+        msg = await ctx.send(f"❌ {ctx.author.mention} Nemáš čekající požadavek na přihlášení.")
         await asyncio.sleep(5); await msg.delete()
 
 @bot.command()
