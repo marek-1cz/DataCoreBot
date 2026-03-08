@@ -6,9 +6,11 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 from threading import Thread
 from supabase import create_client
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import asyncio
 import uuid
 import urllib.request
+import re
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
@@ -191,7 +193,7 @@ PUBLIC_LAYOUT = """
         <a href="/">Domů</a>
         <a href="/download">Download</a>
         <a href="/team">Náš Tým</a>
-        <a href="/supporters" style="color: #F4CC17; font-weight: bold;"><i class="fas fa-pizza-slice"></i> Podporovatelé</a>
+        <a href="/supporters" style="color: #F4CC17; font-weight: bold; text-shadow: 0 0 10px rgba(244, 204, 23, 0.5);"><i class="fas fa-pizza-slice"></i> Podporovatelé</a>
         <a href="/dashboard" class="admin-link">Dashboard 🔒</a>
     </div>
 </nav>
@@ -394,42 +396,110 @@ DASHBOARD_LAYOUT = """
 </script>
 """
 
+# NOVÁ ŠABLONA PRO SÍŇ SLÁVY (BMAC + GLOW + EMOJI ANIMACE)
 HTML_SUPPORTERS = """
-<div style="max-width: 800px; margin: 0 auto; padding: 20px;">
-    <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: var(--blue-main);">Děkuji všem za podporu!</h1>
-        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6;">
-            Zde vidíte lidi, kteří mě finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!
+<style>
+    .glowing-btn {
+        background-color: #F4CC17; 
+        color: #000; 
+        padding: 15px 40px; 
+        font-size: 20px; 
+        font-weight: 900; 
+        border-radius: 50px; 
+        text-decoration: none; 
+        display: inline-block; 
+        margin-top: 20px;
+        box-shadow: 0 0 20px rgba(244, 204, 23, 0.6); 
+        transition: all 0.3s ease; 
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .glowing-btn:hover {
+        box-shadow: 0 0 40px rgba(244, 204, 23, 1); 
+        transform: scale(1.05); 
+        color: #000;
+    }
+    
+    .supporter-card {
+        background-color: var(--bg-panel); 
+        padding: 25px; 
+        border-radius: 12px;
+        box-shadow: 0 0 15px rgba(244, 204, 23, 0.2), inset 0 0 10px rgba(244, 204, 23, 0.05);
+        border: 1px solid rgba(244, 204, 23, 0.3); 
+        border-left: 6px solid #F4CC17;
+        transition: transform 0.3s, box-shadow 0.3s;
+    }
+    .supporter-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(244, 204, 23, 0.4), inset 0 0 15px rgba(244, 204, 23, 0.1);
+    }
+    
+    @keyframes floatUp { 
+        0% { transform: translateY(100vh) scale(0.5) rotate(0deg); opacity: 1; } 
+        100% { transform: translateY(-10vh) scale(1.5) rotate(360deg); opacity: 0; } 
+    }
+    .emoji-pop { 
+        position: fixed; 
+        bottom: -50px; 
+        z-index: 9999; 
+        pointer-events: none; 
+        animation: floatUp 3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; 
+    }
+</style>
+
+<div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
+    <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.3);">Děkuji všem za podporu!</h1>
+        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">
+            Zde vidíte úžasné lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!
         </p>
-        <p style="color: var(--text-main); font-size: 14px; margin-top: 20px; background: rgba(56, 189, 248, 0.1); padding: 15px; border-radius: 8px; border: 1px solid var(--blue-main);">
-            Pokud byste chtěli vývoj také podpořit, můžete využít modré tlačítko 🍕 vpravo dole na obrazovce.
-        </p>
+        
+        <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn">
+            <i class="fas fa-pizza-slice"></i> Podpořit Projekt OIS IDPK
+        </a>
     </div>
     
     <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 40px 0;">
-    <h2 style="text-align: center; color: var(--text-main); letter-spacing: 2px; margin-bottom: 30px;">SEZNAM PODPOROVATELŮ</h2>
+    <h2 style="text-align: center; color: var(--text-main); letter-spacing: 3px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,255,255,0.2);">SEZNAM PODPOROVATELŮ</h2>
     
     <div style="display: flex; flex-direction: column; gap: 20px;">
         {% for s in supporters %}
-        <div style="background-color: var(--bg-panel); border-left: 5px solid var(--blue-main); padding: 25px; border-radius: 10px; box-shadow: 0 10px 20px rgba(0,0,0,0.3);">
+        <div class="supporter-card">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
-                <h3 style="margin: 0; color: var(--text-main); font-size: 22px;">{{ s.get('name', 'Neznámý dárce') }}</h3>
-                <span style="background-color: rgba(16, 185, 129, 0.2); color: var(--success); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px;">{{ s.get('amount', '') }}</span>
+                <h3 style="margin: 0; color: #F4CC17; font-size: 24px; text-shadow: 0 0 10px rgba(244,204,23,0.3);">{{ s.get('name', 'Neznámý dárce') }}</h3>
+                <span style="background-color: rgba(244, 204, 23, 0.15); color: #F4CC17; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(244,204,23,0.3);">{{ s.get('amount', '') }}</span>
             </div>
             {% if s.get('message') %}
-            <p style="color: var(--text-muted); font-size: 16px; font-style: italic; margin: 0; line-height: 1.5;">
+            <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
                 "{{ s.get('message') }}"
             </p>
             {% else %}
             <p style="color: #64748b; font-size: 14px; font-style: italic; margin: 0;">Bez textového vzkazu.</p>
             {% endif %}
-            <div style="font-size: 11px; color: #475569; margin-top: 15px; text-align: right;">Datum podpory: {{ s.get('created_at', '') }}</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 15px; text-align: right; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">Datum podpory: {{ s.get('created_at', '') }}</div>
         </div>
         {% else %}
-        <div style="text-align: center; color: var(--text-muted); padding: 30px; background: var(--bg-panel); border-radius: 10px;">Zatím zde nikdo není. Buďte první! 🍕</div>
+        <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1);">Zatím zde nikdo není. Buďte první! 🍕</div>
         {% endfor %}
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const emojis = ['🎉', '🍕', '💛', '✨'];
+        for(let i = 0; i < 40; i++) {
+            let el = document.createElement('div');
+            el.className = 'emoji-pop';
+            el.innerText = emojis[Math.floor(Math.random() * emojis.length)];
+            el.style.left = Math.random() * 100 + 'vw';
+            el.style.animationDelay = Math.random() * 0.5 + 's';
+            el.style.animationDuration = (Math.random() * 2 + 2) + 's';
+            el.style.fontSize = (Math.random() * 30 + 20) + 'px';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 5000);
+        }
+    });
+</script>
 """
 
 HTML_HOME = """
@@ -935,7 +1005,6 @@ def supporters():
         support_data = []
     return render_public(HTML_SUPPORTERS, supporters=support_data)
 
-# TADY JE TVŮJ NOVÝ TESTOVACÍ WEBHOOK - Nyní odolný vůči chybám (vrátí 200 OK i z prohlížeče)
 @app.route('/webhook/bmac', methods=['GET', 'POST'])
 def bmac_webhook():
     try:
