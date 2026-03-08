@@ -193,8 +193,6 @@ DASHBOARD_LAYOUT = """
                     <div class="profile-val" id="profRegistered"></div>
                     <div class="profile-stat" style="margin-top: 10px;">Aktivita v aplikaci (Status):</div>
                     <div class="profile-val" style="color: #64748b;"><i>Připravuje se...</i></div>
-                    <div class="profile-stat" style="margin-top: 10px;">Přístup do webové DB:</div>
-                    <div class="profile-val" id="profDbAccess"></div>
                 </div>
                 
                 <div class="profile-card" style="max-height: 180px; overflow-y: auto;">
@@ -265,7 +263,6 @@ DASHBOARD_LAYOUT = """
         document.getElementById('profRegistered').innerText = registered_at && registered_at !== 'None' ? registered_at : 'Neznámé (Starý účet)';
         
         document.getElementById('modalDashboardAccess').checked = (dashboard_access === 'True');
-        document.getElementById('profDbAccess').innerHTML = dashboard_access === 'True' ? '<span style="color: var(--success);"><i class="fas fa-check-circle"></i> Povoleno</span>' : '<span style="color: var(--danger);"><i class="fas fa-times-circle"></i> Zakázáno</span>';
         
         document.querySelectorAll('input[name="roles"]').forEach(cb => cb.checked = false);
         roles.split(',').forEach(r => {
@@ -288,7 +285,6 @@ DASHBOARD_LAYOUT = """
             }
         }
 
-        // Fetch Discord Status & Downloads
         document.getElementById('profJoined').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         document.getElementById('modalStatusDot').innerHTML = '';
         document.getElementById('profDownloads').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
@@ -740,15 +736,18 @@ async def async_send_log_to_discord(title, description, color=0x38bdf8):
             break
 
 def send_log_from_flask(title, description, color=0x38bdf8):
-    if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(async_send_log_to_discord(title, description, color), bot.loop)
+    if bot.loop and bot.loop.is_running():
+        asyncio.run_coroutine_threadsafe(async_send_log_to_discord(title, description, color), bot.loop)
 
 def render_public(template_string, **kwargs):
     html = PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
-    return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html), logo_male=URL_MALE_LOGO, logo_velke=URL_VELKE_LOGO, **kwargs)
+    html = BASE_HTML.replace('{% block layout %}{% endblock %}', html)
+    return render_template_string(html, logo_male=URL_MALE_LOGO, logo_velke=URL_VELKE_LOGO, **kwargs)
 
 def render_dashboard(template_string, **kwargs):
     html = DASHBOARD_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
-    return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html), logo_male=URL_MALE_LOGO, logo_velke=URL_VELKE_LOGO, **kwargs)
+    html = BASE_HTML.replace('{% block layout %}{% endblock %}', html)
+    return render_template_string(html, logo_male=URL_MALE_LOGO, logo_velke=URL_VELKE_LOGO, **kwargs)
 
 @app.before_request
 def check_session_validity():
@@ -760,7 +759,9 @@ def check_session_validity():
             if db:
                 user = db.table("users").select("dashboard_access, is_banned, is_deleted").eq("discord_id", discord_id).execute().data
                 if not user or not user[0].get("dashboard_access") or user[0].get("is_banned") or user[0].get("is_deleted"):
-                    session.clear(); flash('Váš přístup do administrace byl zablokován, zrušen nebo Váš účet neexistuje.', 'error'); return redirect(url_for('dashboard_main'))
+                    session.clear()
+                    flash('Váš přístup do administrace byl zablokován, zrušen nebo Váš účet neexistuje.', 'error')
+                    return redirect(url_for('dashboard_main'))
 
 def sync_roles_from_flask(discord_id, role_string):
     async def sync():
@@ -768,19 +769,24 @@ def sync_roles_from_flask(discord_id, role_string):
             for guild in bot.guilds:
                 member = guild.get_member(int(discord_id))
                 if not member:
-                    try: member = await guild.fetch_member(int(discord_id))
+                    try:
+                        member = await guild.fetch_member(int(discord_id))
                     except: pass
-                if member: await update_member_roles(member, role_string)
+                if member:
+                    await update_member_roles(member, role_string)
         except: pass
-    if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
+    if bot.loop and bot.loop.is_running():
+        asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
 # ---------------------------------------------------------
-# API PRO ELECTRON SOFTWARE (HWID A LOGIN)
+# NOVÉ API PRO TVŮJ ELECTRON SOFTWARE (HWID A LOGIN)
 # ---------------------------------------------------------
 
 @app.route('/api/app_login', methods=['POST', 'OPTIONS'])
 def api_app_login():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS':
+        return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+        
     data = request.json
     if not data: return jsonify({"status": "error", "message": "Chybí data."})
     
@@ -793,54 +799,56 @@ def api_app_login():
     user_resp = db.table("users").select("*").or_(f"discord_id.eq.{identifier},nick.ilike.{identifier}").execute()
     if not user_resp.data and identifier.isdigit():
         user_resp = db.table("users").select("*").eq("app_id", int(identifier)).execute()
-            
-    if not user_resp.data: return jsonify({"status": "error", "message": "Uživatel v databázi nenalezen. Zkontrolujte své App ID nebo Nick."})
+        
+    if not user_resp.data:
+        return jsonify({"status": "error", "message": "Uživatel v databázi nenalezen. Zkontrolujte ID nebo Nick."})
         
     user = user_resp.data[0]
     
-    if user.get("is_banned"): return jsonify({"status": "banned", "message": "Tento účet má zakázaný přístup (BAN)."})
-    if user.get("is_deleted"): return jsonify({"status": "error", "message": "Tento účet byl smazán administrátorem."})
+    if user.get("is_banned"):
+        return jsonify({"status": "banned", "message": "Tento účet má zakázaný přístup (BAN)."})
+    if user.get("is_deleted"):
+        return jsonify({"status": "error", "message": "Tento účet byl smazán administrátorem."})
         
     db_hwid = user.get("hwid")
     if db_hwid and db_hwid != "None" and db_hwid.strip() != "" and db_hwid != req_hwid:
-        return jsonify({"status": "hwid_error", "message": "HWID ZÁMEK NESOUHLASÍ! Tento účet je uzamčen na jiný počítač."})
+        return jsonify({"status": "hwid_error", "message": "HWID ZÁMEK NESOUHLASÍ! Účet je vázán na jiný PC."})
         
     token = str(uuid.uuid4())
     db.table("users").update({"login_token": token}).eq("discord_id", user.get("discord_id")).execute()
     
-    async def send():
-        try:
-            u = bot.get_user(int(user.get("discord_id"))) or await bot.fetch_user(int(user.get("discord_id")))
-            if u:
-                embed = discord.Embed(title="🛡️ Bezpečnostní ověření - Aplikace", description=f"Byl zaznamenán pokus o spuštění softwaru.\n**Uživatel:** {user.get('nick')}\nPokud jste to Vy, potvrďte přístup kliknutím na tlačítko níže.", color=0x38bdf8)
-                await u.send(embed=embed, view=AppAuthView(token, user.get("discord_id"), is_dm=True))
-        except: pass
-    if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
+    send_app_auth_dm_from_flask(user.get("discord_id"), token, user.get("nick"), req_hwid, db_hwid)
     
     return jsonify({"status": "waiting", "token": token, "discord_id": user.get("discord_id"), "nick": user.get("nick")})
 
 @app.route('/api/app_check', methods=['POST', 'OPTIONS'])
 def api_app_check():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS':
+        return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+        
     data = request.json
     discord_id = data.get("discord_id")
     req_hwid = data.get("hwid")
-    db = get_db()
     
+    db = get_db()
     user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
     if not user_resp.data: return jsonify({"status": "error", "message": "Účet nenalezen."})
-    user = user_resp.data[0]
     
-    if user.get("is_banned"): return jsonify({"status": "banned", "message": "Máte udělený BAN."})
-    if user.get("is_deleted"): return jsonify({"status": "error", "message": "Účet byl smazán."})
+    user = user_resp.data[0]
+    if user.get("is_banned"):
+        return jsonify({"status": "banned", "message": "Máte udělený BAN."})
+    if user.get("is_deleted"):
+        return jsonify({"status": "error", "message": "Účet byl smazán."})
         
     db_token = user.get("login_token")
+    
     if db_token == "approved":
         db_hwid = user.get("hwid")
         if not db_hwid or db_hwid == "None" or db_hwid.strip() == "":
             db.table("users").update({"hwid": req_hwid, "login_token": ""}).eq("discord_id", discord_id).execute()
         else:
             db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
+            
         return jsonify({"status": "approved", "app_id": user.get("app_id"), "nick": user.get("nick")})
         
     elif db_token == "rejected":
@@ -851,32 +859,39 @@ def api_app_check():
 
 @app.route('/api/silent_check', methods=['POST', 'OPTIONS'])
 def api_silent_check():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS':
+        return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+        
     data = request.json
     discord_id = data.get("discord_id")
     req_hwid = data.get("hwid")
     db = get_db()
     
     user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
-    if not user_resp.data: return jsonify({"status": "rejected", "message": "Tento účet již v databázi neexistuje."})
+    if not user_resp.data: 
+        return jsonify({"status": "rejected", "message": "Tento účet již v databázi neexistuje."})
     
     user = user_resp.data[0]
-    if user.get("is_banned"): return jsonify({"status": "banned", "message": "Tento účet má zakázaný přístup (BAN)."})
-    if user.get("is_deleted"): return jsonify({"status": "rejected", "message": "Tento účet byl smazán administrátorem."})
+    if user.get("is_banned"): 
+        return jsonify({"status": "banned", "message": "Tento účet má zakázaný přístup (BAN)."})
+    if user.get("is_deleted"): 
+        return jsonify({"status": "rejected", "message": "Tento účet byl smazán administrátorem."})
     
     db_hwid = user.get("hwid")
     if db_hwid and db_hwid != "None" and db_hwid.strip() != "" and db_hwid != req_hwid:
-        return jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Počítač nesouhlasí s profilem v databázi."})
+        return jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Váš počítač nesouhlasí s profilem v databázi."})
         
     return jsonify({"status": "approved", "nick": user.get("nick")})
 
 # ---------------------------------------------------------
-# DISCORD TLAČÍTKA A FLASK STRÁNKY
+# TLAČÍTKA A DM ZPRÁVY
 # ---------------------------------------------------------
+
 class DashboardAuthView(discord.ui.View):
     def __init__(self, token, discord_id):
         super().__init__(timeout=300)
-        self.token = token; self.discord_id = discord_id
+        self.token = token
+        self.discord_id = discord_id
 
     @discord.ui.button(label="Ověřit přístup", style=discord.ButtonStyle.success, emoji="✅")
     async def verify_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -888,38 +903,64 @@ class DashboardAuthView(discord.ui.View):
                 db.table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
                 await interaction.edit_original_response(content="✅ **Přístup do administrace byl úspěšně schválen!**\nNyní můžete zavřít tuto zprávu a vrátit se do prohlížeče.", view=None)
                 await async_send_log_to_discord("🔐 Přihlášení do Dashboardu", f"Uživatel s ID `{self.discord_id}` se úspěšně přihlásil do webové administrace přes 2FA.", 0x10b981)
-            else: await interaction.edit_original_response(content="❌ **Platnost požadavku vypršela nebo je neplatný.**", view=None)
+            else:
+                await interaction.edit_original_response(content="❌ **Platnost požadavku vypršela nebo je neplatný.** Zkuste to znovu na webu.", view=None)
 
     @discord.ui.button(label="Zamítnout", style=discord.ButtonStyle.danger, emoji="❌")
     async def decline_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         db = get_db()
-        if db: db.table("users").update({"login_token": "rejected"}).eq("discord_id", self.discord_id).execute()
-        await interaction.edit_original_response(content="⛔ **Žádost o přihlášení zamítnuta.**", view=None)
+        if db:
+            db.table("users").update({"login_token": "rejected"}).eq("discord_id", self.discord_id).execute()
+        await interaction.edit_original_response(content="⛔ **Žádost o přihlášení byla úspěšně zamítnuta.** Přístup zablokován.", view=None)
+
+def send_login_dm_from_flask(discord_id, token):
+    async def send():
+        try:
+            user = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+            if user:
+                embed = discord.Embed(
+                    title="🔐 Bezpečnostní ověření - Dashboard", 
+                    description="Byl zaznamenán pokus o přihlášení do administračního panelu Projektu OIS IDPK z prohlížeče.\n\nPokud jste to Vy, potvrďte přístup kliknutím na tlačítko níže. Pokud jste žádost nepodali, klikněte na **Zamítnout**.", 
+                    color=0x38bdf8
+                )
+                await user.send(embed=embed, view=DashboardAuthView(token, discord_id))
+        except: pass
+    if bot.loop and bot.loop.is_running():
+        asyncio.run_coroutine_threadsafe(send(), bot.loop)
 
 class AppAuthView(discord.ui.View):
     def __init__(self, token, discord_id, is_dm=True):
         super().__init__(timeout=300)
-        self.token = token; self.discord_id = discord_id; self.is_dm = is_dm
+        self.token = token
+        self.discord_id = discord_id
+        self.is_dm = is_dm
+        
         btn_verify = discord.ui.Button(label="Ano, ověřit (Jsem to já)", style=discord.ButtonStyle.success, emoji="✅")
         btn_verify.callback = self.verify_btn
         self.add_item(btn_verify)
+        
         if self.is_dm:
             btn_reject = discord.ui.Button(label="Zamítnout (Nejsem to já)", style=discord.ButtonStyle.danger, emoji="❌")
             btn_reject.callback = self.decline_btn
             self.add_item(btn_reject)
 
     async def verify_btn(self, interaction: discord.Interaction):
-        if str(interaction.user.id) != str(self.discord_id): return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        if str(interaction.user.id) != str(self.discord_id):
+            await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+            return
+            
         await interaction.response.defer()
         db = get_db()
         if db:
             user = db.table("users").select("login_token").eq("discord_id", self.discord_id).execute().data
             if user and user[0].get("login_token") == self.token:
                 db.table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
-                await interaction.edit_original_response(content="✅ **Přihlášení do softwaru schváleno!**", view=None, embed=None)
+                await interaction.edit_original_response(content="✅ **Přihlášení do softwaru bylo úspěšně schváleno!**\nMůžete se vrátit do programu.", view=None, embed=None)
                 await async_send_log_to_discord("🖥️ Přihlášení do Aplikace", f"Uživatel s ID `{self.discord_id}` se úspěšně ověřil a přihlásil do softwaru.", 0x10b981)
-            else: await interaction.edit_original_response(content="❌ **Platnost požadavku vypršela nebo je neplatný.**", view=None, embed=None)
+            else:
+                await interaction.edit_original_response(content="❌ **Platnost požadavku vypršela nebo je neplatný.**", view=None, embed=None)
+                
         if not self.is_dm:
             await asyncio.sleep(3)
             try: await interaction.message.delete()
@@ -928,144 +969,523 @@ class AppAuthView(discord.ui.View):
     async def decline_btn(self, interaction: discord.Interaction):
         await interaction.response.defer()
         db = get_db()
-        if db: db.table("users").update({"login_token": "rejected"}).eq("discord_id", self.discord_id).execute()
-        await interaction.edit_original_response(content="⛔ **Přihlášení zamítnuto.**", view=None, embed=None)
+        if db:
+            db.table("users").update({"login_token": "rejected"}).eq("discord_id", self.discord_id).execute()
+        await interaction.edit_original_response(content="⛔ **Přihlášení bylo zamítnuto.** Přístup zablokován.", view=None, embed=None)
+
+def send_app_auth_dm_from_flask(discord_id, token, nick, req_hwid, db_hwid):
+    async def send():
+        try:
+            user = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+            if user:
+                hwid_text = "Nové zařízení (Vytvoří se zámek)" if not db_hwid or db_hwid.strip()=="" or db_hwid=="None" else "Známé zařízení"
+                embed = discord.Embed(
+                    title="🛡️ Bezpečnostní ověření - Aplikace", 
+                    description=f"Byl zaznamenán pokus o spuštění softwaru Projekt OIS IDPK.\n\n**Uživatel:** {nick}\n**Zařízení:** {hwid_text}\n\nPokud jste to Vy, potvrďte přístup kliknutím na tlačítko níže.", 
+                    color=0x38bdf8
+                )
+                await user.send(embed=embed, view=AppAuthView(token, discord_id, is_dm=True))
+        except: pass
+    if bot.loop and bot.loop.is_running():
+        asyncio.run_coroutine_threadsafe(send(), bot.loop)
+
+# ---------------------------------------------------------
+# KLASICKÉ FLASK STRÁNKY
+# ---------------------------------------------------------
 
 @app.route('/')
-def home(): return render_public(HTML_HOME)
+def home():
+    return render_public(HTML_HOME)
+
 @app.route('/download')
 def download_home():
     html = """
     <div style="text-align: center; padding: 60px 20px; max-width: 700px; margin: 50px auto; background-color: var(--bg-panel); border-radius: 15px; box-shadow: 0 15px 30px rgba(0,0,0,0.5); border-top: 5px solid #5865F2;">
         <h2 style="color: var(--text-main); font-size: 2.2em; margin-top: 0;"><i class="fas fa-shield-alt" style="color: var(--blue-main);"></i> Oficiální distribuce softwaru</h2>
-        <p style="color: var(--text-muted); font-size: 1.1em; line-height: 1.6; margin-bottom: 20px; text-align: left; padding: 0 20px;">Vážený uživateli,<br><br>velice si vážíme Vašeho zájmu o <b>Projekt OIS IDPK</b>. Z důvodu zachování maximální bezpečnosti jsme se rozhodli přesunout veškerou distribuci našeho softwaru na naši zabezpečenou komunikační platformu.</p>
+        <p style="color: var(--text-muted); font-size: 1.1em; line-height: 1.6; margin-bottom: 20px; text-align: left; padding: 0 20px;">
+            Vážený uživateli,<br><br>
+            velice si vážíme Vašeho zájmu o <b>Projekt OIS IDPK</b>. Z důvodu zachování maximální bezpečnosti, spolehlivé autorizace uživatelů a poskytování kvalitní technické podpory jsme se rozhodli přesunout veškerou distribuci našeho softwaru na naši zabezpečenou komunikační platformu.
+        </p>
         <div style="background-color: rgba(88, 101, 242, 0.1); border: 1px solid #5865F2; padding: 30px 20px; border-radius: 10px; margin: 30px 20px;">
             <p style="color: var(--text-main); font-weight: bold; font-size: 1.2em; margin-top: 0;">Pro stažení softwaru se prosím připojte na náš Discord.</p>
             <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Kliknutím na logo níže budete přesměrováni přímo na náš server, kde naleznete instalační panel a další pokyny.</p>
-            <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; text-decoration: none; transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'"><i class="fab fa-discord" style="font-size: 120px; color: #5865F2; filter: drop-shadow(0px 10px 15px rgba(88,101,242,0.4));"></i></a>
+            <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; text-decoration: none; transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                <i class="fab fa-discord" style="font-size: 120px; color: #5865F2; filter: drop-shadow(0px 10px 15px rgba(88,101,242,0.4));"></i>
+            </a>
         </div>
     </div>
     """
     return render_public(html)
+
 @app.route('/download/<token>')
-def secure_download(token): return render_public("Stránka byla zrušena, použijte Discord panel.")
+def secure_download(token):
+    db = get_db()
+    if not db: return "Chyba databáze."
+    
+    resp = db.table("users").select("*").eq("download_token", token).execute()
+    if len(resp.data) == 0:
+        return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Neplatný odkaz!</h2><p>Vygenerujte si nový na našem Discord serveru.</p></div>")
+        
+    user = resp.data[0]
+    
+    if user.get("is_banned"):
+        return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Přístup zamítnut</h2><p>Váš účet má BAN.</p></div>")
+    elif user.get("is_deleted"):
+        return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Účet neexistuje</h2><p>Váš účet byl smazán administrátorem.</p></div>")
+        
+    version_id = request.args.get('v')
+    v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
+    if not v_resp.data:
+        return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--warning);'>Chyba verze</h2><p>Vybraná verze již není k dispozici.</p></div>")
+        
+    v_data = v_resp.data[0]
+    
+    html = f"""
+    <div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);">
+        <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2>
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">
+            Přihlášen jako: <strong>{user.get('nick', '')}</strong> (ID: #{user.get('app_id', '')})
+        </p>
+        <div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;">
+            <h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3>
+            <p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{v_data['version_name']}</strong></p>
+        </div>
+        <a href="/api/get_file/{token}?v={version_id}" class="btn btn-success" style="font-size: 18px; padding: 15px 30px; display: block; border-radius: 8px; text-decoration: none;"><i class="fas fa-download"></i> Stáhnout Soubor</a>
+        <p style="color: var(--text-muted); font-size: 12px; margin-top: 25px; line-height: 1.5;">
+            <i class="fas fa-info-circle" style="color: var(--blue-main);"></i> 
+            <b>Upozornění:</b> Stahování probíhá přes zabezpečený proxy server. Může to trvat déle v závislosti na rychlosti Vašeho připojení.
+        </p>
+    </div>
+    """
+    return render_public(html)
+
+@app.route('/api/get_file/<token>')
+def api_get_file(token):
+    db = get_db()
+    if not db: return "Chyba databáze."
+    
+    resp = db.table("users").select("*").eq("download_token", token).execute()
+    if len(resp.data) == 0: return "Neplatný token."
+    user = resp.data[0]
+    if user.get("is_banned") or user.get("is_deleted"): return "Přístup zamítnut."
+        
+    version_id = request.args.get('v')
+    v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
+    if not v_resp.data: return "Verze nenalezena."
+        
+    file_url = v_resp.data[0]['file_url']
+    version_name = v_resp.data[0]['version_name']
+    
+    now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+    try:
+        db.table("download_logs").insert({
+            "discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": now_str
+        }).execute()
+        send_log_from_flask("📥 Stahování softwaru", f"Uživatel **{user.get('nick', '')}** (ID: `{user['discord_id']}`) právě zahájil stahování verze **{version_name}**.", 0x38bdf8)
+    except: pass
+    
+    version_name_clean = version_name.replace(" ", "_")
+    file_ext = "zip" 
+    clean_url = file_url.split("?")[0] 
+    if "." in clean_url.split("/")[-1]:
+        extracted_ext = clean_url.split("/")[-1].split(".")[-1]
+        if len(extracted_ext) <= 4 and extracted_ext.isalnum(): file_ext = extracted_ext
+
+    if "pixeldrain.com/u/" in file_url: file_url = file_url.replace("/u/", "/api/file/")
+    if "1drv.ms" in file_url or "onedrive.live.com" in file_url or "1drv.com" in file_url: file_url = file_url.split("?")[0] + "?download=1"
+    if "dropbox.com" in file_url:
+        file_url = file_url.replace("dl=0", "dl=1")
+        if "dl=1" not in file_url: file_url += "?dl=1" if "?" not in file_url else "&dl=1"
+
+    try:
+        req = urllib.request.Request(file_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Accept': '*/*'})
+        remote_response = urllib.request.urlopen(req)
+
+        remote_filename = remote_response.info().get_filename()
+        if remote_filename and '.' in remote_filename:
+            ext = remote_filename.split('.')[-1]
+            if len(ext) <= 4 and ext.isalnum(): file_ext = ext 
+
+        def generate():
+            while True:
+                chunk = remote_response.read(8192)
+                if not chunk: break
+                yield chunk
+
+        content_type = remote_response.headers.get('Content-Type', 'application/octet-stream')
+        return Response(stream_with_context(generate()), headers={'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name_clean}.{file_ext}"', 'Content-Type': content_type})
+    except Exception as e:
+        return f"Chyba: Zkontrolujte prosím, zda je odkaz v Dashboardu platný. ({e})"
+
 @app.route('/team')
-def team(): return render_public(HTML_TEAM, team=get_db().table("team").select("*").execute().data if get_db() else [])
+def team():
+    db = get_db()
+    team_members = []
+    if db:
+        try:
+            team_members = db.table("team").select("*").execute().data
+        except: pass 
+    return render_public(HTML_TEAM, team=team_members)
+
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard_main():
     if request.method == 'POST' and 'password' in request.form:
         if request.form.get('password') == os.environ.get("ADMIN_PASSWORD", "admin"):
-            session['logged_in'] = True; session['discord_id'] = 'admin'
+            session['logged_in'] = True
+            session['discord_id'] = 'admin'
+            send_log_from_flask("🔑 Master Login", "Někdo se právě přihlásil do Dashboardu přes hlavní Master Heslo.", 0xf59e0b)
             return redirect(url_for('dashboard_main'))
-    if not session.get('logged_in'): return render_public(HTML_LOGIN)
-    users_data = get_db().table("users").select("*").order("app_id").execute().data if get_db() else []
-    return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů")
+        else:
+            flash('Špatné heslo!', 'error')
+
+    if not session.get('logged_in'):
+        return render_public(HTML_LOGIN)
+        
+    db = get_db()
+    users_data = []
+    title = "Přehled uživatelů"
+    
+    if db:
+        try:
+            query = db.table("users").select("*")
+            filter_type = request.args.get('filter')
+            
+            if filter_type == 'banned':
+                query = query.eq("is_banned", True).eq("is_deleted", False)
+                title = "Seznam zabanovaných"
+            elif filter_type == 'deleted':
+                query = query.eq("is_deleted", True)
+                title = "Smazané účty (Záloha)"
+            elif filter_type:
+                query = query.ilike("role", f"%{filter_type}%").eq("is_deleted", False)
+                title = f"Uživatelé s rolí: {filter_type}"
+            else:
+                query = query.eq("is_deleted", False).order("app_id")
+                
+            users_data = query.execute().data
+        except Exception as e:
+            flash(f'Chyba databáze: {e}', 'error')
+
+    return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title=title)
+
 @app.route('/login_request', methods=['POST'])
 def login_request():
-    discord_id = request.form.get('discord_id'); db = get_db()
+    discord_id = request.form.get('discord_id')
+    db = get_db()
     if db and discord_id:
         try:
             user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
             if user and user[0].get("dashboard_access") == True and not user[0].get("is_banned") and not user[0].get("is_deleted"):
                 token = str(uuid.uuid4())
                 db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
-                async def send():
-                    try:
-                        u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
-                        if u: await u.send(embed=discord.Embed(title="🔐 Bezpečnostní ověření - Dashboard", description="Byl zaznamenán pokus o přihlášení do administračního panelu Projektu OIS IDPK z prohlížeče.\n\nPokud jste to Vy, potvrďte přístup kliknutím na tlačítko níže.", color=0x38bdf8), view=DashboardAuthView(token, discord_id))
-                    except: pass
-                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
+                send_login_dm_from_flask(discord_id, token)
                 return redirect(url_for('wait_auth', discord_id=discord_id))
-            else: flash('Účet neexistuje, nemá povolený přístup, nebo byl zablokován.', 'error')
-        except Exception as e: flash(f'Chyba: {e}', 'error')
+            else:
+                flash('Účet neexistuje, nemá povolený přístup, nebo byl zablokován.', 'error')
+        except Exception as e:
+            flash(f'Chyba při komunikaci s databází: {e}', 'error')
     return redirect(url_for('dashboard_main'))
+
 @app.route('/dashboard/wait_auth')
-def wait_auth(): return render_public(HTML_WAIT_AUTH, discord_id=request.args.get("discord_id"))
+def wait_auth():
+    discord_id = request.args.get("discord_id")
+    if not discord_id: return redirect(url_for('dashboard_main'))
+    return render_public(HTML_WAIT_AUTH, discord_id=discord_id)
+
 @app.route('/api/check_auth/<discord_id>')
 def check_auth(discord_id):
     db = get_db()
     if db:
         user = db.table("users").select("login_token").eq("discord_id", discord_id).execute().data
         if user:
-            t = user[0].get("login_token")
-            if t == "approved":
-                session['logged_in'] = True; session['discord_id'] = discord_id
+            token_status = user[0].get("login_token")
+            if token_status == "approved":
+                session['logged_in'] = True
+                session['discord_id'] = discord_id
                 db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
                 return {"status": "approved"}
-            elif t == "rejected":
+            elif token_status == "rejected":
                 db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
                 return {"status": "rejected"}
     return {"status": "waiting"}
+
 @app.route('/api/get_profile_data/<discord_id>')
 def get_profile_data(discord_id):
     if not session.get('logged_in'): return {"joined_at": "Neznámé", "status": "Neznámý", "downloads": []}
-    joined_at = "Neznámé"; status = "Neznámý"; member = None
+    
+    joined_at = "Neznámé"
+    status = "Neznámý"
+    member = None
+    
     if bot.guilds:
-        for g in bot.guilds:
-            member = g.get_member(int(discord_id))
+        for guild in bot.guilds:
+            member = guild.get_member(int(discord_id))
             if member: break
+            
     if member:
         joined_at = member.joined_at.strftime("%d.%m.%Y") if member.joined_at else "Neznámé"
         status_map = {"online": "🟢 Online", "offline": "⚫ Offline", "idle": "🌙 Nečinný", "dnd": "🔴 Nerušit"}
         status = status_map.get(str(member.status), str(member.status))
-    dls = get_db().table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data if get_db() else []
-    return {"joined_at": joined_at, "status": status, "downloads": dls}
+    
+    db = get_db()
+    downloads = []
+    if db:
+        try:
+            downloads = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data
+        except: pass
+        
+    return {"joined_at": joined_at, "status": status, "downloads": downloads}
 
-# Funkce z dashboardu 
 @app.route('/dashboard/downloads', methods=['GET'])
-def dashboard_downloads(): return render_dashboard(HTML_DOWNLOADS_MGMT, versions=get_db().table("software_versions").select("*").order("id").execute().data if get_db() else [], enabled=True)
+def dashboard_downloads():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    versions = []
+    enabled = True
+    if db:
+        try:
+            set_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute()
+            if set_resp.data and set_resp.data[0]['setting_value'] == 'False':
+                enabled = False
+            versions = db.table("software_versions").select("*").order("id").execute().data
+        except: pass
+    return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled)
+
+@app.route('/dashboard/toggle_downloads', methods=['POST'])
+def toggle_downloads():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    new_status = request.form.get("new_status")
+    db = get_db()
+    if db:
+        try:
+            db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute()
+            flash('Status stahování byl změněn.', 'success')
+            send_log_from_flask("⚙️ Nastavení Stahování", f"Globální stahování bylo přenastaveno na: **{'Povoleno' if new_status == 'True' else 'Zakázáno'}**", 0xf59e0b)
+        except: pass
+    return redirect(url_for('dashboard_downloads'))
+
+@app.route('/dashboard/add_version', methods=['POST'])
+def add_version():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    if db:
+        try:
+            v_name = request.form.get("version_name")
+            v_data = {"version_name": v_name, "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role")}
+            db.table("software_versions").insert(v_data).execute()
+            flash('Verze úspěšně přidána.', 'success')
+            send_log_from_flask("📦 Nová verze", f"Do systému byla přidána nová verze: **{v_name}**", 0x10b981)
+        except: pass
+    return redirect(url_for('dashboard_downloads'))
+
+@app.route('/dashboard/delete_version', methods=['POST'])
+def delete_version():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    v_id = request.form.get("version_id")
+    if db and v_id:
+        try:
+            db.table("software_versions").delete().eq("id", v_id).execute()
+            flash('Verze odebrána.', 'success')
+            send_log_from_flask("🗑️ Smazání verze", "Z databáze byla odstraněna verze aplikace.", 0xef4444)
+        except: pass
+    return redirect(url_for('dashboard_downloads'))
+
 @app.route('/dashboard/pending_roles', methods=['GET'])
-def pending_roles(): return render_dashboard(HTML_PENDING_ROLES, pending=get_db().table("pending_roles").select("*").order("id").execute().data if get_db() else [])
+def pending_roles():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    pending = []
+    if db:
+        try:
+            pending = db.table("pending_roles").select("*").order("id").execute().data
+        except: pass
+    return render_dashboard(HTML_PENDING_ROLES, pending=pending)
+
+@app.route('/dashboard/add_pending_role', methods=['POST'])
+def add_pending_role():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    if db:
+        try:
+            roles_list = request.form.getlist("roles")
+            roles_str = ",".join(roles_list) if roles_list else "User"
+            ident = request.form.get("discord_identifier")
+            p_data = {"discord_identifier": ident, "roles": roles_str}
+            db.table("pending_roles").insert(p_data).execute()
+            flash('Rezervace role byla vytvořena!', 'success')
+            send_log_from_flask("🎟️ Nová rezervace role", f"Byla vytvořena rezervace role **{roles_str}** pro: `{ident}`", 0x38bdf8)
+        except: pass
+    return redirect(url_for('pending_roles'))
+
+@app.route('/dashboard/delete_pending_role', methods=['POST'])
+def delete_pending_role():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    p_id = request.form.get("pending_id")
+    if db and p_id:
+        try:
+            db.table("pending_roles").delete().eq("id", p_id).execute()
+            flash('Rezervace byla zrušena.', 'success')
+        except: pass
+    return redirect(url_for('pending_roles'))
+
 @app.route('/dashboard/ids', methods=['GET'])
-def dashboard_ids(): return render_dashboard(HTML_IDS, users=get_db().table("users").select("*").order("app_id").execute().data if get_db() else [])
+def dashboard_ids():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    users_data = []
+    if db:
+        try:
+            users_data = db.table("users").select("*").order("app_id").execute().data
+        except: pass
+    return render_dashboard(HTML_IDS, users=users_data)
+
+@app.route('/dashboard/change_id', methods=['POST'])
+def change_id():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    discord_id = request.form.get("discord_id")
+    new_app_id = request.form.get("new_app_id")
+    db = get_db()
+    if db and discord_id and new_app_id:
+        try:
+            db.table("users").update({"app_id": int(new_app_id)}).eq("discord_id", discord_id).execute()
+            flash(f'ID úspěšně změněno na #{new_app_id}.', 'success')
+            send_log_from_flask("🔢 Změna ID", f"Uživateli s Discord ID `{discord_id}` bylo změněno App ID na **#{new_app_id}**.", 0xf59e0b)
+        except: pass
+    return redirect(url_for('dashboard_ids'))
+
 @app.route('/dashboard/team', methods=['GET'])
-def dashboard_team_page(): return render_dashboard(HTML_TEAM_ADD, team=get_db().table("team").select("*").execute().data if get_db() else [])
+def dashboard_team_page():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    team_data = []
+    if db:
+        try:
+            team_data = db.table("team").select("*").execute().data
+        except: pass
+    return render_dashboard(HTML_TEAM_ADD, team=team_data)
+
+@app.route('/dashboard/add_team', methods=['POST'])
+def add_team():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    if db:
+        try:
+            role_names = request.form.getlist("role_name[]")
+            role_colors = request.form.getlist("role_color[]")
+            combined_roles = [f"{n.strip()}|{c.strip()}" for n, c in zip(role_names, role_colors) if n.strip()]
+            new_member = {
+                "name": request.form.get("name"), "discord_nick": request.form.get("discord_nick"),
+                "image_url": request.form.get("image_url"), "description": request.form.get("description"),
+                "role_name": ",".join(combined_roles)
+            }
+            db.table("team").insert(new_member).execute()
+            flash('Člen týmu přidán!', 'success')
+            send_log_from_flask("👥 Tým", f"Do týmu byl přidán: **{request.form.get('name')}**", 0x38bdf8)
+        except: pass
+    return redirect(url_for('dashboard_team_page'))
+
+@app.route('/dashboard/delete_team', methods=['POST'])
+def delete_team():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    if db:
+        try:
+            db.table("team").delete().eq("discord_nick", request.form.get("discord_nick")).execute()
+            flash('Člen týmu odebrán.', 'success')
+        except: pass
+    return redirect(url_for('dashboard_team_page'))
+
 @app.route('/dashboard/edit_user', methods=['POST'])
 def edit_user():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db()
-    discord_id = request.form.get("discord_id"); action = request.form.get("action"); nick = request.form.get("nick")
+    discord_id = request.form.get("discord_id")
+    action = request.form.get("action")
+    nick = request.form.get("nick")
+    
     if db and discord_id:
         try:
             if action == 'save':
-                r_str = ",".join(request.form.getlist("roles")) if request.form.getlist("roles") else "User"
-                db.table("users").update({"nick": nick, "role": r_str, "hwid": request.form.get("hwid"), "dashboard_access": True if request.form.get("dashboard_access") else False}).eq("discord_id", discord_id).execute()
-                sync_roles_from_flask(discord_id, r_str); flash('Údaje upraveny!', 'success')
+                roles_list = request.form.getlist("roles")
+                db_access = True if request.form.get("dashboard_access") else False
+                new_roles_str = ",".join(roles_list) if roles_list else "User"
+                
+                db.table("users").update({
+                    "nick": nick,
+                    "role": new_roles_str,
+                    "hwid": request.form.get("hwid"),
+                    "dashboard_access": db_access
+                }).eq("discord_id", discord_id).execute()
+                
+                sync_roles_from_flask(discord_id, new_roles_str)
+                flash('Údaje byly úspěšně upraveny!', 'success')
+                send_log_from_flask("📝 Úprava profilu", f"Profil uživatele **{nick}** (`{discord_id}`) byl upraven v Dashboardu.\nNové role: **{new_roles_str}**\n2FA Přístup: **{'Zapnuto' if db_access else 'Vypnuto'}**", 0x3b82f6)
+                
             elif action == 'ban':
                 db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
-                flash('BAN udělen.', 'warning')
+                send_dm_from_flask(discord_id, "Vážený uživateli, Váš účet na Projektu OIS IDPK má nyní BAN a přístup do administrace Vám byl zablokován.")
+                flash('BAN udělen a přístup do administrace zrušen.', 'warning')
+                send_log_from_flask("🔨 Udělen BAN", f"Uživateli **{nick}** (`{discord_id}`) byl udělen BAN přes Dashboard.", 0xf59e0b)
+                
             elif action == 'unban':
                 db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
+                send_dm_from_flask(discord_id, "Vážený uživateli, Váš BAN na Projektu OIS IDPK byl úspěšně zrušen.")
                 flash('BAN zrušen.', 'success')
+                send_log_from_flask("🕊️ Zrušen BAN", f"Uživateli **{nick}** (`{discord_id}`) byl zrušen BAN.", 0x10b981)
+                
             elif action == 'delete':
-                db.table("users").update({"is_deleted": True, "deleted_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute()
-                flash('Účet smazán (Soft Delete).', 'danger')
+                now = datetime.now().strftime("%d.%m.%Y %H:%M")
+                db.table("users").update({"is_deleted": True, "deleted_at": now, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                send_dm_from_flask(discord_id, "Váš účet na Projektu OIS IDPK byl administrátorem smazán a přístup odepřen.")
+                flash('Účet smazán a přístup do administrace zrušen.', 'danger')
+                send_log_from_flask("☠️ Účet Smazán", f"Účet uživatele **{nick}** (`{discord_id}`) byl smazán (Soft Delete).", 0xef4444)
+                
             elif action == 'restore':
                 db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute()
+                send_dm_from_flask(discord_id, "Váš smazaný účet na Projektu OIS IDPK byl administrátorem obnoven ze zálohy.")
                 flash('Účet obnoven!', 'success')
+                send_log_from_flask("♻️ Účet Obnoven", f"Smazaný účet uživatele **{nick}** (`{discord_id}`) byl obnoven.", 0x10b981)
+                
             elif action == 'hard_delete':
                 db.table("users").delete().eq("discord_id", discord_id).execute()
                 flash('Účet trvale smazán.', 'dark')
+                send_log_from_flask("🔥 Permanentní smazání", f"Účet uživatele `{discord_id}` byl z databáze PERMANENTNĚ vymazán.", 0x000000)
         except: pass
     return redirect(url_for('dashboard_main'))
-@app.route('/logout')
-def logout(): session.clear(); return redirect(url_for('home'))
 
-def run_web(): app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    session.pop('discord_id', None)
+    return redirect(url_for('home'))
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 # ==========================================
 # 3. DISCORD BOT & INTERAKTIVNÍ TLAČÍTKA
 # ==========================================
+
 intents = discord.Intents.default()
-intents.message_content = True; intents.members = True; intents.presences = True
+intents.message_content = True 
+intents.members = True 
+intents.presences = True
 bot = commands.Bot(command_prefix='!', intents=intents, case_insensitive=True)
+
 bot.remove_command('help')
 bot.invites_cache = {}
 
 @bot.event
 async def on_ready():
+    bot.add_view(DownloadView())
+    keep_pixeldrain_alive.start()
+    sync_discord_roles.start()
     for guild in bot.guilds:
-        try: bot.invites_cache[guild.id] = await guild.invites()
+        try:
+            bot.invites_cache[guild.id] = await guild.invites()
         except: pass
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
 
@@ -1078,68 +1498,314 @@ async def on_member_join(member):
         for invite in new_invites:
             for old_invite in old_invites:
                 if invite.code == old_invite.code and invite.uses > old_invite.uses:
-                    used_invite = invite; break
-            if used_invite: break
+                    used_invite = invite
+                    break
+            if used_invite:
+                break
         bot.invites_cache[member.guild.id] = new_invites
     except: pass
-    link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!" if used_invite and used_invite.code == "vmTagbC9mF" else ""
+    
+    link_info = ""
+    if used_invite and used_invite.code == "vmTagbC9mF":
+        link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!"
+        
     await async_send_log_to_discord("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {datetime.now().strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
 
 async def update_member_roles(member, role_string):
-    if not member or not member.guild: return
+    if not member: return
+    guild = member.guild
+    if not guild: return
+    
     u_roles = [r.strip() for r in role_string.split(',')]
+    
+    role_sa = discord.utils.get(guild.roles, name="web-sa")
+    role_dev = discord.utils.get(guild.roles, name="web-dev")
+    role_bt = discord.utils.get(guild.roles, name="web-bt")
+    
     try:
-        r_sa = discord.utils.get(member.guild.roles, name="web-sa")
-        r_dev = discord.utils.get(member.guild.roles, name="web-dev")
-        r_bt = discord.utils.get(member.guild.roles, name="web-bt")
-        if r_sa:
-            if "SA" in u_roles and r_sa not in member.roles: await member.add_roles(r_sa)
-            elif "SA" not in u_roles and r_sa in member.roles: await member.remove_roles(r_sa)
-        if r_dev:
-            if "DEV" in u_roles and r_dev not in member.roles: await member.add_roles(r_dev)
-            elif "DEV" not in u_roles and r_dev in member.roles: await member.remove_roles(r_dev)
-        if r_bt:
-            if "BT" in u_roles and r_bt not in member.roles: await member.add_roles(r_bt)
-            elif "BT" not in u_roles and r_bt in member.roles: await member.remove_roles(r_bt)
+        if role_sa:
+            if "SA" in u_roles and role_sa not in member.roles: 
+                await member.add_roles(role_sa)
+                await async_send_log_to_discord("🎭 Automatická role", f"Uživateli {member.mention} byla automaticky přidělena role **web-sa**.", 0xef4444)
+            elif "SA" not in u_roles and role_sa in member.roles: 
+                await member.remove_roles(role_sa)
+                await async_send_log_to_discord("🎭 Automatická role", f"Uživateli {member.mention} byla automaticky odebrána role **web-sa**.", 0x64748b)
+            
+        if role_dev:
+            if "DEV" in u_roles and role_dev not in member.roles: 
+                await member.add_roles(role_dev)
+                await async_send_log_to_discord("🎭 Automatická role", f"Uživateli {member.mention} byla automaticky přidělena role **web-dev**.", 0x10b981)
+            elif "DEV" not in u_roles and role_dev in member.roles: 
+                await member.remove_roles(role_dev)
+                await async_send_log_to_discord("🎭 Automatická role", f"Uživateli {member.mention} byla automaticky odebrána role **web-dev**.", 0x64748b)
+            
+        if role_bt:
+            if "BT" in u_roles and role_bt not in member.roles: 
+                await member.add_roles(role_bt)
+                await async_send_log_to_discord("🎭 Automatická role", f"Uživateli {member.mention} byla automaticky přidělena role **web-bt**.", 0x3b82f6)
+            elif "BT" not in u_roles and role_bt in member.roles: 
+                await member.remove_roles(role_bt)
+                await async_send_log_to_discord("🎭 Automatická role", f"Uživateli {member.mention} byla automaticky odebrána role **web-bt**.", 0x64748b)
+    except Exception as e:
+        print(f"[CHYBA ROLÍ] Nemám oprávnění měnit role na serveru: {e}", flush=True)
+
+@tasks.loop(minutes=15)
+async def sync_discord_roles():
+    db = get_db()
+    if not db: return
+    try:
+        db_users = db.table("users").select("discord_id", "role", "is_deleted", "is_banned").execute().data
+        if not db_users: return
+        user_dict = {u['discord_id']: u for u in db_users if not u.get('is_deleted') and not u.get('is_banned')}
+        
+        for guild in bot.guilds:
+            for member in guild.members:
+                if str(member.id) in user_dict:
+                    await update_member_roles(member, user_dict[str(member.id)]['role'])
+    except Exception as e:
+        print(f"[ROLE SYNC ERROR] {e}", flush=True)
+
+@tasks.loop(hours=24)
+async def keep_pixeldrain_alive():
+    db = get_db()
+    if not db: return
+    try:
+        versions = db.table("software_versions").select("file_url").execute().data
+        for v in versions:
+            url = v.get("file_url", "")
+            if "pixeldrain.com/u/" in url:
+                api_url = url.replace("/u/", "/api/file/")
+                try:
+                    req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req) as response:
+                        response.read(10)
+                except: pass
     except: pass
+
+class VersionSelect(discord.ui.Select):
+    def __init__(self, user_role):
+        user_level = 1
+        if 'BT' in user_role: user_level = 2
+        if 'DEV' in user_role or 'SA' in user_role: user_level = 3
+        
+        db = get_db()
+        options = []
+        if db:
+            try:
+                v_resp = db.table("software_versions").select("*").order("id").execute()
+                for v in v_resp.data:
+                    req_level = 1
+                    if v['target_role'] == 'BT': req_level = 2
+                    if v['target_role'] == 'DEV_SA': req_level = 3
+                    
+                    if user_level >= req_level:
+                        options.append(discord.SelectOption(label=v['version_name'], description="Dostupné pro tvou roli", value=str(v['id']), emoji="📦"))
+            except: pass
+            
+        if not options:
+            options.append(discord.SelectOption(label="Žádná verze nenalezena", value="none"))
+            
+        super().__init__(placeholder="Vyber verzi k instalaci...", min_values=1, max_values=1, options=options[:25])
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(content="<a:loading:123> Generuji zabezpečený odkaz, prosím čekejte...", view=None)
+        
+        if self.values[0] == "none":
+            await interaction.edit_original_response(content="Aktuálně nejsou dostupné žádné soubory.", view=None)
+            return
+            
+        try:
+            version_id = self.values[0]
+            discord_id = str(interaction.user.id)
+            
+            token = str(uuid.uuid4())
+            db = get_db()
+            if db:
+                db.table("users").update({"download_token": token}).eq("discord_id", discord_id).execute()
+                
+            base_url = os.environ.get("RENDER_EXTERNAL_URL", "https://datacorebot.onrender.com")
+            link = f"{base_url}/download/{token}?v={version_id}"
+            
+            await interaction.edit_original_response(content=f"**Projekt OIS IDPK - Odkaz připraven**\n\nZde je Váš zabezpečený odkaz ke stažení. Kliknutím budete přesměrováni na náš portál.\n🔗 {link}\n\n*Tento odkaz funguje pouze pro Vás.*", view=None)
+        except Exception as e:
+            print(e, flush=True)
+            await interaction.edit_original_response(content=f"Došlo k chybě databáze. Zkuste to prosím znovu.\n*(Technický detail: {str(e)})*", view=None)
+
+class VersionView(discord.ui.View):
+    def __init__(self, user_role):
+        super().__init__(timeout=None)
+        self.add_item(VersionSelect(user_role))
+
+class RulesView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+    @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, custom_id="btn_agree", emoji="✅")
+    async def agree_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="<a:loading:123> Ověřuji profil v databázi a synchronizuji role...", view=None)
+        try:
+            db = get_db()
+            discord_id = str(interaction.user.id)
+            nick = interaction.user.display_name
+            user_roles = "User"
+            now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+            
+            if db:
+                set_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute()
+                if set_resp.data and set_resp.data[0]['setting_value'] == 'False':
+                    await interaction.edit_original_response(content="**Stahování softwaru je aktuálně nedostupné.**\nObraťte se prosím na admin team.", view=None)
+                    return
+                
+                pending_resp = db.table("pending_roles").select("*").execute().data
+                matched_pending = None
+                if pending_resp:
+                    for p in pending_resp:
+                        if p['discord_identifier'] == discord_id or p['discord_identifier'] == nick:
+                            matched_pending = p
+                            break
+                
+                check = db.table("users").select("*").eq("discord_id", discord_id).execute()
+                if len(check.data) > 0:
+                    user_data = check.data[0]
+                    if user_data.get('is_banned'):
+                        await interaction.edit_original_response(content="**Přístup zamítnut:** Máte udělený BAN na Projektu OIS IDPK. 🛑", view=None)
+                        return
+                    elif user_data.get('is_deleted'):
+                        highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                        new_app_id = 1000
+                        if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
+                            new_app_id = highest_id_resp.data[0]["app_id"] + 1
+
+                        new_role = matched_pending['roles'] if matched_pending else "User"
+                        updates = {"app_id": new_app_id, "nick": nick, "is_deleted": False, "deleted_at": "", "role": new_role, "registered_at": now_str}
+                        db.table("users").update(updates).eq("discord_id", discord_id).execute()
+                        user_roles = new_role
+                        if matched_pending: db.table("pending_roles").delete().eq("id", matched_pending['id']).execute()
+                        
+                        await async_send_log_to_discord("♻️ Znovuregistrace", f"Uživatel **{nick}** ({discord_id}) si obnovil smazaný účet.\nPřiřazená role: **{new_role}**", 0x10b981)
+                    else:
+                        user_roles = user_data.get('role', 'User')
+                else:
+                    highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                    new_app_id = 1000
+                    if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
+                        new_app_id = highest_id_resp.data[0]["app_id"] + 1
+
+                    new_role = matched_pending['roles'] if matched_pending else "User"
+                    novy = {
+                        "app_id": new_app_id, "discord_id": discord_id, "nick": nick, 
+                        "role": new_role, "hwid": "", "is_banned": False, 
+                        "is_deleted": False, "deleted_at": "",
+                        "dashboard_access": False, "login_token": "", "registered_at": now_str
+                    }
+                    db.table("users").insert(novy).execute()
+                    user_roles = new_role
+                    if matched_pending: db.table("pending_roles").delete().eq("id", matched_pending['id']).execute()
+                    
+                    await async_send_log_to_discord("👤 Nová registrace", f"**Uživatel:** {nick}\n**ID:** `{discord_id}`\n**App ID:** #{new_app_id}\n**Přiřazená role:** {new_role}", 0x10b981)
+            
+            if isinstance(interaction.user, discord.Member):
+                await update_member_roles(interaction.user, user_roles)
+            
+            await interaction.edit_original_response(content="**Ověření úspěšné.**\nNyní si prosím vyberte soubor k instalaci:", view=VersionView(user_roles))
+        except Exception as e:
+            print(e, flush=True)
+            await interaction.edit_original_response(content=f"Došlo k chybě databáze. Zkuste to prosím znovu.\n*(Technický detail: {str(e)})*", view=None)
+
+    @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, custom_id="btn_disagree", emoji="❌")
+    async def disagree_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="**Akce zrušena.**\nPro stažení softwaru je nutné vyjádřit souhlas s pravidly.", view=None)
+
+class DownloadView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Zahájit instalaci softwaru", style=discord.ButtonStyle.primary, custom_id="btn_start_download", emoji="📥")
+    async def download_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pravidla_text = (
+            "**Projekt OIS IDPK - Podmínky užití**\n\n"
+            "Pokračováním souhlasíte s pravidly:\n"
+            "1. Je přísně zakázáno jakkoli modifikovat nebo šířit tento software.\n"
+            "2. Vygenerovaný odkaz a HWID je vázáno na Váš osobní přístroj.\n\n"
+            "*Souhlasíte s těmito podmínkami?*"
+        )
+        await interaction.response.send_message(pravidla_text, view=RulesView(), ephemeral=True)
 
 class PerDeleteConfirm(discord.ui.View):
     def __init__(self, target_id, author_id):
         super().__init__(timeout=60)
-        self.target_id = target_id; self.author_id = author_id
+        self.target_id = target_id
+        self.author_id = author_id
+
     @discord.ui.button(label="Ano, trvale smazat", style=discord.ButtonStyle.danger, emoji="⚠️")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+            return
         await interaction.response.defer()
         db = get_db()
         if db:
             db.table("users").delete().eq("discord_id", self.target_id).execute()
             await interaction.edit_original_response(content=f"✅ Účet `{self.target_id}` byl z databáze PERMANENTNĚ smazán.", view=None, embed=None)
+            await async_send_log_to_discord("🔥 Permanentní smazání", f"Admin {interaction.user.mention} trvale smazal účet `{self.target_id}` přes Discord příkaz.", 0x000000)
+
     @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+            return
         await interaction.response.edit_message(content="❌ Akce zrušena. Účet smazán nebyl.", view=None, embed=None)
 
+# --- CHYTRÉ ZACHYTÁVÁNÍ CHYB PŘÍKAZŮ ---
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Zkontroluj si `!help` pro správný formát.", delete_after=15)
+        cmd = ctx.command.name.lower()
+        if cmd == "message":
+            await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!message #kanál tvůj text`", delete_after=15)
+        elif cmd == "dm":
+            await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!dm @uživatel tvůj text`", delete_after=15)
+        elif cmd == "info":
+            await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!info 123456789012345678`", delete_after=15)
+        elif cmd == "sm":
+            await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!SM @uživatel`", delete_after=15)
+        elif cmd == "db":
+            await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!DB 123456789012345678`", delete_after=15)
+        elif cmd in ["ban", "unban", "delete", "perdelete"]:
+            await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Správně to je: `!{cmd} 123456789012345678`", delete_after=15)
+        else:
+            await ctx.send(f"{ctx.author.mention} ❌ **Chybí argument:** Zkontroluj si `!help` pro správný formát.", delete_after=15)
     elif isinstance(error, commands.MemberNotFound):
-        await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!** Ujisti se, že zadáváš platné ID uživatele.", delete_after=15)
-    elif isinstance(error, commands.CheckFailure): pass 
-    else: print(f"[CMD ERROR] {error}", flush=True)
+        await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!** Ujisti se, že zadáváš platné ID uživatele nebo ho označuješ přes zavináč (@jméno).", delete_after=15)
+    elif isinstance(error, commands.ChannelNotFound):
+        await ctx.send(f"{ctx.author.mention} ❌ **Kanál nenalezen!** Ujisti se, že označuješ správný kanál (#název).", delete_after=15)
+    elif isinstance(error, commands.CheckFailure):
+        pass 
+    else:
+        print(f"[CMD ERROR] {error}", flush=True)
 
+# --- VLASTNÍ OPRÁVNĚNÍ PRO PŘÍKAZY ---
 def check_web_sa():
     async def predicate(ctx):
-        if discord.utils.get(ctx.author.roles, name="web-sa") or ctx.author.guild_permissions.administrator: return True
-        await ctx.send(f"❌ {ctx.author.mention}, k tomuto příkazu nemáš oprávnění.", delete_after=10); return False
+        if discord.utils.get(ctx.author.roles, name="web-sa") or ctx.author.guild_permissions.administrator:
+            return True
+        await ctx.send(f"❌ {ctx.author.mention}, k tomuto příkazu nemáš oprávnění (vyžadována role `web-sa`).", delete_after=10)
+        try: await ctx.message.delete()
+        except: pass
+        return False
     return commands.check(predicate)
 
 def check_sm_role():
     async def predicate(ctx):
-        if discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator: return True
-        await ctx.send(f"❌ {ctx.author.mention}, k tomuto příkazu nemáš oprávnění.", delete_after=10); return False
+        if discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator:
+            return True
+        await ctx.send(f"❌ {ctx.author.mention}, k tomuto příkazu nemáš oprávnění (vyžadována role `SM`).", delete_after=10)
+        try: await ctx.message.delete()
+        except: pass
+        return False
     return commands.check(predicate)
+
+# --- DISCORD PŘÍKAZY ---
 
 @bot.command(aliases=['overit', 'verify'])
 async def auth(ctx):
@@ -1159,7 +1825,7 @@ async def auth(ctx):
         
     token = user_data[0].get("login_token")
     if not token or token in ["approved", "rejected"]:
-        msg = await ctx.send(f"ℹ️ {ctx.author.mention} Aktuálně nemáš žádný čekající požadavek na přihlášení od aplikace.")
+        msg = await ctx.send(f"ℹ️ {ctx.author.mention} Aktuálně nemáš žádný čekající požadavek na přihlášení.")
         await asyncio.sleep(10)
         try: 
             await msg.delete()
@@ -1180,33 +1846,299 @@ async def auth(ctx):
 @bot.command()
 async def register(ctx, target_id: str = None):
     db = get_db()
-    if not db: return
+    if not db:
+        await ctx.send("❌ Chyba připojení k databázi.")
+        return
         
     if target_id:
         is_admin = discord.utils.get(ctx.author.roles, name="web-sa") or discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator
-        if not is_admin: return await ctx.send(f"❌ {ctx.author.mention} Nemáš oprávnění registrovat cizí účty.")
+        if not is_admin:
+            await ctx.send(f"❌ {ctx.author.mention} Nemáš oprávnění registrovat cizí účty.")
+            return
+            
         discord_id = target_id
         target_member = ctx.guild.get_member(int(discord_id)) if discord_id.isdigit() else None
+        if not target_member and discord_id.isdigit():
+            try: target_member = await ctx.guild.fetch_member(int(discord_id))
+            except: pass
+            
         nick = target_member.display_name if target_member else f"Uživatel {discord_id}"
     else:
-        discord_id = str(ctx.author.id); nick = ctx.author.display_name; target_member = ctx.author
+        discord_id = str(ctx.author.id)
+        nick = ctx.author.display_name
+        target_member = ctx.author
         
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+    
     check = db.table("users").select("*").eq("discord_id", discord_id).execute()
     if len(check.data) > 0:
-        if check.data[0].get('is_banned'): return await ctx.send("❌ Nemůžete se zaregistrovat, tento účet má BAN.")
-        elif check.data[0].get('is_deleted'):
+        user_data = check.data[0]
+        if user_data.get('is_banned'):
+            await ctx.send("❌ Nemůžete se zaregistrovat, tento účet má BAN.")
+            return
+        elif user_data.get('is_deleted'):
             highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
-            new_app_id = highest_id_resp.data[0]["app_id"] + 1 if highest_id_resp.data else 1000
-            db.table("users").update({"app_id": new_app_id, "nick": nick, "is_deleted": False, "deleted_at": "", "registered_at": now_str}).eq("discord_id", discord_id).execute()
+            new_app_id = 1000
+            if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
+                new_app_id = highest_id_resp.data[0]["app_id"] + 1
+
+            pending_resp = db.table("pending_roles").select("*").execute().data
+            matched_pending = None
+            if pending_resp:
+                for p in pending_resp:
+                    if p['discord_identifier'] == discord_id or p['discord_identifier'] == nick:
+                        matched_pending = p
+                        break
+            
+            new_role = matched_pending['roles'] if matched_pending else "User"
+            updates = {"app_id": new_app_id, "nick": nick, "is_deleted": False, "deleted_at": "", "role": new_role, "registered_at": now_str}
+            db.table("users").update(updates).eq("discord_id", discord_id).execute()
+            if matched_pending: db.table("pending_roles").delete().eq("id", matched_pending['id']).execute()
+            
+            await async_send_log_to_discord("♻️ Znovuregistrace (Příkaz)", f"Uživatel **{nick}** ({discord_id}) si obnovil smazaný účet pomocí příkazu.\nPřiřazená role: **{new_role}**", 0x10b981)
             await ctx.send(f"✅ Smazaný účet byl úspěšně obnoven! Nové App ID je **#{new_app_id}**.")
-        else: await ctx.send(f"ℹ️ {'Tento uživatel' if target_id else 'Vy'} už {'je' if target_id else 'jste'} v databázi zaregistrován!")
+            
+            if target_member and isinstance(target_member, discord.Member):
+                await update_member_roles(target_member, new_role)
+        else:
+            await ctx.send(f"ℹ️ {'Tento uživatel' if target_id else 'Vy'} už {'je' if target_id else 'jste'} v databázi zaregistrován!")
     else:
         highest_id_resp = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
-        new_app_id = highest_id_resp.data[0]["app_id"] + 1 if highest_id_resp.data else 1000
-        novy = { "app_id": new_app_id, "discord_id": discord_id, "nick": nick, "role": "User", "hwid": "", "is_banned": False, "is_deleted": False, "deleted_at": "", "dashboard_access": False, "login_token": "", "registered_at": now_str }
-        db.table("users").insert(novy).execute()
-        await ctx.send(f"✅ Úspěšně zaregistrován do databáze! Vaše App ID je **#{new_app_id}**.")
+        new_app_id = 1000
+        if highest_id_resp.data and highest_id_resp.data[0].get("app_id"):
+            new_app_id = highest_id_resp.data[0]["app_id"] + 1
+            
+        pending_resp = db.table("pending_roles").select("*").execute().data
+        matched_pending = None
+        if pending_resp:
+            for p in pending_resp:
+                if p['discord_identifier'] == discord_id or p['discord_identifier'] == nick:
+                    matched_pending = p
+                    break
+                    
+        new_role = matched_pending['roles'] if matched_pending else "User"
+        novy = {
+            "app_id": new_app_id, "discord_id": discord_id, "nick": nick, 
+            "role": new_role, "hwid": "", "is_banned": False, 
+            "is_deleted": False, "deleted_at": "",
+            "dashboard_access": False, "login_token": "", "registered_at": now_str
+        }
+        try:
+            db.table("users").insert(novy).execute()
+            if matched_pending: db.table("pending_roles").delete().eq("id", matched_pending['id']).execute()
+            
+            await async_send_log_to_discord("👤 Nová registrace (Příkaz)", f"**Uživatel:** {nick}\n**ID:** `{discord_id}`\n**App ID:** #{new_app_id}\n**Přiřazená role:** {new_role}", 0x10b981)
+            await ctx.send(f"✅ Úspěšně zaregistrován do databáze! Vaše App ID je **#{new_app_id}**.")
+            
+            if target_member and isinstance(target_member, discord.Member):
+                await update_member_roles(target_member, new_role)
+        except Exception as e:
+            await ctx.send(f"❌ Chyba databáze při ukládání: {e}")
+
+@bot.command()
+@check_web_sa()
+async def setup_download(ctx):
+    embed = discord.Embed(
+        title="📥 Projekt OIS IDPK - Instalace", 
+        description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a generování osobního odkazu ke stažení.", 
+        color=0x38bdf8
+    )
+    embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/8205/8205562.png")
+    await ctx.send(embed=embed, view=DownloadView())
+    await async_send_log_to_discord("🛠️ Setup Download", f"Uživatel {ctx.author.mention} vytvořil nový instalační panel v kanálu {ctx.channel.mention}.", 0xf59e0b)
+    try: await ctx.message.delete()
+    except: pass
+
+@bot.command(name="sm")
+@check_web_sa()
+async def sm_cmd(ctx, member: discord.Member):
+    role = discord.utils.get(ctx.guild.roles, name="SM")
+    if not role:
+        await ctx.send(f"❌ {ctx.author.mention} Role `SM` na tomto serveru neexistuje. Vytvoř ji prosím.", delete_after=10)
+        return
+    if role in member.roles:
+        await member.remove_roles(role)
+        await ctx.send(f"➖ Role **SM** byla uživateli {member.mention} úspěšně odebrána.")
+        await async_send_log_to_discord("🛡️ Správa rolí", f"Admin {ctx.author.mention} **odebral** roli `SM` uživateli {member.mention}.", 0xef4444)
+    else:
+        await member.add_roles(role)
+        await ctx.send(f"➕ Role **SM** byla uživateli {member.mention} úspěšně přidělena.")
+        await async_send_log_to_discord("🛡️ Správa rolí", f"Admin {ctx.author.mention} **přidělil** roli `SM` uživateli {member.mention}.", 0x10b981)
+
+@bot.command(name="db")
+@check_sm_role()
+async def db_cmd(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    user_data = db.table("users").select("dashboard_access, nick").eq("discord_id", discord_id).execute().data
+    if not user_data:
+        await ctx.send(f"❌ {ctx.author.mention} Uživatel s ID `{discord_id}` nebyl v databázi nalezen.", delete_after=10)
+        return
+    
+    current_status = user_data[0].get("dashboard_access", False)
+    new_status = not current_status
+    nick = user_data[0].get("nick", "Neznámý")
+    
+    db.table("users").update({"dashboard_access": new_status}).eq("discord_id", discord_id).execute()
+    
+    stav_text = "POVOLEN ✅" if new_status else "ODEBRÁN ❌"
+    await ctx.send(f"⚙️ Přístup do administrace pro uživatele **{nick}** byl úspěšně **{stav_text}**.")
+    await async_send_log_to_discord("💻 Přístup do DB", f"Manažer {ctx.author.mention} změnil přístup uživateli **{nick}** (`{discord_id}`) na: **{stav_text}**", 0xf59e0b)
+
+@bot.command(name="ban")
+@check_sm_role()
+async def ban_cmd(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    user_data = db.table("users").select("nick").eq("discord_id", discord_id).execute().data
+    if not user_data:
+        await ctx.send(f"❌ {ctx.author.mention} Uživatel s ID `{discord_id}` nebyl v databázi nalezen.", delete_after=10)
+        return
+    nick = user_data[0].get("nick", "Neznámý")
+    db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+    await ctx.send(f"🔨 Uživatel **{nick}** dostal BAN.")
+    await async_send_log_to_discord("🔨 Udělen BAN", f"Manažer {ctx.author.mention} udělil BAN uživateli **{nick}** (`{discord_id}`).", 0xf59e0b)
+    
+    try:
+        u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+        if u: await u.send("Vážený uživateli, Váš účet na Projektu OIS IDPK má nyní BAN a přístup do administrace Vám byl zablokován.")
+    except: pass
+
+@bot.command(name="unban")
+@check_sm_role()
+async def unban_cmd(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    user_data = db.table("users").select("nick").eq("discord_id", discord_id).execute().data
+    if not user_data:
+        await ctx.send(f"❌ {ctx.author.mention} Uživatel s ID `{discord_id}` nebyl v databázi nalezen.", delete_after=10)
+        return
+    nick = user_data[0].get("nick", "Neznámý")
+    db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
+    await ctx.send(f"🕊️ Uživateli **{nick}** byl zrušen BAN.")
+    await async_send_log_to_discord("🕊️ Zrušen BAN", f"Manažer {ctx.author.mention} zrušil BAN uživateli **{nick}** (`{discord_id}`).", 0x10b981)
+    
+    try:
+        u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+        if u: await u.send("Vážený uživateli, Váš BAN na Projektu OIS IDPK byl úspěšně zrušen.")
+    except: pass
+
+@bot.command(name="delete")
+@check_sm_role()
+async def delete_cmd(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    user_data = db.table("users").select("nick").eq("discord_id", discord_id).execute().data
+    if not user_data:
+        await ctx.send(f"❌ {ctx.author.mention} Uživatel s ID `{discord_id}` nebyl v databázi nalezen.", delete_after=10)
+        return
+    now = datetime.now().strftime("%d.%m.%Y %H:%M")
+    nick = user_data[0].get("nick", "Neznámý")
+    db.table("users").update({"is_deleted": True, "deleted_at": now, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+    await ctx.send(f"☠️ Účet uživatele **{nick}** byl smazán.")
+    await async_send_log_to_discord("☠️ Účet Smazán", f"Manažer {ctx.author.mention} smazal (Soft Delete) účet uživatele **{nick}** (`{discord_id}`).", 0xef4444)
+    
+    try:
+        u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+        if u: await u.send("Váš účet na Projektu OIS IDPK byl administrátorem smazán a přístup odepřen.")
+    except: pass
+
+@bot.command(name="perdelete")
+@check_sm_role()
+async def perdelete_cmd(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    user_data = db.table("users").select("nick").eq("discord_id", discord_id).execute().data
+    if not user_data:
+        await ctx.send(f"❌ {ctx.author.mention} Uživatel s ID `{discord_id}` nebyl v databázi nalezen.", delete_after=10)
+        return
+    
+    nick = user_data[0].get("nick", "Neznámý")
+    embed = discord.Embed(
+        title="⚠️ Varování: Permanentní smazání", 
+        description=f"Opravdu chceš nevratně smazat účet **{nick}** (`{discord_id}`)?\n\nTato akce vymaže veškerá data z databáze a nelze ji vzít zpět!", 
+        color=0xef4444
+    )
+    await ctx.send(embed=embed, view=PerDeleteConfirm(discord_id, ctx.author.id))
+
+@bot.command()
+async def ping(ctx):
+    latency = round(bot.latency * 1000)
+    await ctx.send(f"🏓 Pong! Odezva serveru je **{latency}ms**.")
+
+@bot.command()
+async def help(ctx):
+    embed = discord.Embed(
+        title="🤖 Nápověda - IDPK OIS PROJEKT", 
+        description="Jsem systémový bot spravující databázi a infrastrukturu Projektu OIS IDPK. Níže najdeš seznam dostupných příkazů.", 
+        color=0x38bdf8
+    )
+    embed.add_field(name="🌍 Veřejné příkazy", value="`!register` - Manuální registrace účtu do databáze.\n`!auth` / `!verify` - Vyvolá ověřovací tlačítko pro aplikaci.\n`!help` - Zobrazí tuto nápovědu.\n`!verze` - Vypíše dostupné verze aplikace.\n`!ping` - Odezva serveru bota.\n`!info [ID]` - Informace o účtu z databáze.", inline=False)
+    embed.add_field(name="🛡️ Správa DB a Discordu (Pro roli SM)", value="`!message #kanál text` - Odešle zprávu do kanálu.\n`!dm @uživatel text` - Odešle soukromou zprávu.\n`!DB [ID]` - Povolí/zakáže přístup do administrace.\n`!ban [ID]` - Zabanuje uživatele.\n`!unban [ID]` - Zruší BAN uživatele.\n`!delete [ID]` - Smaže uživatele z databáze.\n`!perdelete [ID]` - Trvale vymaže veškerá data uživatele.\n`!register [ID]` - Zaregistruje někoho cizího do DB.", inline=False)
+    embed.add_field(name="⚙️ Administrace (Pro roli web-sa)", value="`!setup_download` - Vytvoří instalační panel pro uživatele.\n`!SM @uživatel` - Rychle přidělí/odebere uživateli roli SM.", inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def verze(ctx):
+    db = get_db()
+    if not db: return
+    v_resp = db.table("software_versions").select("*").order("id").execute().data
+    if not v_resp:
+        await ctx.send("Aktuálně nejsou v databázi k dispozici žádné verze.")
+        return
+    embed = discord.Embed(title="📦 Dostupné verze aplikace", color=0x10b981)
+    for v in v_resp:
+        role_text = "Všichni (User)"
+        if v['target_role'] == 'BT': role_text = "BT, DEV, SA"
+        if v['target_role'] == 'DEV_SA': role_text = "DEV, SA"
+        embed.add_field(name=v['version_name'], value=f"Dostupnost: **{role_text}**", inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def info(ctx, discord_id: str = None):
+    if not discord_id:
+        await ctx.send(f"❌ {ctx.author.mention} **Špatný formát!** Zadejte prosím platné ID Discordu, např.: `!info 123456789012345678`", delete_after=10)
+        return
+    db = get_db()
+    if not db: return
+    user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+    if not user:
+        await ctx.send(f"❌ {ctx.author.mention} Uživatel s Discord ID `{discord_id}` nebyl v databázi nalezen.", delete_after=10)
+        return
+    u = user[0]
+    status = "Aktivní"
+    if u.get('is_deleted'): status = "Smazán"
+    if u.get('is_banned'): status = "BANNED"
+    
+    embed = discord.Embed(title=f"Informace o uživateli: {u.get('nick')}", color=0x38bdf8)
+    embed.add_field(name="App ID", value=f"#{u.get('app_id')}", inline=True)
+    embed.add_field(name="Discord ID", value=u.get('discord_id'), inline=True)
+    embed.add_field(name="Zapsané Role", value=u.get('role'), inline=False)
+    embed.add_field(name="Status Účtu", value=status, inline=True)
+    embed.add_field(name="2FA Dashboard", value="Povolen" if u.get('dashboard_access') else "Zakázán", inline=True)
+    if u.get('registered_at'):
+        embed.add_field(name="Zaregistrován", value=u.get('registered_at'), inline=True)
+    await ctx.send(embed=embed)
+
+@bot.command(name="dm")
+@check_sm_role()
+async def dm_cmd(ctx, user: discord.Member, *, text: str):
+    try:
+        await user.send(text)
+        await ctx.send(f"✅ Zpráva úspěšně odeslána do DM uživateli **{user.display_name}**.")
+        await async_send_log_to_discord("✉️ Odesláno DM", f"Manažer {ctx.author.mention} odeslal zprávu uživateli {user.mention}:\n`{text}`", 0x3b82f6)
+    except Exception:
+        await ctx.send(f"❌ {ctx.author.mention} Nelze odeslat zprávu. Uživatel má pravděpodobně zablokované soukromé zprávy na serveru.", delete_after=10)
+
+@bot.command(name="message")
+@check_sm_role()
+async def message_cmd(ctx, channel: discord.TextChannel, *, text: str):
+    try:
+        await channel.send(text)
+        await ctx.send(f"✅ Zpráva úspěšně odeslána do kanálu {channel.mention}.")
+        await async_send_log_to_discord("📣 Odeslána zpráva", f"Manažer {ctx.author.mention} odeslal zprávu do {channel.mention}:\n`{text}`", 0x3b82f6)
+    except Exception:
+        await ctx.send(f"❌ {ctx.author.mention} Nemám oprávnění posílat zprávy do tohoto kanálu.", delete_after=10)
 
 if __name__ == "__main__":
     Thread(target=run_web).start()
