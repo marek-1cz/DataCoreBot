@@ -144,6 +144,7 @@ HTML_LOGIN = """<div style="max-width: 400px; margin: 50px auto; background-colo
 
 HTML_WAIT_AUTH = """<div style="max-width: 500px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; border-top: 4px solid var(--warning);"><h2 style="color: var(--warning); margin-top: 0;"><i class="fas fa-spinner fa-spin"></i> Čekání na ověření</h2><p style="color: var(--text-main); font-size: 16px;">Byla Vám odeslána soukromá zpráva na Discord.</p><p style="color: var(--text-muted); font-size: 14px;">Zkontrolujte si aplikaci Discord a klikněte na tlačítko <b>Ověřit přístup</b>. Tato stránka se poté automaticky přesměruje.</p></div><script>setInterval(() => { fetch('/api/check_auth/{{ discord_id }}').then(r => r.json()).then(data => { if(data.status === 'approved') { window.location.href = '/dashboard'; } else if(data.status === 'rejected') { window.location.href = '/dashboard'; } }); }, 2000);</script>"""
 
+# --- NOVÁ ŠABLONA: NASTAVENÍ APLIKACE (2 Vypínače) ---
 HTML_APP_SETTINGS = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2 style="margin: 0; color: var(--text-main);">Nastavení Aplikace a Systému</h2>
@@ -161,16 +162,16 @@ HTML_APP_SETTINGS = """
         </form>
     </div>
 
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {{ 'var(--success)' if enabled else 'var(--danger)' }}; text-align: center;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {{ 'var(--success)' if dl_enabled else 'var(--danger)' }}; text-align: center;">
         <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-cloud-download-alt"></i> Status Stahování</h3>
-        <div style="font-size: 50px; margin: 15px 0; color: {{ 'var(--success)' if enabled else 'var(--danger)' }}; text-shadow: 0 0 15px {{ 'rgba(16, 185, 129, 0.5)' if enabled else 'rgba(239, 68, 68, 0.5)' }};">
-            <i class="fas {{ 'fa-check-circle' if enabled else 'fa-ban' }}"></i>
+        <div style="font-size: 50px; margin: 15px 0; color: {{ 'var(--success)' if dl_enabled else 'var(--danger)' }}; text-shadow: 0 0 15px {{ 'rgba(16, 185, 129, 0.5)' if dl_enabled else 'rgba(239, 68, 68, 0.5)' }};">
+            <i class="fas {{ 'fa-check-circle' if dl_enabled else 'fa-ban' }}"></i>
         </div>
         <p style="color: var(--text-muted); font-size: 14px;">Vypínač instalačního procesu přes Discord bota.</p>
         <form action="/dashboard/toggle_downloads" method="POST" style="margin-top: 20px;">
-            <input type="hidden" name="new_status" value="{{ 'False' if enabled else 'True' }}">
+            <input type="hidden" name="new_status" value="{{ 'False' if dl_enabled else 'True' }}">
             <input type="hidden" name="return_to" value="app_settings">
-            <button type="submit" class="btn {{ 'btn-danger' if enabled else 'btn-success' }}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {{ 'ZAKÁZAT STAHOVÁNÍ' if enabled else 'POVOLIT STAHOVÁNÍ' }}</button>
+            <button type="submit" class="btn {{ 'btn-danger' if dl_enabled else 'btn-success' }}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {{ 'ZAKÁZAT STAHOVÁNÍ' if dl_enabled else 'POVOLIT STAHOVÁNÍ' }}</button>
         </form>
     </div>
 </div>
@@ -485,7 +486,7 @@ HTML_DASHBOARD_MAIN = """
                 {% endfor %}
             </td>
             <td style="color: var(--text-muted); font-size: 13px;">
-                {{ user.get('registered_at', 'Neznámé') if user.get('registered_at', 'Neznámé') != '' else 'Neznámé' }}
+                {{ user.get('registered_at', 'Neznámé') if user.get('registered_at') else 'Neznámé' }}
             </td>
             <td>
                 {% if user.get('is_deleted') %}
@@ -586,7 +587,7 @@ def api_status():
         db = get_db()
         if db:
             set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
-            if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')) == 'False':
+            if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false':
                 return _cors_jsonify({"status": "disabled", "message": "SOFTWARE JE NYNÍ GLOBÁLNĚ VYPNUT (ÚDRŽBA)."})
     except: pass
     return _cors_jsonify({"status": "enabled"})
@@ -604,7 +605,7 @@ def api_app_login():
     
     try:
         set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
-        if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')) == 'False':
+        if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false':
             return _cors_jsonify({"status": "error", "message": "OMLOUVÁME SE, SOFTWARE JE NYNÍ DOČASNĚ VYPNUT (ÚDRŽBA)."})
     except: pass
     
@@ -682,7 +683,7 @@ def api_silent_check():
     
     try:
         set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
-        if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')) == 'False':
+        if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false':
             return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ GLOBÁLNĚ VYPNUT (ÚDRŽBA)."})
         
         user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
@@ -771,11 +772,11 @@ class AppAuthView(discord.ui.View):
     def __init__(self, token, discord_id, is_dm=True):
         super().__init__(timeout=300)
         self.token = token; self.discord_id = discord_id; self.is_dm = is_dm
-        btn_verify = discord.ui.Button(label="Ano, ověřit (Jsem to já)", style=discord.ButtonStyle.success, emoji="✅")
+        btn_verify = discord.ui.Button(label="Ano, ověřit (Jsem to já)", style=discord.ButtonStyle.success, emoji="✅", custom_id=f"app_verify_{token}")
         btn_verify.callback = self.verify_btn
         self.add_item(btn_verify)
         if self.is_dm:
-            btn_reject = discord.ui.Button(label="Zamítnout (Nejsem to já)", style=discord.ButtonStyle.danger, emoji="❌")
+            btn_reject = discord.ui.Button(label="Zamítnout (Nejsem to já)", style=discord.ButtonStyle.danger, emoji="❌", custom_id=f"app_reject_{token}")
             btn_reject.callback = self.decline_btn
             self.add_item(btn_reject)
 
@@ -803,7 +804,6 @@ class AppAuthView(discord.ui.View):
 
 @app.route('/')
 def home(): return render_public(HTML_HOME)
-
 @app.route('/download')
 def download_home():
     html = """
@@ -915,6 +915,7 @@ def get_profile_data(discord_id):
                 total_time = u.get("total_time")
                 if not isinstance(total_time, int): total_time = 0
                 
+                # Zabezpečení offline statusu po pádu aplikace (timeout 2 minuty)
                 if is_online and last_active_str:
                     try:
                         last_dt = datetime.strptime(last_active_str, "%d.%m.%Y %H:%M:%S")
@@ -945,8 +946,8 @@ def dashboard_app_settings():
             set_resp = db.table("settings").select("*").in_("setting_key", ["downloads_enabled", "software_enabled"]).execute()
             if set_resp.data:
                 for s in set_resp.data:
-                    if s.get('setting_key') == 'downloads_enabled' and str(s.get('setting_value')) == 'False': enabled = False
-                    if s.get('setting_key') == 'software_enabled' and str(s.get('setting_value')) == 'False': soft_enabled = False
+                    if s.get('setting_key') == 'downloads_enabled' and str(s.get('setting_value')).lower() == 'false': enabled = False
+                    if s.get('setting_key') == 'software_enabled' and str(s.get('setting_value')).lower() == 'false': soft_enabled = False
     except Exception as e: flash(f"Chyba DB: {e}", "error")
     return render_dashboard(HTML_APP_SETTINGS, enabled=enabled, soft_enabled=soft_enabled)
 
@@ -958,7 +959,7 @@ def dashboard_downloads():
         db = get_db()
         if db:
             set_resp = db.table("settings").select("*").eq("setting_key", "downloads_enabled").execute()
-            if set_resp.data and str(set_resp.data[0].get('setting_value')) == 'False': enabled = False
+            if set_resp.data and str(set_resp.data[0].get('setting_value')).lower() == 'false': enabled = False
             versions = db.table("software_versions").select("*").order("id").execute().data
     except Exception as e: flash(f"Chyba DB: {e}", "error")
     return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled)
@@ -969,7 +970,13 @@ def toggle_downloads():
     db = get_db(); new_status = request.form.get("new_status")
     return_to = request.form.get("return_to", "downloads")
     if db:
-        try: db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute(); flash('Status stahování byl změněn.', 'success')
+        try: 
+            check = db.table("settings").select("*").eq("setting_key", "downloads_enabled").execute()
+            if len(check.data) == 0:
+                db.table("settings").insert({"setting_key": "downloads_enabled", "setting_value": new_status}).execute()
+            else:
+                db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute()
+            flash('Status stahování byl změněn.', 'success')
         except Exception as e: flash(f"Chyba: {e}", "error")
     if return_to == 'app_settings': return redirect(url_for('dashboard_app_settings'))
     return redirect(url_for('dashboard_downloads'))
@@ -980,10 +987,15 @@ def toggle_software():
     db = get_db(); new_status = request.form.get("new_status")
     if db:
         try:
-            db.table("settings").update({"setting_value": new_status}).eq("setting_key", "software_enabled").execute()
+            check = db.table("settings").select("*").eq("setting_key", "software_enabled").execute()
+            if len(check.data) == 0:
+                db.table("settings").insert({"setting_key": "software_enabled", "setting_value": new_status}).execute()
+            else:
+                db.table("settings").update({"setting_value": new_status}).eq("setting_key", "software_enabled").execute()
+            
             flash('Globální stav softwaru byl změněn!', 'success')
             send_log_from_flask("🚨 Kill-Switch", f"Software byl přes administraci **{'ZAPNUT' if new_status == 'True' else 'VYPNUT'}**.", 0xef4444 if new_status == 'False' else 0x10b981)
-        except Exception as e: flash(f"Chyba: Zkontrolujte, zda máte vytvořený řádek 'software_enabled' v tabulce settings! ({e})", "error")
+        except Exception as e: flash(f"Chyba DB: {e}", "error")
     return redirect(url_for('dashboard_app_settings'))
 
 @app.route('/dashboard/pending_roles', methods=['GET'])
@@ -1079,7 +1091,8 @@ def edit_user():
 @app.route('/logout')
 def logout(): session.clear(); return redirect(url_for('home'))
 
-def run_web(): app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
+# PŘIDÁNO use_reloader=False pro opravu dvojitého psaní Discord Bota!
+def run_web(): app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)), use_reloader=False)
 
 # ==========================================
 # 3. DISCORD BOT & INTERAKTIVNÍ TLAČÍTKA
@@ -1288,8 +1301,34 @@ async def ping(ctx):
 
 @bot.command()
 async def help(ctx):
-    embed = discord.Embed(title="🤖 Nápověda - IDPK OIS PROJEKT", description="Jsem systémový bot.", color=0x38bdf8)
-    embed.add_field(name="🌍 Příkazy", value="`!register`, `!auth`, `!help`, `!ping`, `!info`, `!verze`", inline=False)
+    embed = discord.Embed(title="🤖 Nápověda - Projekt OIS IDPK", description="Seznam dostupných příkazů rozdělený podle oprávnění.", color=0x38bdf8)
+    
+    embed.add_field(name="🌍 Veřejné příkazy (Pro všechny)", value=(
+        "`!register` - Zaregistruje tě do databáze (přiřadí App ID).\n"
+        "`!auth` (nebo `!verify`) - Zobrazí tlačítko pro schválení přihlášení do PC aplikace.\n"
+        "`!verze` - Zobrazí seznam všech dostupných verzí aplikace ke stažení.\n"
+        "`!ping` - Zobrazí aktuální odezvu (zpoždění) bota.\n"
+        "`!help` - Zobrazí tuto nápovědu."
+    ), inline=False)
+    
+    embed.add_field(name="🛡️ Správa databáze (Pouze pro roli SM)", value=(
+        "`!info [ID]` - Vypíše kompletní profil uživatele (Discord ID, App ID, Role, Status).\n"
+        "`!db [ID]` - Povolí nebo zakáže uživateli přístup do webového Dashboardu (2FA).\n"
+        "`!ban [ID]` - Udělí uživateli globální BAN na celý software a web.\n"
+        "`!unban [ID]` - Zruší BAN.\n"
+        "`!delete [ID]` - Zablokuje uživatele (Soft Delete). Software ho vykopne.\n"
+        "`!perdelete [ID]` - ⚠️ Trvale a nenávratně vymaže všechny data o uživateli z databáze.\n"
+        "`!register [ID]` - Manuálně vytvoří účet pro cizího uživatele přes jeho Discord ID.\n"
+        "`!message #kanál [text]` - Pošle zprávu do vybraného textového kanálu jako bot.\n"
+        "`!dm @uživatel [text]` - Pošle soukromou zprávu uživateli jménem bota."
+    ), inline=False)
+
+    embed.add_field(name="⚙️ Administrace serveru (Pouze pro roli web-sa)", value=(
+        "`!setup_download` - Vygeneruje instalační panel s tlačítkem ke stažení aplikace.\n"
+        "`!sm @uživatel` - Rychle přidělí nebo odebere uživateli administrátorskou roli SM."
+    ), inline=False)
+
+    embed.set_footer(text="Projekt OIS IDPK • Systémový Bot")
     await ctx.send(embed=embed)
 
 @bot.command()
