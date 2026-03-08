@@ -691,7 +691,7 @@ HTML_DASHBOARD_MAIN = """
                 {% endfor %}
             </td>
             <td style="color: var(--text-muted); font-size: 13px;">
-                {{ user.get('registered_at') or 'Neznámé' }}
+                {{ user.get('registered_at', 'Neznámé') if user.get('registered_at', 'Neznámé') != '' else 'Neznámé' }}
             </td>
             <td>
                 {% if user.get('is_deleted') %}
@@ -739,6 +739,11 @@ def send_log_from_flask(title, description, color=0x38bdf8):
     if bot.loop and bot.loop.is_running():
         asyncio.run_coroutine_threadsafe(async_send_log_to_discord(title, description, color), bot.loop)
 
+def _cors_jsonify(data):
+    resp = jsonify(data)
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp
+
 def render_public(template_string, **kwargs):
     html = PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
     html = BASE_HTML.replace('{% block layout %}{% endblock %}', html)
@@ -782,106 +787,95 @@ def sync_roles_from_flask(discord_id, role_string):
 # NOVÉ API PRO TVŮJ ELECTRON SOFTWARE (HWID A LOGIN)
 # ---------------------------------------------------------
 
-@app.route('/api/app_login', methods=['POST', 'OPTIONS'])
+@app.route('/api/app_login', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_login():
-    if request.method == 'OPTIONS':
-        return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
         
     data = request.json
-    if not data: return jsonify({"status": "error", "message": "Chybí data."})
+    if not data: return _cors_jsonify({"status": "error", "message": "Chybí data."})
     
-    identifier = data.get("identifier")
-    req_hwid = data.get("hwid")
+    identifier = str(data.get("identifier", ""))
+    req_hwid = str(data.get("hwid", ""))
     
     db = get_db()
-    if not db: return jsonify({"status": "error", "message": "Chyba databáze."})
+    if not db: return _cors_jsonify({"status": "error", "message": "Chyba databáze."})
     
     user_resp = db.table("users").select("*").or_(f"discord_id.eq.{identifier},nick.ilike.{identifier}").execute()
     if not user_resp.data and identifier.isdigit():
         user_resp = db.table("users").select("*").eq("app_id", int(identifier)).execute()
-        
-    if not user_resp.data:
-        return jsonify({"status": "error", "message": "Uživatel v databázi nenalezen. Zkontrolujte ID nebo Nick."})
+            
+    if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Uživatel v databázi nenalezen. Zkontrolujte své App ID nebo Nick."})
         
     user = user_resp.data[0]
     
-    if user.get("is_banned"):
-        return jsonify({"status": "banned", "message": "Tento účet má zakázaný přístup (BAN)."})
-    if user.get("is_deleted"):
-        return jsonify({"status": "error", "message": "Tento účet byl smazán administrátorem."})
+    if user.get("is_banned"): return _cors_jsonify({"status": "banned", "message": "Tento účet má zakázaný přístup (BAN)."})
+    if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán administrátorem."})
         
     db_hwid = user.get("hwid")
-    if db_hwid and db_hwid != "None" and db_hwid.strip() != "" and db_hwid != req_hwid:
-        return jsonify({"status": "hwid_error", "message": "HWID ZÁMEK NESOUHLASÍ! Účet je vázán na jiný PC."})
+    if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "" and str(db_hwid) != req_hwid:
+        return _cors_jsonify({"status": "hwid_error", "message": "HWID ZÁMEK NESOUHLASÍ! Tento účet je uzamčen na jiný počítač."})
         
     token = str(uuid.uuid4())
     db.table("users").update({"login_token": token}).eq("discord_id", user.get("discord_id")).execute()
     
     send_app_auth_dm_from_flask(user.get("discord_id"), token, user.get("nick"), req_hwid, db_hwid)
     
-    return jsonify({"status": "waiting", "token": token, "discord_id": user.get("discord_id"), "nick": user.get("nick")})
+    return _cors_jsonify({"status": "waiting", "token": token, "discord_id": user.get("discord_id"), "nick": user.get("nick")})
 
-@app.route('/api/app_check', methods=['POST', 'OPTIONS'])
+@app.route('/api/app_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_check():
-    if request.method == 'OPTIONS':
-        return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
         
     data = request.json
-    discord_id = data.get("discord_id")
-    req_hwid = data.get("hwid")
-    
+    discord_id = str(data.get("discord_id", ""))
+    req_hwid = str(data.get("hwid", ""))
     db = get_db()
-    user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
-    if not user_resp.data: return jsonify({"status": "error", "message": "Účet nenalezen."})
     
+    user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
+    if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Účet nenalezen."})
     user = user_resp.data[0]
-    if user.get("is_banned"):
-        return jsonify({"status": "banned", "message": "Máte udělený BAN."})
-    if user.get("is_deleted"):
-        return jsonify({"status": "error", "message": "Účet byl smazán."})
+    
+    if user.get("is_banned"): return _cors_jsonify({"status": "banned", "message": "Máte udělený BAN."})
+    if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Účet byl smazán."})
         
     db_token = user.get("login_token")
-    
     if db_token == "approved":
         db_hwid = user.get("hwid")
-        if not db_hwid or db_hwid == "None" or db_hwid.strip() == "":
+        if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
             db.table("users").update({"hwid": req_hwid, "login_token": ""}).eq("discord_id", discord_id).execute()
         else:
             db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
             
-        return jsonify({"status": "approved", "app_id": user.get("app_id"), "nick": user.get("nick")})
+        return _cors_jsonify({"status": "approved", "app_id": user.get("app_id"), "nick": user.get("nick")})
         
     elif db_token == "rejected":
         db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-        return jsonify({"status": "rejected", "message": "Přístup zamítnut uživatelem na Discordu."})
+        return _cors_jsonify({"status": "rejected", "message": "Přístup zamítnut uživatelem na Discordu."})
         
-    return jsonify({"status": "waiting"})
+    return _cors_jsonify({"status": "waiting"})
 
-@app.route('/api/silent_check', methods=['POST', 'OPTIONS'])
+@app.route('/api/silent_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_silent_check():
-    if request.method == 'OPTIONS':
-        return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
         
     data = request.json
-    discord_id = data.get("discord_id")
-    req_hwid = data.get("hwid")
+    discord_id = str(data.get("discord_id", ""))
+    req_hwid = str(data.get("hwid", ""))
     db = get_db()
     
     user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
-    if not user_resp.data: 
-        return jsonify({"status": "rejected", "message": "Tento účet již v databázi neexistuje."})
+    if not user_resp.data: return _cors_jsonify({"status": "rejected", "message": "Tento účet již v databázi neexistuje."})
     
     user = user_resp.data[0]
-    if user.get("is_banned"): 
-        return jsonify({"status": "banned", "message": "Tento účet má zakázaný přístup (BAN)."})
-    if user.get("is_deleted"): 
-        return jsonify({"status": "rejected", "message": "Tento účet byl smazán administrátorem."})
+    if user.get("is_banned"): return _cors_jsonify({"status": "banned", "message": "Tento účet má zakázaný přístup (BAN)."})
+    if user.get("is_deleted"): return _cors_jsonify({"status": "rejected", "message": "Tento účet byl smazán administrátorem."})
     
     db_hwid = user.get("hwid")
-    if db_hwid and db_hwid != "None" and db_hwid.strip() != "" and db_hwid != req_hwid:
-        return jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Váš počítač nesouhlasí s profilem v databázi."})
+    if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "" and str(db_hwid) != req_hwid:
+        return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Váš počítač nesouhlasí s profilem v databázi."})
         
-    return jsonify({"status": "approved", "nick": user.get("nick")})
+    return _cors_jsonify({"status": "approved", "nick": user.get("nick")})
+
 
 # ---------------------------------------------------------
 # TLAČÍTKA A DM ZPRÁVY
@@ -1044,7 +1038,7 @@ def secure_download(token):
     <div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);">
         <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2>
         <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">
-            Přihlášen jako: <strong>{user.get('nick', '')}</strong> (ID: #{user.get('app_id', '')})
+            Přihlášen jako: <strong>{user.get('nick', 'Neznámý')}</strong> (ID: #{user.get('app_id', '')})
         </p>
         <div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;">
             <h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3>
@@ -1081,7 +1075,7 @@ def api_get_file(token):
         db.table("download_logs").insert({
             "discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": now_str
         }).execute()
-        send_log_from_flask("📥 Stahování softwaru", f"Uživatel **{user.get('nick', '')}** (ID: `{user['discord_id']}`) právě zahájil stahování verze **{version_name}**.", 0x38bdf8)
+        send_log_from_flask("📥 Stahování softwaru", f"Uživatel **{user.get('nick', 'Neznámý')}** (ID: `{user['discord_id']}`) právě zahájil stahování verze **{version_name}**.", 0x38bdf8)
     except: pass
     
     version_name_clean = version_name.replace(" ", "_")
