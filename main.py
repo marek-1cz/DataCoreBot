@@ -394,7 +394,7 @@ DASHBOARD_LAYOUT = """
 </script>
 """
 
-# NOVÁ ŠABLONA PRO SÍŇ SLÁVY (MODRÝ GLOW + RAKETOVÁ EMOJI ANIMACE)
+# NOVÁ ŠABLONA PRO SÍŇ SLÁVY (MODRÝ GLOW + ELEGANTNÍ JEMNÁ EMOJI ANIMACE)
 HTML_SUPPORTERS = """
 <style>
     .glowing-btn-blue {
@@ -434,20 +434,21 @@ HTML_SUPPORTERS = """
         box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4), inset 0 0 15px rgba(56, 189, 248, 0.1);
     }
     
-    /* RAKETOVÁ ANIMACE - RYCHLE NAHORU PŘES CELOU OBRAZOVKU */
-    @keyframes rocketUp { 
-        0% { transform: translateY(105vh) scale(1) rotate(0deg); opacity: 1; } 
-        20% { opacity: 1; }
-        100% { transform: translateY(-105vh) scale(2) rotate(15deg); opacity: 0; } 
+    /* KLIDNÁ ELEGANTNÍ ANIMACE ZESPODU */
+    @keyframes gentlePop { 
+        0% { transform: translateY(50px) scale(0.8); opacity: 0; } 
+        20% { opacity: 1; transform: translateY(-30px) scale(1.1); }
+        80% { opacity: 0.8; transform: translateY(-120px) scale(1); }
+        100% { transform: translateY(-150px) scale(0.9); opacity: 0; } 
     }
-    .emoji-rocket { 
+    .emoji-pop { 
         position: fixed; 
-        bottom: -150px; 
+        bottom: 0; 
         z-index: 9999; 
         pointer-events: none; 
-        animation: rocketUp 1.5s linear forwards; /* Rychlé a lineární */
+        animation: gentlePop 3.5s ease-out forwards; 
         will-change: transform, opacity;
-        filter: drop-shadow(0 0 10px rgba(255,255,255,0.4));
+        filter: drop-shadow(0 2px 5px rgba(0,0,0,0.5));
     }
 </style>
 
@@ -490,24 +491,29 @@ HTML_SUPPORTERS = """
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const emojis = ['🎉', '🍕', '💙', '✨', '🚀', '💎'];
-        // Spustíme ohňostroj
-        for(let i = 0; i < 50; i++) {
+        const emojis = ['🎉', '🍕', '💙', '✨', '💎'];
+        // Jemný efekt pouze na okrajích obrazovky
+        for(let i = 0; i < 25; i++) {
             let el = document.createElement('div');
-            el.className = 'emoji-rocket';
+            el.className = 'emoji-pop';
             el.innerText = emojis[Math.floor(Math.random() * emojis.length)];
-            // Náhodná pozice po celé šířce
-            el.style.left = Math.random() * 100 + 'vw';
-            // Velké emojis
-            el.style.fontSize = (Math.random() * 40 + 50) + 'px';
-            // Různá blesková rychlost (1s až 1.8s)
-            el.style.animationDuration = (Math.random() * 0.8 + 1) + 's';
-            // Velmi malá náhodná zpoždění pro efekt chaosu (0s až 0.3s)
-            el.style.animationDelay = (Math.random() * 0.3) + 's';
+            
+            // Rozdělení na levý okraj (2-15%) a pravý okraj (85-98%) šířky
+            let isLeft = Math.random() > 0.5;
+            let pos = isLeft ? (Math.random() * 13 + 2) : (Math.random() * 13 + 85);
+            el.style.left = pos + 'vw';
+            
+            // Původní menší velikost
+            el.style.fontSize = (Math.random() * 15 + 20) + 'px';
+            
+            // Klidná a pomalejší rychlost (2.5s až 4s)
+            el.style.animationDuration = (Math.random() * 1.5 + 2.5) + 's';
+            // Rozptyl, aby nevyletěly všechny úplně naráz
+            el.style.animationDelay = (Math.random() * 1.5) + 's';
             
             document.body.appendChild(el);
-            // Odstraníme z DOM po skončení animace
-            setTimeout(() => el.remove(), 2500);
+            // Vyčištění z paměti prohlížeče po skončení animace
+            setTimeout(() => el.remove(), 6000);
         }
     });
 </script>
