@@ -104,7 +104,7 @@ DASHBOARD_LAYOUT = """<div class="dashboard-wrapper"><div class="sidebar"><div c
 HTML_HOME = """<div style="text-align: center; padding: 50px 0;"><img src="{{ logo_velke }}" alt="DataCoreBot Logo" style="max-width: 450px; width: 100%; height: auto; margin-bottom: 20px; filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.5));"><p style="font-size: 1.2em; color: var(--text-muted); max-width: 600px; margin: 0 auto 30px auto;">Moderní, rychlý a bezpečný software s nejlepším zabezpečením.</p><a href="/download" class="btn" style="font-size: 18px; padding: 15px 30px; border-radius: 30px;"><i class="fas fa-download"></i> Získat Software</a></div>"""
 HTML_LOGIN = """<div style="max-width: 400px; margin: 50px auto; background-color: var(--bg-panel); padding: 30px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border-top: 4px solid var(--blue-main);"><h2 style="text-align: center; color: var(--blue-main); margin-top: 0;"><i class="fas fa-lock"></i> Dashboard 2FA</h2><div style="background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--danger); padding: 12px; margin-bottom: 20px; border-radius: 0 5px 5px 0;"><p style="color: var(--danger); margin: 0; font-size: 13px; font-weight: 800; text-transform: uppercase;"><i class="fas fa-shield-alt"></i> Zabezpečená zóna</p><p style="color: var(--text-muted); margin: 5px 0 0 0; font-size: 12px; line-height: 1.4;">Tato databáze je přísně vyhrazena <b>pouze pro administrátory a pověřené správce</b> projektu. Běžní uživatelé sem nemají přístup. Každý pokus o neoprávněné přihlášení je monitorován a logován.</p></div><p style="color: var(--text-muted); text-align: center; font-size: 13px;">Pro přístup do systému zadejte své <b>Discord ID</b>.</p><form method="POST" action="/login_request"><label style="font-weight: bold; font-size: 12px; color: var(--text-muted);">VAŠE DISCORD ID</label><input type="text" name="discord_id" placeholder="Např. 123456789012345678" required><button type="submit" class="btn" style="width: 100%; margin-top: 10px;"><i class="fab fa-discord"></i> Odeslat žádost o přihlášení</button></form></div>"""
 HTML_WAIT_AUTH = """<div style="max-width: 500px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; border-top: 4px solid var(--warning);"><h2 style="color: var(--warning); margin-top: 0;"><i class="fas fa-spinner fa-spin"></i> Čekání na ověření</h2><p style="color: var(--text-main); font-size: 16px;">Byla Vám odeslána soukromá zpráva na Discord.</p><p style="color: var(--text-muted); font-size: 14px;">Zkontrolujte si aplikaci Discord a klikněte na tlačítko <b>Ověřit přístup</b>. Tato stránka se poté automaticky přesměruje.</p></div><script>setInterval(() => { fetch('/api/check_auth/{{ discord_id }}').then(r => r.json()).then(data => { if(data.status === 'approved') { window.location.href = '/dashboard'; } else if(data.status === 'rejected') { window.location.href = '/dashboard'; } }); }, 2000);</script>"""
-HTML_DASHBOARD_MAIN = """<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;"><h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2><div style="background: var(--bg-panel); padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #334155;">Celkem uživatelů: <span style="color: var(--blue-main);">{{ users|length }}</span></div></div><div style="overflow-x: auto;"><table><tr><th>App ID</th><th>Discord ID</th><th>Nick</th><th>Role</th><th>Zaregistrován</th><th>Status</th><th>Akce</th></tr>{% for user in users %}<tr style="opacity: {{ '0.5' if user.get('is_deleted') else '1' }};"><td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td><td style="font-size: 12px; color: var(--text-muted);">{{ user.get('discord_id', '') }}</td><td><strong>{{ user.get('nick', '') }}</strong></td><td>{% set role_list = user.get('role').split(',') if user.get('role') else ['User'] %}{% for r in role_list %}{% set r_clean = r.strip() %}{% if r_clean == 'SA' %}<span class="role-tag" style="color: white; background-color: #ef4444; border-color: #ef4444;">SERVER ADMIN</span>{% elif r_clean == 'DEV' %}<span class="role-tag" style="color: white; background-color: #10b981; border-color: #10b981;">DEVELOPER</span>{% elif r_clean == 'BT' %}<span class="role-tag" style="color: white; background-color: #3b82f6; border-color: #3b82f6;">BETA TESTER</span>{% elif r_clean == 'User' %}<span class="role-tag" style="color: white; background-color: #64748b; border-color: #64748b;">User</span>{% endif %}{% endfor %}</td><td style="color: var(--text-muted); font-size: 13px;">{{ user.get('registered_at', 'Neznámé') if user.get('registered_at', 'Neznámé') != '' else 'Neznámé' }}</td><td>{% if user.get('is_deleted') %}<span style="color: var(--danger); font-weight: bold;"><i class="fas fa-skull"></i> Smazán</span>{% elif user.get('is_banned') %}<span style="color: var(--warning); font-weight: bold;"><i class="fas fa-ban"></i> BANNED</span>{% else %}<span style="color: var(--success);"><i class="fas fa-check-circle"></i> Aktivní</span>{% endif %}</td><td><button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', 'User') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-cog"></i> Profil</button></td></tr>{% else %}<tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>{% endfor %}</table></div>"""
+HTML_DASHBOARD_MAIN = """<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;"><h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2><div style="background: var(--bg-panel); padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #334155;">Celkem uživatelů: <span style="color: var(--blue-main);">{{ users|length }}</span></div></div><div style="overflow-x: auto;"><table><tr><th>App ID</th><th>Discord ID</th><th>Nick</th><th>Role</th><th>Zaregistrován</th><th>Status</th><th>Akce</th></tr>{% for user in users %}<tr style="opacity: {{ '0.5' if user.get('is_deleted') else '1' }};"><td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td><td style="font-size: 12px; color: var(--text-muted);">{{ user.get('discord_id', '') }}</td><td><strong>{{ user.get('nick', '') }}</strong></td><td>{% set role_list = user.get('role').split(',') if user.get('role') else ['User'] %}{% for r in role_list %}{% set r_clean = r.strip() %}{% if r_clean == 'SA' %}<span class="role-tag" style="color: white; background-color: #ef4444; border-color: #ef4444;">SERVER ADMIN</span>{% elif r_clean == 'DEV' %}<span class="role-tag" style="color: white; background-color: #10b981; border-color: #10b981;">DEVELOPER</span>{% elif r_clean == 'BT' %}<span class="role-tag" style="color: white; background-color: #3b82f6; border-color: #3b82f6;">BETA TESTER</span>{% elif r_clean == 'User' %}<span class="role-tag" style="color: white; background-color: #64748b; border-color: #64748b;">User</span>{% endif %}{% endfor %}</td><td style="color: var(--text-muted); font-size: 13px;">{{ user.get('registered_at') or 'Neznámé' }}</td><td>{% if user.get('is_deleted') %}<span style="color: var(--danger); font-weight: bold;"><i class="fas fa-skull"></i> Smazán</span>{% elif user.get('is_banned') %}<span style="color: var(--warning); font-weight: bold;"><i class="fas fa-ban"></i> BANNED</span>{% else %}<span style="color: var(--success);"><i class="fas fa-check-circle"></i> Aktivní</span>{% endif %}</td><td><button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', 'User') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-cog"></i> Profil</button></td></tr>{% else %}<tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>{% endfor %}</table></div>"""
 
 def get_db():
     url = os.environ.get("SUPABASE_URL")
@@ -143,11 +143,14 @@ def check_session_validity():
         discord_id = session.get('discord_id')
         if discord_id == 'admin': return 
         if discord_id:
-            db = get_db()
-            if db:
-                user = db.table("users").select("dashboard_access, is_banned, is_deleted").eq("discord_id", discord_id).execute().data
-                if not user or not user[0].get("dashboard_access") or user[0].get("is_banned") or user[0].get("is_deleted"):
-                    session.clear(); flash('Váš přístup do administrace byl zablokován, zrušen nebo Váš účet neexistuje.', 'error'); return redirect(url_for('dashboard_main'))
+            try:
+                db = get_db()
+                if db:
+                    user = db.table("users").select("dashboard_access, is_banned, is_deleted").eq("discord_id", discord_id).execute().data
+                    if not user or not user[0].get("dashboard_access") or user[0].get("is_banned") or user[0].get("is_deleted"):
+                        session.clear(); flash('Váš přístup do administrace byl zablokován, zrušen nebo Váš účet neexistuje.', 'error'); return redirect(url_for('dashboard_main'))
+            except Exception as e:
+                print(f"DB Error in check_session: {e}", flush=True)
 
 def sync_roles_from_flask(discord_id, role_string):
     async def sync():
@@ -176,39 +179,43 @@ def api_app_login():
     db = get_db()
     if not db: return _cors_jsonify({"status": "error", "message": "Chyba databáze."})
     
-    # KONTROLA ZDA NENÍ SOFTWARE GLOBÁLNĚ VYPNUT
-    set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
-    if set_resp.data and str(set_resp.data[0]['setting_value']) == 'False':
-        return _cors_jsonify({"status": "error", "message": "OMLOUVÁME SE, SOFTWARE JE NYNÍ DOČASNĚ VYPNUT (ÚDRŽBA)."})
+    try:
+        set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
+        if set_resp.data and str(set_resp.data[0]['setting_value']) == 'False':
+            return _cors_jsonify({"status": "error", "message": "OMLOUVÁME SE, SOFTWARE JE NYNÍ DOČASNĚ VYPNUT (ÚDRŽBA)."})
+    except: pass
     
-    user_resp = db.table("users").select("*").or_(f"discord_id.eq.{identifier},nick.ilike.{identifier}").execute()
-    if not user_resp.data and identifier.isdigit():
-        user_resp = db.table("users").select("*").eq("app_id", int(identifier)).execute()
+    try:
+        user_resp = db.table("users").select("*").or_(f"discord_id.eq.{identifier},nick.ilike.{identifier}").execute()
+        if not user_resp.data and identifier.isdigit():
+            user_resp = db.table("users").select("*").eq("app_id", int(identifier)).execute()
+                
+        if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Uživatel nenalezen. Zkontrolujte App ID nebo Nick."})
             
-    if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Uživatel nenalezen. Zkontrolujte App ID nebo Nick."})
+        user = user_resp.data[0]
         
-    user = user_resp.data[0]
-    
-    if user.get("is_banned"): return _cors_jsonify({"status": "banned", "message": "Tento účet má zakázaný přístup (BAN)."})
-    if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán administrátorem."})
+        if user.get("is_banned"): return _cors_jsonify({"status": "banned", "message": "Tento účet má zakázaný přístup (BAN)."})
+        if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán administrátorem."})
+            
+        db_hwid = user.get("hwid")
+        if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "" and str(db_hwid) != req_hwid:
+            return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Tento účet je vázán na jiný počítač."})
+            
+        token = str(uuid.uuid4())
+        db.table("users").update({"login_token": token}).eq("discord_id", user.get("discord_id")).execute()
         
-    db_hwid = user.get("hwid")
-    if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "" and str(db_hwid) != req_hwid:
-        return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Tento účet je vázán na jiný počítač."})
+        async def send():
+            try:
+                u = bot.get_user(int(user.get("discord_id"))) or await bot.fetch_user(int(user.get("discord_id")))
+                if u:
+                    embed = discord.Embed(title="🛡️ Bezpečnostní ověření - Aplikace", description=f"Byl zaznamenán pokus o spuštění softwaru.\n**Uživatel:** {user.get('nick')}\nPokud jste to Vy, potvrďte přístup kliknutím na tlačítko níže.", color=0x38bdf8)
+                    await u.send(embed=embed, view=AppAuthView(token, user.get("discord_id"), is_dm=True))
+            except: pass
+        if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
         
-    token = str(uuid.uuid4())
-    db.table("users").update({"login_token": token}).eq("discord_id", user.get("discord_id")).execute()
-    
-    async def send():
-        try:
-            u = bot.get_user(int(user.get("discord_id"))) or await bot.fetch_user(int(user.get("discord_id")))
-            if u:
-                embed = discord.Embed(title="🛡️ Bezpečnostní ověření - Aplikace", description=f"Byl zaznamenán pokus o spuštění softwaru.\n**Uživatel:** {user.get('nick')}\nPokud jste to Vy, potvrďte přístup kliknutím na tlačítko níže.", color=0x38bdf8)
-                await u.send(embed=embed, view=AppAuthView(token, user.get("discord_id"), is_dm=True))
-        except: pass
-    if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
-    
-    return _cors_jsonify({"status": "waiting", "token": token, "discord_id": user.get("discord_id"), "nick": user.get("nick")})
+        return _cors_jsonify({"status": "waiting", "token": token, "discord_id": user.get("discord_id"), "nick": user.get("nick")})
+    except Exception as e:
+        return _cors_jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/app_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_check():
@@ -218,27 +225,30 @@ def api_app_check():
     req_hwid = str(data.get("hwid", ""))
     db = get_db()
     
-    user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
-    if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Účet nenalezen."})
-    user = user_resp.data[0]
-    
-    if user.get("is_banned"): return _cors_jsonify({"status": "banned", "message": "Máte udělený BAN."})
-    if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Účet byl smazán."})
+    try:
+        user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
+        if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Účet nenalezen."})
+        user = user_resp.data[0]
         
-    db_token = user.get("login_token")
-    if db_token == "approved":
-        db_hwid = user.get("hwid")
-        if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
-            db.table("users").update({"hwid": req_hwid, "login_token": ""}).eq("discord_id", discord_id).execute()
-        else:
+        if user.get("is_banned"): return _cors_jsonify({"status": "banned", "message": "Máte udělený BAN."})
+        if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Účet byl smazán."})
+            
+        db_token = user.get("login_token")
+        if db_token == "approved":
+            db_hwid = user.get("hwid")
+            if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
+                db.table("users").update({"hwid": req_hwid, "login_token": ""}).eq("discord_id", discord_id).execute()
+            else:
+                db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
+            return _cors_jsonify({"status": "approved", "app_id": user.get("app_id"), "nick": user.get("nick")})
+            
+        elif db_token == "rejected":
             db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-        return _cors_jsonify({"status": "approved", "app_id": user.get("app_id"), "nick": user.get("nick")})
-        
-    elif db_token == "rejected":
-        db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-        return _cors_jsonify({"status": "rejected", "message": "Přístup zamítnut uživatelem na Discordu."})
-        
-    return _cors_jsonify({"status": "waiting"})
+            return _cors_jsonify({"status": "rejected", "message": "Přístup zamítnut uživatelem na Discordu."})
+            
+        return _cors_jsonify({"status": "waiting"})
+    except Exception as e:
+        return _cors_jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/silent_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_silent_check():
@@ -248,22 +258,25 @@ def api_silent_check():
     req_hwid = str(data.get("hwid", ""))
     db = get_db()
     
-    set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
-    if set_resp.data and str(set_resp.data[0]['setting_value']) == 'False':
-        return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ GLOBÁLNĚ VYPNUT (ÚDRŽBA)."})
-    
-    user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
-    if not user_resp.data: return _cors_jsonify({"status": "rejected", "message": "Tento účet již v databázi neexistuje."})
-    
-    user = user_resp.data[0]
-    if user.get("is_banned"): return _cors_jsonify({"status": "banned", "message": "Tento účet má zakázaný přístup (BAN)."})
-    if user.get("is_deleted"): return _cors_jsonify({"status": "rejected", "message": "Tento účet byl smazán administrátorem."})
-    
-    db_hwid = user.get("hwid")
-    if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "" and str(db_hwid) != req_hwid:
-        return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Váš počítač nesouhlasí s profilem v databázi."})
+    try:
+        set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
+        if set_resp.data and str(set_resp.data[0]['setting_value']) == 'False':
+            return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ GLOBÁLNĚ VYPNUT (ÚDRŽBA)."})
         
-    return _cors_jsonify({"status": "approved", "nick": user.get("nick")})
+        user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
+        if not user_resp.data: return _cors_jsonify({"status": "rejected", "message": "Tento účet již v databázi neexistuje."})
+        
+        user = user_resp.data[0]
+        if user.get("is_banned"): return _cors_jsonify({"status": "banned", "message": "Tento účet má zakázaný přístup (BAN)."})
+        if user.get("is_deleted"): return _cors_jsonify({"status": "rejected", "message": "Tento účet byl smazán administrátorem."})
+        
+        db_hwid = user.get("hwid")
+        if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "" and str(db_hwid) != req_hwid:
+            return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Počítač nesouhlasí s profilem v databázi."})
+            
+        return _cors_jsonify({"status": "approved", "nick": user.get("nick")})
+    except Exception as e:
+        return _cors_jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/app_ping', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_ping():
@@ -276,22 +289,33 @@ def api_app_ping():
     db = get_db()
     if not db: return _cors_jsonify({"status": "error"})
     
-    now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-    user_resp = db.table("users").select("launch_count, total_time, is_banned, is_deleted").eq("discord_id", discord_id).execute()
-    if not user_resp.data: return _cors_jsonify({"status": "error"})
-    
-    u = user_resp.data[0]
-    if u.get("is_banned") or u.get("is_deleted"): return _cors_jsonify({"status": "force_logout"})
-    
-    updates = {"last_active": now_str, "is_online": True}
-    
-    if action == "start": updates["launch_count"] = u.get("launch_count", 0) + 1
-    elif action == "stop": updates["is_online"] = False
-    
-    if session_time > 0: updates["total_time"] = u.get("total_time", 0) + session_time
+    try:
+        now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        user_resp = db.table("users").select("launch_count, total_time, is_banned, is_deleted").eq("discord_id", discord_id).execute()
+        if not user_resp.data: return _cors_jsonify({"status": "error"})
         
-    db.table("users").update(updates).eq("discord_id", discord_id).execute()
-    return _cors_jsonify({"status": "ok"})
+        u = user_resp.data[0]
+        if u.get("is_banned") or u.get("is_deleted"): return _cors_jsonify({"status": "force_logout"})
+        
+        updates = {"last_active": now_str, "is_online": True}
+        
+        if action == "start": 
+            l_count = u.get("launch_count")
+            if not isinstance(l_count, int): l_count = 0
+            updates["launch_count"] = l_count + 1
+        elif action == "stop": 
+            updates["is_online"] = False
+        
+        if session_time > 0: 
+            t_time = u.get("total_time")
+            if not isinstance(t_time, int): t_time = 0
+            updates["total_time"] = t_time + session_time
+            
+        db.table("users").update(updates).eq("discord_id", discord_id).execute()
+        return _cors_jsonify({"status": "ok"})
+    except Exception as e:
+        print(f"Ping Error: {e}", flush=True)
+        return _cors_jsonify({"status": "error", "message": str(e)})
 
 
 # ---------------------------------------------------------
@@ -382,8 +406,12 @@ def dashboard_main():
             session['logged_in'] = True; session['discord_id'] = 'admin'
             return redirect(url_for('dashboard_main'))
     if not session.get('logged_in'): return render_public(HTML_LOGIN)
-    users_data = get_db().table("users").select("*").order("app_id").execute().data if get_db() else []
+    users_data = []
+    try:
+        users_data = get_db().table("users").select("*").order("app_id").execute().data if get_db() else []
+    except Exception as e: flash(f"Chyba při načítání dat (Zkontrolujte Supabase strukturu): {e}", "error")
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů")
+
 @app.route('/login_request', methods=['POST'])
 def login_request():
     discord_id = request.form.get('discord_id'); db = get_db()
@@ -403,6 +431,7 @@ def login_request():
             else: flash('Účet neexistuje, nemá povolený přístup, nebo byl zablokován.', 'error')
         except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_main'))
+
 @app.route('/dashboard/wait_auth')
 def wait_auth(): return render_public(HTML_WAIT_AUTH, discord_id=request.args.get("discord_id"))
 
@@ -435,61 +464,50 @@ def get_profile_data(discord_id):
         status_map = {"online": "🟢 Online", "offline": "⚫ Offline", "idle": "🌙 Nečinný", "dnd": "🔴 Nerušit"}
         status = status_map.get(str(member.status), str(member.status))
         
-    dls = get_db().table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data if get_db() else []
-    
-    # NOVÉ SOUČÁSTI PRO PROFIL
+    dls = []
     app_status_html = "<span style='color: #64748b;'><i>Neaktivní</i></span>"
     stats_html = ""
     db = get_db()
     if db:
-        db_user = db.table("users").select("last_active, is_online, launch_count, total_time").eq("discord_id", discord_id).execute().data
-        if db_user:
-            u = db_user[0]
-            is_online = u.get("is_online", False)
-            last_active = u.get("last_active") or "Nikdy"
-            launch_count = u.get("launch_count") or 0
-            total_time = u.get("total_time") or 0
-            
-            m, s = divmod(total_time, 60)
-            h, m = divmod(m, 60)
-            formatted_time = f"{h}h {m}m {s}s"
-            
-            if is_online: app_status_html = '<span style="color: var(--success); font-weight:bold;">🟢 Aktivní právě teď</span>'
-            else: app_status_html = f'<span style="color: var(--danger);">🔴 Offline</span> (Naposledy: {last_active})'
-            
-            stats_html = f"<div style='margin-top:10px; font-size:12px; color:var(--text-muted); border-top: 1px solid #334155; padding-top: 10px;'><div><b>Počet spuštění:</b> {launch_count}x</div><div style='margin-top:5px;'><b>Celkový čas:</b> {formatted_time}</div></div>"
+        try:
+            dls = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data
+            db_user = db.table("users").select("last_active, is_online, launch_count, total_time").eq("discord_id", discord_id).execute().data
+            if db_user:
+                u = db_user[0]
+                is_online = u.get("is_online", False)
+                last_active = u.get("last_active") or "Nikdy"
+                launch_count = u.get("launch_count")
+                if not isinstance(launch_count, int): launch_count = 0
+                total_time = u.get("total_time")
+                if not isinstance(total_time, int): total_time = 0
+                
+                m, s = divmod(total_time, 60)
+                h, m = divmod(m, 60)
+                formatted_time = f"{h}h {m}m {s}s"
+                
+                if is_online: app_status_html = '<span style="color: var(--success); font-weight:bold;">🟢 Aktivní právě teď</span>'
+                else: app_status_html = f'<span style="color: var(--danger);">🔴 Offline</span> (Naposledy: {last_active})'
+                stats_html = f"<div style='margin-top:10px; font-size:12px; color:var(--text-muted); border-top: 1px solid #334155; padding-top: 10px;'><div><b>Počet spuštění:</b> {launch_count}x</div><div style='margin-top:5px;'><b>Celkový čas:</b> {formatted_time}</div></div>"
+        except Exception as e:
+            print(f"Profile API Error: {e}", flush=True)
             
     return {"joined_at": joined_at, "status": status, "app_status": app_status_html, "stats": stats_html, "downloads": dls}
 
+# Funkce z dashboardu 
 @app.route('/dashboard/downloads', methods=['GET'])
-def dashboard_downloads():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db()
+def dashboard_downloads(): 
     versions = []; enabled = True; soft_enabled = True
-    if db:
-        try:
+    try:
+        db = get_db()
+        if db:
             set_resp = db.table("settings").select("*").in_("setting_key", ["downloads_enabled", "software_enabled"]).execute()
             if set_resp.data:
                 for s in set_resp.data:
                     if s['setting_key'] == 'downloads_enabled' and s['setting_value'] == 'False': enabled = False
                     if s['setting_key'] == 'software_enabled' and s['setting_value'] == 'False': soft_enabled = False
             versions = db.table("software_versions").select("*").order("id").execute().data
-        except: pass
-        
-    html_mod = HTML_DOWNLOADS_MGMT.replace("", f"""
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {'var(--success)' if soft_enabled else 'var(--danger)'}; text-align: center;">
-        <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-desktop"></i> Status Softwaru</h3>
-        <div style="font-size: 50px; margin: 15px 0; color: {'var(--success)' if soft_enabled else 'var(--danger)'}; text-shadow: 0 0 15px {'rgba(16, 185, 129, 0.5)' if soft_enabled else 'rgba(239, 68, 68, 0.5)'};">
-            <i class="fas {'fa-check-circle' if soft_enabled else 'fa-ban'}"></i>
-        </div>
-        <form action="/dashboard/toggle_software" method="POST" style="margin-top: 20px;">
-            <input type="hidden" name="new_status" value="{'False' if soft_enabled else 'True'}">
-            <button type="submit" class="btn {'btn-danger' if soft_enabled else 'btn-success'}" style="width: 100%; font-size: 16px;">
-                <i class="fas fa-power-off"></i> {'VYPNOUT SOFTWARE GLOBÁLNĚ' if soft_enabled else 'ZAPNOUT SOFTWARE'}
-            </button>
-        </form>
-    </div>
-    """)
+    except: pass
+    html_mod = HTML_DOWNLOADS_MGMT.replace("", f"""<div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {'var(--success)' if soft_enabled else 'var(--danger)'}; text-align: center;"><h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-desktop"></i> Status Softwaru</h3><div style="font-size: 50px; margin: 15px 0; color: {'var(--success)' if soft_enabled else 'var(--danger)'}; text-shadow: 0 0 15px {'rgba(16, 185, 129, 0.5)' if soft_enabled else 'rgba(239, 68, 68, 0.5)'};"><i class="fas {'fa-check-circle' if soft_enabled else 'fa-ban'}"></i></div><form action="/dashboard/toggle_software" method="POST" style="margin-top: 20px;"><input type="hidden" name="new_status" value="{'False' if soft_enabled else 'True'}"><button type="submit" class="btn {'btn-danger' if soft_enabled else 'btn-success'}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {'VYPNOUT SOFTWARE GLOBÁLNĚ' if soft_enabled else 'ZAPNOUT SOFTWARE'}</button></form></div>""")
     return render_dashboard(html_mod, versions=versions, enabled=enabled)
 
 @app.route('/dashboard/toggle_downloads', methods=['POST'])
@@ -506,31 +524,11 @@ def toggle_software():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db(); new_status = request.form.get("new_status")
     if db:
-        db.table("settings").update({"setting_value": new_status}).eq("setting_key", "software_enabled").execute()
-        flash('Globální stav softwaru byl změněn!', 'success')
-        send_log_from_flask("🚨 Kill-Switch", f"Software byl přes administraci **{'ZAPNUT' if new_status == 'True' else 'VYPNUT'}**.", 0xef4444 if new_status == 'False' else 0x10b981)
-    return redirect(url_for('dashboard_downloads'))
-
-@app.route('/dashboard/add_version', methods=['POST'])
-def add_version():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db()
-    if db:
         try:
-            v_name = request.form.get("version_name")
-            v_data = {"version_name": v_name, "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role")}
-            db.table("software_versions").insert(v_data).execute()
-            flash('Verze úspěšně přidána.', 'success')
-        except: pass
-    return redirect(url_for('dashboard_downloads'))
-
-@app.route('/dashboard/delete_version', methods=['POST'])
-def delete_version():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db(); v_id = request.form.get("version_id")
-    if db and v_id:
-        db.table("software_versions").delete().eq("id", v_id).execute()
-        flash('Verze odebrána.', 'success')
+            db.table("settings").update({"setting_value": new_status}).eq("setting_key", "software_enabled").execute()
+            flash('Globální stav softwaru byl změněn!', 'success')
+            send_log_from_flask("🚨 Kill-Switch", f"Software byl přes administraci **{'ZAPNUT' if new_status == 'True' else 'VYPNUT'}**.", 0xef4444 if new_status == 'False' else 0x10b981)
+        except Exception as e: flash(f"Chyba: Zkontrolujte, zda máte vytvořený řádek 'software_enabled' v tabulce settings! ({e})", "error")
     return redirect(url_for('dashboard_downloads'))
 
 @app.route('/dashboard/pending_roles', methods=['GET'])
@@ -539,45 +537,6 @@ def pending_roles(): return render_dashboard(HTML_PENDING_ROLES, pending=get_db(
 def dashboard_ids(): return render_dashboard(HTML_IDS, users=get_db().table("users").select("*").order("app_id").execute().data if get_db() else [])
 @app.route('/dashboard/team', methods=['GET'])
 def dashboard_team_page(): return render_dashboard(HTML_TEAM_ADD, team=get_db().table("team").select("*").execute().data if get_db() else [])
-
-@app.route('/dashboard/add_pending_role', methods=['POST'])
-def add_pending_role():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db()
-    if db:
-        roles_str = ",".join(request.form.getlist("roles")) if request.form.getlist("roles") else "User"
-        db.table("pending_roles").insert({"discord_identifier": request.form.get("discord_identifier"), "roles": roles_str}).execute()
-        flash('Rezervace vytvořena.', 'success')
-    return redirect(url_for('pending_roles'))
-
-@app.route('/dashboard/delete_pending_role', methods=['POST'])
-def delete_pending_role():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db(); p_id = request.form.get("pending_id")
-    if db and p_id: db.table("pending_roles").delete().eq("id", p_id).execute()
-    return redirect(url_for('pending_roles'))
-
-@app.route('/dashboard/change_id', methods=['POST'])
-def change_id():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db()
-    if db: db.table("users").update({"app_id": int(request.form.get("new_app_id"))}).eq("discord_id", request.form.get("discord_id")).execute()
-    return redirect(url_for('dashboard_ids'))
-
-@app.route('/dashboard/add_team', methods=['POST'])
-def add_team():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db()
-    if db:
-        combined_roles = [f"{n.strip()}|{c.strip()}" for n, c in zip(request.form.getlist("role_name[]"), request.form.getlist("role_color[]")) if n.strip()]
-        db.table("team").insert({"name": request.form.get("name"), "discord_nick": request.form.get("discord_nick"), "image_url": request.form.get("image_url"), "description": request.form.get("description"), "role_name": ",".join(combined_roles)}).execute()
-    return redirect(url_for('dashboard_team_page'))
-
-@app.route('/dashboard/delete_team', methods=['POST'])
-def delete_team():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    if get_db(): get_db().table("team").delete().eq("discord_nick", request.form.get("discord_nick")).execute()
-    return redirect(url_for('dashboard_team_page'))
 
 @app.route('/dashboard/edit_user', methods=['POST'])
 def edit_user():
@@ -677,11 +636,10 @@ class PerDeleteConfirm(discord.ui.View):
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Zkontroluj si `!help` pro správný formát.", delete_after=15)
+        await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Zkontroluj si `!help`.", delete_after=15)
     elif isinstance(error, commands.MemberNotFound):
-        await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!** Ujisti se, že zadáváš platné ID uživatele.", delete_after=15)
+        await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
     elif isinstance(error, commands.CheckFailure): pass 
-    else: print(f"[CMD ERROR] {error}", flush=True)
 
 def check_web_sa():
     async def predicate(ctx):
@@ -705,29 +663,20 @@ async def auth(ctx):
     if not user_data:
         msg = await ctx.send(f"❌ {ctx.author.mention} Nejsi zaregistrován v databázi.")
         await asyncio.sleep(10)
-        try: 
-            await msg.delete()
-            await ctx.message.delete()
+        try: await msg.delete(); await ctx.message.delete()
         except: pass
         return
         
     token = user_data[0].get("login_token")
     if not token or token in ["approved", "rejected"]:
-        msg = await ctx.send(f"ℹ️ {ctx.author.mention} Aktuálně nemáš žádný čekající požadavek na přihlášení od aplikace.")
+        msg = await ctx.send(f"ℹ️ {ctx.author.mention} Aktuálně nemáš žádný čekající požadavek na přihlášení.")
         await asyncio.sleep(10)
-        try: 
-            await msg.delete()
-            await ctx.message.delete()
+        try: await msg.delete(); await ctx.message.delete()
         except: pass
         return
         
-    embed = discord.Embed(
-        title="🛡️ Ruční ověření přihlášení", 
-        description=f"Potvrzuješ přihlášení do softwaru jako **{user_data[0].get('nick')}**?\n\n*Tato zpráva a tlačítko funguje pouze pro tebe.*", 
-        color=0x38bdf8
-    )
-    
-    msg = await ctx.send(embed=embed, view=AppAuthView(token, discord_id, is_dm=False))
+    embed = discord.Embed(title="🛡️ Ruční ověření přihlášení", description=f"Potvrzuješ přihlášení do softwaru jako **{user_data[0].get('nick')}**?\n\n*Tato zpráva a tlačítko funguje pouze pro tebe.*", color=0x38bdf8)
+    await ctx.send(embed=embed, view=AppAuthView(token, discord_id, is_dm=False))
     try: await ctx.message.delete()
     except: pass
 
@@ -735,7 +684,6 @@ async def auth(ctx):
 async def register(ctx, target_id: str = None):
     db = get_db()
     if not db: return
-        
     if target_id:
         is_admin = discord.utils.get(ctx.author.roles, name="web-sa") or discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator
         if not is_admin: return await ctx.send(f"❌ {ctx.author.mention} Nemáš oprávnění registrovat cizí účty.")
@@ -824,7 +772,7 @@ async def ping(ctx):
 @bot.command()
 async def help(ctx):
     embed = discord.Embed(title="🤖 Nápověda - IDPK OIS PROJEKT", description="Jsem systémový bot.", color=0x38bdf8)
-    embed.add_field(name="🌍 Příkazy", value="`!register`, `!auth`, `!help`, `!ping`, `!info`", inline=False)
+    embed.add_field(name="🌍 Příkazy", value="`!register`, `!auth`, `!help`, `!ping`, `!info`, `!verze`", inline=False)
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -836,6 +784,20 @@ async def info(ctx, discord_id: str = None):
     u = user[0]
     embed = discord.Embed(title=f"Uživatel: {u.get('nick')}", color=0x38bdf8)
     embed.add_field(name="ID", value=u.get('discord_id'), inline=True)
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def verze(ctx):
+    db = get_db()
+    if not db: return
+    v_resp = db.table("software_versions").select("*").order("id").execute().data
+    if not v_resp: return await ctx.send("Aktuálně nejsou v databázi k dispozici žádné verze.")
+    embed = discord.Embed(title="📦 Dostupné verze aplikace", color=0x10b981)
+    for v in v_resp:
+        role_text = "Všichni (User)"
+        if v['target_role'] == 'BT': role_text = "BT, DEV, SA"
+        if v['target_role'] == 'DEV_SA': role_text = "DEV, SA"
+        embed.add_field(name=v['version_name'], value=f"Dostupnost: **{role_text}**", inline=False)
     await ctx.send(embed=embed)
 
 if __name__ == "__main__":
