@@ -5,26 +5,27 @@ from discord.ui import Button, View, Select
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash, Response, stream_with_context, jsonify
 from threading import Thread
 from supabase import create_client
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta
 import asyncio
 import uuid
 import urllib.request
-import re
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
 app = Flask(__name__)
 app.secret_key = "ois_idpk_super_tajny_klic" 
-prague_tz = ZoneInfo("Europe/Prague")
 
-DEPLOY_TIME = datetime.now(prague_tz).strftime("%d.%m.%Y %H:%M:%S")
+# ZCELA BEZPEČNÝ VÝPOČET ČESKÉHO ČASU (BEZ RIZIKA PÁDU SERVERU)
+def get_prague_time():
+    return datetime.utcnow() + timedelta(hours=1)
+
+DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
 
 URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png"
 URL_VELKE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png"
 
 # ==========================================
-# 1. HTML ŠABLONY (NÁDHERNÝ VZHLED)
+# 1. HTML ŠABLONY (PLNÝ DESIGN)
 # ==========================================
 
 BASE_HTML = """
@@ -393,7 +394,6 @@ DASHBOARD_LAYOUT = """
 </script>
 """
 
-# NOVÁ ŠABLONA PRO SÍŇ SLÁVY (BMAC)
 HTML_SUPPORTERS = """
 <div style="max-width: 800px; margin: 0 auto; padding: 20px;">
     <div style="text-align: center; margin-bottom: 30px;">
@@ -413,17 +413,17 @@ HTML_SUPPORTERS = """
         {% for s in supporters %}
         <div style="background-color: var(--bg-panel); border-left: 5px solid var(--blue-main); padding: 25px; border-radius: 10px; box-shadow: 0 10px 20px rgba(0,0,0,0.3);">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
-                <h3 style="margin: 0; color: var(--text-main); font-size: 22px;">{{ s.name }}</h3>
-                <span style="background-color: rgba(16, 185, 129, 0.2); color: var(--success); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px;">{{ s.amount }}</span>
+                <h3 style="margin: 0; color: var(--text-main); font-size: 22px;">{{ s.get('name', 'Neznámý dárce') }}</h3>
+                <span style="background-color: rgba(16, 185, 129, 0.2); color: var(--success); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px;">{{ s.get('amount', '') }}</span>
             </div>
-            {% if s.message %}
+            {% if s.get('message') %}
             <p style="color: var(--text-muted); font-size: 16px; font-style: italic; margin: 0; line-height: 1.5;">
-                "{{ s.message }}"
+                "{{ s.get('message') }}"
             </p>
             {% else %}
             <p style="color: #64748b; font-size: 14px; font-style: italic; margin: 0;">Bez textového vzkazu.</p>
             {% endif %}
-            <div style="font-size: 11px; color: #475569; margin-top: 15px; text-align: right;">Datum podpory: {{ s.created_at }}</div>
+            <div style="font-size: 11px; color: #475569; margin-top: 15px; text-align: right;">Datum podpory: {{ s.get('created_at', '') }}</div>
         </div>
         {% else %}
         <div style="text-align: center; color: var(--text-muted); padding: 30px; background: var(--bg-panel); border-radius: 10px;">Zatím zde nikdo není. Buďte první! 🍕</div>
@@ -783,6 +783,67 @@ HTML_IDS = """
 </div>
 """
 
+HTML_DASHBOARD_MAIN = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
+    <div style="background: var(--bg-panel); padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #334155;">
+        Celkem uživatelů: <span style="color: var(--blue-main);">{{ users|length }}</span>
+    </div>
+</div>
+<div style="overflow-x: auto;">
+    <table>
+        <tr>
+            <th>App ID</th>
+            <th>Discord ID</th>
+            <th>Nick</th>
+            <th>Role</th>
+            <th>Zaregistrován</th>
+            <th>Status</th>
+            <th>Akce</th>
+        </tr>
+        {% for user in users %}
+        <tr style="opacity: {{ '0.5' if user.get('is_deleted') else '1' }};">
+            <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
+            <td style="font-size: 12px; color: var(--text-muted);">{{ user.get('discord_id', '') }}</td>
+            <td><strong>{{ user.get('nick', '') }}</strong></td>
+            <td>
+                {% set role_list = user.get('role').split(',') if user.get('role') else ['User'] %}
+                {% for r in role_list %}
+                    {% set r_clean = r.strip() %}
+                    {% if r_clean == 'SA' %}
+                        <span class="role-tag" style="color: white; background-color: #ef4444; border-color: #ef4444;">SERVER ADMIN</span>
+                    {% elif r_clean == 'DEV' %}
+                        <span class="role-tag" style="color: white; background-color: #10b981; border-color: #10b981;">DEVELOPER</span>
+                    {% elif r_clean == 'BT' %}
+                        <span class="role-tag" style="color: white; background-color: #3b82f6; border-color: #3b82f6;">BETA TESTER</span>
+                    {% elif r_clean == 'User' %}
+                        <span class="role-tag" style="color: white; background-color: #64748b; border-color: #64748b;">User</span>
+                    {% endif %}
+                {% endfor %}
+            </td>
+            <td style="color: var(--text-muted); font-size: 13px;">
+                {{ user.get('registered_at', 'Neznámé') if user.get('registered_at') else 'Neznámé' }}
+            </td>
+            <td>
+                {% if user.get('is_deleted') %}
+                    <span style="color: var(--danger); font-weight: bold;"><i class="fas fa-skull"></i> Smazán</span>
+                {% elif user.get('is_banned') %}
+                    <span style="color: var(--warning); font-weight: bold;"><i class="fas fa-ban"></i> BANNED</span>
+                {% else %}
+                    <span style="color: var(--success);"><i class="fas fa-check-circle"></i> Aktivní</span>
+                {% endif %}
+            </td>
+            <td>
+                <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', 'User') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-cog"></i> Profil</button>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
+        {% endfor %}
+    </table>
+</div>
+"""
+
 # ==========================================
 # GLOBÁLNÍ FUNKCE
 # ==========================================
@@ -798,7 +859,7 @@ async def async_send_log(title, description, color=0x38bdf8):
     for guild in bot.guilds:
         channel = discord.utils.get(guild.channels, name="🖥️・datacore-logs")
         if channel:
-            embed = discord.Embed(title=title, description=description, color=color, timestamp=datetime.now(prague_tz))
+            embed = discord.Embed(title=title, description=description, color=color, timestamp=get_prague_time())
             try: await channel.send(embed=embed)
             except: pass
             break
@@ -874,13 +935,12 @@ def supporters():
         support_data = []
     return render_public(HTML_SUPPORTERS, supporters=support_data)
 
-# >>> TADY JE TVŮJ NOVÝ TESTOVACÍ WEBHOOK (MŮŽEŠ NA NĚJ KLIKNOUT Z PROHLÍŽEČE) <<<
+# TADY JE TVŮJ NOVÝ TESTOVACÍ WEBHOOK - Nyní odolný vůči chybám (vrátí 200 OK i z prohlížeče)
 @app.route('/webhook/bmac', methods=['GET', 'POST'])
 def bmac_webhook():
     try:
-        # 1. Zpracování dat (Ať už přijdou z BMAC přes POST nebo přes tvůj odkaz v prohlížeči přes GET)
         if request.method == 'POST':
-            payload = request.json or {}
+            payload = request.get_json(silent=True) or {}
             data = payload.get('data', payload) if isinstance(payload, dict) else {}
         else:
             data = request.args
@@ -891,18 +951,16 @@ def bmac_webhook():
         currency = data.get('currency') or 'CZK'
         amount_str = f"{amount_val} {currency}"
         
-        # 2. Zápis do databáze (pokud je RLS vyplé, tohle projde)
         db = get_db()
         if db:
             db.table("supporters").insert({
-                "name": name,
-                "message": message,
-                "amount": amount_str,
-                "created_at": datetime.now(prague_tz).strftime("%d.%m.%Y %H:%M")
+                "name": str(name),
+                "message": str(message),
+                "amount": str(amount_str),
+                "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
             }).execute()
             send_log("🍕 Nový dárce!", f"Uživatel **{name}** právě poslal **{amount_str}**.\n\n*Vzkaz: {message}*", 0xF4CC17)
             
-        # 3. Odpověď
         if request.method == 'GET':
             return f"<h1>ÚSPĚCH! 🎉</h1><p>Testovací podpora od <b>{name}</b> byla zapsána do databáze a odeslána na Discord!</p><a href='/supporters'>Zpět na stránku podporovatelů</a>"
         return jsonify({"status": "success"}), 200
@@ -977,7 +1035,7 @@ def api_get_file(token):
         version_name = v_resp.data[0]['version_name']
         
         try:
-            db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": datetime.now(prague_tz).strftime("%d.%m.%Y %H:%M")}).execute()
+            db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
             send_log("📥 Stahování", f"Uživatel `{user.get('nick')}` zahájil stahování: **{version_name}**.", 0x38bdf8)
         except: pass
         
@@ -1002,7 +1060,7 @@ def api_get_file(token):
     except Exception as e: return f"Chyba odkazu: {e}"
 
 # ==========================================
-# API PRO SOFTWARE A DASHBOARD
+# API PRO SOFTWARE
 # ==========================================
 
 @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
@@ -1019,7 +1077,7 @@ def api_status():
 @app.route('/api/app_login', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_login():
     if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
-    data = request.json
+    data = request.get_json(silent=True) or {}
     if not data: return _cors_jsonify({"status": "error", "message": "Chybí data."})
     
     identifier = str(data.get("identifier", ""))
@@ -1065,7 +1123,7 @@ def api_app_login():
 @app.route('/api/app_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_check():
     if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
-    data = request.json
+    data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     req_hwid = str(data.get("hwid", ""))
     db = get_db()
@@ -1093,7 +1151,7 @@ def api_app_check():
 @app.route('/api/silent_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_silent_check():
     if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
-    data = request.json
+    data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     req_hwid = str(data.get("hwid", ""))
     db = get_db()
@@ -1115,12 +1173,12 @@ def api_silent_check():
 @app.route('/api/app_ping', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_ping():
     if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
-    data = request.json
+    data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     action = data.get("action", "ping")
     db = get_db()
     try:
-        now_str = datetime.now(prague_tz).strftime("%d.%m.%Y %H:%M:%S")
+        now_str = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
         user_resp = db.table("users").select("launch_count, total_time").eq("discord_id", discord_id).execute()
         if not user_resp.data: return _cors_jsonify({"status": "error"})
         
@@ -1232,7 +1290,7 @@ def get_profile_data(discord_id):
                 if is_on and la_str:
                     try:
                         last_dt = datetime.strptime(la_str, "%d.%m.%Y %H:%M:%S")
-                        if (datetime.now(prague_tz).replace(tzinfo=None) - last_dt).total_seconds() > 120:
+                        if (get_prague_time().replace(tzinfo=None) - last_dt).total_seconds() > 120:
                             is_on = False
                             db.table("users").update({"is_online": False}).eq("discord_id", discord_id).execute()
                     except: pass
@@ -1402,7 +1460,7 @@ def edit_user():
             elif action == 'unban':
                 db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute(); flash('BAN zrušen.', 'success')
             elif action == 'delete':
-                db.table("users").update({"is_deleted": True, "deleted_at": datetime.now(prague_tz).strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute(); flash('Účet smazán (Soft Delete).', 'danger')
+                db.table("users").update({"is_deleted": True, "deleted_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute(); flash('Účet smazán (Soft Delete).', 'danger')
             elif action == 'restore':
                 db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute(); flash('Účet obnoven!', 'success')
             elif action == 'hard_delete':
@@ -1464,7 +1522,7 @@ async def on_ready():
     try:
         for guild in bot.guilds:
             bot.invites_cache[guild.id] = await guild.invites()
-    except Exception as e: pass
+    except: pass
 
 @bot.event
 async def on_member_join(member):
@@ -1480,7 +1538,7 @@ async def on_member_join(member):
         bot.invites_cache[member.guild.id] = new_invites
     except: pass
     link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!" if used_invite and used_invite.code == "vmTagbC9mF" else ""
-    await async_send_log("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {datetime.now(prague_tz).strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
+    await async_send_log("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {get_prague_time().strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
 
 async def update_member_roles(member, role_string):
     if not member or not member.guild: return
@@ -1566,7 +1624,7 @@ class DynamicDownloadView(discord.ui.View):
                         hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
                         nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
                         r = pend['roles'] if pend else "User"
-                        db.table("users").insert({"app_id": nid, "discord_id": d_id, "nick": n, "role": r, "hwid": "", "is_banned": False, "is_deleted": False, "dashboard_access": False, "login_token": "", "registered_at": datetime.now(prague_tz).strftime("%d.%m.%Y %H:%M")}).execute()
+                        db.table("users").insert({"app_id": nid, "discord_id": d_id, "nick": n, "role": r, "hwid": "", "is_banned": False, "is_deleted": False, "dashboard_access": False, "login_token": "", "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
                         u_role = r
                         if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
                     if isinstance(i2.user, discord.Member): 
