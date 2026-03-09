@@ -16,6 +16,7 @@ print("=== START PROJEKTU OIS IDPK ===", flush=True)
 app = Flask(__name__)
 app.secret_key = "ois_idpk_super_tajny_klic" 
 
+# ZCELA BEZPEČNÝ VÝPOČET ČESKÉHO ČASU
 def get_prague_time():
     return datetime.utcnow() + timedelta(hours=1)
 
@@ -34,7 +35,7 @@ def handle_exception(e):
     return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
 
 # ==========================================
-# 1. HTML ŠABLONY (PLNÝ DESIGN BEZ EMOJI)
+# 1. HTML ŠABLONY (PLNÝ DESIGN)
 # ==========================================
 
 BASE_HTML = """
@@ -442,13 +443,30 @@ HTML_SUPPORTERS = """
         transform: translateY(-5px);
         box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4), inset 0 0 15px rgba(56, 189, 248, 0.1);
     }
+    
+    /* KLIDNÁ ELEGANTNÍ ANIMACE ZESPODU (JEN NA KRAJÍCH) */
+    @keyframes gentlePop { 
+        0% { transform: translateY(50px) scale(0.8); opacity: 0; } 
+        20% { opacity: 1; transform: translateY(-30px) scale(1.1); }
+        80% { opacity: 0.8; transform: translateY(-120px) scale(1); }
+        100% { transform: translateY(-150px) scale(0.9); opacity: 0; } 
+    }
+    .emoji-pop { 
+        position: fixed; 
+        bottom: 0; 
+        z-index: 9999; 
+        pointer-events: none; 
+        animation: gentlePop 3.5s ease-out forwards; 
+        will-change: transform, opacity;
+        filter: drop-shadow(0 2px 5px rgba(0,0,0,0.5));
+    }
 </style>
 
 <div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
     <div style="text-align: center; margin-bottom: 40px;">
         <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Děkuji všem za podporu!</h1>
         <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">
-            Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!
+            Zde vidíte úžasné lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!
         </p>
         
         <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue">
@@ -476,10 +494,39 @@ HTML_SUPPORTERS = """
             <div style="font-size: 11px; color: #64748b; margin-top: 15px; text-align: right; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">Datum podpory: {{ s.get('created_at', '') }}</div>
         </div>
         {% else %}
-        <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1);">Zatím zde nikdo není. Buďte první!</div>
+        <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1);">Zatím zde nikdo není. Buďte první! 🍕</div>
         {% endfor %}
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const emojis = ['🎉', '🍕', '💙', '✨', '💎'];
+        // Jemný efekt pouze na okrajích obrazovky
+        for(let i = 0; i < 25; i++) {
+            let el = document.createElement('div');
+            el.className = 'emoji-pop';
+            el.innerText = emojis[Math.floor(Math.random() * emojis.length)];
+            
+            // Rozdělení na levý okraj (2-15%) a pravý okraj (85-98%) šířky
+            let isLeft = Math.random() > 0.5;
+            let pos = isLeft ? (Math.random() * 13 + 2) : (Math.random() * 13 + 85);
+            el.style.left = pos + 'vw';
+            
+            // Původní menší velikost
+            el.style.fontSize = (Math.random() * 15 + 20) + 'px';
+            
+            // Klidná a pomalejší rychlost (2.5s až 4s)
+            el.style.animationDuration = (Math.random() * 1.5 + 2.5) + 's';
+            // Rozptyl, aby nevyletěly všechny úplně naráz
+            el.style.animationDelay = (Math.random() * 1.5) + 's';
+            
+            document.body.appendChild(el);
+            // Vyčištění z paměti prohlížeče po skončení animace
+            setTimeout(() => el.remove(), 6000);
+        }
+    });
+</script>
 """
 
 HTML_HOME = """
@@ -833,6 +880,67 @@ HTML_IDS = """
 </div>
 """
 
+HTML_DASHBOARD_MAIN = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
+    <div style="background: var(--bg-panel); padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #334155;">
+        Celkem uživatelů: <span style="color: var(--blue-main);">{{ users|length }}</span>
+    </div>
+</div>
+<div style="overflow-x: auto;">
+    <table>
+        <tr>
+            <th>App ID</th>
+            <th>Discord ID</th>
+            <th>Nick</th>
+            <th>Role</th>
+            <th>Zaregistrován</th>
+            <th>Status</th>
+            <th>Akce</th>
+        </tr>
+        {% for user in users %}
+        <tr style="opacity: {{ '0.5' if user.get('is_deleted') else '1' }};">
+            <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
+            <td style="font-size: 12px; color: var(--text-muted);">{{ user.get('discord_id', '') }}</td>
+            <td><strong>{{ user.get('nick', '') }}</strong></td>
+            <td>
+                {% set role_list = user.get('role').split(',') if user.get('role') else ['User'] %}
+                {% for r in role_list %}
+                    {% set r_clean = r.strip() %}
+                    {% if r_clean == 'SA' %}
+                        <span class="role-tag" style="color: white; background-color: #ef4444; border-color: #ef4444;">SERVER ADMIN</span>
+                    {% elif r_clean == 'DEV' %}
+                        <span class="role-tag" style="color: white; background-color: #10b981; border-color: #10b981;">DEVELOPER</span>
+                    {% elif r_clean == 'BT' %}
+                        <span class="role-tag" style="color: white; background-color: #3b82f6; border-color: #3b82f6;">BETA TESTER</span>
+                    {% elif r_clean == 'User' %}
+                        <span class="role-tag" style="color: white; background-color: #64748b; border-color: #64748b;">User</span>
+                    {% endif %}
+                {% endfor %}
+            </td>
+            <td style="color: var(--text-muted); font-size: 13px;">
+                {{ user.get('registered_at', 'Neznámé') if user.get('registered_at') else 'Neznámé' }}
+            </td>
+            <td>
+                {% if user.get('is_deleted') %}
+                    <span style="color: var(--danger); font-weight: bold;"><i class="fas fa-skull"></i> Smazán</span>
+                {% elif user.get('is_banned') %}
+                    <span style="color: var(--warning); font-weight: bold;"><i class="fas fa-ban"></i> BANNED</span>
+                {% else %}
+                    <span style="color: var(--success);"><i class="fas fa-check-circle"></i> Aktivní</span>
+                {% endif %}
+            </td>
+            <td>
+                <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', 'User') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-cog"></i> Profil</button>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
+        {% endfor %}
+    </table>
+</div>
+"""
+
 # ==========================================
 # GLOBÁLNÍ FUNKCE
 # ==========================================
@@ -963,18 +1071,7 @@ def bmac_webhook():
 
 @app.route('/download')
 def download_home():
-    html = """
-    <div style="text-align: center; padding: 60px 20px; max-width: 700px; margin: 50px auto; background-color: var(--bg-panel); border-radius: 15px; box-shadow: 0 15px 30px rgba(0,0,0,0.5); border-top: 5px solid #5865F2;">
-        <h2 style="color: var(--text-main); font-size: 2.2em; margin-top: 0;"><i class="fas fa-shield-alt" style="color: var(--blue-main);"></i> Oficiální distribuce softwaru</h2>
-        <p style="color: var(--text-muted); font-size: 1.1em; line-height: 1.6; margin-bottom: 20px;">Z důvodu zachování maximální bezpečnosti jsme se rozhodli přesunout veškerou distribuci našeho softwaru na naši zabezpečenou komunikační platformu.</p>
-        <div style="background-color: rgba(88, 101, 242, 0.1); border: 1px solid #5865F2; padding: 30px 20px; border-radius: 10px; margin: 30px 20px;">
-            <p style="color: var(--text-main); font-weight: bold; font-size: 1.2em; margin-top: 0;">Pro stažení softwaru se prosím připojte na náš Discord.</p>
-            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Kliknutím na logo níže budete přesměrováni přímo na náš server.</p>
-            <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'"><i class="fab fa-discord" style="font-size: 120px; color: #5865F2; filter: drop-shadow(0px 10px 15px rgba(88,101,242,0.4));"></i></a>
-        </div>
-    </div>
-    """
-    return render_public(html)
+    return render_public(HTML_HOME.replace('Získat Software', 'Stáhnout přes Discord')) # Pro jednoduchost přesměruje na to samé co home
 
 @app.route('/download/<token>')
 def secure_download(token):
@@ -1694,8 +1791,6 @@ class DynamicDownloadView(discord.ui.View):
 
         await interaction.response.send_message("**Podmínky užití:**\n1. Zákaz úprav a šíření.\n2. Zámek na Váš PC (HWID).\n\nSouhlasíte?", view=DynamicRulesView(), ephemeral=True)
 
-# ----------------- PŘÍKAZY BOTA -----------------
-
 @bot.command()
 @check_web_sa()
 async def setup_download(ctx):
@@ -1720,8 +1815,8 @@ async def auth(ctx):
 async def help(ctx):
     embed = discord.Embed(title="🤖 Nápověda - Projekt OIS IDPK", description="Seznam dostupných příkazů rozdělený podle oprávnění.", color=0x38bdf8)
     embed.add_field(name="🌍 Veřejné příkazy", value="`!auth` - Potvrzení přihlášení do aplikace.\n`!ping` - Odezva bota.\n`!help` - Tato nápověda.", inline=False)
-    embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]` - Profil.\n`!db [ID]` - 2FA do webu.\n`!ban`/`!unban [ID]` - BANY.\n`!delete [ID]` - Blokace.\n`!perdelete [ID]` - Úplné smazání.\n`!register [ID]` - Vytvoří účet cizímu.\n`!message #kanál [text]` - Zpráva přes bota.\n`!dm @uzivatel [text]` - Soukromá zpráva.", inline=False)
-    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download` - Generuje instalátor.\n`!sm @uživatel` - Přidá/odebere roli SM.", inline=False)
+    embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]` - Profil.\n`!db [ID]` - 2FA do webu.\n`!ban`/`!unban [ID]` - BANY.\n`!delete [ID]` - Blokace.\n`!perdelete [ID]` - Úplné smazání.\n`!register [ID]` - Vytvoří účet cizímu.", inline=False)
+    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download` - Generuje instalátor.\n`!sm @uživatel` - Přidá roli SM.", inline=False)
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -1733,10 +1828,7 @@ async def info(ctx, discord_id: str = None):
     u = get_db().table("users").select("*").eq("discord_id", discord_id).execute().data
     if not u: return await ctx.send(f"❌ Nenalezen.")
     embed = discord.Embed(title=f"Uživatel: {u[0].get('nick')}", color=0x38bdf8)
-    embed.add_field(name="App ID", value=f"#{u[0].get('app_id')}", inline=True)
-    embed.add_field(name="Discord ID", value=u[0].get('discord_id'), inline=True)
-    embed.add_field(name="Role", value=u[0].get('role'), inline=True)
-    embed.add_field(name="Banned", value="Ano" if u[0].get('is_banned') else "Ne", inline=True)
+    embed.add_field(name="ID", value=u[0].get('discord_id'), inline=True)
     await ctx.send(embed=embed)
 
 @bot.command()
