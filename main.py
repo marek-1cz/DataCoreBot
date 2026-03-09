@@ -35,7 +35,7 @@ def handle_exception(e):
     return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
 
 # ==========================================
-# 1. HTML ŠABLONY (PLNÝ DESIGN)
+# 1. HTML ŠABLONY
 # ==========================================
 
 BASE_HTML = """
@@ -185,8 +185,6 @@ BASE_HTML = """
 </head>
 <body>
     {% block layout %}{% endblock %}
-
-    <script data-name="BMC-Widget" data-cfasync="false" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js" data-id="marekk_czz" data-description="Support me on Buy me a coffee!" data-message="" data-color="#5F7FFF" data-position="Right" data-x_margin="18" data-y_margin="18"></script>
 </body>
 </html>
 """
@@ -234,6 +232,9 @@ DASHBOARD_LAYOUT = """
             <a href="/dashboard/pending_roles" class="sidebar-link" style="color: #10b981;"><i class="fas fa-ticket-alt"></i> Rezervace Rolí</a>
             <a href="/dashboard/ids" class="sidebar-link"><i class="fas fa-id-badge"></i> Správa ID</a>
             <a href="/dashboard/team" class="sidebar-link"><i class="fas fa-user-plus"></i> Správa Týmu</a>
+            
+            <a href="/dashboard/supporters" class="sidebar-link" style="color: #F4CC17;"><i class="fas fa-star"></i> Správa Podporovatelů</a>
+            
             <a href="/dashboard?filter=banned" class="sidebar-link" style="color: var(--warning);"><i class="fas fa-ban"></i> Seznam BANů</a>
             <a href="/dashboard?filter=deleted" class="sidebar-link" style="color: var(--danger);"><i class="fas fa-trash-alt"></i> Smazaní (Záloha)</a>
             <div style="padding: 15px 20px 5px 20px; font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: bold;">Hledat roli</div>
@@ -250,6 +251,13 @@ DASHBOARD_LAYOUT = """
     </div>
     
     <div class="dashboard-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
         {% block content %}{% endblock %}
     </div>
 </div>
@@ -397,6 +405,7 @@ DASHBOARD_LAYOUT = """
 </script>
 """
 
+# HLAVNÍ TABULKA DASHBOARDU
 HTML_DASHBOARD_MAIN = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
@@ -458,6 +467,57 @@ HTML_DASHBOARD_MAIN = """
 </div>
 """
 
+# ZDE JE TVŮJ NOVÝ MANAŽER PODPOROVATELŮ PRO DASHBOARD
+HTML_SUPPORTERS_MGMT = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">Správa Podporovatelů</h2>
+</div>
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid #F4CC17;">
+        <h3 style="color: #F4CC17; margin-top: 0;">➕ Přidat Podporovatele Ručně</h3>
+        <p style="color: var(--text-muted); font-size: 13px;">Pokud ti někdo poslal příspěvek mimo web (např. na účet), můžeš ho zde ručně přidat. Zobrazí se jak v aplikaci, tak na webu.</p>
+        <form action="/dashboard/add_supporter" method="POST">
+            <input type="text" name="name" placeholder="Jméno (např. Pepa z Depa)" required>
+            <input type="text" name="amount" placeholder="Částka (např. 5 CZK nebo 3 kávy)" required>
+            <textarea name="message" placeholder="Vzkaz od podporovatele..." rows="3"></textarea>
+            <button type="submit" class="btn" style="width: 100%; background-color: #F4CC17; color: black;"><i class="fas fa-heart"></i> Přidat podporovatele</button>
+        </form>
+    </div>
+    
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: #F4CC17; margin-top: 0;">💛 Seznam Podporovatelů</h3>
+        <div style="overflow-x: auto;">
+            <table>
+                <tr>
+                    <th>Jméno</th>
+                    <th>Částka</th>
+                    <th>Vzkaz</th>
+                    <th>Datum</th>
+                    <th>Akce</th>
+                </tr>
+                {% for s in supporters %}
+                <tr>
+                    <td><strong style="color: var(--blue-main);">{{ s.get('name', '') }}</strong></td>
+                    <td style="color: var(--success); font-weight: bold;">{{ s.get('amount', '') }}</td>
+                    <td style="font-style: italic; color: var(--text-muted); max-width: 250px; overflow: hidden; text-overflow: ellipsis;">{{ s.get('message', 'Bez vzkazu') }}</td>
+                    <td style="font-size: 12px; color: #64748b;">{{ s.get('created_at', '') }}</td>
+                    <td>
+                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline;">
+                            <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
+                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu smazat tohoto podporovatele?')"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Zatím žádní podporovatelé.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+"""
+
+# NOVÁ ŠABLONA PRO SÍŇ SLÁVY VEŘEJNĚ
 HTML_SUPPORTERS = """
 <style>
     .glowing-btn-blue {
@@ -877,7 +937,7 @@ HTML_IDS = """
 """
 
 # ==========================================
-# GLOBÁLNÍ FUNKCE A DATABÁZE
+# GLOBÁLNÍ FUNKCE
 # ==========================================
 
 def get_db():
@@ -995,7 +1055,7 @@ def bmac_webhook():
             send_log("🍕 Nový dárce!", f"Uživatel **{name}** právě poslal **{amount_str}**.\n\n*Vzkaz: {message}*", 0xF4CC17)
             
         if request.method == 'GET':
-            return f"<h1>ÚSPĚCH! 🎉</h1><p>Testovací podpora od <b>{name}</b> byla zapsána do databáze a odeslána na Discord!</p><a href='/supporters'>Zpět na stránku podporovatelů</a>"
+            return f"<h1>ÚSPĚCH!</h1><p>Testovací podpora od <b>{name}</b> byla zapsána do databáze a odeslána na Discord!</p><a href='/supporters'>Zpět na stránku podporovatelů</a>"
         return jsonify({"status": "success"}), 200
         
     except Exception as e:
@@ -1093,8 +1153,21 @@ def api_get_file(token):
     except Exception as e: return f"Chyba odkazu: {e}"
 
 # ==========================================
-# API PRO SOFTWARE A LOGOVÁNÍ
+# API PRO SOFTWARE A EXTERNÍ APLIKACE
 # ==========================================
+
+# NOVÉ: API pro tvoji PC Appku (Aby sis mohl zobrazit podporovatele)
+@app.route('/api/supporters', methods=['GET', 'OPTIONS'], strict_slashes=False)
+def api_get_supporters():
+    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    try:
+        db = get_db()
+        if db:
+            supporters_data = db.table("supporters").select("*").order("id", desc=True).execute().data or []
+            return _cors_jsonify({"status": "success", "supporters": supporters_data})
+    except Exception as e:
+        return _cors_jsonify({"status": "error", "message": str(e)})
+    return _cors_jsonify({"status": "error", "message": "Database not available"})
 
 @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_status():
@@ -1172,8 +1245,8 @@ def api_app_check():
                 db.table("users").update({"hwid": req_hwid, "login_token": ""}).eq("discord_id", discord_id).execute()
             else:
                 db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-            # VRÁCENO PRO APP: "status": "success", "display_name": user.nick
-            return _cors_jsonify({"status": "success", "display_name": user.get("nick")})
+            # OPRAVA JMENA PRO PC APLIKACI (Posílám všechny klíče, aby to přestalo být "undefined")
+            return _cors_jsonify({"status": "success", "display_name": user.get("nick", "Neznámý"), "nick": user.get("nick", "Neznámý")})
             
         elif user.get("login_token") == "rejected":
             db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
@@ -1201,8 +1274,8 @@ def api_silent_check():
         db_hwid = user.get("hwid")
         if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "" and str(db_hwid) != req_hwid:
             return _cors_jsonify({"status": "error", "message": "ZÁMEK HWID: Váš počítač nesouhlasí."})
-        # VRÁCENO PRO APP: "status": "success", "display_name": user.nick
-        return _cors_jsonify({"status": "success", "display_name": user.get("nick")})
+        # OPRAVA JMENA PRO PC APLIKACI
+        return _cors_jsonify({"status": "success", "display_name": user.get("nick", "Neznámý"), "nick": user.get("nick", "Neznámý")})
     except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/app_ping', methods=['POST', 'OPTIONS'], strict_slashes=False)
@@ -1491,6 +1564,40 @@ def delete_team():
         try: get_db().table("team").delete().eq("discord_nick", request.form.get("discord_nick")).execute()
         except: pass
     return redirect(url_for('dashboard_team_page'))
+
+# --- NOVÉ ROUTY PRO DASHBOARD SPRÁVU PODPOROVATELŮ ---
+@app.route('/dashboard/supporters', methods=['GET'])
+def dashboard_supporters_page(): 
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    try: data = get_db().table("supporters").select("*").order("id", desc=True).execute().data or [] if get_db() else []
+    except: data = []
+    return render_dashboard(HTML_SUPPORTERS_MGMT, supporters=data, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/add_supporter', methods=['POST'])
+def add_supporter():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    if db:
+        try:
+            db.table("supporters").insert({
+                "name": request.form.get("name"),
+                "amount": request.form.get("amount"),
+                "message": request.form.get("message"),
+                "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
+            }).execute()
+            flash('Podporovatel byl úspěšně přidán.', 'success')
+        except Exception as e: flash(f"Chyba: {e}", "error")
+    return redirect(url_for('dashboard_supporters_page'))
+
+@app.route('/dashboard/delete_supporter', methods=['POST'])
+def delete_supporter():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db(); s_id = request.form.get("supporter_id")
+    if db and s_id: 
+        try: db.table("supporters").delete().eq("id", s_id).execute()
+        except: pass
+    return redirect(url_for('dashboard_supporters_page'))
+
 
 @app.route('/dashboard/edit_user', methods=['POST'])
 def edit_user():
