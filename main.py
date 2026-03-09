@@ -201,7 +201,7 @@ PUBLIC_LAYOUT = """
         <a href="/">Domů</a>
         <a href="/download">Download</a>
         <a href="/team">Náš Tým</a>
-        <a href="/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-pizza-slice"></i> Podporovatelé</a>
+        <a href="/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-heart"></i> Podporovatelé</a>
         <a href="/dashboard" class="admin-link">Dashboard 🔒</a>
     </div>
 </nav>
@@ -404,68 +404,6 @@ DASHBOARD_LAYOUT = """
 </script>
 """
 
-# ZDE JE TVŮJ CHYBĚJÍCÍ KÓD PRO HLAVNÍ TABULKU DASHBOARDU!
-HTML_DASHBOARD_MAIN = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
-    <div style="background: var(--bg-panel); padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #334155;">
-        Celkem uživatelů: <span style="color: var(--blue-main);">{{ users|length }}</span>
-    </div>
-</div>
-<div style="overflow-x: auto;">
-    <table>
-        <tr>
-            <th>App ID</th>
-            <th>Discord ID</th>
-            <th>Nick</th>
-            <th>Role</th>
-            <th>Zaregistrován</th>
-            <th>Status</th>
-            <th>Akce</th>
-        </tr>
-        {% for user in users %}
-        <tr style="opacity: {{ '0.5' if user.get('is_deleted') else '1' }};">
-            <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
-            <td style="font-size: 12px; color: var(--text-muted);">{{ user.get('discord_id', '') }}</td>
-            <td><strong>{{ user.get('nick', '') }}</strong></td>
-            <td>
-                {% set role_list = user.get('role').split(',') if user.get('role') else ['User'] %}
-                {% for r in role_list %}
-                    {% set r_clean = r.strip() %}
-                    {% if r_clean == 'SA' %}
-                        <span class="role-tag" style="color: white; background-color: #ef4444; border-color: #ef4444;">SERVER ADMIN</span>
-                    {% elif r_clean == 'DEV' %}
-                        <span class="role-tag" style="color: white; background-color: #10b981; border-color: #10b981;">DEVELOPER</span>
-                    {% elif r_clean == 'BT' %}
-                        <span class="role-tag" style="color: white; background-color: #3b82f6; border-color: #3b82f6;">BETA TESTER</span>
-                    {% elif r_clean == 'User' %}
-                        <span class="role-tag" style="color: white; background-color: #64748b; border-color: #64748b;">User</span>
-                    {% endif %}
-                {% endfor %}
-            </td>
-            <td style="color: var(--text-muted); font-size: 13px;">
-                {{ user.get('registered_at', 'Neznámé') if user.get('registered_at') else 'Neznámé' }}
-            </td>
-            <td>
-                {% if user.get('is_deleted') %}
-                    <span style="color: var(--danger); font-weight: bold;"><i class="fas fa-skull"></i> Smazán</span>
-                {% elif user.get('is_banned') %}
-                    <span style="color: var(--warning); font-weight: bold;"><i class="fas fa-ban"></i> BANNED</span>
-                {% else %}
-                    <span style="color: var(--success);"><i class="fas fa-check-circle"></i> Aktivní</span>
-                {% endif %}
-            </td>
-            <td>
-                <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', 'User') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-cog"></i> Profil</button>
-            </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
-        {% endfor %}
-    </table>
-</div>
-"""
-
 # NOVÁ ŠABLONA PRO SÍŇ SLÁVY (ČISTÝ DESIGN BEZ EMOJIS)
 HTML_SUPPORTERS = """
 <style>
@@ -515,7 +453,7 @@ HTML_SUPPORTERS = """
         </p>
         
         <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue">
-            <i class="fas fa-pizza-slice"></i> Podpořit Projekt OIS IDPK
+            <i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK
         </a>
     </div>
     
@@ -649,9 +587,9 @@ HTML_DOWNLOADS_MGMT = """
             <input type="url" name="file_url" placeholder="Přímý odkaz na stažení souboru" required>
             <label style="color: var(--text-muted); font-size: 13px;">Pro jakou minimální roli je tato verze určena?</label>
             <select name="target_role" required>
-                <option value="User">User (Všichni - Normální verze)</option>
-                <option value="BT">BETA TESTER (Uvidí BT, DEV, SA - Testovací verze)</option>
-                <option value="DEV_SA">DEV / SERVER ADMIN (Uvidí pouze vývojáři a admini)</option>
+                <option value="User">User (Všichni)</option>
+                <option value="BT">BETA TESTER</option>
+                <option value="DEV_SA">DEV / SERVER ADMIN</option>
             </select>
             <button type="submit" class="btn" style="width: 100%;">Přidat verzi do menu</button>
         </form>
@@ -893,6 +831,68 @@ HTML_IDS = """
 </div>
 """
 
+# ZDE JE ZPĚT TABULKA DASHBOARDU
+HTML_DASHBOARD_MAIN = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
+    <div style="background: var(--bg-panel); padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #334155;">
+        Celkem uživatelů: <span style="color: var(--blue-main);">{{ users|length }}</span>
+    </div>
+</div>
+<div style="overflow-x: auto;">
+    <table>
+        <tr>
+            <th>App ID</th>
+            <th>Discord ID</th>
+            <th>Nick</th>
+            <th>Role</th>
+            <th>Zaregistrován</th>
+            <th>Status</th>
+            <th>Akce</th>
+        </tr>
+        {% for user in users %}
+        <tr style="opacity: {{ '0.5' if user.get('is_deleted') else '1' }};">
+            <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
+            <td style="font-size: 12px; color: var(--text-muted);">{{ user.get('discord_id', '') }}</td>
+            <td><strong>{{ user.get('nick', '') }}</strong></td>
+            <td>
+                {% set role_list = user.get('role').split(',') if user.get('role') else ['User'] %}
+                {% for r in role_list %}
+                    {% set r_clean = r.strip() %}
+                    {% if r_clean == 'SA' %}
+                        <span class="role-tag" style="color: white; background-color: #ef4444; border-color: #ef4444;">SERVER ADMIN</span>
+                    {% elif r_clean == 'DEV' %}
+                        <span class="role-tag" style="color: white; background-color: #10b981; border-color: #10b981;">DEVELOPER</span>
+                    {% elif r_clean == 'BT' %}
+                        <span class="role-tag" style="color: white; background-color: #3b82f6; border-color: #3b82f6;">BETA TESTER</span>
+                    {% elif r_clean == 'User' %}
+                        <span class="role-tag" style="color: white; background-color: #64748b; border-color: #64748b;">User</span>
+                    {% endif %}
+                {% endfor %}
+            </td>
+            <td style="color: var(--text-muted); font-size: 13px;">
+                {{ user.get('registered_at', 'Neznámé') if user.get('registered_at') else 'Neznámé' }}
+            </td>
+            <td>
+                {% if user.get('is_deleted') %}
+                    <span style="color: var(--danger); font-weight: bold;"><i class="fas fa-skull"></i> Smazán</span>
+                {% elif user.get('is_banned') %}
+                    <span style="color: var(--warning); font-weight: bold;"><i class="fas fa-ban"></i> BANNED</span>
+                {% else %}
+                    <span style="color: var(--success);"><i class="fas fa-check-circle"></i> Aktivní</span>
+                {% endif %}
+            </td>
+            <td>
+                <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', 'User') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-cog"></i> Profil</button>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
+        {% endfor %}
+    </table>
+</div>
+"""
+
 # ==========================================
 # GLOBÁLNÍ FUNKCE
 # ==========================================
@@ -1009,10 +1009,10 @@ def bmac_webhook():
                 "amount": str(amount_str),
                 "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
             }).execute()
-            send_log("🍕 Nový dárce!", f"Uživatel **{name}** právě poslal **{amount_str}**.\n\n*Vzkaz: {message}*", 0xF4CC17)
+            send_log("☕ Nový dárce!", f"Uživatel **{name}** právě poslal **{amount_str}**.\n\n*Vzkaz: {message}*", 0xF4CC17)
             
         if request.method == 'GET':
-            return f"<h1>ÚSPĚCH! 🎉</h1><p>Testovací podpora od <b>{name}</b> byla zapsána do databáze a odeslána na Discord!</p><a href='/supporters'>Zpět na stránku podporovatelů</a>"
+            return f"<h1>ÚSPĚCH!</h1><p>Testovací podpora od <b>{name}</b> byla zapsána do databáze a odeslána na Discord!</p><a href='/supporters'>Zpět na stránku podporovatelů</a>"
         return jsonify({"status": "success"}), 200
         
     except Exception as e:
@@ -1023,18 +1023,7 @@ def bmac_webhook():
 
 @app.route('/download')
 def download_home():
-    html = """
-    <div style="text-align: center; padding: 60px 20px; max-width: 700px; margin: 50px auto; background-color: var(--bg-panel); border-radius: 15px; box-shadow: 0 15px 30px rgba(0,0,0,0.5); border-top: 5px solid #5865F2;">
-        <h2 style="color: var(--text-main); font-size: 2.2em; margin-top: 0;"><i class="fas fa-shield-alt" style="color: var(--blue-main);"></i> Oficiální distribuce softwaru</h2>
-        <p style="color: var(--text-muted); font-size: 1.1em; line-height: 1.6; margin-bottom: 20px;">Z důvodu zachování maximální bezpečnosti jsme se rozhodli přesunout veškerou distribuci našeho softwaru na naši zabezpečenou komunikační platformu.</p>
-        <div style="background-color: rgba(88, 101, 242, 0.1); border: 1px solid #5865F2; padding: 30px 20px; border-radius: 10px; margin: 30px 20px;">
-            <p style="color: var(--text-main); font-weight: bold; font-size: 1.2em; margin-top: 0;">Pro stažení softwaru se prosím připojte na náš Discord.</p>
-            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Kliknutím na logo níže budete přesměrováni přímo na náš server.</p>
-            <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'"><i class="fab fa-discord" style="font-size: 120px; color: #5865F2; filter: drop-shadow(0px 10px 15px rgba(88,101,242,0.4));"></i></a>
-        </div>
-    </div>
-    """
-    return render_public(html)
+    return render_public(HTML_HOME.replace('Získat Software', 'Stáhnout přes Discord')) 
 
 @app.route('/download/<token>')
 def secure_download(token):
@@ -1183,6 +1172,7 @@ def api_app_check():
         if not user_resp.data: return _cors_jsonify({"status": "error"})
         user = user_resp.data[0]
         
+        # OPRAVENO: Vrácen "approved" a "nick", aby fungovalo přihlášení do aplikace
         if user.get("login_token") == "approved":
             db_hwid = user.get("hwid")
             if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
@@ -1217,7 +1207,8 @@ def api_silent_check():
         db_hwid = user.get("hwid")
         if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "" and str(db_hwid) != req_hwid:
             return _cors_jsonify({"status": "error", "message": "ZÁMEK HWID: Váš počítač nesouhlasí."})
-        return _cors_jsonify({"status": "success"})
+        # OPRAVENO: Vrácen "approved" a "nick", aby fungoval Auto-Login v aplikaci
+        return _cors_jsonify({"status": "approved", "nick": user.get("nick")})
     except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/app_ping', methods=['POST', 'OPTIONS'], strict_slashes=False)
@@ -1524,15 +1515,15 @@ def edit_user():
                         u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
                         if u: await u.send("🚫 **Upozornění:** Administrátor ti udělil BAN na Projekt OIS IDPK. Přístup do aplikace byl zablokován.")
                     except: pass
-                asyncio.run_coroutine_threadsafe(notify(), bot.loop)
+                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(notify(), bot.loop)
             elif action == 'unban':
                 db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute(); flash('BAN zrušen.', 'success')
                 async def notify():
                     try: 
                         u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
-                        if u: await u.send("✅ **Upozornění:** Tvůj BAN na Projekt OIS IDPK byl zrušen. Opět máš přístup.")
+                        if u: await u.send("✅ **Upozornění:** Tvůj BAN na Projekt OIS IDPK byl zrušen. Opět máš přístup do aplikace.")
                     except: pass
-                asyncio.run_coroutine_threadsafe(notify(), bot.loop)
+                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(notify(), bot.loop)
             elif action == 'delete':
                 db.table("users").update({"is_deleted": True, "deleted_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute(); flash('Účet smazán (Soft Delete).', 'danger')
                 async def notify():
@@ -1540,7 +1531,7 @@ def edit_user():
                         u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
                         if u: await u.send("⚠️ **Upozornění:** Tvůj účet na Projektu OIS IDPK byl zablokován administrátorem (Smazán).")
                     except: pass
-                asyncio.run_coroutine_threadsafe(notify(), bot.loop)
+                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(notify(), bot.loop)
             elif action == 'restore':
                 db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute(); flash('Účet obnoven!', 'success')
             elif action == 'hard_delete':
@@ -1583,13 +1574,17 @@ class AppAuthView(discord.ui.View):
     async def ok(self, interaction, button):
         if str(interaction.user.id) != str(self.discord_id): return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
         get_db().table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
-        await interaction.response.edit_message(content="✅ **Ověřeno! Můžete se vrátit do aplikace.**", view=None)
+        await interaction.response.edit_message(content="✅ **Ověřeno! Můžete se vrátit do aplikace.**", embed=None, view=None)
         send_log("🖥️ Přihlášení do Aplikace", f"Uživatel s ID `{self.discord_id}` se úspěšně ověřil a vstoupil do softwaru.", 0x10b981)
         if not self.is_dm: await asyncio.sleep(2); await interaction.message.delete()
 
 intents = discord.Intents.default()
 intents.members = True; intents.message_content = True; intents.presences = True
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+
+# Ochrana před spuštěním bota 2x
+if not hasattr(bot, 'is_ready_fired'):
+    bot.is_ready_fired = False
 bot.invites_cache = {}
 
 # --- PIXELDRAIN ANTI-DELETE OCHRANA ---
@@ -1625,6 +1620,9 @@ async def pixeldrain_keepalive():
 
 @bot.event
 async def on_ready():
+    if bot.is_ready_fired: return
+    bot.is_ready_fired = True
+    
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
     try:
         bot.add_view(DynamicDownloadView())
@@ -1940,5 +1938,6 @@ async def dm(ctx, member: discord.Member, *, text: str):
 def run_web(): app.run(host='0.0.0.0', port=8080, use_reloader=False)
 
 if __name__ == "__main__":
+    os.environ["WERKZEUG_RUN_MAIN"] = "true"
     Thread(target=run_web).start()
     bot.run(os.environ.get("DISCORD_TOKEN"))
