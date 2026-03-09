@@ -35,7 +35,7 @@ def handle_exception(e):
     return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
 
 # ==========================================
-# 1. HTML ŠABLONY (PLNÝ DESIGN BEZ EMOJI)
+# 1. HTML ŠABLONY (PLNÝ DESIGN)
 # ==========================================
 
 BASE_HTML = """
@@ -201,7 +201,7 @@ PUBLIC_LAYOUT = """
         <a href="/">Domů</a>
         <a href="/download">Download</a>
         <a href="/team">Náš Tým</a>
-        <a href="/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-pizza-slice"></i> Podporovatelé</a>
+        <a href="/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-heart"></i> Podporovatelé</a>
         <a href="/dashboard" class="admin-link">Dashboard 🔒</a>
     </div>
 </nav>
@@ -250,13 +250,6 @@ DASHBOARD_LAYOUT = """
     </div>
     
     <div class="dashboard-content">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
         {% block content %}{% endblock %}
     </div>
 </div>
@@ -404,7 +397,67 @@ DASHBOARD_LAYOUT = """
 </script>
 """
 
-# NOVÁ ŠABLONA PRO SÍŇ SLÁVY (ČISTÝ DESIGN BEZ EMOJIS)
+HTML_DASHBOARD_MAIN = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
+    <div style="background: var(--bg-panel); padding: 10px 20px; border-radius: 8px; font-weight: bold; border: 1px solid #334155;">
+        Celkem uživatelů: <span style="color: var(--blue-main);">{{ users|length }}</span>
+    </div>
+</div>
+<div style="overflow-x: auto;">
+    <table>
+        <tr>
+            <th>App ID</th>
+            <th>Discord ID</th>
+            <th>Nick</th>
+            <th>Role</th>
+            <th>Zaregistrován</th>
+            <th>Status</th>
+            <th>Akce</th>
+        </tr>
+        {% for user in users %}
+        <tr style="opacity: {{ '0.5' if user.get('is_deleted') else '1' }};">
+            <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
+            <td style="font-size: 12px; color: var(--text-muted);">{{ user.get('discord_id', '') }}</td>
+            <td><strong>{{ user.get('nick', '') }}</strong></td>
+            <td>
+                {% set role_list = user.get('role').split(',') if user.get('role') else ['User'] %}
+                {% for r in role_list %}
+                    {% set r_clean = r.strip() %}
+                    {% if r_clean == 'SA' %}
+                        <span class="role-tag" style="color: white; background-color: #ef4444; border-color: #ef4444;">SERVER ADMIN</span>
+                    {% elif r_clean == 'DEV' %}
+                        <span class="role-tag" style="color: white; background-color: #10b981; border-color: #10b981;">DEVELOPER</span>
+                    {% elif r_clean == 'BT' %}
+                        <span class="role-tag" style="color: white; background-color: #3b82f6; border-color: #3b82f6;">BETA TESTER</span>
+                    {% elif r_clean == 'User' %}
+                        <span class="role-tag" style="color: white; background-color: #64748b; border-color: #64748b;">User</span>
+                    {% endif %}
+                {% endfor %}
+            </td>
+            <td style="color: var(--text-muted); font-size: 13px;">
+                {{ user.get('registered_at', 'Neznámé') if user.get('registered_at') else 'Neznámé' }}
+            </td>
+            <td>
+                {% if user.get('is_deleted') %}
+                    <span style="color: var(--danger); font-weight: bold;"><i class="fas fa-skull"></i> Smazán</span>
+                {% elif user.get('is_banned') %}
+                    <span style="color: var(--warning); font-weight: bold;"><i class="fas fa-ban"></i> BANNED</span>
+                {% else %}
+                    <span style="color: var(--success);"><i class="fas fa-check-circle"></i> Aktivní</span>
+                {% endif %}
+            </td>
+            <td>
+                <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', 'User') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-cog"></i> Profil</button>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
+        {% endfor %}
+    </table>
+</div>
+"""
+
 HTML_SUPPORTERS = """
 <style>
     .glowing-btn-blue {
@@ -496,12 +549,10 @@ HTML_HOME = """
 HTML_LOGIN = """
 <div style="max-width: 400px; margin: 50px auto; background-color: var(--bg-panel); padding: 30px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border-top: 4px solid var(--blue-main);">
     <h2 style="text-align: center; color: var(--blue-main); margin-top: 0;"><i class="fas fa-lock"></i> Dashboard 2FA</h2>
-    
     <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--danger); padding: 12px; margin-bottom: 20px; border-radius: 0 5px 5px 0;">
         <p style="color: var(--danger); margin: 0; font-size: 13px; font-weight: 800; text-transform: uppercase;"><i class="fas fa-shield-alt"></i> Zabezpečená zóna</p>
         <p style="color: var(--text-muted); margin: 5px 0 0 0; font-size: 12px; line-height: 1.4;">Tato databáze je přísně vyhrazena <b>pouze pro administrátory a pověřené správce</b> projektu. Běžní uživatelé sem nemají přístup. Každý pokus o neoprávněné přihlášení je monitorován a logován.</p>
     </div>
-
     <p style="color: var(--text-muted); text-align: center; font-size: 13px;">Pro přístup do systému zadejte své <b>Discord ID</b>.</p>
     <form method="POST" action="/login_request">
         <label style="font-weight: bold; font-size: 12px; color: var(--text-muted);">VAŠE DISCORD ID</label>
@@ -545,7 +596,6 @@ HTML_APP_SETTINGS = """
             <button type="submit" class="btn {{ 'btn-danger' if soft_enabled else 'btn-success' }}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {{ 'VYPNOUT SOFTWARE GLOBÁLNĚ' if soft_enabled else 'ZAPNOUT SOFTWARE' }}</button>
         </form>
     </div>
-
     <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {{ 'var(--success)' if dl_enabled else 'var(--danger)' }}; text-align: center;">
         <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-cloud-download-alt"></i> Status Stahování</h3>
         <div style="font-size: 50px; margin: 15px 0; color: {{ 'var(--success)' if dl_enabled else 'var(--danger)' }}; text-shadow: 0 0 15px {{ 'rgba(16, 185, 129, 0.5)' if dl_enabled else 'rgba(239, 68, 68, 0.5)' }};">
@@ -587,9 +637,9 @@ HTML_DOWNLOADS_MGMT = """
             <input type="url" name="file_url" placeholder="Přímý odkaz na stažení souboru" required>
             <label style="color: var(--text-muted); font-size: 13px;">Pro jakou minimální roli je tato verze určena?</label>
             <select name="target_role" required>
-                <option value="User">User (Všichni - Normální verze)</option>
-                <option value="BT">BETA TESTER (Uvidí BT, DEV, SA - Testovací verze)</option>
-                <option value="DEV_SA">DEV / SERVER ADMIN (Uvidí pouze vývojáři a admini)</option>
+                <option value="User">User (Všichni)</option>
+                <option value="BT">BETA TESTER</option>
+                <option value="DEV_SA">DEV / SERVER ADMIN</option>
             </select>
             <button type="submit" class="btn" style="width: 100%;">Přidat verzi do menu</button>
         </form>
@@ -599,19 +649,14 @@ HTML_DOWNLOADS_MGMT = """
     <h3 style="color: var(--blue-main); margin-top: 0;">📦 Dostupné soubory</h3>
     <div style="overflow-x: auto;">
         <table>
-            <tr>
-                <th>Název v Menu</th>
-                <th>Cílová Skupina</th>
-                <th>Odkaz na soubor</th>
-                <th>Akce</th>
-            </tr>
+            <tr><th>Název v Menu</th><th>Cílová Skupina</th><th>Odkaz na soubor</th><th>Akce</th></tr>
             {% for v in versions %}
             <tr>
                 <td><strong>{{ v.get('version_name', '') }}</strong></td>
                 <td>
-                    {% if v.get('target_role') == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User (Všichni)</span>{% endif %}
-                    {% if v.get('target_role') == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BETA TESTER+</span>{% endif %}
-                    {% if v.get('target_role') == 'DEV_SA' %}<span class="role-tag" style="background-color: #ef4444; color: white;">DEV / SA</span>{% endif %}
+                    {% if v.get('target_role') == 'User' %}<span class="role-tag" style="background-color: #64748b;">User</span>{% endif %}
+                    {% if v.get('target_role') == 'BT' %}<span class="role-tag" style="background-color: #3b82f6;">BETA TESTER+</span>{% endif %}
+                    {% if v.get('target_role') == 'DEV_SA' %}<span class="role-tag" style="background-color: #ef4444;">DEV / SA</span>{% endif %}
                 </td>
                 <td style="font-size: 12px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                     <a href="{{ v.get('file_url', '') }}" target="_blank" style="color: var(--blue-main);">{{ v.get('file_url', '') }}</a>
@@ -832,7 +877,7 @@ HTML_IDS = """
 """
 
 # ==========================================
-# GLOBÁLNÍ FUNKCE
+# GLOBÁLNÍ FUNKCE A DATABÁZE
 # ==========================================
 
 def get_db():
@@ -961,7 +1006,18 @@ def bmac_webhook():
 
 @app.route('/download')
 def download_home():
-    return render_public(HTML_HOME.replace('Získat Software', 'Stáhnout přes Discord')) 
+    html = """
+    <div style="text-align: center; padding: 60px 20px; max-width: 700px; margin: 50px auto; background-color: var(--bg-panel); border-radius: 15px; box-shadow: 0 15px 30px rgba(0,0,0,0.5); border-top: 5px solid #5865F2;">
+        <h2 style="color: var(--text-main); font-size: 2.2em; margin-top: 0;"><i class="fas fa-shield-alt" style="color: var(--blue-main);"></i> Oficiální distribuce softwaru</h2>
+        <p style="color: var(--text-muted); font-size: 1.1em; line-height: 1.6; margin-bottom: 20px;">Z důvodu zachování maximální bezpečnosti jsme se rozhodli přesunout veškerou distribuci našeho softwaru na naši zabezpečenou komunikační platformu.</p>
+        <div style="background-color: rgba(88, 101, 242, 0.1); border: 1px solid #5865F2; padding: 30px 20px; border-radius: 10px; margin: 30px 20px;">
+            <p style="color: var(--text-main); font-weight: bold; font-size: 1.2em; margin-top: 0;">Pro stažení softwaru se prosím připojte na náš Discord.</p>
+            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Kliknutím na logo níže budete přesměrováni přímo na náš server.</p>
+            <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'"><i class="fab fa-discord" style="font-size: 120px; color: #5865F2; filter: drop-shadow(0px 10px 15px rgba(88,101,242,0.4));"></i></a>
+        </div>
+    </div>
+    """
+    return render_public(html)
 
 @app.route('/download/<token>')
 def secure_download(token):
@@ -1037,7 +1093,7 @@ def api_get_file(token):
     except Exception as e: return f"Chyba odkazu: {e}"
 
 # ==========================================
-# API PRO SOFTWARE
+# API PRO SOFTWARE A LOGOVÁNÍ
 # ==========================================
 
 @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
@@ -1110,20 +1166,20 @@ def api_app_check():
         if not user_resp.data: return _cors_jsonify({"status": "error"})
         user = user_resp.data[0]
         
-        # ODKAZ PRO JS: "approved" ZPĚT! (Tohle blokovalo software)
         if user.get("login_token") == "approved":
             db_hwid = user.get("hwid")
             if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
                 db.table("users").update({"hwid": req_hwid, "login_token": ""}).eq("discord_id", discord_id).execute()
             else:
                 db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-            return _cors_jsonify({"status": "approved", "nick": user.get("nick")})
+            # VRÁCENO PRO APP: "status": "success", "display_name": user.nick
+            return _cors_jsonify({"status": "success", "display_name": user.get("nick")})
             
         elif user.get("login_token") == "rejected":
             db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-            return _cors_jsonify({"status": "rejected", "message": "Přístup zamítnut uživatelem."})
+            return _cors_jsonify({"status": "error", "message": "Přístup zamítnut uživatelem."})
             
-        return _cors_jsonify({"status": "waiting"})
+        return _cors_jsonify({"status": "pending"})
     except: return _cors_jsonify({"status": "error"})
 
 @app.route('/api/silent_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
@@ -1145,8 +1201,8 @@ def api_silent_check():
         db_hwid = user.get("hwid")
         if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "" and str(db_hwid) != req_hwid:
             return _cors_jsonify({"status": "error", "message": "ZÁMEK HWID: Váš počítač nesouhlasí."})
-        # OPRAVENO: Vrácen "approved" a "nick", aby fungoval Auto-Login v aplikaci
-        return _cors_jsonify({"status": "approved", "nick": user.get("nick")})
+        # VRÁCENO PRO APP: "status": "success", "display_name": user.nick
+        return _cors_jsonify({"status": "success", "display_name": user.get("nick")})
     except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/app_ping', methods=['POST', 'OPTIONS'], strict_slashes=False)
@@ -1730,7 +1786,7 @@ async def help(ctx):
     embed = discord.Embed(title="🤖 Nápověda - Projekt OIS IDPK", description="Seznam dostupných příkazů rozdělený podle oprávnění.", color=0x38bdf8)
     embed.add_field(name="🌍 Veřejné příkazy", value="`!auth` (nebo `!overit`) - Potvrzení přihlášení do aplikace.\n`!ping` - Odezva bota.\n`!help` - Tato nápověda.", inline=False)
     embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]` - Profil.\n`!db [ID]` - 2FA do webu.\n`!ban` / `!unban [ID]` - BANY.\n`!delete [ID]` - Blokace.\n`!perdelete [ID]` - Úplné smazání.\n`!register [ID]` - Vytvoří účet cizímu.\n`!message #kanál [text]` - Zpráva přes bota.\n`!dm @uzivatel [text]` - Soukromá zpráva.", inline=False)
-    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download` - Generuje instalátor.\n`!sm @uživatel` - Přidá roli SM.", inline=False)
+    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download` - Generuje instalátor.\n`!sm @uživatel` - Přidá/odebere roli SM.", inline=False)
     await ctx.send(embed=embed)
 
 @bot.command()
