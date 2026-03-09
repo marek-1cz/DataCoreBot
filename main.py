@@ -35,7 +35,7 @@ def handle_exception(e):
     return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
 
 # ==========================================
-# 1. HTML ŠABLONY
+# 1. HTML ŠABLONY (PLNÝ DESIGN BEZ EMOJI)
 # ==========================================
 
 BASE_HTML = """
@@ -185,6 +185,8 @@ BASE_HTML = """
 </head>
 <body>
     {% block layout %}{% endblock %}
+
+    <script data-name="BMC-Widget" data-cfasync="false" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js" data-id="marekk_czz" data-description="Support me on Buy me a coffee!" data-message="" data-color="#5F7FFF" data-position="Right" data-x_margin="18" data-y_margin="18"></script>
 </body>
 </html>
 """
@@ -405,6 +407,56 @@ DASHBOARD_LAYOUT = """
 </script>
 """
 
+# ZDE JE TVŮJ NOVÝ MANAŽER PODPOROVATELŮ PRO DASHBOARD
+HTML_SUPPORTERS_MGMT = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">Správa Podporovatelů</h2>
+</div>
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid #F4CC17;">
+        <h3 style="color: #F4CC17; margin-top: 0;">➕ Přidat Podporovatele Ručně</h3>
+        <p style="color: var(--text-muted); font-size: 13px;">Pokud ti někdo poslal příspěvek mimo web (např. na účet), můžeš ho zde ručně přidat. Zobrazí se jak v aplikaci, tak na webu.</p>
+        <form action="/dashboard/add_supporter" method="POST">
+            <input type="text" name="name" placeholder="Jméno (např. Pepa z Depa)" required>
+            <input type="text" name="amount" placeholder="Částka (např. 5 CZK nebo 3 kávy)" required>
+            <textarea name="message" placeholder="Vzkaz od podporovatele..." rows="3"></textarea>
+            <button type="submit" class="btn" style="width: 100%; background-color: #F4CC17; color: black;"><i class="fas fa-heart"></i> Přidat podporovatele</button>
+        </form>
+    </div>
+    
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: #F4CC17; margin-top: 0;">💛 Seznam Podporovatelů</h3>
+        <div style="overflow-x: auto;">
+            <table>
+                <tr>
+                    <th>Jméno</th>
+                    <th>Částka</th>
+                    <th>Vzkaz</th>
+                    <th>Datum</th>
+                    <th>Akce</th>
+                </tr>
+                {% for s in supporters %}
+                <tr>
+                    <td><strong style="color: var(--blue-main);">{{ s.get('name', '') }}</strong></td>
+                    <td style="color: var(--success); font-weight: bold;">{{ s.get('amount', '') }}</td>
+                    <td style="font-style: italic; color: var(--text-muted); max-width: 250px; overflow: hidden; text-overflow: ellipsis;">{{ s.get('message', 'Bez vzkazu') }}</td>
+                    <td style="font-size: 12px; color: #64748b;">{{ s.get('created_at', '') }}</td>
+                    <td>
+                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline;">
+                            <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
+                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu smazat tohoto podporovatele?')"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Zatím žádní podporovatelé.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+"""
+
 # HLAVNÍ TABULKA DASHBOARDU
 HTML_DASHBOARD_MAIN = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -467,57 +519,7 @@ HTML_DASHBOARD_MAIN = """
 </div>
 """
 
-# ZDE JE TVŮJ NOVÝ MANAŽER PODPOROVATELŮ PRO DASHBOARD
-HTML_SUPPORTERS_MGMT = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);">Správa Podporovatelů</h2>
-</div>
-<div style="display: flex; gap: 20px; flex-wrap: wrap;">
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid #F4CC17;">
-        <h3 style="color: #F4CC17; margin-top: 0;">➕ Přidat Podporovatele Ručně</h3>
-        <p style="color: var(--text-muted); font-size: 13px;">Pokud ti někdo poslal příspěvek mimo web (např. na účet), můžeš ho zde ručně přidat. Zobrazí se jak v aplikaci, tak na webu.</p>
-        <form action="/dashboard/add_supporter" method="POST">
-            <input type="text" name="name" placeholder="Jméno (např. Pepa z Depa)" required>
-            <input type="text" name="amount" placeholder="Částka (např. 5 CZK nebo 3 kávy)" required>
-            <textarea name="message" placeholder="Vzkaz od podporovatele..." rows="3"></textarea>
-            <button type="submit" class="btn" style="width: 100%; background-color: #F4CC17; color: black;"><i class="fas fa-heart"></i> Přidat podporovatele</button>
-        </form>
-    </div>
-    
-    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: #F4CC17; margin-top: 0;">💛 Seznam Podporovatelů</h3>
-        <div style="overflow-x: auto;">
-            <table>
-                <tr>
-                    <th>Jméno</th>
-                    <th>Částka</th>
-                    <th>Vzkaz</th>
-                    <th>Datum</th>
-                    <th>Akce</th>
-                </tr>
-                {% for s in supporters %}
-                <tr>
-                    <td><strong style="color: var(--blue-main);">{{ s.get('name', '') }}</strong></td>
-                    <td style="color: var(--success); font-weight: bold;">{{ s.get('amount', '') }}</td>
-                    <td style="font-style: italic; color: var(--text-muted); max-width: 250px; overflow: hidden; text-overflow: ellipsis;">{{ s.get('message', 'Bez vzkazu') }}</td>
-                    <td style="font-size: 12px; color: #64748b;">{{ s.get('created_at', '') }}</td>
-                    <td>
-                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline;">
-                            <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
-                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu smazat tohoto podporovatele?')"><i class="fas fa-trash"></i></button>
-                        </form>
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Zatím žádní podporovatelé.</td></tr>
-                {% endfor %}
-            </table>
-        </div>
-    </div>
-</div>
-"""
-
-# NOVÁ ŠABLONA PRO SÍŇ SLÁVY VEŘEJNĚ
+# NOVÁ ŠABLONA PRO SÍŇ SLÁVY (ČISTÝ DESIGN BEZ EMOJIS)
 HTML_SUPPORTERS = """
 <style>
     .glowing-btn-blue {
@@ -1055,7 +1057,7 @@ def bmac_webhook():
             send_log("🍕 Nový dárce!", f"Uživatel **{name}** právě poslal **{amount_str}**.\n\n*Vzkaz: {message}*", 0xF4CC17)
             
         if request.method == 'GET':
-            return f"<h1>ÚSPĚCH!</h1><p>Testovací podpora od <b>{name}</b> byla zapsána do databáze a odeslána na Discord!</p><a href='/supporters'>Zpět na stránku podporovatelů</a>"
+            return f"<h1>ÚSPĚCH! 🎉</h1><p>Testovací podpora od <b>{name}</b> byla zapsána do databáze a odeslána na Discord!</p><a href='/supporters'>Zpět na stránku podporovatelů</a>"
         return jsonify({"status": "success"}), 200
         
     except Exception as e:
@@ -1066,18 +1068,7 @@ def bmac_webhook():
 
 @app.route('/download')
 def download_home():
-    html = """
-    <div style="text-align: center; padding: 60px 20px; max-width: 700px; margin: 50px auto; background-color: var(--bg-panel); border-radius: 15px; box-shadow: 0 15px 30px rgba(0,0,0,0.5); border-top: 5px solid #5865F2;">
-        <h2 style="color: var(--text-main); font-size: 2.2em; margin-top: 0;"><i class="fas fa-shield-alt" style="color: var(--blue-main);"></i> Oficiální distribuce softwaru</h2>
-        <p style="color: var(--text-muted); font-size: 1.1em; line-height: 1.6; margin-bottom: 20px;">Z důvodu zachování maximální bezpečnosti jsme se rozhodli přesunout veškerou distribuci našeho softwaru na naši zabezpečenou komunikační platformu.</p>
-        <div style="background-color: rgba(88, 101, 242, 0.1); border: 1px solid #5865F2; padding: 30px 20px; border-radius: 10px; margin: 30px 20px;">
-            <p style="color: var(--text-main); font-weight: bold; font-size: 1.2em; margin-top: 0;">Pro stažení softwaru se prosím připojte na náš Discord.</p>
-            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Kliknutím na logo níže budete přesměrováni přímo na náš server.</p>
-            <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'"><i class="fab fa-discord" style="font-size: 120px; color: #5865F2; filter: drop-shadow(0px 10px 15px rgba(88,101,242,0.4));"></i></a>
-        </div>
-    </div>
-    """
-    return render_public(html)
+    return render_public(HTML_HOME.replace('Získat Software', 'Stáhnout přes Discord')) 
 
 @app.route('/download/<token>')
 def secure_download(token):
@@ -1156,7 +1147,6 @@ def api_get_file(token):
 # API PRO SOFTWARE A EXTERNÍ APLIKACE
 # ==========================================
 
-# NOVÉ: API pro tvoji PC Appku (Aby sis mohl zobrazit podporovatele)
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_get_supporters():
     if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
@@ -1204,12 +1194,12 @@ def api_app_login():
         
         if user.get("is_banned"):
             send_log("⛔ Pokus o přihlášení (BAN)", f"Zabanovaný uživatel `{user.get('nick')}` se pokusil zapnout software.", 0xef4444)
-            return _cors_jsonify({"status": "banned", "message": "Tento účet má BAN."})
+            return _cors_jsonify({"status": "banned", "message": "Tento účet má udělený BAN administrátorem."})
         
         db_hwid = user.get("hwid")
         if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "" and str(db_hwid) != req_hwid:
             send_log("🔒 HWID Neshoda", f"Uživatel `{user.get('nick')}` se hlásí z jiného PC!\nUloženo: `{db_hwid}`\nNové: `{req_hwid}`", 0xf59e0b)
-            return _cors_jsonify({"status": "hwid_error", "message": "Tento účet je vázán na jiný počítač."})
+            return _cors_jsonify({"status": "hwid_error", "message": "Tento účet je vázán na jiný počítač (Ochrana HWID)."})
             
         token = str(uuid.uuid4())
         db.table("users").update({"login_token": token}).eq("discord_id", user.get("discord_id")).execute()
@@ -1245,12 +1235,11 @@ def api_app_check():
                 db.table("users").update({"hwid": req_hwid, "login_token": ""}).eq("discord_id", discord_id).execute()
             else:
                 db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-            # OPRAVA JMENA PRO PC APLIKACI (Posílám všechny klíče, aby to přestalo být "undefined")
             return _cors_jsonify({"status": "success", "display_name": user.get("nick", "Neznámý"), "nick": user.get("nick", "Neznámý")})
             
         elif user.get("login_token") == "rejected":
             db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-            return _cors_jsonify({"status": "error", "message": "Přístup zamítnut uživatelem."})
+            return _cors_jsonify({"status": "error", "message": "Přístup byl zamítnut uživatelem."})
             
         return _cors_jsonify({"status": "pending"})
     except: return _cors_jsonify({"status": "error"})
@@ -1274,7 +1263,6 @@ def api_silent_check():
         db_hwid = user.get("hwid")
         if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "" and str(db_hwid) != req_hwid:
             return _cors_jsonify({"status": "error", "message": "ZÁMEK HWID: Váš počítač nesouhlasí."})
-        # OPRAVA JMENA PRO PC APLIKACI
         return _cors_jsonify({"status": "success", "display_name": user.get("nick", "Neznámý"), "nick": user.get("nick", "Neznámý")})
     except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
 
@@ -1565,7 +1553,6 @@ def delete_team():
         except: pass
     return redirect(url_for('dashboard_team_page'))
 
-# --- NOVÉ ROUTY PRO DASHBOARD SPRÁVU PODPOROVATELŮ ---
 @app.route('/dashboard/supporters', methods=['GET'])
 def dashboard_supporters_page(): 
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
@@ -1597,7 +1584,6 @@ def delete_supporter():
         try: db.table("supporters").delete().eq("id", s_id).execute()
         except: pass
     return redirect(url_for('dashboard_supporters_page'))
-
 
 @app.route('/dashboard/edit_user', methods=['POST'])
 def edit_user():
@@ -1669,15 +1655,120 @@ class DashboardAuthView(discord.ui.View):
 
 class AppAuthView(discord.ui.View):
     def __init__(self, token, discord_id, is_dm=True):
-        super().__init__(timeout=180)
+        super().__init__(timeout=300)
         self.token = token; self.discord_id = discord_id; self.is_dm = is_dm
     @discord.ui.button(label="Ano, ověřit", style=discord.ButtonStyle.success)
     async def ok(self, interaction, button):
-        if str(interaction.user.id) != str(self.discord_id): return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
-        get_db().table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
-        await interaction.response.edit_message(content="✅ **Ověřeno! Můžete se vrátit do aplikace.**", embed=None, view=None)
-        send_log("🖥️ Přihlášení do Aplikace", f"Uživatel s ID `{self.discord_id}` se úspěšně ověřil a vstoupil do softwaru.", 0x10b981)
-        if not self.is_dm: await asyncio.sleep(2); await interaction.message.delete()
+        # OKAMŽITÉ ZACHYCENÍ, ABY NEVYPRŠEL 3s LIMIT!
+        await interaction.response.defer()
+        
+        if str(interaction.user.id) != str(self.discord_id): 
+            return await interaction.followup.send("Toto není tvé tlačítko!", ephemeral=True)
+            
+        try:
+            get_db().table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
+            await interaction.edit_original_response(content="✅ **Ověřeno! Můžete se vrátit do aplikace.**", embed=None, view=None)
+            send_log("🖥️ Přihlášení do Aplikace", f"Uživatel s ID `{self.discord_id}` se úspěšně ověřil a vstoupil do softwaru.", 0x10b981)
+            if not self.is_dm: 
+                await asyncio.sleep(2)
+                await interaction.message.delete()
+        except Exception as e:
+            await interaction.edit_original_response(content=f"❌ Databáze neodpověděla včas: {e}", view=None)
+
+class DynamicVersionSelect(discord.ui.Select):
+    def __init__(self, u_lvl, vers_data):
+        opts = []
+        for v in vers_data:
+            req = 2 if v.get('target_role') == 'BT' else (3 if v.get('target_role') == 'DEV_SA' else 1)
+            if u_lvl >= req: opts.append(discord.SelectOption(label=v['version_name'], value=str(v['id']), emoji="📦"))
+        if not opts: opts.append(discord.SelectOption(label="Nic není k dispozici", value="none"))
+        super().__init__(placeholder="Vyber verzi k instalaci...", options=opts)
+        
+    async def callback(self, i3):
+        await i3.response.defer(ephemeral=True)
+        if self.values[0] == "none": 
+            return await i3.edit_original_response(content="Nic tu není.", view=None)
+            
+        t = str(uuid.uuid4())
+        db = get_db()
+        if db: db.table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
+        url = os.environ.get('RENDER_EXTERNAL_URL', 'https://datacorebot.onrender.com')
+        await i3.edit_original_response(content=f"**Odkaz připraven:**\n🔗 {url}/download/{t}?v={self.values[0]}\n*Platí jen pro Vás.*", view=None)
+
+class DynamicRulesView(discord.ui.View):
+    def __init__(self): super().__init__(timeout=None)
+    
+    @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, emoji="✅", custom_id="rules_agree_btn")
+    async def agree(self, i2, b2):
+        await i2.response.defer(ephemeral=True)
+        try:
+            db = get_db(); d_id = str(i2.user.id); n = i2.user.display_name; u_role = "User"
+            if str((db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}])[0].get('setting_value', '')).lower() == 'false':
+                return await i2.edit_original_response(content="**Stahování je globálně vypnuto.**", view=None)
+                
+            chk = db.table("users").select("*").eq("discord_id", d_id).execute()
+            pend_data = db.table("pending_roles").select("*").execute().data or []
+            pend = next((p for p in pend_data if p['discord_identifier'] in [d_id, n]), None)
+            
+            if chk.data:
+                if chk.data[0].get('is_banned'): return await i2.edit_original_response(content="**Přístup zamítnut:** Máte BAN.", view=None)
+                if chk.data[0].get('is_deleted'):
+                    hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                    nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
+                    r = pend['roles'] if pend else "User"
+                    db.table("users").update({"app_id": nid, "nick": n, "is_deleted": False, "role": r}).eq("discord_id", d_id).execute()
+                    u_role = r
+                    if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
+                else: u_role = chk.data[0].get('role', 'User')
+            else:
+                hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
+                r = pend['roles'] if pend else "User"
+                db.table("users").insert({"app_id": nid, "discord_id": d_id, "nick": n, "role": r, "hwid": "", "is_banned": False, "is_deleted": False, "dashboard_access": False, "login_token": "", "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+                u_role = r
+                if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
+                
+            if isinstance(i2.user, discord.Member): 
+                try: await update_member_roles(i2.user, u_role)
+                except: pass
+            
+            vers_data = db.table("software_versions").select("*").order("id").execute().data or []
+            u_lvl = 3 if 'SA' in u_role or 'DEV' in u_role else (2 if 'BT' in u_role else 1)
+            
+            v_view = discord.ui.View()
+            v_view.add_item(DynamicVersionSelect(u_lvl, vers_data))
+            await i2.edit_original_response(content="**Ověření úspěšné.** Vyberte soubor:", view=v_view)
+        except Exception as e: 
+            await i2.edit_original_response(content=f"Chyba DB: {e}", view=None)
+
+    @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, emoji="❌", custom_id="rules_disagree_btn")
+    async def disagree(self, i2, b2):
+        await i2.response.defer(ephemeral=True)
+        await i2.edit_original_response(content="**Akce zrušena.**", view=None)
+
+class DynamicDownloadView(discord.ui.View):
+    def __init__(self): super().__init__(timeout=None)
+    @discord.ui.button(label="Zahájit instalaci softwaru", style=discord.ButtonStyle.primary, emoji="📥", custom_id="persistent_install_main_btn")
+    async def dl_btn(self, interaction, button):
+        await interaction.response.send_message("**Podmínky užití:**\n1. Zákaz úprav a šíření.\n2. Zámek na Váš PC (HWID).\n\nSouhlasíte?", view=DynamicRulesView(), ephemeral=True)
+
+class PerDeleteConfirm(discord.ui.View):
+    def __init__(self, target_id, author_id):
+        super().__init__(timeout=60)
+        self.target_id = target_id; self.author_id = author_id
+    @discord.ui.button(label="Ano, trvale smazat", style=discord.ButtonStyle.danger, emoji="⚠️")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        if interaction.user.id != self.author_id: return await interaction.followup.send("Toto není tvé tlačítko!", ephemeral=True)
+        db = get_db()
+        if db:
+            db.table("users").delete().eq("discord_id", self.target_id).execute()
+            await interaction.edit_original_response(content=f"✅ Účet `{self.target_id}` byl z databáze PERMANENTNĚ smazán.", view=None, embed=None)
+    @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        if interaction.user.id != self.author_id: return await interaction.followup.send("Toto není tvé tlačítko!", ephemeral=True)
+        await interaction.edit_original_response(content="❌ Akce zrušena. Účet smazán nebyl.", view=None, embed=None)
 
 intents = discord.Intents.default()
 intents.members = True; intents.message_content = True; intents.presences = True
@@ -1723,7 +1814,9 @@ async def on_ready():
     bot.is_ready_fired = True
     
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
-    try: bot.add_view(DynamicDownloadView())
+    try: 
+        bot.add_view(DynamicDownloadView())
+        bot.add_view(DynamicRulesView())
     except: pass
     
     try:
@@ -1767,23 +1860,6 @@ async def update_member_roles(member, role_string):
             elif "BT" not in u_roles and r_bt in member.roles: await member.remove_roles(r_bt)
     except: pass
 
-class PerDeleteConfirm(discord.ui.View):
-    def __init__(self, target_id, author_id):
-        super().__init__(timeout=60)
-        self.target_id = target_id; self.author_id = author_id
-    @discord.ui.button(label="Ano, trvale smazat", style=discord.ButtonStyle.danger, emoji="⚠️")
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
-        await interaction.response.defer()
-        db = get_db()
-        if db:
-            db.table("users").delete().eq("discord_id", self.target_id).execute()
-            await interaction.edit_original_response(content=f"✅ Účet `{self.target_id}` byl z databáze PERMANENTNĚ smazán.", view=None, embed=None)
-    @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
-        await interaction.response.edit_message(content="❌ Akce zrušena. Účet smazán nebyl.", view=None, embed=None)
-
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
@@ -1803,69 +1879,6 @@ def check_sm_role():
         if discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator: return True
         await ctx.send(f"❌ {ctx.author.mention}, k tomuto příkazu nemáš oprávnění.", delete_after=10); return False
     return commands.check(predicate)
-
-class DynamicDownloadView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="Zahájit instalaci softwaru", style=discord.ButtonStyle.primary, emoji="📥", custom_id="persistent_install_main_btn")
-    async def dl_btn(self, interaction, button):
-        class DynamicRulesView(discord.ui.View):
-            def __init__(self): super().__init__(timeout=None)
-            @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, emoji="✅")
-            async def agree(self, i2, b2):
-                await i2.response.edit_message(content="<a:loading:123> Ověřuji profil...", view=None)
-                try:
-                    db = get_db(); d_id = str(i2.user.id); n = i2.user.display_name; u_role = "User"
-                    if str((db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}])[0].get('setting_value', '')).lower() == 'false':
-                        return await i2.edit_original_response(content="**Stahování je globálně vypnuto.**")
-                    chk = db.table("users").select("*").eq("discord_id", d_id).execute()
-                    pend_data = db.table("pending_roles").select("*").execute().data or []
-                    pend = next((p for p in pend_data if p['discord_identifier'] in [d_id, n]), None)
-                    if chk.data:
-                        if chk.data[0].get('is_banned'): return await i2.edit_original_response(content="**Přístup zamítnut:** Máte BAN.")
-                        if chk.data[0].get('is_deleted'):
-                            hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
-                            nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
-                            r = pend['roles'] if pend else "User"
-                            db.table("users").update({"app_id": nid, "nick": n, "is_deleted": False, "role": r}).eq("discord_id", d_id).execute()
-                            u_role = r
-                            if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
-                        else: u_role = chk.data[0].get('role', 'User')
-                    else:
-                        hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
-                        nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
-                        r = pend['roles'] if pend else "User"
-                        db.table("users").insert({"app_id": nid, "discord_id": d_id, "nick": n, "role": r, "hwid": "", "is_banned": False, "is_deleted": False, "dashboard_access": False, "login_token": "", "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
-                        u_role = r
-                        if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
-                    if isinstance(i2.user, discord.Member): 
-                        try: await update_member_roles(i2.user, u_role)
-                        except: pass
-                    
-                    class DynamicVersionSelect(discord.ui.Select):
-                        def __init__(self, u_lvl):
-                            opts = []
-                            vers_data = get_db().table("software_versions").select("*").order("id").execute().data or []
-                            for v in vers_data:
-                                req = 2 if v['target_role'] == 'BT' else (3 if v['target_role'] == 'DEV_SA' else 1)
-                                if u_lvl >= req: opts.append(discord.SelectOption(label=v['version_name'], value=str(v['id']), emoji="📦"))
-                            if not opts: opts.append(discord.SelectOption(label="Nic není k dispozici", value="none"))
-                            super().__init__(placeholder="Vyber verzi k instalaci...", options=opts)
-                        async def callback(self, i3):
-                            if self.values[0] == "none": return await i3.response.send_message("Nic tu není.", ephemeral=True)
-                            await i3.response.send_message("<a:loading:123> Generuji odkaz...", ephemeral=True)
-                            t = str(uuid.uuid4())
-                            get_db().table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
-                            await i3.edit_original_response(content=f"**Odkaz připraven:**\n🔗 {os.environ.get('RENDER_EXTERNAL_URL', 'https://datacorebot.onrender.com')}/download/{t}?v={self.values[0]}\n*Platí jen pro Vás.*")
-                    
-                    v_view = discord.ui.View()
-                    v_view.add_item(DynamicVersionSelect(3 if 'SA' in u_role or 'DEV' in u_role else (2 if 'BT' in u_role else 1)))
-                    await i2.edit_original_response(content="**Ověření úspěšné.** Vyberte soubor:", view=v_view)
-                except Exception as e: await i2.edit_original_response(content=f"Chyba DB: {e}")
-            @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, emoji="❌")
-            async def disagree(self, i2, b2):
-                await i2.response.edit_message(content="**Akce zrušena.**", view=None)
-
-        await interaction.response.send_message("**Podmínky užití:**\n1. Zákaz úprav a šíření.\n2. Zámek na Váš PC (HWID).\n\nSouhlasíte?", view=DynamicRulesView(), ephemeral=True)
 
 @bot.command()
 @check_web_sa()
