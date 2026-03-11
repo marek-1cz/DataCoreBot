@@ -35,7 +35,7 @@ def handle_exception(e):
     return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
 
 # ==========================================
-# 1. HTML ŠABLONY (PLNÝ DESIGN BEZ EMOJI)
+# 1. HTML ŠABLONY
 # ==========================================
 
 BASE_HTML = """
@@ -185,8 +185,6 @@ BASE_HTML = """
 </head>
 <body>
     {% block layout %}{% endblock %}
-
-    <script data-name="BMC-Widget" data-cfasync="false" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js" data-id="marekk_czz" data-description="Support me on Buy me a coffee!" data-message="" data-color="#5F7FFF" data-position="Right" data-x_margin="18" data-y_margin="18"></script>
 </body>
 </html>
 """
@@ -407,140 +405,6 @@ DASHBOARD_LAYOUT = """
 </script>
 """
 
-HTML_DASHBOARD_MAIN = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
-</div>
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-    <div style="overflow-x: auto;">
-        <table>
-            <tr>
-                <th>App ID</th>
-                <th>Nick</th>
-                <th>Role</th>
-                <th>Poslední Aktivita</th>
-                <th>Akce</th>
-            </tr>
-            {% for user in users %}
-            <tr style="opacity: {{ '0.6' if user.get('is_deleted') else '1' }};">
-                <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
-                <td>
-                    <strong>{{ user.get('nick', '') }}</strong>
-                    {% if user.get('is_banned') %}<span style="color: var(--danger); font-size: 11px; margin-left: 5px;"><i class="fas fa-ban"></i> BANNED</span>{% endif %}
-                    {% if user.get('is_deleted') %}<span style="color: var(--text-muted); font-size: 11px; margin-left: 5px;"><i class="fas fa-trash"></i> SMAZÁN</span>{% endif %}
-                </td>
-                <td>
-                    {% set role_list = user.get('role', '').split(',') %}
-                    {% for r in role_list %}
-                        {% set r_clean = r.strip() %}
-                        {% if r_clean == 'SA' %}
-                            <span class="role-tag" style="background-color: #ef4444; color: white;">SA</span>
-                        {% elif r_clean == 'DEV' %}
-                            <span class="role-tag" style="background-color: #10b981; color: white;">DEV</span>
-                        {% elif r_clean == 'BT' %}
-                            <span class="role-tag" style="background-color: #3b82f6; color: white;">BT</span>
-                        {% elif r_clean == 'User' %}
-                            <span class="role-tag" style="background-color: #64748b; color: white;">User</span>
-                        {% endif %}
-                    {% endfor %}
-                </td>
-                <td style="color: var(--text-muted); font-size: 13px;">
-                    {% if user.get('is_online') %}
-                        <span style="color: var(--success); font-weight: bold;">🟢 Nyní hraje</span>
-                    {% else %}
-                        {{ user.get('last_active', 'Nikdy nehrál') }}
-                    {% endif %}
-                </td>
-                <td>
-                    <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', '') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-edit"></i> Upravit</button>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-</div>
-"""
-
-HTML_SUPPORTERS = """
-<style>
-    .glowing-btn-blue {
-        background-color: var(--blue-main); 
-        color: #000; 
-        padding: 15px 40px; 
-        font-size: 20px; 
-        font-weight: 900; 
-        border-radius: 50px; 
-        text-decoration: none; 
-        display: inline-block; 
-        margin-top: 20px;
-        box-shadow: 0 0 20px rgba(56, 189, 248, 0.6); 
-        transition: all 0.3s ease; 
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        border: none;
-        cursor: pointer;
-    }
-    .glowing-btn-blue:hover {
-        box-shadow: 0 0 40px rgba(56, 189, 248, 1); 
-        transform: scale(1.05); 
-        color: #000;
-    }
-    
-    .supporter-card-blue {
-        background-color: var(--bg-panel); 
-        padding: 25px; 
-        border-radius: 12px;
-        box-shadow: 0 0 15px rgba(56, 189, 248, 0.2), inset 0 0 10px rgba(56, 189, 248, 0.05);
-        border: 1px solid rgba(56, 189, 248, 0.3); 
-        border-left: 6px solid var(--blue-main);
-        transition: transform 0.3s, box-shadow 0.3s;
-    }
-    .supporter-card-blue:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4), inset 0 0 15px rgba(56, 189, 248, 0.1);
-    }
-</style>
-
-<div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
-    <div style="text-align: center; margin-bottom: 40px;">
-        <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Děkuji všem za podporu!</h1>
-        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">
-            Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!
-        </p>
-        
-        <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue">
-            <i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK
-        </a>
-    </div>
-    
-    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 40px 0;">
-    <h2 style="text-align: center; color: var(--text-main); letter-spacing: 3px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,255,255,0.2);">SEZNAM PODPOROVATELŮ</h2>
-    
-    <div style="display: flex; flex-direction: column; gap: 20px;">
-        {% for s in supporters %}
-        <div class="supporter-card-blue">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
-                <h3 style="margin: 0; color: var(--blue-main); font-size: 24px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.3);">{{ s.get('name', 'Neznámý dárce') }}</h3>
-                <span style="background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(56, 189, 248, 0.3);">{{ s.get('amount', '') }}</span>
-            </div>
-            {% if s.get('message') %}
-            <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
-                "{{ s.get('message') }}"
-            </p>
-            {% else %}
-            <p style="color: #64748b; font-size: 14px; font-style: italic; margin: 0;">Bez textového vzkazu.</p>
-            {% endif %}
-            <div style="font-size: 11px; color: #64748b; margin-top: 15px; text-align: right; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">Datum podpory: {{ s.get('created_at', '') }}</div>
-        </div>
-        {% else %}
-        <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1);">Zatím zde nikdo není. Buďte první!</div>
-        {% endfor %}
-    </div>
-</div>
-"""
-
 HTML_HOME = """
 <div style="text-align: center; padding: 50px 0;">
     <img src="{{ logo_velke }}" alt="DataCoreBot Logo" style="max-width: 450px; width: 100%; height: auto; margin-bottom: 20px; filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.5));">
@@ -548,6 +412,18 @@ HTML_HOME = """
         Moderní, rychlý a bezpečný software s nejlepším zabezpečením.
     </p>
     <a href="/download" class="btn" style="font-size: 18px; padding: 15px 30px; border-radius: 30px;"><i class="fas fa-download"></i> Získat Software</a>
+</div>
+"""
+
+HTML_DOWNLOADS_MAIN = """
+<div style="text-align: center; padding: 60px 20px; max-width: 700px; margin: 50px auto; background-color: var(--bg-panel); border-radius: 15px; box-shadow: 0 15px 30px rgba(0,0,0,0.5); border-top: 5px solid #5865F2;">
+    <h2 style="color: var(--text-main); font-size: 2.2em; margin-top: 0;"><i class="fas fa-shield-alt" style="color: var(--blue-main);"></i> Oficiální distribuce softwaru</h2>
+    <p style="color: var(--text-muted); font-size: 1.1em; line-height: 1.6; margin-bottom: 20px;">Z důvodu zachování maximální bezpečnosti jsme se rozhodli přesunout veškerou distribuci našeho softwaru na naši zabezpečenou komunikační platformu.</p>
+    <div style="background-color: rgba(88, 101, 242, 0.1); border: 1px solid #5865F2; padding: 30px 20px; border-radius: 10px; margin: 30px 20px;">
+        <p style="color: var(--text-main); font-weight: bold; font-size: 1.2em; margin-top: 0;">Pro stažení softwaru se prosím připojte na náš Discord.</p>
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Kliknutím na logo níže budete přesměrováni přímo na náš server.</p>
+        <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'"><i class="fab fa-discord" style="font-size: 120px; color: #5865F2; filter: drop-shadow(0px 10px 15px rgba(88,101,242,0.4));"></i></a>
+    </div>
 </div>
 """
 
@@ -588,6 +464,31 @@ HTML_WAIT_AUTH = """
         });
     }, 2000);
 </script>
+"""
+
+HTML_TEAM = """
+<h2 style="color: var(--blue-main); border-bottom: 2px solid #334155; padding-bottom: 10px;">Náš Tým</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+    {% for member in team %}
+    <div style="background-color: var(--bg-panel); border-radius: 10px; padding: 20px; text-align: center; border-top: 4px solid var(--blue-main);">
+        <img src="{{ member.get('image_url', '') }}" alt="Fotka" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; border: 3px solid #334155;" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+        <h3 style="font-size: 20px; font-weight: bold; margin: 0 0 5px 0;">{{ member.get('name', '') }}</h3>
+        <div style="color: var(--blue-main); font-size: 14px; margin-bottom: 15px;">@{{ member.get('discord_nick', '') }}</div>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 15px;">{{ member.get('description', '') }}</p>
+        <div>
+            {% set roles_input = member.get('role_name', '').split(',') if member.get('role_name') else [] %}
+            {% for r in roles_input %}
+                {% set parts = r.split('|') %}
+                {% set r_name = parts[0].strip() %}
+                {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
+                <span class="role-tag" style="background-color: {{ r_color }}33; color: {{ r_color }}; border: 1px solid {{ r_color }};">{{ r_name }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <p style="color: var(--text-muted);">Zatím nebyli přidáni žádní členové týmu.</p>
+    {% endfor %}
+</div>
 """
 
 HTML_APP_SETTINGS = """
@@ -689,31 +590,6 @@ HTML_DOWNLOADS_MGMT = """
             {% endfor %}
         </table>
     </div>
-</div>
-"""
-
-HTML_TEAM = """
-<h2 style="color: var(--blue-main); border-bottom: 2px solid #334155; padding-bottom: 10px;">Náš Tým</h2>
-<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
-    {% for member in team %}
-    <div style="background-color: var(--bg-panel); border-radius: 10px; padding: 20px; text-align: center; border-top: 4px solid var(--blue-main);">
-        <img src="{{ member.get('image_url', '') }}" alt="Fotka" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; border: 3px solid #334155;" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-        <h3 style="font-size: 20px; font-weight: bold; margin: 0 0 5px 0;">{{ member.get('name', '') }}</h3>
-        <div style="color: var(--blue-main); font-size: 14px; margin-bottom: 15px;">@{{ member.get('discord_nick', '') }}</div>
-        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 15px;">{{ member.get('description', '') }}</p>
-        <div>
-            {% set roles_input = member.get('role_name', '').split(',') if member.get('role_name') else [] %}
-            {% for r in roles_input %}
-                {% set parts = r.split('|') %}
-                {% set r_name = parts[0].strip() %}
-                {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
-                <span class="role-tag" style="background-color: {{ r_color }}33; color: {{ r_color }}; border: 1px solid {{ r_color }};">{{ r_name }}</span>
-            {% endfor %}
-        </div>
-    </div>
-    {% else %}
-    <p style="color: var(--text-muted);">Zatím nebyli přidáni žádní členové týmu.</p>
-    {% endfor %}
 </div>
 """
 
@@ -892,6 +768,140 @@ HTML_IDS = """
 </div>
 """
 
+HTML_DASHBOARD_MAIN = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
+</div>
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>App ID</th>
+                <th>Nick</th>
+                <th>Role</th>
+                <th>Poslední Aktivita</th>
+                <th>Akce</th>
+            </tr>
+            {% for user in users %}
+            <tr style="opacity: {{ '0.6' if user.get('is_deleted') else '1' }};">
+                <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
+                <td>
+                    <strong>{{ user.get('nick', '') }}</strong>
+                    {% if user.get('is_banned') %}<span style="color: var(--danger); font-size: 11px; margin-left: 5px;"><i class="fas fa-ban"></i> BANNED</span>{% endif %}
+                    {% if user.get('is_deleted') %}<span style="color: var(--text-muted); font-size: 11px; margin-left: 5px;"><i class="fas fa-trash"></i> SMAZÁN</span>{% endif %}
+                </td>
+                <td>
+                    {% set role_list = user.get('role', '').split(',') %}
+                    {% for r in role_list %}
+                        {% set r_clean = r.strip() %}
+                        {% if r_clean == 'SA' %}
+                            <span class="role-tag" style="background-color: #ef4444; color: white;">SA</span>
+                        {% elif r_clean == 'DEV' %}
+                            <span class="role-tag" style="background-color: #10b981; color: white;">DEV</span>
+                        {% elif r_clean == 'BT' %}
+                            <span class="role-tag" style="background-color: #3b82f6; color: white;">BT</span>
+                        {% elif r_clean == 'User' %}
+                            <span class="role-tag" style="background-color: #64748b; color: white;">User</span>
+                        {% endif %}
+                    {% endfor %}
+                </td>
+                <td style="color: var(--text-muted); font-size: 13px;">
+                    {% if user.get('is_online') %}
+                        <span style="color: var(--success); font-weight: bold;">🟢 Nyní hraje</span>
+                    {% else %}
+                        {{ user.get('last_active', 'Nikdy nehrál') }}
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', '') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-edit"></i> Upravit</button>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+"""
+
+HTML_SUPPORTERS = """
+<style>
+    .glowing-btn-blue {
+        background-color: var(--blue-main); 
+        color: #000; 
+        padding: 15px 40px; 
+        font-size: 20px; 
+        font-weight: 900; 
+        border-radius: 50px; 
+        text-decoration: none; 
+        display: inline-block; 
+        margin-top: 20px;
+        box-shadow: 0 0 20px rgba(56, 189, 248, 0.6); 
+        transition: all 0.3s ease; 
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        border: none;
+        cursor: pointer;
+    }
+    .glowing-btn-blue:hover {
+        box-shadow: 0 0 40px rgba(56, 189, 248, 1); 
+        transform: scale(1.05); 
+        color: #000;
+    }
+    
+    .supporter-card-blue {
+        background-color: var(--bg-panel); 
+        padding: 25px; 
+        border-radius: 12px;
+        box-shadow: 0 0 15px rgba(56, 189, 248, 0.2), inset 0 0 10px rgba(56, 189, 248, 0.05);
+        border: 1px solid rgba(56, 189, 248, 0.3); 
+        border-left: 6px solid var(--blue-main);
+        transition: transform 0.3s, box-shadow 0.3s;
+    }
+    .supporter-card-blue:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4), inset 0 0 15px rgba(56, 189, 248, 0.1);
+    }
+</style>
+
+<div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
+    <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Děkuji všem za podporu!</h1>
+        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">
+            Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!
+        </p>
+        
+        <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue">
+            <i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK
+        </a>
+    </div>
+    
+    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 40px 0;">
+    <h2 style="text-align: center; color: var(--text-main); letter-spacing: 3px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,255,255,0.2);">SEZNAM PODPOROVATELŮ</h2>
+    
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+        {% for s in supporters %}
+        <div class="supporter-card-blue">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                <h3 style="margin: 0; color: var(--blue-main); font-size: 24px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.3);">{{ s.get('name', 'Neznámý dárce') }}</h3>
+                <span style="background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(56, 189, 248, 0.3);">{{ s.get('amount', '') }}</span>
+            </div>
+            {% if s.get('message') %}
+            <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+                "{{ s.get('message') }}"
+            </p>
+            {% else %}
+            <p style="color: #64748b; font-size: 14px; font-style: italic; margin: 0;">Bez textového vzkazu.</p>
+            {% endif %}
+            <div style="font-size: 11px; color: #64748b; margin-top: 15px; text-align: right; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">Datum podpory: {{ s.get('created_at', '') }}</div>
+        </div>
+        {% else %}
+        <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1);">Zatím zde nikdo není. Buďte první!</div>
+        {% endfor %}
+    </div>
+</div>
+"""
+
 # ==========================================
 # GLOBÁLNÍ FUNKCE
 # ==========================================
@@ -970,6 +980,10 @@ def sync_roles_from_flask(discord_id, role_string):
 def home():
     return render_public(HTML_HOME)
 
+@app.route('/download')
+def download_home():
+    return render_public(HTML_DOWNLOADS_MAIN)
+
 @app.route('/team')
 def team(): 
     try: team_members = get_db().table("team").select("*").execute().data or [] if get_db() else []
@@ -1019,21 +1033,6 @@ def bmac_webhook():
         if request.method == 'GET':
             return f"<h1>❌ CHYBA DATABÁZE</h1><p><b>Důvod:</b> {str(e)}</p><p>Zkontroluj, zda jsi v Supabase opravdu vypnul RLS u tabulky 'supporters' a zda je 'created_at' nastavený jako text.</p>"
         return jsonify({"status": "error", "message": str(e)}), 400
-
-@app.route('/download')
-def download_home():
-    html = """
-    <div style="text-align: center; padding: 60px 20px; max-width: 700px; margin: 50px auto; background-color: var(--bg-panel); border-radius: 15px; box-shadow: 0 15px 30px rgba(0,0,0,0.5); border-top: 5px solid #5865F2;">
-        <h2 style="color: var(--text-main); font-size: 2.2em; margin-top: 0;"><i class="fas fa-shield-alt" style="color: var(--blue-main);"></i> Oficiální distribuce softwaru</h2>
-        <p style="color: var(--text-muted); font-size: 1.1em; line-height: 1.6; margin-bottom: 20px;">Z důvodu zachování maximální bezpečnosti jsme se rozhodli přesunout veškerou distribuci našeho softwaru na naši zabezpečenou komunikační platformu.</p>
-        <div style="background-color: rgba(88, 101, 242, 0.1); border: 1px solid #5865F2; padding: 30px 20px; border-radius: 10px; margin: 30px 20px;">
-            <p style="color: var(--text-main); font-weight: bold; font-size: 1.2em; margin-top: 0;">Pro stažení softwaru se prosím připojte na náš Discord.</p>
-            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Kliknutím na logo níže budete přesměrováni přímo na náš server.</p>
-            <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'"><i class="fab fa-discord" style="font-size: 120px; color: #5865F2; filter: drop-shadow(0px 10px 15px rgba(88,101,242,0.4));"></i></a>
-        </div>
-    </div>
-    """
-    return render_public(html)
 
 @app.route('/download/<token>')
 def secure_download(token):
@@ -1529,7 +1528,6 @@ def edit_user():
         except: pass
     return redirect(url_for('dashboard_main'))
 
-
 # ==========================================
 # DISCORD BOT A TLAČÍTKA
 # ==========================================
@@ -1784,7 +1782,8 @@ async def help(ctx):
     await ctx.send(embed=embed)
 
 @bot.command()
-async def ping(ctx): await ctx.send(f"🏓 Pong! Odezva: **{round(bot.latency * 1000)}ms**.")
+async def ping(ctx): 
+    await ctx.send(f"🏓 Pong! Odezva: **{round(bot.latency * 1000)}ms**.")
 
 @bot.command()
 async def info(ctx, discord_id: str = None):
