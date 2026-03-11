@@ -949,7 +949,6 @@ def check_session_validity():
             
     if request.path.startswith('/dashboard') and request.path != '/dashboard/wait_auth' and session.get('logged_in'):
         discord_id = session.get('discord_id')
-        if discord_id == 'admin': return 
         if discord_id:
             try:
                 db = get_db()
@@ -1294,10 +1293,6 @@ def logout(): session.clear(); return redirect(url_for('home'))
 
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard_main():
-    if request.method == 'POST' and 'password' in request.form:
-        if request.form.get('password') == os.environ.get("ADMIN_PASSWORD", "admin"):
-            session['logged_in'] = True; session['discord_id'] = 'admin'
-            return redirect(url_for('dashboard_main'))
     if not session.get('logged_in'):
         return render_public(HTML_LOGIN)
     
