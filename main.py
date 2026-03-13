@@ -10,6 +10,7 @@ import asyncio
 import uuid
 import urllib.request
 import traceback
+import re
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
@@ -957,18 +958,49 @@ HTML_SUPPORTERS = """
         color: #000;
     }
     
-    .supporter-card-blue {
+    /* ZÁKLADNÍ (TIER 1) - do $8.99 */
+    .tier-1 {
         background-color: var(--bg-panel); 
         padding: 25px; 
         border-radius: 12px;
-        box-shadow: 0 0 15px rgba(56, 189, 248, 0.2), inset 0 0 10px rgba(56, 189, 248, 0.05);
+        box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
         border: 1px solid rgba(56, 189, 248, 0.3); 
         border-left: 6px solid var(--blue-main);
         transition: transform 0.3s, box-shadow 0.3s;
     }
-    .supporter-card-blue:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4), inset 0 0 15px rgba(56, 189, 248, 0.1);
+    .tier-1:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4); }
+    .tier-1 .name-title { color: var(--blue-main); text-shadow: 0 0 10px rgba(56, 189, 248, 0.3); }
+
+    /* STŘEDNÍ (TIER 2) - do $14.99 */
+    .tier-2 {
+        background-color: #1e293b; 
+        padding: 25px; 
+        border-radius: 12px;
+        box-shadow: 0 0 25px rgba(245, 158, 11, 0.3);
+        border: 1px solid rgba(245, 158, 11, 0.5); 
+        border-left: 6px solid var(--warning);
+        transition: transform 0.3s, box-shadow 0.3s;
+    }
+    .tier-2:hover { transform: translateY(-5px); box-shadow: 0 10px 35px rgba(245, 158, 11, 0.6); }
+    .tier-2 .name-title { color: var(--warning); text-shadow: 0 0 15px rgba(245, 158, 11, 0.6); }
+    .tier-2 .amt-badge { background-color: rgba(245, 158, 11, 0.1) !important; color: var(--warning) !important; border-color: rgba(245, 158, 11, 0.5) !important; }
+
+    /* EXTRÉMNÍ (TIER 3) - nad $15 */
+    .tier-3 {
+        background: linear-gradient(135deg, #1e293b, #451a03);
+        padding: 30px; 
+        border-radius: 12px;
+        box-shadow: 0 0 40px rgba(245, 158, 11, 0.6);
+        border: 2px solid #fbbf24; 
+        animation: epicWebGlow 2s infinite alternate;
+        transition: transform 0.3s;
+    }
+    .tier-3:hover { transform: translateY(-5px) scale(1.02); }
+    .tier-3 .name-title { color: #fcd34d; font-size: 30px !important; text-shadow: 0 0 20px #fcd34d; text-transform: uppercase; }
+    .tier-3 .amt-badge { background-color: #f59e0b !important; color: #000 !important; border: none !important; font-size: 18px !important; box-shadow: 0 0 15px #f59e0b; }
+    @keyframes epicWebGlow {
+        from { box-shadow: 0 0 30px rgba(245, 158, 11, 0.5); }
+        to { box-shadow: 0 0 60px rgba(245, 158, 11, 0.9), inset 0 0 20px rgba(245, 158, 11, 0.2); }
     }
 </style>
 
@@ -989,10 +1021,10 @@ HTML_SUPPORTERS = """
     
     <div style="display: flex; flex-direction: column; gap: 20px;">
         {% for s in supporters %}
-        <div class="supporter-card-blue">
+        <div class="tier-{{ s.get('tier', 1) }}">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
-                <h3 style="margin: 0; color: var(--blue-main); font-size: 24px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.3);">{{ s.get('name', 'Neznámý dárce') }}</h3>
-                <span style="background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(56, 189, 248, 0.3);">{{ s.get('amount', '') }}</span>
+                <h3 class="name-title" style="margin: 0; font-size: 24px;">{{ s.get('name', 'Neznámý dárce') }} {% if s.get('tier') == 3 %}👑{% elif s.get('tier') == 2 %}⭐{% endif %}</h3>
+                <span class="amt-badge" style="background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(56, 189, 248, 0.3);">{{ s.get('amount', '') }}</span>
             </div>
             {% if s.get('message') %}
             <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
@@ -1020,7 +1052,7 @@ HTML_SUPPORTERS_MGMT = """
         <p style="color: var(--text-muted); font-size: 13px;">(Pokud Vám někdo poslal peníze mimo Buy Me a Coffee)</p>
         <form action="/dashboard/add_supporter" method="POST">
             <input type="text" name="name" placeholder="Jméno podporovatele" required>
-            <input type="text" name="amount" placeholder="Částka (např. 150 CZK)" required>
+            <input type="text" name="amount" placeholder="Částka (např. 150 CZK nebo 10 USD)" required>
             <textarea name="message" placeholder="Zpráva od podporovatele (volitelně)..." rows="3"></textarea>
             <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Přidat do databáze</button>
         </form>
@@ -1030,7 +1062,6 @@ HTML_SUPPORTERS_MGMT = """
         <div style="overflow-x: auto;">
             <table>
                 <tr>
-                    <th>ID</th>
                     <th>Jméno</th>
                     <th>Částka</th>
                     <th>Zpráva</th>
@@ -1039,7 +1070,6 @@ HTML_SUPPORTERS_MGMT = """
                 </tr>
                 {% for s in supporters %}
                 <tr>
-                    <td style="color:var(--text-muted);">#{{ s.get('id', '') }}</td>
                     <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
                     <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
                     <td style="font-style:italic;">{{ s.get('message', 'Bez zprávy') }}</td>
@@ -1052,7 +1082,7 @@ HTML_SUPPORTERS_MGMT = """
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Zatím žádné platby.</td></tr>
+                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Zatím žádné platby.</td></tr>
                 {% endfor %}
             </table>
         </div>
@@ -1061,7 +1091,7 @@ HTML_SUPPORTERS_MGMT = """
 """
 
 # ==========================================
-# GLOBÁLNÍ FUNKCE
+# GLOBÁLNÍ FUNKCE A TŘÍDĚNÍ PODPOROVATELŮ
 # ==========================================
 
 def get_db():
@@ -1071,6 +1101,34 @@ def get_db():
         if not url or not key: return None
         return create_client(url, key)
     except: return None
+
+def process_supporters(data_list):
+    # Projde seznam, vytáhne si číslo a určí Tier
+    for s in data_list:
+        amt_str = str(s.get('amount', '0'))
+        # Najde číslo ve stringu
+        match = re.search(r'([\d\.,]+)', amt_str)
+        val = 0.0
+        if match:
+            val_str = match.group(1).replace(',', '.')
+            try: val = float(val_str)
+            except: pass
+        
+        norm_val = val
+        lower_amt = amt_str.lower()
+        if 'usd' in lower_amt or '$' in lower_amt: norm_val *= 23
+        elif 'eur' in lower_amt or '€' in lower_amt: norm_val *= 25
+        
+        s['norm_val'] = norm_val
+        
+        # Tiers: 3 = > 350czk (15 USD), 2 = 195czk (9 USD), 1 = základ
+        if norm_val >= 345: s['tier'] = 3
+        elif norm_val >= 195: s['tier'] = 2
+        else: s['tier'] = 1
+
+    # Seřadí od nejbohatšího, pak podle data
+    data_list.sort(key=lambda x: (x.get('norm_val', 0), x.get('id', 0)), reverse=True)
+    return data_list
 
 async def async_send_log(title, description, color=0x38bdf8):
     for guild in bot.guilds:
@@ -1151,19 +1209,20 @@ def team():
 def supporters():
     try: 
         db = get_db()
-        support_data = db.table("supporters").select("*").order("id", desc=True).execute().data or [] if db else []
+        data = db.table("supporters").select("*").execute().data or [] if db else []
+        support_data = process_supporters(data)
     except: 
         support_data = []
     return render_public(HTML_SUPPORTERS, supporters=support_data)
 
-# TUTO CESTU POUŽÍVÁ TVŮJ PC OVLADAČ PRO NAČTENÍ JMEN VE HVĚZDIČCE
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'])
 def api_supporters():
     if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
     try:
         db = get_db()
         if not db: return _cors_jsonify({"error": "DB not ready"}), 500
-        support_data = db.table("supporters").select("name, amount, message, created_at").order("id", desc=True).execute().data or []
+        data = db.table("supporters").select("name, amount, message, created_at").execute().data or []
+        support_data = process_supporters(data)
         return _cors_jsonify({"supporters": support_data})
     except Exception as e:
         return _cors_jsonify({"error": str(e)}), 500
@@ -1200,7 +1259,7 @@ def bmac_webhook():
     except Exception as e:
         print(f"Webhook Error: {e}", flush=True)
         if request.method == 'GET':
-            return f"<h1>❌ CHYBA DATABÁZE</h1><p><b>Důvod:</b> {str(e)}</p><p>Zkontroluj, zda jsi v Supabase opravdu vypnul RLS u tabulky 'supporters'.</p>"
+            return f"<h1>❌ CHYBA DATABÁZE</h1><p><b>Důvod:</b> {str(e)}</p><p>Zkontroluj nastavení tabulky 'supporters'.</p>"
         return jsonify({"status": "error", "message": str(e)}), 400
 
 @app.route('/download/<token>')
@@ -1480,20 +1539,19 @@ def dashboard_main():
     
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů", deploy_time=DEPLOY_TIME)
 
-# PRO ZOBRAZENÍ TABULKY PODPOROVATELŮ PŘÍMO V DASHBOARDU S MOŽNOSTÍ ÚPRAV
 @app.route('/dashboard/supporters', methods=['GET'])
 def dashboard_supporters():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
     try: 
         db = get_db()
-        support_data = db.table("supporters").select("*").order("id", desc=True).execute().data or [] if db else []
+        data = db.table("supporters").select("*").execute().data or [] if db else []
+        support_data = process_supporters(data)
     except Exception as e: 
         flash(f"Chyba při stahování seznamu dárů: {e}", "error")
         support_data = []
     
     return render_dashboard(HTML_SUPPORTERS_MGMT, supporters=support_data, deploy_time=DEPLOY_TIME)
 
-# MANUÁLNÍ PŘIDÁNÍ PODPOROVATELE
 @app.route('/dashboard/add_supporter', methods=['POST'])
 def add_supporter():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
@@ -1509,7 +1567,6 @@ def add_supporter():
         flash(f'Chyba při přidávání: {e}', 'error')
     return redirect(url_for('dashboard_supporters'))
 
-# MANUÁLNÍ SMAZÁNÍ PODPOROVATELE
 @app.route('/dashboard/delete_supporter', methods=['POST'])
 def delete_supporter():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
@@ -1636,7 +1693,6 @@ def add_version():
     except: pass
     return redirect(url_for('dashboard_downloads'))
 
-# EDITACE EXISTUJÍCÍ VERZE SOUBORU
 @app.route('/dashboard/edit_version', methods=['POST'])
 def edit_version():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
@@ -1791,7 +1847,6 @@ intents.members = True; intents.message_content = True; intents.presences = True
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 bot.invites_cache = {}
 
-# --- PIXELDRAIN ANTI-DELETE OCHRANA ---
 @tasks.loop(hours=24)
 async def pixeldrain_keepalive():
     db = get_db()
@@ -1815,8 +1870,8 @@ async def pixeldrain_keepalive():
         if refreshed:
             files_str = "\n• ".join(refreshed)
             await async_send_log(
-                "🔄 Anti-Delete Ochrana (Pixeldrain)", 
-                f"Systém právě úspěšně nasimuloval stažení u uložených souborů na Pixeldrainu.\n**Ochráněné soubory:**\n• {files_str}", 
+                "🔄 Anti-Delete Ochrana", 
+                f"Systém právě úspěšně nasimuloval stažení.\n**Ochráněné soubory:**\n• {files_str}", 
                 0x3b82f6
             )
     except Exception as e:
@@ -1825,17 +1880,12 @@ async def pixeldrain_keepalive():
 @bot.event
 async def on_ready():
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
-    try:
-        bot.add_view(DynamicDownloadView())
+    try: bot.add_view(DynamicDownloadView())
     except: pass
-    
     try:
-        for guild in bot.guilds:
-            bot.invites_cache[guild.id] = await guild.invites()
+        for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
     except: pass
-    
-    if not pixeldrain_keepalive.is_running():
-        pixeldrain_keepalive.start()
+    if not pixeldrain_keepalive.is_running(): pixeldrain_keepalive.start()
 
 @bot.event
 async def on_member_join(member):
@@ -1886,14 +1936,12 @@ class PerDeleteConfirm(discord.ui.View):
     @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
-        await interaction.response.edit_message(content="❌ Akce zrušena. Účet smazán nebyl.", view=None, embed=None)
+        await interaction.response.edit_message(content="❌ Akce zrušena.", view=None, embed=None)
 
 @bot.event
 async def on_command_error(ctx, error):
-    if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Zkontroluj si `!help`.", delete_after=15)
-    elif isinstance(error, commands.MemberNotFound):
-        await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
+    if isinstance(error, commands.MissingRequiredArgument): await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Zkontroluj si `!help`.", delete_after=15)
+    elif isinstance(error, commands.MemberNotFound): await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
     elif isinstance(error, commands.CheckFailure): pass 
 
 def check_web_sa():
@@ -1971,14 +2019,11 @@ class DynamicDownloadView(discord.ui.View):
 
         await interaction.response.send_message("**Podmínky užití:**\n1. Zákaz úprav a šíření.\n2. Zámek na Váš PC (HWID).\n\nSouhlasíte?", view=DynamicRulesView(), ephemeral=True)
 
-# ----------------- PŘÍKAZY BOTA -----------------
-
 @bot.command()
 @check_web_sa()
 async def setup_download(ctx):
     embed = discord.Embed(title="📥 Projekt OIS IDPK - Instalace", description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a generování osobního odkazu ke stažení.", color=0x38bdf8)
     await ctx.send(embed=embed, view=DynamicDownloadView())
-    send_log("🛠️ Setup Download", f"Uživatel {ctx.author.mention} vytvořil nový instalační panel v kanálu {ctx.channel.mention}.", 0xf59e0b)
     try: await ctx.message.delete()
     except: pass
 
@@ -2065,10 +2110,9 @@ async def perdelete(ctx, discord_id: str):
 async def register(ctx, target_id: str = None):
     db = get_db()
     if not db: return await ctx.send("❌ Databáze nedostupná.")
-    
     if target_id:
         is_admin = discord.utils.get(ctx.author.roles, name="web-sa") or discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator
-        if not is_admin: return await ctx.send(f"❌ {ctx.author.mention} Nemáš oprávnění registrovat cizí účty.")
+        if not is_admin: return await ctx.send(f"❌ {ctx.author.mention} Nemáš oprávnění.")
         discord_id = target_id
         target_member = ctx.guild.get_member(int(discord_id)) if discord_id.isdigit() else None
         nick = target_member.display_name if target_member else f"Uživatel {discord_id}"
@@ -2076,7 +2120,6 @@ async def register(ctx, target_id: str = None):
         discord_id = str(ctx.author.id)
         nick = ctx.author.display_name
         target_member = ctx.author
-        
     now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
     check = db.table("users").select("*").eq("discord_id", discord_id).execute().data
     if check:
@@ -2087,8 +2130,7 @@ async def register(ctx, target_id: str = None):
             db.table("users").update({"app_id": new_app_id, "nick": nick, "is_deleted": False, "deleted_at": "", "registered_at": now_str}).eq("discord_id", discord_id).execute()
             await ctx.send(f"✅ Smazaný účet byl úspěšně obnoven! Nové App ID je **#{new_app_id}**.")
             if target_member: await update_member_roles(target_member, check[0].get('role', 'User'))
-        else:
-            await ctx.send(f"ℹ️ Tento uživatel již je zaregistrován!")
+        else: await ctx.send(f"ℹ️ Tento uživatel již je zaregistrován!")
     else:
         highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
         new_app_id = highest[0]["app_id"] + 1 if highest else 1000
@@ -2102,29 +2144,26 @@ async def sm(ctx, member: discord.Member):
     if not role: return await ctx.send("❌ Role `SM` na serveru neexistuje.")
     if role in member.roles:
         await member.remove_roles(role)
-        await ctx.send(f"➖ Role **SM** byla uživateli {member.mention} odebrána.")
+        await ctx.send(f"➖ Role **SM** byla odebrána.")
     else:
         await member.add_roles(role)
-        await ctx.send(f"➕ Role **SM** byla uživateli {member.mention} přidělena.")
+        await ctx.send(f"➕ Role **SM** byla přidělena.")
 
 @bot.command()
 @check_sm_role()
 async def message(ctx, channel: discord.TextChannel, *, text: str):
     try:
         await channel.send(text)
-        await ctx.send(f"✅ Zpráva odeslána do {channel.mention}.")
-    except discord.Forbidden:
-        await ctx.send("❌ Nemám oprávnění posílat zprávy do tohoto kanálu.")
+        await ctx.send(f"✅ Odesláno.")
+    except: await ctx.send("❌ Nemám oprávnění.")
 
 @bot.command()
 @check_sm_role()
 async def dm(ctx, member: discord.Member, *, text: str):
     try:
-        embed = discord.Embed(title="Zpráva od administrace (OIS IDPK)", description=text, color=0x38bdf8)
-        await member.send(embed=embed)
-        await ctx.send(f"✅ Zpráva odeslána uživateli {member.mention}.")
-    except discord.Forbidden:
-        await ctx.send("❌ Tento uživatel má zablokované soukromé zprávy od serverů.")
+        await member.send(embed=discord.Embed(title="Zpráva od administrace", description=text, color=0x38bdf8))
+        await ctx.send(f"✅ Odesláno.")
+    except: await ctx.send("❌ Zablokované SZ.")
 
 def run_web(): app.run(host='0.0.0.0', port=8080, use_reloader=False)
 
