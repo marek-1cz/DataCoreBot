@@ -111,7 +111,7 @@ BASE_HTML = """
         .btn { 
             display: inline-block; 
             background-color: var(--blue-main); 
-            color: #fff; 
+            color: #000; 
             padding: 10px 20px; 
             border-radius: 6px; 
             text-decoration: none; 
@@ -120,15 +120,15 @@ BASE_HTML = """
             cursor: pointer; 
             transition: 0.3s; 
         }
-        .btn:hover { background-color: var(--blue-hover); transform: translateY(-2px); }
-        .btn-danger { background-color: var(--danger); }
-        .btn-danger:hover { background-color: #dc2626; }
+        .btn:hover { background-color: var(--blue-hover); transform: translateY(-2px); color: #fff; }
+        .btn-danger { background-color: var(--danger); color: #fff;}
+        .btn-danger:hover { background-color: #dc2626; color: #fff;}
         .btn-warning { background-color: var(--warning); color: #000; }
-        .btn-warning:hover { background-color: #d97706; }
-        .btn-success { background-color: var(--success); }
-        .btn-success:hover { background-color: #059669; }
+        .btn-warning:hover { background-color: #d97706; color: #000;}
+        .btn-success { background-color: var(--success); color: #fff;}
+        .btn-success:hover { background-color: #059669; color: #fff;}
         .btn-dark { background-color: #334155; color: white; }
-        .btn-dark:hover { background-color: #475569; }
+        .btn-dark:hover { background-color: #475569; color: white;}
         
         input[type="text"], input[type="number"], input[type="password"], input[type="url"], textarea, select { 
             width: 100%; 
@@ -580,9 +580,10 @@ HTML_DOWNLOADS_MGMT = """
                     <a href="{{ v.get('file_url', '') }}" target="_blank" style="color: var(--blue-main);">{{ v.get('file_url', '') }}</a>
                 </td>
                 <td>
+                    <button type="button" class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" onclick="openEditVerModal('{{ v.get('id', '') }}', '{{ v.get('version_name', '') }}', '{{ v.get('file_url', '') }}', '{{ v.get('target_role', '') }}')"><i class="fas fa-edit"></i> Úprava</button>
                     <form action="/dashboard/delete_version" method="POST" style="display:inline;">
                         <input type="hidden" name="version_id" value="{{ v.get('id', '') }}">
-                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Odebrat tuto verzi ze stahování?')"><i class="fas fa-trash"></i></button>
+                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Odebrat tuto verzi ze stahování?')"><i class="fas fa-trash"></i> Smazat</button>
                     </form>
                 </td>
             </tr>
@@ -592,6 +593,45 @@ HTML_DOWNLOADS_MGMT = """
         </table>
     </div>
 </div>
+
+<div class="modal-overlay" id="editVerModal">
+    <div class="modal">
+        <div style="width: 100%;">
+            <h2 style="color: var(--warning); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+                <i class="fas fa-edit"></i> Upravit verzi
+            </h2>
+            <form action="/dashboard/edit_version" method="POST">
+                <input type="hidden" name="version_id" id="ev_id">
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Název v Menu:</label>
+                <input type="text" name="version_name" id="ev_name" required>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">URL odkazu:</label>
+                <input type="url" name="file_url" id="ev_url" required>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Pro jakou minimální roli?</label>
+                <select name="target_role" id="ev_role" required>
+                    <option value="User">User (Všichni)</option>
+                    <option value="BT">BETA TESTER (Testovací)</option>
+                    <option value="DEV_SA">DEV / SERVER ADMIN (Neveřejné)</option>
+                </select>
+                
+                <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 15px;">Uložit změny</button>
+            </form>
+            <button type="button" class="btn" style="width: 100%; margin-top: 10px; background: transparent; border: 1px solid #334155; color: var(--text-muted);" onclick="document.getElementById('editVerModal').style.display='none'">Zrušit</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openEditVerModal(id, name, url, role) {
+        document.getElementById('ev_id').value = id;
+        document.getElementById('ev_name').value = name;
+        document.getElementById('ev_url').value = url;
+        document.getElementById('ev_role').value = role;
+        document.getElementById('editVerModal').style.display = 'flex';
+    }
+</script>
 """
 
 HTML_PENDING_ROLES = """
@@ -802,7 +842,13 @@ HTML_DASHBOARD_MAIN = """
                         <span style="color: var(--success); font-size: 11px; font-weight:bold; border:1px solid var(--success); padding:2px 5px; border-radius:4px;">ACTIVATED</span>
                     {% endif %}
                 </td>
-                <td>
+                
+                {% set role_weight = 1 %}
+                {% if 'SA' in user.get('role', '') %}{% set role_weight = 4 %}
+                {% elif 'DEV' in user.get('role', '') %}{% set role_weight = 3 %}
+                {% elif 'BT' in user.get('role', '') %}{% set role_weight = 2 %}
+                {% endif %}
+                <td data-sort="{{ role_weight }}">
                     {% set role_list = user.get('role', '').split(',') %}
                     {% for r in role_list %}
                         {% set r_clean = r.strip() %}
@@ -840,10 +886,8 @@ HTML_DASHBOARD_MAIN = """
 </div>
 
 <script>
-    // AUTO REFRESH KAŽDOU MINUTU
     setTimeout(() => { location.reload(); }, 60000);
 
-    // ŘAZENÍ TABULKY
     let sortDir = {};
     function sortTable(n) {
         let table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
@@ -962,6 +1006,56 @@ HTML_SUPPORTERS = """
         {% else %}
         <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1);">Zatím zde nikdo není. Buďte první!</div>
         {% endfor %}
+    </div>
+</div>
+"""
+
+HTML_SUPPORTERS_MGMT = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-star" style="color:var(--warning);"></i> Správa Podporovatelů</h2>
+</div>
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Ruční přidání podporovatele</h3>
+        <p style="color: var(--text-muted); font-size: 13px;">(Pokud Vám někdo poslal peníze mimo Buy Me a Coffee)</p>
+        <form action="/dashboard/add_supporter" method="POST">
+            <input type="text" name="name" placeholder="Jméno podporovatele" required>
+            <input type="text" name="amount" placeholder="Částka (např. 150 CZK)" required>
+            <textarea name="message" placeholder="Zpráva od podporovatele (volitelně)..." rows="3"></textarea>
+            <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Přidat do databáze</button>
+        </form>
+    </div>
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">☕ Seznam podporovatelů</h3>
+        <div style="overflow-x: auto;">
+            <table>
+                <tr>
+                    <th>ID</th>
+                    <th>Jméno</th>
+                    <th>Částka</th>
+                    <th>Zpráva</th>
+                    <th>Datum přidání</th>
+                    <th>Akce</th>
+                </tr>
+                {% for s in supporters %}
+                <tr>
+                    <td style="color:var(--text-muted);">#{{ s.get('id', '') }}</td>
+                    <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
+                    <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
+                    <td style="font-style:italic;">{{ s.get('message', 'Bez zprávy') }}</td>
+                    <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
+                    <td>
+                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline;">
+                            <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
+                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu smazat tohoto podporovatele?')"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Zatím žádné platby.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
     </div>
 </div>
 """
@@ -1106,7 +1200,7 @@ def bmac_webhook():
     except Exception as e:
         print(f"Webhook Error: {e}", flush=True)
         if request.method == 'GET':
-            return f"<h1>❌ CHYBA DATABÁZE</h1><p><b>Důvod:</b> {str(e)}</p><p>Zkontroluj, zda jsi v Supabase opravdu vypnul RLS u tabulky 'supporters' a zda je 'created_at' nastavený jako text.</p>"
+            return f"<h1>❌ CHYBA DATABÁZE</h1><p><b>Důvod:</b> {str(e)}</p><p>Zkontroluj, zda jsi v Supabase opravdu vypnul RLS u tabulky 'supporters'.</p>"
         return jsonify({"status": "error", "message": str(e)}), 400
 
 @app.route('/download/<token>')
@@ -1386,7 +1480,7 @@ def dashboard_main():
     
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů", deploy_time=DEPLOY_TIME)
 
-# PRO ZOBRAZENÍ TABULKY PODPOROVATELŮ PŘÍMO V DASHBOARDU
+# PRO ZOBRAZENÍ TABULKY PODPOROVATELŮ PŘÍMO V DASHBOARDU S MOŽNOSTÍ ÚPRAV
 @app.route('/dashboard/supporters', methods=['GET'])
 def dashboard_supporters():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
@@ -1397,37 +1491,34 @@ def dashboard_supporters():
         flash(f"Chyba při stahování seznamu dárů: {e}", "error")
         support_data = []
     
-    # Rychlý html kód čistě pro dashboard tabulku s podporovateli
-    html = """
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-star" style="color:var(--warning);"></i> Historie Podporovatelů</h2>
-    </div>
-    <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <div style="overflow-x: auto;">
-            <table>
-                <tr>
-                    <th>ID</th>
-                    <th>Jméno</th>
-                    <th>Částka</th>
-                    <th>Zpráva</th>
-                    <th>Datum přijetí</th>
-                </tr>
-                {% for s in supporters %}
-                <tr>
-                    <td style="color:var(--text-muted);">#{{ s.get('id', '') }}</td>
-                    <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
-                    <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
-                    <td style="font-style:italic;">{{ s.get('message', 'Bez zprávy') }}</td>
-                    <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Zatím žádné platby.</td></tr>
-                {% endfor %}
-            </table>
-        </div>
-    </div>
-    """
-    return render_dashboard(html, supporters=support_data, deploy_time=DEPLOY_TIME)
+    return render_dashboard(HTML_SUPPORTERS_MGMT, supporters=support_data, deploy_time=DEPLOY_TIME)
+
+# MANUÁLNÍ PŘIDÁNÍ PODPOROVATELE
+@app.route('/dashboard/add_supporter', methods=['POST'])
+def add_supporter():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    try: 
+        get_db().table("supporters").insert({
+            "name": request.form.get("name"), 
+            "amount": request.form.get("amount"), 
+            "message": request.form.get("message", ""),
+            "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
+        }).execute()
+        flash('Podporovatel byl úspěšně přidán!', 'success')
+    except Exception as e: 
+        flash(f'Chyba při přidávání: {e}', 'error')
+    return redirect(url_for('dashboard_supporters'))
+
+# MANUÁLNÍ SMAZÁNÍ PODPOROVATELE
+@app.route('/dashboard/delete_supporter', methods=['POST'])
+def delete_supporter():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    try: 
+        get_db().table("supporters").delete().eq("id", request.form.get("supporter_id")).execute()
+        flash('Podporovatel smazán.', 'success')
+    except Exception as e: 
+        flash(f'Chyba při mazání: {e}', 'error')
+    return redirect(url_for('dashboard_supporters'))
 
 @app.route('/api/get_profile_data/<discord_id>')
 def get_profile_data(discord_id):
@@ -1543,6 +1634,21 @@ def add_version():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     try: get_db().table("software_versions").insert({"version_name": request.form.get("version_name"), "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role")}).execute()
     except: pass
+    return redirect(url_for('dashboard_downloads'))
+
+# EDITACE EXISTUJÍCÍ VERZE SOUBORU
+@app.route('/dashboard/edit_version', methods=['POST'])
+def edit_version():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    try: 
+        get_db().table("software_versions").update({
+            "version_name": request.form.get("version_name"), 
+            "file_url": request.form.get("file_url"), 
+            "target_role": request.form.get("target_role")
+        }).eq("id", request.form.get("version_id")).execute()
+        flash('Verze byla úspěšně upravena.', 'success')
+    except Exception as e: 
+        flash(f'Chyba při úpravě verze: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
 
 @app.route('/dashboard/delete_version', methods=['POST'])
