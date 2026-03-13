@@ -150,7 +150,8 @@ BASE_HTML = """
             overflow: hidden; 
         }
         th, td { padding: 15px; text-align: left; border-bottom: 1px solid #334155; }
-        th { background-color: #0f172a; color: var(--blue-main); font-weight: 600; text-transform: uppercase; font-size: 13px; }
+        th { background-color: #0f172a; color: var(--blue-main); font-weight: 600; text-transform: uppercase; font-size: 13px; cursor: pointer; transition: background 0.2s;}
+        th:hover { background-color: #1e293b; }
         tr:hover { background-color: #334155; }
         
         .role-tag { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; margin: 2px; }
@@ -233,7 +234,7 @@ DASHBOARD_LAYOUT = """
             <a href="/dashboard/ids" class="sidebar-link"><i class="fas fa-id-badge"></i> Správa ID</a>
             <a href="/dashboard/team" class="sidebar-link"><i class="fas fa-user-plus"></i> Správa Týmu</a>
             
-            <a href="/dashboard/supporters" class="sidebar-link" style="color: #F4CC17;"><i class="fas fa-star"></i> Správa Podporovatelů</a>
+            <a href="/dashboard/supporters" class="sidebar-link" style="color: #F4CC17;"><i class="fas fa-star"></i> Podporovatelé</a>
             
             <a href="/dashboard?filter=banned" class="sidebar-link" style="color: var(--warning);"><i class="fas fa-ban"></i> Seznam BANů</a>
             <a href="/dashboard?filter=deleted" class="sidebar-link" style="color: var(--danger);"><i class="fas fa-trash-alt"></i> Smazaní (Záloha)</a>
@@ -774,21 +775,32 @@ HTML_DASHBOARD_MAIN = """
 </div>
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
     <div style="overflow-x: auto;">
-        <table>
-            <tr>
-                <th>App ID</th>
-                <th>Nick</th>
-                <th>Role</th>
-                <th>Poslední Aktivita</th>
-                <th>Akce</th>
-            </tr>
+        <table id="usersTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0)">App ID ↕</th>
+                    <th onclick="sortTable(1)">Nick ↕</th>
+                    <th onclick="sortTable(2)">Stav ↕</th>
+                    <th onclick="sortTable(3)">Role ↕</th>
+                    <th onclick="sortTable(4)">Poslední Aktivita ↕</th>
+                    <th>Akce</th>
+                </tr>
+            </thead>
+            <tbody>
             {% for user in users %}
-            <tr style="opacity: {{ '0.6' if user.get('is_deleted') else '1' }};">
+            <tr>
                 <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
+                <td><strong>{{ user.get('nick', '') }}</strong></td>
                 <td>
-                    <strong>{{ user.get('nick', '') }}</strong>
-                    {% if user.get('is_banned') %}<span style="color: var(--danger); font-size: 11px; margin-left: 5px;"><i class="fas fa-ban"></i> BANNED</span>{% endif %}
-                    {% if user.get('is_deleted') %}<span style="color: var(--text-muted); font-size: 11px; margin-left: 5px;"><i class="fas fa-trash"></i> SMAZÁN</span>{% endif %}
+                    {% if user.get('is_banned') %}
+                        <span style="color: var(--danger); font-size: 11px; font-weight:bold; border:1px solid var(--danger); padding:2px 5px; border-radius:4px;">BANNED</span>
+                    {% elif user.get('is_deleted') %}
+                        <span style="color: var(--text-muted); font-size: 11px; font-weight:bold; border:1px solid var(--text-muted); padding:2px 5px; border-radius:4px;">DELETED</span>
+                    {% elif not user.get('hwid') or user.get('hwid') == 'None' or user.get('hwid') == '' %}
+                        <span style="color: var(--warning); font-size: 11px; font-weight:bold; border:1px solid var(--warning); padding:2px 5px; border-radius:4px;">NOT ACTIVATED</span>
+                    {% else %}
+                        <span style="color: var(--success); font-size: 11px; font-weight:bold; border:1px solid var(--success); padding:2px 5px; border-radius:4px;">ACTIVATED</span>
+                    {% endif %}
                 </td>
                 <td>
                     {% set role_list = user.get('role', '').split(',') %}
@@ -804,8 +816,11 @@ HTML_DASHBOARD_MAIN = """
                             <span class="role-tag" style="background-color: #64748b; color: white;">User</span>
                         {% endif %}
                     {% endfor %}
+                    {% if user.get('dashboard_access') %}
+                        <i class="fas fa-shield-alt" style="color:var(--blue-main); font-size:12px; margin-left:5px;" title="Má přístup do DB"></i>
+                    {% endif %}
                 </td>
-                <td style="color: var(--text-muted); font-size: 13px;">
+                <td style="color: var(--text-muted); font-size: 13px;" data-sort="{{ '99999999999' if user.get('is_online') else user.get('last_active', '0') }}">
                     {% if user.get('is_online') %}
                         <span style="color: var(--success); font-weight: bold;">🟢 Nyní hraje</span>
                     {% else %}
@@ -817,11 +832,60 @@ HTML_DASHBOARD_MAIN = """
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
+            <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
             {% endfor %}
+            </tbody>
         </table>
     </div>
 </div>
+
+<script>
+    // AUTO REFRESH KAŽDOU MINUTU
+    setTimeout(() => { location.reload(); }, 60000);
+
+    // ŘAZENÍ TABULKY
+    let sortDir = {};
+    function sortTable(n) {
+        let table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+        table = document.getElementById("usersTable");
+        switching = true;
+        
+        dir = sortDir[n] === "asc" ? "desc" : "asc";
+        sortDir[n] = dir;
+
+        while (switching) {
+            switching = false;
+            rows = table.rows;
+            for (i = 1; i < (rows.length - 1); i++) {
+                shouldSwitch = false;
+                x = rows[i].getElementsByTagName("TD")[n];
+                y = rows[i + 1].getElementsByTagName("TD")[n];
+                
+                let xContent = x.hasAttribute("data-sort") ? x.getAttribute("data-sort") : x.innerHTML.replace(/<[^>]*>?/gm, '').trim();
+                let yContent = y.hasAttribute("data-sort") ? y.getAttribute("data-sort") : y.innerHTML.replace(/<[^>]*>?/gm, '').trim();
+                
+                if (!isNaN(xContent) && !isNaN(yContent)) {
+                    xContent = parseFloat(xContent);
+                    yContent = parseFloat(yContent);
+                } else {
+                    xContent = xContent.toLowerCase();
+                    yContent = yContent.toLowerCase();
+                }
+
+                if (dir == "asc") {
+                    if (xContent > yContent) { shouldSwitch = true; break; }
+                } else if (dir == "desc") {
+                    if (xContent < yContent) { shouldSwitch = true; break; }
+                }
+            }
+            if (shouldSwitch) {
+                rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                switching = true;
+                switchcount ++;
+            } 
+        }
+    }
+</script>
 """
 
 HTML_SUPPORTERS = """
@@ -997,6 +1061,18 @@ def supporters():
     except: 
         support_data = []
     return render_public(HTML_SUPPORTERS, supporters=support_data)
+
+# TUTO CESTU POUŽÍVÁ TVŮJ PC OVLADAČ PRO NAČTENÍ JMEN VE HVĚZDIČCE
+@app.route('/api/supporters', methods=['GET', 'OPTIONS'])
+def api_supporters():
+    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    try:
+        db = get_db()
+        if not db: return _cors_jsonify({"error": "DB not ready"}), 500
+        support_data = db.table("supporters").select("name, amount, message, created_at").order("id", desc=True).execute().data or []
+        return _cors_jsonify({"supporters": support_data})
+    except Exception as e:
+        return _cors_jsonify({"error": str(e)}), 500
 
 @app.route('/webhook/bmac', methods=['GET', 'POST'])
 def bmac_webhook():
@@ -1309,6 +1385,49 @@ def dashboard_main():
     except Exception as e: flash(f"Chyba při načítání dat: {e}", "error")
     
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů", deploy_time=DEPLOY_TIME)
+
+# PRO ZOBRAZENÍ TABULKY PODPOROVATELŮ PŘÍMO V DASHBOARDU
+@app.route('/dashboard/supporters', methods=['GET'])
+def dashboard_supporters():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
+    try: 
+        db = get_db()
+        support_data = db.table("supporters").select("*").order("id", desc=True).execute().data or [] if db else []
+    except Exception as e: 
+        flash(f"Chyba při stahování seznamu dárů: {e}", "error")
+        support_data = []
+    
+    # Rychlý html kód čistě pro dashboard tabulku s podporovateli
+    html = """
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-star" style="color:var(--warning);"></i> Historie Podporovatelů</h2>
+    </div>
+    <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <div style="overflow-x: auto;">
+            <table>
+                <tr>
+                    <th>ID</th>
+                    <th>Jméno</th>
+                    <th>Částka</th>
+                    <th>Zpráva</th>
+                    <th>Datum přijetí</th>
+                </tr>
+                {% for s in supporters %}
+                <tr>
+                    <td style="color:var(--text-muted);">#{{ s.get('id', '') }}</td>
+                    <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
+                    <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
+                    <td style="font-style:italic;">{{ s.get('message', 'Bez zprávy') }}</td>
+                    <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Zatím žádné platby.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+    """
+    return render_dashboard(html, supporters=support_data, deploy_time=DEPLOY_TIME)
 
 @app.route('/api/get_profile_data/<discord_id>')
 def get_profile_data(discord_id):
