@@ -201,7 +201,7 @@ PUBLIC_LAYOUT = """
         <a href="/">Domů</a>
         <a href="/download">Download</a>
         <a href="/team">Náš Tým</a>
-        <a href="/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-heart"></i> Podporovatelé</a>
+        <a href="/supporters" style="color: #fca5a5; font-weight: bold; text-shadow: 0 0 10px rgba(239, 68, 68, 0.6);"><i class="fas fa-heart"></i> Podporovatelé</a>
         <a href="/dashboard" class="admin-link">Dashboard 🔒</a>
     </div>
 </nav>
@@ -235,7 +235,7 @@ DASHBOARD_LAYOUT = """
             <a href="/dashboard/ids" class="sidebar-link"><i class="fas fa-id-badge"></i> Správa ID</a>
             <a href="/dashboard/team" class="sidebar-link"><i class="fas fa-user-plus"></i> Správa Týmu</a>
             
-            <a href="/dashboard/supporters" class="sidebar-link" style="color: #F4CC17;"><i class="fas fa-star"></i> Podporovatelé</a>
+            <a href="/dashboard/supporters" class="sidebar-link" style="color: #ef4444; text-shadow: 0 0 5px rgba(239,68,68,0.5);"><i class="fas fa-heart"></i> Podporovatelé</a>
             
             <a href="/dashboard?filter=banned" class="sidebar-link" style="color: var(--warning);"><i class="fas fa-ban"></i> Seznam BANů</a>
             <a href="/dashboard?filter=deleted" class="sidebar-link" style="color: var(--danger);"><i class="fas fa-trash-alt"></i> Smazaní (Záloha)</a>
@@ -958,49 +958,55 @@ HTML_SUPPORTERS = """
         color: #000;
     }
     
-    /* ZÁKLADNÍ (TIER 1) - do $8.99 */
+    /* ZÁKLADNÍ (TIER 1) - do 194 CZK */
     .tier-1 {
-        background-color: var(--bg-panel); 
-        padding: 25px; 
-        border-radius: 12px;
-        box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+        background-color: rgba(15, 23, 42, 0.8); 
+        padding: 20px; 
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
         border: 1px solid rgba(56, 189, 248, 0.3); 
-        border-left: 6px solid var(--blue-main);
+        border-left: 5px solid #38bdf8;
         transition: transform 0.3s, box-shadow 0.3s;
     }
     .tier-1:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4); }
-    .tier-1 .name-title { color: var(--blue-main); text-shadow: 0 0 10px rgba(56, 189, 248, 0.3); }
+    .tier-1 .name-title { color: #e0f2fe; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); font-size: 20px; margin: 0; }
+    .tier-1 .title-badge { font-size: 10px; color: #38bdf8; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin-bottom: 5px; }
+    .tier-1 .amt-badge { background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; border: 1px solid rgba(56, 189, 248, 0.3); }
 
-    /* STŘEDNÍ (TIER 2) - do $14.99 */
+    /* STŘEDNÍ (TIER 2) - 195 až 324 CZK */
     .tier-2 {
-        background-color: #1e293b; 
+        background-color: rgba(30, 41, 59, 0.9); 
         padding: 25px; 
         border-radius: 12px;
-        box-shadow: 0 0 25px rgba(245, 158, 11, 0.3);
-        border: 1px solid rgba(245, 158, 11, 0.5); 
-        border-left: 6px solid var(--warning);
+        box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
+        border: 1px solid rgba(245, 158, 11, 0.6); 
+        border-left: 6px solid #f59e0b;
+        transform: scale(1.02);
         transition: transform 0.3s, box-shadow 0.3s;
     }
-    .tier-2:hover { transform: translateY(-5px); box-shadow: 0 10px 35px rgba(245, 158, 11, 0.6); }
-    .tier-2 .name-title { color: var(--warning); text-shadow: 0 0 15px rgba(245, 158, 11, 0.6); }
-    .tier-2 .amt-badge { background-color: rgba(245, 158, 11, 0.1) !important; color: var(--warning) !important; border-color: rgba(245, 158, 11, 0.5) !important; }
+    .tier-2:hover { transform: translateY(-5px) scale(1.03); box-shadow: 0 10px 35px rgba(245, 158, 11, 0.7); }
+    .tier-2 .name-title { color: #fcd34d; font-size: 26px; margin: 0; text-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
+    .tier-2 .title-badge { font-size: 12px; color: #f59e0b; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; margin-bottom: 5px; }
+    .tier-2 .amt-badge { background-color: rgba(245, 158, 11, 0.1); color: var(--warning); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(245, 158, 11, 0.5); }
 
-    /* EXTRÉMNÍ (TIER 3) - nad $15 */
+    /* EXTRÉMNÍ (TIER 3) - od 325 CZK */
     .tier-3 {
-        background: linear-gradient(135deg, #1e293b, #451a03);
+        background: linear-gradient(135deg, #2a0a18, #450a0a);
         padding: 30px; 
-        border-radius: 12px;
-        box-shadow: 0 0 40px rgba(245, 158, 11, 0.6);
-        border: 2px solid #fbbf24; 
-        animation: epicWebGlow 2s infinite alternate;
+        border-radius: 15px;
+        box-shadow: 0 0 35px rgba(239, 68, 68, 0.6), inset 0 0 20px rgba(239, 68, 68, 0.2);
+        border: 2px solid #ef4444; 
+        animation: epicWebGlow 1.5s infinite alternate;
+        transform: scale(1.05);
         transition: transform 0.3s;
     }
-    .tier-3:hover { transform: translateY(-5px) scale(1.02); }
-    .tier-3 .name-title { color: #fcd34d; font-size: 30px !important; text-shadow: 0 0 20px #fcd34d; text-transform: uppercase; }
-    .tier-3 .amt-badge { background-color: #f59e0b !important; color: #000 !important; border: none !important; font-size: 18px !important; box-shadow: 0 0 15px #f59e0b; }
+    .tier-3:hover { transform: translateY(-5px) scale(1.08); }
+    .tier-3 .name-title { color: #fca5a5; font-size: 32px !important; margin: 0; text-shadow: 0 0 20px #ef4444, 0 0 40px #ef4444; text-transform: uppercase; font-weight: 900; }
+    .tier-3 .title-badge { font-size: 14px; color: #ef4444; text-transform: uppercase; font-weight: 900; letter-spacing: 3px; margin-bottom: 5px; text-shadow: 0 0 10px #ef4444; }
+    .tier-3 .amt-badge { background-color: #ef4444 !important; color: #fff !important; border: 2px solid #fca5a5 !important; padding: 8px 20px; border-radius: 25px; font-weight: bold; font-size: 20px !important; box-shadow: 0 0 20px #ef4444; }
     @keyframes epicWebGlow {
-        from { box-shadow: 0 0 30px rgba(245, 158, 11, 0.5); }
-        to { box-shadow: 0 0 60px rgba(245, 158, 11, 0.9), inset 0 0 20px rgba(245, 158, 11, 0.2); }
+        from { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
+        to { box-shadow: 0 0 50px rgba(239, 68, 68, 0.9), inset 0 0 30px rgba(239, 68, 68, 0.3); }
     }
 </style>
 
@@ -1019,19 +1025,26 @@ HTML_SUPPORTERS = """
     <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 40px 0;">
     <h2 style="text-align: center; color: var(--text-main); letter-spacing: 3px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,255,255,0.2);">SEZNAM PODPOROVATELŮ</h2>
     
-    <div style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; flex-direction: column; gap: 30px; padding-bottom: 50px;">
         {% for s in supporters %}
         <div class="tier-{{ s.get('tier', 1) }}">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
-                <h3 class="name-title" style="margin: 0; font-size: 24px;">{{ s.get('name', 'Neznámý dárce') }} {% if s.get('tier') == 3 %}👑{% elif s.get('tier') == 2 %}⭐{% endif %}</h3>
-                <span class="amt-badge" style="background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(56, 189, 248, 0.3);">{{ s.get('amount', '') }}</span>
+            {% if s.get('tier') == 3 %}
+                <div class="title-badge">MEGA PODPOROVATEL</div>
+            {% elif s.get('tier') == 2 %}
+                <div class="title-badge">VELKÝ PODPOROVATEL</div>
+            {% else %}
+                <div class="title-badge">PODPOROVATEL</div>
+            {% endif %}
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 class="name-title">{{ s.get('name', 'Neznámý dárce') }} {% if s.get('tier') == 3 %}👑{% elif s.get('tier') == 2 %}⭐{% endif %}</h3>
+                <span class="amt-badge">{{ s.get('amount', '') }}</span>
             </div>
+            
             {% if s.get('message') %}
-            <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+            <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0; line-height: 1.5; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 2px solid rgba(255,255,255,0.2);">
                 "{{ s.get('message') }}"
             </p>
-            {% else %}
-            <p style="color: #64748b; font-size: 14px; font-style: italic; margin: 0;">Bez textového vzkazu.</p>
             {% endif %}
             <div style="font-size: 11px; color: #64748b; margin-top: 15px; text-align: right; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">Datum podpory: {{ s.get('created_at', '') }}</div>
         </div>
@@ -1103,10 +1116,8 @@ def get_db():
     except: return None
 
 def process_supporters(data_list):
-    # Projde seznam, vytáhne si číslo a určí Tier
     for s in data_list:
         amt_str = str(s.get('amount', '0'))
-        # Najde číslo ve stringu
         match = re.search(r'([\d\.,]+)', amt_str)
         val = 0.0
         if match:
@@ -1121,12 +1132,10 @@ def process_supporters(data_list):
         
         s['norm_val'] = norm_val
         
-        # Tiers: 3 = > 350czk (15 USD), 2 = 195czk (9 USD), 1 = základ
-        if norm_val >= 345: s['tier'] = 3
+        if norm_val >= 325: s['tier'] = 3
         elif norm_val >= 195: s['tier'] = 2
         else: s['tier'] = 1
 
-    # Seřadí od nejbohatšího, pak podle data
     data_list.sort(key=lambda x: (x.get('norm_val', 0), x.get('id', 0)), reverse=True)
     return data_list
 
@@ -1544,7 +1553,7 @@ def dashboard_supporters():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
     try: 
         db = get_db()
-        data = db.table("supporters").select("*").execute().data or [] if db else []
+        data = db.table("supporters").select("*").order("id", desc=True).execute().data or [] if db else []
         support_data = process_supporters(data)
     except Exception as e: 
         flash(f"Chyba při stahování seznamu dárů: {e}", "error")
