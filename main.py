@@ -79,10 +79,31 @@ def process_supporters(data_list):
     data_list.sort(key=lambda x: (x.get('norm_val', 0), x.get('id', 0)), reverse=True)
     return data_list
 
-def calculate_roles_for_supporter():
-    # Všichni podporovatelé bez ohledu na částku dostávají tyto role
-    # Vrací: (Role na Discordu, Role v Databázi)
-    return "🎖️| Beta tester", "BT"
+def calculate_roles_for_supporter(amount_str):
+    match = re.search(r'([\d\.,]+)', str(amount_str))
+    val = 0.0
+    if match:
+        try:
+            val = float(match.group(1).replace(',', '.'))
+        except:
+            pass
+    if 'usd' in str(amount_str).lower() or '$' in str(amount_str).lower():
+        val *= 23
+    elif 'eur' in str(amount_str).lower() or '€' in str(amount_str).lower():
+        val *= 25
+    
+    if val >= 325:
+        tier_role = "⭐| MEGA PODPOROVATEL"
+    elif val >= 195:
+        tier_role = "⭐| VELKÝ PODPOROVATEL"
+    else:
+        tier_role = "⭐| PODPOROVATEL"
+        
+    # Vrací List rolí pro Discord a String pro Databázi
+    discord_roles = ["🎖️| Beta tester", tier_role]
+    db_role_string = f"BT,{tier_role}"
+    
+    return discord_roles, db_role_string
 
 def user_exists_sync(identifier):
     try:
@@ -102,7 +123,7 @@ def user_exists_sync(identifier):
         pass
     return False
 
-async def assign_supporter_role(identifier, role_name):
+async def assign_supporter_role(identifier, role_names_list):
     success = False
     try:
         for guild in bot.guilds:
@@ -117,14 +138,20 @@ async def assign_supporter_role(identifier, role_name):
                 )
 
             if member:
-                role = discord.utils.get(guild.roles, name=role_name)
-                if role:
-                    await member.add_roles(role)
+                assigned_any = False
+                for r_name in role_names_list:
+                    role = discord.utils.get(guild.roles, name=r_name)
+                    if role:
+                        await member.add_roles(role)
+                        assigned_any = True
+                
+                if assigned_any:
                     success = True
                     try:
+                        roles_str = "\n".join([f"**{r}**" for r in role_names_list])
                         embed = discord.Embed(
-                            title="🎉 Děkujeme za podporu!", 
-                            description=f"Na našem Discord serveru a v databázi ti byla automaticky přidělena exkluzivní role:\n\n**{role_name}**\n\nMoc si toho vážíme!", 
+                            title="🎉 Děkujeme za obrovskou podporu!", 
+                            description=f"Na našem Discord serveru a v databázi ti byly automaticky přiděleny tyto exkluzivní role:\n\n{roles_str}\n\nMoc si toho vážíme!", 
                             color=0x38bdf8
                         )
                         await member.send(embed=embed)
@@ -132,14 +159,15 @@ async def assign_supporter_role(identifier, role_name):
                         pass
                 break
     except Exception as e:
-        print(f"Chyba pri pridelovani role: {e}")
+        print(f"Chyba pri pridelovani roli: {e}")
     return success
 
-async def announce_new_supporter(discord_nick, amount_str, message, role_name):
+async def announce_new_supporter(discord_nick, amount_str, message, role_names_list):
     for guild in bot.guilds:
         channel = discord.utils.get(guild.channels, name="⭐・podporovatelé")
         if channel:
-            embed = discord.Embed(title="🎉 MÁME NOVÉHO PODPOROVATELE!", description=f"Uživatel **{discord_nick}** právě podpořil náš projekt a získal exkluzivní roli **{role_name}** na serveru i v aplikaci!", color=0xf59e0b)
+            roles_str = ", ".join([f"**{r}**" for r in role_names_list])
+            embed = discord.Embed(title="🎉 MÁME NOVÉHO PODPOROVATELE!", description=f"Uživatel **{discord_nick}** právě podpořil náš projekt a získal exkluzivní role {roles_str} na serveru i v aplikaci!", color=0xf59e0b)
             embed.add_field(name="💰 Výše podpory", value=f"**{amount_str}**", inline=False)
             if message and message.strip():
                 embed.add_field(name="📝 Vzkaz od podporovatele", value=f"*{message}*", inline=False)
@@ -323,6 +351,7 @@ def claim_role():
 
         all_records = db.table("supporters").select("*").eq("name", bmac_name).execute().data
         
+        # OCHRANA PROTI ZNEUŽITÍ: Pokud je platba už dokončená, zablokujeme to.
         if any(r['status'] == 'completed' for r in all_records):
             send_log("⚠️ Pokus o zneužití (Double Claim)", f"Uživatel **{discord_nick}** se pokusil na webu znovu použít BMAC jméno **{bmac_name}**, které už bylo dříve spárováno s jiným účtem!", 0xef4444)
             flash('Chyba: Platba pod tímto jménem již byla spárována s jiným Discord účtem a nelze ji použít znovu!', 'error')
@@ -332,12 +361,12 @@ def claim_role():
 
         if pending_records:
             record = pending_records[0] 
-            discord_role, db_role = calculate_roles_for_supporter()
+            discord_roles, db_role_string = calculate_roles_for_supporter(record.get('amount', '0'))
             
             if user_exists_sync(discord_nick):
                 if bot.loop and bot.loop.is_running():
-                    asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, discord_role), bot.loop)
-                    asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_nick, record.get('amount', '0'), record.get('message', ''), discord_role), bot.loop)
+                    asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, discord_roles), bot.loop)
+                    asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_nick, record.get('amount', '0'), record.get('message', ''), discord_roles), bot.loop)
 
                 db.table("supporters").update({"status": "completed", "discord_nick": discord_nick}).eq("id", record['id']).execute()
                 send_log("✅ Role úspěšně vyzvednuta", f"Uživatel **{discord_nick}** si přes web úspěšně spároval BMAC platbu od jména **{bmac_name}**.", 0x10b981)
@@ -346,19 +375,24 @@ def claim_role():
                 if db_user:
                     current_roles = db_user[0].get('role', '')
                     roles_list = [r.strip() for r in current_roles.split(',')] if current_roles else []
-                    if db_role not in roles_list:
-                        roles_list.append(db_role)
-                        new_roles = ",".join(roles_list)
-                        db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
+                    
+                    # Přidáme nové role do seznamu, pokud tam ještě nejsou
+                    for new_r in db_role_string.split(','):
+                        if new_r.strip() not in roles_list:
+                            roles_list.append(new_r.strip())
+                            
+                    new_roles = ",".join(roles_list)
+                    db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
                 else:
-                    db.table("pending_roles").insert({"discord_identifier": discord_nick, "roles": db_role}).execute()
+                    db.table("pending_roles").insert({"discord_identifier": discord_nick, "roles": db_role_string}).execute()
 
-                flash('Úspěch! Role ti byla právě přidělena na Discordu a tvé jméno bude zveřejněno v síni slávy!', 'success')
+                flash('Úspěch! Role ti byla právě přidělena na Discordu a tvoje jméno bude zveřejněno v síni slávy!', 'success')
             else:
                 db.table("supporters").update({"status": "manual_review", "discord_nick": discord_nick}).eq("id", record['id']).execute()
                 send_log("⚠️ Žádost o kontrolu", f"Uživatel **{discord_nick}** se pokusil spárovat platbu od **{bmac_name}**, ale bot ho nenašel na Discord serveru.\nPřesunuto do manuální kontroly.", 0xf59e0b)
                 flash('Tvůj Discord účet nebyl na serveru nalezen! Požadavek byl odeslán ke schválení administrátorovi.', 'warning')
         else:
+            # Kontrola, jestli už to náhodou nečeká na manuální kontrolu
             manual_records = [r for r in all_records if r['status'] == 'manual_review']
             if manual_records:
                 flash('Tato platba již čeká na manuální schválení administrátorem. Prosím vyčkejte.', 'warning')
@@ -393,7 +427,7 @@ def bmac_webhook():
         currency = data.get('currency') or 'CZK'
         amount_str = f"{amount_val} {currency}"
         
-        discord_role, db_role = calculate_roles_for_supporter()
+        discord_roles, db_role_string = calculate_roles_for_supporter(amount_str)
         discord_identifier = None
         
         id_match = re.search(r'\b\d{17,19}\b', message)
@@ -426,16 +460,19 @@ def bmac_webhook():
                 if db_user:
                     current_roles = db_user[0].get('role', '')
                     roles_list = [r.strip() for r in current_roles.split(',')] if current_roles else []
-                    if db_role not in roles_list:
-                        roles_list.append(db_role)
-                        new_roles = ",".join(roles_list)
-                        db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
+                    
+                    for new_r in db_role_string.split(','):
+                        if new_r.strip() not in roles_list:
+                            roles_list.append(new_r.strip())
+                            
+                    new_roles = ",".join(roles_list)
+                    db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
                 else:
-                    db.table("pending_roles").insert({"discord_identifier": discord_identifier, "roles": db_role}).execute()
+                    db.table("pending_roles").insert({"discord_identifier": discord_identifier, "roles": db_role_string}).execute()
 
                 if bot.loop and bot.loop.is_running():
-                    asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_identifier, discord_role), bot.loop)
-                    asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_identifier, amount_str, message, discord_role), bot.loop)
+                    asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_identifier, discord_roles), bot.loop)
+                    asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_identifier, amount_str, message, discord_roles), bot.loop)
 
         if request.method == 'GET':
             return f"<h1>ÚSPĚCH! 🎉</h1><p>Testovací podpora zapsána!</p><a href='/supporters'>Zpět</a>"
@@ -774,7 +811,8 @@ def dashboard_stats():
     try:
         db = get_db()
         if db:
-            visits = db.table("page_visits").select("*").execute().data or []
+            # Ochrana paměti - Načte pouze nejnovějších 5000 záznamů, aby nepadla RAMka
+            visits = db.table("page_visits").select("*").order("id", desc=True).limit(5000).execute().data or []
             total_visits = len(visits)
             now = get_prague_time().replace(tzinfo=None)
             
@@ -886,16 +924,14 @@ def approve_claim():
     amount = request.form.get("amount", "0")
     db = get_db()
     if db and claim_id and discord_nick:
-        discord_role, db_role = calculate_roles_for_supporter()
+        discord_roles, db_role_string = calculate_roles_for_supporter(amount)
         
-        # Odeslání zprávy a role
         if bot.loop and bot.loop.is_running():
-            asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, discord_role), bot.loop)
+            asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, discord_roles), bot.loop)
             
-            # Načtení detailů pro announcement
             rec = db.table("supporters").select("*").eq("id", claim_id).execute().data
             if rec:
-                asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_nick, amount, rec[0].get('message', ''), discord_role), bot.loop)
+                asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_nick, amount, rec[0].get('message', ''), discord_roles), bot.loop)
         
         db.table("supporters").update({"status": "completed", "discord_nick": discord_nick}).eq("id", claim_id).execute()
         send_log("✅ Manuální schválení", f"Administrátor právě schválil roli pro uživatele **{discord_nick}**.", 0x10b981)
@@ -904,12 +940,13 @@ def approve_claim():
         if db_user:
             current_roles = db_user[0].get('role', '')
             roles_list = [r.strip() for r in current_roles.split(',')] if current_roles else []
-            if db_role not in roles_list:
-                roles_list.append(db_role)
-                new_roles = ",".join(roles_list)
-                db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
+            for new_r in db_role_string.split(','):
+                if new_r.strip() not in roles_list:
+                    roles_list.append(new_r.strip())
+            new_roles = ",".join(roles_list)
+            db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
         else:
-            db.table("pending_roles").insert({"discord_identifier": discord_nick, "roles": db_role}).execute()
+            db.table("pending_roles").insert({"discord_identifier": discord_nick, "roles": db_role_string}).execute()
             
         flash(f'Požadavek schválen a role udělena pro: {discord_nick}', 'success')
     return redirect(url_for('dashboard_supporters'))
@@ -965,21 +1002,22 @@ def add_supporter():
         }).execute()
         
         if d_nick:
-            discord_role, db_role = calculate_roles_for_supporter()
+            discord_roles, db_role_string = calculate_roles_for_supporter(amt)
             if bot.loop and bot.loop.is_running():
-                asyncio.run_coroutine_threadsafe(assign_supporter_role(d_nick, discord_role), bot.loop)
-                asyncio.run_coroutine_threadsafe(announce_new_supporter(d_nick, amt, msg, discord_role), bot.loop)
+                asyncio.run_coroutine_threadsafe(assign_supporter_role(d_nick, discord_roles), bot.loop)
+                asyncio.run_coroutine_threadsafe(announce_new_supporter(d_nick, amt, msg, discord_roles), bot.loop)
                 
             db_user = db.table("users").select("*").or_(f"discord_id.eq.{d_nick},nick.ilike.{d_nick}").execute().data
             if db_user:
                 current_roles = db_user[0].get('role', '')
                 roles_list = [r.strip() for r in current_roles.split(',')] if current_roles else []
-                if db_role not in roles_list:
-                    roles_list.append(db_role)
-                    new_roles = ",".join(roles_list)
-                    db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
+                for new_r in db_role_string.split(','):
+                    if new_r.strip() not in roles_list:
+                        roles_list.append(new_r.strip())
+                new_roles = ",".join(roles_list)
+                db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
             else:
-                db.table("pending_roles").insert({"discord_identifier": d_nick, "roles": db_role}).execute()
+                db.table("pending_roles").insert({"discord_identifier": d_nick, "roles": db_role_string}).execute()
         
         flash('Podporovatel byl úspěšně přidán!', 'success')
     except Exception as e:
@@ -1263,14 +1301,17 @@ def edit_user():
                 r_str = ",".join(request.form.getlist("roles")) if request.form.getlist("roles") else "User"
                 db.table("users").update({"nick": nick, "role": r_str, "hwid": request.form.get("hwid"), "dashboard_access": True if request.form.get("dashboard_access") else False}).eq("discord_id", discord_id).execute()
                 sync_roles_from_flask(discord_id, r_str)
+                send_log("✏️ Úprava uživatele", f"Administrátor upravil uživatele **{nick}** (ID: `{discord_id}`).\nNové role: `{r_str}`", 0xf59e0b)
                 flash('Údaje upraveny!', 'success')
             elif action == 'ban':
                 db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                send_log("🔨 BAN", f"Administrátor udělil BAN uživateli **{nick}** (ID: `{discord_id}`).", 0xef4444)
                 flash('BAN udělen.', 'warning')
                 if str(session.get('discord_id')) == str(discord_id):
                     session.clear()
             elif action == 'unban':
                 db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
+                send_log("🕊️ UN-BAN", f"Administrátor zrušil BAN uživateli **{nick}** (ID: `{discord_id}`).", 0x10b981)
                 flash('BAN zrušen.', 'success')
             elif action == 'delete':
                 db.table("users").update({"is_deleted": True, "deleted_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute()
@@ -1635,9 +1676,9 @@ async def unban(ctx, discord_id: str):
     db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
     await ctx.send(f"🕊️ Uživateli `{discord_id}` byl zrušen BAN.")
 
-@bot.command(name="db")
+@bot.command()
 @check_sm_role()
-async def db_cmd(ctx, discord_id: str):
+async def db(ctx, discord_id: str):
     db_conn = get_db()
     if not db_conn:
         return
