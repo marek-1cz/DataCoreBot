@@ -13,8 +13,15 @@ import json
 import traceback
 import re
 
-# IMPORT VŠECH HTML DESIGNŮ Z VEDLEJŠÍHO SOUBORU
-from html_templates import *
+# ==========================================
+# IMPORT HTML Z html_templates.py
+# ==========================================
+from html_templates import (
+    BASE_HTML, PUBLIC_LAYOUT, DASHBOARD_LAYOUT, HTML_HOME, HTML_CLAIM, 
+    HTML_STATS, HTML_TEAM, HTML_DOWNLOADS_MAIN, HTML_LOGIN, HTML_WAIT_AUTH, 
+    HTML_APP_SETTINGS, HTML_PENDING_ROLES, HTML_TEAM_ADD, HTML_IDS, 
+    HTML_DASHBOARD_MAIN, HTML_SUPPORTERS, HTML_SUPPORTERS_MGMT
+)
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
@@ -38,7 +45,7 @@ def handle_exception(e):
     return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
 
 # ==========================================
-# GLOBÁLNÍ FUNKCE A DATABÁZE
+# DATABÁZE A GLOBÁLNÍ FUNKCE
 # ==========================================
 
 def get_db():
@@ -218,9 +225,8 @@ def sync_roles_from_flask(discord_id, role_string):
     if bot.loop and bot.loop.is_running():
         asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
-
 # ==========================================
-# VEŘEJNÉ STRÁNKY (PUBLIC ROUTES)
+# PUBLIC FLASK STRÁNKY A BMAC
 # ==========================================
 
 @app.route('/')
@@ -259,7 +265,7 @@ def home():
             except:
                 pass
             
-            if not country_code or country_code.lower() == 'us' or country_name.lower() in ["neznámá", "unknown", "none"]:
+            if not country_code or country_code.lower() == 'us' or country_name.lower() in ["neznámá", "unknown", "neznámá (nepodporováno)", "none", "united states", "us"]:
                 return 
             
             combined_location = f"{country_code}|{country_name}|{region}"
@@ -1595,8 +1601,8 @@ def run_web():
 
 if __name__ == "__main__":
     token = os.environ.get("DISCORD_TOKEN")
+    Thread(target=run_web).start()
     if token:
-        Thread(target=run_web).start()
         bot.run(token)
     else:
-        print("KRITICKÁ CHYBA: DISCORD_TOKEN není nastaven v environment variables!")
+        print("KRITICKÁ CHYBA: DISCORD_TOKEN není nastaven v environment variables! (Web běží dál bez Bota)")
