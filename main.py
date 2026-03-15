@@ -23,7 +23,8 @@ app.secret_key = "ois_idpk_super_tajny_klic"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png"
+# 👇 ZDE SI UPRAV ODKAZ NA TEN TVŮJ NOVÝ OBRÁZEK ZE SUPABASE 👇
+URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/bus-logo/NAZEV_TVEHO_OBRAZKU.png" 
 URL_VELKE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png"
 
 def get_prague_time():
@@ -99,7 +100,6 @@ def calculate_roles_for_supporter(amount_str):
     else:
         tier_role = "⭐| PODPOROVATEL"
         
-    # Vrací List rolí pro Discord a String pro Databázi
     discord_roles = ["🎖️| Beta tester", tier_role]
     db_role_string = f"BT,{tier_role}"
     
@@ -351,7 +351,6 @@ def claim_role():
 
         all_records = db.table("supporters").select("*").eq("name", bmac_name).execute().data
         
-        # OCHRANA PROTI ZNEUŽITÍ: Pokud je platba už dokončená, zablokujeme to.
         if any(r['status'] == 'completed' for r in all_records):
             send_log("⚠️ Pokus o zneužití (Double Claim)", f"Uživatel **{discord_nick}** se pokusil na webu znovu použít BMAC jméno **{bmac_name}**, které už bylo dříve spárováno s jiným účtem!", 0xef4444)
             flash('Chyba: Platba pod tímto jménem již byla spárována s jiným Discord účtem a nelze ji použít znovu!', 'error')
@@ -376,7 +375,6 @@ def claim_role():
                     current_roles = db_user[0].get('role', '')
                     roles_list = [r.strip() for r in current_roles.split(',')] if current_roles else []
                     
-                    # Přidáme nové role do seznamu, pokud tam ještě nejsou
                     for new_r in db_role_string.split(','):
                         if new_r.strip() not in roles_list:
                             roles_list.append(new_r.strip())
@@ -392,7 +390,6 @@ def claim_role():
                 send_log("⚠️ Žádost o kontrolu", f"Uživatel **{discord_nick}** se pokusil spárovat platbu od **{bmac_name}**, ale bot ho nenašel na Discord serveru.\nPřesunuto do manuální kontroly.", 0xf59e0b)
                 flash('Tvůj Discord účet nebyl na serveru nalezen! Požadavek byl odeslán ke schválení administrátorovi.', 'warning')
         else:
-            # Kontrola, jestli už to náhodou nečeká na manuální kontrolu
             manual_records = [r for r in all_records if r['status'] == 'manual_review']
             if manual_records:
                 flash('Tato platba již čeká na manuální schválení administrátorem. Prosím vyčkejte.', 'warning')
@@ -926,9 +923,11 @@ def approve_claim():
     if db and claim_id and discord_nick:
         discord_roles, db_role_string = calculate_roles_for_supporter(amount)
         
+        # Odeslání zprávy a role
         if bot.loop and bot.loop.is_running():
             asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, discord_roles), bot.loop)
             
+            # Načtení detailů pro announcement
             rec = db.table("supporters").select("*").eq("id", claim_id).execute().data
             if rec:
                 asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_nick, amount, rec[0].get('message', ''), discord_roles), bot.loop)
@@ -1676,9 +1675,9 @@ async def unban(ctx, discord_id: str):
     db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
     await ctx.send(f"🕊️ Uživateli `{discord_id}` byl zrušen BAN.")
 
-@bot.command()
+@bot.command(name="db")
 @check_sm_role()
-async def db(ctx, discord_id: str):
+async def db_cmd(ctx, discord_id: str):
     db_conn = get_db()
     if not db_conn:
         return
