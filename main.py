@@ -35,7 +35,7 @@ def handle_exception(e):
     return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
 
 # ==========================================
-# HTML ŠABLONY
+# 1. HTML ŠABLONY
 # ==========================================
 
 BASE_HTML = """
@@ -330,9 +330,11 @@ HTML_HOME = """
                 Celá infrastruktura, od databází po ověřování uživatelů, je bezpečně řízena a chráněna unikátním systémem DataCoreBot. 
                 Zajišťuje bleskovou synchronizaci dat, striktní Hardware ID (HWID) ochranu a nepřetržitý chod palubních počítačů.
             </p>
-            <p style="color: var(--blue-main); font-weight: bold; margin: 0; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px;">
-                <i class="fas fa-code"></i> Vytvořeno vývojářem marekk_czz
-            </p>
+            <div style="display: inline-block; background: rgba(0,0,0,0.3); padding: 10px 20px; border-radius: 8px; border: 1px solid var(--blue-main);">
+                <p style="color: var(--text-main); font-weight: bold; margin: 0; font-size: 1em; letter-spacing: 1px;">
+                    <i class="fas fa-code" style="color: var(--blue-main);"></i> Vytvořeno vývojářem <span style="color: var(--blue-main);">marekk_czz</span>
+                </p>
+            </div>
         </div>
     </div>
 </div>
@@ -372,19 +374,32 @@ HTML_STATS = """
     </div>
 </div>
 
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+    <h3 style="color: var(--warning); margin-top: 0;"><i class="fas fa-globe"></i> Návštěvnost podle států (Souhrn)</h3>
+    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+        {% for cc, data in country_totals.items() %}
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid #334155; padding: 10px 20px; border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+            <img src="{{ data.flag }}" alt="" style="border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">
+            <span style="color: var(--text-main); font-weight: bold;">{{ data.name }}</span>
+            <span style="background: var(--blue-main); color: #000; padding: 2px 8px; border-radius: 12px; font-weight: 900; font-size: 12px;">{{ data.count }}</span>
+        </div>
+        {% else %}
+        <div style="color: var(--text-muted);">Zatím žádná data k zobrazení.</div>
+        {% endfor %}
+    </div>
+</div>
+
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-    <h3 style="color: var(--warning); margin-top: 0;"><i class="fas fa-globe"></i> Návštěvnost podle zemí a regionů</h3>
+    <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-map-marker-alt"></i> Detailní přehled regionů</h3>
     <table style="width: 100%;">
         <tr>
             <th>Stát / Region</th>
             <th>Počet zobrazení</th>
         </tr>
-        {% for c_name, data in countries.items() %}
+        {% for c_name, data in region_totals.items() %}
         <tr>
             <td style="font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
-                {% if data.flag %}
-                <img src="{{ data.flag }}" alt="flag" style="border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">
-                {% endif %}
+                <img src="{{ data.flag }}" alt="" style="border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">
                 {{ c_name }}
             </td>
             <td style="color: var(--blue-main); font-weight: bold; font-size: 16px;">{{ data.count }}</td>
@@ -831,258 +846,6 @@ HTML_IDS = """
 </div>
 """
 
-HTML_DASHBOARD_MAIN = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
-    
-    <div id="refresh-timer" style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;">
-        <i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Aktualizace za: <span id="timer-sec" style="color: white;">60</span>s
-    </div>
-</div>
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-    <div style="overflow-x: auto;">
-        <table id="usersTable">
-            <thead>
-                <tr>
-                    <th onclick="sortTable(0)">App ID ↕</th>
-                    <th onclick="sortTable(1)">Nick ↕</th>
-                    <th onclick="sortTable(2)">Stav ↕</th>
-                    <th onclick="sortTable(3)">Role ↕</th>
-                    <th onclick="sortTable(4)">Poslední Aktivita ↕</th>
-                    <th>Akce</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for user in users %}
-            <tr>
-                <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
-                <td><strong>{{ user.get('nick', '') }}</strong></td>
-                <td>
-                    {% if user.get('is_banned') %}
-                        <span style="color: var(--danger); font-size: 11px; font-weight:bold; border:1px solid var(--danger); padding:2px 5px; border-radius:4px;">BANNED</span>
-                    {% elif user.get('is_deleted') %}
-                        <span style="color: var(--text-muted); font-size: 11px; font-weight:bold; border:1px solid var(--text-muted); padding:2px 5px; border-radius:4px;">DELETED</span>
-                    {% elif not user.get('hwid') or user.get('hwid') == 'None' or user.get('hwid') == '' %}
-                        <span style="color: var(--warning); font-size: 11px; font-weight:bold; border:1px solid var(--warning); padding:2px 5px; border-radius:4px;">NOT ACTIVATED</span>
-                    {% else %}
-                        <span style="color: var(--success); font-size: 11px; font-weight:bold; border:1px solid var(--success); padding:2px 5px; border-radius:4px;">ACTIVATED</span>
-                    {% endif %}
-                </td>
-                
-                {% set role_weight = 1 %}
-                {% if 'SA' in user.get('role', '') %}{% set role_weight = 4 %}
-                {% elif 'DEV' in user.get('role', '') %}{% set role_weight = 3 %}
-                {% elif 'BT' in user.get('role', '') %}{% set role_weight = 2 %}
-                {% endif %}
-                <td data-sort="{{ role_weight }}">
-                    {% set role_list = user.get('role', '').split(',') %}
-                    {% for r in role_list %}
-                        {% set r_clean = r.strip() %}
-                        {% if r_clean == 'SA' %}
-                            <span class="role-tag" style="background-color: #ef4444; color: white;">SA</span>
-                        {% elif r_clean == 'DEV' %}
-                            <span class="role-tag" style="background-color: #10b981; color: white;">DEV</span>
-                        {% elif r_clean == 'BT' %}
-                            <span class="role-tag" style="background-color: #3b82f6; color: white;">BT</span>
-                        {% elif r_clean == 'User' %}
-                            <span class="role-tag" style="background-color: #64748b; color: white;">User</span>
-                        {% endif %}
-                    {% endfor %}
-                    {% if user.get('dashboard_access') %}
-                        <i class="fas fa-shield-alt" style="color:var(--blue-main); font-size:12px; margin-left:5px;" title="Má přístup do DB"></i>
-                    {% endif %}
-                </td>
-                <td style="color: var(--text-muted); font-size: 13px;" data-sort="{{ '99999999999' if user.get('is_online') else user.get('last_active', '0') }}">
-                    {% if user.get('is_online') %}
-                        <span style="color: var(--success); font-weight: bold;">🟢 AKTIVNÍ</span>
-                    {% else %}
-                        {{ user.get('last_active', 'Nikdy nehrál') }}
-                    {% endif %}
-                </td>
-                <td>
-                    <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', '') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-edit"></i> Upravit</button>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<script>
-    // AUTO REFRESH KAŽDOU MINUTU
-    let timeLeft = 60;
-    setInterval(() => {
-        timeLeft--;
-        let secEl = document.getElementById('timer-sec');
-        if(secEl) secEl.innerText = timeLeft;
-        if(timeLeft <= 0) location.reload();
-    }, 1000);
-
-    // ŘAZENÍ TABULKY
-    let sortDir = {};
-    function sortTable(n) {
-        let table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-        table = document.getElementById("usersTable");
-        switching = true;
-        
-        dir = sortDir[n] === "asc" ? "desc" : "asc";
-        sortDir[n] = dir;
-
-        while (switching) {
-            switching = false;
-            rows = table.rows;
-            for (i = 1; i < (rows.length - 1); i++) {
-                shouldSwitch = false;
-                x = rows[i].getElementsByTagName("TD")[n];
-                y = rows[i + 1].getElementsByTagName("TD")[n];
-                
-                let xContent = x.hasAttribute("data-sort") ? x.getAttribute("data-sort") : x.innerHTML.replace(/<[^>]*>?/gm, '').trim();
-                let yContent = y.hasAttribute("data-sort") ? y.getAttribute("data-sort") : y.innerHTML.replace(/<[^>]*>?/gm, '').trim();
-                
-                if (!isNaN(xContent) && !isNaN(yContent)) {
-                    xContent = parseFloat(xContent);
-                    yContent = parseFloat(yContent);
-                } else {
-                    xContent = xContent.toLowerCase();
-                    yContent = yContent.toLowerCase();
-                }
-
-                if (dir == "asc") {
-                    if (xContent > yContent) { shouldSwitch = true; break; }
-                } else if (dir == "desc") {
-                    if (xContent < yContent) { shouldSwitch = true; break; }
-                }
-            }
-            if (shouldSwitch) {
-                rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-                switching = true;
-                switchcount ++;
-            } 
-        }
-    }
-</script>
-"""
-
-HTML_SUPPORTERS = """
-<style>
-    .glowing-btn-blue { background-color: var(--blue-main); color: #000; padding: 15px 40px; font-size: 20px; font-weight: 900; border-radius: 50px; text-decoration: none; display: inline-block; margin-top: 20px; box-shadow: 0 0 20px rgba(56, 189, 248, 0.6); transition: all 0.3s ease; text-transform: uppercase; letter-spacing: 1px; border: none; cursor: pointer; }
-    .glowing-btn-blue:hover { box-shadow: 0 0 40px rgba(56, 189, 248, 1); transform: scale(1.05); color: #000; }
-    
-    .supporter-wrapper {
-        width: 100%; max-width: 500px; min-height: 230px;
-        display: flex; flex-direction: column; justify-content: space-between; align-items: center; text-align: center; box-sizing: border-box;
-    }
-
-    .tier-1 { background-color: rgba(15, 23, 42, 0.8); padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.3); border-left: 5px solid #38bdf8; transition: transform 0.5s ease, box-shadow 0.5s ease; }
-    .tier-1:hover { transform: scale(1.05); box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4); }
-    .tier-1 .name-title { color: #e0f2fe; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); font-size: 20px; margin: 0 0 10px 0; }
-    .tier-1 .title-badge { font-size: 10px; color: #38bdf8; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin-bottom: 10px; }
-    .tier-1 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; border: 1px solid rgba(56, 189, 248, 0.3); }
-
-    @keyframes pulseMedium { from { box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); } to { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); } }
-    .tier-2 { background-color: rgba(30, 41, 59, 0.9); padding: 25px; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.6); border-left: 6px solid #f59e0b; animation: pulseMedium 2s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
-    .tier-2:hover { transform: scale(1.05) !important; animation: none; box-shadow: 0 10px 35px rgba(245, 158, 11, 0.8); }
-    .tier-2 .name-title { color: #fcd34d; font-size: 26px; margin: 0 0 10px 0; text-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
-    .tier-2 .title-badge { font-size: 12px; color: #f59e0b; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; margin-bottom: 10px; }
-    .tier-2 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(245, 158, 11, 0.1); color: var(--warning); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(245, 158, 11, 0.5); }
-
-    @keyframes epicWebGlow { from { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); } to { box-shadow: 0 0 50px rgba(239, 68, 68, 0.9), inset 0 0 30px rgba(239, 68, 68, 0.3); } }
-    .tier-3 { background: linear-gradient(135deg, #2a0a18, #450a0a); padding: 30px; border-radius: 15px; border: 2px solid #ef4444; animation: epicWebGlow 1.5s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
-    .tier-3:hover { transform: scale(1.08) !important; animation: none; box-shadow: 0 15px 60px rgba(239, 68, 68, 1); }
-    .tier-3 .name-title { color: #fca5a5; font-size: 32px !important; margin: 0 0 15px 0; text-shadow: 0 0 20px #ef4444, 0 0 40px #ef4444; text-transform: uppercase; font-weight: 900; }
-    .tier-3 .title-badge { font-size: 14px; color: #ef4444; text-transform: uppercase; font-weight: 900; letter-spacing: 3px; margin-bottom: 10px; text-shadow: 0 0 10px #ef4444; }
-    .tier-3 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: #ef4444 !important; color: #fff !important; border: 2px solid #fca5a5 !important; padding: 8px 20px; border-radius: 25px; font-weight: bold; font-size: 20px !important; box-shadow: 0 0 20px #ef4444; }
-</style>
-
-<div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
-    <div style="text-align: center; margin-bottom: 40px;">
-        <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Děkuji všem za podporu!</h1>
-        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!</p>
-        <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue"><i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK</a>
-    </div>
-    
-    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 40px 0;">
-    <h2 style="text-align: center; color: var(--text-main); letter-spacing: 3px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,255,255,0.2);">SEZNAM PODPOROVATELŮ</h2>
-    
-    <div style="display: flex; flex-direction: column; gap: 40px; padding-bottom: 50px; align-items: center;">
-        {% for s in supporters %}
-        <div class="tier-{{ s.get('tier', 1) }} supporter-wrapper">
-            <div style="width: 100%;">
-                {% if s.get('tier') == 3 %} <div class="title-badge">MEGA PODPOROVATEL</div>
-                {% elif s.get('tier') == 2 %} <div class="title-badge">VELKÝ PODPOROVATEL</div>
-                {% else %} <div class="title-badge">PODPOROVATEL</div> {% endif %}
-                
-                <h3 class="name-title">{{ s.get('name', 'Neznámý dárce') }}</h3>
-                <div class="amt-badge">{{ s.get('amount', '') }}</div>
-            </div>
-            
-            <div style="width: 100%; margin-top: auto;">
-                {% if s.get('message') %}
-                <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0 auto 15px auto; line-height: 1.5; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 2px solid rgba(255,255,255,0.2); max-width: 90%;">
-                    "{{ s.get('message') }}"
-                </p>
-                {% endif %}
-                <div style="font-size: 11px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; text-align: center;">Datum podpory: {{ s.get('created_at', '') }}</div>
-            </div>
-        </div>
-        {% else %}
-        <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1); width: 100%;">Zatím zde nikdo není. Buďte první!</div>
-        {% endfor %}
-    </div>
-</div>
-"""
-
-HTML_SUPPORTERS_MGMT = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-star" style="color:var(--warning);"></i> Správa Podporovatelů</h2>
-</div>
-<div style="display: flex; gap: 20px; flex-wrap: wrap;">
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Ruční přidání podporovatele</h3>
-        <p style="color: var(--text-muted); font-size: 13px;">(Pokud Vám někdo poslal peníze mimo Buy Me a Coffee)</p>
-        <form action="/dashboard/add_supporter" method="POST">
-            <input type="text" name="name" placeholder="Jméno podporovatele" required>
-            <input type="text" name="amount" placeholder="Částka (např. 150 CZK nebo 10 USD)" required>
-            <textarea name="message" placeholder="Zpráva od podporovatele (volitelně)..." rows="3"></textarea>
-            <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Přidat do databáze</button>
-        </form>
-    </div>
-    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">☕ Seznam podporovatelů</h3>
-        <div style="overflow-x: auto;">
-            <table>
-                <tr>
-                    <th>Jméno</th>
-                    <th>Částka</th>
-                    <th>Zpráva</th>
-                    <th>Datum přidání</th>
-                    <th>Akce</th>
-                </tr>
-                {% for s in supporters %}
-                <tr>
-                    <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
-                    <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
-                    <td style="font-style:italic;">{{ s.get('message', 'Bez zprávy') }}</td>
-                    <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
-                    <td>
-                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline;">
-                            <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
-                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu smazat tohoto podporovatele?')"><i class="fas fa-trash"></i></button>
-                        </form>
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Zatím žádné platby.</td></tr>
-                {% endfor %}
-            </table>
-        </div>
-    </div>
-</div>
-"""
-
 # ==========================================
 # GLOBÁLNÍ FUNKCE A TŘÍDĚNÍ PODPOROVATELŮ
 # ==========================================
@@ -1186,25 +949,24 @@ def sync_roles_from_flask(discord_id, role_string):
 def home(): 
     def log_visit(ip, cf_country):
         try:
-            db = get_db()
-            if not db: return
-            
-            # Zahodíme místní a prázdné IP adresy (boty)
             if not ip or ip in ["127.0.0.1", "::1", "0.0.0.0"]: return
             clean_ip = ip.split(',')[0].strip()
+            
+            db = get_db()
+            if not db: return
             
             today_str = get_prague_time().strftime("%d.%m.%Y")
             now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
             
-            # Kontrola: 1 záznam na IP denně
             existing = db.table("page_visits").select("visited_at").eq("ip", clean_ip).execute().data or []
             for record in existing:
                 if record.get("visited_at", "").startswith(today_str):
-                    return # Už tu dneska byl
+                    return # Jiz zaznamenano dnes pro tuto IP
             
+            country_name = cf_country
             region = ""
             country_code = ""
-            country_name = cf_country
+            
             try:
                 url = f"http://ip-api.com/json/{clean_ip}"
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -1216,10 +978,9 @@ def home():
                         country_code = geo_data.get("countryCode", "").lower()
             except: pass
             
-            # Nechceme v databázi nesmysly, US servery renderu nebo neznámé IP
-            if not country_code or country_name.lower() in ["neznámá", "unknown", "neznámá (nepodporováno)"]:
-                return
-                
+            if not country_code or country_name.lower() in ["neznámá", "unknown", "neznámá (nepodporováno)", "none"]:
+                return 
+            
             combined_location = f"{country_code}|{country_name}|{region}"
             db.table("page_visits").insert({"ip": clean_ip, "country": combined_location, "visited_at": now_str}).execute()
         except: pass
@@ -1555,7 +1316,11 @@ def logout(): session.clear(); return redirect(url_for('home'))
 @app.route('/dashboard/stats')
 def dashboard_stats():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    total_visits = 0; last_7_days = 0; parsed_countries = {}
+    
+    total_visits = 0
+    last_7_days = 0
+    country_totals = {}
+    region_totals = {}
     
     dates_7_days = [(get_prague_time().replace(tzinfo=None) - timedelta(days=i)).strftime("%d.%m.") for i in range(6, -1, -1)]
     chart_data_7d = {d: 0 for d in dates_7_days}
@@ -1569,18 +1334,27 @@ def dashboard_stats():
             now = get_prague_time().replace(tzinfo=None)
             
             for v in visits:
-                c_raw = v.get('country', 'Neznámá (Nepodporováno)')
+                c_raw = v.get('country', '')
+                if not c_raw or 'neznámá' in c_raw.lower() or 'unknown' in c_raw.lower() or 'none' in c_raw.lower():
+                    continue
+                
                 parts = c_raw.split('|')
                 cc = parts[0] if len(parts) > 0 else ""
                 c_name = parts[1] if len(parts) > 1 else c_raw
                 reg = parts[2] if len(parts) > 2 else ""
                 
-                if cc and cc != "neznámá" and cc != "neznámá (nepodporováno)":
-                    flag = f"https://flagcdn.com/24x18/{cc}.png"
-                    display_name = f"{c_name} - {reg}" if reg else c_name
-                    if display_name not in parsed_countries:
-                        parsed_countries[display_name] = {"count": 0, "flag": flag}
-                    parsed_countries[display_name]["count"] += 1
+                if not cc: continue
+                
+                flag_url = f"https://flagcdn.com/24x18/{cc}.png"
+                
+                if cc not in country_totals:
+                    country_totals[cc] = {"name": c_name, "count": 0, "flag": flag_url}
+                country_totals[cc]["count"] += 1
+                
+                display_name = f"{c_name} - {reg}" if reg else c_name
+                if display_name not in region_totals:
+                    region_totals[display_name] = {"count": 0, "flag": flag_url}
+                region_totals[display_name]["count"] += 1
                 
                 try:
                     v_time = datetime.strptime(v['visited_at'], "%d.%m.%Y %H:%M")
@@ -1593,9 +1367,10 @@ def dashboard_stats():
                     if v_time.date() == now.date():
                         if hour_str in chart_data_24h: chart_data_24h[hour_str] += 1
                 except: pass
+                
     except Exception as e: flash(f"Chyba při načítání statistik: {e}", "error")
     
-    return render_dashboard(HTML_STATS, total_visits=total_visits, last_7_days=last_7_days, countries=parsed_countries, labels_7d=json.dumps(list(chart_data_7d.keys())), data_7d=json.dumps(list(chart_data_7d.values())), labels_24h=json.dumps(list(chart_data_24h.keys())), data_24h=json.dumps(list(chart_data_24h.values())), deploy_time=DEPLOY_TIME)
+    return render_dashboard(HTML_STATS, total_visits=total_visits, last_7_days=last_7_days, country_totals=country_totals, region_totals=region_totals, labels_7d=json.dumps(list(chart_data_7d.keys())), data_7d=json.dumps(list(chart_data_7d.values())), labels_24h=json.dumps(list(chart_data_24h.keys())), data_24h=json.dumps(list(chart_data_24h.values())), deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard_main():
