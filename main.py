@@ -1,10 +1,17 @@
-import os, discord, asyncio, uuid, urllib.request, json, traceback, re
+import os
+import discord
 from discord.ext import commands, tasks
 from discord.ui import Button, View, Select
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash, Response, stream_with_context, jsonify
 from threading import Thread
 from supabase import create_client
 from datetime import datetime, timedelta
+import asyncio
+import uuid
+import urllib.request
+import json
+import traceback
+import re
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
@@ -13,8 +20,11 @@ app.secret_key = "ois_idpk_super_tajny_klic"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-def get_prague_time(): return datetime.utcnow() + timedelta(hours=1)
+def get_prague_time():
+    return datetime.utcnow() + timedelta(hours=1)
+
 DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
+
 URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png"
 URL_VELKE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png"
 
@@ -22,32 +32,1130 @@ URL_VELKE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/pub
 def handle_exception(e):
     error_trace = traceback.format_exc()
     print(error_trace, flush=True)
-    return f"<div style='background:#0f172a;color:#ef4444;padding:20px;font-family:monospace;border:2px solid #ef4444;'><h2>CHYBA (500)</h2><pre>{error_trace}</pre></div>", 500
+    return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
 
 # ==========================================
-# 1. ZKOMPRIMOVANÉ HTML ŠABLONY
+# 1. HTML ŠABLONY (V PLNOKREVNÉM DESIGNU)
 # ==========================================
-BASE_HTML = """<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Projekt OIS IDPK</title><link rel="icon" type="image/png" href="{{ logo_male }}"><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet"><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><style>:root{--bg-dark:#0f172a;--bg-panel:#1e293b;--blue-main:#38bdf8;--blue-hover:#0284c7;--text-main:#f8fafc;--text-muted:#94a3b8;--danger:#ef4444;--success:#10b981;--warning:#f59e0b}body{font-family:'Segoe UI',sans-serif;background-color:var(--bg-dark);color:var(--text-main);margin:0;padding:0}.top-nav{background-color:rgba(15,23,42,0.9);padding:15px 40px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;backdrop-filter:blur(10px);z-index:100}.logo{font-size:24px;font-weight:800;color:var(--blue-main);text-decoration:none;display:flex;align-items:center;gap:10px}.nav-links a{color:var(--text-main);text-decoration:none;margin-left:20px;font-weight:500;transition:0.3s}.nav-links a:hover{color:var(--blue-main)}.nav-links .admin-link{color:var(--text-muted);font-size:12px;margin-left:40px;border:1px solid #334155;padding:5px 10px;border-radius:5px}.container{max-width:1200px;margin:40px auto;padding:0 20px}.btn{display:inline-block;background-color:var(--blue-main);color:#000;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;border:none;cursor:pointer;transition:0.3s}.btn:hover{background-color:var(--blue-hover);transform:translateY(-2px);color:#fff}.btn-danger{background-color:var(--danger);color:#fff}.btn-warning{background-color:var(--warning);color:#000}.btn-success{background-color:var(--success);color:#fff}.btn-dark{background-color:#334155;color:#fff}input,textarea,select{width:100%;padding:10px;margin:8px 0 15px;background-color:#0f172a;border:1px solid #334155;color:#fff;border-radius:5px;box-sizing:border-box}table{width:100%;border-collapse:collapse;margin-top:10px;background-color:var(--bg-panel);border-radius:10px;overflow:hidden}th,td{padding:15px;text-align:left;border-bottom:1px solid #334155}th{background-color:#0f172a;color:var(--blue-main);cursor:pointer}tr:hover{background-color:#334155}.role-tag{display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:bold;margin:2px}.dashboard-wrapper{display:flex;min-height:100vh}.sidebar{width:250px;background-color:var(--bg-panel);border-right:1px solid #334155;display:flex;flex-direction:column}.sidebar-header{padding:20px;border-bottom:1px solid #334155;text-align:center}.sidebar-menu{padding:20px 0;flex-grow:1}.sidebar-link{display:block;padding:12px 20px;color:var(--text-muted);text-decoration:none;font-weight:500;border-left:3px solid transparent}.sidebar-link:hover{background-color:rgba(56,189,248,0.1);color:var(--blue-main);border-left-color:var(--blue-main)}.dashboard-content{flex-grow:1;padding:30px;background-color:var(--bg-dark);overflow-y:auto}.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);backdrop-filter:blur(5px);z-index:1000;align-items:center;justify-content:center}.modal{background:var(--bg-panel);padding:30px;border-radius:15px;width:700px;max-width:90%;border-top:5px solid var(--blue-main);max-height:90vh;overflow-y:auto}.alert{padding:15px;border-radius:5px;margin-bottom:20px;font-weight:bold}.alert-success{background:rgba(16,185,129,0.2);color:var(--success);border:1px solid var(--success)}.alert-error{background:rgba(239,68,68,0.2);color:var(--danger);border:1px solid var(--danger)}.alert-warning{background:rgba(245,158,11,0.2);color:var(--warning);border:1px solid var(--warning)}.profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}.profile-card{background:#0f172a;padding:15px;border-radius:8px;border:1px solid #334155}.checkbox-group{display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px}</style></head><body>{% block layout %}{% endblock %}</body></html>"""
-PUBLIC_LAYOUT = """<nav class="top-nav"><a href="/" class="logo"><img src="{{ logo_male }}" style="height:30px;border-radius:4px;">OIS IDPK</a><div class="nav-links"><a href="/">Domů</a><a href="/download">Download</a><a href="/team">Náš Tým</a><a href="/supporters" style="color:var(--blue-main);font-weight:bold;text-shadow:0 0 10px rgba(56,189,248,0.6)"><i class="fas fa-heart"></i> Podporovatelé</a><a href="/dashboard" class="admin-link">Dashboard 🔒</a></div></nav><div class="container">{% with messages=get_flashed_messages(with_categories=true) %}{% if messages %}{% for c, m in messages %}<div class="alert alert-{{ c }}">{{ m }}</div>{% endfor %}{% endif %}{% endwith %}{% block content %}{% endblock %}</div>"""
-DASHBOARD_LAYOUT = """<div class="dashboard-wrapper"><div class="sidebar"><div class="sidebar-header"><a href="/" class="logo" style="font-size:20px;justify-content:center"><img src="{{ logo_male }}" style="height:24px;border-radius:4px;">OIS IDPK</a><div style="font-size:11px;color:var(--text-muted);margin-top:5px;">Dashboard</div></div><div class="sidebar-menu"><a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a><a href="/dashboard/stats" class="sidebar-link"><i class="fas fa-chart-bar"></i> Statistiky Webu</a><a href="/dashboard/app_settings" class="sidebar-link"><i class="fas fa-cog"></i> Nastavení Aplikace</a><a href="/dashboard/downloads" class="sidebar-link"><i class="fas fa-cloud-download-alt"></i> Správa Stahování</a><a href="/dashboard/pending_roles" class="sidebar-link" style="color:#10b981;"><i class="fas fa-ticket-alt"></i> Rezervace Rolí</a><a href="/dashboard/ids" class="sidebar-link"><i class="fas fa-id-badge"></i> Správa ID</a><a href="/dashboard/team" class="sidebar-link"><i class="fas fa-user-plus"></i> Správa Týmu</a><a href="/dashboard/supporters" class="sidebar-link" style="color:var(--blue-main);text-shadow:0 0 5px rgba(56,189,248,0.5);"><i class="fas fa-star"></i> Podporovatelé</a><a href="/dashboard?filter=banned" class="sidebar-link" style="color:var(--warning);"><i class="fas fa-ban"></i> Seznam BANů</a><a href="/dashboard?filter=deleted" class="sidebar-link" style="color:var(--danger);"><i class="fas fa-trash-alt"></i> Smazaní (Záloha)</a></div><div style="padding:20px;"><div style="font-size:11px;color:var(--text-muted);text-align:center;margin-bottom:15px;border-top:1px solid #334155;padding-top:15px;"><i class="fas fa-clock"></i> Update:<br><b>{{ deploy_time }}</b></div><a href="/logout" class="btn btn-danger" style="width:100%;text-align:center;"><i class="fas fa-sign-out-alt"></i> Odhlásit</a></div></div><div class="dashboard-content">{% with messages=get_flashed_messages(with_categories=true) %}{% if messages %}{% for c, m in messages %}<div class="alert alert-{{ c }}">{{ m }}</div>{% endfor %}{% endif %}{% endwith %}{% block content %}{% endblock %}</div></div><div class="modal-overlay" id="editModal"><div class="modal"><h2 style="color:var(--blue-main);margin-top:0;border-bottom:1px solid #334155;padding-bottom:10px;display:flex;justify-content:space-between;"><span><i class="fas fa-user"></i> Profil <span id="modalAppId" style="color:var(--text-muted);"></span></span><span id="modalStatusDot"></span></h2><div class="profile-grid"><div class="profile-card"><div class="profile-stat">Členem Discordu od:</div><div class="profile-val" id="profJoined"><i class="fas fa-spinner fa-spin"></i></div><div class="profile-stat" style="margin-top:10px;">Datum registrace:</div><div class="profile-val" id="profRegistered"></div><div class="profile-stat" style="margin-top:10px;">Aktivita:</div><div class="profile-val" id="profAppStatus"></div><div id="profStats"></div><div class="profile-stat" style="margin-top:10px;">Přístup DB:</div><div class="profile-val" id="profDbAccess"></div></div><div class="profile-card" style="max-height:250px;overflow-y:auto;"><div class="profile-stat" style="font-weight:bold;color:var(--blue-main);">Historie stahování:</div><table class="dl-table"><tbody id="profDownloads"></tbody></table></div></div><form action="/dashboard/edit_user" method="POST" style="border-top:1px solid #334155;padding-top:15px;"><input type="hidden" name="discord_id" id="modalDiscordId"><label>Herní Nick:</label><input type="text" name="nick" id="modalNick" required><label>Role:</label><div class="checkbox-group"><label style="color:#ef4444;"><input type="checkbox" name="roles" value="SA"> SA</label><label style="color:#10b981;"><input type="checkbox" name="roles" value="DEV"> DEV</label><label style="color:#3b82f6;"><input type="checkbox" name="roles" value="BT"> BT</label><label style="color:#94a3b8;"><input type="checkbox" name="roles" value="User"> User</label></div><label>HWID:</label><input type="text" name="hwid" id="modalHwid" placeholder="Pro odblokování smažte text zde"><div style="background:rgba(56,189,248,0.1);padding:10px;border-radius:5px;border:1px solid var(--blue-main);margin-bottom:15px;"><label style="cursor:pointer;font-weight:bold;color:var(--blue-main);display:flex;align-items:center;gap:10px;"><input type="checkbox" name="dashboard_access" id="modalDashboardAccess" value="True"> Povolit 2FA DB</label></div><div id="activeActions"><div style="display:flex;gap:10px;"><button type="submit" name="action" value="save" class="btn" style="flex:2;">Uložit</button><button type="submit" name="action" value="ban" id="btnBan" class="btn btn-warning" style="flex:1;">Dát BAN</button><button type="submit" name="action" value="unban" id="btnUnban" class="btn btn-success" style="flex:1;display:none;">Un-BAN</button></div><div style="margin-top:15px;border-top:1px solid #334155;padding-top:15px;"><button type="submit" name="action" value="delete" class="btn btn-danger" style="width:100%;" onclick="return confirm('Smazat účet?')">Smazat účet (Soft)</button></div></div><div id="deletedActions" style="display:none;margin-top:20px;border-top:1px solid #334155;padding-top:15px;"><p style="color:var(--danger);font-weight:bold;text-align:center;margin-top:0;">Smazaný účet</p><div style="display:flex;gap:10px;"><button type="submit" name="action" value="restore" class="btn btn-success" style="flex:1;">Obnovit</button><button type="submit" name="action" value="hard_delete" class="btn btn-dark" style="flex:1;" onclick="return confirm('Trvale smazat?')">Smazat permanentně</button></div></div></form><button class="btn" onclick="document.getElementById('editModal').style.display='none'" style="background:transparent;color:var(--text-muted);width:100%;margin-top:10px;border:1px solid #334155;">Zrušit</button></div></div><script>function openModal(a,d,n,r,h,b,dl,da,reg){document.getElementById('editModal').style.display='flex';document.getElementById('modalAppId').innerText="#"+a;document.getElementById('modalDiscordId').value=d;document.getElementById('modalNick').value=n;document.getElementById('modalHwid').value=h==='None'?'':h;document.getElementById('profRegistered').innerText=reg&&reg!=='None'?reg:'Neznámé';document.getElementById('modalDashboardAccess').checked=(da==='True');document.getElementById('profDbAccess').innerHTML=da==='True'?'<span style="color:var(--success)">Povoleno</span>':'<span style="color:var(--danger)">Zakázáno</span>';document.querySelectorAll('input[name="roles"]').forEach(cb=>cb.checked=false);r.split(',').forEach(ro=>{let el=document.querySelector(`input[name="roles"][value="${ro.trim()}"]`);if(el)el.checked=true;});if(dl==='True'){document.getElementById('activeActions').style.display='none';document.getElementById('deletedActions').style.display='block';}else{document.getElementById('activeActions').style.display='block';document.getElementById('deletedActions').style.display='none';if(b==='True'){document.getElementById('btnBan').style.display='none';document.getElementById('btnUnban').style.display='block';}else{document.getElementById('btnBan').style.display='block';document.getElementById('btnUnban').style.display='none';}}document.getElementById('profJoined').innerHTML='<i class="fas fa-spinner fa-spin"></i>';document.getElementById('modalStatusDot').innerHTML='';document.getElementById('profDownloads').innerHTML='<tr><td colspan="2" style="text-align:center"><i class="fas fa-spinner fa-spin"></i></td></tr>';document.getElementById('profAppStatus').innerHTML='';document.getElementById('profStats').innerHTML='';fetch('/api/get_profile_data/'+d).then(r=>r.json()).then(data=>{document.getElementById('profJoined').innerText=data.joined_at;document.getElementById('modalStatusDot').innerHTML=data.status;document.getElementById('profAppStatus').innerHTML=data.app_status;document.getElementById('profStats').innerHTML=data.stats;let dlH="";if(data.downloads&&data.downloads.length>0){data.downloads.forEach(dw=>{dlH+=`<tr><td style="color:var(--blue-main)"><b>${dw.version_name}</b></td><td style="color:var(--text-muted)">${dw.downloaded_at}</td></tr>`;});}else{dlH="<tr><td colspan='2' style='color:var(--text-muted)'>Žádná data</td></tr>";}document.getElementById('profDownloads').innerHTML=dlH;});}</script>"""
-HTML_HOME = """<div style="text-align:center;padding:60px 20px;max-width:800px;margin:0 auto;"><h1 style="color:var(--blue-main);font-size:2.5em;text-transform:uppercase;letter-spacing:2px;text-shadow:0 0 15px rgba(56,189,248,0.4);">OFICIÁLNÍ STRÁNKA PROJEKTU OIS IDPK</h1><div style="font-size:1.1em;color:var(--text-main);line-height:1.6;margin-bottom:40px;background:rgba(30,41,59,0.5);padding:25px;border-radius:10px;border-left:4px solid var(--blue-main);text-align:left;"><p style="margin-top:0;">Projekt OIS IDPK je fanouškovský software inspirovaný skutečnými vnitřními informačními panely, které se používají v autobusech Plzeňského kraje. Cílem projektu je co nejvěrněji napodobit jejich vzhled i způsob fungování.</p><p>Software simuluje zobrazování zastávek, průběh celé linky i další informace. Můžeš si vyzkoušet, jak se panel chová při jízdě po trase.</p><p style="margin-bottom:0;">Projekt není oficiálním produktem dopravců a nijak s nimi nespolupracuje. Jde o čistě fanouškovský projekt pro zábavu.</p></div><a href="/download" class="btn" style="font-size:18px;padding:15px 40px;border-radius:30px;box-shadow:0 5px 15px rgba(56,189,248,0.4);"><i class="fas fa-download"></i> Získat Software</a><hr style="border:none;border-top:1px solid rgba(255,255,255,0.1);margin:60px 0;"><div style="display:flex;flex-direction:column;align-items:center;gap:20px;background:var(--bg-panel);padding:40px;border-radius:15px;border:1px solid #334155;"><img src="{{ logo_velke }}" alt="Logo" style="max-width:250px;height:auto;filter:drop-shadow(0 10px 15px rgba(0,0,0,0.5));margin-bottom:10px;"><div style="text-align:center;max-width:600px;"><h3 style="color:var(--warning);margin-top:0;font-size:1.6em;text-shadow:0 0 5px rgba(245,158,11,0.5);">Poháněno systémem DataCoreBot</h3><p style="color:var(--text-muted);font-size:1em;line-height:1.6;margin:0 0 15px 0;">Celá infrastruktura je bezpečně řízena systémem DataCoreBot. Zajišťuje bleskovou synchronizaci dat a HWID ochranu.</p><div style="display:inline-block;background:rgba(0,0,0,0.3);padding:10px 20px;border-radius:8px;border:1px solid var(--blue-main);"><p style="color:var(--text-main);font-weight:bold;margin:0;letter-spacing:1px;"><i class="fas fa-code" style="color:var(--blue-main);"></i> Vytvořeno vývojářem <span style="color:var(--blue-main);">marekk_czz</span></p></div></div></div></div>"""
-HTML_CLAIM = """<div style="max-width:500px;margin:50px auto;background:var(--bg-panel);padding:40px;border-radius:10px;border-top:4px solid var(--blue-main);box-shadow:0 10px 30px rgba(0,0,0,0.5);"><h2 style="color:var(--blue-main);text-align:center;margin-top:0;"><i class="fas fa-gift"></i> Vyzvednutí VIP Role</h2><p style="color:var(--text-muted);font-size:14px;text-align:center;margin-bottom:30px;">Zadejte jméno z Buy Me a Coffee a Váš Discord Nick.</p><form method="POST"><label style="color:var(--text-muted);font-size:12px;font-weight:bold;">JMÉNO Z BUY ME A COFFEE</label><input type="text" name="bmac_name" placeholder="Např. Jan Novák" required style="margin-bottom:20px;"><label style="color:var(--text-muted);font-size:12px;font-weight:bold;">VÁŠ DISCORD NICK</label><input type="text" name="discord_nick" placeholder="Např. marekk_czz" required><button type="submit" class="btn" style="width:100%;margin-top:20px;font-size:16px;padding:15px;"><i class="fab fa-discord"></i> Propojit a získat roli</button></form></div>"""
-HTML_STATS = """<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h2 style="margin:0;color:var(--text-main);"><i class="fas fa-chart-line" style="color:var(--blue-main);"></i> Statistiky Webu</h2><div style="color:var(--text-muted);font-size:13px;background:rgba(0,0,0,0.3);padding:8px 12px;border-radius:6px;border:1px solid #334155;font-weight:bold;"><i class="fas fa-sync-alt" style="color:var(--blue-main);"></i> Auto-update</div></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;margin-bottom:20px;"><div style="background:var(--bg-panel);padding:20px;border-radius:10px;border-top:4px solid var(--blue-main);text-align:center;"><h3 style="color:var(--text-muted);font-size:14px;margin-top:0;text-transform:uppercase;">Unikátní zobrazení (Celkem)</h3><div style="font-size:40px;font-weight:900;color:var(--text-main);">{{ total_visits }}</div></div><div style="background:var(--bg-panel);padding:20px;border-radius:10px;border-top:4px solid var(--success);text-align:center;"><h3 style="color:var(--text-muted);font-size:14px;margin-top:0;text-transform:uppercase;">Zobrazení za 7 dní</h3><div style="font-size:40px;font-weight:900;color:var(--success);">{{ last_7_days }}</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;"><div style="background:var(--bg-panel);padding:20px;border-radius:10px;"><h3 style="color:var(--blue-main);margin-top:0;"><i class="fas fa-calendar-week"></i> Návštěvnost za 7 dní</h3><div style="position:relative;height:250px;width:100%;"><canvas id="chart7d"></canvas></div></div><div style="background:var(--bg-panel);padding:20px;border-radius:10px;"><h3 style="color:var(--blue-main);margin-top:0;"><i class="fas fa-clock"></i> Dnešní aktivita</h3><div style="position:relative;height:250px;width:100%;"><canvas id="chart24h"></canvas></div></div></div><div style="background:var(--bg-panel);padding:20px;border-radius:10px;margin-bottom:20px;"><h3 style="color:var(--warning);margin-top:0;"><i class="fas fa-globe"></i> Státy</h3><div style="display:flex;gap:15px;flex-wrap:wrap;">{% for cc, data in country_totals.items() %}<div style="background:rgba(0,0,0,0.3);border:1px solid #334155;padding:10px 20px;border-radius:8px;display:flex;align-items:center;gap:10px;"><img src="{{ data.flag }}" style="border-radius:3px;box-shadow:0 0 5px rgba(0,0,0,0.5);"><span style="color:var(--text-main);font-weight:bold;">{{ data.name }}</span><span style="background:var(--blue-main);color:#000;padding:2px 8px;border-radius:12px;font-weight:900;font-size:12px;">{{ data.count }}</span></div>{% else %}<div style="color:var(--text-muted);">Zatím žádná data.</div>{% endfor %}</div></div><div style="background:var(--bg-panel);padding:20px;border-radius:10px;"><h3 style="color:var(--blue-main);margin-top:0;"><i class="fas fa-map-marker-alt"></i> Přehled regionů</h3><table style="width:100%;"><tr><th>Stát / Region</th><th>Počet</th></tr>{% for c_name, data in region_totals.items() %}<tr><td style="font-weight:bold;color:var(--text-main);display:flex;align-items:center;gap:10px;">{% if data.flag %}<img src="{{ data.flag }}" style="border-radius:3px;">{% endif %}{{ c_name }}</td><td style="color:var(--blue-main);font-weight:bold;font-size:16px;">{{ data.count }}</td></tr>{% else %}<tr><td colspan="2" style="text-align:center;color:var(--text-muted);">Prázdné.</td></tr>{% endfor %}</table></div><script>const labels7d={{ labels_7d | safe }};const data7d={{ data_7d | safe }};const labels24h={{ labels_24h | safe }};const data24h={{ data_24h | safe }};new Chart(document.getElementById('chart7d').getContext('2d'),{type:'line',data:{labels:labels7d,datasets:[{label:'Návštěv',data:data7d,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.2)',borderWidth:3,tension:0.3,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'#94a3b8',stepSize:1},grid:{color:'#334155'}},x:{ticks:{color:'#94a3b8'},grid:{display:false}}}}});new Chart(document.getElementById('chart24h').getContext('2d'),{type:'bar',data:{labels:labels24h,datasets:[{label:'Dnešní',data:data24h,backgroundColor:'#38bdf8',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'#94a3b8',stepSize:1},grid:{color:'#334155'}},x:{ticks:{color:'#94a3b8'},grid:{display:false}}}}});</script>"""
-HTML_APP_SETTINGS = """<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h2 style="margin:0;color:var(--text-main);">Nastavení Aplikace</h2></div><div style="display:flex;gap:20px;flex-wrap:wrap;"><div style="flex:1;min-width:300px;background:var(--bg-panel);padding:20px;border-radius:10px;border-top:4px solid {{ 'var(--success)' if soft_enabled else 'var(--danger)' }};text-align:center;"><h3 style="margin-top:0;color:var(--text-main);"><i class="fas fa-desktop"></i> Kill-Switch Aplikace</h3><div style="font-size:50px;margin:15px 0;color:{{ 'var(--success)' if soft_enabled else 'var(--danger)' }};"><i class="fas {{ 'fa-check-circle' if soft_enabled else 'fa-ban' }}"></i></div><p style="color:var(--text-muted);font-size:14px;">Globální vypínač PC aplikace.</p><form action="/dashboard/toggle_software" method="POST" style="margin-top:20px;"><input type="hidden" name="new_status" value="{{ 'False' if soft_enabled else 'True' }}"><button type="submit" class="btn {{ 'btn-danger' if soft_enabled else 'btn-success' }}" style="width:100%;font-size:16px;"><i class="fas fa-power-off"></i> {{ 'VYPNOUT SOFTWARE' if soft_enabled else 'ZAPNOUT SOFTWARE' }}</button></form></div><div style="flex:1;min-width:300px;background:var(--bg-panel);padding:20px;border-radius:10px;border-top:4px solid {{ 'var(--success)' if dl_enabled else 'var(--danger)' }};text-align:center;"><h3 style="margin-top:0;color:var(--text-main);"><i class="fas fa-cloud-download-alt"></i> Stahování Instalátoů</h3><div style="font-size:50px;margin:15px 0;color:{{ 'var(--success)' if dl_enabled else 'var(--danger)' }};"><i class="fas {{ 'fa-check-circle' if dl_enabled else 'fa-ban' }}"></i></div><p style="color:var(--text-muted);font-size:14px;">Vypínač instalací bota.</p><form action="/dashboard/toggle_downloads" method="POST" style="margin-top:20px;"><input type="hidden" name="new_status" value="{{ 'False' if dl_enabled else 'True' }}"><input type="hidden" name="return_to" value="app_settings"><button type="submit" class="btn {{ 'btn-danger' if dl_enabled else 'btn-success' }}" style="width:100%;font-size:16px;"><i class="fas fa-power-off"></i> {{ 'ZAKÁZAT STAHOVÁNÍ' if dl_enabled else 'POVOLIT STAHOVÁNÍ' }}</button></form></div></div>"""
-HTML_DOWNLOADS_MAIN = """<div style="text-align:center;padding:60px 20px;max-width:700px;margin:50px auto;background:var(--bg-panel);border-radius:15px;box-shadow:0 15px 30px rgba(0,0,0,0.5);border-top:5px solid #5865F2;"><h2 style="color:var(--text-main);font-size:2.2em;margin-top:0;"><i class="fas fa-shield-alt" style="color:var(--blue-main);"></i> Distribuce softwaru</h2><p style="color:var(--text-muted);font-size:1.1em;line-height:1.6;margin-bottom:20px;">Přesunuli jsme stahování na Discord pro vyšší bezpečnost.</p><div style="background:rgba(88,101,242,0.1);border:1px solid #5865F2;padding:30px 20px;border-radius:10px;margin:30px 20px;"><p style="color:var(--text-main);font-weight:bold;font-size:1.2em;margin-top:0;">Jak získat software:</p><p style="color:var(--text-muted);font-size:14px;margin-bottom:30px;">Připojte se na náš Discord a běžte do kanálu <b>💾・download</b>. 🚀</p><a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display:inline-block;transition:0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'"><i class="fab fa-discord" style="font-size:120px;color:#5865F2;filter:drop-shadow(0 10px 15px rgba(88,101,242,0.4));"></i></a></div></div>"""
-HTML_LOGIN = """<div style="max-width:400px;margin:50px auto;background:var(--bg-panel);padding:30px;border-radius:10px;box-shadow:0 10px 25px rgba(0,0,0,0.5);border-top:4px solid var(--blue-main);"><h2 style="text-align:center;color:var(--blue-main);margin-top:0;"><i class="fas fa-lock"></i> Dashboard 2FA</h2><div style="background:rgba(239,68,68,0.1);border-left:4px solid var(--danger);padding:12px;margin-bottom:20px;border-radius:0 5px 5px 0;"><p style="color:var(--danger);margin:0;font-size:13px;font-weight:800;"><i class="fas fa-shield-alt"></i> Zabezpečená zóna</p><p style="color:var(--text-muted);margin:5px 0 0;font-size:12px;line-height:1.4;">Vyhrazeno pouze pro administrátory.</p></div><form method="POST" action="/login_request"><label style="font-weight:bold;font-size:12px;color:var(--text-muted);">VAŠE DISCORD ID</label><input type="text" name="discord_id" placeholder="Např. 1234567890" required><button type="submit" class="btn" style="width:100%;margin-top:10px;"><i class="fab fa-discord"></i> Odeslat žádost</button></form></div>"""
-HTML_WAIT_AUTH = """<div style="max-width:500px;margin:50px auto;background:var(--bg-panel);padding:40px;border-radius:10px;text-align:center;border-top:4px solid var(--warning);"><h2 style="color:var(--warning);margin-top:0;"><i class="fas fa-spinner fa-spin"></i> Čekání na ověření</h2><p style="color:var(--text-main);font-size:16px;">Zpráva odeslána na Discord.</p><p style="color:var(--text-muted);font-size:14px;">Klikněte na tlačítko v aplikaci Discord.</p></div><script>setInterval(()=>{fetch('/api/check_auth/{{ discord_id }}').then(r=>r.json()).then(data=>{if(data.status==='approved'){window.location.href='/dashboard/login_finalize?discord_id={{ discord_id }}';}else if(data.status==='rejected'){window.location.href='/dashboard';}});},2000);</script>"""
-HTML_TEAM = """<h2 style="color:var(--blue-main);border-bottom:2px solid #334155;padding-bottom:10px;text-align:center;">Náš Tým</h2><div style="display:flex;justify-content:center;flex-wrap:wrap;gap:20px;">{% for m in team %}<div style="background:var(--bg-panel);border-radius:10px;padding:20px;text-align:center;border-top:4px solid var(--blue-main);width:300px;transition:0.5s;"><img src="{{ m.get('image_url','') }}" style="width:100px;height:100px;border-radius:50%;object-fit:cover;margin-bottom:15px;border:3px solid #334155;" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'"><h3 style="font-size:20px;margin:0 0 5px;">{{ m.get('name','') }}</h3><div style="color:var(--blue-main);font-size:14px;margin-bottom:15px;">@{{ m.get('discord_nick','') }}</div><p style="color:var(--text-muted);font-size:14px;line-height:1.5;">{{ m.get('description','') }}</p><div>{% set roles = m.get('role_name','').split(',') if m.get('role_name') else [] %}{% for r in roles %}{% set p = r.split('|') %}{% set rn = p[0].strip() %}{% set rc = p[1].strip() if p|length>1 else '#38bdf8' %}<span class="role-tag" style="background:{{rc}}33;color:{{rc}};border:1px solid {{rc}};">{{rn}}</span>{% endfor %}</div></div>{% else %}<p style="color:var(--text-muted);text-align:center;width:100%;">Prázdné.</p>{% endfor %}</div>"""
-HTML_DOWNLOADS_MGMT = """<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h2 style="margin:0;color:var(--text-main);">Správa Stahování</h2></div><div style="display:flex;gap:20px;flex-wrap:wrap;"><div style="flex:1;min-width:300px;background:var(--bg-panel);padding:20px;border-radius:10px;text-align:center;"><h3 style="color:var(--text-main);margin-top:0;">Hlavní vypínač</h3><form action="/dashboard/toggle_downloads" method="POST" style="margin-top:20px;"><input type="hidden" name="new_status" value="{{ 'False' if enabled else 'True' }}"><input type="hidden" name="return_to" value="downloads"><button type="submit" class="btn {{ 'btn-danger' if enabled else 'btn-success' }}" style="width:100%;">{{ 'ZAKÁZAT' if enabled else 'POVOLIT' }}</button></form></div><div style="flex:2;min-width:300px;background:var(--bg-panel);padding:20px;border-radius:10px;"><h3 style="color:var(--blue-main);margin-top:0;">➕ Přidat Verzi</h3><form action="/dashboard/add_version" method="POST"><input type="text" name="version_name" placeholder="Název" required><input type="url" name="file_url" placeholder="URL" required><select name="target_role" required><option value="User">User</option><option value="BT">BT</option><option value="DEV_SA">DEV/SA</option></select><button type="submit" class="btn" style="width:100%;">Přidat</button></form></div></div><div style="background:var(--bg-panel);padding:20px;border-radius:10px;margin-top:20px;"><div style="overflow-x:auto;"><table><tr><th>Název</th><th>Role</th><th>Odkaz</th><th>Akce</th></tr>{% for v in versions %}<tr><td>{{ v.get('version_name','') }}</td><td>{{ v.get('target_role','') }}</td><td><a href="{{ v.get('file_url','') }}" style="color:var(--blue-main);">Link</a></td><td><form action="/dashboard/delete_version" method="POST" style="display:inline;"><input type="hidden" name="version_id" value="{{ v.get('id','') }}"><button type="submit" class="btn btn-danger" style="padding:5px 10px;">X</button></form></td></tr>{% endfor %}</table></div></div>"""
-HTML_PENDING_ROLES = """<div style="display:flex;gap:20px;flex-wrap:wrap;"><div style="flex:1;background:var(--bg-panel);padding:20px;border-radius:10px;"><h3 style="color:var(--blue-main);margin-top:0;">➕ Rezervovat Roli</h3><form action="/dashboard/add_pending_role" method="POST"><input type="text" name="discord_identifier" placeholder="Nick/ID" required><div class="checkbox-group"><label><input type="checkbox" name="roles" value="SA"> SA</label><label><input type="checkbox" name="roles" value="DEV"> DEV</label><label><input type="checkbox" name="roles" value="BT"> BT</label><label><input type="checkbox" name="roles" value="User"> User</label></div><button type="submit" class="btn" style="width:100%;">Vytvořit</button></form></div><div style="flex:2;background:var(--bg-panel);padding:20px;border-radius:10px;"><table><tr><th>Discord</th><th>Role</th><th>Akce</th></tr>{% for p in pending %}<tr><td>{{ p.get('discord_identifier','') }}</td><td>{{ p.get('roles','') }}</td><td><form action="/dashboard/delete_pending_role" method="POST"><input type="hidden" name="pending_id" value="{{ p.get('id','') }}"><button type="submit" class="btn btn-danger">X</button></form></td></tr>{% endfor %}</table></div></div>"""
-HTML_TEAM_ADD = """<div style="display:flex;gap:20px;flex-wrap:wrap;"><div style="flex:1;background:var(--bg-panel);padding:20px;border-radius:10px;"><h3 style="color:var(--blue-main);margin-top:0;">➕ Tým</h3><form action="/dashboard/add_team" method="POST"><input type="text" name="name" placeholder="Jméno" required><input type="text" name="discord_nick" placeholder="Nick" required><input type="url" name="image_url" placeholder="URL" required><textarea name="description" required></textarea><input type="text" name="role_name[]" placeholder="Role"><input type="color" name="role_color[]" value="#ef4444"><button type="submit" class="btn" style="width:100%;">Přidat</button></form></div><div style="flex:2;background:var(--bg-panel);padding:20px;border-radius:10px;"><table><tr><th>Jméno</th><th>Akce</th></tr>{% for m in team %}<tr><td>{{ m.get('name','') }}</td><td><form action="/dashboard/delete_team" method="POST"><input type="hidden" name="discord_nick" value="{{ m.get('discord_nick','') }}"><button type="submit" class="btn btn-danger">X</button></form></td></tr>{% endfor %}</table></div></div>"""
-HTML_IDS = """<div style="background:var(--bg-panel);padding:20px;border-radius:10px;"><table><tr><th>App ID</th><th>Nick</th><th>Akce</th></tr>{% for u in users %}<tr><td>#{{ u.get('app_id','') }}</td><td>{{ u.get('nick','') }}</td><td><form action="/dashboard/change_id" method="POST" style="display:flex;gap:5px;"><input type="hidden" name="discord_id" value="{{ u.get('discord_id','') }}"><input type="number" name="new_app_id" required style="width:80px;margin:0;"><button type="submit" class="btn" style="padding:5px;">Změnit</button></form></td></tr>{% endfor %}</table></div>"""
-HTML_DASHBOARD_MAIN = """<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h2 style="margin:0;color:var(--text-main);">{{ title }}</h2><div style="color:var(--text-muted);font-size:13px;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;border:1px solid #334155;"><span id="timer-sec">60</span>s</div></div><div style="background:var(--bg-panel);padding:20px;border-radius:10px;"><div style="overflow-x:auto;"><table id="usersTable"><thead><tr><th>ID</th><th>Nick</th><th>Stav</th><th>Role</th><th>Aktivita</th><th>Akce</th></tr></thead><tbody>{% for u in users %}<tr><td style="color:var(--blue-main);">#{{ u.get('app_id','') }}</td><td>{{ u.get('nick','') }}</td><td>{% if u.get('is_banned') %}<span style="color:var(--danger)">BAN</span>{% elif u.get('is_deleted') %}<span style="color:#aaa">DEL</span>{% else %}<span style="color:var(--success)">OK</span>{% endif %}</td><td>{{ u.get('role','') }}</td><td>{% if u.get('is_online') %}<span style="color:var(--success)">ONLINE</span>{% else %}{{ u.get('last_active','Nikdy') }}{% endif %}</td><td><button class="btn btn-dark" style="padding:5px;" onclick="openModal('{{ u.get('app_id','') }}','{{ u.get('discord_id','') }}','{{ u.get('nick','') }}','{{ u.get('role','') }}','{{ u.get('hwid','') }}','{{ u.get('is_banned',False) }}','{{ u.get('is_deleted',False) }}','{{ u.get('dashboard_access',False) }}','{{ u.get('registered_at','') }}')">Edit</button></td></tr>{% endfor %}</tbody></table></div></div><script>let t=60;setInterval(()=>{t--;document.getElementById('timer-sec').innerText=t;if(t<=0)location.reload();},1000);</script>"""
-HTML_SUPPORTERS = """<style>.glowing-btn-blue{background:var(--blue-main);color:#000;padding:15px 40px;font-size:20px;font-weight:900;border-radius:50px;text-decoration:none;display:inline-block;margin-top:20px;box-shadow:0 0 20px rgba(56,189,248,0.6);text-transform:uppercase;}.glowing-btn-blue:hover{box-shadow:0 0 40px rgba(56,189,248,1);transform:scale(1.05);}.supporter-wrapper{width:100%;max-width:500px;min-height:230px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;text-align:center;box-sizing:border-box;}.tier-1{background:rgba(15,23,42,0.8);padding:20px;border-radius:10px;border:1px solid rgba(56,189,248,0.3);border-left:5px solid #38bdf8;}.tier-2{background:rgba(30,41,59,0.9);padding:25px;border-radius:12px;border:1px solid rgba(245,158,11,0.6);border-left:6px solid #f59e0b;}.tier-3{background:linear-gradient(135deg,#2a0a18,#450a0a);padding:30px;border-radius:15px;border:2px solid #ef4444;}.name-title{color:#fff;font-size:24px;margin:0 0 10px;}.title-badge{font-size:12px;color:var(--blue-main);font-weight:bold;margin-bottom:10px;}.amt-badge{display:inline-block;margin-bottom:25px;background:rgba(255,255,255,0.1);padding:5px 15px;border-radius:20px;font-weight:bold;}</style><div style="max-width:800px;margin:0 auto;padding:20px;text-align:center;"><h1 style="color:var(--blue-main);font-size:36px;">Děkuji za podporu!</h1><a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue"><i class="fas fa-heart"></i> Podpořit</a><hr style="border:none;border-top:1px solid rgba(255,255,255,0.1);margin:40px 0;"><div style="display:flex;flex-direction:column;gap:40px;align-items:center;">{% for s in supporters %}<div class="tier-{{ s.get('tier',1) }} supporter-wrapper"><div style="width:100%;"><div class="title-badge">TIER {{ s.get('tier',1) }}</div><h3 class="name-title">{{ s.get('name','Neznámý') }}</h3><div class="amt-badge">{{ s.get('amount','') }}</div></div><div style="width:100%;margin-top:auto;">{% if s.get('message') %}<p style="font-style:italic;background:rgba(0,0,0,0.3);padding:15px;border-radius:8px;">"{{ s.get('message') }}"</p>{% endif %}<div style="font-size:11px;color:#64748b;">Datum: {{ s.get('created_at','') }}</div></div></div>{% else %}<div style="color:var(--text-muted);">Zatím nikdo.</div>{% endfor %}</div></div>"""
-HTML_SUPPORTERS_MGMT = """<div style="display:flex;gap:20px;flex-wrap:wrap;"><div style="flex:1;min-width:300px;background:var(--bg-panel);padding:20px;border-radius:10px;"><h3 style="color:var(--warning);margin-top:0;">Ke schválení</h3><table><tr><th>Jméno</th><th>Discord</th><th>Akce</th></tr>{% for p in pending_claims %}<tr><td>{{ p.get('name','') }}</td><td>{{ p.get('discord_nick','') }}</td><td><form action="/dashboard/approve_claim" method="POST" style="display:inline;"><input type="hidden" name="claim_id" value="{{ p.get('id','') }}"><input type="hidden" name="discord_nick" value="{{ p.get('discord_nick','') }}"><input type="hidden" name="amount" value="{{ p.get('amount','') }}"><button type="submit" class="btn btn-success" style="padding:5px;">Schválit</button></form><form action="/dashboard/reject_claim" method="POST" style="display:inline;"><input type="hidden" name="claim_id" value="{{ p.get('id','') }}"><button type="submit" class="btn btn-danger" style="padding:5px;">X</button></form></td></tr>{% endfor %}</table></div><div style="flex:2;min-width:300px;background:var(--bg-panel);padding:20px;border-radius:10px;"><h3 style="color:var(--blue-main);margin-top:0;">Historie</h3><table><tr><th>Jméno</th><th>Částka</th><th>Datum</th><th>Akce</th></tr>{% for s in supporters %}<tr><td>{{ s.get('name','') }}</td><td style="color:var(--success);">{{ s.get('amount','') }}</td><td>{{ s.get('created_at','') }}</td><td><form action="/dashboard/delete_supporter" method="POST"><input type="hidden" name="supporter_id" value="{{ s.get('id','') }}"><button type="submit" class="btn btn-danger" style="padding:5px;">X</button></form></td></tr>{% endfor %}</table></div></div>"""
+
+BASE_HTML = """
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projekt OIS IDPK</title>
+    <link rel="icon" type="image/png" href="{{ logo_male }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --bg-dark: #0f172a; --bg-panel: #1e293b; --blue-main: #38bdf8; --blue-hover: #0284c7; --text-main: #f8fafc; --text-muted: #94a3b8; --danger: #ef4444; --success: #10b981; --warning: #f59e0b; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-dark); color: var(--text-main); margin: 0; padding: 0; }
+        .top-nav { background-color: rgba(15, 23, 42, 0.9); padding: 15px 40px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; backdrop-filter: blur(10px); z-index: 100; }
+        .logo { font-size: 24px; font-weight: 800; color: var(--blue-main); text-decoration: none; letter-spacing: 1px; display: flex; align-items: center; gap: 10px; }
+        .nav-links a { color: var(--text-main); text-decoration: none; margin-left: 20px; font-weight: 500; transition: color 0.3s; }
+        .nav-links a:hover { color: var(--blue-main); }
+        .nav-links .admin-link { color: var(--text-muted); font-size: 12px; margin-left: 40px; border: 1px solid #334155; padding: 5px 10px; border-radius: 5px; }
+        .container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
+        .btn { display: inline-block; background-color: var(--blue-main); color: #000; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: bold; border: none; cursor: pointer; transition: 0.3s; }
+        .btn:hover { background-color: var(--blue-hover); transform: translateY(-2px); color: #fff; }
+        .btn-danger { background-color: var(--danger); color: #fff;}
+        .btn-danger:hover { background-color: #dc2626; color: #fff;}
+        .btn-warning { background-color: var(--warning); color: #000; }
+        .btn-warning:hover { background-color: #d97706; color: #000;}
+        .btn-success { background-color: var(--success); color: #fff;}
+        .btn-success:hover { background-color: #059669; color: #fff;}
+        .btn-dark { background-color: #334155; color: white; }
+        .btn-dark:hover { background-color: #475569; color: white;}
+        input[type="text"], input[type="number"], input[type="password"], input[type="url"], textarea, select { width: 100%; padding: 10px; margin: 8px 0 15px 0; background-color: #0f172a; border: 1px solid #334155; color: white; border-radius: 5px; box-sizing: border-box; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background-color: var(--bg-panel); border-radius: 10px; overflow: hidden; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #334155; }
+        th { background-color: #0f172a; color: var(--blue-main); font-weight: 600; text-transform: uppercase; font-size: 13px; cursor: pointer; transition: background 0.2s;}
+        th:hover { background-color: #1e293b; }
+        tr:hover { background-color: #334155; }
+        .role-tag { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; margin: 2px; }
+        .dashboard-wrapper { display: flex; min-height: 100vh; }
+        .sidebar { width: 250px; background-color: var(--bg-panel); border-right: 1px solid #334155; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 20px; border-bottom: 1px solid #334155; text-align: center; }
+        .sidebar-menu { padding: 20px 0; flex-grow: 1; }
+        .sidebar-link { display: block; padding: 12px 20px; color: var(--text-muted); text-decoration: none; font-weight: 500; transition: 0.2s; border-left: 3px solid transparent; }
+        .sidebar-link:hover, .sidebar-link.active { background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); border-left-color: var(--blue-main); }
+        .sidebar-link i { width: 25px; }
+        .dashboard-content { flex-grow: 1; padding: 30px; background-color: var(--bg-dark); overflow-y: auto; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); z-index: 1000; align-items: center; justify-content: center; }
+        .modal { background: var(--bg-panel); padding: 30px; border-radius: 15px; width: 700px; max-width: 90%; border-top: 5px solid var(--blue-main); box-shadow: 0 15px 30px rgba(0,0,0,0.5); transform: translateY(20px); transition: 0.3s; max-height: 90vh; overflow-y: auto;}
+        .modal.active { display: flex; }
+        .alert { padding: 15px; border-radius: 5px; margin-bottom: 20px; font-weight: bold; }
+        .alert-success { background-color: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid var(--success); }
+        .alert-error { background-color: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
+        .alert-warning { background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
+        .checkbox-group { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
+        .checkbox-group label { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: bold; cursor: pointer; }
+        .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .profile-card { background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; }
+        .profile-stat { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+        .profile-val { font-size: 14px; font-weight: bold; color: var(--text-main); }
+        .dl-table th, .dl-table td { padding: 8px; font-size: 12px; border-bottom: 1px solid #334155; }
+    </style>
+</head>
+<body>
+    {% block layout %}{% endblock %}
+</body>
+</html>
+"""
+
+PUBLIC_LAYOUT = """
+<nav class="top-nav">
+    <a href="/" class="logo">
+        <img src="{{ logo_male }}" alt="Logo" style="height: 30px; width: auto; border-radius: 4px;">
+        OIS IDPK
+    </a>
+    <div class="nav-links">
+        <a href="/">Domů</a>
+        <a href="/download">Download</a>
+        <a href="/team">Náš Tým</a>
+        <a href="/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-heart"></i> Podporovatelé</a>
+        <a href="/dashboard" class="admin-link">Dashboard 🔒</a>
+    </div>
+</nav>
+<div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+</div>
+"""
+
+DASHBOARD_LAYOUT = """
+<div class="dashboard-wrapper">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                <img src="{{ logo_male }}" alt="Logo" style="height: 24px; width: auto; border-radius: 4px;">
+                OIS IDPK
+            </a>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div>
+        </div>
+        <div class="sidebar-menu">
+            <a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a>
+            <a href="/dashboard/stats" class="sidebar-link"><i class="fas fa-chart-bar"></i> Statistiky Webu</a>
+            <a href="/dashboard/app_settings" class="sidebar-link"><i class="fas fa-cog"></i> Nastavení Aplikace</a>
+            <a href="/dashboard/downloads" class="sidebar-link"><i class="fas fa-cloud-download-alt"></i> Správa Stahování</a>
+            <a href="/dashboard/pending_roles" class="sidebar-link" style="color: #10b981;"><i class="fas fa-ticket-alt"></i> Rezervace Rolí</a>
+            <a href="/dashboard/ids" class="sidebar-link"><i class="fas fa-id-badge"></i> Správa ID</a>
+            <a href="/dashboard/team" class="sidebar-link"><i class="fas fa-user-plus"></i> Správa Týmu</a>
+            
+            <a href="/dashboard/supporters" class="sidebar-link" style="color: var(--blue-main); text-shadow: 0 0 5px rgba(56, 189, 248, 0.5);"><i class="fas fa-star"></i> Podporovatelé</a>
+            
+            <a href="/dashboard?filter=banned" class="sidebar-link" style="color: var(--warning);"><i class="fas fa-ban"></i> Seznam BANů</a>
+            <a href="/dashboard?filter=deleted" class="sidebar-link" style="color: var(--danger);"><i class="fas fa-trash-alt"></i> Smazaní (Záloha)</a>
+            <div style="padding: 15px 20px 5px 20px; font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: bold;">Hledat roli</div>
+            <a href="/dashboard?filter=SA" class="sidebar-link"><i class="fas fa-crown"></i> SA (SERVER ADMIN)</a>
+            <a href="/dashboard?filter=DEV" class="sidebar-link"><i class="fas fa-code"></i> DEV (DEVELOPER)</a>
+            <a href="/dashboard?filter=BT" class="sidebar-link"><i class="fas fa-bug"></i> BT (BETA TESTER)</a>
+        </div>
+        <div style="padding: 20px;">
+            <div style="font-size: 11px; color: var(--text-muted); text-align: center; margin-bottom: 15px; border-top: 1px solid #334155; padding-top: 15px;">
+                <i class="fas fa-clock"></i> Poslední update bota:<br><b>{{ deploy_time }}</b>
+            </div>
+            <a href="/logout" class="btn btn-danger" style="width: 100%; text-align: center; box-sizing: border-box;"><i class="fas fa-sign-out-alt"></i> Odhlásit</a>
+        </div>
+    </div>
+    
+    <div class="dashboard-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </div>
+</div>
+
+<div class="modal-overlay" id="editModal">
+    <div class="modal" id="modalContent">
+        <div style="width: 100%;">
+            <h2 style="color: var(--blue-main); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px; display: flex; justify-content: space-between;">
+                <span><i class="fas fa-user"></i> Profil <span id="modalAppId" style="color: var(--text-muted); font-size: 16px;"></span></span>
+                <span id="modalStatusDot" style="font-size: 14px;"></span>
+            </h2>
+            
+            <div class="profile-grid">
+                <div class="profile-card">
+                    <div class="profile-stat">Členem Discordu od:</div>
+                    <div class="profile-val" id="profJoined"><i class="fas fa-spinner fa-spin"></i> Načítání...</div>
+                    <div class="profile-stat" style="margin-top: 10px;">Datum registrace v DB:</div>
+                    <div class="profile-val" id="profRegistered"></div>
+                    <div class="profile-stat" style="margin-top: 10px;">Aktivita v aplikaci (Status):</div>
+                    <div class="profile-val" id="profAppStatus" style="color: #64748b;"><i>Připravuje se...</i></div>
+                    <div id="profStats"></div>
+                    <div class="profile-stat" style="margin-top: 10px;">Přístup do webové DB:</div>
+                    <div class="profile-val" id="profDbAccess"></div>
+                </div>
+                
+                <div class="profile-card" style="max-height: 250px; overflow-y: auto;">
+                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--blue-main);">Historie stahování:</div>
+                    <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent; border-radius: 0;">
+                        <tbody id="profDownloads">
+                            <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <form action="/dashboard/edit_user" method="POST" style="border-top: 1px solid #334155; padding-top: 15px;">
+                <input type="hidden" name="discord_id" id="modalDiscordId">
+                <label>Herní Nick:</label>
+                <input type="text" name="nick" id="modalNick" required>
+                <label>Role:</label>
+                <div class="checkbox-group">
+                    <label style="color: #ef4444;"><input type="checkbox" name="roles" value="SA"> SA</label>
+                    <label style="color: #10b981;"><input type="checkbox" name="roles" value="DEV"> DEV</label>
+                    <label style="color: #3b82f6;"><input type="checkbox" name="roles" value="BT"> BT</label>
+                    <label style="color: #94a3b8;"><input type="checkbox" name="roles" value="User"> User</label>
+                </div>
+                <label>HWID (Zámek na PC):</label>
+                <input type="text" name="hwid" id="modalHwid" placeholder="Pro odblokování smažte text zde">
+                <div style="background-color: rgba(56, 189, 248, 0.1); padding: 10px; border-radius: 5px; border: 1px solid var(--blue-main); margin-bottom: 15px;">
+                    <label style="cursor: pointer; font-weight: bold; color: var(--blue-main); margin: 0; display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" name="dashboard_access" id="modalDashboardAccess" value="True" style="width: auto; margin: 0;"> 
+                        Povolit přístup do Dashboardu (2FA ověření)
+                    </label>
+                </div>
+                <div id="activeActions">
+                    <div style="display: flex; gap: 10px; margin-top: 10px;">
+                        <button type="submit" name="action" value="save" class="btn" style="flex: 2;"><i class="fas fa-save"></i> Uložit úpravy</button>
+                        <button type="submit" name="action" value="ban" id="btnBan" class="btn btn-warning" style="flex: 1;"><i class="fas fa-ban"></i> Dát BAN</button>
+                        <button type="submit" name="action" value="unban" id="btnUnban" class="btn btn-success" style="flex: 1; display: none;"><i class="fas fa-check"></i> Un-BAN</button>
+                    </div>
+                    <div style="margin-top: 15px; border-top: 1px solid #334155; padding-top: 15px;">
+                        <button type="submit" name="action" value="delete" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Smazat účet? (Zablokuje ID, umožní novou registraci)')"><i class="fas fa-trash"></i> Smazat účet (Soft Delete)</button>
+                    </div>
+                </div>
+                <div id="deletedActions" style="display: none; margin-top: 20px; border-top: 1px solid #334155; padding-top: 15px;">
+                    <p style="color: var(--danger); font-weight: bold; text-align: center; margin-top: 0;">Tento účet je smazaný.</p>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="submit" name="action" value="restore" class="btn btn-success" style="flex: 1;"><i class="fas fa-undo"></i> Obnovit účet</button>
+                        <button type="submit" name="action" value="hard_delete" class="btn btn-dark" style="flex: 1;" onclick="return confirm('PERMANENTNÍ SMAZÁNÍ: Tato akce kompletně vymaže veškerá data o tomto uživateli. Pokračovat?')"><i class="fas fa-skull"></i> Smazat permanentně</button>
+                    </div>
+                </div>
+            </form>
+            <button class="btn" onclick="closeModal()" style="background: transparent; color: var(--text-muted); width: 100%; margin-top: 10px; border: 1px solid #334155;">Zrušit</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openModal(app_id, discord_id, nick, roles, hwid, is_banned, is_deleted, dashboard_access, registered_at) {
+        document.getElementById('editModal').style.display = 'flex';
+        document.getElementById('modalAppId').innerText = "#" + app_id;
+        document.getElementById('modalDiscordId').value = discord_id;
+        document.getElementById('modalNick').value = nick;
+        document.getElementById('modalHwid').value = hwid === 'None' ? '' : hwid;
+        document.getElementById('profRegistered').innerText = registered_at && registered_at !== 'None' ? registered_at : 'Neznámé (Starý účet)';
+        document.getElementById('modalDashboardAccess').checked = (dashboard_access === 'True');
+        document.getElementById('profDbAccess').innerHTML = dashboard_access === 'True' ? '<span style="color: var(--success);"><i class="fas fa-check-circle"></i> Povoleno</span>' : '<span style="color: var(--danger);"><i class="fas fa-times-circle"></i> Zakázáno</span>';
+        document.querySelectorAll('input[name="roles"]').forEach(cb => cb.checked = false);
+        roles.split(',').forEach(r => {
+            let el = document.querySelector(`input[name="roles"][value="${r.trim()}"]`);
+            if(el) el.checked = true;
+        });
+        if (is_deleted === 'True') {
+            document.getElementById('activeActions').style.display = 'none';
+            document.getElementById('deletedActions').style.display = 'block';
+        } else {
+            document.getElementById('activeActions').style.display = 'block';
+            document.getElementById('deletedActions').style.display = 'none';
+            if (is_banned === 'True') {
+                document.getElementById('btnBan').style.display = 'none';
+                document.getElementById('btnUnban').style.display = 'block';
+            } else {
+                document.getElementById('btnBan').style.display = 'block';
+                document.getElementById('btnUnban').style.display = 'none';
+            }
+        }
+        document.getElementById('profJoined').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        document.getElementById('modalStatusDot').innerHTML = '';
+        document.getElementById('profDownloads').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
+        document.getElementById('profAppStatus').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        document.getElementById('profStats').innerHTML = '';
+        
+        fetch('/api/get_profile_data/' + discord_id)
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('profJoined').innerText = data.joined_at;
+                document.getElementById('modalStatusDot').innerHTML = data.status;
+                document.getElementById('profAppStatus').innerHTML = data.app_status;
+                document.getElementById('profStats').innerHTML = data.stats;
+                let dlHtml = "";
+                if(data.downloads && data.downloads.length > 0) {
+                    data.downloads.forEach(d => {
+                        dlHtml += `<tr><td style="color: var(--blue-main);"><b>${d.version_name}</b></td><td style="color: var(--text-muted);">${d.downloaded_at}</td></tr>`;
+                    });
+                } else {
+                    dlHtml = "<tr><td colspan='2' style='color: var(--text-muted);'>Zatím nestáhl žádný soubor.</td></tr>";
+                }
+                document.getElementById('profDownloads').innerHTML = dlHtml;
+            });
+    }
+    function closeModal() { document.getElementById('editModal').style.display = 'none'; }
+</script>
+"""
+
+HTML_HOME = """
+<div style="text-align: center; padding: 60px 20px; max-width: 800px; margin: 0 auto;">
+    <h1 style="color: var(--blue-main); font-size: 2.5em; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">OFICIÁLNÍ STRÁNKA PROJEKTU OIS IDPK</h1>
+    
+    <div style="font-size: 1.1em; color: var(--text-main); line-height: 1.6; margin-bottom: 40px; background: rgba(30, 41, 59, 0.5); padding: 25px; border-radius: 10px; border-left: 4px solid var(--blue-main); text-align: left;">
+        <p style="margin-top:0;">Projekt OIS IDPK je fanouškovský software inspirovaný skutečnými vnitřními informačními panely, které se používají v autobusech Plzeňského kraje. Cílem projektu je co nejvěrněji napodobit jejich vzhled i způsob fungování.</p>
+        <p>Software simuluje zobrazování zastávek, průběh celé linky i další informace, které běžně vidí cestující během jízdy. Díky tomu si můžeš jednoduše vyzkoušet, jak se panel chová při jízdě po trase, jak se postupně mění zastávky nebo jak vypadají informace o aktuální části linky.</p>
+        <p style="margin-bottom:0;">Celý projekt vznikl z nadšení pro dopravu, technologie a informační systémy ve veřejné dopravě. Projekt není oficiálním produktem ani službou dopravců nebo organizací veřejné dopravy a nijak s nimi nespolupracuje. Jedná se čistě o fanouškovský projekt vytvořený pro zábavu, experimentování a zájem o dopravní technologie.</p>
+    </div>
+    
+    <a href="/download" class="btn" style="font-size: 18px; padding: 15px 40px; border-radius: 30px; box-shadow: 0 5px 15px rgba(56, 189, 248, 0.4);"><i class="fas fa-download"></i> Získat Software</a>
+    
+    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 60px 0;">
+    
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; background: var(--bg-panel); padding: 40px; border-radius: 15px; border: 1px solid #334155;">
+        <img src="{{ logo_velke }}" alt="DataCoreBot Logo" style="max-width: 250px; height: auto; filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.5)); margin-bottom: 10px;">
+        <div style="text-align: center; max-width: 600px;">
+            <h3 style="color: var(--warning); margin-top: 0; font-size: 1.6em; text-shadow: 0 0 5px rgba(245, 158, 11, 0.5);">Poháněno systémem DataCoreBot</h3>
+            <p style="color: var(--text-muted); font-size: 1em; line-height: 1.6; margin: 0 0 15px 0;">
+                Celá infrastruktura, od databází po ověřování uživatelů, je bezpečně řízena a chráněna unikátním systémem DataCoreBot. 
+                Zajišťuje bleskovou synchronizaci dat, striktní Hardware ID (HWID) ochranu a nepřetržitý chod palubních počítačů.
+            </p>
+            <div style="display: inline-block; background: rgba(0,0,0,0.3); padding: 10px 20px; border-radius: 8px; border: 1px solid var(--blue-main);">
+                <p style="color: var(--text-main); font-weight: bold; margin: 0; font-size: 1em; letter-spacing: 1px;">
+                    <i class="fas fa-code" style="color: var(--blue-main);"></i> Vytvořeno vývojářem <span style="color: var(--blue-main);">marekk_czz</span>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+"""
+
+HTML_CLAIM = """
+<div style="max-width: 500px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--blue-main); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <h2 style="color: var(--blue-main); text-align: center; margin-top: 0;"><i class="fas fa-gift"></i> Vyzvednutí VIP Role</h2>
+    <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 30px;">Zadejte jméno, pod kterým jste před malou chvílí poslali příspěvek na Buy Me a Coffee, a Váš Discord Nick. Náš systém Vám obratem automaticky přidělí roli!</p>
+    
+    <form method="POST">
+        <label style="color: var(--text-muted); font-size: 12px; font-weight: bold;">JMÉNO ZADANÉ NA BUY ME A COFFEE</label>
+        <input type="text" name="bmac_name" placeholder="Např. Jan Novák" required style="margin-bottom: 20px;">
+        
+        <label style="color: var(--text-muted); font-size: 12px; font-weight: bold; display: block;">VÁŠ DISCORD NICK</label>
+        <input type="text" name="discord_nick" placeholder="Např. marekk_czz" required>
+        
+        <button type="submit" class="btn" style="width: 100%; margin-top: 20px; font-size: 16px; padding: 15px;"><i class="fab fa-discord"></i> Propojit a získat roli</button>
+    </form>
+</div>
+"""
+
+HTML_STATS = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-chart-line" style="color:var(--blue-main);"></i> Statistiky Webu</h2>
+    <div style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;">
+        <i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Automaticky aktualizováno
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px;">
+    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--blue-main); text-align: center;">
+        <h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Unikátní zobrazení (Celkem)</h3>
+        <div style="font-size: 40px; font-weight: 900; color: var(--text-main);">{{ total_visits }}</div>
+    </div>
+    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--success); text-align: center;">
+        <h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Zobrazení za 7 dní</h3>
+        <div style="font-size: 40px; font-weight: 900; color: var(--success);">{{ last_7_days }}</div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-calendar-week"></i> Návštěvnost za posledních 7 dní</h3>
+        <div style="position: relative; height: 250px; width: 100%;">
+            <canvas id="chart7d"></canvas>
+        </div>
+    </div>
+    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-clock"></i> Dnešní aktivita po hodinách</h3>
+        <div style="position: relative; height: 250px; width: 100%;">
+            <canvas id="chart24h"></canvas>
+        </div>
+    </div>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+    <h3 style="color: var(--warning); margin-top: 0;"><i class="fas fa-globe"></i> Návštěvnost podle států (Souhrn)</h3>
+    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+        {% for cc, data in country_totals.items() %}
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid #334155; padding: 10px 20px; border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+            <img src="{{ data.flag }}" alt="" style="border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">
+            <span style="color: var(--text-main); font-weight: bold;">{{ data.name }}</span>
+            <span style="background: var(--blue-main); color: #000; padding: 2px 8px; border-radius: 12px; font-weight: 900; font-size: 12px;">{{ data.count }}</span>
+        </div>
+        {% else %}
+        <div style="color: var(--text-muted);">Zatím žádná data k zobrazení.</div>
+        {% endfor %}
+    </div>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-map-marker-alt"></i> Detailní přehled regionů</h3>
+    <table style="width: 100%;">
+        <tr>
+            <th>Stát / Region</th>
+            <th>Počet zobrazení</th>
+        </tr>
+        {% for c_name, data in region_totals.items() %}
+        <tr>
+            <td style="font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+                {% if data.flag %}
+                <img src="{{ data.flag }}" alt="" style="border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">
+                {% endif %}
+                {{ c_name }}
+            </td>
+            <td style="color: var(--blue-main); font-weight: bold; font-size: 16px;">{{ data.count }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Zatím žádná data k zobrazení. Tabulka "page_visits" je prázdná.</td></tr>
+        {% endfor %}
+    </table>
+</div>
+
+<script>
+    const labels7d = {{ labels_7d | safe }};
+    const data7d = {{ data_7d | safe }};
+    const labels24h = {{ labels_24h | safe }};
+    const data24h = {{ data_24h | safe }};
+
+    new Chart(document.getElementById('chart7d').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels7d,
+            datasets: [{
+                label: 'Počet návštěv',
+                data: data7d,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                borderWidth: 3,
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8' }, grid: { display: false } } } }
+    });
+
+    new Chart(document.getElementById('chart24h').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: labels24h,
+            datasets: [{
+                label: 'Dnešní návštěvy',
+                data: data24h,
+                backgroundColor: '#38bdf8',
+                borderRadius: 4
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { display: false } } } }
+    });
+</script>
+"""
+
+HTML_APP_SETTINGS = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">Nastavení Aplikace a Systému</h2>
+</div>
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {{ 'var(--success)' if soft_enabled else 'var(--danger)' }}; text-align: center;">
+        <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-desktop"></i> Status Softwaru (Kill-Switch)</h3>
+        <div style="font-size: 50px; margin: 15px 0; color: {{ 'var(--success)' if soft_enabled else 'var(--danger)' }}; text-shadow: 0 0 15px {{ 'rgba(16, 185, 129, 0.5)' if soft_enabled else 'rgba(239, 68, 68, 0.5)' }};">
+            <i class="fas {{ 'fa-check-circle' if soft_enabled else 'fa-ban' }}"></i>
+        </div>
+        <p style="color: var(--text-muted); font-size: 14px;">Globální vypínač celé PC aplikace. Pokud je vypnuto, nepustí nikoho dál.</p>
+        <form action="/dashboard/toggle_software" method="POST" style="margin-top: 20px;">
+            <input type="hidden" name="new_status" value="{{ 'False' if soft_enabled else 'True' }}">
+            <button type="submit" class="btn {{ 'btn-danger' if soft_enabled else 'btn-success' }}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {{ 'VYPNOUT SOFTWARE GLOBÁLNĚ' if soft_enabled else 'ZAPNOUT SOFTWARE' }}</button>
+        </form>
+    </div>
+
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {{ 'var(--success)' if dl_enabled else 'var(--danger)' }}; text-align: center;">
+        <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-cloud-download-alt"></i> Status Stahování</h3>
+        <div style="font-size: 50px; margin: 15px 0; color: {{ 'var(--success)' if dl_enabled else 'var(--danger)' }}; text-shadow: 0 0 15px {{ 'rgba(16, 185, 129, 0.5)' if dl_enabled else 'rgba(239, 68, 68, 0.5)' }};">
+            <i class="fas {{ 'fa-check-circle' if dl_enabled else 'fa-ban' }}"></i>
+        </div>
+        <p style="color: var(--text-muted); font-size: 14px;">Vypínač instalačního procesu přes Discord bota.</p>
+        <form action="/dashboard/toggle_downloads" method="POST" style="margin-top: 20px;">
+            <input type="hidden" name="new_status" value="{{ 'False' if dl_enabled else 'True' }}">
+            <input type="hidden" name="return_to" value="app_settings">
+            <button type="submit" class="btn {{ 'btn-danger' if dl_enabled else 'btn-success' }}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {{ 'ZAKÁZAT STAHOVÁNÍ' if dl_enabled else 'POVOLIT STAHOVÁNÍ' }}</button>
+        </form>
+    </div>
+</div>
+"""
+
+HTML_DOWNLOADS_MAIN = """
+<div style="text-align: center; padding: 60px 20px; max-width: 700px; margin: 50px auto; background-color: var(--bg-panel); border-radius: 15px; box-shadow: 0 15px 30px rgba(0,0,0,0.5); border-top: 5px solid #5865F2;">
+    <h2 style="color: var(--text-main); font-size: 2.2em; margin-top: 0;"><i class="fas fa-shield-alt" style="color: var(--blue-main);"></i> Oficiální distribuce softwaru</h2>
+    <p style="color: var(--text-muted); font-size: 1.1em; line-height: 1.6; margin-bottom: 20px;">
+        Z důvodu ochrany projektu a samotného softwaru jsme se rozhodli přesunout jeho distribuci na náš Discord server. Díky tomu máme větší kontrolu nad přístupem k softwaru a můžeme lépe zabránit jeho zneužití nebo neautorizovanému šíření.
+    </p>
+    <div style="background-color: rgba(88, 101, 242, 0.1); border: 1px solid #5865F2; padding: 30px 20px; border-radius: 10px; margin: 30px 20px;">
+        <p style="color: var(--text-main); font-weight: bold; font-size: 1.2em; margin-top: 0;">Jak získat software:</p>
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">
+            Připojte se na náš Discord, ověřte, že nejste robot, a poté přejděte do kanálu <b>💾・download</b>, kde stačí postupovat podle pokynů DataCoreBota. 🚀
+        </p>
+        <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'"><i class="fab fa-discord" style="font-size: 120px; color: #5865F2; filter: drop-shadow(0px 10px 15px rgba(88,101,242,0.4));"></i></a>
+    </div>
+</div>
+"""
+
+HTML_LOGIN = """
+<div style="max-width: 400px; margin: 50px auto; background-color: var(--bg-panel); padding: 30px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border-top: 4px solid var(--blue-main);">
+    <h2 style="text-align: center; color: var(--blue-main); margin-top: 0;"><i class="fas fa-lock"></i> Dashboard 2FA</h2>
+    <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--danger); padding: 12px; margin-bottom: 20px; border-radius: 0 5px 5px 0;">
+        <p style="color: var(--danger); margin: 0; font-size: 13px; font-weight: 800; text-transform: uppercase;"><i class="fas fa-shield-alt"></i> Zabezpečená zóna</p>
+        <p style="color: var(--text-muted); margin: 5px 0 0 0; font-size: 12px; line-height: 1.4;">Tato databáze je přísně vyhrazena <b>pouze pro administrátory a pověřené správce</b> projektu. Běžní uživatelé sem nemají přístup. Každý pokus o neoprávněné přihlášení je monitorován a logován.</p>
+    </div>
+    <p style="color: var(--text-muted); text-align: center; font-size: 13px;">Pro přístup do systému zadejte své <b>Discord ID</b>.</p>
+    <form method="POST" action="/login_request">
+        <label style="font-weight: bold; font-size: 12px; color: var(--text-muted);">VAŠE DISCORD ID</label>
+        <input type="text" name="discord_id" placeholder="Např. 123456789012345678" required>
+        <button type="submit" class="btn" style="width: 100%; margin-top: 10px;"><i class="fab fa-discord"></i> Odeslat žádost o přihlášení</button>
+    </form>
+</div>
+"""
+
+HTML_WAIT_AUTH = """
+<div style="max-width: 500px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; border-top: 4px solid var(--warning);">
+    <h2 style="color: var(--warning); margin-top: 0;"><i class="fas fa-spinner fa-spin"></i> Čekání na ověření</h2>
+    <p style="color: var(--text-main); font-size: 16px;">Byla Vám odeslána soukromá zpráva na Discord.</p>
+    <p style="color: var(--text-muted); font-size: 14px;">Zkontrolujte si aplikaci Discord a klikněte na tlačítko <b>Ověřit přístup</b>.</p>
+</div>
+<script>
+    setInterval(() => {
+        fetch('/api/check_auth/{{ discord_id }}')
+        .then(r => r.json())
+        .then(data => {
+            if(data.status === 'approved') { window.location.href = '/dashboard/login_finalize?discord_id={{ discord_id }}'; } 
+            else if(data.status === 'rejected') { window.location.href = '/dashboard'; }
+        });
+    }, 2000);
+</script>
+"""
+
+HTML_TEAM = """
+<h2 style="color: var(--blue-main); border-bottom: 2px solid #334155; padding-bottom: 10px; text-align:center;">Náš Tým</h2>
+<div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 20px;">
+    {% for member in team %}
+    <div style="background-color: var(--bg-panel); border-radius: 10px; padding: 20px; text-align: center; border-top: 4px solid var(--blue-main); width: 300px; max-width:100%; transition: transform 0.5s ease, box-shadow 0.5s ease;">
+        <img src="{{ member.get('image_url', '') }}" alt="Fotka" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; border: 3px solid #334155;" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+        <h3 style="font-size: 20px; font-weight: bold; margin: 0 0 5px 0;">{{ member.get('name', '') }}</h3>
+        <div style="color: var(--blue-main); font-size: 14px; margin-bottom: 15px;">@{{ member.get('discord_nick', '') }}</div>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 15px;">{{ member.get('description', '') }}</p>
+        <div>
+            {% set roles_input = member.get('role_name', '').split(',') if member.get('role_name') else [] %}
+            {% for r in roles_input %}
+                {% set parts = r.split('|') %}
+                {% set r_name = parts[0].strip() %}
+                {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
+                <span class="role-tag" style="background-color: {{ r_color }}33; color: {{ r_color }}; border: 1px solid {{ r_color }};">{{ r_name }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <p style="color: var(--text-muted); text-align:center; width:100%;">Zatím nebyli přidáni žádní členové týmu.</p>
+    {% endfor %}
+</div>
+<style>
+    div[style*="width: 300px"]:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 12px 30px rgba(56, 189, 248, 0.4);
+    }
+</style>
+"""
+
+HTML_DOWNLOADS_MGMT = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">Správa Stahování</h2>
+</div>
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {{ 'var(--success)' if enabled else 'var(--danger)' }}; text-align: center;">
+        <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-power-off"></i> Hlavní vypínač instalací</h3>
+        <div style="font-size: 50px; margin: 15px 0; color: {{ 'var(--success)' if enabled else 'var(--danger)' }}; text-shadow: 0 0 15px {{ 'rgba(16, 185, 129, 0.5)' if enabled else 'rgba(239, 68, 68, 0.5)' }};">
+            <i class="fas {{ 'fa-check-circle' if enabled else 'fa-ban' }}"></i>
+        </div>
+        <p style="color: var(--text-muted); font-size: 14px;">Pokud je vypnuto, nikdo nebude moci zahájit instalaci přes Discord bota.</p>
+        <form action="/dashboard/toggle_downloads" method="POST" style="margin-top: 20px;">
+            <input type="hidden" name="new_status" value="{{ 'False' if enabled else 'True' }}">
+            <input type="hidden" name="return_to" value="downloads">
+            <button type="submit" class="btn {{ 'btn-danger' if enabled else 'btn-success' }}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {{ 'ZAKÁZAT STAHOVÁNÍ' if enabled else 'POVOLIT STAHOVÁNÍ' }}</button>
+        </form>
+    </div>
+
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Přidat Instalační Soubor (Verzi)</h3>
+        <p style="color: var(--warning); font-size: 12px; margin-top: -5px;">Můžete vložit odkaz na <b>PixelDrain.com</b>, <b>OneDrive</b>, nebo Dropbox.</p>
+        <form action="/dashboard/add_version" method="POST">
+            <input type="text" name="version_name" placeholder="Název zobrazený v menu (např. Stabilní v1.0)" required>
+            <input type="url" name="file_url" placeholder="Přímý odkaz na stažení souboru" required>
+            <label style="color: var(--text-muted); font-size: 13px;">Pro jakou minimální roli je tato verze určena?</label>
+            <select name="target_role" required>
+                <option value="User">User (Uvidí všichni - Normální verze)</option>
+                <option value="BT">BETA TESTER (Uvidí BT, DEV, SA - Testovací verze)</option>
+                <option value="DEV_SA">DEV / SERVER ADMIN (Uvidí pouze vývojáři a admini)</option>
+            </select>
+            <button type="submit" class="btn" style="width: 100%;">Přidat verzi do menu</button>
+        </form>
+    </div>
+</div>
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-top: 20px;">
+    <h3 style="color: var(--blue-main); margin-top: 0;">📦 Dostupné soubory</h3>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>Název v Menu</th>
+                <th>Cílová Skupina</th>
+                <th>Odkaz na soubor</th>
+                <th>Akce</th>
+            </tr>
+            {% for v in versions %}
+            <tr>
+                <td><strong>{{ v.get('version_name', '') }}</strong></td>
+                <td>
+                    {% if v.get('target_role') == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User (Všichni)</span>{% endif %}
+                    {% if v.get('target_role') == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BETA TESTER+</span>{% endif %}
+                    {% if v.get('target_role') == 'DEV_SA' %}<span class="role-tag" style="background-color: #ef4444; color: white;">DEV / SA</span>{% endif %}
+                </td>
+                <td style="font-size: 12px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    <a href="{{ v.get('file_url', '') }}" target="_blank" style="color: var(--blue-main);">{{ v.get('file_url', '') }}</a>
+                </td>
+                <td>
+                    <button type="button" class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" onclick="openEditVerModal('{{ v.get('id', '') }}', '{{ v.get('version_name', '') }}', '{{ v.get('file_url', '') }}', '{{ v.get('target_role', '') }}')"><i class="fas fa-edit"></i> Úprava</button>
+                    <form action="/dashboard/delete_version" method="POST" style="display:inline;">
+                        <input type="hidden" name="version_id" value="{{ v.get('id', '') }}">
+                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Odebrat tuto verzi ze stahování?')"><i class="fas fa-trash"></i> Smazat</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Zatím nebyly přidány žádné soubory ke stažení.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<div class="modal-overlay" id="editVerModal">
+    <div class="modal">
+        <div style="width: 100%;">
+            <h2 style="color: var(--warning); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+                <i class="fas fa-edit"></i> Upravit verzi
+            </h2>
+            <form action="/dashboard/edit_version" method="POST">
+                <input type="hidden" name="version_id" id="ev_id">
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Název v Menu:</label>
+                <input type="text" name="version_name" id="ev_name" required>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">URL odkazu:</label>
+                <input type="url" name="file_url" id="ev_url" required>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Pro jakou minimální roli?</label>
+                <select name="target_role" id="ev_role" required>
+                    <option value="User">User (Všichni)</option>
+                    <option value="BT">BETA TESTER (Testovací)</option>
+                    <option value="DEV_SA">DEV / SERVER ADMIN (Neveřejné)</option>
+                </select>
+                
+                <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 15px;">Uložit změny</button>
+            </form>
+            <button type="button" class="btn" style="width: 100%; margin-top: 10px; background: transparent; border: 1px solid #334155; color: var(--text-muted);" onclick="document.getElementById('editVerModal').style.display='none'">Zrušit</button>
+        </div>
+    </div>
+</div>
+<script>
+    function openEditVerModal(id, name, url, role) {
+        document.getElementById('ev_id').value = id;
+        document.getElementById('ev_name').value = name;
+        document.getElementById('ev_url').value = url;
+        document.getElementById('ev_role').value = role;
+        document.getElementById('editVerModal').style.display = 'flex';
+    }
+</script>
+"""
+
+HTML_PENDING_ROLES = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">Rezervace Rolí (Nezaregistrovaní)</h2>
+</div>
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Předpřipravit Roli</h3>
+        <p style="color: var(--text-muted); font-size: 13px;">Jakmile uživatel s tímto ID nebo Nickem na Discordu klikne na instalaci, systém mu automaticky přiřadí vybranou roli místo základního "User".</p>
+        <form action="/dashboard/add_pending_role" method="POST">
+            <input type="text" name="discord_identifier" placeholder="Discord Nick (nebo Discord ID)" required>
+            <label style="color: var(--text-muted); font-size: 13px; display: block; margin-bottom: 8px;">Vyberte roli pro rezervaci:</label>
+            <div class="checkbox-group">
+                <label style="color: #ef4444;"><input type="checkbox" name="roles" value="SA"> SA</label>
+                <label style="color: #10b981;"><input type="checkbox" name="roles" value="DEV"> DEV</label>
+                <label style="color: #3b82f6;"><input type="checkbox" name="roles" value="BT"> BT</label>
+                <label style="color: #94a3b8;"><input type="checkbox" name="roles" value="User"> User</label>
+            </div>
+            <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Vytvořit Rezervaci</button>
+        </form>
+    </div>
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">⏳ Čekající rezervace</h3>
+        <div style="overflow-x: auto;">
+            <table>
+                <tr>
+                    <th>Discord Identifikátor</th>
+                    <th>Rezervovaná Role</th>
+                    <th>Akce</th>
+                </tr>
+                {% for p in pending %}
+                <tr>
+                    <td><strong>{{ p.get('discord_identifier', '') }}</strong></td>
+                    <td>
+                        {% set role_list = p.get('roles', '').split(',') if p.get('roles') else ['User'] %}
+                        {% for r in role_list %}
+                            {% set r_clean = r.strip() %}
+                            {% if r_clean == 'SA' %}
+                                <span class="role-tag" style="color: white; background-color: #ef4444; border-color: #ef4444;">SERVER ADMIN</span>
+                            {% elif r_clean == 'DEV' %}
+                                <span class="role-tag" style="color: white; background-color: #10b981; border-color: #10b981;">DEVELOPER</span>
+                            {% elif r_clean == 'BT' %}
+                                <span class="role-tag" style="color: white; background-color: #3b82f6; border-color: #3b82f6;">BETA TESTER</span>
+                            {% elif r_clean == 'User' %}
+                                <span class="role-tag" style="color: white; background-color: #64748b; border-color: #64748b;">User</span>
+                            {% endif %}
+                        {% endfor %}
+                    </td>
+                    <td>
+                        <form action="/dashboard/delete_pending_role" method="POST" style="display:inline;">
+                            <input type="hidden" name="pending_id" value="{{ p.get('id', '') }}">
+                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Zrušit tuto rezervaci?')"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Zatím žádné čekající rezervace.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+"""
+
+HTML_TEAM_ADD = """
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Přidat člena týmu</h3>
+        <form action="/dashboard/add_team" method="POST">
+            <input type="text" name="name" placeholder="Jméno / Přezdívka" required>
+            <input type="text" name="discord_nick" placeholder="Discord Nick (bez @)" required>
+            <input type="url" name="image_url" placeholder="URL obrázku (odkaz na fotku)" required>
+            <textarea name="description" placeholder="Něco o něm..." rows="3" required></textarea>
+            <label style="color: var(--text-muted); font-size: 13px; display: block; margin-bottom: 8px;">Role a jejich barvy:</label>
+            <div id="roles-container">
+                <div class="role-entry" style="display: flex; gap: 10px; margin-bottom: 5px;">
+                    <input type="text" name="role_name[]" placeholder="Název Role (např. SA)" required style="flex: 2; margin: 0;">
+                    <input type="color" name="role_color[]" value="#ef4444" style="flex: 1; padding: 2px; height: 40px; margin: 0;">
+                </div>
+            </div>
+            <button type="button" class="btn btn-dark" onclick="addRoleField()" style="width: 100%; margin-bottom: 15px; margin-top: 5px; padding: 5px; font-size: 12px;">+ Přidat další roli</button>
+            <button type="submit" class="btn" style="width: 100%;">Přidat do týmu</button>
+        </form>
+    </div>
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">👥 Aktuální členové týmu</h3>
+        <div style="overflow-x: auto;">
+            <table>
+                <tr>
+                    <th>Jméno</th>
+                    <th>Discord Nick</th>
+                    <th>Role</th>
+                    <th>Akce</th>
+                </tr>
+                {% for member in team %}
+                <tr>
+                    <td><strong>{{ member.get('name', '') }}</strong></td>
+                    <td>{{ member.get('discord_nick', '') }}</td>
+                    <td>
+                        {% set roles_input = member.get('role_name', '').split(',') if member.get('role_name') else [] %}
+                        {% for r in roles_input %}
+                            {% set parts = r.split('|') %}
+                            {% set r_name = parts[0].strip() %}
+                            {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
+                            <span class="role-tag" style="color: {{ r_color }}; border: 1px solid {{ r_color }}; background-color: {{ r_color }}33;">{{ r_name }}</span>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        <form action="/dashboard/delete_team" method="POST" style="display:inline;">
+                            <input type="hidden" name="discord_nick" value="{{ member.get('discord_nick', '') }}">
+                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Odebrat tohoto člena z týmu?')"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Zatím nebyl přidán žádný člen týmu.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+    function addRoleField() {
+        const container = document.getElementById('roles-container');
+        const div = document.createElement('div');
+        div.className = 'role-entry';
+        div.style = 'display: flex; gap: 10px; margin-bottom: 5px;';
+        div.innerHTML = `<input type="text" name="role_name[]" placeholder="Název Role" required style="flex: 2; margin: 0;"><input type="color" name="role_color[]" value="#38bdf8" style="flex: 1; padding: 2px; height: 40px; margin: 0;"><button type="button" class="btn btn-danger" onclick="this.parentElement.remove()" style="padding: 0 10px; margin: 0;">X</button>`;
+        container.appendChild(div);
+    }
+</script>
+"""
+
+HTML_IDS = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">Správa Aplikačních ID</h2>
+</div>
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">Zde můžete ručně změnit ID libovolnému uživateli. Tímto způsobem lze také znovu obsadit ID, které bylo dříve zablokováno smazaným uživatelem.</p>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>App ID</th>
+                <th>Nick</th>
+                <th>Discord ID</th>
+                <th>Status Účtu</th>
+                <th>Změnit ID na:</th>
+            </tr>
+            {% for user in users %}
+            <tr style="opacity: {{ '0.6' if user.get('is_deleted') else '1' }};">
+                <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
+                <td><strong>{{ user.get('nick', '') }}</strong></td>
+                <td style="font-size: 12px; color: var(--text-muted);">{{ user.get('discord_id', '') }}</td>
+                <td>
+                    {% if user.get('is_deleted') %}
+                        <span style="color: var(--danger); font-size: 12px; font-weight: bold;">Smazán (Blokuje ID)</span>
+                    {% else %}
+                        <span style="color: var(--success); font-size: 12px;">Aktivní</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <form action="/dashboard/change_id" method="POST" style="display: flex; gap: 5px;">
+                        <input type="hidden" name="discord_id" value="{{ user.get('discord_id', '') }}">
+                        <input type="number" name="new_app_id" placeholder="Nové ID" required style="width: 100px; margin: 0; padding: 5px;">
+                        <button type="submit" class="btn" style="padding: 5px 10px; font-size: 12px;">Změnit</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+"""
+
+HTML_DASHBOARD_MAIN = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
+    
+    <div id="refresh-timer" style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;">
+        <i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Aktualizace za: <span id="timer-sec" style="color: white;">60</span>s
+    </div>
+</div>
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <div style="overflow-x: auto;">
+        <table id="usersTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0)">App ID ↕</th>
+                    <th onclick="sortTable(1)">Nick ↕</th>
+                    <th onclick="sortTable(2)">Stav ↕</th>
+                    <th onclick="sortTable(3)">Role ↕</th>
+                    <th onclick="sortTable(4)">Poslední Aktivita ↕</th>
+                    <th>Akce</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for user in users %}
+            <tr>
+                <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
+                <td><strong>{{ user.get('nick', '') }}</strong></td>
+                <td>
+                    {% if user.get('is_banned') %}
+                        <span style="color: var(--danger); font-size: 11px; font-weight:bold; border:1px solid var(--danger); padding:2px 5px; border-radius:4px;">BANNED</span>
+                    {% elif user.get('is_deleted') %}
+                        <span style="color: var(--text-muted); font-size: 11px; font-weight:bold; border:1px solid var(--text-muted); padding:2px 5px; border-radius:4px;">DELETED</span>
+                    {% elif not user.get('hwid') or user.get('hwid') == 'None' or user.get('hwid') == '' %}
+                        <span style="color: var(--warning); font-size: 11px; font-weight:bold; border:1px solid var(--warning); padding:2px 5px; border-radius:4px;">NOT ACTIVATED</span>
+                    {% else %}
+                        <span style="color: var(--success); font-size: 11px; font-weight:bold; border:1px solid var(--success); padding:2px 5px; border-radius:4px;">ACTIVATED</span>
+                    {% endif %}
+                </td>
+                
+                {% set role_weight = 1 %}
+                {% if 'SA' in user.get('role', '') %}{% set role_weight = 4 %}
+                {% elif 'DEV' in user.get('role', '') %}{% set role_weight = 3 %}
+                {% elif 'BT' in user.get('role', '') %}{% set role_weight = 2 %}
+                {% endif %}
+                <td data-sort="{{ role_weight }}">
+                    {% set role_list = user.get('role', '').split(',') %}
+                    {% for r in role_list %}
+                        {% set r_clean = r.strip() %}
+                        {% if r_clean == 'SA' %}
+                            <span class="role-tag" style="background-color: #ef4444; color: white;">SA</span>
+                        {% elif r_clean == 'DEV' %}
+                            <span class="role-tag" style="background-color: #10b981; color: white;">DEV</span>
+                        {% elif r_clean == 'BT' %}
+                            <span class="role-tag" style="background-color: #3b82f6; color: white;">BT</span>
+                        {% elif r_clean == 'User' %}
+                            <span class="role-tag" style="background-color: #64748b; color: white;">User</span>
+                        {% endif %}
+                    {% endfor %}
+                    {% if user.get('dashboard_access') %}
+                        <i class="fas fa-shield-alt" style="color:var(--blue-main); font-size:12px; margin-left:5px;" title="Má přístup do DB"></i>
+                    {% endif %}
+                </td>
+                <td style="color: var(--text-muted); font-size: 13px;" data-sort="{{ '99999999999' if user.get('is_online') else user.get('last_active', '0') }}">
+                    {% if user.get('is_online') %}
+                        <span style="color: var(--success); font-weight: bold;">🟢 AKTIVNÍ</span>
+                    {% else %}
+                        {{ user.get('last_active', 'Nikdy nehrál') }}
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', '') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-edit"></i> Upravit</button>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let timeLeft = 60;
+    setInterval(() => {
+        timeLeft--;
+        let secEl = document.getElementById('timer-sec');
+        if(secEl) secEl.innerText = timeLeft;
+        if(timeLeft <= 0) location.reload();
+    }, 1000);
+
+    let sortDir = {};
+    function sortTable(n) {
+        let table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+        table = document.getElementById("usersTable");
+        switching = true;
+        
+        dir = sortDir[n] === "asc" ? "desc" : "asc";
+        sortDir[n] = dir;
+
+        while (switching) {
+            switching = false;
+            rows = table.rows;
+            for (i = 1; i < (rows.length - 1); i++) {
+                shouldSwitch = false;
+                x = rows[i].getElementsByTagName("TD")[n];
+                y = rows[i + 1].getElementsByTagName("TD")[n];
+                
+                let xContent = x.hasAttribute("data-sort") ? x.getAttribute("data-sort") : x.innerHTML.replace(/<[^>]*>?/gm, '').trim();
+                let yContent = y.hasAttribute("data-sort") ? y.getAttribute("data-sort") : y.innerHTML.replace(/<[^>]*>?/gm, '').trim();
+                
+                if (!isNaN(xContent) && !isNaN(yContent)) {
+                    xContent = parseFloat(xContent);
+                    yContent = parseFloat(yContent);
+                } else {
+                    xContent = xContent.toLowerCase();
+                    yContent = yContent.toLowerCase();
+                }
+
+                if (dir == "asc") {
+                    if (xContent > yContent) { shouldSwitch = true; break; }
+                } else if (dir == "desc") {
+                    if (xContent < yContent) { shouldSwitch = true; break; }
+                }
+            }
+            if (shouldSwitch) {
+                rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                switching = true;
+                switchcount ++;
+            } 
+        }
+    }
+</script>
+"""
+
+HTML_SUPPORTERS = """
+<style>
+    .glowing-btn-blue { background-color: var(--blue-main); color: #000; padding: 15px 40px; font-size: 20px; font-weight: 900; border-radius: 50px; text-decoration: none; display: inline-block; margin-top: 20px; box-shadow: 0 0 20px rgba(56, 189, 248, 0.6); transition: all 0.3s ease; text-transform: uppercase; letter-spacing: 1px; border: none; cursor: pointer; }
+    .glowing-btn-blue:hover { box-shadow: 0 0 40px rgba(56, 189, 248, 1); transform: scale(1.05); color: #000; }
+    
+    .supporter-wrapper {
+        width: 100%; max-width: 500px; min-height: 230px;
+        display: flex; flex-direction: column; justify-content: space-between; align-items: center; text-align: center; box-sizing: border-box;
+    }
+
+    .tier-1 { background-color: rgba(15, 23, 42, 0.8); padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.3); border-left: 5px solid #38bdf8; transition: transform 0.5s ease, box-shadow 0.5s ease; }
+    .tier-1:hover { transform: scale(1.05); box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4); }
+    .tier-1 .name-title { color: #e0f2fe; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); font-size: 20px; margin: 0 0 10px 0; }
+    .tier-1 .title-badge { font-size: 10px; color: #38bdf8; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin-bottom: 10px; }
+    .tier-1 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; border: 1px solid rgba(56, 189, 248, 0.3); }
+
+    @keyframes pulseMedium { from { box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); } to { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); } }
+    .tier-2 { background-color: rgba(30, 41, 59, 0.9); padding: 25px; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.6); border-left: 6px solid #f59e0b; animation: pulseMedium 2s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
+    .tier-2:hover { transform: scale(1.05) !important; animation: none; box-shadow: 0 10px 35px rgba(245, 158, 11, 0.8); }
+    .tier-2 .name-title { color: #fcd34d; font-size: 26px; margin: 0 0 10px 0; text-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
+    .tier-2 .title-badge { font-size: 12px; color: #f59e0b; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; margin-bottom: 10px; }
+    .tier-2 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(245, 158, 11, 0.1); color: var(--warning); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(245, 158, 11, 0.5); }
+
+    @keyframes epicWebGlow { from { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); } to { box-shadow: 0 0 50px rgba(239, 68, 68, 0.9), inset 0 0 30px rgba(239, 68, 68, 0.3); } }
+    .tier-3 { background: linear-gradient(135deg, #2a0a18, #450a0a); padding: 30px; border-radius: 15px; border: 2px solid #ef4444; animation: epicWebGlow 1.5s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
+    .tier-3:hover { transform: scale(1.08) !important; animation: none; box-shadow: 0 15px 60px rgba(239, 68, 68, 1); }
+    .tier-3 .name-title { color: #fca5a5; font-size: 32px !important; margin: 0 0 15px 0; text-shadow: 0 0 20px #ef4444, 0 0 40px #ef4444; text-transform: uppercase; font-weight: 900; }
+    .tier-3 .title-badge { font-size: 14px; color: #ef4444; text-transform: uppercase; font-weight: 900; letter-spacing: 3px; margin-bottom: 10px; text-shadow: 0 0 10px #ef4444; }
+    .tier-3 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: #ef4444 !important; color: #fff !important; border: 2px solid #fca5a5 !important; padding: 8px 20px; border-radius: 25px; font-weight: bold; font-size: 20px !important; box-shadow: 0 0 20px #ef4444; }
+</style>
+
+<div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
+    <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Děkuji všem za podporu!</h1>
+        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!</p>
+        <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue"><i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK</a>
+    </div>
+    
+    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 40px 0;">
+    <h2 style="text-align: center; color: var(--text-main); letter-spacing: 3px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,255,255,0.2);">SEZNAM PODPOROVATELŮ</h2>
+    
+    <div style="display: flex; flex-direction: column; gap: 40px; padding-bottom: 50px; align-items: center;">
+        {% for s in supporters %}
+        <div class="tier-{{ s.get('tier', 1) }} supporter-wrapper">
+            <div style="width: 100%;">
+                {% if s.get('tier') == 3 %} <div class="title-badge">MEGA PODPOROVATEL</div>
+                {% elif s.get('tier') == 2 %} <div class="title-badge">VELKÝ PODPOROVATEL</div>
+                {% else %} <div class="title-badge">PODPOROVATEL</div> {% endif %}
+                
+                <h3 class="name-title">{{ s.get('name', 'Neznámý dárce') }}</h3>
+                <div class="amt-badge">{{ s.get('amount', '') }}</div>
+            </div>
+            
+            <div style="width: 100%; margin-top: auto;">
+                {% if s.get('message') %}
+                <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0 auto 15px auto; line-height: 1.5; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 2px solid rgba(255,255,255,0.2); max-width: 90%;">
+                    "{{ s.get('message') }}"
+                </p>
+                {% endif %}
+                <div style="font-size: 11px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; text-align: center;">Datum podpory: {{ s.get('created_at', '') }}</div>
+            </div>
+        </div>
+        {% else %}
+        <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1); width: 100%;">Zatím zde nikdo není. Buďte první!</div>
+        {% endfor %}
+    </div>
+</div>
+"""
+
+HTML_SUPPORTERS_MGMT = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-star" style="color:var(--warning);"></i> Správa Podporovatelů</h2>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--warning); margin-bottom: 20px;">
+    <h3 style="color: var(--warning); margin-top: 0;"><i class="fas fa-exclamation-triangle"></i> Ke schválení (Manuální kontrola)</h3>
+    <p style="color: var(--text-muted); font-size: 13px;">Zde se zobrazují lidé, kteří si zažádali o roli na webu, ale systém nenašel shodu nebo jejich účet na Discordu.</p>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>BMAC Jméno</th>
+                <th>Požadovaný Discord Nick</th>
+                <th>Částka (Odhad Role)</th>
+                <th>Akce</th>
+            </tr>
+            {% for p in pending_claims %}
+            <tr>
+                <td style="color:var(--blue-main); font-weight:bold;">{{ p.get('name', 'Neznámý') }}</td>
+                <td style="color:white; font-weight:bold;">{{ p.get('discord_nick', 'Nevyplněno') }}</td>
+                <td><span class="role-tag" style="background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning);">{{ p.get('amount', '?') }}</span></td>
+                <td>
+                    <form action="/dashboard/approve_claim" method="POST" style="display:inline;">
+                        <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
+                        <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
+                        <input type="hidden" name="amount" value="{{ p.get('amount', '0') }}">
+                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-check"></i> Schválit roli</button>
+                    </form>
+                    <form action="/dashboard/reject_claim" method="POST" style="display:inline;">
+                        <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
+                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu zamítnout tento požadavek?')"><i class="fas fa-times"></i> Zamítnout</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Vše je vyřízeno, žádné čekající požadavky.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Ruční přidání podporovatele</h3>
+        <p style="color: var(--text-muted); font-size: 13px;">(Pokud Vám někdo poslal peníze mimo Buy Me a Coffee)</p>
+        <form action="/dashboard/add_supporter" method="POST">
+            <input type="text" name="name" placeholder="Jméno podporovatele" required>
+            <input type="text" name="amount" placeholder="Částka (např. 150 CZK nebo 10 USD)" required>
+            <textarea name="message" placeholder="Zpráva od podporovatele (volitelně)..." rows="3"></textarea>
+            <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Přidat do databáze</button>
+        </form>
+    </div>
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">☕ Historie podporovatelů</h3>
+        <div style="overflow-x: auto;">
+            <table>
+                <tr>
+                    <th>Jméno</th>
+                    <th>Discord</th>
+                    <th>Částka</th>
+                    <th>Zpráva</th>
+                    <th>Datum</th>
+                    <th>Akce</th>
+                </tr>
+                {% for s in supporters %}
+                <tr>
+                    <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
+                    <td style="color:#aaa; font-size:12px;">{{ s.get('discord_nick', '') }}</td>
+                    <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
+                    <td style="font-style:italic;">{{ s.get('message', 'Bez zprávy') }}</td>
+                    <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
+                    <td>
+                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline;">
+                            <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
+                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu smazat tohoto podporovatele?')"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Zatím žádné platby.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+"""
 
 # ==========================================
-# GLOBÁLNÍ FUNKCE A TŘÍDĚNÍ
+# GLOBÁLNÍ FUNKCE A TŘÍDĚNÍ PODPOROVATELŮ
 # ==========================================
 
 def get_db():
@@ -66,13 +1174,16 @@ def process_supporters(data_list):
         if match:
             try: val = float(match.group(1).replace(',', '.'))
             except: pass
+        
         norm_val = val
         if 'usd' in amt_str.lower() or '$' in amt_str.lower(): norm_val *= 23
         elif 'eur' in amt_str.lower() or '€' in amt_str.lower(): norm_val *= 25
+        
         s['norm_val'] = norm_val
         if norm_val >= 325: s['tier'] = 3
         elif norm_val >= 195: s['tier'] = 2
         else: s['tier'] = 1
+
     data_list.sort(key=lambda x: (x.get('norm_val', 0), x.get('id', 0)), reverse=True)
     return data_list
 
@@ -84,6 +1195,7 @@ def calculate_role_from_amount(amount_str):
         except: pass
     if 'usd' in str(amount_str).lower() or '$' in str(amount_str).lower(): val *= 23
     elif 'eur' in str(amount_str).lower() or '€' in str(amount_str).lower(): val *= 25
+    
     if val >= 325: return "⭐| MEGA PODPOROVATEL"
     elif val >= 195: return "⭐| VELKÝ PODPOROVATEL"
     else: return "⭐| PODPOROVATEL"
@@ -107,10 +1219,10 @@ async def assign_supporter_role(identifier, role_name):
                 if role:
                     await member.add_roles(role)
                     success = True
-                    try: await member.send(embed=discord.Embed(title="🎉 Děkujeme!", description=f"Role udělena:\n**{role_name}**", color=0x38bdf8))
+                    try: await member.send(embed=discord.Embed(title="🎉 Děkujeme za obrovskou podporu!", description=f"Na našem Discord serveru a v databázi ti byla automaticky přidělena exkluzivní role:\n\n**{role_name}**\n\nMoc si toho vážíme!", color=0x38bdf8))
                     except: pass
                 break
-    except Exception as e: print(e)
+    except Exception as e: print(f"Chyba pri pridelovani role: {e}")
     return success
 
 def send_log(title, description, color=0x38bdf8):
@@ -251,13 +1363,13 @@ def claim_role():
                         db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
                 else:
                     db.table("pending_roles").insert({"discord_identifier": discord_nick, "roles": assigned_role}).execute()
-                flash('Úspěch! Role přidělena na Discordu.', 'success')
+                flash('Úspěch! Role ti byla právě přidělena na Discordu.', 'success')
             else:
                 db.table("supporters").update({"status": "manual_review", "discord_nick": discord_nick}).eq("id", record['id']).execute()
-                flash('Discord účet nenalezen! Odesláno administrátorovi ke schválení.', 'warning')
+                flash('Tvůj Discord účet nebyl nalezen! Odesláno administrátorovi ke schválení.', 'warning')
         else:
             db.table("supporters").insert({"name": bmac_name, "discord_nick": discord_nick, "amount": "Neznámá (Z webu)", "message": "Zadal špatné jméno BMAC", "status": "manual_review", "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
-            flash('Platba s tímto jménem nenalezena. Odesláno administrátorovi k ruční kontrole.', 'warning')
+            flash('Platba nenalezena. Odesláno administrátorovi k ruční kontrole.', 'warning')
         return redirect(url_for('claim_role'))
     return render_public(HTML_CLAIM)
 
@@ -285,20 +1397,19 @@ def bmac_webhook():
             status = 'pending'
             if discord_identifier and user_exists_sync(discord_identifier): status = 'completed'
             db.table("supporters").insert({"name": str(name), "message": str(message), "amount": str(amount_str), "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "status": status, "discord_nick": discord_identifier or ""}).execute()
-            send_log("🍕 Nový dárce!", f"Uživatel **{name}** právě poslal **{amount_str}**.\n\n*Vzkaz: {message}*", 0xF4CC17)
+            send_log("🍕 Nový dárce!", f"Uživatel **{name}** poslal **{amount_str}**.\n\n*Vzkaz: {message}*", 0xF4CC17)
             if status == 'completed':
                 db_user = db.table("users").select("*").or_(f"discord_id.eq.{discord_identifier},nick.ilike.{discord_identifier}").execute().data
                 if db_user:
                     current_roles = db_user[0].get('role', '')
                     if assigned_role not in current_roles:
-                        new_roles = f"{current_roles},{assigned_role}" if current_roles else assigned_role
-                        db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
+                        db.table("users").update({"role": f"{current_roles},{assigned_role}" if current_roles else assigned_role}).eq("discord_id", db_user[0]['discord_id']).execute()
                 else: db.table("pending_roles").insert({"discord_identifier": discord_identifier, "roles": assigned_role}).execute()
                 if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_identifier, assigned_role), bot.loop)
         if request.method == 'GET': return f"<h1>ÚSPĚCH! 🎉</h1><a href='/supporters'>Zpět</a>"
         return jsonify({"status": "success"}), 200
     except Exception as e:
-        if request.method == 'GET': return f"<h1>❌ CHYBA DATABÁZE</h1><p>{str(e)}</p>"
+        if request.method == 'GET': return f"<h1>❌ CHYBA</h1><p>{str(e)}</p>"
         return jsonify({"status": "error", "message": str(e)}), 400
 
 @app.route('/download/<token>')
@@ -341,7 +1452,7 @@ def api_get_file(token):
         if "dropbox.com" in file_url:
             file_url = file_url.replace("dl=0", "dl=1")
             if "dl=1" not in file_url: file_url += "?dl=1" if "?" not in file_url else "&dl=1"
-        req = urllib.request.Request(file_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+        req = urllib.request.Request(file_url, headers={'User-Agent': 'Mozilla/5.0'})
         remote_response = urllib.request.urlopen(req)
         def generate():
             while True:
@@ -369,8 +1480,7 @@ def api_app_login():
     if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
     data = request.get_json(silent=True) or {}
     if not data: return _cors_jsonify({"status": "error", "message": "Chybí data."})
-    identifier = str(data.get("identifier", "")); req_hwid = str(data.get("hwid", ""))
-    db = get_db()
+    identifier = str(data.get("identifier", "")); req_hwid = str(data.get("hwid", "")); db = get_db()
     try:
         set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
         if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false': return _cors_jsonify({"status": "error", "message": "SOFTWARE JE VYPNUT."})
@@ -804,84 +1914,57 @@ def edit_user():
 # ==========================================
 # DISCORD BOT A TLAČÍTKA
 # ==========================================
-class DashboardAuthView(discord.ui.View):
-    def __init__(self, token, discord_id):
-        super().__init__(timeout=300)
-        self.token = token; self.discord_id = discord_id
-    @discord.ui.button(label="Ověřit přístup", style=discord.ButtonStyle.success, emoji="✅")
-    async def verify_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+async def update_member_roles(member, role_string):
+    if not member or not member.guild: return
+    u_roles = [r.strip() for r in role_string.split(',')]
+    try:
+        r_sa = discord.utils.get(member.guild.roles, name="web-sa")
+        r_dev = discord.utils.get(member.guild.roles, name="web-dev")
+        r_bt = discord.utils.get(member.guild.roles, name="web-bt")
+        if r_sa:
+            if "SA" in u_roles and r_sa not in member.roles: await member.add_roles(r_sa)
+            elif "SA" not in u_roles and r_sa in member.roles: await member.remove_roles(r_sa)
+        if r_dev:
+            if "DEV" in u_roles and r_dev not in member.roles: await member.add_roles(r_dev)
+            elif "DEV" not in u_roles and r_dev in member.roles: await member.remove_roles(r_dev)
+        if r_bt:
+            if "BT" in u_roles and r_bt not in member.roles: await member.add_roles(r_bt)
+            elif "BT" not in u_roles and r_bt in member.roles: await member.remove_roles(r_bt)
+    except: pass
+
+class PerDeleteConfirm(discord.ui.View):
+    def __init__(self, target_id, author_id):
+        super().__init__(timeout=60)
+        self.target_id = target_id; self.author_id = author_id
+    @discord.ui.button(label="Ano, trvale smazat", style=discord.ButtonStyle.danger, emoji="⚠️")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
         await interaction.response.defer()
         db = get_db()
         if db:
-            user = db.table("users").select("login_token").eq("discord_id", self.discord_id).execute().data
-            if user and user[0].get("login_token") == self.token:
-                db.table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
-                await interaction.edit_original_response(content="✅ **Schváleno!**", view=None)
-            else: await interaction.edit_original_response(content="❌ **Vypršelo.**", view=None)
-    @discord.ui.button(label="Zamítnout", style=discord.ButtonStyle.danger, emoji="❌")
-    async def decline_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-        db = get_db()
-        if db: db.table("users").update({"login_token": "rejected"}).eq("discord_id", self.discord_id).execute()
-        await interaction.edit_original_response(content="⛔ **Zamítnuto.**", view=None)
-
-class AppAuthView(discord.ui.View):
-    def __init__(self, token, discord_id, is_dm=True):
-        super().__init__(timeout=180)
-        self.token = token; self.discord_id = discord_id; self.is_dm = is_dm
-    @discord.ui.button(label="Ano, ověřit", style=discord.ButtonStyle.success)
-    async def ok(self, interaction, button):
-        if str(interaction.user.id) != str(self.discord_id): return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
-        get_db().table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
-        await interaction.response.edit_message(content="✅ **Ověřeno!**", view=None)
-        send_log("🖥️ Přihlášení do Aplikace", f"Uživatel s ID `{self.discord_id}` se úspěšně ověřil a vstoupil do softwaru.", 0x10b981)
-        if not self.is_dm: await asyncio.sleep(2); await interaction.message.delete()
-
-intents = discord.Intents.default()
-intents.members = True; intents.message_content = True; intents.presences = True
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
-bot.invites_cache = {}
-
-@tasks.loop(hours=24)
-async def pixeldrain_keepalive():
-    db = get_db()
-    if not db: return
-    try:
-        versions = db.table("software_versions").select("version_name, file_url").execute().data or []
-        for v in versions:
-            url = v.get("file_url", "")
-            if "pixeldrain.com/u/" in url:
-                try:
-                    req = urllib.request.Request(url.replace("/u/", "/api/file/"), headers={'User-Agent': 'Mozilla/5.0', 'Range': 'bytes=0-10'})
-                    await asyncio.to_thread(urllib.request.urlopen, req, timeout=15)
-                except: pass
-    except: pass
+            db.table("users").delete().eq("discord_id", self.target_id).execute()
+            await interaction.edit_original_response(content=f"✅ Účet `{self.target_id}` smazán.", view=None, embed=None)
+    @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        await interaction.response.edit_message(content="❌ Zrušeno.", view=None, embed=None)
 
 @bot.event
-async def on_ready():
-    print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
-    try: bot.add_view(DynamicDownloadView())
-    except: pass
-    try:
-        for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
-    except: pass
-    if not pixeldrain_keepalive.is_running(): pixeldrain_keepalive.start()
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument): await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!**", delete_after=15)
+    elif isinstance(error, commands.MemberNotFound): await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
 
-@bot.event
-async def on_member_join(member):
-    used_invite = None
-    try:
-        new_invites = await member.guild.invites()
-        old_invites = bot.invites_cache.get(member.guild.id, [])
-        for invite in new_invites:
-            for old_invite in old_invites:
-                if invite.code == old_invite.code and invite.uses > old_invite.uses:
-                    used_invite = invite; break
-            if used_invite: break
-        bot.invites_cache[member.guild.id] = new_invites
-    except: pass
-    link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!" if used_invite and used_invite.code == "vmTagbC9mF" else ""
-    await async_send_log("👋 Nový člen", f"**Uživatel:** {member.mention}\n**ID:** `{member.id}`\n**Datum připojení:** {get_prague_time().strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
+def check_web_sa():
+    async def predicate(ctx):
+        if discord.utils.get(ctx.author.roles, name="web-sa") or ctx.author.guild_permissions.administrator: return True
+        await ctx.send(f"❌ {ctx.author.mention}, nemáš oprávnění.", delete_after=10); return False
+    return commands.check(predicate)
+
+def check_sm_role():
+    async def predicate(ctx):
+        if discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator: return True
+        await ctx.send(f"❌ {ctx.author.mention}, nemáš oprávnění.", delete_after=10); return False
+    return commands.check(predicate)
 
 class DynamicDownloadView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
@@ -889,18 +1972,18 @@ class DynamicDownloadView(discord.ui.View):
     async def dl_btn(self, interaction, button):
         class DynamicRulesView(discord.ui.View):
             def __init__(self): super().__init__(timeout=None)
-            @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, emoji="✅")
+            @discord.ui.button(label="Souhlasím", style=discord.ButtonStyle.success, emoji="✅")
             async def agree(self, i2, b2):
-                await i2.response.edit_message(content="<a:loading:123> Ověřuji...", view=None)
+                await i2.response.edit_message(content="Ověřuji...", view=None)
                 try:
                     db = get_db(); d_id = str(i2.user.id); n = i2.user.display_name; u_role = "User"
                     if str((db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}])[0].get('setting_value', '')).lower() == 'false':
-                        return await i2.edit_original_response(content="**Stahování je globálně vypnuto.**")
+                        return await i2.edit_original_response(content="**Stahování vypnuto.**")
                     chk = db.table("users").select("*").eq("discord_id", d_id).execute()
                     pend_data = db.table("pending_roles").select("*").execute().data or []
                     pend = next((p for p in pend_data if p['discord_identifier'] in [d_id, n]), None)
                     if chk.data:
-                        if chk.data[0].get('is_banned'): return await i2.edit_original_response(content="**Přístup zamítnut:** Máte BAN.")
+                        if chk.data[0].get('is_banned'): return await i2.edit_original_response(content="**BAN.**")
                         if chk.data[0].get('is_deleted'):
                             hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
                             nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
@@ -926,30 +2009,64 @@ class DynamicDownloadView(discord.ui.View):
                             for v in vers_data:
                                 req = 2 if v['target_role'] == 'BT' else (3 if v['target_role'] == 'DEV_SA' else 1)
                                 if u_lvl >= req: opts.append(discord.SelectOption(label=v['version_name'], value=str(v['id']), emoji="📦"))
-                            if not opts: opts.append(discord.SelectOption(label="Nic není k dispozici", value="none"))
-                            super().__init__(placeholder="Vyber verzi k instalaci...", options=opts)
+                            if not opts: opts.append(discord.SelectOption(label="Nic", value="none"))
+                            super().__init__(placeholder="Vyber verzi...", options=opts)
                         async def callback(self, i3):
-                            if self.values[0] == "none": return await i3.response.send_message("Nic tu není.", ephemeral=True)
-                            await i3.response.send_message("<a:loading:123> Generuji odkaz...", ephemeral=True)
+                            if self.values[0] == "none": return await i3.response.send_message("Nic.", ephemeral=True)
+                            await i3.response.send_message("Generuji...", ephemeral=True)
                             t = str(uuid.uuid4())
                             get_db().table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
-                            await i3.edit_original_response(content=f"**Odkaz připraven:**\n🔗 {os.environ.get('RENDER_EXTERNAL_URL', 'https://datacorebot.onrender.com')}/download/{t}?v={self.values[0]}\n*Platí jen pro Vás.*")
+                            await i3.edit_original_response(content=f"**Odkaz:**\n🔗 {os.environ.get('RENDER_EXTERNAL_URL', 'https://datacorebot.onrender.com')}/download/{t}?v={self.values[0]}")
                     v_view = discord.ui.View()
                     v_view.add_item(DynamicVersionSelect(3 if 'SA' in u_role or 'DEV' in u_role else (2 if 'BT' in u_role else 1)))
-                    await i2.edit_original_response(content="**Ověření úspěšné.** Vyberte soubor:", view=v_view)
+                    await i2.edit_original_response(content="**Vyberte soubor:**", view=v_view)
                 except Exception as e: await i2.edit_original_response(content=f"Chyba DB: {e}")
             @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, emoji="❌")
             async def disagree(self, i2, b2): await i2.response.edit_message(content="**Zrušeno.**", view=None)
         await interaction.response.send_message("**Podmínky užití:**\n1. Zákaz úprav a šíření.\n2. Zámek na Váš PC (HWID).\n\nSouhlasíte?", view=DynamicRulesView(), ephemeral=True)
 
 @bot.command()
+@check_web_sa()
+async def setup_download(ctx):
+    await ctx.send(embed=discord.Embed(title="📥 Instalace", description="Kliknutím zahájíte ověření.", color=0x38bdf8), view=DynamicDownloadView())
+    try: await ctx.message.delete()
+    except: pass
+
+@bot.command()
 async def auth(ctx):
     try: await ctx.message.delete()
     except: pass
     u = get_db().table("users").select("login_token").eq("discord_id", str(ctx.author.id)).execute().data
-    if u and u[0].get('login_token'): await ctx.send(f"🛡️ {ctx.author.mention}, potvrďte přihlášení do aplikace:", view=AppAuthView(u[0]['login_token'], str(ctx.author.id), False), delete_after=60)
+    if u and u[0].get('login_token'): await ctx.send(f"🛡️ {ctx.author.mention}, potvrďte:", view=AppAuthView(u[0]['login_token'], str(ctx.author.id), False), delete_after=60)
+
+@bot.command()
+async def ping(ctx): await ctx.send(f"🏓 Odezva: **{round(bot.latency * 1000)}ms**.")
+
+@bot.command()
+@check_sm_role()
+async def ban(ctx, discord_id: str):
+    db = get_db()
+    if db: db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute(); await ctx.send(f"🔨 BAN.")
+
+@bot.command()
+@check_sm_role()
+async def unban(ctx, discord_id: str):
+    db = get_db()
+    if db: db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute(); await ctx.send(f"🕊️ UNBAN.")
+
+@bot.command()
+@check_sm_role()
+async def db(ctx, discord_id: str):
+    db_conn = get_db()
+    if db_conn:
+        u = db_conn.table("users").select("dashboard_access").eq("discord_id", discord_id).execute().data
+        if u:
+            ns = not u[0].get("dashboard_access", False)
+            db_conn.table("users").update({"dashboard_access": ns}).eq("discord_id", discord_id).execute()
+            await ctx.send(f"⚙️ DB přístup: **{'POVOLEN' if ns else 'ODEBRÁN'}**.")
 
 def run_web(): app.run(host='0.0.0.0', port=8080, use_reloader=False)
+
 if __name__ == "__main__":
     Thread(target=run_web).start()
     bot.run(os.environ.get("DISCORD_TOKEN"))
