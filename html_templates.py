@@ -67,7 +67,7 @@ BASE_HTML = """
 PUBLIC_LAYOUT = """
 <nav class="top-nav">
     <a href="/" class="logo">
-        <img src="{{ logo_male }}" alt="Logo" style="height: 30px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 8px rgba(56, 189, 248, 0.6));">
+        <i class="fas fa-robot" style="font-size: 26px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"></i>
         OIS IDPK
     </a>
     <div class="nav-links">
@@ -95,7 +95,7 @@ DASHBOARD_LAYOUT = """
     <div class="sidebar">
         <div class="sidebar-header">
             <a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;">
-                <img src="{{ logo_male }}" alt="Logo" style="height: 24px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 6px rgba(56, 189, 248, 0.6));">
+                <i class="fas fa-robot" style="text-shadow: 0 0 8px rgba(56, 189, 248, 0.6);"></i>
                 OIS IDPK
             </a>
             <div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div>
@@ -990,7 +990,7 @@ HTML_SUPPORTERS = """
 <div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
     <div style="text-align: center; margin-bottom: 40px;">
         <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Děkuji všem za podporu!</h1>
-        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!</p>
+        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK Jsem neskutečně rád za každého z vás!</p>
         <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue"><i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK</a>
     </div>
     
