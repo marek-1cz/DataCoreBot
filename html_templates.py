@@ -67,7 +67,7 @@ BASE_HTML = """
 PUBLIC_LAYOUT = """
 <nav class="top-nav">
     <a href="/" class="logo">
-        <i class="fas fa-bus" style="font-size: 26px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"></i>
+        <img src="{{ logo_male }}" alt="Logo" style="height: 30px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 8px rgba(56, 189, 248, 0.6));">
         OIS IDPK
     </a>
     <div class="nav-links">
@@ -95,7 +95,7 @@ DASHBOARD_LAYOUT = """
     <div class="sidebar">
         <div class="sidebar-header">
             <a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;">
-                <i class="fas fa-bus" style="text-shadow: 0 0 8px rgba(56, 189, 248, 0.6);"></i>
+                <img src="{{ logo_male }}" alt="Logo" style="height: 24px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 6px rgba(56, 189, 248, 0.6));">
                 OIS IDPK
             </a>
             <div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div>
