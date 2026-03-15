@@ -904,7 +904,7 @@ async def assign_supporter_role(identifier, role_name):
                     try:
                         embed = discord.Embed(
                             title="🎉 Děkujeme za obrovskou podporu!", 
-                            description=f"Na našem Discord serveru a v databázi ti byla automaticky přidělena exkluzivní role:\n\n⭐ **{role_name}**\n\nMoc si toho vážíme!", 
+                            description=f"Na našem Discord serveru a v databázi ti byla automaticky přidělena exkluzivní role:\n\n**{role_name}**\n\nMoc si toho vážíme!", 
                             color=0x38bdf8
                         )
                         await member.send(embed=embed)
@@ -1009,7 +1009,7 @@ def home():
                         country_code = geo_data.get("countryCode", "").lower()
             except: pass
             
-            if not country_code or country_name.lower() in ["neznámá", "unknown", "neznámá (nepodporováno)", "none"]:
+            if not country_code or country_code.lower() == 'us' or country_name.lower() in ["neznámá", "unknown", "neznámá (nepodporováno)", "none", "united states", "us"]:
                 return 
             
             combined_location = f"{country_code}|{country_name}|{region}"
@@ -1070,9 +1070,9 @@ def bmac_webhook():
         if 'usd' in currency.lower() or '$' in currency.lower(): norm_val *= 23
         elif 'eur' in currency.lower() or '€' in currency.lower(): norm_val *= 25
 
-        if norm_val >= 325: assigned_role = "MEGA PODPOROVATEL"
-        elif norm_val >= 195: assigned_role = "VELKÝ PODPOROVATEL"
-        else: assigned_role = "PODPOROVATEL"
+        if norm_val >= 325: assigned_role = "⭐| MEGA PODPOROVATEL"
+        elif norm_val >= 195: assigned_role = "⭐| VELKÝ PODPOROVATEL"
+        else: assigned_role = "⭐| PODPOROVATEL"
 
         # Získání Discord ID/Nicku
         discord_identifier = None
@@ -1102,7 +1102,6 @@ def bmac_webhook():
             db.table("supporters").insert({"name": str(name), "message": str(message), "amount": str(amount_str), "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
             send_log("🍕 Nový dárce!", f"Uživatel **{name}** právě poslal **{amount_str}**.\n\n*Vzkaz: {message}*", 0xF4CC17)
 
-            # Zápis automatické role
             if discord_identifier:
                 db_user = db.table("users").select("*").or_(f"discord_id.eq.{discord_identifier},nick.ilike.{discord_identifier}").execute().data
                 if db_user:
@@ -1113,7 +1112,6 @@ def bmac_webhook():
                 else:
                     db.table("pending_roles").insert({"discord_identifier": discord_identifier, "roles": assigned_role}).execute()
 
-                # Přidělení role na Discordu přes bota
                 if bot.loop and bot.loop.is_running():
                     asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_identifier, assigned_role), bot.loop)
 
@@ -1413,7 +1411,7 @@ def dashboard_stats():
             
             for v in visits:
                 c_raw = v.get('country', '')
-                if not c_raw or 'neznámá' in c_raw.lower() or 'unknown' in c_raw.lower() or 'none' in c_raw.lower():
+                if not c_raw or 'neznámá' in c_raw.lower() or 'unknown' in c_raw.lower() or 'none' in c_raw.lower() or 'us' in c_raw.lower():
                     continue
                 
                 parts = c_raw.split('|')
@@ -1421,7 +1419,7 @@ def dashboard_stats():
                 c_name = parts[1] if len(parts) > 1 else c_raw
                 reg = parts[2] if len(parts) > 2 else ""
                 
-                if not cc: continue
+                if not cc or cc == 'us': continue
                 
                 flag_url = f"https://flagcdn.com/24x18/{cc}.png"
                 
@@ -1724,25 +1722,6 @@ def edit_user():
 # ==========================================
 # DISCORD BOT A TLAČÍTKA
 # ==========================================
-async def assign_supporter_role(identifier, role_name):
-    try:
-        for guild in bot.guilds:
-            member = None
-            if identifier.isdigit(): member = guild.get_member(int(identifier))
-            if not member:
-                member = discord.utils.find(lambda m: m.name.lower() == identifier.lower() or (m.global_name and m.global_name.lower() == identifier.lower()), guild.members)
-
-            if member:
-                role = discord.utils.get(guild.roles, name=role_name)
-                if role:
-                    await member.add_roles(role)
-                    try:
-                        embed = discord.Embed(title="🎉 Děkujeme za obrovskou podporu!", description=f"Na našem Discord serveru a v databázi ti byla automaticky přidělena exkluzivní role:\n\n⭐ **{role_name}**\n\nMoc si toho vážíme!", color=0x38bdf8)
-                        await member.send(embed=embed)
-                    except: pass
-                break
-    except Exception as e: print(f"Chyba pri pridelovani role: {e}")
-
 class DashboardAuthView(discord.ui.View):
     def __init__(self, token, discord_id):
         super().__init__(timeout=300)
