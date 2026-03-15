@@ -13,15 +13,8 @@ import json
 import traceback
 import re
 
-# ==========================================
-# IMPORT HTML Z html_templates.py
-# ==========================================
-from html_templates import (
-    BASE_HTML, PUBLIC_LAYOUT, DASHBOARD_LAYOUT, HTML_HOME, HTML_CLAIM, 
-    HTML_STATS, HTML_TEAM, HTML_DOWNLOADS_MAIN, HTML_LOGIN, HTML_WAIT_AUTH, 
-    HTML_APP_SETTINGS, HTML_PENDING_ROLES, HTML_TEAM_ADD, HTML_IDS, 
-    HTML_DASHBOARD_MAIN, HTML_SUPPORTERS, HTML_SUPPORTERS_MGMT
-)
+# IMPORT VŠECH HTML DESIGNŮ Z VEDLEJŠÍHO SOUBORU
+from html_templates import *
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
@@ -226,7 +219,7 @@ def sync_roles_from_flask(discord_id, role_string):
         asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
 # ==========================================
-# PUBLIC FLASK STRÁNKY A BMAC
+# VEŘEJNÉ STRÁNKY (PUBLIC ROUTES)
 # ==========================================
 
 @app.route('/')
@@ -1224,6 +1217,30 @@ def edit_user():
 # ==========================================
 # DISCORD BOT A TLAČÍTKA
 # ==========================================
+
+intents = discord.Intents.default()
+intents.members = True
+intents.message_content = True
+intents.presences = True
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+bot.invites_cache = {}
+
+def check_web_sa():
+    async def predicate(ctx):
+        if discord.utils.get(ctx.author.roles, name="web-sa") or ctx.author.guild_permissions.administrator:
+            return True
+        await ctx.send(f"❌ {ctx.author.mention}, nemáš oprávnění k tomuto příkazu.", delete_after=10)
+        return False
+    return commands.check(predicate)
+
+def check_sm_role():
+    async def predicate(ctx):
+        if discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator:
+            return True
+        await ctx.send(f"❌ {ctx.author.mention}, nemáš oprávnění k tomuto příkazu.", delete_after=10)
+        return False
+    return commands.check(predicate)
+
 class DashboardAuthView(discord.ui.View):
     def __init__(self, token, discord_id):
         super().__init__(timeout=300)
@@ -1270,72 +1287,27 @@ class AppAuthView(discord.ui.View):
             await asyncio.sleep(2)
             await interaction.message.delete()
 
-intents = discord.Intents.default()
-intents.members = True
-intents.message_content = True
-intents.presences = True
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
-bot.invites_cache = {}
+class PerDeleteConfirm(discord.ui.View):
+    def __init__(self, target_id, author_id):
+        super().__init__(timeout=60)
+        self.target_id = target_id
+        self.author_id = author_id
 
-@tasks.loop(hours=24)
-async def pixeldrain_keepalive():
-    db = get_db()
-    if not db:
-        return
-    try:
-        resp = db.table("software_versions").select("version_name, file_url").execute()
-        versions = getattr(resp, "data", []) or []
-        refreshed = []
-        for v in versions:
-            url = v.get("file_url", "")
-            name = v.get("version_name", "Neznámá verze")
-            if "pixeldrain.com/u/" in url:
-                api_url = url.replace("/u/", "/api/file/")
-                try:
-                    req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0', 'Range': 'bytes=0-10'})
-                    await asyncio.to_thread(urllib.request.urlopen, req, timeout=15)
-                    refreshed.append(name)
-                except:
-                    pass
-        if refreshed:
-            files_str = "\n• ".join(refreshed)
-            await async_send_log("🔄 Anti-Delete Ochrana", f"Systém právě úspěšně nasimuloval stažení.\n**Ochráněné soubory:**\n• {files_str}", 0x3b82f6)
-    except:
-        pass
+    @discord.ui.button(label="Ano, trvale smazat", style=discord.ButtonStyle.danger, emoji="⚠️")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        await interaction.response.defer()
+        db = get_db()
+        if db:
+            db.table("users").delete().eq("discord_id", self.target_id).execute()
+            await interaction.edit_original_response(content=f"✅ Účet `{self.target_id}` byl z databáze PERMANENTNĚ smazán.", view=None, embed=None)
 
-@bot.event
-async def on_ready():
-    print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
-    try:
-        bot.add_view(DynamicDownloadView())
-    except:
-        pass
-    try:
-        for guild in bot.guilds:
-            bot.invites_cache[guild.id] = await guild.invites()
-    except:
-        pass
-    if not pixeldrain_keepalive.is_running():
-        pixeldrain_keepalive.start()
-
-@bot.event
-async def on_member_join(member):
-    used_invite = None
-    try:
-        new_invites = await member.guild.invites()
-        old_invites = bot.invites_cache.get(member.guild.id, [])
-        for invite in new_invites:
-            for old_invite in old_invites:
-                if invite.code == old_invite.code and invite.uses > old_invite.uses:
-                    used_invite = invite
-                    break
-            if used_invite:
-                break
-        bot.invites_cache[member.guild.id] = new_invites
-    except:
-        pass
-    link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!" if used_invite and used_invite.code == "vmTagbC9mF" else ""
-    await async_send_log("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {get_prague_time().strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
+    @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        await interaction.response.edit_message(content="❌ Akce zrušena.", view=None, embed=None)
 
 class DynamicDownloadView(discord.ui.View):
     def __init__(self):
@@ -1423,6 +1395,75 @@ class DynamicDownloadView(discord.ui.View):
                 await i2.response.edit_message(content="**Akce zrušena.**", view=None)
                 
         await interaction.response.send_message("**Podmínky užití:**\n1. Zákaz úprav a šíření.\n2. Zámek na Váš PC (HWID).\n\nSouhlasíte?", view=DynamicRulesView(), ephemeral=True)
+
+@tasks.loop(hours=24)
+async def pixeldrain_keepalive():
+    db = get_db()
+    if not db:
+        return
+    try:
+        resp = db.table("software_versions").select("version_name, file_url").execute()
+        versions = getattr(resp, "data", []) or []
+        refreshed = []
+        for v in versions:
+            url = v.get("file_url", "")
+            name = v.get("version_name", "Neznámá verze")
+            if "pixeldrain.com/u/" in url:
+                api_url = url.replace("/u/", "/api/file/")
+                try:
+                    req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0', 'Range': 'bytes=0-10'})
+                    await asyncio.to_thread(urllib.request.urlopen, req, timeout=15)
+                    refreshed.append(name)
+                except:
+                    pass
+        if refreshed:
+            files_str = "\n• ".join(refreshed)
+            await async_send_log("🔄 Anti-Delete Ochrana", f"Systém právě úspěšně nasimuloval stažení.\n**Ochráněné soubory:**\n• {files_str}", 0x3b82f6)
+    except:
+        pass
+
+@bot.event
+async def on_ready():
+    print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
+    try:
+        bot.add_view(DynamicDownloadView())
+    except:
+        pass
+    try:
+        for guild in bot.guilds:
+            bot.invites_cache[guild.id] = await guild.invites()
+    except:
+        pass
+    if not pixeldrain_keepalive.is_running():
+        pixeldrain_keepalive.start()
+
+@bot.event
+async def on_member_join(member):
+    used_invite = None
+    try:
+        new_invites = await member.guild.invites()
+        old_invites = bot.invites_cache.get(member.guild.id, [])
+        for invite in new_invites:
+            for old_invite in old_invites:
+                if invite.code == old_invite.code and invite.uses > old_invite.uses:
+                    used_invite = invite
+                    break
+            if used_invite:
+                break
+        bot.invites_cache[member.guild.id] = new_invites
+    except:
+        pass
+    link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!" if used_invite and used_invite.code == "vmTagbC9mF" else ""
+    await async_send_log("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {get_prague_time().strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Zkontroluj si `!help`.", delete_after=15)
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
+    elif isinstance(error, commands.CheckFailure):
+        pass 
 
 @bot.command()
 @check_web_sa()
@@ -1601,8 +1642,8 @@ def run_web():
 
 if __name__ == "__main__":
     token = os.environ.get("DISCORD_TOKEN")
-    Thread(target=run_web).start()
     if token:
+        Thread(target=run_web).start()
         bot.run(token)
     else:
         print("KRITICKÁ CHYBA: DISCORD_TOKEN není nastaven v environment variables! (Web běží dál bez Bota)")
