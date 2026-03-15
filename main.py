@@ -35,7 +35,7 @@ def handle_exception(e):
     return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
 
 # ==========================================
-# 1. HTML ŠABLONY
+# HTML ŠABLONY
 # ==========================================
 
 BASE_HTML = """
@@ -348,7 +348,7 @@ HTML_STATS = """
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px;">
     <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--blue-main); text-align: center;">
-        <h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Celkem zobrazení</h3>
+        <h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Unikátní zobrazení (Celkem)</h3>
         <div style="font-size: 40px; font-weight: 900; color: var(--text-main);">{{ total_visits }}</div>
     </div>
     <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--success); text-align: center;">
@@ -384,8 +384,6 @@ HTML_STATS = """
             <td style="font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
                 {% if data.flag %}
                 <img src="{{ data.flag }}" alt="flag" style="border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">
-                {% else %}
-                <i class="fas fa-question-circle" style="color: #64748b;"></i>
                 {% endif %}
                 {{ c_name }}
             </td>
@@ -417,7 +415,7 @@ HTML_STATS = """
                 fill: true
             }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8' }, grid: { display: false } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8' }, grid: { display: false } } } }
     });
 
     new Chart(document.getElementById('chart24h').getContext('2d'), {
@@ -968,6 +966,123 @@ HTML_DASHBOARD_MAIN = """
 </script>
 """
 
+HTML_SUPPORTERS = """
+<style>
+    .glowing-btn-blue { background-color: var(--blue-main); color: #000; padding: 15px 40px; font-size: 20px; font-weight: 900; border-radius: 50px; text-decoration: none; display: inline-block; margin-top: 20px; box-shadow: 0 0 20px rgba(56, 189, 248, 0.6); transition: all 0.3s ease; text-transform: uppercase; letter-spacing: 1px; border: none; cursor: pointer; }
+    .glowing-btn-blue:hover { box-shadow: 0 0 40px rgba(56, 189, 248, 1); transform: scale(1.05); color: #000; }
+    
+    .supporter-wrapper {
+        width: 100%; max-width: 500px; min-height: 230px;
+        display: flex; flex-direction: column; justify-content: space-between; align-items: center; text-align: center; box-sizing: border-box;
+    }
+
+    .tier-1 { background-color: rgba(15, 23, 42, 0.8); padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.3); border-left: 5px solid #38bdf8; transition: transform 0.5s ease, box-shadow 0.5s ease; }
+    .tier-1:hover { transform: scale(1.05); box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4); }
+    .tier-1 .name-title { color: #e0f2fe; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); font-size: 20px; margin: 0 0 10px 0; }
+    .tier-1 .title-badge { font-size: 10px; color: #38bdf8; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin-bottom: 10px; }
+    .tier-1 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; border: 1px solid rgba(56, 189, 248, 0.3); }
+
+    @keyframes pulseMedium { from { box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); } to { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); } }
+    .tier-2 { background-color: rgba(30, 41, 59, 0.9); padding: 25px; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.6); border-left: 6px solid #f59e0b; animation: pulseMedium 2s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
+    .tier-2:hover { transform: scale(1.05) !important; animation: none; box-shadow: 0 10px 35px rgba(245, 158, 11, 0.8); }
+    .tier-2 .name-title { color: #fcd34d; font-size: 26px; margin: 0 0 10px 0; text-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
+    .tier-2 .title-badge { font-size: 12px; color: #f59e0b; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; margin-bottom: 10px; }
+    .tier-2 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(245, 158, 11, 0.1); color: var(--warning); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(245, 158, 11, 0.5); }
+
+    @keyframes epicWebGlow { from { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); } to { box-shadow: 0 0 50px rgba(239, 68, 68, 0.9), inset 0 0 30px rgba(239, 68, 68, 0.3); } }
+    .tier-3 { background: linear-gradient(135deg, #2a0a18, #450a0a); padding: 30px; border-radius: 15px; border: 2px solid #ef4444; animation: epicWebGlow 1.5s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
+    .tier-3:hover { transform: scale(1.08) !important; animation: none; box-shadow: 0 15px 60px rgba(239, 68, 68, 1); }
+    .tier-3 .name-title { color: #fca5a5; font-size: 32px !important; margin: 0 0 15px 0; text-shadow: 0 0 20px #ef4444, 0 0 40px #ef4444; text-transform: uppercase; font-weight: 900; }
+    .tier-3 .title-badge { font-size: 14px; color: #ef4444; text-transform: uppercase; font-weight: 900; letter-spacing: 3px; margin-bottom: 10px; text-shadow: 0 0 10px #ef4444; }
+    .tier-3 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: #ef4444 !important; color: #fff !important; border: 2px solid #fca5a5 !important; padding: 8px 20px; border-radius: 25px; font-weight: bold; font-size: 20px !important; box-shadow: 0 0 20px #ef4444; }
+</style>
+
+<div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
+    <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Děkuji všem za podporu!</h1>
+        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!</p>
+        <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue"><i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK</a>
+    </div>
+    
+    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 40px 0;">
+    <h2 style="text-align: center; color: var(--text-main); letter-spacing: 3px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,255,255,0.2);">SEZNAM PODPOROVATELŮ</h2>
+    
+    <div style="display: flex; flex-direction: column; gap: 40px; padding-bottom: 50px; align-items: center;">
+        {% for s in supporters %}
+        <div class="tier-{{ s.get('tier', 1) }} supporter-wrapper">
+            <div style="width: 100%;">
+                {% if s.get('tier') == 3 %} <div class="title-badge">MEGA PODPOROVATEL</div>
+                {% elif s.get('tier') == 2 %} <div class="title-badge">VELKÝ PODPOROVATEL</div>
+                {% else %} <div class="title-badge">PODPOROVATEL</div> {% endif %}
+                
+                <h3 class="name-title">{{ s.get('name', 'Neznámý dárce') }}</h3>
+                <div class="amt-badge">{{ s.get('amount', '') }}</div>
+            </div>
+            
+            <div style="width: 100%; margin-top: auto;">
+                {% if s.get('message') %}
+                <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0 auto 15px auto; line-height: 1.5; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 2px solid rgba(255,255,255,0.2); max-width: 90%;">
+                    "{{ s.get('message') }}"
+                </p>
+                {% endif %}
+                <div style="font-size: 11px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; text-align: center;">Datum podpory: {{ s.get('created_at', '') }}</div>
+            </div>
+        </div>
+        {% else %}
+        <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1); width: 100%;">Zatím zde nikdo není. Buďte první!</div>
+        {% endfor %}
+    </div>
+</div>
+"""
+
+HTML_SUPPORTERS_MGMT = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-star" style="color:var(--warning);"></i> Správa Podporovatelů</h2>
+</div>
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Ruční přidání podporovatele</h3>
+        <p style="color: var(--text-muted); font-size: 13px;">(Pokud Vám někdo poslal peníze mimo Buy Me a Coffee)</p>
+        <form action="/dashboard/add_supporter" method="POST">
+            <input type="text" name="name" placeholder="Jméno podporovatele" required>
+            <input type="text" name="amount" placeholder="Částka (např. 150 CZK nebo 10 USD)" required>
+            <textarea name="message" placeholder="Zpráva od podporovatele (volitelně)..." rows="3"></textarea>
+            <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Přidat do databáze</button>
+        </form>
+    </div>
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">☕ Seznam podporovatelů</h3>
+        <div style="overflow-x: auto;">
+            <table>
+                <tr>
+                    <th>Jméno</th>
+                    <th>Částka</th>
+                    <th>Zpráva</th>
+                    <th>Datum přidání</th>
+                    <th>Akce</th>
+                </tr>
+                {% for s in supporters %}
+                <tr>
+                    <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
+                    <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
+                    <td style="font-style:italic;">{{ s.get('message', 'Bez zprávy') }}</td>
+                    <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
+                    <td>
+                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline;">
+                            <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
+                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu smazat tohoto podporovatele?')"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Zatím žádné platby.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+"""
+
 # ==========================================
 # GLOBÁLNÍ FUNKCE A TŘÍDĚNÍ PODPOROVATELŮ
 # ==========================================
@@ -1073,12 +1188,24 @@ def home():
         try:
             db = get_db()
             if not db: return
+            
+            # Zahodíme místní a prázdné IP adresy (boty)
+            if not ip or ip in ["127.0.0.1", "::1", "0.0.0.0"]: return
+            clean_ip = ip.split(',')[0].strip()
+            
+            today_str = get_prague_time().strftime("%d.%m.%Y")
             now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+            
+            # Kontrola: 1 záznam na IP denně
+            existing = db.table("page_visits").select("visited_at").eq("ip", clean_ip).execute().data or []
+            for record in existing:
+                if record.get("visited_at", "").startswith(today_str):
+                    return # Už tu dneska byl
+            
             region = ""
             country_code = ""
             country_name = cf_country
             try:
-                clean_ip = ip.split(',')[0].strip()
                 url = f"http://ip-api.com/json/{clean_ip}"
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                 with urllib.request.urlopen(req, timeout=3) as response:
@@ -1088,12 +1215,17 @@ def home():
                         region = geo_data.get("regionName", "")
                         country_code = geo_data.get("countryCode", "").lower()
             except: pass
+            
+            # Nechceme v databázi nesmysly, US servery renderu nebo neznámé IP
+            if not country_code or country_name.lower() in ["neznámá", "unknown", "neznámá (nepodporováno)"]:
+                return
+                
             combined_location = f"{country_code}|{country_name}|{region}"
-            db.table("page_visits").insert({"ip": ip, "country": combined_location, "visited_at": now_str}).execute()
+            db.table("page_visits").insert({"ip": clean_ip, "country": combined_location, "visited_at": now_str}).execute()
         except: pass
 
     ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    country = request.headers.get('CF-IPCountry', 'Neznámá (Nepodporováno)')
+    country = request.headers.get('CF-IPCountry', 'Neznámá')
     Thread(target=log_visit, args=(ip, country)).start()
     
     return render_public(HTML_HOME)
@@ -1449,10 +1581,6 @@ def dashboard_stats():
                     if display_name not in parsed_countries:
                         parsed_countries[display_name] = {"count": 0, "flag": flag}
                     parsed_countries[display_name]["count"] += 1
-                else:
-                    if "Neznámá" not in parsed_countries:
-                        parsed_countries["Neznámá"] = {"count": 0, "flag": ""}
-                    parsed_countries["Neznámá"]["count"] += 1
                 
                 try:
                     v_time = datetime.strptime(v['visited_at'], "%d.%m.%Y %H:%M")
