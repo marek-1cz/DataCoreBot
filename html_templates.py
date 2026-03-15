@@ -1037,8 +1037,8 @@ HTML_SUPPORTERS_MGMT = """
         <table>
             <tr>
                 <th>BMAC Jméno</th>
-                <th>Požadovaný Discord Nick</th>
-                <th>Částka (Odhad Role)</th>
+                <th>Discord Nick</th>
+                <th>Částka</th>
                 <th>Akce</th>
             </tr>
             {% for p in pending_claims %}
@@ -1046,16 +1046,17 @@ HTML_SUPPORTERS_MGMT = """
                 <td style="color:var(--blue-main); font-weight:bold;">{{ p.get('name', 'Neznámý') }}</td>
                 <td style="color:white; font-weight:bold;">{{ p.get('discord_nick', 'Nevyplněno') }}</td>
                 <td><span class="role-tag" style="background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning);">{{ p.get('amount', '?') }}</span></td>
-                <td>
-                    <form action="/dashboard/approve_claim" method="POST" style="display:inline;">
+                <td style="display: flex; gap: 5px;">
+                    <form action="/dashboard/approve_claim" method="POST" style="display:inline; margin:0;">
                         <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
                         <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
                         <input type="hidden" name="amount" value="{{ p.get('amount', '0') }}">
-                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-check"></i> Schválit roli</button>
+                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a přidat roli"><i class="fas fa-check"></i></button>
                     </form>
-                    <form action="/dashboard/reject_claim" method="POST" style="display:inline;">
+                    <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily" onclick="openSupporterEdit('{{ p.get('id', '') }}', '{{ p.get('name', '') | replace("'", "\\'") }}', '{{ p.get('discord_nick', '') | replace("'", "\\'") }}', '{{ p.get('amount', '') | replace("'", "\\'") }}', '{{ p.get('message', '') | replace("'", "\\'") | replace('\\n', ' ') }}')"><i class="fas fa-edit"></i></button>
+                    <form action="/dashboard/reject_claim" method="POST" style="display:inline; margin:0;">
                         <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
-                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu zamítnout tento požadavek?')"><i class="fas fa-times"></i> Zamítnout</button>
+                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout" onclick="return confirm('Opravdu zamítnout tento požadavek?')"><i class="fas fa-times"></i></button>
                     </form>
                 </td>
             </tr>
@@ -1072,6 +1073,7 @@ HTML_SUPPORTERS_MGMT = """
         <p style="color: var(--text-muted); font-size: 13px;">(Pokud Vám někdo poslal peníze mimo Buy Me a Coffee)</p>
         <form action="/dashboard/add_supporter" method="POST">
             <input type="text" name="name" placeholder="Jméno podporovatele" required>
+            <input type="text" name="discord_nick" placeholder="Discord Nick (Volitelně)">
             <input type="text" name="amount" placeholder="Částka (např. 150 CZK nebo 10 USD)" required>
             <textarea name="message" placeholder="Zpráva od podporovatele (volitelně)..." rows="3"></textarea>
             <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Přidat do databáze</button>
@@ -1094,12 +1096,13 @@ HTML_SUPPORTERS_MGMT = """
                     <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
                     <td style="color:#aaa; font-size:12px;">{{ s.get('discord_nick', '') }}</td>
                     <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
-                    <td style="font-style:italic;">{{ s.get('message', 'Bez zprávy') }}</td>
+                    <td style="font-style:italic; font-size: 12px; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ s.get('message', '') }}">{{ s.get('message', 'Bez zprávy') }}</td>
                     <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
-                    <td>
-                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline;">
+                    <td style="display: flex; gap: 5px;">
+                        <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily" onclick="openSupporterEdit('{{ s.get('id', '') }}', '{{ s.get('name', '') | replace("'", "\\'") }}', '{{ s.get('discord_nick', '') | replace("'", "\\'") }}', '{{ s.get('amount', '') | replace("'", "\\'") }}', '{{ s.get('message', '') | replace("'", "\\'") | replace('\\n', ' ') }}')"><i class="fas fa-edit"></i></button>
+                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline; margin: 0;">
                             <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
-                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu smazat tohoto podporovatele?')"><i class="fas fa-trash"></i></button>
+                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Smazat z historie" onclick="return confirm('Opravdu smazat tohoto podporovatele z webu?')"><i class="fas fa-trash"></i></button>
                         </form>
                     </td>
                 </tr>
@@ -1110,4 +1113,43 @@ HTML_SUPPORTERS_MGMT = """
         </div>
     </div>
 </div>
+
+<div class="modal-overlay" id="editSupporterModal">
+    <div class="modal" style="width: 500px; border-top: 5px solid var(--warning);">
+        <div style="width: 100%;">
+            <h2 style="color: var(--warning); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+                <i class="fas fa-edit"></i> Úprava Podporovatele
+            </h2>
+            <form action="/dashboard/edit_supporter" method="POST">
+                <input type="hidden" name="supporter_id" id="es_id">
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Jméno (BMAC):</label>
+                <input type="text" name="name" id="es_name" required>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Discord Nick (Slouží pro spárování):</label>
+                <input type="text" name="discord_nick" id="es_nick">
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Částka (Formát: např. 150 CZK):</label>
+                <input type="text" name="amount" id="es_amount" required>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Vzkaz od podporovatele:</label>
+                <textarea name="message" id="es_message" rows="3"></textarea>
+                
+                <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 15px;"><i class="fas fa-save"></i> Uložit změny</button>
+            </form>
+            <button type="button" class="btn" style="width: 100%; margin-top: 10px; background: transparent; border: 1px solid #334155; color: var(--text-muted);" onclick="document.getElementById('editSupporterModal').style.display='none'">Zrušit</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openSupporterEdit(id, name, nick, amount, msg) {
+        document.getElementById('es_id').value = id;
+        document.getElementById('es_name').value = name;
+        document.getElementById('es_nick').value = nick;
+        document.getElementById('es_amount').value = amount;
+        document.getElementById('es_message').value = msg;
+        document.getElementById('editSupporterModal').style.display = 'flex';
+    }
+</script>
 """
