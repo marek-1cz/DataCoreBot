@@ -340,6 +340,23 @@ HTML_HOME = """
 </div>
 """
 
+HTML_CLAIM = """
+<div style="max-width: 500px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--blue-main); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <h2 style="color: var(--blue-main); text-align: center; margin-top: 0;"><i class="fas fa-gift"></i> Vyzvednutí VIP Role</h2>
+    <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 30px;">Zadejte jméno, pod kterým jste před malou chvílí poslali příspěvek na Buy Me a Coffee, a Váš Discord Nick. Náš systém Vám obratem automaticky přidělí roli!</p>
+    
+    <form method="POST">
+        <label style="color: var(--text-muted); font-size: 12px; font-weight: bold;">JMÉNO ZADANÉ NA BUY ME A COFFEE</label>
+        <input type="text" name="bmac_name" placeholder="Např. Jan Novák" required style="margin-bottom: 20px;">
+        
+        <label style="color: var(--text-muted); font-size: 12px; font-weight: bold; display: block;">VÁŠ DISCORD NICK</label>
+        <input type="text" name="discord_nick" placeholder="Např. marekk_czz" required>
+        
+        <button type="submit" class="btn" style="width: 100%; margin-top: 20px; font-size: 16px; padding: 15px;"><i class="fab fa-discord"></i> Propojit a získat roli</button>
+    </form>
+</div>
+"""
+
 HTML_STATS = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-chart-line" style="color:var(--blue-main);"></i> Statistiky Webu</h2>
@@ -848,6 +865,226 @@ HTML_IDS = """
 </div>
 """
 
+HTML_DASHBOARD_MAIN = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
+    
+    <div id="refresh-timer" style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;">
+        <i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Aktualizace za: <span id="timer-sec" style="color: white;">60</span>s
+    </div>
+</div>
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <div style="overflow-x: auto;">
+        <table id="usersTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0)">App ID ↕</th>
+                    <th onclick="sortTable(1)">Nick ↕</th>
+                    <th onclick="sortTable(2)">Stav ↕</th>
+                    <th onclick="sortTable(3)">Role ↕</th>
+                    <th onclick="sortTable(4)">Poslední Aktivita ↕</th>
+                    <th>Akce</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for user in users %}
+            <tr>
+                <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
+                <td><strong>{{ user.get('nick', '') }}</strong></td>
+                <td>
+                    {% if user.get('is_banned') %}
+                        <span style="color: var(--danger); font-size: 11px; font-weight:bold; border:1px solid var(--danger); padding:2px 5px; border-radius:4px;">BANNED</span>
+                    {% elif user.get('is_deleted') %}
+                        <span style="color: var(--text-muted); font-size: 11px; font-weight:bold; border:1px solid var(--text-muted); padding:2px 5px; border-radius:4px;">DELETED</span>
+                    {% elif not user.get('hwid') or user.get('hwid') == 'None' or user.get('hwid') == '' %}
+                        <span style="color: var(--warning); font-size: 11px; font-weight:bold; border:1px solid var(--warning); padding:2px 5px; border-radius:4px;">NOT ACTIVATED</span>
+                    {% else %}
+                        <span style="color: var(--success); font-size: 11px; font-weight:bold; border:1px solid var(--success); padding:2px 5px; border-radius:4px;">ACTIVATED</span>
+                    {% endif %}
+                </td>
+                
+                {% set role_weight = 1 %}
+                {% if 'SA' in user.get('role', '') %}{% set role_weight = 4 %}
+                {% elif 'DEV' in user.get('role', '') %}{% set role_weight = 3 %}
+                {% elif 'BT' in user.get('role', '') %}{% set role_weight = 2 %}
+                {% endif %}
+                <td data-sort="{{ role_weight }}">
+                    {% set role_list = user.get('role', '').split(',') %}
+                    {% for r in role_list %}
+                        {% set r_clean = r.strip() %}
+                        {% if r_clean == 'SA' %}
+                            <span class="role-tag" style="background-color: #ef4444; color: white;">SA</span>
+                        {% elif r_clean == 'DEV' %}
+                            <span class="role-tag" style="background-color: #10b981; color: white;">DEV</span>
+                        {% elif r_clean == 'BT' %}
+                            <span class="role-tag" style="background-color: #3b82f6; color: white;">BT</span>
+                        {% elif r_clean == 'User' %}
+                            <span class="role-tag" style="background-color: #64748b; color: white;">User</span>
+                        {% endif %}
+                    {% endfor %}
+                    {% if user.get('dashboard_access') %}
+                        <i class="fas fa-shield-alt" style="color:var(--blue-main); font-size:12px; margin-left:5px;" title="Má přístup do DB"></i>
+                    {% endif %}
+                </td>
+                <td style="color: var(--text-muted); font-size: 13px;" data-sort="{{ '99999999999' if user.get('is_online') else user.get('last_active', '0') }}">
+                    {% if user.get('is_online') %}
+                        <span style="color: var(--success); font-weight: bold;">🟢 AKTIVNÍ</span>
+                    {% else %}
+                        {{ user.get('last_active', 'Nikdy nehrál') }}
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', '') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-edit"></i> Upravit</button>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let timeLeft = 60;
+    setInterval(() => {
+        timeLeft--;
+        let secEl = document.getElementById('timer-sec');
+        if(secEl) secEl.innerText = timeLeft;
+        if(timeLeft <= 0) location.reload();
+    }, 1000);
+
+    let sortDir = {};
+    function sortTable(n) {
+        let table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+        table = document.getElementById("usersTable");
+        switching = true;
+        
+        dir = sortDir[n] === "asc" ? "desc" : "asc";
+        sortDir[n] = dir;
+
+        while (switching) {
+            switching = false;
+            rows = table.rows;
+            for (i = 1; i < (rows.length - 1); i++) {
+                shouldSwitch = false;
+                x = rows[i].getElementsByTagName("TD")[n];
+                y = rows[i + 1].getElementsByTagName("TD")[n];
+                
+                let xContent = x.hasAttribute("data-sort") ? x.getAttribute("data-sort") : x.innerHTML.replace(/<[^>]*>?/gm, '').trim();
+                let yContent = y.hasAttribute("data-sort") ? y.getAttribute("data-sort") : y.innerHTML.replace(/<[^>]*>?/gm, '').trim();
+                
+                if (!isNaN(xContent) && !isNaN(yContent)) {
+                    xContent = parseFloat(xContent);
+                    yContent = parseFloat(yContent);
+                } else {
+                    xContent = xContent.toLowerCase();
+                    yContent = yContent.toLowerCase();
+                }
+
+                if (dir == "asc") {
+                    if (xContent > yContent) { shouldSwitch = true; break; }
+                } else if (dir == "desc") {
+                    if (xContent < yContent) { shouldSwitch = true; break; }
+                }
+            }
+            if (shouldSwitch) {
+                rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                switching = true;
+                switchcount ++;
+            } 
+        }
+    }
+</script>
+"""
+
+HTML_SUPPORTERS_MGMT = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-star" style="color:var(--warning);"></i> Správa Podporovatelů</h2>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--warning); margin-bottom: 20px;">
+    <h3 style="color: var(--warning); margin-top: 0;"><i class="fas fa-exclamation-triangle"></i> Ke schválení (Manuální kontrola)</h3>
+    <p style="color: var(--text-muted); font-size: 13px;">Zde se zobrazují lidé, kteří si zažádali o roli na webu, ale systém nenašel shodu nebo jejich účet na Discordu.</p>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>BMAC Jméno</th>
+                <th>Požadovaný Discord Nick</th>
+                <th>Částka (Odhad Role)</th>
+                <th>Akce</th>
+            </tr>
+            {% for p in pending_claims %}
+            <tr>
+                <td style="color:var(--blue-main); font-weight:bold;">{{ p.get('name', 'Neznámý') }}</td>
+                <td style="color:white; font-weight:bold;">{{ p.get('discord_nick', 'Nevyplněno') }}</td>
+                <td><span class="role-tag" style="background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning);">{{ p.get('amount', '?') }}</span></td>
+                <td>
+                    <form action="/dashboard/approve_claim" method="POST" style="display:inline;">
+                        <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
+                        <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
+                        <input type="hidden" name="amount" value="{{ p.get('amount', '0') }}">
+                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-check"></i> Schválit roli</button>
+                    </form>
+                    <form action="/dashboard/reject_claim" method="POST" style="display:inline;">
+                        <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
+                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu zamítnout tento požadavek?')"><i class="fas fa-times"></i> Zamítnout</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Vše je vyřízeno, žádné čekající požadavky.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Ruční přidání podporovatele</h3>
+        <p style="color: var(--text-muted); font-size: 13px;">(Pokud Vám někdo poslal peníze mimo Buy Me a Coffee)</p>
+        <form action="/dashboard/add_supporter" method="POST">
+            <input type="text" name="name" placeholder="Jméno podporovatele" required>
+            <input type="text" name="amount" placeholder="Částka (např. 150 CZK nebo 10 USD)" required>
+            <textarea name="message" placeholder="Zpráva od podporovatele (volitelně)..." rows="3"></textarea>
+            <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Přidat do databáze</button>
+        </form>
+    </div>
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">☕ Historie podporovatelů</h3>
+        <div style="overflow-x: auto;">
+            <table>
+                <tr>
+                    <th>Jméno</th>
+                    <th>Discord</th>
+                    <th>Částka</th>
+                    <th>Zpráva</th>
+                    <th>Datum</th>
+                    <th>Akce</th>
+                </tr>
+                {% for s in supporters %}
+                <tr>
+                    <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
+                    <td style="color:#aaa; font-size:12px;">{{ s.get('discord_nick', '') }}</td>
+                    <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
+                    <td style="font-style:italic;">{{ s.get('message', 'Bez zprávy') }}</td>
+                    <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
+                    <td>
+                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline;">
+                            <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
+                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu smazat tohoto podporovatele?')"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Zatím žádné platby.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+"""
+
 # ==========================================
 # GLOBÁLNÍ FUNKCE A TŘÍDĚNÍ PODPOROVATELŮ
 # ==========================================
@@ -884,7 +1121,30 @@ def process_supporters(data_list):
     data_list.sort(key=lambda x: (x.get('norm_val', 0), x.get('id', 0)), reverse=True)
     return data_list
 
+def calculate_role_from_amount(amount_str):
+    match = re.search(r'([\d\.,]+)', str(amount_str))
+    val = 0.0
+    if match:
+        try: val = float(match.group(1).replace(',', '.'))
+        except: pass
+    if 'usd' in str(amount_str).lower() or '$' in str(amount_str).lower(): val *= 23
+    elif 'eur' in str(amount_str).lower() or '€' in str(amount_str).lower(): val *= 25
+    
+    if val >= 325: return "⭐| MEGA PODPOROVATEL"
+    elif val >= 195: return "⭐| VELKÝ PODPOROVATEL"
+    else: return "⭐| PODPOROVATEL"
+
+def user_exists_sync(identifier):
+    try:
+        for guild in bot.guilds:
+            if identifier.isdigit() and guild.get_member(int(identifier)): return True
+            if discord.utils.find(lambda m: m.name.lower() == identifier.lower() or (m.global_name and m.global_name.lower() == identifier.lower()), guild.members):
+                return True
+    except: pass
+    return False
+
 async def assign_supporter_role(identifier, role_name):
+    success = False
     try:
         for guild in bot.guilds:
             member = None
@@ -901,6 +1161,7 @@ async def assign_supporter_role(identifier, role_name):
                 role = discord.utils.get(guild.roles, name=role_name)
                 if role:
                     await member.add_roles(role)
+                    success = True
                     try:
                         embed = discord.Embed(
                             title="🎉 Děkujeme za obrovskou podporu!", 
@@ -912,6 +1173,7 @@ async def assign_supporter_role(identifier, role_name):
                 break
     except Exception as e:
         print(f"Chyba pri pridelovani role: {e}")
+    return success
 
 async def async_send_log(title, description, color=0x38bdf8):
     for guild in bot.guilds:
@@ -1035,7 +1297,7 @@ def team():
 def supporters():
     try: 
         db = get_db()
-        data = db.table("supporters").select("*").execute().data or [] if db else []
+        data = db.table("supporters").select("*").eq("status", "completed").execute().data or [] if db else []
         support_data = process_supporters(data)
     except: support_data = []
     return render_public(HTML_SUPPORTERS, supporters=support_data)
@@ -1046,10 +1308,60 @@ def api_supporters():
     try:
         db = get_db()
         if not db: return _cors_jsonify({"error": "DB not ready"}), 500
-        data = db.table("supporters").select("name, amount, message, created_at").execute().data or []
+        data = db.table("supporters").select("name, amount, message, created_at").eq("status", "completed").execute().data or []
         support_data = process_supporters(data)
         return _cors_jsonify({"supporters": support_data})
     except Exception as e: return _cors_jsonify({"error": str(e)}), 500
+
+@app.route('/claim', methods=['GET', 'POST'])
+def claim_role():
+    if request.method == 'POST':
+        bmac_name = request.form.get('bmac_name', '').strip()
+        discord_nick = request.form.get('discord_nick', '').strip()
+        
+        db = get_db()
+        if not db: 
+            flash('Chyba připojení k databázi.', 'error')
+            return redirect(url_for('claim_role'))
+
+        records = db.table("supporters").select("*").eq("name", bmac_name).in_("status", ["pending", "manual_review"]).execute().data
+
+        if records:
+            record = records[0] 
+            assigned_role = calculate_role_from_amount(record.get('amount', '0'))
+            
+            if user_exists_sync(discord_nick):
+                if bot.loop and bot.loop.is_running():
+                    asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, assigned_role), bot.loop)
+                db.table("supporters").update({"status": "completed", "discord_nick": discord_nick}).eq("id", record['id']).execute()
+                
+                db_user = db.table("users").select("*").or_(f"discord_id.eq.{discord_nick},nick.ilike.{discord_nick}").execute().data
+                if db_user:
+                    current_roles = db_user[0].get('role', '')
+                    if assigned_role not in current_roles:
+                        new_roles = f"{current_roles},{assigned_role}" if current_roles else assigned_role
+                        db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
+                else:
+                    db.table("pending_roles").insert({"discord_identifier": discord_nick, "roles": assigned_role}).execute()
+
+                flash('Úspěch! Účet nalezen a role ti byla právě přidělena na Discordu.', 'success')
+            else:
+                db.table("supporters").update({"status": "manual_review", "discord_nick": discord_nick}).eq("id", record['id']).execute()
+                flash('Tvůj Discord účet nebyl na serveru nalezen! Požadavek byl odeslán ke schválení administrátorovi.', 'warning')
+        else:
+            db.table("supporters").insert({
+                "name": bmac_name,
+                "discord_nick": discord_nick,
+                "amount": "Neznámá (Z webu)",
+                "message": "Uživatel zadal špatné jméno BMAC",
+                "status": "manual_review",
+                "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
+            }).execute()
+            flash('Platba s tímto jménem nebyla nalezena. Odesláno administrátorovi k ruční kontrole.', 'warning')
+
+        return redirect(url_for('claim_role'))
+
+    return render_public(HTML_CLAIM)
 
 @app.route('/webhook/bmac', methods=['GET', 'POST'])
 def bmac_webhook():
@@ -1065,17 +1377,9 @@ def bmac_webhook():
         currency = data.get('currency') or 'CZK'
         amount_str = f"{amount_val} {currency}"
         
-        # Výpočet Tieru
-        norm_val = float(amount_val)
-        if 'usd' in currency.lower() or '$' in currency.lower(): norm_val *= 23
-        elif 'eur' in currency.lower() or '€' in currency.lower(): norm_val *= 25
-
-        if norm_val >= 325: assigned_role = "⭐| MEGA PODPOROVATEL"
-        elif norm_val >= 195: assigned_role = "⭐| VELKÝ PODPOROVATEL"
-        else: assigned_role = "⭐| PODPOROVATEL"
-
-        # Získání Discord ID/Nicku
+        assigned_role = calculate_role_from_amount(amount_str)
         discord_identifier = None
+        
         id_match = re.search(r'\b\d{17,19}\b', message)
         if id_match:
             discord_identifier = id_match.group(0)
@@ -1083,26 +1387,25 @@ def bmac_webhook():
             nick_match = re.search(r'(?i)(?:discord|dc|nick)[\s:]+([a-zA-Z0-9_.-]+)', message)
             if nick_match:
                 discord_identifier = nick_match.group(1).strip()
-            else:
-                custom_questions = data.get('custom_questions', [])
-                if isinstance(custom_questions, list):
-                    for q in custom_questions:
-                        ans = str(q.get('answer', ''))
-                        if ans:
-                            discord_identifier = ans.strip()
-                            break
-                elif isinstance(custom_questions, dict):
-                    for k, v in custom_questions.items():
-                        if v:
-                            discord_identifier = str(v).strip()
-                            break
 
         db = get_db()
         if db:
-            db.table("supporters").insert({"name": str(name), "message": str(message), "amount": str(amount_str), "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+            status = 'pending'
+            if discord_identifier and user_exists_sync(discord_identifier):
+                status = 'completed'
+
+            db.table("supporters").insert({
+                "name": str(name), 
+                "message": str(message), 
+                "amount": str(amount_str), 
+                "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M"),
+                "status": status,
+                "discord_nick": discord_identifier or ""
+            }).execute()
+            
             send_log("🍕 Nový dárce!", f"Uživatel **{name}** právě poslal **{amount_str}**.\n\n*Vzkaz: {message}*", 0xF4CC17)
 
-            if discord_identifier:
+            if status == 'completed':
                 db_user = db.table("users").select("*").or_(f"discord_id.eq.{discord_identifier},nick.ilike.{discord_identifier}").execute().data
                 if db_user:
                     current_roles = db_user[0].get('role', '')
@@ -1480,19 +1783,67 @@ def dashboard_main():
 @app.route('/dashboard/supporters', methods=['GET'])
 def dashboard_supporters():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
+    pending_claims = []
+    support_data = []
     try: 
         db = get_db()
-        support_data = process_supporters(db.table("supporters").select("*").execute().data or []) if db else []
+        if db:
+            p_data = db.table("supporters").select("*").eq("status", "manual_review").execute().data or []
+            pending_claims = p_data
+            
+            s_data = db.table("supporters").select("*").eq("status", "completed").execute().data or []
+            support_data = process_supporters(s_data)
     except Exception as e: 
-        flash(f"Chyba při stahování seznamu dárů: {e}", "error")
-        support_data = []
-    return render_dashboard(HTML_SUPPORTERS_MGMT, supporters=support_data, deploy_time=DEPLOY_TIME)
+        flash(f"Chyba DB: {e}", "error")
+    return render_dashboard(HTML_SUPPORTERS_MGMT, pending_claims=pending_claims, supporters=support_data, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/approve_claim', methods=['POST'])
+def approve_claim():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    claim_id = request.form.get("claim_id")
+    discord_nick = request.form.get("discord_nick")
+    amount = request.form.get("amount", "0")
+    db = get_db()
+    if db and claim_id and discord_nick:
+        assigned_role = calculate_role_from_amount(amount)
+        if bot.loop and bot.loop.is_running():
+            asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, assigned_role), bot.loop)
+        
+        db.table("supporters").update({"status": "completed", "discord_nick": discord_nick}).eq("id", claim_id).execute()
+        
+        db_user = db.table("users").select("*").or_(f"discord_id.eq.{discord_nick},nick.ilike.{discord_nick}").execute().data
+        if db_user:
+            current_roles = db_user[0].get('role', '')
+            if assigned_role not in current_roles:
+                new_roles = f"{current_roles},{assigned_role}" if current_roles else assigned_role
+                db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
+        else:
+            db.table("pending_roles").insert({"discord_identifier": discord_nick, "roles": assigned_role}).execute()
+            
+        flash(f'Požadavek schválen a role udělena pro: {discord_nick}', 'success')
+    return redirect(url_for('dashboard_supporters'))
+
+@app.route('/dashboard/reject_claim', methods=['POST'])
+def reject_claim():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    claim_id = request.form.get("claim_id")
+    db = get_db()
+    if db and claim_id:
+        db.table("supporters").delete().eq("id", claim_id).execute()
+        flash('Požadavek byl zamítnut a smazán.', 'success')
+    return redirect(url_for('dashboard_supporters'))
 
 @app.route('/dashboard/add_supporter', methods=['POST'])
 def add_supporter():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     try: 
-        get_db().table("supporters").insert({"name": request.form.get("name"), "amount": request.form.get("amount"), "message": request.form.get("message", ""), "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+        get_db().table("supporters").insert({
+            "name": request.form.get("name"), 
+            "amount": request.form.get("amount"), 
+            "message": request.form.get("message", ""), 
+            "status": "completed",
+            "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
+        }).execute()
         flash('Podporovatel byl úspěšně přidán!', 'success')
     except Exception as e: flash(f'Chyba při přidávání: {e}', 'error')
     return redirect(url_for('dashboard_supporters'))
@@ -1722,93 +2073,6 @@ def edit_user():
 # ==========================================
 # DISCORD BOT A TLAČÍTKA
 # ==========================================
-class DashboardAuthView(discord.ui.View):
-    def __init__(self, token, discord_id):
-        super().__init__(timeout=300)
-        self.token = token; self.discord_id = discord_id
-    @discord.ui.button(label="Ověřit přístup", style=discord.ButtonStyle.success, emoji="✅")
-    async def verify_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-        db = get_db()
-        if db:
-            user = db.table("users").select("login_token").eq("discord_id", self.discord_id).execute().data
-            if user and user[0].get("login_token") == self.token:
-                db.table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
-                await interaction.edit_original_response(content="✅ **Přístup do administrace byl úspěšně schválen!**", view=None)
-            else: await interaction.edit_original_response(content="❌ **Platnost vypršela.**", view=None)
-    @discord.ui.button(label="Zamítnout", style=discord.ButtonStyle.danger, emoji="❌")
-    async def decline_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-        db = get_db()
-        if db: db.table("users").update({"login_token": "rejected"}).eq("discord_id", self.discord_id).execute()
-        await interaction.edit_original_response(content="⛔ **Zamítnuto.**", view=None)
-
-class AppAuthView(discord.ui.View):
-    def __init__(self, token, discord_id, is_dm=True):
-        super().__init__(timeout=180)
-        self.token = token; self.discord_id = discord_id; self.is_dm = is_dm
-    @discord.ui.button(label="Ano, ověřit", style=discord.ButtonStyle.success)
-    async def ok(self, interaction, button):
-        if str(interaction.user.id) != str(self.discord_id): return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
-        get_db().table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
-        await interaction.response.edit_message(content="✅ **Ověřeno! Můžete se vrátit do aplikace.**", view=None)
-        send_log("🖥️ Přihlášení do Aplikace", f"Uživatel s ID `{self.discord_id}` se úspěšně ověřil a vstoupil do softwaru.", 0x10b981)
-        if not self.is_dm: await asyncio.sleep(2); await interaction.message.delete()
-
-intents = discord.Intents.default()
-intents.members = True; intents.message_content = True; intents.presences = True
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
-bot.invites_cache = {}
-
-@tasks.loop(hours=24)
-async def pixeldrain_keepalive():
-    db = get_db()
-    if not db: return
-    try:
-        resp = db.table("software_versions").select("version_name, file_url").execute()
-        versions = getattr(resp, "data", []) or []
-        refreshed = []
-        for v in versions:
-            url = v.get("file_url", "")
-            name = v.get("version_name", "Neznámá verze")
-            if "pixeldrain.com/u/" in url:
-                api_url = url.replace("/u/", "/api/file/")
-                try:
-                    req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0', 'Range': 'bytes=0-10'})
-                    await asyncio.to_thread(urllib.request.urlopen, req, timeout=15)
-                    refreshed.append(name)
-                except: pass
-        if refreshed:
-            files_str = "\n• ".join(refreshed)
-            await async_send_log("🔄 Anti-Delete Ochrana", f"Systém právě úspěšně nasimuloval stažení.\n**Ochráněné soubory:**\n• {files_str}", 0x3b82f6)
-    except: pass
-
-@bot.event
-async def on_ready():
-    print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
-    try: bot.add_view(DynamicDownloadView())
-    except: pass
-    try:
-        for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
-    except: pass
-    if not pixeldrain_keepalive.is_running(): pixeldrain_keepalive.start()
-
-@bot.event
-async def on_member_join(member):
-    used_invite = None
-    try:
-        new_invites = await member.guild.invites()
-        old_invites = bot.invites_cache.get(member.guild.id, [])
-        for invite in new_invites:
-            for old_invite in old_invites:
-                if invite.code == old_invite.code and invite.uses > old_invite.uses:
-                    used_invite = invite; break
-            if used_invite: break
-        bot.invites_cache[member.guild.id] = new_invites
-    except: pass
-    link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!" if used_invite and used_invite.code == "vmTagbC9mF" else ""
-    await async_send_log("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {get_prague_time().strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
-
 async def update_member_roles(member, role_string):
     if not member or not member.guild: return
     u_roles = [r.strip() for r in role_string.split(',')]
