@@ -1198,7 +1198,7 @@ HTML_FEEDBACK = """
             <tr>
                 <td style="color:white; font-weight:bold;">{{ f.get('nick', 'Neznámý') }} <br><span style="font-size:11px; color:#aaa; font-weight:normal;">{{ f.get('discord_id', '') }}</span></td>
                 <td style="color:#ddd; font-style:italic;">{{ f.get('message', '') }}</td>
-                <td style="color:#aaa; font-size:12px;">{{ f.get('created_at', '') }}</td>
+                <td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td>
                 <td style="display:flex; gap:5px;">
                     <form action="/dashboard/feedback_reset_hwid" method="POST" style="margin:0;">
                         <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
@@ -1234,7 +1234,7 @@ HTML_FEEDBACK = """
             <tr>
                 <td style="color:white; font-weight:bold;">{{ f.get('nick', 'Neznámý') }} <br><span style="font-size:11px; color:#aaa; font-weight:normal;">{{ f.get('discord_id', '') }}</span></td>
                 <td style="color:#ddd; font-style:italic;">{{ f.get('message', '') }}</td>
-                <td style="color:#aaa; font-size:12px;">{{ f.get('created_at', '') }}</td>
+                <td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td>
                 <td style="display:flex; gap:5px;">
                     <button type="button" class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" onclick="replyGeneral('{{ f.get('id', '') }}', '{{ f.get('nick', '') | replace("'", "\\'") }}', '{{ f.get('discord_id', '') }}')"><i class="fas fa-reply"></i> Odpovědět</button>
                     <form id="form_general_reply_{{ f.get('id', '') }}" action="/dashboard/feedback_reply" method="POST" style="display:none;">
