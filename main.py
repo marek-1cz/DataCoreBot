@@ -1,6 +1,7 @@
 import os
 import discord
 from discord.ext import commands, tasks
+from discord.ui import Button, View, Select
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash, Response, stream_with_context, jsonify
 from threading import Thread
 from supabase import create_client
@@ -13,6 +14,7 @@ import traceback
 import re
 import gc
 
+# IMPORT VŠECH HTML DESIGNŮ Z VEDLEJŠÍHO SOUBORU
 from html_templates import *
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
@@ -36,6 +38,9 @@ def handle_exception(e):
     print(error_trace, flush=True)
     return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
 
+# ==========================================
+# DATABÁZE A GLOBÁLNÍ FUNKCE (OPTIMALIZOVÁNO PRO RAM)
+# ==========================================
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 _db_client = None
@@ -177,7 +182,7 @@ async def assign_supporter_role(identifier, role_names_list):
                         pass
                 break
     except Exception as e:
-        pass
+        print(f"Chyba pri pridelovani roli: {e}")
     return success
 
 async def announce_new_supporter(discord_nick, amount_str, message, role_names_list):
@@ -663,7 +668,7 @@ def api_submit_feedback():
         msg = data.get("message", "")
         db.table("feedback").insert({
             "discord_id": d_id, "nick": nick, "type": type_str, "message": msg,
-            "status": "pending", "sys_note": "", "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
+            "status": "pending", "sys_note": "", "fcreated_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
         }).execute()
         
         log_title = "🔄 Žádost o HWID Reset" if type_str == "HWID" else "💬 Nová zpětná vazba"
@@ -1227,9 +1232,6 @@ def edit_user():
         except: pass
     return redirect(url_for('dashboard_main'))
 
-# ==========================================
-# DISCORD BOT A TLAČÍTKA
-# ==========================================
 class DashboardAuthView(discord.ui.View):
     def __init__(self, token, discord_id):
         super().__init__(timeout=300)
@@ -1245,15 +1247,13 @@ class DashboardAuthView(discord.ui.View):
             if user and user[0].get("login_token") == self.token:
                 db.table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
                 await interaction.edit_original_response(content="✅ **Přístup do administrace byl úspěšně schválen!**", view=None)
-            else:
-                await interaction.edit_original_response(content="❌ **Platnost vypršela.**", view=None)
+            else: await interaction.edit_original_response(content="❌ **Platnost vypršela.**", view=None)
                 
     @discord.ui.button(label="Zamítnout", style=discord.ButtonStyle.danger, emoji="❌")
     async def decline_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         db = get_db()
-        if db:
-            db.table("users").update({"login_token": "rejected"}).eq("discord_id", self.discord_id).execute()
+        if db: db.table("users").update({"login_token": "rejected"}).eq("discord_id", self.discord_id).execute()
         await interaction.edit_original_response(content="⛔ **Zamítnuto.**", view=None)
 
 class AppAuthView(discord.ui.View):
@@ -1265,16 +1265,13 @@ class AppAuthView(discord.ui.View):
         
     @discord.ui.button(label="Ano, ověřit", style=discord.ButtonStyle.success)
     async def ok(self, interaction, button):
-        if str(interaction.user.id) != str(self.discord_id):
-            return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        if str(interaction.user.id) != str(self.discord_id): return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
         db = get_db()
-        if db:
-            db.table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
+        if db: db.table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
         await interaction.response.edit_message(content="✅ **Ověřeno! Můžete se vrátit do aplikace.**", view=None)
         send_log("🖥️ Přihlášení do Aplikace", f"Uživatel s ID `{self.discord_id}` se úspěšně ověřil a vstoupil do softwaru.", 0x10b981)
         if not self.is_dm:
-            await asyncio.sleep(2)
-            await interaction.message.delete()
+            await asyncio.sleep(2); await interaction.message.delete()
 
 class PerDeleteConfirm(discord.ui.View):
     def __init__(self, target_id, author_id):
@@ -1284,8 +1281,7 @@ class PerDeleteConfirm(discord.ui.View):
 
     @discord.ui.button(label="Ano, trvale smazat", style=discord.ButtonStyle.danger, emoji="⚠️")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.author_id:
-            return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
         await interaction.response.defer()
         db = get_db()
         if db:
@@ -1294,8 +1290,7 @@ class PerDeleteConfirm(discord.ui.View):
 
     @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.author_id:
-            return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
         await interaction.response.edit_message(content="❌ Akce zrušena.", view=None, embed=None)
 
 class DynamicDownloadView(discord.ui.View):
@@ -1316,15 +1311,11 @@ class DynamicDownloadView(discord.ui.View):
                     d_id = str(i2.user.id)
                     n = i2.user.display_name
                     u_role = "User"
-                    
                     settings_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}]
-                    if str(settings_resp[0].get('setting_value', '')).lower() == 'false':
-                        return await i2.edit_original_response(content="**Stahování je globálně vypnuto.**")
-                        
+                    if str(settings_resp[0].get('setting_value', '')).lower() == 'false': return await i2.edit_original_response(content="**Stahování je globálně vypnuto.**")
                     chk = db.table("users").select("*").eq("discord_id", d_id).execute()
                     pend_data = db.table("pending_roles").select("*").execute().data or []
                     pend = next((p for p in pend_data if p['discord_identifier'] in [d_id, n]), None)
-                    
                     if chk.data:
                         if chk.data[0].get('is_banned'): return await i2.edit_original_response(content="**Přístup zamítnut:** Máte BAN.")
                         if chk.data[0].get('is_deleted'):
