@@ -417,8 +417,8 @@ def claim_role():
                     "name": bmac_name,
                     "discord_nick": discord_nick,
                     "amount": "Neznámá (Z webu)",
-                    "message": "",
-                    "sys_note": "Uživatel zadal na webu jméno BMAC, ke kterému nedorazil webhook.",
+                    "message": "Uživatel zadal na webu jméno BMAC, které nebylo nalezeno webhookem.",
+                    "sys_note": "Nový požadavek, systém nezaznamenal tuto platbu z BMAC.",
                     "status": "manual_review",
                     "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
                 }).execute()
@@ -832,6 +832,7 @@ def dashboard_stats():
     try:
         db = get_db()
         if db:
+            # Ochrana paměti - Načte pouze nejnovějších 5000 záznamů, aby nepadla RAMka
             visits = db.table("page_visits").select("*").order("id", desc=True).limit(5000).execute().data or []
             total_visits = len(visits)
             now = get_prague_time().replace(tzinfo=None)
