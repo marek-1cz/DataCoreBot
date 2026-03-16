@@ -12,6 +12,7 @@ import json
 import traceback
 import re
 import gc
+from werkzeug.exceptions import HTTPException
 
 from html_templates import *
 
@@ -32,6 +33,11 @@ DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
 
 @app.errorhandler(Exception)
 def handle_exception(e):
+    # Pokud se jedná o běžnou HTTP chybu (např. 404 Stránka nenalezena), ukážeme hezkou hlášku
+    if isinstance(e, HTTPException):
+        return f"<div style='background:#0f172a; color:#f59e0b; padding:40px; font-family:sans-serif; text-align:center; height:100vh; box-sizing:border-box;'><h2 style='font-size:40px;'>CHYBA {e.code}</h2><p style='font-size:18px; color:white;'>Stránka nebyla nalezena, nebo k ní nemáte přístup.</p><a href='/' style='display:inline-block; margin-top:20px; padding:10px 20px; background:#38bdf8; color:black; text-decoration:none; font-weight:bold; border-radius:5px;'>Zpět domů</a></div>", e.code
+    
+    # Jinak to je kritická chyba kódu (500), takže ukážeme červený Traceback
     error_trace = traceback.format_exc()
     print(error_trace, flush=True)
     return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
