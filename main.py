@@ -546,7 +546,51 @@ def secure_download(token):
             return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--warning);'>Chyba verze</h2></div>")
             
         v_data = v_resp.data[0]
-        html = f"""<div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);"><h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2><p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Přihlášen jako: <strong>{user.get('nick', '')}</strong></p><div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;"><h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3><p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{v_data.get('version_name', '')}</strong></p></div><a href="/api/get_file/{token}?v={version_id}" class="btn btn-success" style="font-size: 18px; padding: 15px 30px;"><i class="fas fa-download"></i> Stáhnout Soubor</a></div>"""
+        
+        # UPRAVENÉ HTML PRO STAHOVÁNÍ S LOADINGEM A TLAČÍTKEM ZNOVA
+        html = f"""<div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);">
+            <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2>
+            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Přihlášen jako: <strong>{user.get('nick', '')}</strong></p>
+            <div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;">
+                <h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3>
+                <p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{v_data.get('version_name', '')}</strong></p>
+            </div>
+            
+            <div id="download-area">
+                <a href="#" onclick="startDownload()" class="btn btn-success" style="font-size: 18px; padding: 15px 30px; display: inline-block;" id="dl-btn">
+                    <i class="fas fa-download"></i> Stáhnout Soubor
+                </a>
+            </div>
+            
+            <div id="loading-area" style="display: none;">
+                <div class="spinner" style="margin: 0 auto 10px auto; border-color: rgba(16, 185, 129, 0.3); border-top-color: #10b981;"></div>
+                <p style="color: var(--text-main); font-weight: bold;">Připravuji stahování...</p>
+            </div>
+            
+            <div id="success-area" style="display: none; margin-top: 20px;">
+                <h3 style="color: var(--success); margin-top: 0;"><i class="fas fa-check"></i> Úspěšně staženo</h3>
+                <p style="color: var(--text-main); font-size: 14px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 3px solid var(--blue-main);">
+                    Po stažení souboru jej nezapomeňte rozbalit pomocí programů jako <b>7-ZIP</b> nebo <b>WinRAR</b>.
+                </p>
+                <a href="/api/get_file/{token}?v={version_id}" style="color: var(--text-muted); font-size: 12px; text-decoration: underline; margin-top: 15px; display: inline-block;">Nestáhlo se to? Stáhnout znova</a>
+            </div>
+            
+            <iframe id="dl-frame" style="display:none;"></iframe>
+            
+            <script>
+                function startDownload() {{
+                    document.getElementById('download-area').style.display = 'none';
+                    document.getElementById('loading-area').style.display = 'block';
+                    
+                    document.getElementById('dl-frame').src = "/api/get_file/{token}?v={version_id}";
+                    
+                    setTimeout(() => {{
+                        document.getElementById('loading-area').style.display = 'none';
+                        document.getElementById('success-area').style.display = 'block';
+                    }}, 3000);
+                }}
+            </script>
+        </div>"""
         return render_public(html)
     except:
         return "Systémová chyba."
@@ -1544,12 +1588,12 @@ class DynamicDownloadView(discord.ui.View):
                                 if u_lvl >= req:
                                     opts.append(discord.SelectOption(label=v['version_name'], value=str(v['id']), emoji="📦"))
                             if not opts:
-                                opts.append(discord.SelectOption(label="Nic není k dispozici", value="none"))
+                                opts.append(discord.SelectOption(label="Žádná verze nenalezena", description="Pro vaše role nejsou dostupné žádné verze.", value="none"))
                             super().__init__(placeholder="Vyber verzi k instalaci...", options=opts)
                             
                         async def callback(self, i3):
                             if self.values[0] == "none":
-                                return await i3.response.send_message("Nic tu není.", ephemeral=True)
+                                return await i3.response.send_message("Pro vaše role nejsou dostupné žádné verze hry.", ephemeral=True)
                             await i3.response.send_message("<a:loading:123> Generuji odkaz...", ephemeral=True)
                             t = str(uuid.uuid4())
                             get_db().table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
@@ -1565,7 +1609,7 @@ class DynamicDownloadView(discord.ui.View):
             async def disagree(self, i2, b2):
                 await i2.response.edit_message(content="**Akce zrušena.**", view=None)
                 
-        await interaction.response.send_message("**Podmínky užití:**\n1. Zákaz úprav a šíření.\n2. Zámek na Váš PC (HWID).\n\nSouhlasíte?", view=DynamicRulesView(), ephemeral=True)
+        await interaction.response.send_message("**PODMÍNKY UŽÍVÁNÍ:**\n1. Přísný zákaz šíření, kopírování nebo sdílení aplikace bez výslovného souhlasu autora.\n2. Systém využívá HWID ochranu. Aplikace se trvale sváže s fyzickým hardwarem vašeho počítače a nelze ji přenést jinam.\n3. Každý pokus o modifikaci kódu nebo obcházení zabezpečení povede k okamžitému a trvalému zablokování (BAN).\n\nSouhlasíte s těmito podmínkami?", view=DynamicRulesView(), ephemeral=True)
 
 intents = discord.Intents.default()
 intents.members = True
@@ -1683,7 +1727,7 @@ async def on_command_error(ctx, error):
 @bot.command()
 @check_web_sa()
 async def setup_download(ctx):
-    embed = discord.Embed(title="📥 Projekt OIS IDPK - Instalace", description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a generování osobního odkazu ke stažení.", color=0x38bdf8)
+    embed = discord.Embed(title="📥 Projekt OIS IDPK - Instalace", description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a generování osobního odkazu ke stažení.\n\n**Při stahování se automaticky přihlásíte do databáze.**", color=0x38bdf8)
     await ctx.send(embed=embed, view=DynamicDownloadView())
     try:
         await ctx.message.delete()
