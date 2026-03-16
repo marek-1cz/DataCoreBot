@@ -12,6 +12,7 @@ import urllib.request
 import json
 import traceback
 import re
+import gc  # Optimalizace paměti (Garbage Collector)
 
 # IMPORT VŠECH HTML DESIGNŮ Z VEDLEJŠÍHO SOUBORU
 from html_templates import *
@@ -38,15 +39,18 @@ def handle_exception(e):
     return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
 
 # ==========================================
-# DATABÁZE A GLOBÁLNÍ FUNKCE
+# DATABÁZE A GLOBÁLNÍ FUNKCE (OPTIMALIZOVÁNO PRO RAM)
 # ==========================================
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+_db_client = None
 
 def get_db():
+    global _db_client
     try:
-        url = os.environ.get("SUPABASE_URL")
-        key = os.environ.get("SUPABASE_KEY")
-        if url and key:
-            return create_client(url, key)
+        if _db_client is None and SUPABASE_URL and SUPABASE_KEY:
+            _db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        return _db_client
     except Exception as e:
         print(f"Chyba připojení k DB: {e}")
     return None
@@ -385,7 +389,6 @@ def claim_role():
             elif r['status'] == 'manual_review':
                 try:
                     c_time = datetime.strptime(r['created_at'], "%d.%m.%Y %H:%M")
-                    # Pokud je to méně než 24 hodin (86400 sekund), může si to ještě zachránit
                     if (now - c_time).total_seconds() <= 86400:
                         valid_records.append(r)
                     else:
@@ -853,8 +856,7 @@ def dashboard_stats():
     try:
         db = get_db()
         if db:
-            # Ochrana paměti - Načte pouze nejnovějších 5000 záznamů, aby nepadla RAMka
-            visits = db.table("page_visits").select("*").order("id", desc=True).limit(5000).execute().data or []
+            visits = db.table("page_visits").select("*").order("id", desc=True).limit(1500).execute().data or []
             total_visits = len(visits)
             now = get_prague_time().replace(tzinfo=None)
             
@@ -900,6 +902,7 @@ def dashboard_stats():
     except Exception as e:
         flash(f"Chyba při načítání statistik: {e}", "error")
     
+    gc.collect()
     return render_dashboard(HTML_STATS, total_visits=total_visits, last_7_days=last_7_days, country_totals=country_totals, region_totals=region_totals, labels_7d=json.dumps(list(chart_data_7d.keys())), data_7d=json.dumps(list(chart_data_7d.values())), labels_24h=json.dumps(list(chart_data_24h.keys())), data_24h=json.dumps(list(chart_data_24h.values())), deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard', methods=['GET', 'POST'])
@@ -937,6 +940,8 @@ def dashboard_main():
                             pass
     except Exception as e:
         flash(f"Chyba při načítání dat: {e}", "error")
+        
+    gc.collect()
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů", deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/supporters', methods=['GET'])
@@ -1566,7 +1571,7 @@ intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 intents.presences = True
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=None, max_messages=10)
 bot.invites_cache = {}
 
 def check_web_sa():
