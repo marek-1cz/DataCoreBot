@@ -23,8 +23,7 @@ app.secret_key = "ois_idpk_super_tajny_klic"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-# 👇 ZDE SI UPRAV ODKAZ NA TEN TVŮJ NOVÝ OBRÁZEK ZE SUPABASE 👇
-URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/bus-logo/NAZEV_TVEHO_OBRAZKU.png" 
+URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png"
 URL_VELKE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png"
 
 def get_prague_time():
@@ -122,6 +121,26 @@ def user_exists_sync(identifier):
     except:
         pass
     return False
+
+async def send_user_dm(discord_identifier, title, description, color=0x38bdf8):
+    if not discord_identifier: return
+    try:
+        for guild in bot.guilds:
+            member = None
+            if discord_identifier.isdigit():
+                member = guild.get_member(int(discord_identifier))
+            if not member:
+                member = discord.utils.find(
+                    lambda m: m.name.lower() == discord_identifier.lower() or 
+                              (m.global_name and m.global_name.lower() == discord_identifier.lower()), 
+                    guild.members
+                )
+            if member:
+                embed = discord.Embed(title=title, description=description, color=color)
+                await member.send(embed=embed)
+                return
+    except Exception as e:
+        print(f"Chyba pri odesilani DM pro {discord_identifier}: {e}")
 
 async def assign_supporter_role(identifier, role_names_list):
     success = False
@@ -367,7 +386,7 @@ def claim_role():
                     asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, discord_roles), bot.loop)
                     asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_nick, record.get('amount', '0'), record.get('message', ''), discord_roles), bot.loop)
 
-                db.table("supporters").update({"status": "completed", "discord_nick": discord_nick}).eq("id", record['id']).execute()
+                db.table("supporters").update({"status": "completed", "discord_nick": discord_nick, "sys_note": "Spárováno přes web"}).eq("id", record['id']).execute()
                 send_log("✅ Role úspěšně vyzvednuta", f"Uživatel **{discord_nick}** si přes web úspěšně spároval BMAC platbu od jména **{bmac_name}**.", 0x10b981)
                 
                 db_user = db.table("users").select("*").or_(f"discord_id.eq.{discord_nick},nick.ilike.{discord_nick}").execute().data
@@ -386,8 +405,8 @@ def claim_role():
 
                 flash('Úspěch! Role ti byla právě přidělena na Discordu a tvoje jméno bude zveřejněno v síni slávy!', 'success')
             else:
-                db.table("supporters").update({"status": "manual_review", "discord_nick": discord_nick}).eq("id", record['id']).execute()
-                send_log("⚠️ Žádost o kontrolu", f"Uživatel **{discord_nick}** se pokusil spárovat platbu od **{bmac_name}**, ale bot ho nenašel na Discord serveru.\nPřesunuto do manuální kontroly.", 0xf59e0b)
+                db.table("supporters").update({"status": "manual_review", "discord_nick": discord_nick, "sys_note": "Discord účet nebyl nalezen na serveru."}).eq("id", record['id']).execute()
+                send_log("⚠️ Žádost o kontrolu", f"Uživatel na webu zadal nick **{discord_nick}** k platbě od **{bmac_name}**, ale bot ho nenašel na Discord serveru.\nPřesunuto do manuální kontroly.", 0xf59e0b)
                 flash('Tvůj Discord účet nebyl na serveru nalezen! Požadavek byl odeslán ke schválení administrátorovi.', 'warning')
         else:
             manual_records = [r for r in all_records if r['status'] == 'manual_review']
@@ -398,11 +417,12 @@ def claim_role():
                     "name": bmac_name,
                     "discord_nick": discord_nick,
                     "amount": "Neznámá (Z webu)",
-                    "message": "Uživatel zadal na webu jméno BMAC, které nebylo nalezeno webhookem.",
+                    "message": "",
+                    "sys_note": "Uživatel zadal na webu jméno BMAC, ke kterému nedorazil webhook.",
                     "status": "manual_review",
                     "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
                 }).execute()
-                send_log("📝 Nová neznámá žádost", f"Uživatel **{discord_nick}** žádá o spárování jména **{bmac_name}**, ale webhookem neprošla žádná taková platba.\nPřidáno k manuální kontrole.", 0x3b82f6)
+                send_log("📝 Nová neznámá žádost", f"Uživatel **{discord_nick}** na webu žádá o spárování jména **{bmac_name}**, ale webhookem neprošla žádná taková platba.\nPřidáno k manuální kontrole.", 0x3b82f6)
                 flash('Platba s tímto jménem nebyla v našem systému nalezena. Váš požadavek byl odeslán administrátorovi k ruční kontrole.', 'warning')
 
         return redirect(url_for('claim_role'))
@@ -438,8 +458,11 @@ def bmac_webhook():
         db = get_db()
         if db:
             status = 'pending'
+            sys_note = "Čeká na spárování uživatelem na webu."
+            
             if discord_identifier and user_exists_sync(discord_identifier):
                 status = 'completed'
+                sys_note = "Automaticky spárováno z Webhooku."
 
             db.table("supporters").insert({
                 "name": str(name), 
@@ -447,6 +470,7 @@ def bmac_webhook():
                 "amount": str(amount_str), 
                 "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M"),
                 "status": status,
+                "sys_note": sys_note,
                 "discord_nick": discord_identifier or ""
             }).execute()
             
@@ -808,7 +832,6 @@ def dashboard_stats():
     try:
         db = get_db()
         if db:
-            # Ochrana paměti - Načte pouze nejnovějších 5000 záznamů, aby nepadla RAMka
             visits = db.table("page_visits").select("*").order("id", desc=True).limit(5000).execute().data or []
             total_visits = len(visits)
             now = get_prague_time().replace(tzinfo=None)
@@ -899,18 +922,17 @@ def dashboard_supporters():
     if not session.get('logged_in'):
         return redirect(url_for('dashboard_main')) 
     pending_claims = []
-    support_data = []
+    supporters_history = []
     try: 
         db = get_db()
         if db:
-            p_data = db.table("supporters").select("*").eq("status", "manual_review").execute().data or []
-            pending_claims = p_data
+            pending_claims = db.table("supporters").select("*").eq("status", "manual_review").execute().data or []
             
-            s_data = db.table("supporters").select("*").eq("status", "completed").execute().data or []
-            support_data = process_supporters(s_data)
+            s_data = db.table("supporters").select("*").in_("status", ["completed", "rejected"]).execute().data or []
+            supporters_history = process_supporters(s_data)
     except Exception as e: 
         flash(f"Chyba DB: {e}", "error")
-    return render_dashboard(HTML_SUPPORTERS_MGMT, pending_claims=pending_claims, supporters=support_data, deploy_time=DEPLOY_TIME)
+    return render_dashboard(HTML_SUPPORTERS_MGMT, pending_claims=pending_claims, supporters_history=supporters_history, deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/approve_claim', methods=['POST'])
 def approve_claim():
@@ -923,16 +945,14 @@ def approve_claim():
     if db and claim_id and discord_nick:
         discord_roles, db_role_string = calculate_roles_for_supporter(amount)
         
-        # Odeslání zprávy a role
         if bot.loop and bot.loop.is_running():
             asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, discord_roles), bot.loop)
             
-            # Načtení detailů pro announcement
             rec = db.table("supporters").select("*").eq("id", claim_id).execute().data
             if rec:
                 asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_nick, amount, rec[0].get('message', ''), discord_roles), bot.loop)
         
-        db.table("supporters").update({"status": "completed", "discord_nick": discord_nick}).eq("id", claim_id).execute()
+        db.table("supporters").update({"status": "completed", "sys_note": "Schváleno manuálně", "discord_nick": discord_nick}).eq("id", claim_id).execute()
         send_log("✅ Manuální schválení", f"Administrátor právě schválil roli pro uživatele **{discord_nick}**.", 0x10b981)
         
         db_user = db.table("users").select("*").or_(f"discord_id.eq.{discord_nick},nick.ilike.{discord_nick}").execute().data
@@ -955,11 +975,18 @@ def reject_claim():
     if not session.get('logged_in'):
         return redirect(url_for('dashboard_main'))
     claim_id = request.form.get("claim_id")
+    discord_nick = request.form.get("discord_nick", "")
+    sys_note = request.form.get("sys_note", "Zamítnuto administrátorem bez udání důvodu.")
+    
     db = get_db()
     if db and claim_id:
-        db.table("supporters").delete().eq("id", claim_id).execute()
-        send_log("❌ Manuální zamítnutí", f"Administrátor zamítl a smazal platbu s ID: {claim_id}.", 0xef4444)
-        flash('Požadavek byl zamítnut a smazán.', 'success')
+        db.table("supporters").update({"status": "rejected", "sys_note": sys_note}).eq("id", claim_id).execute()
+        send_log("❌ Manuální zamítnutí", f"Administrátor zamítl platbu pro uživatele **{discord_nick}**.\n**Důvod:** {sys_note}", 0xef4444)
+        
+        if discord_nick and bot.loop and bot.loop.is_running():
+            asyncio.run_coroutine_threadsafe(send_user_dm(discord_nick, "❌ Žádost o roli zamítnuta", f"Tvoje žádost o spárování platby byla zamítnuta administrátorem.\n\n**Důvod:** {sys_note}", 0xef4444), bot.loop)
+            
+        flash('Požadavek byl zamítnut.', 'success')
     return redirect(url_for('dashboard_supporters'))
 
 @app.route('/dashboard/edit_supporter', methods=['POST'])
@@ -997,6 +1024,7 @@ def add_supporter():
             "amount": amt, 
             "message": msg, 
             "status": "completed",
+            "sys_note": "Přidáno manuálně z Dashboardu",
             "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
         }).execute()
         
@@ -1305,20 +1333,24 @@ def edit_user():
             elif action == 'ban':
                 db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
                 send_log("🔨 BAN", f"Administrátor udělil BAN uživateli **{nick}** (ID: `{discord_id}`).", 0xef4444)
+                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🔨 Účet zablokován", "Váš přístup do aplikace a databáze byl trvale zablokován administrátorem.", 0xef4444), bot.loop)
                 flash('BAN udělen.', 'warning')
                 if str(session.get('discord_id')) == str(discord_id):
                     session.clear()
             elif action == 'unban':
                 db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
                 send_log("🕊️ UN-BAN", f"Administrátor zrušil BAN uživateli **{nick}** (ID: `{discord_id}`).", 0x10b981)
+                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🕊️ Účet odblokován", "Váš přístup do aplikace a databáze byl obnoven.", 0x10b981), bot.loop)
                 flash('BAN zrušen.', 'success')
             elif action == 'delete':
                 db.table("users").update({"is_deleted": True, "deleted_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "⚠️ Účet smazán", "Váš uživatelský účet byl smazán administrátorem.", 0xf59e0b), bot.loop)
                 flash('Účet smazán (Soft Delete).', 'danger')
                 if str(session.get('discord_id')) == str(discord_id):
                     session.clear()
             elif action == 'restore':
                 db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute()
+                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "✅ Účet obnoven", "Váš uživatelský účet byl úspěšně obnoven administrátorem.", 0x10b981), bot.loop)
                 flash('Účet obnoven!', 'success')
             elif action == 'hard_delete':
                 db.table("users").delete().eq("discord_id", discord_id).execute()
@@ -1548,7 +1580,7 @@ async def check_pending_supporters():
             try:
                 created_time = datetime.strptime(p['created_at'], "%d.%m.%Y %H:%M")
                 if (now - created_time).total_seconds() > 300: # 5 MINUT
-                    db.table("supporters").update({"status": "manual_review"}).eq("id", p['id']).execute()
+                    db.table("supporters").update({"status": "manual_review", "sys_note": "Vypršel čas 5 minut na spárování."}).eq("id", p['id']).execute()
                     send_log("⏳ Platba propadla do kontroly", f"Uživatel si do 5 minut na webu nevyzvedl roli za jméno BMAC: **{p.get('name')}**.\nPřesunuto do manuálního schvalování v Dashboardu.", 0xf59e0b)
             except:
                 pass
@@ -1627,9 +1659,23 @@ async def auth(ctx):
             await msg.delete()
 
 @bot.command()
+async def verze(ctx):
+    db = get_db()
+    if not db:
+        return await ctx.send("❌ Databáze není dostupná.")
+    versions = db.table("software_versions").select("*").execute().data or []
+    if not versions:
+        return await ctx.send("Zatím nejsou dostupné žádné verze ke stažení.")
+        
+    embed = discord.Embed(title="📦 Dostupné verze softwaru", color=0x38bdf8)
+    for v in versions:
+        embed.add_field(name=v['version_name'], value=f"Dostupné pro: `{v['target_role']}`", inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command()
 async def help(ctx):
     embed = discord.Embed(title="🤖 Nápověda - Projekt OIS IDPK", description="Seznam dostupných příkazů rozdělený podle oprávnění.", color=0x38bdf8)
-    embed.add_field(name="🌍 Veřejné příkazy", value="`!auth` - Potvrzení přihlášení do aplikace.\n`!ping` - Odezva bota.\n`!help` - Tato nápověda.", inline=False)
+    embed.add_field(name="🌍 Veřejné příkazy", value="`!auth` - Potvrzení přihlášení do aplikace.\n`!ping` - Odezva bota.\n`!verze` - Seznam dostupných verzí.\n`!help` - Tato nápověda.", inline=False)
     embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]` - Profil.\n`!db [ID]` - 2FA do webu.\n`!ban`/`!unban [ID]` - BANY.\n`!delete [ID]` - Blokace.\n`!perdelete [ID]` - Úplné smazání.\n`!register [ID]` - Vytvoří účet cizímu.\n`!message #kanál [text]` - Zpráva přes bota.\n`!dm @uzivatel [text]` - Soukromá zpráva.", inline=False)
     embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download` - Generuje instalátor.\n`!sm @uživatel` - Přidá/odebere roli SM.", inline=False)
     await ctx.send(embed=embed)
@@ -1658,32 +1704,29 @@ async def info(ctx, discord_id: str = None):
 @check_sm_role()
 async def ban(ctx, discord_id: str):
     db = get_db()
-    if not db:
-        return
+    if not db: return
     user_data = db.table("users").select("*").eq("discord_id", discord_id).execute().data
-    if not user_data:
-        return await ctx.send("❌ Uživatel nenalezen.")
+    if not user_data: return await ctx.send("❌ Uživatel nenalezen.")
     db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+    await send_user_dm(discord_id, "🔨 Účet zablokován", "Váš přístup do aplikace a databáze byl trvale zablokován administrátorem.", 0xef4444)
     await ctx.send(f"🔨 Uživateli `{discord_id}` byl udělen BAN.")
 
 @bot.command()
 @check_sm_role()
 async def unban(ctx, discord_id: str):
     db = get_db()
-    if not db:
-        return
+    if not db: return
     db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
+    await send_user_dm(discord_id, "🕊️ Účet odblokován", "Váš přístup do aplikace a databáze byl obnoven.", 0x10b981)
     await ctx.send(f"🕊️ Uživateli `{discord_id}` byl zrušen BAN.")
 
 @bot.command(name="db")
 @check_sm_role()
 async def db_cmd(ctx, discord_id: str):
     db_conn = get_db()
-    if not db_conn:
-        return
+    if not db_conn: return
     user_data = db_conn.table("users").select("dashboard_access").eq("discord_id", discord_id).execute().data
-    if not user_data:
-        return await ctx.send("❌ Uživatel nenalezen.")
+    if not user_data: return await ctx.send("❌ Uživatel nenalezen.")
     new_status = not user_data[0].get("dashboard_access", False)
     db_conn.table("users").update({"dashboard_access": new_status}).eq("discord_id", discord_id).execute()
     await ctx.send(f"⚙️ Přístup do DB pro ID `{discord_id}`: **{'POVOLEN ✅' if new_status else 'ODEBRÁN ❌'}**.")
@@ -1692,10 +1735,10 @@ async def db_cmd(ctx, discord_id: str):
 @check_sm_role()
 async def delete(ctx, discord_id: str):
     db = get_db()
-    if not db:
-        return
+    if not db: return
     now = get_prague_time().strftime("%d.%m.%Y %H:%M")
     db.table("users").update({"is_deleted": True, "deleted_at": now, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+    await send_user_dm(discord_id, "⚠️ Účet smazán", "Váš uživatelský účet byl smazán administrátorem.", 0xf59e0b)
     await ctx.send(f"☠️ Účet `{discord_id}` byl smazán (Soft Delete).")
 
 @bot.command()
@@ -1707,12 +1750,10 @@ async def perdelete(ctx, discord_id: str):
 @bot.command()
 async def register(ctx, target_id: str = None):
     db = get_db()
-    if not db:
-        return await ctx.send("❌ Databáze nedostupná.")
+    if not db: return await ctx.send("❌ Databáze nedostupná.")
     if target_id:
         is_admin = discord.utils.get(ctx.author.roles, name="web-sa") or discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator
-        if not is_admin:
-            return await ctx.send(f"❌ {ctx.author.mention} Nemáš oprávnění.")
+        if not is_admin: return await ctx.send(f"❌ {ctx.author.mention} Nemáš oprávnění.")
         discord_id = target_id
         target_member = ctx.guild.get_member(int(discord_id)) if discord_id.isdigit() else None
         nick = target_member.display_name if target_member else f"Uživatel {discord_id}"
@@ -1731,8 +1772,7 @@ async def register(ctx, target_id: str = None):
             new_app_id = highest[0]["app_id"] + 1 if highest else 1000
             db.table("users").update({"app_id": new_app_id, "nick": nick, "is_deleted": False, "deleted_at": "", "registered_at": now_str}).eq("discord_id", discord_id).execute()
             await ctx.send(f"✅ Smazaný účet byl úspěšně obnoven! Nové App ID je **#{new_app_id}**.")
-            if target_member:
-                await update_member_roles(target_member, check[0].get('role', 'User'))
+            if target_member: await update_member_roles(target_member, check[0].get('role', 'User'))
         else:
             await ctx.send(f"ℹ️ Tento uživatel již je zaregistrován!")
     else:
@@ -1745,8 +1785,7 @@ async def register(ctx, target_id: str = None):
 @check_web_sa()
 async def sm(ctx, member: discord.Member):
     role = discord.utils.get(ctx.guild.roles, name="SM")
-    if not role:
-        return await ctx.send("❌ Role `SM` neexistuje.")
+    if not role: return await ctx.send("❌ Role `SM` neexistuje.")
     if role in member.roles:
         await member.remove_roles(role)
         await ctx.send(f"➖ Role **SM** odebrána.")
