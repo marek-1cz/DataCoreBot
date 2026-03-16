@@ -67,7 +67,7 @@ BASE_HTML = """
 PUBLIC_LAYOUT = """
 <nav class="top-nav">
     <a href="/" class="logo">
-        <i class="fas fa-robot" style="font-size: 26px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"></i>
+        <img src="{{ logo_male }}" alt="Logo" style="height: 30px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 8px rgba(56, 189, 248, 0.6));">
         OIS IDPK
     </a>
     <div class="nav-links">
@@ -95,7 +95,7 @@ DASHBOARD_LAYOUT = """
     <div class="sidebar">
         <div class="sidebar-header">
             <a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;">
-                <i class="fas fa-robot" style="text-shadow: 0 0 8px rgba(56, 189, 248, 0.6);"></i>
+                <img src="{{ logo_male }}" alt="Logo" style="height: 24px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 6px rgba(56, 189, 248, 0.6));">
                 OIS IDPK
             </a>
             <div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div>
@@ -990,7 +990,7 @@ HTML_SUPPORTERS = """
 <div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
     <div style="text-align: center; margin-bottom: 40px;">
         <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Děkuji všem za podporu!</h1>
-        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK Jsem neskutečně rád za každého z vás!</p>
+        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!</p>
         <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue"><i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK</a>
     </div>
     
@@ -1039,6 +1039,7 @@ HTML_SUPPORTERS_MGMT = """
                 <th>BMAC Jméno</th>
                 <th>Discord Nick</th>
                 <th>Částka</th>
+                <th>Systémová Zpráva</th>
                 <th>Akce</th>
             </tr>
             {% for p in pending_claims %}
@@ -1046,6 +1047,7 @@ HTML_SUPPORTERS_MGMT = """
                 <td style="color:var(--blue-main); font-weight:bold;">{{ p.get('name', 'Neznámý') }}</td>
                 <td style="color:white; font-weight:bold;">{{ p.get('discord_nick', 'Nevyplněno') }}</td>
                 <td><span class="role-tag" style="background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning);">{{ p.get('amount', '?') }}</span></td>
+                <td style="color: var(--danger); font-size: 12px; font-weight: bold; max-width: 200px;">{{ p.get('sys_note', 'Čeká na schválení') }}</td>
                 <td style="display: flex; gap: 5px;">
                     <form action="/dashboard/approve_claim" method="POST" style="display:inline; margin:0;">
                         <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
@@ -1053,19 +1055,33 @@ HTML_SUPPORTERS_MGMT = """
                         <input type="hidden" name="amount" value="{{ p.get('amount', '0') }}">
                         <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a přidat roli"><i class="fas fa-check"></i></button>
                     </form>
+                    
                     <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily" onclick="openSupporterEdit('{{ p.get('id', '') }}', '{{ p.get('name', '') | replace("'", "\\'") }}', '{{ p.get('discord_nick', '') | replace("'", "\\'") }}', '{{ p.get('amount', '') | replace("'", "\\'") }}', '{{ p.get('message', '') | replace("'", "\\'") | replace('\\n', ' ') }}')"><i class="fas fa-edit"></i></button>
-                    <form action="/dashboard/reject_claim" method="POST" style="display:inline; margin:0;">
+                    
+                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout" onclick="rejectClaim('{{ p.get('id', '') }}', '{{ p.get('discord_nick', '') | replace("'", "\\'") }}')"><i class="fas fa-times"></i></button>
+                    <form id="form_reject_{{ p.get('id', '') }}" action="/dashboard/reject_claim" method="POST" style="display:none;">
                         <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
-                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout" onclick="return confirm('Opravdu zamítnout tento požadavek?')"><i class="fas fa-times"></i></button>
+                        <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
+                        <input type="hidden" name="sys_note" id="reject_reason_{{ p.get('id', '') }}">
                     </form>
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Vše je vyřízeno, žádné čekající požadavky.</td></tr>
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Vše je vyřízeno, žádné čekající požadavky.</td></tr>
             {% endfor %}
         </table>
     </div>
 </div>
+
+<script>
+    function rejectClaim(claimId, discordNick) {
+        let reason = prompt("Zadejte důvod zamítnutí žádosti pro " + (discordNick || "uživatele") + ":", "Neplatné údaje / Platba nenalezena");
+        if (reason !== null) {
+            document.getElementById('reject_reason_' + claimId).value = reason;
+            document.getElementById('form_reject_' + claimId).submit();
+        }
+    }
+</script>
 
 <div style="display: flex; gap: 20px; flex-wrap: wrap;">
     <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
@@ -1080,23 +1096,31 @@ HTML_SUPPORTERS_MGMT = """
         </form>
     </div>
     <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">☕ Historie podporovatelů</h3>
+        <h3 style="color: var(--blue-main); margin-top: 0;">☕ Historie podporovatelů (Schválení i Zamítnutí)</h3>
         <div style="overflow-x: auto;">
             <table>
                 <tr>
+                    <th>Stav</th>
                     <th>Jméno</th>
                     <th>Discord</th>
                     <th>Částka</th>
-                    <th>Zpráva</th>
+                    <th>Systémová Zpráva</th>
                     <th>Datum</th>
                     <th>Akce</th>
                 </tr>
-                {% for s in supporters %}
-                <tr>
+                {% for s in supporters_history %}
+                <tr style="opacity: {{ '0.6' if s.get('status') == 'rejected' else '1' }};">
+                    <td>
+                        {% if s.get('status') == 'rejected' %}
+                            <span class="role-tag" style="background-color: var(--danger); color: white;">Zamítnuto</span>
+                        {% else %}
+                            <span class="role-tag" style="background-color: var(--success); color: white;">Schváleno</span>
+                        {% endif %}
+                    </td>
                     <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
                     <td style="color:#aaa; font-size:12px;">{{ s.get('discord_nick', '') }}</td>
                     <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
-                    <td style="font-style:italic; font-size: 12px; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ s.get('message', '') }}">{{ s.get('message', 'Bez zprávy') }}</td>
+                    <td style="font-style:italic; font-size: 12px; color: {{ 'var(--danger)' if s.get('status') == 'rejected' else 'var(--text-muted)' }}; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ s.get('sys_note', '') }}">{{ s.get('sys_note', 'OK') }}</td>
                     <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
                     <td style="display: flex; gap: 5px;">
                         <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily" onclick="openSupporterEdit('{{ s.get('id', '') }}', '{{ s.get('name', '') | replace("'", "\\'") }}', '{{ s.get('discord_nick', '') | replace("'", "\\'") }}', '{{ s.get('amount', '') | replace("'", "\\'") }}', '{{ s.get('message', '') | replace("'", "\\'") | replace('\\n', ' ') }}')"><i class="fas fa-edit"></i></button>
@@ -1107,7 +1131,7 @@ HTML_SUPPORTERS_MGMT = """
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Zatím žádné platby.</td></tr>
+                <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Zatím žádná historie.</td></tr>
                 {% endfor %}
             </table>
         </div>
