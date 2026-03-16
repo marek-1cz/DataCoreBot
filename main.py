@@ -375,10 +375,27 @@ def claim_role():
             flash('Chyba: Platba pod tímto jménem již byla spárována s jiným Discord účtem a nelze ji použít znovu!', 'error')
             return redirect(url_for('claim_role'))
 
-        pending_records = [r for r in all_records if r['status'] == 'pending']
+        valid_records = []
+        expired_records = []
+        now = get_prague_time().replace(tzinfo=None)
 
-        if pending_records:
-            record = pending_records[0] 
+        for r in all_records:
+            if r['status'] == 'pending':
+                valid_records.append(r)
+            elif r['status'] == 'manual_review':
+                try:
+                    c_time = datetime.strptime(r['created_at'], "%d.%m.%Y %H:%M")
+                    # Pokud je to méně než 24 hodin (86400 sekund), může si to ještě zachránit
+                    if (now - c_time).total_seconds() <= 86400:
+                        valid_records.append(r)
+                    else:
+                        expired_records.append(r)
+                except:
+                    valid_records.append(r)
+
+        if valid_records:
+            record = valid_records[0] 
+            old_status = record['status']
             discord_roles, db_role_string = calculate_roles_for_supporter(record.get('amount', '0'))
             
             if user_exists_sync(discord_nick):
@@ -386,18 +403,21 @@ def claim_role():
                     asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, discord_roles), bot.loop)
                     asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_nick, record.get('amount', '0'), record.get('message', ''), discord_roles), bot.loop)
 
-                db.table("supporters").update({"status": "completed", "discord_nick": discord_nick, "sys_note": "Spárováno přes web"}).eq("id", record['id']).execute()
-                send_log("✅ Role úspěšně vyzvednuta", f"Uživatel **{discord_nick}** si přes web úspěšně spároval BMAC platbu od jména **{bmac_name}**.", 0x10b981)
+                new_sys_note = "Spárováno přes web (zachráněno z kontroly)" if old_status == "manual_review" else "Spárováno přes web včas"
+                db.table("supporters").update({"status": "completed", "discord_nick": discord_nick, "sys_note": new_sys_note}).eq("id", record['id']).execute()
+                
+                log_msg = f"Uživatel **{discord_nick}** si přes web úspěšně spároval BMAC platbu od jména **{bmac_name}**."
+                if old_status == "manual_review":
+                    log_msg += "\n*(Poznámka: Platba byla tímto automaticky zachráněna a vyřazena z manuálního schvalování!)*"
+                send_log("✅ Role úspěšně vyzvednuta", log_msg, 0x10b981)
                 
                 db_user = db.table("users").select("*").or_(f"discord_id.eq.{discord_nick},nick.ilike.{discord_nick}").execute().data
                 if db_user:
                     current_roles = db_user[0].get('role', '')
                     roles_list = [r.strip() for r in current_roles.split(',')] if current_roles else []
-                    
                     for new_r in db_role_string.split(','):
                         if new_r.strip() not in roles_list:
                             roles_list.append(new_r.strip())
-                            
                     new_roles = ",".join(roles_list)
                     db.table("users").update({"role": new_roles}).eq("discord_id", db_user[0]['discord_id']).execute()
                 else:
@@ -409,8 +429,9 @@ def claim_role():
                 send_log("⚠️ Žádost o kontrolu", f"Uživatel na webu zadal nick **{discord_nick}** k platbě od **{bmac_name}**, ale bot ho nenašel na Discord serveru.\nPřesunuto do manuální kontroly.", 0xf59e0b)
                 flash('Tvůj Discord účet nebyl na serveru nalezen! Požadavek byl odeslán ke schválení administrátorovi.', 'warning')
         else:
-            manual_records = [r for r in all_records if r['status'] == 'manual_review']
-            if manual_records:
+            if expired_records:
+                flash('Časový limit 24 hodin pro automatické spárování vypršel. Vaše platba musí být nyní schválena administrátorem ručně.', 'warning')
+            elif any(r['status'] == 'manual_review' for r in all_records):
                 flash('Tato platba již čeká na manuální schválení administrátorem. Prosím vyčkejte.', 'warning')
             else:
                 db.table("supporters").insert({
@@ -1047,6 +1068,7 @@ def add_supporter():
             else:
                 db.table("pending_roles").insert({"discord_identifier": d_nick, "roles": db_role_string}).execute()
         
+        send_log("➕ Přidán podporovatel", f"Administrátor ručně přidal podporovatele **{request.form.get('name')}** (Discord: {d_nick}).\nČástka: {amt}", 0x10b981)
         flash('Podporovatel byl úspěšně přidán!', 'success')
     except Exception as e:
         flash(f'Chyba při přidávání: {e}', 'error')
@@ -1188,6 +1210,7 @@ def toggle_downloads():
             else:
                 db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute()
             flash('Status stahování byl změněn.', 'success')
+            send_log("📥 Stahování přepnuto", f"Administrátor **{'POVOLIL' if new_status == 'True' else 'ZAKÁZAL'}** stahování softwaru.", 0x3b82f6)
         except Exception as e:
             flash(f"Chyba: {e}", "error")
     if return_to == 'app_settings':
@@ -1199,7 +1222,9 @@ def add_version():
     if not session.get('logged_in'):
         return redirect(url_for('dashboard_main'))
     try:
-        get_db().table("software_versions").insert({"version_name": request.form.get("version_name"), "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role")}).execute()
+        v_name = request.form.get("version_name")
+        get_db().table("software_versions").insert({"version_name": v_name, "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role")}).execute()
+        send_log("📦 Nová verze softwaru", f"Administrátor přidal novou verzi: **{v_name}**.", 0x10b981)
     except:
         pass
     return redirect(url_for('dashboard_downloads'))
@@ -1221,6 +1246,7 @@ def delete_version():
         return redirect(url_for('dashboard_main'))
     try:
         get_db().table("software_versions").delete().eq("id", request.form.get("version_id")).execute()
+        send_log("🗑️ Verze smazána", "Administrátor smazal jednu z verzí ke stažení.", 0xef4444)
     except:
         pass
     return redirect(url_for('dashboard_downloads'))
@@ -1257,7 +1283,9 @@ def add_pending_role():
     if db:
         try:
             roles_str = ",".join(request.form.getlist("roles")) if request.form.getlist("roles") else "User"
-            db.table("pending_roles").insert({"discord_identifier": request.form.get("discord_identifier"), "roles": roles_str}).execute()
+            dc_id = request.form.get("discord_identifier")
+            db.table("pending_roles").insert({"discord_identifier": dc_id, "roles": roles_str}).execute()
+            send_log("🎫 Nová rezervace role", f"Administrátor vytvořil předpřipravenou roli pro: `{dc_id}`.\nRole: `{roles_str}`", 0x3b82f6)
             flash('Rezervace vytvořena.', 'success')
         except Exception as e:
             flash(f"Chyba: {e}", "error")
@@ -1283,7 +1311,14 @@ def change_id():
     db = get_db()
     if db: 
         try:
-            db.table("users").update({"app_id": int(request.form.get("new_app_id"))}).eq("discord_id", request.form.get("discord_id")).execute()
+            discord_id = request.form.get("discord_id")
+            new_app_id = int(request.form.get("new_app_id"))
+            user_info = db.table("users").select("nick, app_id").eq("discord_id", discord_id).execute().data
+            if user_info:
+                old_app_id = user_info[0].get('app_id')
+                nick = user_info[0].get('nick')
+                db.table("users").update({"app_id": new_app_id}).eq("discord_id", discord_id).execute()
+                send_log("🆔 Změna ID", f"Administrátor změnil ID hráči **{nick}** z `#{old_app_id}` na **#{new_app_id}**.", 0x38bdf8)
         except:
             pass
     return redirect(url_for('dashboard_ids'))
@@ -1296,7 +1331,9 @@ def add_team():
     if db:
         try:
             combined_roles = [f"{n.strip()}|{c.strip()}" for n, c in zip(request.form.getlist("role_name[]"), request.form.getlist("role_color[]")) if n.strip()]
-            db.table("team").insert({"name": request.form.get("name"), "discord_nick": request.form.get("discord_nick"), "image_url": request.form.get("image_url"), "description": request.form.get("description"), "role_name": ",".join(combined_roles)}).execute()
+            n = request.form.get("name")
+            db.table("team").insert({"name": n, "discord_nick": request.form.get("discord_nick"), "image_url": request.form.get("image_url"), "description": request.form.get("description"), "role_name": ",".join(combined_roles)}).execute()
+            send_log("🤝 Nový člen týmu", f"Do týmu na webu byl přidán: **{n}**.", 0x10b981)
         except:
             pass
     return redirect(url_for('dashboard_team_page'))
@@ -1308,7 +1345,9 @@ def delete_team():
     db = get_db()
     if db: 
         try:
-            db.table("team").delete().eq("discord_nick", request.form.get("discord_nick")).execute()
+            dc_nick = request.form.get("discord_nick")
+            db.table("team").delete().eq("discord_nick", dc_nick).execute()
+            send_log("👋 Odebrání člena týmu", f"Člen týmu `{dc_nick}` byl odebrán z webu.", 0xef4444)
         except:
             pass
     return redirect(url_for('dashboard_team_page'))
@@ -1346,15 +1385,18 @@ def edit_user():
             elif action == 'delete':
                 db.table("users").update({"is_deleted": True, "deleted_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute()
                 if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "⚠️ Účet smazán", "Váš uživatelský účet byl smazán administrátorem.", 0xf59e0b), bot.loop)
+                send_log("☠️ Účet smazán", f"Administrátor smazal účet uživatele **{nick}** (ID: `{discord_id}`).", 0xef4444)
                 flash('Účet smazán (Soft Delete).', 'danger')
                 if str(session.get('discord_id')) == str(discord_id):
                     session.clear()
             elif action == 'restore':
                 db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute()
                 if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "✅ Účet obnoven", "Váš uživatelský účet byl úspěšně obnoven administrátorem.", 0x10b981), bot.loop)
+                send_log("✅ Obnova účtu", f"Administrátor obnovil účet uživatele **{nick}** (ID: `{discord_id}`).", 0x10b981)
                 flash('Účet obnoven!', 'success')
             elif action == 'hard_delete':
                 db.table("users").delete().eq("discord_id", discord_id).execute()
+                send_log("💀 Permanentní výmaz", f"Administrátor TRVALE vymazal uživatele s ID: `{discord_id}` z databáze.", 0x0f172a)
                 flash('Účet trvale smazán.', 'dark')
                 if str(session.get('discord_id')) == str(discord_id):
                     session.clear()
@@ -1576,16 +1618,16 @@ async def check_pending_supporters():
         return
     try:
         pending = db.table("supporters").select("*").eq("status", "pending").execute().data or []
-        now = get_prague_time()
+        now = get_prague_time().replace(tzinfo=None)
         for p in pending:
             try:
                 created_time = datetime.strptime(p['created_at'], "%d.%m.%Y %H:%M")
                 if (now - created_time).total_seconds() > 300: # 5 MINUT
                     db.table("supporters").update({"status": "manual_review", "sys_note": "Vypršel čas 5 minut na spárování."}).eq("id", p['id']).execute()
-                    send_log("⏳ Platba propadla do kontroly", f"Uživatel si do 5 minut na webu nevyzvedl roli za jméno BMAC: **{p.get('name')}**.\nPřesunuto do manuálního schvalování v Dashboardu.", 0xf59e0b)
-            except:
+                    send_log("⏳ Platba propadla do kontroly", f"Uživatel si do 5 minut na webu nevyzvedl roli za jméno BMAC: **{p.get('name')}**.\nPřesunuto do manuálního schvalování. *(Pozn.: Stále si ji ale může vyzvednout přes /claim)*", 0xf59e0b)
+            except Exception as e:
                 pass
-    except:
+    except Exception as e:
         pass
 
 @bot.event
