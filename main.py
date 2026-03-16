@@ -1,7 +1,6 @@
 import os
 import discord
 from discord.ext import commands, tasks
-from discord.ui import Button, View, Select
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash, Response, stream_with_context, jsonify
 from threading import Thread
 from supabase import create_client
@@ -14,7 +13,6 @@ import traceback
 import re
 import gc
 
-# IMPORT VŠECH HTML DESIGNŮ Z VEDLEJŠÍHO SOUBORU
 from html_templates import *
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
@@ -38,9 +36,6 @@ def handle_exception(e):
     print(error_trace, flush=True)
     return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
 
-# ==========================================
-# DATABÁZE A GLOBÁLNÍ FUNKCE (OPTIMALIZOVÁNO PRO RAM)
-# ==========================================
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 _db_client = None
@@ -182,7 +177,7 @@ async def assign_supporter_role(identifier, role_names_list):
                         pass
                 break
     except Exception as e:
-        print(f"Chyba pri pridelovani roli: {e}")
+        pass
     return success
 
 async def announce_new_supporter(discord_nick, amount_str, message, role_names_list):
@@ -650,7 +645,7 @@ def api_app_ping():
         updates = {"last_active": now_str, "is_online": True}
         if action == "start": updates["launch_count"] = (user_resp.data[0].get("launch_count") or 0) + 1
         elif action == "stop": updates["is_online"] = False
-        elif action == "ping": updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 60
+        elif action == "ping": updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 30 # 30s místo 60
         db.table("users").update(updates).eq("discord_id", discord_id).execute()
         return _cors_jsonify({"status": "ok"})
     except: return _cors_jsonify({"status": "error"})
@@ -802,7 +797,7 @@ def dashboard_main():
                     if la_str:
                         try:
                             last_dt = datetime.strptime(la_str, "%d.%m.%Y %H:%M:%S")
-                            if (now - last_dt).total_seconds() > 120:
+                            if (now - last_dt).total_seconds() > 45:
                                 u["is_online"] = False
                                 db.table("users").update({"is_online": False}).eq("discord_id", u["discord_id"]).execute()
                         except: pass
@@ -988,249 +983,6 @@ def delete_supporter():
         flash('Podporovatel smazán.', 'success')
     except Exception as e: flash(f'Chyba při mazání: {e}', 'error')
     return redirect(url_for('dashboard_supporters'))
-
-@app.route('/api/get_profile_data/<discord_id>')
-def get_profile_data(discord_id):
-    if not session.get('logged_in'): return jsonify({"joined_at": "Neznámé", "status": "Neznámý", "downloads": []})
-    joined_at = "Neznámé"; app_status_html = "<span style='color: #64748b;'><i>Neaktivní</i></span>"; stats_html = ""; dls = []
-    status_map = { "online": "<span style='color:#10b981; font-weight:bold;'><i class='fas fa-circle'></i> Online</span>", "idle": "<span style='color:#f59e0b; font-weight:bold;'><i class='fas fa-moon'></i> Nečinný</span>", "dnd": "<span style='color:#ef4444; font-weight:bold;'><i class='fas fa-minus-circle'></i> Nerušit</span>", "offline": "<span style='color:#64748b; font-weight:bold;'><i class='fas fa-circle'></i> Offline</span>" }
-    status_html = status_map["offline"]
-    try:
-        if bot.guilds:
-            for g in bot.guilds:
-                m = g.get_member(int(discord_id))
-                if m:
-                    joined_at = m.joined_at.strftime("%d.%m.%Y") if m.joined_at else "Neznámé"
-                    status_html = status_map.get(str(m.status), status_map["offline"])
-                    break
-        db = get_db()
-        if db:
-            dls = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data or []
-            db_user = db.table("users").select("last_active, is_online, launch_count, total_time").eq("discord_id", discord_id).execute().data
-            if db_user:
-                u = db_user[0]
-                is_on = u.get("is_online", False)
-                la_str = u.get("last_active") or ""
-                if is_on and la_str:
-                    try:
-                        last_dt = datetime.strptime(la_str, "%d.%m.%Y %H:%M:%S")
-                        if (get_prague_time().replace(tzinfo=None) - last_dt).total_seconds() > 120:
-                            is_on = False
-                            db.table("users").update({"is_online": False}).eq("discord_id", discord_id).execute()
-                    except: pass
-                m, s = divmod(u.get("total_time") or 0, 60); h, m = divmod(m, 60)
-                if is_on: app_status_html = '<span style="color: var(--success); font-weight:bold;">🟢 AKTIVNÍ</span>'
-                else: app_status_html = f'<span style="color: var(--danger);">🔴 Offline</span> (Naposledy: {la_str or "Nikdy"})'
-                stats_html = f"<div style='margin-top:10px; font-size:12px; color:var(--text-muted); border-top: 1px solid #334155; padding-top: 10px;'><div><b>Spuštění:</b> {u.get('launch_count') or 0}x</div><div style='margin-top:5px;'><b>Čas:</b> {h}h {m}m {s}s</div></div>"
-    except: pass
-    return jsonify({"joined_at": joined_at, "status": status_html, "app_status": app_status_html, "stats": stats_html, "downloads": dls})
-
-@app.route('/dashboard/app_settings', methods=['GET'])
-def dashboard_app_settings():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    soft_enabled = True; dl_enabled = True
-    try:
-        db = get_db()
-        if db:
-            res = db.table("settings").select("*").in_("setting_key", ["software_enabled", "downloads_enabled"]).execute().data or []
-            for r in res:
-                if r.get('setting_key') == 'software_enabled' and str(r.get('setting_value')).lower() == 'false': soft_enabled = False
-                if r.get('setting_key') == 'downloads_enabled' and str(r.get('setting_value')).lower() == 'false': dl_enabled = False
-    except: pass
-    return render_dashboard(HTML_APP_SETTINGS, soft_enabled=soft_enabled, dl_enabled=dl_enabled, deploy_time=DEPLOY_TIME)
-
-@app.route('/dashboard/downloads', methods=['GET'])
-def dashboard_downloads():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
-    versions = []; enabled = True
-    try:
-        db = get_db()
-        if db:
-            set_resp = db.table("settings").select("*").eq("setting_key", "downloads_enabled").execute().data or []
-            if set_resp and str(set_resp[0].get('setting_value')).lower() == 'false': enabled = False
-            versions = db.table("software_versions").select("*").order("id").execute().data or []
-    except Exception as e: flash(f"Chyba DB: {e}", "error")
-    return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled, deploy_time=DEPLOY_TIME)
-
-@app.route('/dashboard/toggle_software', methods=['POST'])
-def toggle_software():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db(); new_status = request.form.get("new_status")
-    if db:
-        try:
-            check = db.table("settings").select("*").eq("setting_key", "software_enabled").execute().data or []
-            if not check: db.table("settings").insert({"setting_key": "software_enabled", "setting_value": new_status}).execute()
-            else: db.table("settings").update({"setting_value": new_status}).eq("setting_key", "software_enabled").execute()
-            flash('Globální stav softwaru byl změněn!', 'success')
-            send_log("🚨 Kill-Switch", f"Software byl přes administraci **{'ZAPNUT' if new_status == 'True' else 'VYPNUT'}**.", 0xef4444 if new_status == 'False' else 0x10b981)
-        except Exception as e: flash(f"Chyba: Zkontrolujte DB. ({e})", "error")
-    return redirect(url_for('dashboard_app_settings'))
-
-@app.route('/dashboard/toggle_downloads', methods=['POST'])
-def toggle_downloads():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db(); new_status = request.form.get("new_status"); return_to = request.form.get("return_to", "downloads")
-    if db:
-        try: 
-            check = db.table("settings").select("*").eq("setting_key", "downloads_enabled").execute().data or []
-            if not check: db.table("settings").insert({"setting_key": "downloads_enabled", "setting_value": new_status}).execute()
-            else: db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute()
-            flash('Status stahování byl změněn.', 'success')
-            send_log("📥 Stahování přepnuto", f"Administrátor **{'POVOLIL' if new_status == 'True' else 'ZAKÁZAL'}** stahování softwaru.", 0x3b82f6)
-        except Exception as e: flash(f"Chyba: {e}", "error")
-    if return_to == 'app_settings': return redirect(url_for('dashboard_app_settings'))
-    return redirect(url_for('dashboard_downloads'))
-
-@app.route('/dashboard/add_version', methods=['POST'])
-def add_version():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    try:
-        v_name = request.form.get("version_name")
-        get_db().table("software_versions").insert({"version_name": v_name, "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role")}).execute()
-        send_log("📦 Nová verze softwaru", f"Administrátor přidal novou verzi: **{v_name}**.", 0x10b981)
-    except: pass
-    return redirect(url_for('dashboard_downloads'))
-
-@app.route('/dashboard/edit_version', methods=['POST'])
-def edit_version():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    try: 
-        get_db().table("software_versions").update({"version_name": request.form.get("version_name"), "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role")}).eq("id", request.form.get("version_id")).execute()
-        flash('Verze byla úspěšně upravena.', 'success')
-    except Exception as e: flash(f'Chyba při úpravě verze: {e}', 'error')
-    return redirect(url_for('dashboard_downloads'))
-
-@app.route('/dashboard/delete_version', methods=['POST'])
-def delete_version():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    try:
-        get_db().table("software_versions").delete().eq("id", request.form.get("version_id")).execute()
-        send_log("🗑️ Verze smazána", "Administrátor smazal jednu z verzí ke stažení.", 0xef4444)
-    except: pass
-    return redirect(url_for('dashboard_downloads'))
-
-@app.route('/dashboard/pending_roles', methods=['GET'])
-def pending_roles(): 
-    try: data = get_db().table("pending_roles").select("*").order("id").execute().data or [] if get_db() else []
-    except: data = []
-    return render_dashboard(HTML_PENDING_ROLES, pending=data, deploy_time=DEPLOY_TIME)
-
-@app.route('/dashboard/ids', methods=['GET'])
-def dashboard_ids(): 
-    try: data = get_db().table("users").select("*").order("app_id").execute().data or [] if get_db() else []
-    except: data = []
-    return render_dashboard(HTML_IDS, users=data, deploy_time=DEPLOY_TIME)
-
-@app.route('/dashboard/team', methods=['GET'])
-def dashboard_team_page(): 
-    try: data = get_db().table("team").select("*").execute().data or [] if get_db() else []
-    except: data = []
-    return render_dashboard(HTML_TEAM_ADD, team=data, deploy_time=DEPLOY_TIME)
-
-@app.route('/dashboard/add_pending_role', methods=['POST'])
-def add_pending_role():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db()
-    if db:
-        try:
-            roles_str = ",".join(request.form.getlist("roles")) if request.form.getlist("roles") else "User"
-            dc_id = request.form.get("discord_identifier")
-            db.table("pending_roles").insert({"discord_identifier": dc_id, "roles": roles_str}).execute()
-            send_log("🎫 Nová rezervace role", f"Administrátor vytvořil předpřipravenou roli pro: `{dc_id}`.\nRole: `{roles_str}`", 0x3b82f6)
-            flash('Rezervace vytvořena.', 'success')
-        except Exception as e: flash(f"Chyba: {e}", "error")
-    return redirect(url_for('pending_roles'))
-
-@app.route('/dashboard/delete_pending_role', methods=['POST'])
-def delete_pending_role():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db(); p_id = request.form.get("pending_id")
-    if db and p_id: 
-        try: db.table("pending_roles").delete().eq("id", p_id).execute()
-        except: pass
-    return redirect(url_for('pending_roles'))
-
-@app.route('/dashboard/change_id', methods=['POST'])
-def change_id():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db()
-    if db: 
-        try:
-            discord_id = request.form.get("discord_id"); new_app_id = int(request.form.get("new_app_id"))
-            user_info = db.table("users").select("nick, app_id").eq("discord_id", discord_id).execute().data
-            if user_info:
-                old_app_id = user_info[0].get('app_id'); nick = user_info[0].get('nick')
-                db.table("users").update({"app_id": new_app_id}).eq("discord_id", discord_id).execute()
-                send_log("🆔 Změna ID", f"Administrátor změnil ID hráči **{nick}** z `#{old_app_id}` na **#{new_app_id}**.", 0x38bdf8)
-        except: pass
-    return redirect(url_for('dashboard_ids'))
-
-@app.route('/dashboard/add_team', methods=['POST'])
-def add_team():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db()
-    if db:
-        try:
-            combined_roles = [f"{n.strip()}|{c.strip()}" for n, c in zip(request.form.getlist("role_name[]"), request.form.getlist("role_color[]")) if n.strip()]
-            n = request.form.get("name")
-            db.table("team").insert({"name": n, "discord_nick": request.form.get("discord_nick"), "image_url": request.form.get("image_url"), "description": request.form.get("description"), "role_name": ",".join(combined_roles)}).execute()
-            send_log("🤝 Nový člen týmu", f"Do týmu na webu byl přidán: **{n}**.", 0x10b981)
-        except: pass
-    return redirect(url_for('dashboard_team_page'))
-
-@app.route('/dashboard/delete_team', methods=['POST'])
-def delete_team():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db()
-    if db: 
-        try:
-            dc_nick = request.form.get("discord_nick")
-            db.table("team").delete().eq("discord_nick", dc_nick).execute()
-            send_log("👋 Odebrání člena týmu", f"Člen týmu `{dc_nick}` byl odebrán z webu.", 0xef4444)
-        except: pass
-    return redirect(url_for('dashboard_team_page'))
-
-@app.route('/dashboard/edit_user', methods=['POST'])
-def edit_user():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db(); discord_id = request.form.get("discord_id"); action = request.form.get("action"); nick = request.form.get("nick")
-    if db and discord_id:
-        try:
-            if action == 'save':
-                r_str = ",".join(request.form.getlist("roles")) if request.form.getlist("roles") else "User"
-                db.table("users").update({"nick": nick, "role": r_str, "hwid": request.form.get("hwid"), "dashboard_access": True if request.form.get("dashboard_access") else False}).eq("discord_id", discord_id).execute()
-                sync_roles_from_flask(discord_id, r_str)
-                send_log("✏️ Úprava uživatele", f"Administrátor upravil uživatele **{nick}** (ID: `{discord_id}`).\nNové role: `{r_str}`", 0xf59e0b)
-                flash('Údaje upraveny!', 'success')
-            elif action == 'ban':
-                db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
-                send_log("🔨 BAN", f"Administrátor udělil BAN uživateli **{nick}** (ID: `{discord_id}`).", 0xef4444)
-                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🔨 Účet zablokován", "Váš přístup do aplikace a databáze byl trvale zablokován administrátorem.", 0xef4444), bot.loop)
-                flash('BAN udělen.', 'warning')
-                if str(session.get('discord_id')) == str(discord_id): session.clear()
-            elif action == 'unban':
-                db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
-                send_log("🕊️ UN-BAN", f"Administrátor zrušil BAN uživateli **{nick}** (ID: `{discord_id}`).", 0x10b981)
-                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🕊️ Účet odblokován", "Váš přístup do aplikace a databáze byl obnoven.", 0x10b981), bot.loop)
-                flash('BAN zrušen.', 'success')
-            elif action == 'delete':
-                db.table("users").update({"is_deleted": True, "deleted_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute()
-                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "⚠️ Účet smazán", "Váš uživatelský účet byl smazán administrátorem.", 0xf59e0b), bot.loop)
-                send_log("☠️ Účet smazán", f"Administrátor smazal účet uživatele **{nick}** (ID: `{discord_id}`).", 0xef4444)
-                flash('Účet smazán (Soft Delete).', 'danger')
-                if str(session.get('discord_id')) == str(discord_id): session.clear()
-            elif action == 'restore':
-                db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute()
-                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "✅ Účet obnoven", "Váš uživatelský účet byl úspěšně obnoven administrátorem.", 0x10b981), bot.loop)
-                send_log("✅ Obnova účtu", f"Administrátor obnovil účet uživatele **{nick}** (ID: `{discord_id}`).", 0x10b981)
-                flash('Účet obnoven!', 'success')
-            elif action == 'hard_delete':
-                db.table("users").delete().eq("discord_id", discord_id).execute()
-                send_log("💀 Permanentní výmaz", f"Administrátor TRVALE vymazal uživatele s ID: `{discord_id}` z databáze.", 0x0f172a)
-                flash('Účet trvale smazán.', 'dark')
-                if str(session.get('discord_id')) == str(discord_id): session.clear()
-        except: pass
-    return redirect(url_for('dashboard_main'))
 
 class DashboardAuthView(discord.ui.View):
     def __init__(self, token, discord_id):
