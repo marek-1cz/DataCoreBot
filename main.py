@@ -14,7 +14,6 @@ import re
 import gc
 from werkzeug.exceptions import HTTPException
 
-# IMPORT VŠECH HTML DESIGNŮ Z VEDLEJŠÍHO SOUBORU
 from html_templates import *
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
@@ -307,7 +306,7 @@ def claim_role():
             elif any(r['status'] == 'manual_review' for r in all_records): flash('Tato platba již čeká na manuální schválení.', 'warning')
             else:
                 db.table("supporters").insert({"name": bmac_name, "discord_nick": discord_nick, "amount": "Neznámá", "message": "", "sys_note": "Nezaznamenáno z BMAC.", "status": "manual_review", "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
-                send_log("📝 Nová neznámá žádost", f"Uživatel **{discord_nick}** žádá o **{bmac_name}**, ale platba neexistuje.", 0x3b82f6)
+                send_log("🚨 VYŽADUJE KONTROLU: Neznámá platba 🚨", f"Uživatel **{discord_nick}** žádá o platbu od **{bmac_name}**, ale webhookem neprošla.\n\n👉 **BĚŽTE DO DASHBOARDU A ZKONTROLUJTE TO!**", 0xef4444)
                 flash('Platba nenalezena. Odesláno administrátorovi k ruční kontrole.', 'warning')
         return redirect(url_for('claim_role'))
     return render_public(HTML_CLAIM)
@@ -537,9 +536,10 @@ def api_submit_feedback():
             "status": "pending", "sys_note": "", "fcreated_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
         }).execute()
         
-        log_title = "🔄 Žádost o HWID Reset" if type_str == "HWID" else "💬 Nová zpětná vazba"
-        log_color = 0xf59e0b if type_str == "HWID" else 0xa855f7
-        send_log(log_title, f"Uživatel **{nick}** (`{d_id}`) poslal zprávu přes aplikaci:\n*{msg}*", log_color)
+        log_title = "🚨 VYŽADUJE KONTROLU: Žádost o HWID 🚨" if type_str == "HWID" else "🔔 NOVÁ ZPĚTNÁ VAZBA (NÁPAD/CHYBA) 🔔"
+        log_color = 0xef4444 if type_str == "HWID" else 0xa855f7
+        desc = f"**Od:** {nick} (`{d_id}`)\n**Zpráva:**\n*{msg}*\n\n👉 **BĚŽTE DO DASHBOARDU A VYŘEŠTE TO!**"
+        send_log(log_title, desc, log_color)
         
         return _cors_jsonify({"status": "success"})
     except Exception as e:
