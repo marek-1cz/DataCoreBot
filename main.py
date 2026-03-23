@@ -27,7 +27,9 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png"
 URL_VELKE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png"
 
-def get_prague_time(): return datetime.utcnow() + timedelta(hours=1)
+def get_prague_time(): 
+    return datetime.utcnow() + timedelta(hours=1)
+
 DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
 
 @app.errorhandler(Exception)
@@ -48,7 +50,8 @@ def get_db():
         if _db_client is None and SUPABASE_URL and SUPABASE_KEY:
             _db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
         return _db_client
-    except Exception as e: print(f"Chyba připojení k DB: {e}")
+    except Exception as e: 
+        print(f"Chyba připojení k DB: {e}")
     return None
 
 def process_supporters(data_list):
@@ -132,9 +135,10 @@ async def announce_new_supporter(discord_nick, amount_str, message, role_names_l
         channel = discord.utils.get(guild.channels, name="⭐・podporovatelé")
         if channel:
             roles_str = ", ".join([f"**{r}**" for r in role_names_list])
-            embed = discord.Embed(title="🎉 MÁME NOVÉHO PODPOROVATELE!", description=f"Uživatel **{discord_nick}** právě podpořil náš projekt a získal exkluzivní role {roles_str}!", color=0xf59e0b)
+            embed = discord.Embed(title="🎉 MÁME NOVÉHO PODPOROVATELE!", description=f"Uživatel **{discord_nick}** právě podpořil náš projekt a získal exkluzivní role {roles_str} na serveru i v aplikaci!", color=0xf59e0b)
             embed.add_field(name="💰 Výše podpory", value=f"**{amount_str}**", inline=False)
             if message and message.strip(): embed.add_field(name="📝 Vzkaz od podporovatele", value=f"*{message}*", inline=False)
+            embed.set_footer(text="Obrovsky děkujeme za Vaši podporu! ❤️ Projekt OIS IDPK")
             try: await channel.send(embed=embed)
             except: pass
             break
@@ -148,7 +152,8 @@ async def async_send_log(title, description, color=0x38bdf8):
             break
 
 def send_log(title, description, color=0x38bdf8):
-    if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(async_send_log(title, description, color), bot.loop)
+    if bot.loop and bot.loop.is_running(): 
+        asyncio.run_coroutine_threadsafe(async_send_log(title, description, color), bot.loop)
 
 def _cors_jsonify(data):
     resp = jsonify(data)
@@ -1218,6 +1223,12 @@ def check_sm_role():
         return False
     return commands.check(predicate)
 
+@tasks.loop(minutes=3)
+async def connection_watchdog():
+    if bot.is_closed() or not bot.is_ready():
+        print("Watchdog: Spojení ztraceno! Vynucuji restart.", flush=True)
+        os._exit(1)
+
 @tasks.loop(hours=24)
 async def pixeldrain_keepalive():
     db = get_db()
@@ -1251,7 +1262,7 @@ async def check_pending_supporters():
         for p in pending:
             try:
                 created_time = datetime.strptime(p['created_at'], "%d.%m.%Y %H:%M")
-                if (now - created_time).total_seconds() > 300:
+                if (now - created_time).total_seconds() > 300: # 5 MINUT
                     db.table("supporters").update({"status": "manual_review", "sys_note": "Vypršel čas 5 minut na spárování."}).eq("id", p['id']).execute()
                     send_log("⏳ Platba propadla do kontroly", f"Uživatel si do 5 minut na webu nevyzvedl roli za jméno BMAC: **{p.get('name')}**.\nPřesunuto do manuálního schvalování. *(Pozn.: Stále si ji ale může vyzvednout přes /claim)*", 0xf59e0b)
             except Exception as e: pass
@@ -1260,6 +1271,7 @@ async def check_pending_supporters():
 @bot.event
 async def on_ready():
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
+    send_log("🔄 Systém Online", "Bot byl úspěšně (re)startován a je plně připojen k Discordu.", 0x10b981)
     try: bot.add_view(DynamicDownloadView())
     except: pass
     try:
@@ -1267,6 +1279,22 @@ async def on_ready():
     except: pass
     if not pixeldrain_keepalive.is_running(): pixeldrain_keepalive.start()
     if not check_pending_supporters.is_running(): check_pending_supporters.start()
+    if not connection_watchdog.is_running(): connection_watchdog.start()
+
+@bot.event
+async def on_message(message):
+    if message.author.bot: return
+    if not message.guild:
+        for guild in bot.guilds:
+            channel = discord.utils.get(guild.channels, name="🖲️・bot-dm")
+            if channel:
+                embed = discord.Embed(title="📩 Nová zpráva do DM bota", description=message.content, color=0xa855f7)
+                embed.set_author(name=f"{message.author.display_name} (@{message.author.name})")
+                embed.set_footer(text=f"ID: {message.author.id}")
+                try: await channel.send(embed=embed)
+                except: pass
+                break
+    await bot.process_commands(message)
 
 @bot.event
 async def on_member_join(member):
