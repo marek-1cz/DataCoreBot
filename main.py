@@ -27,9 +27,7 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png"
 URL_VELKE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png"
 
-def get_prague_time(): 
-    return datetime.utcnow() + timedelta(hours=1)
-
+def get_prague_time(): return datetime.utcnow() + timedelta(hours=1)
 DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
 
 @app.errorhandler(Exception)
@@ -50,8 +48,7 @@ def get_db():
         if _db_client is None and SUPABASE_URL and SUPABASE_KEY:
             _db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
         return _db_client
-    except Exception as e: 
-        print(f"Chyba připojení k DB: {e}")
+    except Exception as e: print(f"Chyba připojení k DB: {e}")
     return None
 
 def process_supporters(data_list):
@@ -514,18 +511,69 @@ def api_app_ping():
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     action = data.get("action", "ping")
+    session_id = data.get("session_id", "")
     db = get_db()
+    if not db: return _cors_jsonify({"status": "error"})
     try:
         now_str = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
         user_resp = db.table("users").select("launch_count, total_time").eq("discord_id", discord_id).execute()
         if not user_resp.data: return _cors_jsonify({"status": "error"})
+        
         updates = {"last_active": now_str, "is_online": True}
-        if action == "start": updates["launch_count"] = (user_resp.data[0].get("launch_count") or 0) + 1
-        elif action == "stop": updates["is_online"] = False
-        elif action == "ping": updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 30
+        
+        if action == "start": 
+            updates["launch_count"] = (user_resp.data[0].get("launch_count") or 0) + 1
+            new_session_id = str(uuid.uuid4())
+            db.table("app_sessions").insert({"session_id": new_session_id, "discord_id": discord_id, "start_time": now_str, "end_time": now_str}).execute()
+            db.table("users").update(updates).eq("discord_id", discord_id).execute()
+            return _cors_jsonify({"status": "ok", "session_id": new_session_id})
+            
+        elif action == "stop": 
+            updates["is_online"] = False
+            if session_id: db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
+            
+        elif action == "ping": 
+            updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 1 # 1 minuta (aplikace posílá ping každou minutu)
+            if session_id: db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
+            
         db.table("users").update(updates).eq("discord_id", discord_id).execute()
-        return _cors_jsonify({"status": "ok"})
+        return _cors_jsonify({"status": "ok", "session_id": session_id})
     except: return _cors_jsonify({"status": "error"})
+
+@app.route('/api/get_messages', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_get_messages():
+    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    data = request.get_json(silent=True) or {}
+    discord_id = str(data.get("discord_id", ""))
+    app_id = str(data.get("app_id", ""))
+    db = get_db()
+    if not db or not discord_id: return _cors_jsonify({"messages": []})
+    try:
+        all_msgs = db.table("app_messages").select("*").execute().data or []
+        read_msgs = db.table("read_messages").select("message_id").eq("discord_id", discord_id).execute().data or []
+        read_ids = [m['message_id'] for m in read_msgs]
+        
+        valid_msgs = []
+        for msg in all_msgs:
+            target = str(msg.get('target', ''))
+            is_target = target == 'GLOBAL' or discord_id in target or app_id in target
+            if is_target:
+                if msg.get('repeat') or msg['message_id'] not in read_ids:
+                    valid_msgs.append({"id": msg['message_id'], "title": msg['title'], "content": msg['content']})
+        return _cors_jsonify({"messages": valid_msgs})
+    except: return _cors_jsonify({"messages": []})
+
+@app.route('/api/mark_message_read', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_mark_message_read():
+    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    data = request.get_json(silent=True) or {}
+    discord_id = str(data.get("discord_id", ""))
+    message_id = str(data.get("message_id", ""))
+    db = get_db()
+    if db and discord_id and message_id:
+        try: db.table("read_messages").insert({"discord_id": discord_id, "message_id": message_id}).execute()
+        except: pass
+    return _cors_jsonify({"status": "ok"})
 
 @app.route('/api/submit_feedback', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_submit_feedback():
@@ -675,7 +723,7 @@ def dashboard_main():
                     if la_str:
                         try:
                             last_dt = datetime.strptime(la_str, "%d.%m.%Y %H:%M:%S")
-                            if (now - last_dt).total_seconds() > 45:
+                            if (now - last_dt).total_seconds() > 90:
                                 u["is_online"] = False
                                 db.table("users").update({"is_online": False}).eq("discord_id", u["discord_id"]).execute()
                         except: pass
@@ -777,6 +825,7 @@ def feedback_delete():
 def dashboard_app_settings():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     soft_enabled = True; dl_enabled = True
+    messages = []
     try:
         db = get_db()
         if db:
@@ -784,8 +833,36 @@ def dashboard_app_settings():
             for r in res:
                 if r.get('setting_key') == 'software_enabled' and str(r.get('setting_value')).lower() == 'false': soft_enabled = False
                 if r.get('setting_key') == 'downloads_enabled' and str(r.get('setting_value')).lower() == 'false': dl_enabled = False
+            messages = db.table("app_messages").select("*").order("created_at", desc=True).execute().data or []
     except: pass
-    return render_dashboard(HTML_APP_SETTINGS, soft_enabled=soft_enabled, dl_enabled=dl_enabled, deploy_time=DEPLOY_TIME)
+    return render_dashboard(HTML_APP_SETTINGS, soft_enabled=soft_enabled, dl_enabled=dl_enabled, messages=messages, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/send_app_message', methods=['POST'])
+def send_app_message():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    if db:
+        try:
+            target = request.form.get("target", "GLOBAL").strip()
+            title = request.form.get("title", "Zpráva od vývojáře")
+            content = request.form.get("content", "")
+            repeat = True if request.form.get("repeat") else False
+            now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+            db.table("app_messages").insert({
+                "target": target, "title": title, "content": content, "repeat": repeat, "created_at": now_str
+            }).execute()
+            flash('Zpráva pro aplikaci byla úspěšně nastavena!', 'success')
+        except Exception as e: flash(f"Chyba: {e}", "error")
+    return redirect(url_for('dashboard_app_settings'))
+
+@app.route('/dashboard/delete_app_message', methods=['POST'])
+def delete_app_message():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db(); msg_id = request.form.get("message_id")
+    if db and msg_id:
+        try: db.table("app_messages").delete().eq("message_id", msg_id).execute()
+        except: pass
+    return redirect(url_for('dashboard_app_settings'))
 
 @app.route('/dashboard/downloads', methods=['GET'])
 def dashboard_downloads():
@@ -868,6 +945,20 @@ def dashboard_ids():
     try: data = get_db().table("users").select("*").order("app_id").execute().data or [] if get_db() else []
     except: data = []
     return render_dashboard(HTML_IDS, users=data, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/user_history/<discord_id>', methods=['GET'])
+def dashboard_user_history(discord_id):
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    sessions = []
+    user_info = {}
+    try:
+        db = get_db()
+        if db:
+            user_data = db.table("users").select("nick, app_id").eq("discord_id", discord_id).execute().data
+            if user_data: user_info = user_data[0]
+            sessions = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("start_time", desc=True).limit(50).execute().data or []
+    except: pass
+    return render_dashboard(HTML_USER_HISTORY, sessions=sessions, user_info=user_info, deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/team', methods=['GET'])
 def dashboard_team_page(): 
@@ -1262,7 +1353,7 @@ async def check_pending_supporters():
         for p in pending:
             try:
                 created_time = datetime.strptime(p['created_at'], "%d.%m.%Y %H:%M")
-                if (now - created_time).total_seconds() > 300: # 5 MINUT
+                if (now - created_time).total_seconds() > 300: 
                     db.table("supporters").update({"status": "manual_review", "sys_note": "Vypršel čas 5 minut na spárování."}).eq("id", p['id']).execute()
                     send_log("⏳ Platba propadla do kontroly", f"Uživatel si do 5 minut na webu nevyzvedl roli za jméno BMAC: **{p.get('name')}**.\nPřesunuto do manuálního schvalování. *(Pozn.: Stále si ji ale může vyzvednout přes /claim)*", 0xf59e0b)
             except Exception as e: pass
