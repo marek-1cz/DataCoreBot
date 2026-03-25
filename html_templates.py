@@ -180,6 +180,15 @@ DASHBOARD_LAYOUT = """
                 </div>
             </div>
 
+            <button type="button" class="btn btn-dark" style="width:100%; margin-top:10px; box-sizing:border-box;" onclick="document.getElementById('sessionHistoryBox').style.display = document.getElementById('sessionHistoryBox').style.display === 'none' ? 'block' : 'none';"><i class="fas fa-history"></i> ZOBRAZIT / SKRÝT HISTORII SEZENÍ (KOMPLETNÍ LOGY)</button>
+            <div id="sessionHistoryBox" style="display:none; margin-top:10px; max-height:250px; overflow-y:auto; border:1px solid #334155; border-radius:5px; padding:10px; background:rgba(0,0,0,0.3);">
+                <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent;">
+                    <tbody id="profSessionsFull">
+                        <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
+                    </tbody>
+                </table>
+            </div>
+
             <form action="/dashboard/edit_user" method="POST" style="border-top: 1px solid #334155; padding-top: 15px; margin-top: 15px;">
                 <input type="hidden" name="discord_id" id="modalDiscordId">
                 <label>Herní Nick:</label>
@@ -223,20 +232,31 @@ DASHBOARD_LAYOUT = """
 </div>
 
 <script>
-    function openModal(app_id, discord_id, nick, roles, hwid, is_banned, is_deleted, dashboard_access, registered_at) {
+    function openModal(btn) {
         document.getElementById('editModal').style.display = 'flex';
-        document.getElementById('modalAppId').innerText = "#" + app_id;
+        document.getElementById('modalAppId').innerText = "#" + btn.getAttribute('data-app-id');
+        let discord_id = btn.getAttribute('data-discord-id');
         document.getElementById('modalDiscordId').value = discord_id;
-        document.getElementById('modalNick').value = nick;
+        document.getElementById('modalNick').value = btn.getAttribute('data-nick');
+        
+        let hwid = btn.getAttribute('data-hwid');
         document.getElementById('modalHwid').value = hwid === 'None' ? '' : hwid;
+        
+        let registered_at = btn.getAttribute('data-reg-at');
         document.getElementById('profRegistered').innerText = registered_at && registered_at !== 'None' ? registered_at : 'Neznámé (Starý účet)';
+        
+        let dashboard_access = btn.getAttribute('data-db-access');
         document.getElementById('modalDashboardAccess').checked = (dashboard_access === 'True');
         document.getElementById('profDbAccess').innerHTML = dashboard_access === 'True' ? '<span style="color: var(--success);"><i class="fas fa-check-circle"></i> Povoleno</span>' : '<span style="color: var(--danger);"><i class="fas fa-times-circle"></i> Zakázáno</span>';
+        
         document.querySelectorAll('input[name="roles"]').forEach(cb => cb.checked = false);
-        roles.split(',').forEach(r => {
+        btn.getAttribute('data-roles').split(',').forEach(r => {
             let el = document.querySelector(`input[name="roles"][value="${r.trim()}"]`);
             if(el) el.checked = true;
         });
+        
+        let is_deleted = btn.getAttribute('data-deleted');
+        let is_banned = btn.getAttribute('data-banned');
         if (is_deleted === 'True') {
             document.getElementById('activeActions').style.display = 'none';
             document.getElementById('deletedActions').style.display = 'block';
@@ -251,12 +271,15 @@ DASHBOARD_LAYOUT = """
                 document.getElementById('btnUnban').style.display = 'none';
             }
         }
+        
         document.getElementById('profJoined').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         document.getElementById('modalStatusDot').innerHTML = '';
         document.getElementById('profDownloads').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
         document.getElementById('profSessions').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
+        document.getElementById('profSessionsFull').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
         document.getElementById('profAppStatus').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         document.getElementById('profStats').innerHTML = '';
+        document.getElementById('sessionHistoryBox').style.display = 'none';
         
         fetch('/api/get_profile_data/' + discord_id)
             .then(r => r.json())
@@ -289,6 +312,7 @@ DASHBOARD_LAYOUT = """
                     sessHtml = "<tr><td colspan='2' style='color: var(--text-muted);'>Zatím žádná aktivita.</td></tr>";
                 }
                 document.getElementById('profSessions').innerHTML = sessHtml;
+                document.getElementById('profSessionsFull').innerHTML = sessHtml;
             });
     }
     function closeModal() { document.getElementById('editModal').style.display = 'none'; }
@@ -533,7 +557,18 @@ HTML_NOTIFICATIONS = """
                         </td>
                         <td style="color: var(--text-muted); font-size: 12px;">{{ m.get('expires_at', 'Nikdy') or 'Nikdy' }}</td>
                         <td style="display: flex; gap: 5px;">
-                            <button type="button" class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit" onclick="openEditMessageModal('{{ m.get('message_id', '') }}', '{{ m.get('title', '') | replace("'", "\\'") }}', '{{ m.get('content', '') | replace("'", "\\'") | replace('\\n', '\\\\n') }}', '{{ m.get('target_type', '') }}', '{{ m.get('target_data', '') | replace("'", "\\'") }}', '{{ m.get('link_url', '') }}', '{{ m.get('expires_at', '') }}', {{ 'true' if m.get('repeat') else 'false' }})"><i class="fas fa-edit"></i></button>
+                            <button type="button" class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit" 
+                                data-id="{{ m.get('message_id', '') }}"
+                                data-title="{{ m.get('title', '') }}"
+                                data-content="{{ m.get('content', '') }}"
+                                data-type="{{ m.get('target_type', '') }}"
+                                data-data="{{ m.get('target_data', '') }}"
+                                data-url="{{ m.get('link_url', '') }}"
+                                data-exp="{{ m.get('expires_at', '') }}"
+                                data-repeat="{{ 'true' if m.get('repeat') else 'false' }}"
+                                onclick="openEditMessageModal(this)">
+                                <i class="fas fa-edit"></i>
+                            </button>
                             <form action="/dashboard/archive_app_message" method="POST" style="margin:0;">
                                 <input type="hidden" name="message_id" value="{{ m.get('message_id', '') }}">
                                 <button type="submit" class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" title="Archivovat (Zmizí z aplikace)"><i class="fas fa-archive"></i></button>
@@ -661,16 +696,19 @@ HTML_NOTIFICATIONS = """
         }
     }
 
-    function openEditMessageModal(id, title, content, type, data, url, exp, repeat) {
-        document.getElementById('em_id').value = id;
-        document.getElementById('em_title').value = title;
-        document.getElementById('em_content').value = content;
-        document.getElementById('em_type').value = type;
-        document.getElementById('em_data').value = data;
-        document.getElementById('em_url').value = url;
-        document.getElementById('em_exp').value = exp;
-        document.getElementById('em_repeat').checked = repeat;
+    function openEditMessageModal(btn) {
+        document.getElementById('em_id').value = btn.getAttribute('data-id');
+        document.getElementById('em_title').value = btn.getAttribute('data-title');
+        document.getElementById('em_content').value = btn.getAttribute('data-content');
+        document.getElementById('em_type').value = btn.getAttribute('data-type');
+        document.getElementById('em_data').value = btn.getAttribute('data-data');
+        document.getElementById('em_url').value = btn.getAttribute('data-url');
+        document.getElementById('em_exp').value = btn.getAttribute('data-exp');
+        document.getElementById('em_repeat').checked = btn.getAttribute('data-repeat') === 'true';
         document.getElementById('editMessageModal').style.display = 'flex';
+        
+        document.getElementById('target_type').value = btn.getAttribute('data-type');
+        toggleTargetData();
     }
 </script>
 """
@@ -810,7 +848,12 @@ HTML_DOWNLOADS_MGMT = """
                     <a href="{{ v.get('file_url', '') }}" target="_blank" style="color: var(--blue-main);">{{ v.get('file_url', '') }}</a>
                 </td>
                 <td>
-                    <button type="button" class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" onclick="openEditVerModal('{{ v.get('id', '') }}', '{{ v.get('version_name', '') }}', '{{ v.get('file_url', '') }}', '{{ v.get('target_role', '') }}')"><i class="fas fa-edit"></i> Úprava</button>
+                    <button type="button" class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" 
+                        data-id="{{ v.get('id', '') }}"
+                        data-name="{{ v.get('version_name', '') }}"
+                        data-url="{{ v.get('file_url', '') }}"
+                        data-role="{{ v.get('target_role', '') }}"
+                        onclick="openEditVerModal(this)"><i class="fas fa-edit"></i> Úprava</button>
                     <form action="/dashboard/delete_version" method="POST" style="display:inline;">
                         <input type="hidden" name="version_id" value="{{ v.get('id', '') }}">
                         <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Odebrat tuto verzi ze stahování?')"><i class="fas fa-trash"></i> Smazat</button>
@@ -853,11 +896,11 @@ HTML_DOWNLOADS_MGMT = """
     </div>
 </div>
 <script>
-    function openEditVerModal(id, name, url, role) {
-        document.getElementById('ev_id').value = id;
-        document.getElementById('ev_name').value = name;
-        document.getElementById('ev_url').value = url;
-        document.getElementById('ev_role').value = role;
+    function openEditVerModal(btn) {
+        document.getElementById('ev_id').value = btn.getAttribute('data-id');
+        document.getElementById('ev_name').value = btn.getAttribute('data-name');
+        document.getElementById('ev_url').value = btn.getAttribute('data-url');
+        document.getElementById('ev_role').value = btn.getAttribute('data-role');
         document.getElementById('editVerModal').style.display = 'flex';
     }
 </script>
@@ -1107,7 +1150,17 @@ HTML_DASHBOARD_MAIN = """
                     {% endif %}
                 </td>
                 <td>
-                    <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', '') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-edit"></i> Upravit / Zobrazit Detaily</button>
+                    <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" 
+                        data-app-id="{{ user.get('app_id', '') }}"
+                        data-discord-id="{{ user.get('discord_id', '') }}"
+                        data-nick="{{ user.get('nick', '') }}"
+                        data-roles="{{ user.get('role', '') }}"
+                        data-hwid="{{ user.get('hwid', '') }}"
+                        data-banned="{{ user.get('is_banned', False) }}"
+                        data-deleted="{{ user.get('is_deleted', False) }}"
+                        data-db-access="{{ user.get('dashboard_access', False) }}"
+                        data-reg-at="{{ user.get('registered_at', '') }}"
+                        onclick="openModal(this)"><i class="fas fa-edit"></i> Upravit / Zobrazit Detaily</button>
                 </td>
             </tr>
             {% else %}
@@ -1260,9 +1313,15 @@ HTML_SUPPORTERS_MGMT = """
                         <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a přidat roli"><i class="fas fa-check"></i></button>
                     </form>
                     
-                    <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily" onclick="openSupporterEdit('{{ p.get('id', '') }}', '{{ p.get('name', '') | replace("'", "\\'") }}', '{{ p.get('discord_nick', '') | replace("'", "\\'") }}', '{{ p.get('amount', '') | replace("'", "\\'") }}', '{{ p.get('message', '') | replace("'", "\\'") | replace('\\n', ' ') }}')"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily"
+                        data-id="{{ p.get('id', '') }}"
+                        data-name="{{ p.get('name', '') }}"
+                        data-nick="{{ p.get('discord_nick', '') }}"
+                        data-amount="{{ p.get('amount', '') }}"
+                        data-msg="{{ p.get('message', '') }}"
+                        onclick="openSupporterEdit(this)"><i class="fas fa-edit"></i></button>
                     
-                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout" onclick="rejectClaim('{{ p.get('id', '') }}', '{{ p.get('discord_nick', '') | replace("'", "\\'") }}')"><i class="fas fa-times"></i></button>
+                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout" onclick="rejectClaim('{{ p.get('id', '') }}', '{{ p.get('discord_nick', '') }}')"><i class="fas fa-times"></i></button>
                     <form id="form_reject_{{ p.get('id', '') }}" action="/dashboard/reject_claim" method="POST" style="display:none;">
                         <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
                         <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
@@ -1327,7 +1386,13 @@ HTML_SUPPORTERS_MGMT = """
                     <td style="font-style:italic; font-size: 12px; color: {{ 'var(--danger)' if s.get('status') == 'rejected' else 'var(--text-muted)' }}; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ s.get('sys_note', '') }}">{{ s.get('sys_note', 'OK') }}</td>
                     <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
                     <td style="display: flex; gap: 5px;">
-                        <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily" onclick="openSupporterEdit('{{ s.get('id', '') }}', '{{ s.get('name', '') | replace("'", "\\'") }}', '{{ s.get('discord_nick', '') | replace("'", "\\'") }}', '{{ s.get('amount', '') | replace("'", "\\'") }}', '{{ s.get('message', '') | replace("'", "\\'") | replace('\\n', ' ') }}')"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily"
+                            data-id="{{ s.get('id', '') }}"
+                            data-name="{{ s.get('name', '') }}"
+                            data-nick="{{ s.get('discord_nick', '') }}"
+                            data-amount="{{ s.get('amount', '') }}"
+                            data-msg="{{ s.get('message', '') }}"
+                            onclick="openSupporterEdit(this)"><i class="fas fa-edit"></i></button>
                         <form action="/dashboard/delete_supporter" method="POST" style="display:inline; margin: 0;">
                             <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
                             <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Smazat z historie" onclick="return confirm('Opravdu smazat tohoto podporovatele z webu?')"><i class="fas fa-trash"></i></button>
@@ -1371,12 +1436,12 @@ HTML_SUPPORTERS_MGMT = """
 </div>
 
 <script>
-    function openSupporterEdit(id, name, nick, amount, msg) {
-        document.getElementById('es_id').value = id;
-        document.getElementById('es_name').value = name;
-        document.getElementById('es_nick').value = nick;
-        document.getElementById('es_amount').value = amount;
-        document.getElementById('es_message').value = msg;
+    function openSupporterEdit(btn) {
+        document.getElementById('es_id').value = btn.getAttribute('data-id');
+        document.getElementById('es_name').value = btn.getAttribute('data-name');
+        document.getElementById('es_nick').value = btn.getAttribute('data-nick');
+        document.getElementById('es_amount').value = btn.getAttribute('data-amount');
+        document.getElementById('es_message').value = btn.getAttribute('data-msg');
         document.getElementById('editSupporterModal').style.display = 'flex';
     }
 </script>
@@ -1408,7 +1473,10 @@ HTML_FEEDBACK = """
                         <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
                         <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a Resetovat HWID"><i class="fas fa-check"></i> Resetovat</button>
                     </form>
-                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout žádost" onclick="rejectHwid('{{ f.get('id', '') }}', '{{ f.get('nick', '') | replace("'", "\\'") }}')"><i class="fas fa-times"></i> Zamítnout</button>
+                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout žádost" 
+                        data-id="{{ f.get('id', '') }}"
+                        data-nick="{{ f.get('nick', '') }}"
+                        onclick="rejectHwid(this)"><i class="fas fa-times"></i> Zamítnout</button>
                     <form id="form_hwid_reject_{{ f.get('id', '') }}" action="/dashboard/feedback_reject" method="POST" style="display:none;">
                         <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
                         <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
@@ -1439,7 +1507,10 @@ HTML_FEEDBACK = """
                 <td style="color:#ddd; font-style:italic;">{{ f.get('message', '') }}</td>
                 <td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td>
                 <td style="display:flex; gap:5px;">
-                    <button type="button" class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" onclick="replyGeneral('{{ f.get('id', '') }}', '{{ f.get('nick', '') | replace("'", "\\'") }}', '{{ f.get('discord_id', '') }}')"><i class="fas fa-reply"></i> Odpovědět</button>
+                    <button type="button" class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;"
+                        data-id="{{ f.get('id', '') }}"
+                        data-nick="{{ f.get('nick', '') }}"
+                        onclick="replyGeneral(this)"><i class="fas fa-reply"></i> Odpovědět</button>
                     <form id="form_general_reply_{{ f.get('id', '') }}" action="/dashboard/feedback_reply" method="POST" style="display:none;">
                         <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
                         <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
@@ -1496,14 +1567,18 @@ HTML_FEEDBACK = """
 </div>
 
 <script>
-    function rejectHwid(id, nick) {
+    function rejectHwid(btn) {
+        let id = btn.getAttribute('data-id');
+        let nick = btn.getAttribute('data-nick');
         let reason = prompt("Zadejte důvod zamítnutí pro hráče " + nick + ":", "Reset HWID nyní není možný.");
         if (reason) {
             document.getElementById('reject_reason_' + id).value = reason;
             document.getElementById('form_hwid_reject_' + id).submit();
         }
     }
-    function replyGeneral(id, nick, dId) {
+    function replyGeneral(btn) {
+        let id = btn.getAttribute('data-id');
+        let nick = btn.getAttribute('data-nick');
         let msg = prompt("Napište zprávu pro hráče " + nick + " (Přijde mu to do DM):");
         if (msg) {
             document.getElementById('reply_msg_' + id).value = msg;
