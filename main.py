@@ -13,8 +13,6 @@ import traceback
 import re
 import gc
 from werkzeug.exceptions import HTTPException
-
-# IMPORT VŠECH HTML DESIGNŮ Z VEDLEJŠÍHO SOUBORU
 from html_templates import *
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
@@ -33,10 +31,8 @@ DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
 @app.errorhandler(Exception)
 def handle_exception(e):
     if isinstance(e, HTTPException):
-        return f"<div style='background:#0f172a; color:#f59e0b; padding:40px; font-family:sans-serif; text-align:center; height:100vh; box-sizing:border-box;'><h2 style='font-size:40px;'>CHYBA {e.code}</h2><p style='font-size:18px; color:white;'>Stránka nebyla nalezena, nebo k ní nemáte přístup.</p><a href='/' style='display:inline-block; margin-top:20px; padding:10px 20px; background:#38bdf8; color:black; text-decoration:none; font-weight:bold; border-radius:5px;'>Zpět domů</a></div>", e.code
-    error_trace = traceback.format_exc()
-    print(error_trace, flush=True)
-    return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA APLIKACE (500)</h2><p>Pošli tohle vývojáři:</p><pre>{error_trace}</pre></div>", 500
+        return f"<div style='background:#0f172a; color:#f59e0b; padding:40px; font-family:sans-serif; text-align:center; height:100vh; box-sizing:border-box;'><h2 style='font-size:40px;'>CHYBA {e.code}</h2><p style='font-size:18px; color:white;'>Stránka nebyla nalezena.</p><a href='/' style='display:inline-block; margin-top:20px; padding:10px 20px; background:#38bdf8; color:black; text-decoration:none; font-weight:bold; border-radius:5px;'>Zpět domů</a></div>", e.code
+    return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA (500)</h2><pre>{traceback.format_exc()}</pre></div>", 500
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -192,6 +188,10 @@ def sync_roles_from_flask(discord_id, role_string):
                 if member: await update_member_roles(member, role_string)
         except: pass
     if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
+
+@app.route('/api/keepalive', methods=['GET'])
+def api_keepalive():
+    return _cors_jsonify({"status": "alive", "time": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")})
 
 @app.route('/')
 def home(): 
@@ -540,7 +540,6 @@ def api_app_ping():
         return _cors_jsonify({"status": "ok", "session_id": session_id})
     except: return _cors_jsonify({"status": "error"})
 
-# PŘIDÁNO: Nový můstek pro natažení dat do okna v profilu Dashboardu
 @app.route('/api/get_profile_data/<discord_id>', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_get_profile_data(discord_id):
     if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
@@ -688,10 +687,6 @@ def api_submit_feedback():
         return _cors_jsonify({"status": "success"})
     except Exception as e:
         return _cors_jsonify({"status": "error", "message": str(e)})
-
-# ==========================================
-# DASHBOARD A ADMIN ROUTES
-# ==========================================
 
 @app.route('/login_request', methods=['POST'])
 def login_request():
@@ -931,10 +926,21 @@ def dashboard_notifications():
     try:
         db = get_db()
         if db: 
-            messages = db.table("app_messages").select("*").order("created_at", desc=True).execute().data or []
-            for m in messages:
+            now = get_prague_time().replace(tzinfo=None)
+            msgs = db.table("app_messages").select("*").order("created_at", desc=True).execute().data or []
+            for m in msgs:
+                if not str(m.get('is_archived')).lower() == 'true':
+                    exp_str = m.get('expires_at')
+                    if exp_str and exp_str.strip():
+                        try:
+                            exp_dt = datetime.strptime(exp_str.strip(), "%d.%m.%Y %H:%M")
+                            if now > exp_dt:
+                                db.table("app_messages").update({"is_archived": True}).eq("message_id", m["message_id"]).execute()
+                                m['is_archived'] = True
+                        except: pass
                 m['is_archived'] = str(m.get('is_archived')).lower() == 'true'
                 m['repeat'] = str(m.get('repeat')).lower() == 'true'
+            messages = msgs
     except: pass
     return render_dashboard(HTML_NOTIFICATIONS, messages=messages, deploy_time=DEPLOY_TIME)
 
@@ -960,7 +966,7 @@ def send_app_message():
                 "title": title, "content": content, "repeat": repeat, "link_url": link_url, 
                 "expires_at": expires_at, "is_archived": False, "created_at": now_str
             }).execute()
-            flash('Oznámení pro aplikaci bylo úspěšně odesláno/vytvořeno!', 'success')
+            flash('Oznámení pro aplikaci bylo úspěšně odesláno!', 'success')
         except Exception as e: flash(f"Chyba: {e}", "error")
     return redirect(url_for('dashboard_notifications'))
 
@@ -1443,6 +1449,14 @@ def check_sm_role():
         return False
     return commands.check(predicate)
 
+@tasks.loop(minutes=5)
+async def keepalive_ping():
+    try:
+        url = os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:8080") + "/api/keepalive"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
+    except: pass
+
 @tasks.loop(minutes=3)
 async def connection_watchdog():
     if bot.is_closed() or not bot.is_ready():
@@ -1500,6 +1514,7 @@ async def on_ready():
     if not pixeldrain_keepalive.is_running(): pixeldrain_keepalive.start()
     if not check_pending_supporters.is_running(): check_pending_supporters.start()
     if not connection_watchdog.is_running(): connection_watchdog.start()
+    if not keepalive_ping.is_running(): keepalive_ping.start()
 
 @bot.event
 async def on_message(message):
