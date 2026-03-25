@@ -548,57 +548,52 @@ def api_get_profile_data(discord_id):
     if not discord_id or discord_id == 'None' or discord_id.strip() == '':
         return _cors_jsonify({"error": "Chybí Discord ID"})
 
-    db = get_db()
-    if not db: return _cors_jsonify({"error": "DB Error"}), 500
-    
-    u_data = []
-    try: u_data = db.table("users").select("*").eq("discord_id", discord_id).execute().data
-    except: pass
-
-    stats = ""
-    app_status = "<span style='color: var(--text-muted);'>Neznámý</span>"
-    
-    if u_data:
-        u = u_data[0]
-        try: t_time = int(u.get("total_time") or 0)
-        except: t_time = 0
-        try: l_count = int(u.get("launch_count") or 0)
-        except: l_count = 0
-        
-        hours = t_time // 60
-        mins = t_time % 60
-        stats = f"<div style='margin-bottom:5px;'><b style='color:var(--blue-main);'>{hours}h {mins}m</b> v aplikaci</div><div><b style='color:var(--blue-main);'>{l_count}x</b> spuštěno</div>"
-        
-        if u.get("is_online"):
-            app_status = "<span style='color: var(--success); font-weight:bold;'><i class='fas fa-circle'></i> Nyní hraje</span>"
-        else:
-            app_status = f"<span style='color: var(--text-muted);'><i class='fas fa-moon'></i> {u.get('last_active', 'Nikdy')}</span>"
-
-    joined_at = "Nenalezen na serveru"
     try:
-        for guild in bot.guilds:
-            member = guild.get_member(int(discord_id))
-            if member and member.joined_at:
-                joined_at = member.joined_at.strftime("%d.%m.%Y")
-                break
-    except: pass
+        db = get_db()
+        if not db: return _cors_jsonify({"error": "DB Error"}), 500
+        
+        u_data = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+        stats = ""
+        app_status = "<span style='color: var(--text-muted);'>Neznámý</span>"
+        
+        if u_data:
+            u = u_data[0]
+            try: t_time = int(u.get("total_time") or 0)
+            except: t_time = 0
+            try: l_count = int(u.get("launch_count") or 0)
+            except: l_count = 0
+            
+            hours = t_time // 60
+            mins = t_time % 60
+            stats = f"<div style='margin-bottom:5px;'><b style='color:var(--blue-main);'>{hours}h {mins}m</b> v aplikaci</div><div><b style='color:var(--blue-main);'>{l_count}x</b> spuštěno</div>"
+            
+            if u.get("is_online"):
+                app_status = "<span style='color: var(--success); font-weight:bold;'><i class='fas fa-circle'></i> Nyní hraje</span>"
+            else:
+                app_status = f"<span style='color: var(--text-muted);'><i class='fas fa-moon'></i> {u.get('last_active', 'Nikdy')}</span>"
 
-    downloads = []
-    try: downloads = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(10).execute().data or []
-    except: pass
+        joined_at = "Nenalezen na serveru"
+        try:
+            for guild in bot.guilds:
+                member = guild.get_member(int(discord_id))
+                if member and member.joined_at:
+                    joined_at = member.joined_at.strftime("%d.%m.%Y")
+                    break
+        except: pass
 
-    sessions_data = []
-    try: sessions_data = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data or []
-    except: pass
-    
-    return _cors_jsonify({
-        "joined_at": joined_at,
-        "status": "", 
-        "app_status": app_status,
-        "stats": stats,
-        "downloads": downloads,
-        "sessions": sessions_data
-    })
+        downloads = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(10).execute().data or []
+        sessions_data = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data or []
+        
+        return _cors_jsonify({
+            "joined_at": joined_at,
+            "status": "", 
+            "app_status": app_status,
+            "stats": stats,
+            "downloads": downloads,
+            "sessions": sessions_data
+        })
+    except Exception as e:
+        return _cors_jsonify({"error": str(e)}), 500
 
 @app.route('/api/get_messages', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_get_messages():
@@ -1476,10 +1471,10 @@ async def keepalive_ping():
         await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
     except: pass
 
-@tasks.loop(minutes=3)
+@tasks.loop(minutes=2)
 async def connection_watchdog():
     if bot.is_closed() or not bot.is_ready():
-        print("Watchdog: Spojení ztraceno! Vynucuji restart.", flush=True)
+        print("Watchdog: Spojení ztraceno! Vynucuji restart celého serveru (pro zrušení případného IP banu).", flush=True)
         os._exit(1)
 
 @tasks.loop(hours=24)
