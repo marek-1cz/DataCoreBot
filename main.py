@@ -547,14 +547,20 @@ def api_get_profile_data(discord_id):
     db = get_db()
     if not db: return _cors_jsonify({"error": "DB Error"}), 500
     
-    u_data = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+    u_data = []
+    try: u_data = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+    except: pass
+
     stats = ""
     app_status = "<span style='color: var(--text-muted);'>Neznámý</span>"
     
     if u_data:
         u = u_data[0]
-        t_time = u.get("total_time") or 0
-        l_count = u.get("launch_count") or 0
+        try: t_time = int(u.get("total_time") or 0)
+        except: t_time = 0
+        try: l_count = int(u.get("launch_count") or 0)
+        except: l_count = 0
+        
         hours = t_time // 60
         mins = t_time % 60
         stats = f"<div style='margin-bottom:5px;'><b style='color:var(--blue-main);'>{hours}h {mins}m</b> v aplikaci</div><div><b style='color:var(--blue-main);'>{l_count}x</b> spuštěno</div>"
@@ -573,8 +579,13 @@ def api_get_profile_data(discord_id):
                 break
     except: pass
 
-    downloads = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(10).execute().data or []
-    sessions_data = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data or []
+    downloads = []
+    try: downloads = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(10).execute().data or []
+    except: pass
+
+    sessions_data = []
+    try: sessions_data = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data or []
+    except: pass
     
     return _cors_jsonify({
         "joined_at": joined_at,
@@ -687,6 +698,10 @@ def api_submit_feedback():
         return _cors_jsonify({"status": "success"})
     except Exception as e:
         return _cors_jsonify({"status": "error", "message": str(e)})
+
+# ==========================================
+# DASHBOARD A ADMIN ROUTES
+# ==========================================
 
 @app.route('/login_request', methods=['POST'])
 def login_request():
