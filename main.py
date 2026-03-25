@@ -565,13 +565,14 @@ def api_get_messages():
         now = get_prague_time().replace(tzinfo=None)
 
         for msg in all_msgs:
-            if msg.get("is_archived"): continue
+            # Oprava pro bezpečné vyhodnocení boolean textu
+            if str(msg.get("is_archived")).lower() == 'true': 
+                continue
 
-            # Kontrola expirace zprávy
             expires_at_str = msg.get("expires_at")
-            if expires_at_str:
+            if expires_at_str and expires_at_str.strip():
                 try:
-                    exp_dt = datetime.strptime(expires_at_str, "%d.%m.%Y %H:%M")
+                    exp_dt = datetime.strptime(expires_at_str.strip(), "%d.%m.%Y %H:%M")
                     if now > exp_dt:
                         db.table("app_messages").update({"is_archived": True}).eq("message_id", msg["message_id"]).execute()
                         continue
@@ -593,7 +594,8 @@ def api_get_messages():
                     is_target = True
 
             if is_target:
-                if msg.get('repeat') or msg['message_id'] not in read_ids:
+                is_repeat = str(msg.get('repeat')).lower() == 'true'
+                if is_repeat or msg['message_id'] not in read_ids:
                     valid_msgs.append({
                         "id": msg['message_id'], 
                         "title": msg['title'], 
@@ -883,7 +885,11 @@ def dashboard_notifications():
     messages = []
     try:
         db = get_db()
-        if db: messages = db.table("app_messages").select("*").order("created_at", desc=True).execute().data or []
+        if db: 
+            messages = db.table("app_messages").select("*").order("created_at", desc=True).execute().data or []
+            for m in messages:
+                m['is_archived'] = str(m.get('is_archived')).lower() == 'true'
+                m['repeat'] = str(m.get('repeat')).lower() == 'true'
     except: pass
     return render_dashboard(HTML_NOTIFICATIONS, messages=messages, deploy_time=DEPLOY_TIME)
 
