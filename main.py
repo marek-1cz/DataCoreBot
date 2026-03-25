@@ -1472,12 +1472,6 @@ async def keepalive_ping():
         await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
     except: pass
 
-@tasks.loop(minutes=3)
-async def connection_watchdog():
-    if bot.is_closed() or not bot.is_ready():
-        print("Watchdog: Spojení ztraceno! Vynucuji restart.", flush=True)
-        os._exit(1)
-
 @tasks.loop(hours=24)
 async def pixeldrain_keepalive():
     db = get_db()
@@ -1528,7 +1522,6 @@ async def on_ready():
     except: pass
     if not pixeldrain_keepalive.is_running(): pixeldrain_keepalive.start()
     if not check_pending_supporters.is_running(): check_pending_supporters.start()
-    if not connection_watchdog.is_running(): connection_watchdog.start()
     if not keepalive_ping.is_running(): keepalive_ping.start()
 
 @bot.event
