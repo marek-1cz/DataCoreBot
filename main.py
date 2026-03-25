@@ -473,7 +473,7 @@ def api_app_check():
                 if req_hwid and req_hwid.startswith("PC-"): db.table("users").update({"hwid": req_hwid, "login_token": ""}).eq("discord_id", discord_id).execute()
                 else: db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
             else: db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-            return _cors_jsonify({"status": "success", "display_name": user.get("nick")})
+            return _cors_jsonify({"status": "success", "display_name": user.get("nick"), "app_id": str(user.get("app_id", ""))})
         elif user.get("login_token") == "rejected":
             db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
             return _cors_jsonify({"status": "error", "message": "Přístup zamítnut uživatelem."})
@@ -499,10 +499,10 @@ def api_silent_check():
         if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
             if req_hwid and req_hwid.startswith("PC-"):
                 db.table("users").update({"hwid": req_hwid}).eq("discord_id", discord_id).execute()
-                return _cors_jsonify({"status": "success"})
+                return _cors_jsonify({"status": "success", "app_id": str(user.get("app_id", ""))})
             return _cors_jsonify({"status": "error", "message": "ZÁMEK HWID: Chyba čtení PC."})
         if str(db_hwid) != req_hwid: return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Váš počítač nesouhlasí."})
-        return _cors_jsonify({"status": "success"})
+        return _cors_jsonify({"status": "success", "app_id": str(user.get("app_id", ""))})
     except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/app_ping', methods=['POST', 'OPTIONS'], strict_slashes=False)
@@ -533,7 +533,7 @@ def api_app_ping():
             if session_id: db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
             
         elif action == "ping": 
-            updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 1 # 1 minuta (aplikace posílá ping každou minutu)
+            updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 1
             if session_id: db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
             
         db.table("users").update(updates).eq("discord_id", discord_id).execute()
@@ -549,17 +549,57 @@ def api_get_messages():
     db = get_db()
     if not db or not discord_id: return _cors_jsonify({"messages": []})
     try:
+        user_data = db.table("users").select("role, nick").eq("discord_id", discord_id).execute().data
+        user_roles = []
+        user_nick = ""
+        if user_data:
+            user_nick = str(user_data[0].get("nick", ""))
+            r_str = user_data[0].get("role", "")
+            user_roles = [r.strip() for r in r_str.split(",")] if r_str else ["User"]
+
         all_msgs = db.table("app_messages").select("*").execute().data or []
         read_msgs = db.table("read_messages").select("message_id").eq("discord_id", discord_id).execute().data or []
         read_ids = [m['message_id'] for m in read_msgs]
         
         valid_msgs = []
+        now = get_prague_time().replace(tzinfo=None)
+
         for msg in all_msgs:
-            target = str(msg.get('target', ''))
-            is_target = target == 'GLOBAL' or discord_id in target or app_id in target
+            if msg.get("is_archived"): continue
+
+            # Kontrola expirace zprávy
+            expires_at_str = msg.get("expires_at")
+            if expires_at_str:
+                try:
+                    exp_dt = datetime.strptime(expires_at_str, "%d.%m.%Y %H:%M")
+                    if now > exp_dt:
+                        db.table("app_messages").update({"is_archived": True}).eq("message_id", msg["message_id"]).execute()
+                        continue
+                except: pass
+
+            target_type = msg.get("target_type", "GLOBAL")
+            target_data = str(msg.get("target_data", ""))
+
+            is_target = False
+            if target_type == 'GLOBAL':
+                is_target = True
+            elif target_type == 'ROLE':
+                target_roles = [r.strip() for r in target_data.split(',')]
+                if any(tr in user_roles for tr in target_roles):
+                    is_target = True
+            elif target_type == 'USERS':
+                targets = [t.strip() for t in target_data.split(',')]
+                if discord_id in targets or app_id in targets or user_nick in targets:
+                    is_target = True
+
             if is_target:
                 if msg.get('repeat') or msg['message_id'] not in read_ids:
-                    valid_msgs.append({"id": msg['message_id'], "title": msg['title'], "content": msg['content']})
+                    valid_msgs.append({
+                        "id": msg['message_id'], 
+                        "title": msg['title'], 
+                        "content": msg['content'],
+                        "link_url": msg.get('link_url', "")
+                    })
         return _cors_jsonify({"messages": valid_msgs})
     except: return _cors_jsonify({"messages": []})
 
@@ -571,7 +611,9 @@ def api_mark_message_read():
     message_id = str(data.get("message_id", ""))
     db = get_db()
     if db and discord_id and message_id:
-        try: db.table("read_messages").insert({"discord_id": discord_id, "message_id": message_id}).execute()
+        try:
+            read_id = str(uuid.uuid4())
+            db.table("read_messages").insert({"read_id": read_id, "discord_id": discord_id, "message_id": message_id}).execute()
         except: pass
     return _cors_jsonify({"status": "ok"})
 
@@ -821,11 +863,10 @@ def feedback_delete():
         flash('Záznam smazán.', 'success')
     return redirect(url_for('dashboard_feedback'))
 
-@app.route('/dashboard/app_settings', methods=['GET'])
-def dashboard_app_settings():
+@app.route('/dashboard/app_management', methods=['GET'])
+def dashboard_app_management():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     soft_enabled = True; dl_enabled = True
-    messages = []
     try:
         db = get_db()
         if db:
@@ -833,9 +874,18 @@ def dashboard_app_settings():
             for r in res:
                 if r.get('setting_key') == 'software_enabled' and str(r.get('setting_value')).lower() == 'false': soft_enabled = False
                 if r.get('setting_key') == 'downloads_enabled' and str(r.get('setting_value')).lower() == 'false': dl_enabled = False
-            messages = db.table("app_messages").select("*").order("created_at", desc=True).execute().data or []
     except: pass
-    return render_dashboard(HTML_APP_SETTINGS, soft_enabled=soft_enabled, dl_enabled=dl_enabled, messages=messages, deploy_time=DEPLOY_TIME)
+    return render_dashboard(HTML_APP_MANAGEMENT, soft_enabled=soft_enabled, dl_enabled=dl_enabled, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/notifications', methods=['GET'])
+def dashboard_notifications():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    messages = []
+    try:
+        db = get_db()
+        if db: messages = db.table("app_messages").select("*").order("created_at", desc=True).execute().data or []
+    except: pass
+    return render_dashboard(HTML_NOTIFICATIONS, messages=messages, deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/send_app_message', methods=['POST'])
 def send_app_message():
@@ -843,17 +893,59 @@ def send_app_message():
     db = get_db()
     if db:
         try:
-            target = request.form.get("target", "GLOBAL").strip()
+            target_type = request.form.get("target_type", "GLOBAL")
+            target_data = request.form.get("target_data", "").strip()
             title = request.form.get("title", "Zpráva od vývojáře")
             content = request.form.get("content", "")
             repeat = True if request.form.get("repeat") else False
+            has_link = True if request.form.get("has_link") else False
+            link_url = request.form.get("link_url", "") if has_link else ""
+            expires_at = request.form.get("expires_at", "")
+            
             now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+            new_msg_id = str(uuid.uuid4())
             db.table("app_messages").insert({
-                "target": target, "title": title, "content": content, "repeat": repeat, "created_at": now_str
+                "message_id": new_msg_id, "target_type": target_type, "target_data": target_data, 
+                "title": title, "content": content, "repeat": repeat, "link_url": link_url, 
+                "expires_at": expires_at, "is_archived": False, "created_at": now_str
             }).execute()
-            flash('Zpráva pro aplikaci byla úspěšně nastavena!', 'success')
+            flash('Oznámení pro aplikaci bylo úspěšně odesláno/vytvořeno!', 'success')
         except Exception as e: flash(f"Chyba: {e}", "error")
-    return redirect(url_for('dashboard_app_settings'))
+    return redirect(url_for('dashboard_notifications'))
+
+@app.route('/dashboard/edit_app_message', methods=['POST'])
+def edit_app_message():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    msg_id = request.form.get("message_id")
+    if db and msg_id:
+        try:
+            target_type = request.form.get("target_type", "GLOBAL")
+            target_data = request.form.get("target_data", "").strip()
+            title = request.form.get("title", "Zpráva od vývojáře")
+            content = request.form.get("content", "")
+            repeat = True if request.form.get("repeat") else False
+            has_link = True if request.form.get("has_link") else False
+            link_url = request.form.get("link_url", "") if has_link else ""
+            expires_at = request.form.get("expires_at", "")
+            
+            db.table("app_messages").update({
+                "target_type": target_type, "target_data": target_data, "title": title, 
+                "content": content, "repeat": repeat, "link_url": link_url, "expires_at": expires_at
+            }).eq("message_id", msg_id).execute()
+            flash('Oznámení bylo úspěšně upraveno!', 'success')
+        except Exception as e: flash(f"Chyba: {e}", "error")
+    return redirect(url_for('dashboard_notifications'))
+
+@app.route('/dashboard/archive_app_message', methods=['POST'])
+def archive_app_message():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    msg_id = request.form.get("message_id")
+    if db and msg_id:
+        try: db.table("app_messages").update({"is_archived": True}).eq("message_id", msg_id).execute()
+        except: pass
+    return redirect(url_for('dashboard_notifications'))
 
 @app.route('/dashboard/delete_app_message', methods=['POST'])
 def delete_app_message():
@@ -862,7 +954,7 @@ def delete_app_message():
     if db and msg_id:
         try: db.table("app_messages").delete().eq("message_id", msg_id).execute()
         except: pass
-    return redirect(url_for('dashboard_app_settings'))
+    return redirect(url_for('dashboard_notifications'))
 
 @app.route('/dashboard/downloads', methods=['GET'])
 def dashboard_downloads():
@@ -889,7 +981,7 @@ def toggle_software():
             flash('Globální stav softwaru byl změněn!', 'success')
             send_log("🚨 Kill-Switch", f"Software byl přes administraci **{'ZAPNUT' if new_status == 'True' else 'VYPNUT'}**.", 0xef4444 if new_status == 'False' else 0x10b981)
         except Exception as e: flash(f"Chyba: Zkontrolujte DB. ({e})", "error")
-    return redirect(url_for('dashboard_app_settings'))
+    return redirect(url_for('dashboard_app_management'))
 
 @app.route('/dashboard/toggle_downloads', methods=['POST'])
 def toggle_downloads():
@@ -903,7 +995,7 @@ def toggle_downloads():
             flash('Status stahování byl změněn.', 'success')
             send_log("📥 Stahování přepnuto", f"Administrátor **{'POVOLIL' if new_status == 'True' else 'ZAKÁZAL'}** stahování softwaru.", 0x3b82f6)
         except Exception as e: flash(f"Chyba: {e}", "error")
-    if return_to == 'app_settings': return redirect(url_for('dashboard_app_settings'))
+    if return_to == 'app_management': return redirect(url_for('dashboard_app_management'))
     return redirect(url_for('dashboard_downloads'))
 
 @app.route('/dashboard/add_version', methods=['POST'])
