@@ -103,7 +103,8 @@ DASHBOARD_LAYOUT = """
         <div class="sidebar-menu">
             <a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a>
             <a href="/dashboard/stats" class="sidebar-link"><i class="fas fa-chart-bar"></i> Statistiky Webu</a>
-            <a href="/dashboard/app_settings" class="sidebar-link"><i class="fas fa-cog"></i> Nastavení Aplikace</a>
+            <a href="/dashboard/app_management" class="sidebar-link"><i class="fas fa-desktop"></i> Správa Aplikace</a>
+            <a href="/dashboard/notifications" class="sidebar-link" style="color: #f59e0b;"><i class="fas fa-bell"></i> Oznámení</a>
             <a href="/dashboard/downloads" class="sidebar-link"><i class="fas fa-cloud-download-alt"></i> Správa Stahování</a>
             <a href="/dashboard/pending_roles" class="sidebar-link" style="color: #10b981;"><i class="fas fa-ticket-alt"></i> Rezervace Rolí</a>
             <a href="/dashboard/ids" class="sidebar-link"><i class="fas fa-id-badge"></i> Správa ID</a>
@@ -429,13 +430,13 @@ HTML_STATS = """
 </script>
 """
 
-HTML_APP_SETTINGS = """
+HTML_APP_MANAGEMENT = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);">Nastavení Aplikace a Systému</h2>
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-desktop" style="color:var(--blue-main);"></i> Správa Aplikace</h2>
 </div>
 <div style="display: flex; gap: 20px; flex-wrap: wrap;">
     <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {{ 'var(--success)' if soft_enabled else 'var(--danger)' }}; text-align: center;">
-        <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-desktop"></i> Status Softwaru (Kill-Switch)</h3>
+        <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-power-off"></i> Status Softwaru (Kill-Switch)</h3>
         <div style="font-size: 50px; margin: 15px 0; color: {{ 'var(--success)' if soft_enabled else 'var(--danger)' }}; text-shadow: 0 0 15px {{ 'rgba(16, 185, 129, 0.5)' if soft_enabled else 'rgba(239, 68, 68, 0.5)' }};">
             <i class="fas {{ 'fa-check-circle' if soft_enabled else 'fa-ban' }}"></i>
         </div>
@@ -454,11 +455,177 @@ HTML_APP_SETTINGS = """
         <p style="color: var(--text-muted); font-size: 14px;">Vypínač instalačního procesu přes Discord bota.</p>
         <form action="/dashboard/toggle_downloads" method="POST" style="margin-top: 20px;">
             <input type="hidden" name="new_status" value="{{ 'False' if dl_enabled else 'True' }}">
-            <input type="hidden" name="return_to" value="app_settings">
+            <input type="hidden" name="return_to" value="app_management">
             <button type="submit" class="btn {{ 'btn-danger' if dl_enabled else 'btn-success' }}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {{ 'ZAKÁZAT STAHOVÁNÍ' if dl_enabled else 'POVOLIT STAHOVÁNÍ' }}</button>
         </form>
     </div>
 </div>
+"""
+
+HTML_NOTIFICATIONS = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-bell" style="color:#f59e0b;"></i> Systém Oznámení (Pop-up do aplikace)</h2>
+</div>
+
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--warning);">
+        <h3 style="margin-top: 0; color: var(--warning);"><i class="fas fa-paper-plane"></i> Odeslat nové oznámení</h3>
+        <p style="color: var(--text-muted); font-size: 13px;">Toto vyskočí lidem ihned po spuštění palubáku.</p>
+        <form action="/dashboard/send_app_message" method="POST">
+            <label style="color: var(--text-muted); font-size: 13px;">Nadpis oznámení:</label>
+            <input type="text" name="title" placeholder="Např. Vánoční Update 1.5!" required>
+            
+            <label style="color: var(--text-muted); font-size: 13px;">Text oznámení (lze použít HTML tagy jako &lt;br&gt;):</label>
+            <textarea name="content" rows="4" placeholder="Napište text zprávy..." required></textarea>
+            
+            <label style="color: var(--text-muted); font-size: 13px;">Pro koho je zpráva určena?</label>
+            <select name="target_type" id="target_type" onchange="toggleTargetData()" style="margin-bottom: 10px;">
+                <option value="GLOBAL">Všichni uživatelé (Globálně)</option>
+                <option value="ROLE">Podle Rolí</option>
+                <option value="USERS">Vybraní uživatelé (Podle ID nebo Nicku)</option>
+            </select>
+            
+            <div id="target_data_container" style="display: none;">
+                <label style="color: var(--text-muted); font-size: 13px;" id="target_label">Specifikace:</label>
+                <input type="text" name="target_data" id="target_data" placeholder="">
+            </div>
+
+            <div style="background-color: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; margin: 15px 0;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--text-main); font-size: 13px;">
+                    <input type="checkbox" name="has_link" id="has_link" onchange="toggleLinkUrl()" style="width: auto; margin: 0;">
+                    Přidat do aplikace speciální tlačítko s odkazem
+                </label>
+            </div>
+            
+            <div id="link_url_container" style="display: none;">
+                <label style="color: var(--text-muted); font-size: 13px;">URL adresa tlačítka (např. odkaz na novinky):</label>
+                <input type="url" name="link_url" placeholder="https://...">
+            </div>
+
+            <div style="background-color: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; margin: 15px 0;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--text-main); font-size: 13px;">
+                    <input type="checkbox" name="repeat" style="width: auto; margin: 0;">
+                    Zobrazovat uživatelům DOKOLA (Při každém startu)
+                </label>
+                <span style="font-size: 11px; color: var(--text-muted); margin-left: 23px;">Pokud nezaškrtneš, uživateli to vyskočí jen jednou a pak se to skryje.</span>
+            </div>
+
+            <label style="color: var(--text-muted); font-size: 13px;">Kdy má oznámení automaticky zmizet? (Expirace)</label>
+            <input type="text" name="expires_at" placeholder="Např. 31.12.2026 23:59 (Volitelné)">
+
+            <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 10px;"><i class="fas fa-paper-plane"></i> Vytvořit Oznámení</button>
+        </form>
+    </div>
+
+    <div style="flex: 2; min-width: 300px;">
+        <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+            <h3 style="color: var(--success); margin-top: 0;"><i class="fas fa-broadcast-tower"></i> Aktivní Oznámení</h3>
+            <div style="overflow-x: auto;">
+                <table>
+                    <tr>
+                        <th>Nadpis</th>
+                        <th>Cílení</th>
+                        <th>Opakování</th>
+                        <th>Expirace</th>
+                        <th>Akce</th>
+                    </tr>
+                    {% for m in messages %}
+                    {% if not m.get('is_archived') %}
+                    <tr>
+                        <td style="color: var(--text-main); font-weight: bold;">{{ m.get('title', '') }}</td>
+                        <td>
+                            {% if m.get('target_type') == 'GLOBAL' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">Globálně</span>
+                            {% elif m.get('target_type') == 'ROLE' %}<span class="role-tag" style="background-color: #a855f7; color: white;">Role: {{ m.get('target_data', '') }}</span>
+                            {% else %}<span class="role-tag" style="background-color: #ef4444; color: white;">Hráči: {{ m.get('target_data', '')[:15] }}...</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if m.get('repeat') %}<span style="color:var(--warning); font-size: 12px; font-weight:bold;"><i class="fas fa-sync"></i> Ano</span>
+                            {% else %}<span style="color:var(--success); font-size: 12px; font-weight:bold;">Jen jednou</span>{% endif %}
+                        </td>
+                        <td style="color: var(--text-muted); font-size: 12px;">{{ m.get('expires_at', 'Nikdy') or 'Nikdy' }}</td>
+                        <td style="display: flex; gap: 5px;">
+                            <form action="/dashboard/archive_app_message" method="POST" style="margin:0;">
+                                <input type="hidden" name="message_id" value="{{ m.get('message_id', '') }}">
+                                <button type="submit" class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" title="Archivovat (Zmizí z aplikace)"><i class="fas fa-archive"></i></button>
+                            </form>
+                            <form action="/dashboard/delete_app_message" method="POST" style="margin:0;">
+                                <input type="hidden" name="message_id" value="{{ m.get('message_id', '') }}">
+                                <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu smazat oznámení?')"><i class="fas fa-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% else %}
+                    <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádná aktivní oznámení.</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+
+        <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; opacity: 0.8;">
+            <h3 style="color: var(--text-muted); margin-top: 0;"><i class="fas fa-archive"></i> Archivovaná Oznámení</h3>
+            <div style="overflow-x: auto;">
+                <table>
+                    <tr>
+                        <th>Nadpis</th>
+                        <th>Cílení</th>
+                        <th>Vytvořeno</th>
+                        <th>Akce</th>
+                    </tr>
+                    {% for m in messages %}
+                    {% if m.get('is_archived') %}
+                    <tr>
+                        <td style="color: var(--text-muted);">{{ m.get('title', '') }}</td>
+                        <td style="font-size: 12px; color: var(--text-muted);">{{ m.get('target_type', '') }}</td>
+                        <td style="color: var(--text-muted); font-size: 12px;">{{ m.get('created_at', '') }}</td>
+                        <td>
+                            <form action="/dashboard/delete_app_message" method="POST" style="margin:0;">
+                                <input type="hidden" name="message_id" value="{{ m.get('message_id', '') }}">
+                                <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Trvale smazat z archivu?')"><i class="fas fa-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleTargetData() {
+        const type = document.getElementById('target_type').value;
+        const container = document.getElementById('target_data_container');
+        const input = document.getElementById('target_data');
+        const label = document.getElementById('target_label');
+        
+        if (type === 'GLOBAL') {
+            container.style.display = 'none';
+            input.removeAttribute('required');
+        } else {
+            container.style.display = 'block';
+            input.setAttribute('required', 'true');
+            if (type === 'ROLE') {
+                label.innerText = 'Zadej role oddělené čárkou (např. BT, DEV, SA):';
+                input.placeholder = 'BT, DEV';
+            } else if (type === 'USERS') {
+                label.innerText = 'Zadej Herní ID, Discord ID nebo Nick (oddělené čárkou):';
+                input.placeholder = '1001, marekk_czz, 1234567890';
+            }
+        }
+    }
+    
+    function toggleLinkUrl() {
+        const hasLink = document.getElementById('has_link').checked;
+        const container = document.getElementById('link_url_container');
+        if (hasLink) {
+            container.style.display = 'block';
+        } else {
+            container.style.display = 'none';
+        }
+    }
+</script>
 """
 
 HTML_DOWNLOADS_MAIN = """
@@ -824,6 +991,31 @@ HTML_IDS = """
 </div>
 """
 
+HTML_USER_HISTORY = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--blue-main);"><i class="fas fa-history"></i> Historie sezení uživatele: {{ user_info.get('nick', 'Neznámý') }} (#{{ user_info.get('app_id', '???') }})</h2>
+    <a href="/dashboard" class="btn btn-dark"><i class="fas fa-arrow-left"></i> Zpět na přehled</a>
+</div>
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>Start Sezení</th>
+                <th>Konec Sezení</th>
+            </tr>
+            {% for session in sessions %}
+            <tr>
+                <td style="color: var(--success); font-weight: bold;">{{ session.get('start_time', '') }}</td>
+                <td style="color: var(--danger); font-weight: bold;">{{ session.get('end_time', '') }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Uživatel nemá zaznamenánu žádnou aktivitu.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+"""
+
 HTML_DASHBOARD_MAIN = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
@@ -894,6 +1086,7 @@ HTML_DASHBOARD_MAIN = """
                 </td>
                 <td>
                     <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', '') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-edit"></i> Upravit</button>
+                    <a href="/dashboard/user_history/{{ user.get('discord_id', '') }}" class="btn btn-warning" style="padding: 5px 10px; font-size: 12px; margin-left: 5px;"><i class="fas fa-history"></i> Logy</a>
                 </td>
             </tr>
             {% else %}
