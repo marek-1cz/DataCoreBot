@@ -540,6 +540,52 @@ def api_app_ping():
         return _cors_jsonify({"status": "ok", "session_id": session_id})
     except: return _cors_jsonify({"status": "error"})
 
+# PŘIDÁNO: Nový můstek pro natažení dat do okna v profilu Dashboardu
+@app.route('/api/get_profile_data/<discord_id>', methods=['GET', 'OPTIONS'], strict_slashes=False)
+def api_get_profile_data(discord_id):
+    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if not session.get('logged_in'): return _cors_jsonify({"error": "Unauthorized"}), 401
+    db = get_db()
+    if not db: return _cors_jsonify({"error": "DB Error"}), 500
+    
+    u_data = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+    stats = ""
+    app_status = "<span style='color: var(--text-muted);'>Neznámý</span>"
+    
+    if u_data:
+        u = u_data[0]
+        t_time = u.get("total_time") or 0
+        l_count = u.get("launch_count") or 0
+        hours = t_time // 60
+        mins = t_time % 60
+        stats = f"<div style='margin-bottom:5px;'><b style='color:var(--blue-main);'>{hours}h {mins}m</b> v aplikaci</div><div><b style='color:var(--blue-main);'>{l_count}x</b> spuštěno</div>"
+        
+        if u.get("is_online"):
+            app_status = "<span style='color: var(--success); font-weight:bold;'><i class='fas fa-circle'></i> Nyní hraje</span>"
+        else:
+            app_status = f"<span style='color: var(--text-muted);'><i class='fas fa-moon'></i> {u.get('last_active', 'Nikdy')}</span>"
+
+    joined_at = "Nenalezen na serveru"
+    try:
+        for guild in bot.guilds:
+            member = guild.get_member(int(discord_id))
+            if member and member.joined_at:
+                joined_at = member.joined_at.strftime("%d.%m.%Y")
+                break
+    except: pass
+
+    downloads = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(10).execute().data or []
+    sessions_data = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data or []
+    
+    return _cors_jsonify({
+        "joined_at": joined_at,
+        "status": "", 
+        "app_status": app_status,
+        "stats": stats,
+        "downloads": downloads,
+        "sessions": sessions_data
+    })
+
 @app.route('/api/get_messages', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_get_messages():
     if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
@@ -565,7 +611,6 @@ def api_get_messages():
         now = get_prague_time().replace(tzinfo=None)
 
         for msg in all_msgs:
-            # Oprava pro bezpečné vyhodnocení boolean textu
             if str(msg.get("is_archived")).lower() == 'true': 
                 continue
 
@@ -1043,20 +1088,6 @@ def dashboard_ids():
     try: data = get_db().table("users").select("*").order("app_id").execute().data or [] if get_db() else []
     except: data = []
     return render_dashboard(HTML_IDS, users=data, deploy_time=DEPLOY_TIME)
-
-@app.route('/dashboard/user_history/<discord_id>', methods=['GET'])
-def dashboard_user_history(discord_id):
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    sessions = []
-    user_info = {}
-    try:
-        db = get_db()
-        if db:
-            user_data = db.table("users").select("nick, app_id").eq("discord_id", discord_id).execute().data
-            if user_data: user_info = user_data[0]
-            sessions = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("start_time", desc=True).limit(50).execute().data or []
-    except: pass
-    return render_dashboard(HTML_USER_HISTORY, sessions=sessions, user_info=user_info, deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/team', methods=['GET'])
 def dashboard_team_page(): 
