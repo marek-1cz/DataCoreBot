@@ -544,6 +544,10 @@ def api_app_ping():
 def api_get_profile_data(discord_id):
     if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
     if not session.get('logged_in'): return _cors_jsonify({"error": "Unauthorized"}), 401
+    
+    if not discord_id or discord_id == 'None' or discord_id.strip() == '':
+        return _cors_jsonify({"error": "Chybí Discord ID"})
+
     db = get_db()
     if not db: return _cors_jsonify({"error": "DB Error"}), 500
     
@@ -1472,6 +1476,12 @@ async def keepalive_ping():
         await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
     except: pass
 
+@tasks.loop(minutes=3)
+async def connection_watchdog():
+    if bot.is_closed() or not bot.is_ready():
+        print("Watchdog: Spojení ztraceno! Vynucuji restart.", flush=True)
+        os._exit(1)
+
 @tasks.loop(hours=24)
 async def pixeldrain_keepalive():
     db = get_db()
@@ -1522,6 +1532,7 @@ async def on_ready():
     except: pass
     if not pixeldrain_keepalive.is_running(): pixeldrain_keepalive.start()
     if not check_pending_supporters.is_running(): check_pending_supporters.start()
+    if not connection_watchdog.is_running(): connection_watchdog.start()
     if not keepalive_ping.is_running(): keepalive_ping.start()
 
 @bot.event
@@ -1723,7 +1734,9 @@ async def dm(ctx, member: discord.Member, *, text: str):
         await ctx.send(f"✅ Odesláno.")
     except: await ctx.send("❌ Zablokované SZ.")
 
-def run_web(): app.run(host='0.0.0.0', port=8080, use_reloader=False)
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port, use_reloader=False)
 
 if __name__ == "__main__":
     token = os.environ.get("DISCORD_TOKEN")
