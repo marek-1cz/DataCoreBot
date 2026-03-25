@@ -51,7 +51,7 @@ BASE_HTML = """
         .alert-warning { background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
         .checkbox-group { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
         .checkbox-group label { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: bold; cursor: pointer; }
-        .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .profile-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 20px; }
         .profile-card { background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; }
         .profile-stat { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
         .profile-val { font-size: 14px; font-weight: bold; color: var(--text-main); }
@@ -169,15 +169,15 @@ DASHBOARD_LAYOUT = """
                         </tbody>
                     </table>
                 </div>
-            </div>
 
-            <button type="button" class="btn btn-dark" style="width:100%; margin-top:10px; box-sizing:border-box;" onclick="document.getElementById('sessionHistoryBox').style.display = document.getElementById('sessionHistoryBox').style.display === 'none' ? 'block' : 'none';"><i class="fas fa-history"></i> ZOBRAZIT / SKRÝT HISTORII SEZENÍ (LOGY)</button>
-            <div id="sessionHistoryBox" style="display:none; margin-top:10px; max-height:250px; overflow-y:auto; border:1px solid #334155; border-radius:5px; padding:10px; background:rgba(0,0,0,0.3);">
-                <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent;">
-                    <tbody id="profSessions">
-                        <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
-                    </tbody>
-                </table>
+                <div class="profile-card" style="max-height: 250px; overflow-y: auto;">
+                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--warning);">Historie sezení (Logy):</div>
+                    <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent; border-radius: 0;">
+                        <tbody id="profSessions">
+                            <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <form action="/dashboard/edit_user" method="POST" style="border-top: 1px solid #334155; padding-top: 15px; margin-top: 15px;">
@@ -257,7 +257,6 @@ DASHBOARD_LAYOUT = """
         document.getElementById('profSessions').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
         document.getElementById('profAppStatus').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         document.getElementById('profStats').innerHTML = '';
-        document.getElementById('sessionHistoryBox').style.display = 'none';
         
         fetch('/api/get_profile_data/' + discord_id)
             .then(r => r.json())
@@ -1260,4 +1259,256 @@ HTML_SUPPORTERS_MGMT = """
                         <input type="hidden" name="amount" value="{{ p.get('amount', '0') }}">
                         <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a přidat roli"><i class="fas fa-check"></i></button>
                     </form>
-                    <button class="btn btn-warning" style="padding: 5px 10px; font
+                    
+                    <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily" onclick="openSupporterEdit('{{ p.get('id', '') }}', '{{ p.get('name', '') | replace("'", "\\'") }}', '{{ p.get('discord_nick', '') | replace("'", "\\'") }}', '{{ p.get('amount', '') | replace("'", "\\'") }}', '{{ p.get('message', '') | replace("'", "\\'") | replace('\\n', ' ') }}')"><i class="fas fa-edit"></i></button>
+                    
+                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout" onclick="rejectClaim('{{ p.get('id', '') }}', '{{ p.get('discord_nick', '') | replace("'", "\\'") }}')"><i class="fas fa-times"></i></button>
+                    <form id="form_reject_{{ p.get('id', '') }}" action="/dashboard/reject_claim" method="POST" style="display:none;">
+                        <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
+                        <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
+                        <input type="hidden" name="sys_note" id="reject_reason_{{ p.get('id', '') }}">
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Vše je vyřízeno, žádné čekající požadavky.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<script>
+    function rejectClaim(claimId, discordNick) {
+        let reason = prompt("Zadejte důvod zamítnutí žádosti pro " + (discordNick || "uživatele") + ":", "Neplatné údaje / Platba nenalezena");
+        if (reason !== null) {
+            document.getElementById('reject_reason_' + claimId).value = reason;
+            document.getElementById('form_reject_' + claimId).submit();
+        }
+    }
+</script>
+
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Ruční přidání podporovatele</h3>
+        <p style="color: var(--text-muted); font-size: 13px;">(Pokud Vám někdo poslal peníze mimo Buy Me a Coffee)</p>
+        <form action="/dashboard/add_supporter" method="POST">
+            <input type="text" name="name" placeholder="Jméno podporovatele" required>
+            <input type="text" name="discord_nick" placeholder="Discord Nick (Volitelně)">
+            <input type="text" name="amount" placeholder="Částka (např. 150 CZK nebo 10 USD)" required>
+            <textarea name="message" placeholder="Zpráva od podporovatele (volitelně)..." rows="3"></textarea>
+            <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Přidat do databáze</button>
+        </form>
+    </div>
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">☕ Historie podporovatelů (Schválení i Zamítnutí)</h3>
+        <div style="overflow-x: auto;">
+            <table>
+                <tr>
+                    <th>Stav</th>
+                    <th>Jméno</th>
+                    <th>Discord</th>
+                    <th>Částka</th>
+                    <th>Systémová Zpráva</th>
+                    <th>Datum</th>
+                    <th>Akce</th>
+                </tr>
+                {% for s in supporters_history %}
+                <tr style="opacity: {{ '0.6' if s.get('status') == 'rejected' else '1' }};">
+                    <td>
+                        {% if s.get('status') == 'rejected' %}
+                            <span class="role-tag" style="background-color: var(--danger); color: white;">Zamítnuto</span>
+                        {% else %}
+                            <span class="role-tag" style="background-color: var(--success); color: white;">Schváleno</span>
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
+                    <td style="color:#aaa; font-size:12px;">{{ s.get('discord_nick', '') }}</td>
+                    <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
+                    <td style="font-style:italic; font-size: 12px; color: {{ 'var(--danger)' if s.get('status') == 'rejected' else 'var(--text-muted)' }}; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ s.get('sys_note', '') }}">{{ s.get('sys_note', 'OK') }}</td>
+                    <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
+                    <td style="display: flex; gap: 5px;">
+                        <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily" onclick="openSupporterEdit('{{ s.get('id', '') }}', '{{ s.get('name', '') | replace("'", "\\'") }}', '{{ s.get('discord_nick', '') | replace("'", "\\'") }}', '{{ s.get('amount', '') | replace("'", "\\'") }}', '{{ s.get('message', '') | replace("'", "\\'") | replace('\\n', ' ') }}')"><i class="fas fa-edit"></i></button>
+                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline; margin: 0;">
+                            <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
+                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Smazat z historie" onclick="return confirm('Opravdu smazat tohoto podporovatele z webu?')"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Zatím žádná historie.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="editSupporterModal">
+    <div class="modal" style="width: 500px; border-top: 5px solid var(--warning);">
+        <div style="width: 100%;">
+            <h2 style="color: var(--warning); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+                <i class="fas fa-edit"></i> Úprava Podporovatele
+            </h2>
+            <form action="/dashboard/edit_supporter" method="POST">
+                <input type="hidden" name="supporter_id" id="es_id">
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Jméno (BMAC):</label>
+                <input type="text" name="name" id="es_name" required>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Discord Nick (Slouží pro spárování):</label>
+                <input type="text" name="discord_nick" id="es_nick">
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Částka (Formát: např. 150 CZK):</label>
+                <input type="text" name="amount" id="es_amount" required>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Vzkaz od podporovatele:</label>
+                <textarea name="message" id="es_message" rows="3"></textarea>
+                
+                <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 15px;"><i class="fas fa-save"></i> Uložit změny</button>
+            </form>
+            <button type="button" class="btn" style="width: 100%; margin-top: 10px; background: transparent; border: 1px solid #334155; color: var(--text-muted);" onclick="document.getElementById('editSupporterModal').style.display='none'">Zrušit</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openSupporterEdit(id, name, nick, amount, msg) {
+        document.getElementById('es_id').value = id;
+        document.getElementById('es_name').value = name;
+        document.getElementById('es_nick').value = nick;
+        document.getElementById('es_amount').value = amount;
+        document.getElementById('es_message').value = msg;
+        document.getElementById('editSupporterModal').style.display = 'flex';
+    }
+</script>
+"""
+
+HTML_FEEDBACK = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-comments" style="color:#a855f7;"></i> Zpětná vazba a Žádosti</h2>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--warning); margin-bottom: 20px;">
+    <h3 style="color: var(--warning); margin-top: 0;">Nové žádosti o HWID Reset</h3>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>Uživatel (ID)</th>
+                <th>Důvod (Zpráva)</th>
+                <th>Datum</th>
+                <th>Akce</th>
+            </tr>
+            {% for f in hwid_pending %}
+            <tr>
+                <td style="color:white; font-weight:bold;">{{ f.get('nick', 'Neznámý') }} <br><span style="font-size:11px; color:#aaa; font-weight:normal;">{{ f.get('discord_id', '') }}</span></td>
+                <td style="color:#ddd; font-style:italic;">{{ f.get('message', '') }}</td>
+                <td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td>
+                <td style="display:flex; gap:5px;">
+                    <form action="/dashboard/feedback_reset_hwid" method="POST" style="margin:0;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
+                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a Resetovat HWID"><i class="fas fa-check"></i> Resetovat</button>
+                    </form>
+                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout žádost" onclick="rejectHwid('{{ f.get('id', '') }}', '{{ f.get('nick', '') | replace("'", "\\'") }}')"><i class="fas fa-times"></i> Zamítnout</button>
+                    <form id="form_hwid_reject_{{ f.get('id', '') }}" action="/dashboard/feedback_reject" method="POST" style="display:none;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
+                        <input type="hidden" name="reason" id="reject_reason_{{ f.get('id', '') }}">
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Zatím žádné žádosti o HWID reset.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--blue-main); margin-bottom: 20px;">
+    <h3 style="color: var(--blue-main); margin-top: 0;">Nové zprávy od uživatelů (Všeobecné)</h3>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>Uživatel (ID)</th>
+                <th>Zpráva / Nápad / Chyba</th>
+                <th>Datum</th>
+                <th>Akce</th>
+            </tr>
+            {% for f in general_pending %}
+            <tr>
+                <td style="color:white; font-weight:bold;">{{ f.get('nick', 'Neznámý') }} <br><span style="font-size:11px; color:#aaa; font-weight:normal;">{{ f.get('discord_id', '') }}</span></td>
+                <td style="color:#ddd; font-style:italic;">{{ f.get('message', '') }}</td>
+                <td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td>
+                <td style="display:flex; gap:5px;">
+                    <button type="button" class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" onclick="replyGeneral('{{ f.get('id', '') }}', '{{ f.get('nick', '') | replace("'", "\\'") }}', '{{ f.get('discord_id', '') }}')"><i class="fas fa-reply"></i> Odpovědět</button>
+                    <form id="form_general_reply_{{ f.get('id', '') }}" action="/dashboard/feedback_reply" method="POST" style="display:none;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
+                        <input type="hidden" name="message" id="reply_msg_{{ f.get('id', '') }}">
+                    </form>
+                    
+                    <form action="/dashboard/feedback_resolve" method="POST" style="margin:0;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-check-circle"></i> Vyřešeno</button>
+                    </form>
+                    
+                    <form action="/dashboard/feedback_delete" method="POST" style="margin:0;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-trash"></i> Smazat</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Zatím žádná nová zpětná vazba.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <h3 style="color: var(--success); margin-top: 0;">Vyřešeno / Uzavřeno</h3>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>Uživatel</th>
+                <th>Typ</th>
+                <th>Zpráva uživatele</th>
+                <th>Vaše odpověď / Status</th>
+                <th>Akce</th>
+            </tr>
+            {% for f in resolved_all %}
+            <tr style="opacity: 0.7;">
+                <td style="color:white; font-weight:bold;">{{ f.get('nick', '') }}</td>
+                <td>{{ 'HWID Reset' if f.get('type') == 'HWID' else 'Zpětná vazba' }}</td>
+                <td style="color:#aaa; font-style:italic;">{{ f.get('message', '') }}</td>
+                <td style="color:var(--success); font-weight:bold;">{{ f.get('sys_note', 'Vyřešeno') }}</td>
+                <td>
+                    <form action="/dashboard/feedback_delete" method="POST" style="margin:0;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-trash"></i></button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádné uzavřené tickety.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<script>
+    function rejectHwid(id, nick) {
+        let reason = prompt("Zadejte důvod zamítnutí pro hráče " + nick + ":", "Reset HWID nyní není možný.");
+        if (reason) {
+            document.getElementById('reject_reason_' + id).value = reason;
+            document.getElementById('form_hwid_reject_' + id).submit();
+        }
+    }
+    function replyGeneral(id, nick, dId) {
+        let msg = prompt("Napište zprávu pro hráče " + nick + " (Přijde mu to do DM):");
+        if (msg) {
+            document.getElementById('reply_msg_' + id).value = msg;
+            document.getElementById('form_general_reply_' + id).submit();
+        }
+    }
+</script>
+"""
