@@ -559,12 +559,12 @@ HTML_NOTIFICATIONS = """
                         <td style="display: flex; gap: 5px;">
                             <button type="button" class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit" 
                                 data-id="{{ m.get('message_id', '') }}"
-                                data-title="{{ m.get('title', '') }}"
-                                data-content="{{ m.get('content', '') }}"
+                                data-title="{{ m.get('title', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
+                                data-content="{{ m.get('content', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
                                 data-type="{{ m.get('target_type', '') }}"
-                                data-data="{{ m.get('target_data', '') }}"
-                                data-url="{{ m.get('link_url', '') }}"
-                                data-exp="{{ m.get('expires_at', '') }}"
+                                data-data="{{ m.get('target_data', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
+                                data-url="{{ m.get('link_url', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
+                                data-exp="{{ m.get('expires_at', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
                                 data-repeat="{{ 'true' if m.get('repeat') else 'false' }}"
                                 onclick="openEditMessageModal(this)">
                                 <i class="fas fa-edit"></i>
@@ -850,8 +850,8 @@ HTML_DOWNLOADS_MGMT = """
                 <td>
                     <button type="button" class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" 
                         data-id="{{ v.get('id', '') }}"
-                        data-name="{{ v.get('version_name', '') }}"
-                        data-url="{{ v.get('file_url', '') }}"
+                        data-name="{{ v.get('version_name', '') | replace('\"', '&quot;') }}"
+                        data-url="{{ v.get('file_url', '') | replace('\"', '&quot;') }}"
                         data-role="{{ v.get('target_role', '') }}"
                         onclick="openEditVerModal(this)"><i class="fas fa-edit"></i> Úprava</button>
                     <form action="/dashboard/delete_version" method="POST" style="display:inline;">
@@ -1153,9 +1153,9 @@ HTML_DASHBOARD_MAIN = """
                     <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" 
                         data-app-id="{{ user.get('app_id', '') }}"
                         data-discord-id="{{ user.get('discord_id', '') }}"
-                        data-nick="{{ user.get('nick', '') }}"
-                        data-roles="{{ user.get('role', '') }}"
-                        data-hwid="{{ user.get('hwid', '') }}"
+                        data-nick="{{ user.get('nick', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
+                        data-roles="{{ user.get('role', '') | replace('\"', '&quot;') }}"
+                        data-hwid="{{ user.get('hwid', '') | replace('\"', '&quot;') }}"
                         data-banned="{{ user.get('is_banned', False) }}"
                         data-deleted="{{ user.get('is_deleted', False) }}"
                         data-db-access="{{ user.get('dashboard_access', False) }}"
@@ -1315,13 +1315,13 @@ HTML_SUPPORTERS_MGMT = """
                     
                     <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily"
                         data-id="{{ p.get('id', '') }}"
-                        data-name="{{ p.get('name', '') }}"
-                        data-nick="{{ p.get('discord_nick', '') }}"
-                        data-amount="{{ p.get('amount', '') }}"
-                        data-msg="{{ p.get('message', '') }}"
+                        data-name="{{ p.get('name', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
+                        data-nick="{{ p.get('discord_nick', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
+                        data-amount="{{ p.get('amount', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
+                        data-msg="{{ p.get('message', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") | replace('\\n', ' ') }}"
                         onclick="openSupporterEdit(this)"><i class="fas fa-edit"></i></button>
                     
-                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout" onclick="rejectClaim('{{ p.get('id', '') }}', '{{ p.get('discord_nick', '') }}')"><i class="fas fa-times"></i></button>
+                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout" onclick="rejectClaim('{{ p.get('id', '') }}', '{{ p.get('discord_nick', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}')"><i class="fas fa-times"></i></button>
                     <form id="form_reject_{{ p.get('id', '') }}" action="/dashboard/reject_claim" method="POST" style="display:none;">
                         <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
                         <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
@@ -1388,10 +1388,10 @@ HTML_SUPPORTERS_MGMT = """
                     <td style="display: flex; gap: 5px;">
                         <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily"
                             data-id="{{ s.get('id', '') }}"
-                            data-name="{{ s.get('name', '') }}"
-                            data-nick="{{ s.get('discord_nick', '') }}"
-                            data-amount="{{ s.get('amount', '') }}"
-                            data-msg="{{ s.get('message', '') }}"
+                            data-name="{{ s.get('name', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
+                            data-nick="{{ s.get('discord_nick', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
+                            data-amount="{{ s.get('amount', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
+                            data-msg="{{ s.get('message', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") | replace('\\n', ' ') }}"
                             onclick="openSupporterEdit(this)"><i class="fas fa-edit"></i></button>
                         <form action="/dashboard/delete_supporter" method="POST" style="display:inline; margin: 0;">
                             <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
@@ -1475,7 +1475,7 @@ HTML_FEEDBACK = """
                     </form>
                     <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout žádost" 
                         data-id="{{ f.get('id', '') }}"
-                        data-nick="{{ f.get('nick', '') }}"
+                        data-nick="{{ f.get('nick', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
                         onclick="rejectHwid(this)"><i class="fas fa-times"></i> Zamítnout</button>
                     <form id="form_hwid_reject_{{ f.get('id', '') }}" action="/dashboard/feedback_reject" method="POST" style="display:none;">
                         <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
@@ -1509,7 +1509,7 @@ HTML_FEEDBACK = """
                 <td style="display:flex; gap:5px;">
                     <button type="button" class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;"
                         data-id="{{ f.get('id', '') }}"
-                        data-nick="{{ f.get('nick', '') }}"
+                        data-nick="{{ f.get('nick', '') | replace('\"', '&quot;') | replace(\"'\", \"\\\\'\") }}"
                         onclick="replyGeneral(this)"><i class="fas fa-reply"></i> Odpovědět</button>
                     <form id="form_general_reply_{{ f.get('id', '') }}" action="/dashboard/feedback_reply" method="POST" style="display:none;">
                         <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
