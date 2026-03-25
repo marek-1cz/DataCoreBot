@@ -51,7 +51,7 @@ BASE_HTML = """
         .alert-warning { background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
         .checkbox-group { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
         .checkbox-group label { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: bold; cursor: pointer; }
-        .profile-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
         .profile-card { background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; }
         .profile-stat { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
         .profile-val { font-size: 14px; font-weight: bold; color: var(--text-main); }
@@ -169,18 +169,18 @@ DASHBOARD_LAYOUT = """
                         </tbody>
                     </table>
                 </div>
-
-                <div class="profile-card" style="max-height: 250px; overflow-y: auto;">
-                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--warning);">Historie sezení (Logy):</div>
-                    <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent; border-radius: 0;">
-                        <tbody id="profSessions">
-                            <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
-                        </tbody>
-                    </table>
-                </div>
             </div>
 
-            <form action="/dashboard/edit_user" method="POST" style="border-top: 1px solid #334155; padding-top: 15px;">
+            <button type="button" class="btn btn-dark" style="width:100%; margin-top:10px; box-sizing:border-box;" onclick="document.getElementById('sessionHistoryBox').style.display = document.getElementById('sessionHistoryBox').style.display === 'none' ? 'block' : 'none';"><i class="fas fa-history"></i> ZOBRAZIT / SKRÝT HISTORII SEZENÍ (LOGY)</button>
+            <div id="sessionHistoryBox" style="display:none; margin-top:10px; max-height:250px; overflow-y:auto; border:1px solid #334155; border-radius:5px; padding:10px; background:rgba(0,0,0,0.3);">
+                <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent;">
+                    <tbody id="profSessions">
+                        <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <form action="/dashboard/edit_user" method="POST" style="border-top: 1px solid #334155; padding-top: 15px; margin-top: 15px;">
                 <input type="hidden" name="discord_id" id="modalDiscordId">
                 <label>Herní Nick:</label>
                 <input type="text" name="nick" id="modalNick" required>
@@ -257,6 +257,7 @@ DASHBOARD_LAYOUT = """
         document.getElementById('profSessions').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
         document.getElementById('profAppStatus').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         document.getElementById('profStats').innerHTML = '';
+        document.getElementById('sessionHistoryBox').style.display = 'none';
         
         fetch('/api/get_profile_data/' + discord_id)
             .then(r => r.json())
@@ -280,8 +281,8 @@ DASHBOARD_LAYOUT = """
                 if(data.sessions && data.sessions.length > 0) {
                     data.sessions.forEach(s => {
                         sessHtml += `<tr>
-                            <td style="color: var(--success); font-weight:bold; white-space:nowrap;">🟢 ${s.start_time.split(' ')[1]}</td>
-                            <td style="color: var(--danger); font-weight:bold; white-space:nowrap;">🔴 ${s.end_time.split(' ')[1]}</td>
+                            <td style="color: var(--success); font-weight:bold; white-space:nowrap;">🟢 ${s.start_time.split(' ')[1] if s.start_time.split(' ').length > 1 else s.start_time}</td>
+                            <td style="color: var(--danger); font-weight:bold; white-space:nowrap;">🔴 ${s.end_time.split(' ')[1] if s.end_time.split(' ').length > 1 else s.end_time}</td>
                         </tr>
                         <tr><td colspan="2" style="color: var(--text-muted); padding-top:0; padding-bottom:10px; border-bottom:1px solid #334155; text-align:center;">${s.start_time.split(' ')[0]}</td></tr>`;
                     });
@@ -298,17 +299,13 @@ DASHBOARD_LAYOUT = """
 HTML_HOME = """
 <div style="text-align: center; padding: 60px 20px; max-width: 800px; margin: 0 auto;">
     <h1 style="color: var(--blue-main); font-size: 2.5em; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">OFICIÁLNÍ STRÁNKA PROJEKTU OIS IDPK</h1>
-    
     <div style="font-size: 1.1em; color: var(--text-main); line-height: 1.6; margin-bottom: 40px; background: rgba(30, 41, 59, 0.5); padding: 25px; border-radius: 10px; border-left: 4px solid var(--blue-main); text-align: left;">
         <p style="margin-top:0;">Projekt OIS IDPK je fanouškovský software inspirovaný skutečnými vnitřními informačními panely, které se používají v autobusech Plzeňského kraje. Cílem projektu je co nejvěrněji napodobit jejich vzhled i způsob fungování.</p>
         <p>Software simuluje zobrazování zastávek, průběh celé linky i další informace, které běžně vidí cestující během jízdy. Díky tomu si můžeš jednoduše vyzkoušet, jak se panel chová při jízdě po trase, jak se postupně mění zastávky nebo jak vypadají informace o aktuální části linky.</p>
         <p style="margin-bottom:0;">Celý projekt vznikl z nadšení pro dopravu, technologie a informační systems ve veřejné dopravě. Projekt není oficiálním produktem ani službou dopravců nebo organizací veřejné dopravy a nijak s nimi nespolupracuje. Jedná se čistě o fanouškovský projekt vytvořený pro zábavu, experimentování a zájem o dopravní technologie.</p>
     </div>
-    
     <a href="/download" class="btn" style="font-size: 18px; padding: 15px 40px; border-radius: 30px; box-shadow: 0 5px 15px rgba(56, 189, 248, 0.4);"><i class="fas fa-download"></i> Získat Software</a>
-    
     <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 60px 0;">
-    
     <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; background: var(--bg-panel); padding: 40px; border-radius: 15px; border: 1px solid #334155;">
         <img src="{{ logo_velke }}" alt="DataCoreBot Logo" style="max-width: 250px; height: auto; filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.5)); margin-bottom: 10px;">
         <div style="text-align: center; max-width: 600px;">
@@ -331,14 +328,11 @@ HTML_CLAIM = """
 <div style="max-width: 500px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--blue-main); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
     <h2 style="color: var(--blue-main); text-align: center; margin-top: 0;"><i class="fas fa-gift"></i> Vyzvednutí VIP Role</h2>
     <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 30px;">Zadejte jméno, pod kterým jste před malou chvílí poslali příspěvek na Buy Me a Coffee, a Váš Discord Nick. Náš systém Vám obratem automaticky přidělí roli!</p>
-    
     <form method="POST">
         <label style="color: var(--text-muted); font-size: 12px; font-weight: bold;">JMÉNO ZADANÉ NA BUY ME A COFFEE</label>
         <input type="text" name="bmac_name" placeholder="Např. Jan Novák" required style="margin-bottom: 20px;">
-        
         <label style="color: var(--text-muted); font-size: 12px; font-weight: bold; display: block;">VÁŠ DISCORD NICK</label>
         <input type="text" name="discord_nick" placeholder="Např. marekk_czz" required>
-        
         <button type="submit" class="btn" style="width: 100%; margin-top: 20px; font-size: 16px; padding: 15px;"><i class="fab fa-discord"></i> Propojit a získat roli</button>
     </form>
 </div>
@@ -421,37 +415,8 @@ HTML_STATS = """
     const data7d = {{ data_7d | safe }};
     const labels24h = {{ labels_24h | safe }};
     const data24h = {{ data_24h | safe }};
-
-    new Chart(document.getElementById('chart7d').getContext('2d'), {
-        type: 'line',
-        data: {
-            labels: labels7d,
-            datasets: [{
-                label: 'Počet návštěv',
-                data: data7d,
-                borderColor: '#10b981',
-                backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                borderWidth: 3,
-                tension: 0.3,
-                fill: true
-            }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8' }, grid: { display: false } } } }
-    });
-
-    new Chart(document.getElementById('chart24h').getContext('2d'), {
-        type: 'bar',
-        data: {
-            labels: labels24h,
-            datasets: [{
-                label: 'Dnešní návštěvy',
-                data: data24h,
-                backgroundColor: '#38bdf8',
-                borderRadius: 4
-            }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { display: false } } } }
-    });
+    new Chart(document.getElementById('chart7d').getContext('2d'), { type: 'line', data: { labels: labels7d, datasets: [{ label: 'Počet návštěv', data: data7d, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)', borderWidth: 3, tension: 0.3, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8' }, grid: { display: false } } } } });
+    new Chart(document.getElementById('chart24h').getContext('2d'), { type: 'bar', data: { labels: labels24h, datasets: [{ label: 'Dnešní návštěvy', data: data24h, backgroundColor: '#38bdf8', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { display: false } } } } });
 </script>
 """
 
@@ -569,6 +534,7 @@ HTML_NOTIFICATIONS = """
                         </td>
                         <td style="color: var(--text-muted); font-size: 12px;">{{ m.get('expires_at', 'Nikdy') or 'Nikdy' }}</td>
                         <td style="display: flex; gap: 5px;">
+                            <button type="button" class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit" onclick="openEditMessageModal('{{ m.get('message_id', '') }}', '{{ m.get('title', '') | replace("'", "\\'") }}', '{{ m.get('content', '') | replace("'", "\\'") | replace('\\n', '\\\\n') }}', '{{ m.get('target_type', '') }}', '{{ m.get('target_data', '') | replace("'", "\\'") }}', '{{ m.get('link_url', '') }}', '{{ m.get('expires_at', '') }}', {{ 'true' if m.get('repeat') else 'false' }})"><i class="fas fa-edit"></i></button>
                             <form action="/dashboard/archive_app_message" method="POST" style="margin:0;">
                                 <input type="hidden" name="message_id" value="{{ m.get('message_id', '') }}">
                                 <button type="submit" class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" title="Archivovat (Zmizí z aplikace)"><i class="fas fa-archive"></i></button>
@@ -618,6 +584,51 @@ HTML_NOTIFICATIONS = """
     </div>
 </div>
 
+<div class="modal-overlay" id="editMessageModal">
+    <div class="modal" style="width: 500px; border-top: 5px solid var(--warning);">
+        <div style="width: 100%;">
+            <h2 style="color: var(--warning); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+                <i class="fas fa-edit"></i> Úprava Oznámení
+            </h2>
+            <form action="/dashboard/edit_app_message" method="POST">
+                <input type="hidden" name="message_id" id="em_id">
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Nadpis:</label>
+                <input type="text" name="title" id="em_title" required>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Text:</label>
+                <textarea name="content" id="em_content" rows="4" required></textarea>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Typ cílení:</label>
+                <select name="target_type" id="em_type" required>
+                    <option value="GLOBAL">Globálně</option>
+                    <option value="ROLE">Podle Rolí</option>
+                    <option value="USERS">Vybraní uživatelé</option>
+                </select>
+
+                <label style="color: var(--text-muted); font-size: 13px;">Data cílení:</label>
+                <input type="text" name="target_data" id="em_data">
+
+                <label style="color: var(--text-muted); font-size: 13px;">Odkaz tlačítka (prázdné = bez tlačítka):</label>
+                <input type="url" name="link_url" id="em_url">
+
+                <label style="color: var(--text-muted); font-size: 13px;">Expirace:</label>
+                <input type="text" name="expires_at" id="em_exp">
+
+                <div style="background-color: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; margin: 15px 0;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--text-main); font-size: 13px;">
+                        <input type="checkbox" name="repeat" id="em_repeat" style="width: auto; margin: 0;">
+                        Zobrazovat uživatelům DOKOLA
+                    </label>
+                </div>
+                
+                <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 15px;"><i class="fas fa-save"></i> Uložit změny</button>
+            </form>
+            <button type="button" class="btn" style="width: 100%; margin-top: 10px; background: transparent; border: 1px solid #334155; color: var(--text-muted);" onclick="document.getElementById('editMessageModal').style.display='none'">Zrušit</button>
+        </div>
+    </div>
+</div>
+
 <script>
     function toggleTargetData() {
         const type = document.getElementById('target_type').value;
@@ -649,6 +660,18 @@ HTML_NOTIFICATIONS = """
         } else {
             container.style.display = 'none';
         }
+    }
+
+    function openEditMessageModal(id, title, content, type, data, url, exp, repeat) {
+        document.getElementById('em_id').value = id;
+        document.getElementById('em_title').value = title;
+        document.getElementById('em_content').value = content;
+        document.getElementById('em_type').value = type;
+        document.getElementById('em_data').value = data;
+        document.getElementById('em_url').value = url;
+        document.getElementById('em_exp').value = exp;
+        document.getElementById('em_repeat').checked = repeat;
+        document.getElementById('editMessageModal').style.display = 'flex';
     }
 </script>
 """
@@ -1085,7 +1108,7 @@ HTML_DASHBOARD_MAIN = """
                     {% endif %}
                 </td>
                 <td>
-                    <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', '') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-edit"></i> Upravit</button>
+                    <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" onclick="openModal('{{ user.get('app_id', '') }}', '{{ user.get('discord_id', '') }}', '{{ user.get('nick', '') }}', '{{ user.get('role', '') }}', '{{ user.get('hwid', '') }}', '{{ user.get('is_banned', False) }}', '{{ user.get('is_deleted', False) }}', '{{ user.get('dashboard_access', False) }}', '{{ user.get('registered_at', '') }}')"><i class="fas fa-edit"></i> Upravit / Zobrazit Detaily</button>
                 </td>
             </tr>
             {% else %}
@@ -1153,25 +1176,18 @@ HTML_SUPPORTERS = """
 <style>
     .glowing-btn-blue { background-color: var(--blue-main); color: #000; padding: 15px 40px; font-size: 20px; font-weight: 900; border-radius: 50px; text-decoration: none; display: inline-block; margin-top: 20px; box-shadow: 0 0 20px rgba(56, 189, 248, 0.6); transition: all 0.3s ease; text-transform: uppercase; letter-spacing: 1px; border: none; cursor: pointer; }
     .glowing-btn-blue:hover { box-shadow: 0 0 40px rgba(56, 189, 248, 1); transform: scale(1.05); color: #000; }
-    
-    .supporter-wrapper {
-        width: 100%; max-width: 500px; min-height: 230px;
-        display: flex; flex-direction: column; justify-content: space-between; align-items: center; text-align: center; box-sizing: border-box;
-    }
-
+    .supporter-wrapper { width: 100%; max-width: 500px; min-height: 230px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; text-align: center; box-sizing: border-box; }
     .tier-1 { background-color: rgba(15, 23, 42, 0.8); padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.3); border-left: 5px solid #38bdf8; transition: transform 0.5s ease, box-shadow 0.5s ease; }
     .tier-1:hover { transform: scale(1.05); box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4); }
     .tier-1 .name-title { color: #e0f2fe; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); font-size: 20px; margin: 0 0 10px 0; }
     .tier-1 .title-badge { font-size: 10px; color: #38bdf8; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin-bottom: 10px; }
     .tier-1 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; border: 1px solid rgba(56, 189, 248, 0.3); }
-
     @keyframes pulseMedium { from { box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); } to { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); } }
     .tier-2 { background-color: rgba(30, 41, 59, 0.9); padding: 25px; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.6); border-left: 6px solid #f59e0b; animation: pulseMedium 2s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
     .tier-2:hover { transform: scale(1.05) !important; animation: none; box-shadow: 0 10px 35px rgba(245, 158, 11, 0.8); }
     .tier-2 .name-title { color: #fcd34d; font-size: 26px; margin: 0 0 10px 0; text-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
     .tier-2 .title-badge { font-size: 12px; color: #f59e0b; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; margin-bottom: 10px; }
     .tier-2 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(245, 158, 11, 0.1); color: var(--warning); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(245, 158, 11, 0.5); }
-
     @keyframes epicWebGlow { from { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); } to { box-shadow: 0 0 50px rgba(239, 68, 68, 0.9), inset 0 0 30px rgba(239, 68, 68, 0.3); } }
     .tier-3 { background: linear-gradient(135deg, #2a0a18, #450a0a); padding: 30px; border-radius: 15px; border: 2px solid #ef4444; animation: epicWebGlow 1.5s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
     .tier-3:hover { transform: scale(1.08) !important; animation: none; box-shadow: 0 15px 60px rgba(239, 68, 68, 1); }
@@ -1186,10 +1202,8 @@ HTML_SUPPORTERS = """
         <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!</p>
         <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue"><i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK</a>
     </div>
-    
     <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 40px 0;">
     <h2 style="text-align: center; color: var(--text-main); letter-spacing: 3px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,255,255,0.2);">SEZNAM PODPOROVATELŮ</h2>
-    
     <div style="display: flex; flex-direction: column; gap: 40px; padding-bottom: 50px; align-items: center;">
         {% for s in supporters %}
         <div class="tier-{{ s.get('tier', 1) }} supporter-wrapper">
@@ -1197,11 +1211,9 @@ HTML_SUPPORTERS = """
                 {% if s.get('tier') == 3 %} <div class="title-badge">MEGA PODPOROVATEL</div>
                 {% elif s.get('tier') == 2 %} <div class="title-badge">VELKÝ PODPOROVATEL</div>
                 {% else %} <div class="title-badge">PODPOROVATEL</div> {% endif %}
-                
                 <h3 class="name-title">{{ s.get('name', 'Neznámý dárce') }}</h3>
                 <div class="amt-badge">{{ s.get('amount', '') }}</div>
             </div>
-            
             <div style="width: 100%; margin-top: auto;">
                 {% if s.get('message') %}
                 <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0 auto 15px auto; line-height: 1.5; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 2px solid rgba(255,255,255,0.2); max-width: 90%;">
@@ -1248,11 +1260,4 @@ HTML_SUPPORTERS_MGMT = """
                         <input type="hidden" name="amount" value="{{ p.get('amount', '0') }}">
                         <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a přidat roli"><i class="fas fa-check"></i></button>
                     </form>
-                    
-                    <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily" onclick="openSupporterEdit('{{ p.get('id', '') }}', '{{ p.get('name', '') | replace("'", "\\'") }}', '{{ p.get('discord_nick', '') | replace("'", "\\'") }}', '{{ p.get('amount', '') | replace("'", "\\'") }}', '{{ p.get('message', '') | replace("'", "\\'") | replace('\\n', ' ') }}')"><i class="fas fa-edit"></i></button>
-                    
-                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout" onclick="rejectClaim('{{ p.get('id', '') }}', '{{ p.get('discord_nick', '') | replace("'", "\\'") }}')"><i class="fas fa-times"></i></button>
-                    <form id="form_reject_{{ p.get('id', '') }}" action="/dashboard/reject_claim" method="POST" style="display:none;">
-                        <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
-                        <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
-                        <input type="hidden" name="sys_note" id
+                    <button class="btn btn-warning" style="padding: 5px 10px; font
