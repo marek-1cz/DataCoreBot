@@ -458,7 +458,7 @@ def api_app_login():
                 u = bot.get_user(int(user.get("discord_id"))) or await bot.fetch_user(int(user.get("discord_id")))
                 if u: await u.send(embed=discord.Embed(title="🛡️ Ověření přihlášení", description=f"Byl zaznamenán pokus o spuštění softwaru.\n**Uživatel:** {user.get('nick')}\nPotvrďte přístup tlačítkem níže.", color=0x38bdf8), view=AppAuthView(token, user.get("discord_id"), is_dm=True))
             except: pass
-        if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
+        if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
         return _cors_jsonify({"status": "waiting", "discord_id": user.get("discord_id")})
     except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
 
@@ -705,6 +705,10 @@ def api_submit_feedback():
     except Exception as e:
         return _cors_jsonify({"status": "error", "message": str(e)})
 
+# ==========================================
+# DASHBOARD A ADMIN ROUTES
+# ==========================================
+
 @app.route('/login_request', methods=['POST'])
 def login_request():
     discord_id = request.form.get('discord_id')
@@ -720,7 +724,7 @@ def login_request():
                         u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
                         if u: await u.send(embed=discord.Embed(title="🔐 Bezpečnostní ověření", description="Byl zaznamenán pokus o přihlášení do administračního panelu.\n\nPokud jste to Vy, potvrďte přístup kliknutím na tlačítko níže.", color=0x38bdf8), view=DashboardAuthView(token, discord_id))
                     except: pass
-                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
                 return redirect(url_for('wait_auth', discord_id=discord_id))
             else: flash('Účet neexistuje, nemá povolený přístup, nebo byl zablokován.', 'error')
         except Exception as e: flash(f'Chyba: {e}', 'error')
@@ -1466,13 +1470,10 @@ def check_sm_role():
         return False
     return commands.check(predicate)
 
-@tasks.loop(minutes=5)
-async def keepalive_ping():
-    try:
-        url = os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:8080") + "/api/keepalive"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
-    except: pass
+@tasks.loop(minutes=2)
+async def connection_watchdog():
+    if bot.is_closed() or not bot.is_ready():
+        print("Watchdog: Spojení ztraceno! Zkouším počkat.", flush=True)
 
 @tasks.loop(hours=24)
 async def pixeldrain_keepalive():
@@ -1525,7 +1526,7 @@ async def on_ready():
     except: pass
     if not pixeldrain_keepalive.is_running(): pixeldrain_keepalive.start()
     if not check_pending_supporters.is_running(): check_pending_supporters.start()
-    if not keepalive_ping.is_running(): keepalive_ping.start()
+    if not connection_watchdog.is_running(): connection_watchdog.start()
 
 @bot.event
 async def on_message(message):
@@ -1726,23 +1727,43 @@ async def dm(ctx, member: discord.Member, *, text: str):
         await ctx.send(f"✅ Odesláno.")
     except: await ctx.send("❌ Zablokované SZ.")
 
+def internal_keepalive():
+    while True:
+        try:
+            url = os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:8080") + "/api/keepalive"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            urllib.request.urlopen(req, timeout=10)
+        except:
+            pass
+        time.sleep(300)
+
 def run_discord_bot(bot_token):
-    asyncio.set_event_loop(asyncio.new_event_loop())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     while True:
         try:
             print("==> Pokus o start Discord Bota...", flush=True)
-            bot.run(bot_token)
+            loop.run_until_complete(bot.start(bot_token))
         except Exception as e:
             print(f"==> [DISCORD CHYBA] Bot havaroval: {e}", flush=True)
-            print("==> [DISCORD INFO] Bot má nejspíš BAN 1015 (Rate limit).", flush=True)
-            print("==> [DISCORD INFO] Web BĚŽÍ DÁL! Zkouším to znovu za 15 minut...", flush=True)
-            time.sleep(900)
+            if "429" in str(e) or "1015" in str(e):
+                print("==> [DISCORD INFO] Render IP dostala Cloudflare BAN (1015) od Discordu.", flush=True)
+                print("==> [DISCORD INFO] Zkouším to znovu za 15 minut...", flush=True)
+                time.sleep(900)
+            else:
+                time.sleep(60)
+        finally:
+            try:
+                loop.run_until_complete(bot.close())
+            except:
+                pass
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
 if __name__ == "__main__":
+    Thread(target=internal_keepalive, daemon=True).start()
     token = os.environ.get("DISCORD_TOKEN")
     if token:
         Thread(target=run_discord_bot, args=(token,), daemon=True).start()
