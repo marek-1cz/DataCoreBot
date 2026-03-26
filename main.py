@@ -12,6 +12,7 @@ import json
 import traceback
 import re
 import gc
+import time
 from werkzeug.exceptions import HTTPException
 from html_templates import *
 
@@ -1231,7 +1232,7 @@ def approve_claim():
     db = get_db()
     if db and claim_id and discord_nick:
         discord_roles, db_role_string = calculate_roles_for_supporter(amount)
-        if bot.loop and bot.loop.is_running():
+        if bot.loop and bot.loop.is_running() and bot.is_ready():
             asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, discord_roles), bot.loop)
             rec = db.table("supporters").select("*").eq("id", claim_id).execute().data
             if rec: asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_nick, amount, rec[0].get('message', ''), discord_roles), bot.loop)
@@ -1465,6 +1466,16 @@ def check_sm_role():
         return False
     return commands.check(predicate)
 
+def internal_keepalive():
+    while True:
+        try:
+            url = os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:8080") + "/api/keepalive"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            urllib.request.urlopen(req, timeout=10)
+        except:
+            pass
+        time.sleep(300)
+
 def run_discord_bot(bot_token):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -1482,6 +1493,7 @@ def run_web():
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
 if __name__ == "__main__":
+    Thread(target=internal_keepalive, daemon=True).start()
     token = os.environ.get("DISCORD_TOKEN")
     if token:
         Thread(target=run_discord_bot, args=(token,), daemon=True).start()
