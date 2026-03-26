@@ -12,6 +12,7 @@ import json
 import traceback
 import re
 import gc
+import time  # Přidáno pro bezpečné čekání
 from werkzeug.exceptions import HTTPException
 from html_templates import *
 
@@ -697,10 +698,6 @@ def api_submit_feedback():
         return _cors_jsonify({"status": "success"})
     except Exception as e:
         return _cors_jsonify({"status": "error", "message": str(e)})
-
-# ==========================================
-# DASHBOARD A ADMIN ROUTES
-# ==========================================
 
 @app.route('/login_request', methods=['POST'])
 def login_request():
@@ -1471,12 +1468,6 @@ async def keepalive_ping():
         await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
     except: pass
 
-@tasks.loop(minutes=2)
-async def connection_watchdog():
-    if bot.is_closed() or not bot.is_ready():
-        print("Watchdog: Spojení ztraceno! Vynucuji restart celého serveru (pro zrušení případného IP banu).", flush=True)
-        os._exit(1)
-
 @tasks.loop(hours=24)
 async def pixeldrain_keepalive():
     db = get_db()
@@ -1527,7 +1518,6 @@ async def on_ready():
     except: pass
     if not pixeldrain_keepalive.is_running(): pixeldrain_keepalive.start()
     if not check_pending_supporters.is_running(): check_pending_supporters.start()
-    if not connection_watchdog.is_running(): connection_watchdog.start()
     if not keepalive_ping.is_running(): keepalive_ping.start()
 
 @bot.event
@@ -1729,12 +1719,27 @@ async def dm(ctx, member: discord.Member, *, text: str):
         await ctx.send(f"✅ Odesláno.")
     except: await ctx.send("❌ Zablokované SZ.")
 
+def run_discord_bot(bot_token):
+    asyncio.set_event_loop(asyncio.new_event_loop())
+    while True:
+        try:
+            print("==> Pokus o start Discord Bota...", flush=True)
+            bot.run(bot_token)
+        except Exception as e:
+            print(f"==> [DISCORD CHYBA] Bot havaroval: {e}", flush=True)
+            print("==> [DISCORD INFO] Pravděpodobně dočasný BAN od Discordu (Error 1015/429).", flush=True)
+            print("==> [DISCORD INFO] Web a databáze BĚŽÍ DÁL! Bot to zkusí znovu za 15 minut...", flush=True)
+            time.sleep(900)
+
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
 if __name__ == "__main__":
     token = os.environ.get("DISCORD_TOKEN")
-    Thread(target=run_web).start()
-    if token: bot.run(token)
-    else: print("KRITICKÁ CHYBA: DISCORD_TOKEN není nastaven v environment variables! (Web běží dál bez Bota)")
+    if token:
+        Thread(target=run_discord_bot, args=(token,), daemon=True).start()
+    else:
+        print("KRITICKÁ CHYBA: DISCORD_TOKEN chybí! (Web běží dál bez Bota)")
+
+    run_web()
