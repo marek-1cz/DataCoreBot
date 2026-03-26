@@ -2,6 +2,7 @@ import os
 import discord
 from discord.ext import commands, tasks
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash, Response, stream_with_context, jsonify
+from flask_cors import CORS
 from threading import Thread
 from supabase import create_client
 from datetime import datetime, timedelta
@@ -19,6 +20,9 @@ from html_templates import *
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
 app = Flask(__name__)
+# Aktivujeme CORS pro celou aplikaci, aby se PC aplikace mohla připojit
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+
 app.secret_key = "ois_idpk_super_tajny_klic" 
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -156,6 +160,8 @@ def send_log(title, description, color=0x38bdf8):
 def _cors_jsonify(data):
     resp = jsonify(data)
     resp.headers['Access-Control-Allow-Origin'] = '*'
+    resp.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     return resp
 
 def render_public(template_string, **kwargs):
@@ -418,7 +424,7 @@ def api_get_file(token):
 
 @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_status():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     try:
         db = get_db()
         set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
@@ -429,7 +435,7 @@ def api_status():
 
 @app.route('/api/app_login', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_login():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     if not data: return _cors_jsonify({"status": "error", "message": "Chybí data."})
     identifier = str(data.get("identifier", ""))
@@ -464,7 +470,7 @@ def api_app_login():
 
 @app.route('/api/app_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_check():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     req_hwid = str(data.get("hwid", ""))
@@ -488,7 +494,7 @@ def api_app_check():
 
 @app.route('/api/silent_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_silent_check():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     req_hwid = str(data.get("hwid", ""))
@@ -513,7 +519,7 @@ def api_silent_check():
 
 @app.route('/api/app_ping', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_ping():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     action = data.get("action", "ping")
@@ -548,7 +554,7 @@ def api_app_ping():
 
 @app.route('/api/get_profile_data/<discord_id>', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_get_profile_data(discord_id):
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     if not session.get('logged_in'): return _cors_jsonify({"error": "Unauthorized"}), 401
     
     if not discord_id or discord_id == 'None' or discord_id.strip() == '':
@@ -604,7 +610,7 @@ def api_get_profile_data(discord_id):
 
 @app.route('/api/get_messages', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_get_messages():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     app_id = str(data.get("app_id", ""))
@@ -668,7 +674,7 @@ def api_get_messages():
 
 @app.route('/api/mark_message_read', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_mark_message_read():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     message_id = str(data.get("message_id", ""))
@@ -682,7 +688,7 @@ def api_mark_message_read():
 
 @app.route('/api/submit_feedback', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_submit_feedback():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     db = get_db()
     if not db: return _cors_jsonify({"status": "error", "message": "DB Error"})
@@ -1477,7 +1483,7 @@ async def keepalive_ping():
 @tasks.loop(minutes=2)
 async def connection_watchdog():
     if bot.is_closed() or not bot.is_ready():
-        print("Watchdog: Spojení ztraceno! Vynucuji restart celého serveru (pro zrušení případného IP banu).", flush=True)
+        print("Watchdog: Spojení ztraceno! Vynucuji restart celého serveru!", flush=True)
         os._exit(1)
 
 @tasks.loop(hours=24)
