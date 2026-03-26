@@ -12,6 +12,7 @@ import json
 import traceback
 import re
 import gc
+import time  # <--- TOTO JE TEN CHYBĚJÍCÍ ŘÁDEK, KTERÝ TO SHAZOVAL
 from werkzeug.exceptions import HTTPException
 from html_templates import *
 
@@ -80,6 +81,7 @@ def calculate_roles_for_supporter(amount_str):
 
 def user_exists_sync(identifier):
     try:
+        if not bot.is_ready(): return False
         for guild in bot.guilds:
             if identifier.isdigit():
                 member = guild.get_member(int(identifier))
@@ -90,7 +92,7 @@ def user_exists_sync(identifier):
     return False
 
 async def send_user_dm(discord_identifier, title, description, color=0x38bdf8):
-    if not discord_identifier: return
+    if not discord_identifier or not bot.is_ready(): return
     try:
         for guild in bot.guilds:
             member = guild.get_member(int(discord_identifier)) if discord_identifier.isdigit() else None
@@ -102,6 +104,7 @@ async def send_user_dm(discord_identifier, title, description, color=0x38bdf8):
 
 async def assign_supporter_role(identifier, role_names_list):
     success = False
+    if not bot.is_ready(): return False
     try:
         for guild in bot.guilds:
             member = guild.get_member(int(identifier)) if identifier.isdigit() else None
@@ -124,6 +127,7 @@ async def assign_supporter_role(identifier, role_names_list):
     return success
 
 async def announce_new_supporter(discord_nick, amount_str, message, role_names_list):
+    if not bot.is_ready(): return
     for guild in bot.guilds:
         channel = discord.utils.get(guild.channels, name="⭐・podporovatelé")
         if channel:
@@ -137,6 +141,7 @@ async def announce_new_supporter(discord_nick, amount_str, message, role_names_l
             break
 
 async def async_send_log(title, description, color=0x38bdf8):
+    if not bot.is_ready(): return
     for guild in bot.guilds:
         channel = discord.utils.get(guild.channels, name="🖥️・datacore-logs")
         if channel:
@@ -145,7 +150,7 @@ async def async_send_log(title, description, color=0x38bdf8):
             break
 
 def send_log(title, description, color=0x38bdf8):
-    if bot.loop and bot.loop.is_running(): 
+    if bot.loop and bot.loop.is_running() and bot.is_ready(): 
         asyncio.run_coroutine_threadsafe(async_send_log(title, description, color), bot.loop)
 
 def _cors_jsonify(data):
@@ -182,6 +187,7 @@ def check_session_validity():
 
 def sync_roles_from_flask(discord_id, role_string):
     async def sync():
+        if not bot.is_ready(): return
         try:
             for guild in bot.guilds:
                 member = guild.get_member(int(discord_id)) or await guild.fetch_member(int(discord_id))
@@ -452,7 +458,7 @@ def api_app_login():
                 u = bot.get_user(int(user.get("discord_id"))) or await bot.fetch_user(int(user.get("discord_id")))
                 if u: await u.send(embed=discord.Embed(title="🛡️ Ověření přihlášení", description=f"Byl zaznamenán pokus o spuštění softwaru.\n**Uživatel:** {user.get('nick')}\nPotvrďte přístup tlačítkem níže.", color=0x38bdf8), view=AppAuthView(token, user.get("discord_id"), is_dm=True))
             except: pass
-        if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
+        if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
         return _cors_jsonify({"status": "waiting", "discord_id": user.get("discord_id")})
     except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
 
@@ -574,11 +580,12 @@ def api_get_profile_data(discord_id):
 
         joined_at = "Nenalezen na serveru"
         try:
-            for guild in bot.guilds:
-                member = guild.get_member(int(discord_id))
-                if member and member.joined_at:
-                    joined_at = member.joined_at.strftime("%d.%m.%Y")
-                    break
+            if bot.is_ready():
+                for guild in bot.guilds:
+                    member = guild.get_member(int(discord_id))
+                    if member and member.joined_at:
+                        joined_at = member.joined_at.strftime("%d.%m.%Y")
+                        break
         except: pass
 
         downloads = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(10).execute().data or []
@@ -713,7 +720,7 @@ def login_request():
                         u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
                         if u: await u.send(embed=discord.Embed(title="🔐 Bezpečnostní ověření", description="Byl zaznamenán pokus o přihlášení do administračního panelu.\n\nPokud jste to Vy, potvrďte přístup kliknutím na tlačítko níže.", color=0x38bdf8), view=DashboardAuthView(token, discord_id))
                     except: pass
-                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
                 return redirect(url_for('wait_auth', discord_id=discord_id))
             else: flash('Účet neexistuje, nemá povolený přístup, nebo byl zablokován.', 'error')
         except Exception as e: flash(f'Chyba: {e}', 'error')
@@ -864,7 +871,7 @@ def feedback_reset_hwid():
         db.table("users").update({"hwid": ""}).eq("discord_id", d_id).execute()
         db.table("feedback").update({"status": "resolved", "sys_note": f"HWID bylo resetováno [{now_str}]"}).eq("id", fb_id).execute()
         send_log("🔄 HWID Resetováno", f"Administrátor vyhověl žádosti a resetoval HWID pro ID: `{d_id}`.", 0x10b981)
-        if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "🔄 HWID Resetováno", "Vaše žádost byla schválena. HWID vašeho účtu bylo úspěšně vymazáno. Při dalším spuštění aplikace se spáruje s novým počítačem.", 0x10b981), bot.loop)
+        if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "🔄 HWID Resetováno", "Vaše žádost byla schválena. HWID vašeho účtu bylo úspěšně vymazáno. Při dalším spuštění aplikace se spáruje s novým počítačem.", 0x10b981), bot.loop)
         flash('HWID resetováno.', 'success')
     return redirect(url_for('dashboard_feedback'))
 
@@ -877,7 +884,7 @@ def feedback_reject():
         now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
         db.table("feedback").update({"status": "resolved", "sys_note": f"Zamítnuto: {reason} [{now_str}]"}).eq("id", fb_id).execute()
         send_log("❌ Žádost zamítnuta", f"Administrátor zamítl žádost o HWID pro ID: `{d_id}`.\nDůvod: {reason}", 0xef4444)
-        if d_id and bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "❌ Žádost zamítnuta", f"Vaše žádost o reset HWID byla administrátorem zamítnuta.\n\n**Důvod:** {reason}", 0xef4444), bot.loop)
+        if d_id and bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "❌ Žádost zamítnuta", f"Vaše žádost o reset HWID byla administrátorem zamítnuta.\n\n**Důvod:** {reason}", 0xef4444), bot.loop)
         flash('Žádost zamítnuta.', 'success')
     return redirect(url_for('dashboard_feedback'))
 
@@ -890,7 +897,7 @@ def feedback_reply():
         now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
         db.table("feedback").update({"status": "resolved", "sys_note": f"Odpověď: {msg} [{now_str}]"}).eq("id", fb_id).execute()
         send_log("📩 Odpověď na feedback", f"Administrátor odpověděl uživateli `{d_id}`:\n*{msg}*", 0x38bdf8)
-        if d_id and bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "📩 Zpráva od administrace", f"Odpověď na vaši zprávu z aplikace:\n\n{msg}", 0x38bdf8), bot.loop)
+        if d_id and bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "📩 Zpráva od administrace", f"Odpověď na vaši zprávu z aplikace:\n\n{msg}", 0x38bdf8), bot.loop)
         flash('Odpověď odeslána a ticket uzavřen.', 'success')
     return redirect(url_for('dashboard_feedback'))
 
@@ -1189,23 +1196,23 @@ def edit_user():
             elif action == 'ban':
                 db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
                 send_log("🔨 BAN", f"Administrátor udělil BAN uživateli **{nick}** (ID: `{discord_id}`).", 0xef4444)
-                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🔨 Účet zablokován", "Váš přístup do aplikace a databáze byl trvale zablokován administrátorem.", 0xef4444), bot.loop)
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🔨 Účet zablokován", "Váš přístup do aplikace a databáze byl trvale zablokován administrátorem.", 0xef4444), bot.loop)
                 flash('BAN udělen.', 'warning')
                 if str(session.get('discord_id')) == str(discord_id): session.clear()
             elif action == 'unban':
                 db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
                 send_log("🕊️ UN-BAN", f"Administrátor zrušil BAN uživateli **{nick}** (ID: `{discord_id}`).", 0x10b981)
-                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🕊️ Účet odblokován", "Váš přístup do aplikace a databáze byl obnoven.", 0x10b981), bot.loop)
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🕊️ Účet odblokován", "Váš přístup do aplikace a databáze byl obnoven.", 0x10b981), bot.loop)
                 flash('BAN zrušen.', 'success')
             elif action == 'delete':
                 db.table("users").update({"is_deleted": True, "deleted_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute()
-                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "⚠️ Účet smazán", "Váš uživatelský účet byl smazán administrátorem.", 0xf59e0b), bot.loop)
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "⚠️ Účet smazán", "Váš uživatelský účet byl smazán administrátorem.", 0xf59e0b), bot.loop)
                 send_log("☠️ Účet smazán", f"Administrátor smazal účet uživatele **{nick}** (ID: `{discord_id}`).", 0xef4444)
                 flash('Účet smazán (Soft Delete).', 'danger')
                 if str(session.get('discord_id')) == str(discord_id): session.clear()
             elif action == 'restore':
                 db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute()
-                if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "✅ Účet obnoven", "Váš uživatelský účet byl úspěšně obnoven administrátorem.", 0x10b981), bot.loop)
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "✅ Účet obnoven", "Váš uživatelský účet byl úspěšně obnoven administrátorem.", 0x10b981), bot.loop)
                 send_log("✅ Obnova účtu", f"Administrátor obnovil účet uživatele **{nick}** (ID: `{discord_id}`).", 0x10b981)
                 flash('Účet obnoven!', 'success')
             elif action == 'hard_delete':
@@ -1225,7 +1232,7 @@ def approve_claim():
     db = get_db()
     if db and claim_id and discord_nick:
         discord_roles, db_role_string = calculate_roles_for_supporter(amount)
-        if bot.loop and bot.loop.is_running():
+        if bot.loop and bot.loop.is_running() and bot.is_ready():
             asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, discord_roles), bot.loop)
             rec = db.table("supporters").select("*").eq("id", claim_id).execute().data
             if rec: asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_nick, amount, rec[0].get('message', ''), discord_roles), bot.loop)
@@ -1253,7 +1260,7 @@ def reject_claim():
         now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
         db.table("supporters").update({"status": "rejected", "sys_note": f"Zamítnuto: {sys_note} [{now_str}]"}).eq("id", claim_id).execute()
         send_log("❌ Manuální zamítnutí", f"Administrátor zamítl platbu pro uživatele **{discord_nick}**.\nDůvod: {sys_note}", 0xef4444)
-        if discord_nick and bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_nick, "❌ Žádost o roli zamítnuta", f"Tvoje žádost o spárování platby byla zamítnuta administrátorem.\n\n**Důvod:** {sys_note}", 0xef4444), bot.loop)
+        if discord_nick and bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_nick, "❌ Žádost o roli zamítnuta", f"Tvoje žádost o spárování platby byla zamítnuta administrátorem.\n\n**Důvod:** {sys_note}", 0xef4444), bot.loop)
         flash('Požadavek byl zamítnut.', 'success')
     return redirect(url_for('dashboard_supporters'))
 
@@ -1280,7 +1287,7 @@ def add_supporter():
         db.table("supporters").insert({"name": request.form.get("name"), "discord_nick": d_nick, "amount": amt, "message": msg, "status": "completed", "sys_note": "Přidáno manuálně z Dashboardu", "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
         if d_nick:
             discord_roles, db_role_string = calculate_roles_for_supporter(amt)
-            if bot.loop and bot.loop.is_running():
+            if bot.loop and bot.loop.is_running() and bot.is_ready():
                 asyncio.run_coroutine_threadsafe(assign_supporter_role(d_nick, discord_roles), bot.loop)
                 asyncio.run_coroutine_threadsafe(announce_new_supporter(d_nick, amt, msg, discord_roles), bot.loop)
             db_user = db.table("users").select("*").or_(f"discord_id.eq.{d_nick},nick.ilike.{d_nick}").execute().data
