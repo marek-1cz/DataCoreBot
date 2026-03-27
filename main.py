@@ -2,7 +2,6 @@ import os
 import discord
 from discord.ext import commands, tasks
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash, Response, stream_with_context, jsonify
-from flask_cors import CORS
 from threading import Thread
 from supabase import create_client
 from datetime import datetime, timedelta
@@ -20,8 +19,6 @@ from html_templates import *
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
 app = Flask(__name__)
-# Aktivujeme CORS pro celou aplikaci
-CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 app.secret_key = "ois_idpk_super_tajny_klic" 
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
@@ -29,6 +26,16 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png"
 URL_VELKE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png"
+
+# ==========================================
+# AGRESIVNÍ CORS (Oprava Offline režimu u starých verzí)
+# ==========================================
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Range'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+    return response
 
 def get_prague_time(): return datetime.utcnow() + timedelta(hours=1)
 DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
@@ -303,8 +310,9 @@ def check_version_access(db, app_version_from_pc, user):
     except Exception as e:
         return {"allowed": True}
 
-@app.route('/api/keepalive', methods=['GET'])
+@app.route('/api/keepalive', methods=['GET', 'OPTIONS'])
 def api_keepalive():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     return _cors_jsonify({"status": "alive", "time": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")})
 
 @app.route('/')
@@ -362,7 +370,7 @@ def supporters():
 
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'])
 def api_supporters():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     try:
         db = get_db()
         if not db: return _cors_jsonify({"error": "DB not ready"}), 500
@@ -429,8 +437,9 @@ def claim_role():
         return redirect(url_for('claim_role'))
     return render_public(HTML_CLAIM)
 
-@app.route('/webhook/bmac', methods=['GET', 'POST'])
+@app.route('/webhook/bmac', methods=['GET', 'POST', 'OPTIONS'])
 def bmac_webhook():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     try:
         if request.method == 'POST':
             payload = request.get_json(silent=True) or {}
@@ -506,7 +515,6 @@ def api_get_file(token):
         file_url = v_resp.data[0]['file_url']
         version_name = v_resp.data[0]['version_name']
         
-        # Uložení logu POUZE PŘI PRVNÍM REQUESTU (ne při pauza/pokračování Range)
         if not request.headers.get('Range') or request.headers.get('Range') == 'bytes=0-':
             try:
                 db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
@@ -520,7 +528,6 @@ def api_get_file(token):
             file_url = file_url.replace("dl=0", "dl=1")
             if "dl=1" not in file_url: file_url += "?dl=1" if "?" not in file_url else "&dl=1"
             
-        # PODPORA PRO PAUZA / POKRAČOVAT (RANGE REQUESTS)
         headers = {'User-Agent': 'Mozilla/5.0'}
         range_header = request.headers.get('Range')
         if range_header:
@@ -697,7 +704,7 @@ def api_app_ping():
                 
         elif action == "stop": 
             updates["is_online"] = False
-            updates["admin_bypass"] = False # JAKMILE VYPNE Hru, BYPASS SE ZAMKNE!
+            updates["admin_bypass"] = False 
             if session_id: 
                 db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
             
