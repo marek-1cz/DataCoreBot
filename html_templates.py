@@ -105,7 +105,7 @@ DASHBOARD_LAYOUT = """
             <a href="/dashboard/stats" class="sidebar-link"><i class="fas fa-chart-bar"></i> Statistiky Webu</a>
             <a href="/dashboard/app_management" class="sidebar-link"><i class="fas fa-desktop"></i> Správa Aplikace</a>
             <a href="/dashboard/notifications" class="sidebar-link" style="color: #f59e0b;"><i class="fas fa-bell"></i> Oznámení</a>
-            <a href="/dashboard/downloads" class="sidebar-link"><i class="fas fa-cloud-download-alt"></i> Správa Stahování</a>
+            <a href="/dashboard/downloads" class="sidebar-link"><i class="fas fa-code-branch"></i> Správa Verzí a Přístupů</a>
             <a href="/dashboard/pending_roles" class="sidebar-link" style="color: #10b981;"><i class="fas fa-ticket-alt"></i> Rezervace Rolí</a>
             <a href="/dashboard/ids" class="sidebar-link"><i class="fas fa-id-badge"></i> Správa ID</a>
             <a href="/dashboard/team" class="sidebar-link"><i class="fas fa-user-plus"></i> Správa Týmu</a>
@@ -727,138 +727,60 @@ HTML_NOTIFICATIONS = """
 </script>
 """
 
-HTML_DOWNLOADS_MAIN = """
-<div style="text-align: center; padding: 60px 20px; max-width: 700px; margin: 50px auto; background-color: var(--bg-panel); border-radius: 15px; box-shadow: 0 15px 30px rgba(0,0,0,0.5); border-top: 5px solid #5865F2;">
-    <h2 style="color: var(--text-main); font-size: 2.2em; margin-top: 0;"><i class="fas fa-shield-alt" style="color: var(--blue-main);"></i> Oficiální distribuce softwaru</h2>
-    <p style="color: var(--text-muted); font-size: 1.1em; line-height: 1.6; margin-bottom: 20px;">
-        Z důvodu ochrany projektu a samotného softwaru jsme se rozhodli přesunout jeho distribuci na náš Discord server. Díky tomu máme větší kontrolu nad přístupem k softwaru a můžeme lépe zabránit jeho zneužití nebo neautorizovanému šíření.
-    </p>
-    <div style="background-color: rgba(88, 101, 242, 0.1); border: 1px solid #5865F2; padding: 30px 20px; border-radius: 10px; margin: 30px 20px;">
-        <p style="color: var(--text-main); font-weight: bold; font-size: 1.2em; margin-top: 0;">Jak získat software:</p>
-        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">
-            Připojte se na náš Discord, ověřte, že nejste robot, a poté přejděte do kanálu <b>💾・download</b>, kde stačí postupovat podle pokynů DataCoreBota. 🚀
-        </p>
-        <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'"><i class="fab fa-discord" style="font-size: 120px; color: #5865F2; filter: drop-shadow(0px 10px 15px rgba(88,101,242,0.4));"></i></a>
-    </div>
-</div>
-"""
-
-HTML_LOGIN = """
-<div style="max-width: 400px; margin: 50px auto; background-color: var(--bg-panel); padding: 30px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border-top: 4px solid var(--blue-main);">
-    <h2 style="text-align: center; color: var(--blue-main); margin-top: 0;"><i class="fas fa-lock"></i> Dashboard 2FA</h2>
-    <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--danger); padding: 12px; margin-bottom: 20px; border-radius: 0 5px 5px 0;">
-        <p style="color: var(--danger); margin: 0; font-size: 13px; font-weight: 800; text-transform: uppercase;"><i class="fas fa-shield-alt"></i> Zabezpečená zóna</p>
-        <p style="color: var(--text-muted); margin: 5px 0 0 0; font-size: 12px; line-height: 1.4;">Tato databáze je přísně vyhrazena <b>pouze pro administrátory a pověřené správce</b> projektu. Běžní uživatelé sem nemají přístup. Každý pokus o neoprávněné přihlášení je monitorován a logován.</p>
-    </div>
-    <p style="color: var(--text-muted); text-align: center; font-size: 13px;">Pro přístup do systému zadejte své <b>Discord ID</b>.</p>
-    <form method="POST" action="/login_request">
-        <label style="font-weight: bold; font-size: 12px; color: var(--text-muted);">VAŠE DISCORD ID</label>
-        <input type="text" name="discord_id" placeholder="Např. 123456789012345678" required>
-        <button type="submit" class="btn" style="width: 100%; margin-top: 10px;"><i class="fab fa-discord"></i> Odeslat žádost o přihlášení</button>
-    </form>
-</div>
-"""
-
-HTML_WAIT_AUTH = """
-<div style="max-width: 500px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; border-top: 4px solid var(--warning);">
-    <h2 style="color: var(--warning); margin-top: 0;"><i class="fas fa-spinner fa-spin"></i> Čekání na ověření</h2>
-    <p style="color: var(--text-main); font-size: 16px;">Byla Vám odeslána soukromá zpráva na Discord.</p>
-    <p style="color: var(--text-muted); font-size: 14px;">Zkontrolujte si aplikaci Discord a klikněte na tlačítko <b>Ověřit přístup</b>.</p>
-</div>
-<script>
-    setInterval(() => {
-        fetch('/api/check_auth/{{ discord_id }}')
-        .then(r => r.json())
-        .then(data => {
-            if(data.status === 'approved') { window.location.href = '/dashboard/login_finalize?discord_id={{ discord_id }}'; } 
-            else if(data.status === 'rejected') { window.location.href = '/dashboard'; }
-        });
-    }, 2000);
-</script>
-"""
-
-HTML_TEAM = """
-<style>
-    .team-card { transition: transform 0.3s ease, box-shadow 0.3s ease; }
-    .team-card:hover { transform: translateY(-10px); box-shadow: 0 15px 35px rgba(56, 189, 248, 0.4); }
-</style>
-<h2 style="color: var(--blue-main); border-bottom: 2px solid #334155; padding-bottom: 10px; text-align:center;">Náš Tým</h2>
-<div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 20px;">
-    {% for member in team %}
-    <div class="team-card" style="background-color: var(--bg-panel); border-radius: 10px; padding: 20px; text-align: center; border-top: 4px solid var(--blue-main); width: 300px; max-width:100%;">
-        <img src="{{ member.get('image_url', '') }}" alt="Fotka" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; border: 3px solid #334155;" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-        <h3 style="font-size: 20px; font-weight: bold; margin: 0 0 5px 0;">{{ member.get('name', '') }}</h3>
-        <div style="color: var(--blue-main); font-size: 14px; margin-bottom: 15px;">@{{ member.get('discord_nick', '') }}</div>
-        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 15px;">{{ member.get('description', '') }}</p>
-        <div>
-            {% set roles_input = member.get('role_name', '').split(',') if member.get('role_name') else [] %}
-            {% for r in roles_input %}
-                {% set parts = r.split('|') %}
-                {% set r_name = parts[0].strip() %}
-                {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
-                <span class="role-tag" style="background-color: {{ r_color }}33; color: {{ r_color }}; border: 1px solid {{ r_color }};">{{ r_name }}</span>
-            {% endfor %}
-        </div>
-    </div>
-    {% else %}
-    <p style="color: var(--text-muted); text-align:center; width:100%;">Zatím nebyli přidáni žádní členové týmu.</p>
-    {% endfor %}
-</div>
-"""
-
 HTML_DOWNLOADS_MGMT = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);">Správa Stahování</h2>
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-code-branch" style="color:var(--blue-main);"></i> Manažer Verzí a Přístupů</h2>
 </div>
 <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {{ 'var(--success)' if enabled else 'var(--danger)' }}; text-align: center;">
-        <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-power-off"></i> Hlavní vypínač instalací</h3>
-        <div style="font-size: 50px; margin: 15px 0; color: {{ 'var(--success)' if enabled else 'var(--danger)' }}; text-shadow: 0 0 15px {{ 'rgba(16, 185, 129, 0.5)' if enabled else 'rgba(239, 68, 68, 0.5)' }};">
-            <i class="fas {{ 'fa-check-circle' if enabled else 'fa-ban' }}"></i>
-        </div>
-        <p style="color: var(--text-muted); font-size: 14px;">Pokud je vypnuto, nikdo nebude moci zahájit instalaci přes Discord bota.</p>
-        <form action="/dashboard/toggle_downloads" method="POST" style="margin-top: 20px;">
-            <input type="hidden" name="new_status" value="{{ 'False' if enabled else 'True' }}">
-            <input type="hidden" name="return_to" value="downloads">
-            <button type="submit" class="btn {{ 'btn-danger' if enabled else 'btn-success' }}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {{ 'ZAKÁZAT STAHOVÁNÍ' if enabled else 'POVOLIT STAHOVÁNÍ' }}</button>
-        </form>
-    </div>
-
-    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Přidat Instalační Soubor (Verzi)</h3>
-        <p style="color: var(--warning); font-size: 12px; margin-top: -5px;">Můžete vložit odkaz na <b>PixelDrain.com</b>, <b>OneDrive</b>, nebo Dropbox.</p>
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Vydat novou verzi</h3>
+        <p style="color: var(--warning); font-size: 12px; margin-top: -5px;">Po přidání se ihned objeví ke stažení na webu i Discordu.</p>
         <form action="/dashboard/add_version" method="POST">
-            <input type="text" name="version_name" placeholder="Název zobrazený v menu (např. Stabilní v1.0)" required>
+            <input type="text" name="version_name" placeholder="Název (Musí být SHODNÝ s názvem v logic-ovladac.js!)" required>
             <input type="url" name="file_url" placeholder="Přímý odkaz na stažení souboru" required>
-            <label style="color: var(--text-muted); font-size: 13px;">Pro jakou minimální roli je tato verze určena?</label>
+            
+            <label style="color: var(--text-muted); font-size: 13px;">Pro jakou roli je tato verze určena?</label>
             <select name="target_role" required>
                 <option value="User">User (Uvidí všichni - Normální verze)</option>
                 <option value="BT">BETA TESTER (Uvidí BT, DEV, SA - Testovací verze)</option>
-                <option value="DEV_SA">DEV / SERVER ADMIN (Uvidí pouze vývojáři a admini)</option>
+                <option value="DEV_SA">DEV / SERVER ADMIN (Neveřejná verze)</option>
             </select>
-            <button type="submit" class="btn" style="width: 100%;">Přidat verzi do menu</button>
+            
+            <button type="submit" class="btn" style="width: 100%;">Přidat verzi</button>
         </form>
     </div>
 </div>
+
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-top: 20px;">
-    <h3 style="color: var(--blue-main); margin-top: 0;">📦 Dostupné soubory</h3>
+    <h3 style="color: var(--blue-main); margin-top: 0;">📦 Tabulka vydaných verzí softwaru</h3>
     <div style="overflow-x: auto;">
         <table>
             <tr>
                 <th>Název v Menu</th>
+                <th>Stav Podpory</th>
                 <th>Cílová Skupina</th>
                 <th>Odkaz na soubor</th>
                 <th>Akce</th>
             </tr>
             {% for v in versions %}
-            <tr>
+            {% set is_active = str(v.get('is_active', 'True')).lower() == 'true' %}
+            <tr style="opacity: {{ '1' if is_active else '0.5' }};">
                 <td><strong>{{ v.get('version_name', '') }}</strong></td>
+                <td>
+                    {% if is_active %}
+                        <span class="role-tag" style="background-color: var(--success); color: white;">Aktivní</span>
+                    {% else %}
+                        <span class="role-tag" style="background-color: var(--danger); color: white;">Zablokováno (Konec)</span>
+                    {% endif %}
+                    <br>
+                    <span style="font-size: 11px; color: var(--text-muted);">Konec: {{ v.get('eol_date', '') or 'Nikdy' }}</span>
+                </td>
                 <td>
                     {% if v.get('target_role') == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User (Všichni)</span>{% endif %}
                     {% if v.get('target_role') == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BETA TESTER+</span>{% endif %}
                     {% if v.get('target_role') == 'DEV_SA' %}<span class="role-tag" style="background-color: #ef4444; color: white;">DEV / SA</span>{% endif %}
                 </td>
-                <td style="font-size: 12px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <td style="font-size: 12px; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                     <a href="{{ v.get('file_url', '') }}" target="_blank" style="color: var(--blue-main);">{{ v.get('file_url', '') }}</a>
                 </td>
                 <td>
@@ -867,15 +789,17 @@ HTML_DOWNLOADS_MGMT = """
                         data-name="{{ (v.get('version_name') or '') | e }}"
                         data-url="{{ (v.get('file_url') or '') | e }}"
                         data-role="{{ (v.get('target_role') or '') | e }}"
+                        data-active="{{ 'true' if is_active else 'false' }}"
+                        data-eol="{{ (v.get('eol_date') or '') | e }}"
                         onclick="openEditVerModal(this)"><i class="fas fa-edit"></i> Úprava</button>
                     <form action="/dashboard/delete_version" method="POST" style="display:inline;">
                         <input type="hidden" name="version_id" value="{{ v.get('id', '') }}">
-                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Odebrat tuto verzi ze stahování?')"><i class="fas fa-trash"></i> Smazat</button>
+                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Odebrat tuto verzi z databáze?')"><i class="fas fa-trash"></i> Smazat</button>
                     </form>
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Zatím nebyly přidány žádné soubory ke stažení.</td></tr>
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Zatím nebyly přidány žádné verze.</td></tr>
             {% endfor %}
         </table>
     </div>
@@ -885,12 +809,12 @@ HTML_DOWNLOADS_MGMT = """
     <div class="modal">
         <div style="width: 100%;">
             <h2 style="color: var(--warning); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">
-                <i class="fas fa-edit"></i> Upravit verzi
+                <i class="fas fa-edit"></i> Řízení Verze
             </h2>
             <form action="/dashboard/edit_version" method="POST">
                 <input type="hidden" name="version_id" id="ev_id">
                 
-                <label style="color: var(--text-muted); font-size: 13px;">Název v Menu:</label>
+                <label style="color: var(--text-muted); font-size: 13px;">Název Verze:</label>
                 <input type="text" name="version_name" id="ev_name" required>
                 
                 <label style="color: var(--text-muted); font-size: 13px;">URL odkazu:</label>
@@ -902,6 +826,17 @@ HTML_DOWNLOADS_MGMT = """
                     <option value="BT">BETA TESTER (Testovací)</option>
                     <option value="DEV_SA">DEV / SERVER ADMIN (Neveřejné)</option>
                 </select>
+
+                <div style="background-color: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; margin: 15px 0;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--text-main); font-size: 13px;">
+                        <input type="checkbox" name="is_active" id="ev_active" style="width: auto; margin: 0;">
+                        <b>Tato verze je aktivní (Povolit přihlášení do Palubáku)</b>
+                    </label>
+                    <span style="font-size: 11px; color: #ef4444; margin-left: 23px; display: block; margin-top: 5px;">Pokud toto odškrtneš, každý, kdo má tuto verzi staženou, dostane při pokusu o přihlášení banovací hlášku s odkazem na stažení nové verze.</span>
+                </div>
+
+                <label style="color: var(--text-muted); font-size: 13px;">Konec podpory (Datum, kdy se automaticky verze uzamkne - Volitelné):</label>
+                <input type="text" name="eol_date" id="ev_eol" placeholder="Např. 31.12.2026">
                 
                 <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 15px;">Uložit změny</button>
             </form>
@@ -916,6 +851,8 @@ HTML_DOWNLOADS_MGMT = """
             document.getElementById('ev_name').value = btn.getAttribute('data-name') || "";
             document.getElementById('ev_url').value = btn.getAttribute('data-url') || "";
             document.getElementById('ev_role').value = btn.getAttribute('data-role') || "User";
+            document.getElementById('ev_active').checked = btn.getAttribute('data-active') === 'true';
+            document.getElementById('ev_eol').value = btn.getAttribute('data-eol') || "";
             document.getElementById('editVerModal').style.display = 'flex';
         } catch(e) {
             alert("Chyba při otevírání: " + e.message);
