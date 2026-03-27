@@ -736,7 +736,8 @@ HTML_DOWNLOADS_MGMT = """
         <h3 style="color: var(--blue-main); margin-top: 0;">➕ Vydat novou verzi</h3>
         <p style="color: var(--warning); font-size: 12px; margin-top: -5px;">Po přidání se ihned objeví ke stažení na webu i Discordu.</p>
         <form action="/dashboard/add_version" method="POST">
-            <input type="text" name="version_name" placeholder="Název (Musí být SHODNÝ s názvem v logic-ovladac.js!)" required>
+            <input type="text" name="version_name" placeholder="Zobrazený Název (např. Jarní Update 1.5)" required>
+            <input type="text" name="db_version" placeholder="Verze Databáze (Přesně z logic-ovladac.js!)" required>
             <input type="url" name="file_url" placeholder="Přímý odkaz na stažení souboru" required>
             
             <label style="color: var(--text-muted); font-size: 13px;">Pro jakou roli je tato verze určena?</label>
@@ -756,16 +757,17 @@ HTML_DOWNLOADS_MGMT = """
     <div style="overflow-x: auto;">
         <table>
             <tr>
-                <th>Název v Menu</th>
+                <th>Název (Zobrazený)</th>
+                <th>Verze pro DB (Přihlášení)</th>
                 <th>Stav Podpory</th>
                 <th>Cílová Skupina</th>
-                <th>Odkaz na soubor</th>
                 <th>Akce</th>
             </tr>
             {% for v in versions %}
             {% set is_active = (v.get('is_active', True) | string | lower) != 'false' %}
             <tr style="opacity: {{ '1' if is_active else '0.5' }};">
                 <td><strong>{{ v.get('version_name', '') }}</strong></td>
+                <td style="color: var(--warning); font-family: monospace;">{{ v.get('db_version', '') }}</td>
                 <td>
                     {% if is_active %}
                         <span class="role-tag" style="background-color: var(--success); color: white;">Aktivní</span>
@@ -780,13 +782,11 @@ HTML_DOWNLOADS_MGMT = """
                     {% if v.get('target_role') == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BETA TESTER+</span>{% endif %}
                     {% if v.get('target_role') == 'DEV_SA' %}<span class="role-tag" style="background-color: #ef4444; color: white;">DEV / SA</span>{% endif %}
                 </td>
-                <td style="font-size: 12px; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                    <a href="{{ v.get('file_url', '') }}" target="_blank" style="color: var(--blue-main);">{{ v.get('file_url', '') }}</a>
-                </td>
                 <td>
                     <button type="button" class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" 
                         data-id="{{ v.get('id', '') }}"
                         data-name="{{ (v.get('version_name') or '') | e }}"
+                        data-db="{{ (v.get('db_version') or '') | e }}"
                         data-url="{{ (v.get('file_url') or '') | e }}"
                         data-role="{{ (v.get('target_role') or '') | e }}"
                         data-active="{{ 'true' if is_active else 'false' }}"
@@ -814,8 +814,11 @@ HTML_DOWNLOADS_MGMT = """
             <form action="/dashboard/edit_version" method="POST">
                 <input type="hidden" name="version_id" id="ev_id">
                 
-                <label style="color: var(--text-muted); font-size: 13px;">Název Verze:</label>
+                <label style="color: var(--text-muted); font-size: 13px;">Název Verze (Zobrazený):</label>
                 <input type="text" name="version_name" id="ev_name" required>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Verze Databáze (Z logic-ovladac.js):</label>
+                <input type="text" name="db_version" id="ev_db" required>
                 
                 <label style="color: var(--text-muted); font-size: 13px;">URL odkazu:</label>
                 <input type="url" name="file_url" id="ev_url" required>
@@ -849,6 +852,7 @@ HTML_DOWNLOADS_MGMT = """
         try {
             document.getElementById('ev_id').value = btn.getAttribute('data-id') || "";
             document.getElementById('ev_name').value = btn.getAttribute('data-name') || "";
+            document.getElementById('ev_db').value = btn.getAttribute('data-db') || "";
             document.getElementById('ev_url').value = btn.getAttribute('data-url') || "";
             document.getElementById('ev_role').value = btn.getAttribute('data-role') || "User";
             document.getElementById('ev_active').checked = btn.getAttribute('data-active') === 'true';
@@ -1034,516 +1038,4 @@ HTML_IDS = """
         </table>
     </div>
 </div>
-"""
-
-HTML_DASHBOARD_MAIN = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
-    
-    <div id="refresh-timer" style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;">
-        <i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Aktualizace za: <span id="timer-sec" style="color: white;">60</span>s
-    </div>
-</div>
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-    <div style="overflow-x: auto;">
-        <table id="usersTable">
-            <thead>
-                <tr>
-                    <th onclick="sortTable(0)">App ID ↕</th>
-                    <th onclick="sortTable(1)">Nick ↕</th>
-                    <th onclick="sortTable(2)">Stav ↕</th>
-                    <th onclick="sortTable(3)">Role ↕</th>
-                    <th onclick="sortTable(4)">Poslední Aktivita ↕</th>
-                    <th>Akce</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for user in users %}
-            <tr>
-                <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
-                <td><strong>{{ user.get('nick', '') }}</strong></td>
-                <td>
-                    {% if user.get('is_banned') %}
-                        <span style="color: var(--danger); font-size: 11px; font-weight:bold; border:1px solid var(--danger); padding:2px 5px; border-radius:4px;">BANNED</span>
-                    {% elif user.get('is_deleted') %}
-                        <span style="color: var(--text-muted); font-size: 11px; font-weight:bold; border:1px solid var(--text-muted); padding:2px 5px; border-radius:4px;">DELETED</span>
-                    {% elif not user.get('hwid') or user.get('hwid') == 'None' or user.get('hwid') == '' %}
-                        <span style="color: var(--warning); font-size: 11px; font-weight:bold; border:1px solid var(--warning); padding:2px 5px; border-radius:4px;">NOT ACTIVATED</span>
-                    {% else %}
-                        <span style="color: var(--success); font-size: 11px; font-weight:bold; border:1px solid var(--success); padding:2px 5px; border-radius:4px;">ACTIVATED</span>
-                    {% endif %}
-                </td>
-                
-                {% set role_weight = 1 %}
-                {% if 'SA' in user.get('role', '') %}{% set role_weight = 4 %}
-                {% elif 'DEV' in user.get('role', '') %}{% set role_weight = 3 %}
-                {% elif 'BT' in user.get('role', '') %}{% set role_weight = 2 %}
-                {% endif %}
-                <td data-sort="{{ role_weight }}">
-                    {% set role_list = user.get('role', '').split(',') %}
-                    {% for r in role_list %}
-                        {% set r_clean = r.strip() %}
-                        {% if r_clean == 'SA' %}
-                            <span class="role-tag" style="background-color: #ef4444; color: white;">SA</span>
-                        {% elif r_clean == 'DEV' %}
-                            <span class="role-tag" style="background-color: #10b981; color: white;">DEV</span>
-                        {% elif r_clean == 'BT' %}
-                            <span class="role-tag" style="background-color: #3b82f6; color: white;">BT</span>
-                        {% elif r_clean == 'User' %}
-                            <span class="role-tag" style="background-color: #64748b; color: white;">User</span>
-                        {% endif %}
-                    {% endfor %}
-                    {% if user.get('dashboard_access') %}
-                        <i class="fas fa-shield-alt" style="color:var(--blue-main); font-size:12px; margin-left:5px;" title="Má přístup do DB"></i>
-                    {% endif %}
-                </td>
-                <td style="color: var(--text-muted); font-size: 13px;" data-sort="{{ '99999999999' if user.get('is_online') else user.get('last_active', '0') }}">
-                    {% if user.get('is_online') %}
-                        <span style="color: var(--success); font-weight: bold;">🟢 AKTIVNÍ</span>
-                    {% else %}
-                        {{ user.get('last_active', 'Nikdy nehrál') }}
-                    {% endif %}
-                </td>
-                <td>
-                    <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" 
-                        data-app-id="{{ user.get('app_id', '') }}"
-                        data-discord-id="{{ user.get('discord_id', '') }}"
-                        data-nick="{{ (user.get('nick') or '') | e }}"
-                        data-roles="{{ (user.get('role') or '') | e }}"
-                        data-hwid="{{ (user.get('hwid') or '') | e }}"
-                        data-banned="{{ user.get('is_banned', False) }}"
-                        data-deleted="{{ user.get('is_deleted', False) }}"
-                        data-db-access="{{ user.get('dashboard_access', False) }}"
-                        data-reg-at="{{ (user.get('registered_at') or '') | e }}"
-                        onclick="openModal(this)"><i class="fas fa-edit"></i> Upravit</button>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<script>
-    let timeLeft = 60;
-    setInterval(() => {
-        if(timeLeft > 0) {
-            timeLeft--;
-            let secEl = document.getElementById('timer-sec');
-            if(secEl) secEl.innerText = timeLeft;
-        }
-        if(timeLeft === 0) {
-            timeLeft = -1; // Aby se to nevolalo pořád dokola
-            location.reload();
-        }
-    }, 1000);
-
-    let sortDir = {};
-    function sortTable(n) {
-        let table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-        table = document.getElementById("usersTable");
-        switching = true;
-        
-        dir = sortDir[n] === "asc" ? "desc" : "asc";
-        sortDir[n] = dir;
-
-        while (switching) {
-            switching = false;
-            rows = table.rows;
-            for (i = 1; i < (rows.length - 1); i++) {
-                shouldSwitch = false;
-                x = rows[i].getElementsByTagName("TD")[n];
-                y = rows[i + 1].getElementsByTagName("TD")[n];
-                
-                let xContent = x.hasAttribute("data-sort") ? x.getAttribute("data-sort") : x.innerHTML.replace(/<[^>]*>?/gm, '').trim();
-                let yContent = y.hasAttribute("data-sort") ? y.getAttribute("data-sort") : y.innerHTML.replace(/<[^>]*>?/gm, '').trim();
-                
-                if (!isNaN(xContent) && !isNaN(yContent)) {
-                    xContent = parseFloat(xContent);
-                    yContent = parseFloat(yContent);
-                } else {
-                    xContent = xContent.toLowerCase();
-                    yContent = yContent.toLowerCase();
-                }
-
-                if (dir == "asc") {
-                    if (xContent > yContent) { shouldSwitch = true; break; }
-                } else if (dir == "desc") {
-                    if (xContent < yContent) { shouldSwitch = true; break; }
-                }
-            }
-            if (shouldSwitch) {
-                rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-                switching = true;
-                switchcount ++;
-            } 
-        }
-    }
-</script>
-"""
-
-HTML_SUPPORTERS = """
-<style>
-    .glowing-btn-blue { background-color: var(--blue-main); color: #000; padding: 15px 40px; font-size: 20px; font-weight: 900; border-radius: 50px; text-decoration: none; display: inline-block; margin-top: 20px; box-shadow: 0 0 20px rgba(56, 189, 248, 0.6); transition: all 0.3s ease; text-transform: uppercase; letter-spacing: 1px; border: none; cursor: pointer; }
-    .glowing-btn-blue:hover { box-shadow: 0 0 40px rgba(56, 189, 248, 1); transform: scale(1.05); color: #000; }
-    .supporter-wrapper { width: 100%; max-width: 500px; min-height: 230px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; text-align: center; box-sizing: border-box; }
-    .tier-1 { background-color: rgba(15, 23, 42, 0.8); padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.3); border-left: 5px solid #38bdf8; transition: transform 0.5s ease, box-shadow 0.5s ease; }
-    .tier-1:hover { transform: scale(1.05); box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4); }
-    .tier-1 .name-title { color: #e0f2fe; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); font-size: 20px; margin: 0 0 10px 0; }
-    .tier-1 .title-badge { font-size: 10px; color: #38bdf8; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin-bottom: 10px; }
-    .tier-1 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; border: 1px solid rgba(56, 189, 248, 0.3); }
-    @keyframes pulseMedium { from { box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); } to { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); } }
-    .tier-2 { background-color: rgba(30, 41, 59, 0.9); padding: 25px; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.6); border-left: 6px solid #f59e0b; animation: pulseMedium 2s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
-    .tier-2:hover { transform: scale(1.05) !important; animation: none; box-shadow: 0 10px 35px rgba(245, 158, 11, 0.8); }
-    .tier-2 .name-title { color: #fcd34d; font-size: 26px; margin: 0 0 10px 0; text-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
-    .tier-2 .title-badge { font-size: 12px; color: #f59e0b; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; margin-bottom: 10px; }
-    .tier-2 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(245, 158, 11, 0.1); color: var(--warning); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(245, 158, 11, 0.5); }
-    @keyframes epicWebGlow { from { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); } to { box-shadow: 0 0 50px rgba(239, 68, 68, 0.9), inset 0 0 30px rgba(239, 68, 68, 0.3); } }
-    .tier-3 { background: linear-gradient(135deg, #2a0a18, #450a0a); padding: 30px; border-radius: 15px; border: 2px solid #ef4444; animation: epicWebGlow 1.5s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
-    .tier-3:hover { transform: scale(1.08) !important; animation: none; box-shadow: 0 15px 60px rgba(239, 68, 68, 1); }
-    .tier-3 .name-title { color: #fca5a5; font-size: 32px !important; margin: 0 0 15px 0; text-shadow: 0 0 20px #ef4444, 0 0 40px #ef4444; text-transform: uppercase; font-weight: 900; }
-    .tier-3 .title-badge { font-size: 14px; color: #ef4444; text-transform: uppercase; font-weight: 900; letter-spacing: 3px; margin-bottom: 10px; text-shadow: 0 0 10px #ef4444; }
-    .tier-3 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: #ef4444 !important; color: #fff !important; border: 2px solid #fca5a5 !important; padding: 8px 20px; border-radius: 25px; font-weight: bold; font-size: 20px !important; box-shadow: 0 0 20px #ef4444; }
-</style>
-
-<div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
-    <div style="text-align: center; margin-bottom: 40px;">
-        <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Děkuji všem za podporu!</h1>
-        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!</p>
-        <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue"><i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK</a>
-    </div>
-    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 40px 0;">
-    <h2 style="text-align: center; color: var(--text-main); letter-spacing: 3px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,255,255,0.2);">SEZNAM PODPOROVATELŮ</h2>
-    <div style="display: flex; flex-direction: column; gap: 40px; padding-bottom: 50px; align-items: center;">
-        {% for s in supporters %}
-        <div class="tier-{{ s.get('tier', 1) }} supporter-wrapper">
-            <div style="width: 100%;">
-                {% if s.get('tier') == 3 %} <div class="title-badge">MEGA PODPOROVATEL</div>
-                {% elif s.get('tier') == 2 %} <div class="title-badge">VELKÝ PODPOROVATEL</div>
-                {% else %} <div class="title-badge">PODPOROVATEL</div> {% endif %}
-                <h3 class="name-title">{{ s.get('name', 'Neznámý dárce') }}</h3>
-                <div class="amt-badge">{{ s.get('amount', '') }}</div>
-            </div>
-            <div style="width: 100%; margin-top: auto;">
-                {% if s.get('message') %}
-                <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0 auto 15px auto; line-height: 1.5; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 2px solid rgba(255,255,255,0.2); max-width: 90%;">
-                    "{{ s.get('message') }}"
-                </p>
-                {% endif %}
-                <div style="font-size: 11px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; text-align: center;">Datum podpory: {{ s.get('created_at', '') }}</div>
-            </div>
-        </div>
-        {% else %}
-        <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1); width: 100%;">Zatím zde nikdo není. Buďte první!</div>
-        {% endfor %}
-    </div>
-</div>
-"""
-
-HTML_SUPPORTERS_MGMT = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-star" style="color:var(--warning);"></i> Správa Podporovatelů</h2>
-</div>
-
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--warning); margin-bottom: 20px;">
-    <h3 style="color: var(--warning); margin-top: 0;"><i class="fas fa-exclamation-triangle"></i> Ke schválení (Manuální kontrola)</h3>
-    <p style="color: var(--text-muted); font-size: 13px;">Zde se zobrazují lidé, kteří si zažádali o roli na webu, ale systém nenašel shodu nebo jejich účet na Discordu.</p>
-    <div style="overflow-x: auto;">
-        <table>
-            <tr>
-                <th>BMAC Jméno</th>
-                <th>Discord Nick</th>
-                <th>Částka</th>
-                <th>Systémová Zpráva</th>
-                <th>Akce</th>
-            </tr>
-            {% for p in pending_claims %}
-            <tr>
-                <td style="color:var(--blue-main); font-weight:bold;">{{ p.get('name', 'Neznámý') }}</td>
-                <td style="color:white; font-weight:bold;">{{ p.get('discord_nick', 'Nevyplněno') }}</td>
-                <td><span class="role-tag" style="background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning);">{{ p.get('amount', '?') }}</span></td>
-                <td style="color: var(--danger); font-size: 12px; font-weight: bold; max-width: 200px;">{{ p.get('sys_note', 'Čeká na schválení') }}</td>
-                <td style="display: flex; gap: 5px;">
-                    <form action="/dashboard/approve_claim" method="POST" style="display:inline; margin:0;">
-                        <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
-                        <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
-                        <input type="hidden" name="amount" value="{{ p.get('amount', '0') }}">
-                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a přidat roli"><i class="fas fa-check"></i></button>
-                    </form>
-                    
-                    <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily"
-                        data-id="{{ p.get('id', '') }}"
-                        data-name="{{ (p.get('name') or '') | e }}"
-                        data-nick="{{ (p.get('discord_nick') or '') | e }}"
-                        data-amount="{{ (p.get('amount') or '') | e }}"
-                        data-msg="{{ (p.get('message') or '') | e }}"
-                        onclick="openSupporterEdit(this)"><i class="fas fa-edit"></i></button>
-                    
-                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout" onclick="rejectClaim('{{ p.get('id', '') }}', '{{ (p.get('discord_nick') or '') | e }}')"><i class="fas fa-times"></i></button>
-                    <form id="form_reject_{{ p.get('id', '') }}" action="/dashboard/reject_claim" method="POST" style="display:none;">
-                        <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
-                        <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
-                        <input type="hidden" name="sys_note" id="reject_reason_{{ p.get('id', '') }}">
-                    </form>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Vše je vyřízeno, žádné čekající požadavky.</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-</div>
-
-<script>
-    function rejectClaim(claimId, discordNick) {
-        let reason = prompt("Zadejte důvod zamítnutí žádosti pro " + (discordNick || "uživatele") + ":", "Neplatné údaje / Platba nenalezena");
-        if (reason !== null) {
-            document.getElementById('reject_reason_' + claimId).value = reason;
-            document.getElementById('form_reject_' + claimId).submit();
-        }
-    }
-</script>
-
-<div style="display: flex; gap: 20px; flex-wrap: wrap;">
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Ruční přidání podporovatele</h3>
-        <p style="color: var(--text-muted); font-size: 13px;">(Pokud Vám někdo poslal peníze mimo Buy Me a Coffee)</p>
-        <form action="/dashboard/add_supporter" method="POST">
-            <input type="text" name="name" placeholder="Jméno podporovatele" required>
-            <input type="text" name="discord_nick" placeholder="Discord Nick (Volitelně)">
-            <input type="text" name="amount" placeholder="Částka (např. 150 CZK nebo 10 USD)" required>
-            <textarea name="message" placeholder="Zpráva od podporovatele (volitelně)..." rows="3"></textarea>
-            <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Přidat do databáze</button>
-        </form>
-    </div>
-    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">☕ Historie podporovatelů (Schválení i Zamítnutí)</h3>
-        <div style="overflow-x: auto;">
-            <table>
-                <tr>
-                    <th>Stav</th>
-                    <th>Jméno</th>
-                    <th>Discord</th>
-                    <th>Částka</th>
-                    <th>Systémová Zpráva</th>
-                    <th>Datum</th>
-                    <th>Akce</th>
-                </tr>
-                {% for s in supporters_history %}
-                <tr style="opacity: {{ '0.6' if s.get('status') == 'rejected' else '1' }};">
-                    <td>
-                        {% if s.get('status') == 'rejected' %}
-                            <span class="role-tag" style="background-color: var(--danger); color: white;">Zamítnuto</span>
-                        {% else %}
-                            <span class="role-tag" style="background-color: var(--success); color: white;">Schváleno</span>
-                        {% endif %}
-                    </td>
-                    <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
-                    <td style="color:#aaa; font-size:12px;">{{ s.get('discord_nick', '') }}</td>
-                    <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
-                    <td style="font-style:italic; font-size: 12px; color: {{ 'var(--danger)' if s.get('status') == 'rejected' else 'var(--text-muted)' }}; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ s.get('sys_note', '') }}">{{ s.get('sys_note', 'OK') }}</td>
-                    <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
-                    <td style="display: flex; gap: 5px;">
-                        <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily"
-                            data-id="{{ s.get('id', '') }}"
-                            data-name="{{ (s.get('name') or '') | e }}"
-                            data-nick="{{ (s.get('discord_nick') or '') | e }}"
-                            data-amount="{{ (s.get('amount') or '') | e }}"
-                            data-msg="{{ (s.get('message') or '') | e }}"
-                            onclick="openSupporterEdit(this)"><i class="fas fa-edit"></i></button>
-                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline; margin: 0;">
-                            <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
-                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Smazat z historie" onclick="return confirm('Opravdu smazat tohoto podporovatele z webu?')"><i class="fas fa-trash"></i></button>
-                        </form>
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Zatím žádná historie.</td></tr>
-                {% endfor %}
-            </table>
-        </div>
-    </div>
-</div>
-
-<div class="modal-overlay" id="editSupporterModal">
-    <div class="modal" style="width: 500px; border-top: 5px solid var(--warning);">
-        <div style="width: 100%;">
-            <h2 style="color: var(--warning); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">
-                <i class="fas fa-edit"></i> Úprava Podporovatele
-            </h2>
-            <form action="/dashboard/edit_supporter" method="POST">
-                <input type="hidden" name="supporter_id" id="es_id">
-                
-                <label style="color: var(--text-muted); font-size: 13px;">Jméno (BMAC):</label>
-                <input type="text" name="name" id="es_name" required>
-                
-                <label style="color: var(--text-muted); font-size: 13px;">Discord Nick (Slouží pro spárování):</label>
-                <input type="text" name="discord_nick" id="es_nick">
-                
-                <label style="color: var(--text-muted); font-size: 13px;">Částka (Formát: např. 150 CZK):</label>
-                <input type="text" name="amount" id="es_amount" required>
-                
-                <label style="color: var(--text-muted); font-size: 13px;">Vzkaz od podporovatele:</label>
-                <textarea name="message" id="es_message" rows="3"></textarea>
-                
-                <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 15px;"><i class="fas fa-save"></i> Uložit změny</button>
-            </form>
-            <button type="button" class="btn" style="width: 100%; margin-top: 10px; background: transparent; border: 1px solid #334155; color: var(--text-muted);" onclick="document.getElementById('editSupporterModal').style.display='none'">Zrušit</button>
-        </div>
-    </div>
-</div>
-
-<script>
-    function openSupporterEdit(btn) {
-        document.getElementById('es_id').value = btn.getAttribute('data-id');
-        document.getElementById('es_name').value = btn.getAttribute('data-name');
-        document.getElementById('es_nick').value = btn.getAttribute('data-nick');
-        document.getElementById('es_amount').value = btn.getAttribute('data-amount');
-        document.getElementById('es_message').value = btn.getAttribute('data-msg');
-        document.getElementById('editSupporterModal').style.display = 'flex';
-    }
-</script>
-"""
-
-HTML_FEEDBACK = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-comments" style="color:#a855f7;"></i> Zpětná vazba a Žádosti</h2>
-</div>
-
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--warning); margin-bottom: 20px;">
-    <h3 style="color: var(--warning); margin-top: 0;">Nové žádosti o HWID Reset</h3>
-    <div style="overflow-x: auto;">
-        <table>
-            <tr>
-                <th>Uživatel (ID)</th>
-                <th>Důvod (Zpráva)</th>
-                <th>Datum</th>
-                <th>Akce</th>
-            </tr>
-            {% for f in hwid_pending %}
-            <tr>
-                <td style="color:white; font-weight:bold;">{{ f.get('nick', 'Neznámý') }} <br><span style="font-size:11px; color:#aaa; font-weight:normal;">{{ f.get('discord_id', '') }}</span></td>
-                <td style="color:#ddd; font-style:italic;">{{ f.get('message', '') }}</td>
-                <td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td>
-                <td style="display:flex; gap:5px;">
-                    <form action="/dashboard/feedback_reset_hwid" method="POST" style="margin:0;">
-                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
-                        <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
-                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a Resetovat HWID"><i class="fas fa-check"></i> Resetovat</button>
-                    </form>
-                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout žádost" 
-                        data-id="{{ f.get('id', '') }}"
-                        data-nick="{{ (f.get('nick') or '') | e }}"
-                        onclick="rejectHwid(this)"><i class="fas fa-times"></i> Zamítnout</button>
-                    <form id="form_hwid_reject_{{ f.get('id', '') }}" action="/dashboard/feedback_reject" method="POST" style="display:none;">
-                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
-                        <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
-                        <input type="hidden" name="reason" id="reject_reason_{{ f.get('id', '') }}">
-                    </form>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Zatím žádné žádosti o HWID reset.</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-</div>
-
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--blue-main); margin-bottom: 20px;">
-    <h3 style="color: var(--blue-main); margin-top: 0;">Nové zprávy od uživatelů (Všeobecné)</h3>
-    <div style="overflow-x: auto;">
-        <table>
-            <tr>
-                <th>Uživatel (ID)</th>
-                <th>Zpráva / Nápad / Chyba</th>
-                <th>Datum</th>
-                <th>Akce</th>
-            </tr>
-            {% for f in general_pending %}
-            <tr>
-                <td style="color:white; font-weight:bold;">{{ f.get('nick', 'Neznámý') }} <br><span style="font-size:11px; color:#aaa; font-weight:normal;">{{ f.get('discord_id', '') }}</span></td>
-                <td style="color:#ddd; font-style:italic;">{{ f.get('message', '') }}</td>
-                <td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td>
-                <td style="display:flex; gap:5px;">
-                    <button type="button" class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;"
-                        data-id="{{ f.get('id', '') }}"
-                        data-nick="{{ (f.get('nick') or '') | e }}"
-                        onclick="replyGeneral(this)"><i class="fas fa-reply"></i> Odpovědět</button>
-                    <form id="form_general_reply_{{ f.get('id', '') }}" action="/dashboard/feedback_reply" method="POST" style="display:none;">
-                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
-                        <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
-                        <input type="hidden" name="message" id="reply_msg_{{ f.get('id', '') }}">
-                    </form>
-                    
-                    <form action="/dashboard/feedback_resolve" method="POST" style="margin:0;">
-                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
-                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-check-circle"></i> Vyřešeno</button>
-                    </form>
-                    
-                    <form action="/dashboard/feedback_delete" method="POST" style="margin:0;">
-                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
-                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-trash"></i> Smazat</button>
-                    </form>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Zatím žádná nová zpětná vazba.</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-</div>
-
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-    <h3 style="color: var(--success); margin-top: 0;">Vyřešeno / Uzavřeno</h3>
-    <div style="overflow-x: auto;">
-        <table>
-            <tr>
-                <th>Uživatel</th>
-                <th>Typ</th>
-                <th>Zpráva uživatele</th>
-                <th>Vaše odpověď / Status</th>
-                <th>Akce</th>
-            </tr>
-            {% for f in resolved_all %}
-            <tr style="opacity: 0.7;">
-                <td style="color:white; font-weight:bold;">{{ f.get('nick', '') }}</td>
-                <td>{{ 'HWID Reset' if f.get('type') == 'HWID' else 'Zpětná vazba' }}</td>
-                <td style="color:#aaa; font-style:italic;">{{ f.get('message', '') }}</td>
-                <td style="color:var(--success); font-weight:bold;">{{ f.get('sys_note', 'Vyřešeno') }}</td>
-                <td>
-                    <form action="/dashboard/feedback_delete" method="POST" style="margin:0;">
-                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
-                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-trash"></i></button>
-                    </form>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádné uzavřené tickety.</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-</div>
-
-<script>
-    function rejectHwid(btn) {
-        let id = btn.getAttribute('data-id');
-        let nick = btn.getAttribute('data-nick');
-        let reason = prompt("Zadejte důvod zamítnutí pro hráče " + nick + ":", "Reset HWID nyní není možný.");
-        if (reason) {
-            document.getElementById('reject_reason_' + id).value = reason;
-            document.getElementById('form_hwid_reject_' + id).submit();
-        }
-    }
-    function replyGeneral(btn) {
-        let id = btn.getAttribute('data-id');
-        let nick = btn.getAttribute('data-nick');
-        let msg = prompt("Napište zprávu pro hráče " + nick + " (Přijde mu to do DM):");
-        if (msg) {
-            document.getElementById('reply_msg_' + id).value = msg;
-            document.getElementById('form_general_reply_' + id).submit();
-        }
-    }
-</script>
 """
