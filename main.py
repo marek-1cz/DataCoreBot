@@ -201,6 +201,29 @@ def sync_roles_from_flask(discord_id, role_string):
         except: pass
     if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
+def check_version_access(db, version_name, user_role_str):
+    # Pokud app_version není předáno, necháme projít (pro zpětnou kompatibilitu)
+    if not version_name or str(version_name).strip() == "": return True
+    
+    try:
+        v_data = db.table("software_versions").select("target_role").eq("version_name", version_name).execute().data
+        if not v_data: return True # Verze nenalezena v DB, nebudeme zbytečně blokovat
+        
+        target = v_data[0].get("target_role", "User")
+        if target == "User": return True # Přístupné pro všechny
+        
+        roles = [r.strip() for r in user_role_str.split(",")] if user_role_str else []
+        
+        # SA a DEV mohou hrát všechno
+        if "SA" in roles or "DEV" in roles: return True
+        
+        # Pokud je to BT verze, musí mít aspoň BT roli
+        if target == "BT" and "BT" in roles: return True
+        
+        return False
+    except:
+        return True # Při chybě DB pustíme, ať neshodíme přihlášení
+
 @app.route('/api/keepalive', methods=['GET'])
 def api_keepalive():
     return _cors_jsonify({"status": "alive", "time": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")})
@@ -440,23 +463,32 @@ def api_app_login():
     if not data: return _cors_jsonify({"status": "error", "message": "Chybí data."})
     identifier = str(data.get("identifier", ""))
     req_hwid = str(data.get("hwid", ""))
+    app_version = str(data.get("app_version", ""))
     db = get_db()
     try:
         set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
         if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false':
             return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ VYPNUT."})
+            
         user_resp = db.table("users").select("*").or_(f"discord_id.eq.{identifier},nick.ilike.{identifier}").execute()
         if not user_resp.data and identifier.isdigit(): user_resp = db.table("users").select("*").eq("app_id", int(identifier)).execute()
         if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Uživatel nenalezen."})
         user = user_resp.data[0]
+        
         if user.get("is_banned"):
             send_log("⛔ Pokus o přihlášení (BAN)", f"Zabanovaný uživatel `{user.get('nick')}` se pokusil zapnout software.", 0xef4444)
             return _cors_jsonify({"status": "banned", "message": "Tento účet má BAN."})
+            
+        if not check_version_access(db, app_version, user.get("role")):
+            send_log("🛡️ Neoprávněný přístup verze", f"Uživatel `{user.get('nick')}` se pokusil zapnout verzi **{app_version}**, ale nemá na ni roli!", 0xf59e0b)
+            return _cors_jsonify({"status": "error", "message": f"Nemáte dostatečnou roli pro hraní verze '{app_version}'."})
+            
         db_hwid = user.get("hwid")
         if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "":
             if str(db_hwid) != req_hwid:
                 send_log("🔒 HWID Neshoda", f"Uživatel `{user.get('nick')}` se hlásí z jiného PC!\nUloženo: `{db_hwid}`\nNové: `{req_hwid}`", 0xf59e0b)
                 return _cors_jsonify({"status": "hwid_error", "message": "Tento účet je vázán na jiný počítač."})
+                
         token = str(uuid.uuid4())
         db.table("users").update({"login_token": token}).eq("discord_id", user.get("discord_id")).execute()
         async def send():
@@ -498,15 +530,22 @@ def api_silent_check():
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     req_hwid = str(data.get("hwid", ""))
+    app_version = str(data.get("app_version", ""))
     db = get_db()
     try:
         set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
         if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false': return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ VYPNUT."})
+        
         user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
         if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Tento účet neexistuje."})
         user = user_resp.data[0]
+        
         if user.get("is_banned"): return _cors_jsonify({"status": "error", "message": "Tento účet má BAN."})
         if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."})
+        
+        if not check_version_access(db, app_version, user.get("role")):
+            return _cors_jsonify({"status": "error", "message": f"Nemáte dostatečnou roli pro verzi '{app_version}'."})
+            
         db_hwid = user.get("hwid")
         if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
             if req_hwid and req_hwid.startswith("PC-"):
@@ -536,17 +575,23 @@ def api_app_ping():
         if action == "start": 
             updates["launch_count"] = (user_resp.data[0].get("launch_count") or 0) + 1
             new_session_id = str(uuid.uuid4())
+            # Vytvoření sezení s identickým start_time a end_time (zatím)
             db.table("app_sessions").insert({"session_id": new_session_id, "discord_id": discord_id, "start_time": now_str, "end_time": now_str}).execute()
             db.table("users").update(updates).eq("discord_id", discord_id).execute()
             return _cors_jsonify({"status": "ok", "session_id": new_session_id})
             
+        elif action == "ping": 
+            # Přičte přesně 1 minutu (protože interval v JS bude odteď 60000ms = 60s)
+            updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 1
+            if session_id: 
+                # Posune konec sezení na aktuální čas, takže uvidíme od kdy do kdy hrál
+                db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
+                
         elif action == "stop": 
             updates["is_online"] = False
-            if session_id: db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
-            
-        elif action == "ping": 
-            updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 1
-            if session_id: db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
+            if session_id: 
+                # Finálně uzavře sezení
+                db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
             
         db.table("users").update(updates).eq("discord_id", discord_id).execute()
         return _cors_jsonify({"status": "ok", "session_id": session_id})
