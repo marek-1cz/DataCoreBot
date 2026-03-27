@@ -329,36 +329,6 @@ DASHBOARD_LAYOUT = """
 </script>
 """
 
-HTML_LOGIN = """
-<div style="max-width: 400px; margin: 100px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--blue-main); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-    <h2 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-lock"></i> Administrace</h2>
-    <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Zadejte své Discord ID pro přihlášení.</p>
-    <form action="/login_request" method="POST">
-        <input type="text" name="discord_id" placeholder="Vaše Discord ID" required style="text-align: center; font-size: 16px; letter-spacing: 2px;">
-        <button type="submit" class="btn" style="width: 100%; margin-top: 20px; font-size: 16px;"><i class="fas fa-sign-in-alt"></i> Přihlásit se</button>
-    </form>
-</div>
-"""
-
-HTML_WAIT_AUTH = """
-<div style="max-width: 400px; margin: 100px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--warning); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-    <div class="spinner" style="border: 4px solid rgba(245, 158, 11, 0.3); border-top: 4px solid var(--warning); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0 auto 20px auto;"></div>
-    <h2 style="color: var(--warning); margin-top: 0;">Čekám na ověření</h2>
-    <p style="color: var(--text-muted); font-size: 14px;">Byla Vám odeslána soukromá zpráva na Discordu s žádostí o schválení přístupu.<br><br>Jakmile přístup potvrdíte, budete automaticky přesměrováni.</p>
-    <script>
-        setInterval(() => {
-            fetch('/api/check_auth/{{ discord_id }}')
-            .then(r => r.json())
-            .then(data => {
-                if (data.status === 'approved') { window.location.href = '/dashboard/login_finalize?discord_id={{ discord_id }}'; }
-                else if (data.status === 'rejected') { window.location.href = '/'; }
-            });
-        }, 2000);
-    </script>
-    <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-</div>
-"""
-
 HTML_HOME = """
 <div style="text-align: center; padding: 60px 20px; max-width: 800px; margin: 0 auto;">
     <h1 style="color: var(--blue-main); font-size: 2.5em; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">OFICIÁLNÍ STRÁNKA PROJEKTU OIS IDPK</h1>
@@ -384,44 +354,6 @@ HTML_HOME = """
             </div>
         </div>
     </div>
-</div>
-"""
-
-HTML_DOWNLOADS_MAIN = """
-<div style="text-align: center; max-width: 600px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--blue-main); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-    <h2 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-download"></i> Stažení aplikace</h2>
-    <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 30px;">
-        Software není ke stažení veřejně k dispozici. Pro získání softwaru se musíte připojit na náš oficiální Discord server, propojit si účet a vygenerovat si svůj vlastní unikátní odkaz.
-    </p>
-    <a href="https://discord.gg/vmTagbC9mF" target="_blank" class="btn" style="font-size: 18px; padding: 15px 30px; border-radius: 30px; box-shadow: 0 5px 15px rgba(56, 189, 248, 0.4);"><i class="fab fa-discord"></i> Připojit se na Discord</a>
-</div>
-"""
-
-HTML_TEAM = """
-<div style="text-align: center; margin-bottom: 40px;">
-    <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Náš Tým</h1>
-    <p style="color: var(--text-muted); font-size: 16px;">Lidé, kteří stojí za tímto projektem a starají se o jeho chod.</p>
-</div>
-<div style="display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;">
-    {% for member in team %}
-    <div style="background-color: var(--bg-panel); border: 1px solid #334155; border-radius: 10px; width: 300px; padding: 20px; text-align: center; transition: 0.3s; box-shadow: 0 10px 20px rgba(0,0,0,0.3);">
-        <img src="{{ member.get('image_url', '') }}" alt="Avatar" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid var(--blue-main); margin-bottom: 15px;">
-        <h3 style="color: var(--text-main); margin: 0 0 5px 0; font-size: 22px;">{{ member.get('name', '') }}</h3>
-        <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 15px;"><i class="fab fa-discord"></i> {{ member.get('discord_nick', '') }}</div>
-        <div style="margin-bottom: 15px;">
-            {% set roles_input = member.get('role_name', '').split(',') if member.get('role_name') else [] %}
-            {% for r in roles_input %}
-                {% set parts = r.split('|') %}
-                {% set r_name = parts[0].strip() %}
-                {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
-                <span class="role-tag" style="color: {{ r_color }}; border: 1px solid {{ r_color }}; background-color: {{ r_color }}33;">{{ r_name }}</span>
-            {% endfor %}
-        </div>
-        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5; font-style: italic;">"{{ member.get('description', '') }}"</p>
-    </div>
-    {% else %}
-    <div style="color: var(--text-muted); width: 100%; text-align: center; padding: 50px;">Zatím zde nejsou žádní členové.</div>
-    {% endfor %}
 </div>
 """
 
@@ -1392,7 +1324,7 @@ HTML_FEEDBACK = """
             {% for f in resolved_all %}
             <tr style="opacity: 0.7;">
                 <td style="color:white; font-weight:bold;">{{ f.get('nick', '') }}</td>
-                <td>{{ f.get('type', '') }}</td>
+                <td>{{ 'HWID Reset' if f.get('type') == 'HWID' else ('Admin Bypass' if f.get('type') == 'ADMIN_BYPASS' else 'Zpětná vazba') }}</td>
                 <td style="color:#aaa; font-style:italic;">{{ f.get('message', '') }}</td>
                 <td style="color:var(--success); font-weight:bold;">{{ f.get('sys_note', 'Vyřešeno') }}</td>
                 <td>
@@ -1429,4 +1361,74 @@ HTML_FEEDBACK = """
         }
     }
 </script>
+"""
+
+HTML_LOGIN = """
+<div style="max-width: 400px; margin: 100px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--blue-main); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <h2 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-lock"></i> Administrace</h2>
+    <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Zadejte své Discord ID pro přihlášení.</p>
+    <form action="/login_request" method="POST">
+        <input type="text" name="discord_id" placeholder="Vaše Discord ID" required style="text-align: center; font-size: 16px; letter-spacing: 2px;">
+        <button type="submit" class="btn" style="width: 100%; margin-top: 20px; font-size: 16px;"><i class="fas fa-sign-in-alt"></i> Přihlásit se</button>
+    </form>
+</div>
+"""
+
+HTML_WAIT_AUTH = """
+<div style="max-width: 400px; margin: 100px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--warning); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <div class="spinner" style="border: 4px solid rgba(245, 158, 11, 0.3); border-top: 4px solid var(--warning); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0 auto 20px auto;"></div>
+    <h2 style="color: var(--warning); margin-top: 0;">Čekám na ověření</h2>
+    <p style="color: var(--text-muted); font-size: 14px;">Byla Vám odeslána soukromá zpráva na Discordu s žádostí o schválení přístupu.<br><br>Jakmile přístup potvrdíte, budete automaticky přesměrováni.</p>
+    <script>
+        setInterval(() => {
+            fetch('/api/check_auth/{{ discord_id }}')
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'approved') { window.location.href = '/dashboard/login_finalize?discord_id={{ discord_id }}'; }
+                else if (data.status === 'rejected') { window.location.href = '/'; }
+            });
+        }, 2000);
+    </script>
+    <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+</div>
+"""
+
+HTML_DOWNLOADS_MAIN = """
+<div style="text-align: center; margin: 80px auto; max-width: 600px;">
+    <h2 style="color: var(--blue-main); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 40px;">Klikni na logo pro stažení softwaru</h2>
+    <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);" onmouseover="this.style.transform='scale(1.15) rotate(2deg)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'">
+        <img src="{{ logo_velke }}" alt="Projekt OIS IDPK" style="max-width: 350px; width: 100%; filter: drop-shadow(0px 15px 25px rgba(56, 189, 248, 0.6));">
+    </a>
+    <p style="color: var(--text-muted); margin-top: 40px; font-size: 16px; line-height: 1.6;">
+        Software není ke stažení veřejně k dispozici.<br>Budete přesměrováni na náš oficiální Discord server, kde si vygenerujete svůj vlastní unikátní odkaz.
+    </p>
+</div>
+"""
+
+HTML_TEAM = """
+<div style="text-align: center; margin-bottom: 40px;">
+    <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Náš Tým</h1>
+    <p style="color: var(--text-muted); font-size: 16px;">Lidé, kteří stojí za tímto projektem a starají se o jeho chod.</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;">
+    {% for member in team %}
+    <div style="background-color: var(--bg-panel); border: 1px solid #334155; border-radius: 10px; width: 300px; padding: 20px; text-align: center; transition: 0.3s; box-shadow: 0 10px 20px rgba(0,0,0,0.3);">
+        <img src="{{ member.get('image_url', '') }}" onerror="this.onerror=null; this.src='{{ logo_male }}';" alt="Avatar" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid var(--blue-main); margin-bottom: 15px; background-color: var(--bg-dark);">
+        <h3 style="color: var(--text-main); margin: 0 0 5px 0; font-size: 22px;">{{ member.get('name', '') }}</h3>
+        <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 15px;"><i class="fab fa-discord"></i> {{ member.get('discord_nick', '') }}</div>
+        <div style="margin-bottom: 15px;">
+            {% set roles_input = member.get('role_name', '').split(',') if member.get('role_name') else [] %}
+            {% for r in roles_input %}
+                {% set parts = r.split('|') %}
+                {% set r_name = parts[0].strip() %}
+                {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
+                <span class="role-tag" style="color: {{ r_color }}; border: 1px solid {{ r_color }}; background-color: {{ r_color }}33;">{{ r_name }}</span>
+            {% endfor %}
+        </div>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5; font-style: italic;">"{{ member.get('description', '') }}"</p>
+    </div>
+    {% else %}
+    <div style="color: var(--text-muted); width: 100%; text-align: center; padding: 50px;">Zatím zde nejsou žádní členové.</div>
+    {% endfor %}
+</div>
 """
