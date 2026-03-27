@@ -20,7 +20,7 @@ from html_templates import *
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
 app = Flask(__name__)
-# Aktivujeme CORS pro celou aplikaci (čistě přes knihovnu)
+# Aktivujeme CORS pro celou aplikaci
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 app.secret_key = "ois_idpk_super_tajny_klic" 
@@ -198,7 +198,9 @@ def sync_roles_from_flask(discord_id, role_string):
     if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
 def check_version_access(db, version_name, user_role_str):
-    if not version_name or str(version_name).strip() == "": return {"allowed": True}
+    # ZDE JE TEN ZÁMEK: Pokud se aplikace neohlásí verzí, dostane tvrdej ban
+    if not version_name or str(version_name).strip() == "": 
+        return {"allowed": False, "msg": "Nepodporovaná verze aplikace. Stáhnite jsi novou verzyi přes náš discord."}
     
     try:
         v_data = db.table("software_versions").select("*").eq("version_name", version_name).execute().data
@@ -293,8 +295,9 @@ def supporters():
     except: pass
     return render_public(HTML_SUPPORTERS, supporters=support_data)
 
-@app.route('/api/supporters', methods=['GET'])
+@app.route('/api/supporters', methods=['GET', 'OPTIONS'])
 def api_supporters():
+    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
     try:
         db = get_db()
         if not db: return _cors_jsonify({"error": "DB not ready"}), 500
@@ -456,8 +459,9 @@ def api_get_file(token):
         return Response(stream_with_context(generate()), headers={'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name.replace(" ", "_")}.{file_ext}"', 'Content-Type': content_type})
     except Exception as e: return f"Chyba odkazu: {e}"
 
-@app.route('/api/status', methods=['GET'], strict_slashes=False)
+@app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_status():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     try:
         db = get_db()
         set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
@@ -466,8 +470,9 @@ def api_status():
     except: pass
     return _cors_jsonify({"status": "enabled"})
 
-@app.route('/api/app_login', methods=['POST'], strict_slashes=False)
+@app.route('/api/app_login', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_login():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     if not data: return _cors_jsonify({"status": "error", "message": "Chybí data."})
     identifier = str(data.get("identifier", ""))
@@ -510,8 +515,9 @@ def api_app_login():
         return _cors_jsonify({"status": "waiting", "discord_id": user.get("discord_id")})
     except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
 
-@app.route('/api/app_check', methods=['POST'], strict_slashes=False)
+@app.route('/api/app_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_check():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     req_hwid = str(data.get("hwid", ""))
@@ -533,8 +539,9 @@ def api_app_check():
         return _cors_jsonify({"status": "pending"})
     except: return _cors_jsonify({"status": "error"})
 
-@app.route('/api/silent_check', methods=['POST'], strict_slashes=False)
+@app.route('/api/silent_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_silent_check():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     req_hwid = str(data.get("hwid", ""))
@@ -565,8 +572,9 @@ def api_silent_check():
         return _cors_jsonify({"status": "success", "app_id": str(user.get("app_id", ""))})
     except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
 
-@app.route('/api/app_ping', methods=['POST'], strict_slashes=False)
+@app.route('/api/app_ping', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_ping():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     action = data.get("action", "ping")
@@ -583,26 +591,31 @@ def api_app_ping():
         if action == "start": 
             updates["launch_count"] = (user_resp.data[0].get("launch_count") or 0) + 1
             new_session_id = str(uuid.uuid4())
+            # Vytvoření sezení s identickým start_time a end_time (zatím)
             db.table("app_sessions").insert({"session_id": new_session_id, "discord_id": discord_id, "start_time": now_str, "end_time": now_str}).execute()
             db.table("users").update(updates).eq("discord_id", discord_id).execute()
             return _cors_jsonify({"status": "ok", "session_id": new_session_id})
             
         elif action == "ping": 
+            # Přičte přesně 1 minutu (protože interval v JS bude odteď 60000ms = 60s)
             updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 1
             if session_id: 
+                # Posune konec sezení na aktuální čas, takže uvidíme od kdy do kdy hrál
                 db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
                 
         elif action == "stop": 
             updates["is_online"] = False
             if session_id: 
+                # Finálně uzavře sezení
                 db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
             
         db.table("users").update(updates).eq("discord_id", discord_id).execute()
         return _cors_jsonify({"status": "ok", "session_id": session_id})
     except: return _cors_jsonify({"status": "error"})
 
-@app.route('/api/get_profile_data/<discord_id>', methods=['GET'], strict_slashes=False)
+@app.route('/api/get_profile_data/<discord_id>', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_get_profile_data(discord_id):
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     if not session.get('logged_in'): return _cors_jsonify({"error": "Unauthorized"}), 401
     
     if not discord_id or discord_id == 'None' or discord_id.strip() == '':
@@ -656,8 +669,9 @@ def api_get_profile_data(discord_id):
     except Exception as e:
         return _cors_jsonify({"error": str(e)}), 500
 
-@app.route('/api/get_messages', methods=['POST'], strict_slashes=False)
+@app.route('/api/get_messages', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_get_messages():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     app_id = str(data.get("app_id", ""))
@@ -719,8 +733,9 @@ def api_get_messages():
         return _cors_jsonify({"messages": valid_msgs})
     except: return _cors_jsonify({"messages": []})
 
-@app.route('/api/mark_message_read', methods=['POST'], strict_slashes=False)
+@app.route('/api/mark_message_read', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_mark_message_read():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     message_id = str(data.get("message_id", ""))
@@ -732,8 +747,9 @@ def api_mark_message_read():
         except: pass
     return _cors_jsonify({"status": "ok"})
 
-@app.route('/api/submit_feedback', methods=['POST'], strict_slashes=False)
+@app.route('/api/submit_feedback', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_submit_feedback():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     db = get_db()
     if not db: return _cors_jsonify({"status": "error", "message": "DB Error"})
@@ -1486,7 +1502,6 @@ class DynamicDownloadView(discord.ui.View):
                     class DynamicVersionSelect(discord.ui.Select):
                         def __init__(self, u_lvl):
                             opts = []
-                            # Zobrazí jen verze, které jsou v databázi aktivní
                             vers_data = get_db().table("software_versions").select("*").eq("is_active", True).order("id", desc=True).execute().data or []
                             for v in vers_data:
                                 req = 2 if v['target_role'] == 'BT' else (3 if v['target_role'] == 'DEV_SA' else 1)
@@ -1500,7 +1515,6 @@ class DynamicDownloadView(discord.ui.View):
                             t = str(uuid.uuid4())
                             get_db().table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
                             
-                            # Tady je natvrdo nová KOYEB adresa pro bota!
                             link = f"https://datacorebot.koyeb.app/download/{t}?v={self.values[0]}"
                             await i3.edit_original_response(content=f"**Odkaz připraven:**\n🔗 {link}\n*Platí jen pro Vás.*")
                             
