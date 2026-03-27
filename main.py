@@ -257,13 +257,18 @@ def sync_roles_from_flask(discord_id, role_string):
         except: pass
     if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
-def check_version_access(db, app_version_from_pc, user_role_str):
+def check_version_access(db, app_version_from_pc, user):
+    # ADMIN BYPASS: Pokud má uživatel aktivní bypass, ignorujeme všechny kontroly verze!
+    if user.get("admin_bypass") == True:
+        return {"allowed": True}
+
+    user_role_str = user.get("role", "")
+    
     # Pokud se aplikace ve verzi neohlásí (např. verze 1.4 z renderu), rovnou jí to zařízne a nepustí k přihlášení
     if not app_version_from_pc or str(app_version_from_pc).strip() == "": 
         return {"allowed": False, "msg": "Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
     
     try:
-        # Kontroluje se PŘESNĚ pod novým sloupcem db_version
         v_data = db.table("software_versions").select("*").eq("db_version", app_version_from_pc).execute().data
         if not v_data: return {"allowed": False, "msg": f"Verze '{app_version_from_pc}' neexistuje v databázi! Stáhněte si aktuální verzi z našeho Discordu."}
         
@@ -279,9 +284,8 @@ def check_version_access(db, app_version_from_pc, user_role_str):
             try:
                 eol_dt = datetime.strptime(str(eol).strip(), "%d.%m.%Y")
                 if datetime.now() > eol_dt:
-                    # Automaticky zablokovat v DB, jakmile čas vyprší
                     db.table("software_versions").update({"is_active": False}).eq("id", v_info["id"]).execute()
-                    return {"allowed": False, "msg": f"Platnost této verze vypršela dne {eol}. Stáhněte si novou verzi přes náš Discord."}
+                    return {"allowed": False, "msg": f"Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
             except Exception as d_err:
                 pass 
 
@@ -584,7 +588,7 @@ def api_app_login():
             send_log("⛔ Pokus o přihlášení (BAN)", f"Zabanovaný uživatel `{user.get('nick')}` se pokusil zapnout software.", 0xef4444)
             return _cors_jsonify({"status": "banned", "message": "Tento účet má BAN."})
             
-        version_check = check_version_access(db, app_version, user.get("role"))
+        version_check = check_version_access(db, app_version, user)
         if not version_check["allowed"]:
             send_log("🛡️ Neoprávněný přístup verze", f"Uživatel `{user.get('nick')}` se pokusil zapnout zakázanou/neoprávněnou verzi: **{app_version}**", 0xf59e0b)
             return _cors_jsonify({"status": "error", "message": version_check["msg"]})
@@ -649,7 +653,7 @@ def api_silent_check():
         if user.get("is_banned"): return _cors_jsonify({"status": "error", "message": "Tento účet má BAN."})
         if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."})
         
-        version_check = check_version_access(db, app_version, user.get("role"))
+        version_check = check_version_access(db, app_version, user)
         if not version_check["allowed"]:
             return _cors_jsonify({"status": "error", "message": version_check["msg"]})
             
@@ -693,6 +697,7 @@ def api_app_ping():
                 
         elif action == "stop": 
             updates["is_online"] = False
+            updates["admin_bypass"] = False # JAKMILE VYPNE Hru, BYPASS SE ZAMKNE!
             if session_id: 
                 db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
             
@@ -850,8 +855,10 @@ def api_submit_feedback():
             "status": "pending", "sys_note": "", "fcreated_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
         }).execute()
         
-        log_title = "🚨 VYŽADUJE KONTROLU: Žádost o HWID 🚨" if type_str == "HWID" else "🔔 NOVÁ ZPĚTNÁ VAZBA (NÁPAD/CHYBA) 🔔"
-        log_color = 0xef4444 if type_str == "HWID" else 0xa855f7
+        if type_str == "HWID": log_title = "🚨 VYŽADUJE KONTROLU: Žádost o HWID 🚨"; log_color = 0xef4444
+        elif type_str == "ADMIN_BYPASS": log_title = "🔓 VYŽADUJE SCHVÁLENÍ: Admin Bypass 🔓"; log_color = 0xf59e0b
+        else: log_title = "🔔 NOVÁ ZPĚTNÁ VAZBA (NÁPAD/CHYBA) 🔔"; log_color = 0xa855f7
+            
         desc = f"**Od:** {nick} (`{d_id}`)\n**Zpráva:**\n*{msg}*\n\n👉 **BĚŽTE DO DASHBOARDU A VYŘEŠTE TO!**"
         send_log(log_title, desc, log_color)
         
@@ -1002,7 +1009,7 @@ def dashboard_supporters():
 @app.route('/dashboard/feedback', methods=['GET'])
 def dashboard_feedback():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    hwid_p = []; gen_p = []; res_all = []
+    hwid_p = []; bypass_p = []; gen_p = []; res_all = []
     try:
         db = get_db()
         if db:
@@ -1010,10 +1017,43 @@ def dashboard_feedback():
             for item in data:
                 if item.get('status') == 'pending':
                     if item.get('type') == 'HWID': hwid_p.append(item)
+                    elif item.get('type') == 'ADMIN_BYPASS': bypass_p.append(item)
                     else: gen_p.append(item)
                 else: res_all.append(item)
     except: pass
-    return render_dashboard(HTML_FEEDBACK, hwid_pending=hwid_p, general_pending=gen_p, resolved_all=res_all, deploy_time=DEPLOY_TIME)
+    return render_dashboard(HTML_FEEDBACK, hwid_pending=hwid_p, bypass_pending=bypass_p, general_pending=gen_p, resolved_all=res_all, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/bypass_approve', methods=['POST'])
+def bypass_approve():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    fb_id = request.form.get("feedback_id")
+    db = get_db()
+    if db and fb_id:
+        fb = db.table("feedback").select("*").eq("id", fb_id).execute().data
+        if fb:
+            d_id = fb[0]['discord_id']
+            now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+            db.table("users").update({"admin_bypass": True}).eq("discord_id", d_id).execute()
+            db.table("feedback").update({"status": "resolved", "sys_note": f"Bypass schválen [{now_str}]"}).eq("id", fb_id).execute()
+            send_log("🔓 Admin Bypass", f"Administrátor jednorázově odemkl starou verzi pro uživatele: `{d_id}`.", 0x10b981)
+            if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "🔓 Přístup povolen", "Tvá žádost o jednorázový vstup do staré verze byla schválena. Můžeš se přihlásit. Po vypnutí aplikace se přístup opět zamkne.", 0x10b981), bot.loop)
+            flash('Bypass schválen.', 'success')
+    return redirect(url_for('dashboard_feedback'))
+
+@app.route('/dashboard/bypass_reject', methods=['POST'])
+def bypass_reject():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    fb_id = request.form.get("feedback_id")
+    db = get_db()
+    if db and fb_id:
+        fb = db.table("feedback").select("*").eq("id", fb_id).execute().data
+        if fb:
+            d_id = fb[0]['discord_id']
+            now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+            db.table("feedback").update({"status": "resolved", "sys_note": f"Bypass zamítnut [{now_str}]"}).eq("id", fb_id).execute()
+            send_log("❌ Bypass Zamítnut", f"Administrátor zamítl vstup do staré verze pro: `{d_id}`.", 0xef4444)
+            flash('Bypass zamítnut.', 'success')
+    return redirect(url_for('dashboard_feedback'))
 
 @app.route('/dashboard/feedback_reset_hwid', methods=['POST'])
 def feedback_reset_hwid():
@@ -1037,8 +1077,8 @@ def feedback_reject():
     if db and fb_id:
         now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
         db.table("feedback").update({"status": "resolved", "sys_note": f"Zamítnuto: {reason} [{now_str}]"}).eq("id", fb_id).execute()
-        send_log("❌ Žádost zamítnuta", f"Administrátor zamítl žádost o HWID pro ID: `{d_id}`.\nDůvod: {reason}", 0xef4444)
-        if d_id and bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "❌ Žádost zamítnuta", f"Vaše žádost o reset HWID byla administrátorem zamítnuta.\n\n**Důvod:** {reason}", 0xef4444), bot.loop)
+        send_log("❌ Žádost zamítnuta", f"Administrátor zamítl žádost pro ID: `{d_id}`.\nDůvod: {reason}", 0xef4444)
+        if d_id and bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "❌ Žádost zamítnuta", f"Vaše žádost v aplikaci byla administrátorem zamítnuta.\n\n**Důvod:** {reason}", 0xef4444), bot.loop)
         flash('Žádost zamítnuta.', 'success')
     return redirect(url_for('dashboard_feedback'))
 
@@ -1705,7 +1745,7 @@ async def on_ready():
     try:
         for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
     except: pass
-    trigger_setup_messages_update() # Při startu zkontroluje a případně upraví stahovací zprávy
+    trigger_setup_messages_update() 
     if not pixeldrain_keepalive.is_running(): pixeldrain_keepalive.start()
     if not check_pending_supporters.is_running(): check_pending_supporters.start()
     if not connection_watchdog.is_running(): connection_watchdog.start()
