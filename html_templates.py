@@ -727,6 +727,85 @@ HTML_NOTIFICATIONS = """
 </script>
 """
 
+HTML_DOWNLOADS_MAIN = """
+<div style="text-align: center; padding: 60px 20px; max-width: 700px; margin: 50px auto; background-color: var(--bg-panel); border-radius: 15px; box-shadow: 0 15px 30px rgba(0,0,0,0.5); border-top: 5px solid #5865F2;">
+    <h2 style="color: var(--text-main); font-size: 2.2em; margin-top: 0;"><i class="fas fa-shield-alt" style="color: var(--blue-main);"></i> Oficiální distribuce softwaru</h2>
+    <p style="color: var(--text-muted); font-size: 1.1em; line-height: 1.6; margin-bottom: 20px;">
+        Z důvodu ochrany projektu a samotného softwaru jsme se rozhodli přesunout jeho distribuci na náš Discord server. Díky tomu máme větší kontrolu nad přístupem k softwaru a můžeme lépe zabránit jeho zneužití nebo neautorizovanému šíření.
+    </p>
+    <div style="background-color: rgba(88, 101, 242, 0.1); border: 1px solid #5865F2; padding: 30px 20px; border-radius: 10px; margin: 30px 20px;">
+        <p style="color: var(--text-main); font-weight: bold; font-size: 1.2em; margin-top: 0;">Jak získat software:</p>
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">
+            Připojte se na náš Discord, ověřte, že nejste robot, a poté přejděte do kanálu <b>💾・download</b>, kde stačí postupovat podle pokynů DataCoreBota. 🚀
+        </p>
+        <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'"><i class="fab fa-discord" style="font-size: 120px; color: #5865F2; filter: drop-shadow(0px 10px 15px rgba(88,101,242,0.4));"></i></a>
+    </div>
+</div>
+"""
+
+HTML_LOGIN = """
+<div style="max-width: 400px; margin: 50px auto; background-color: var(--bg-panel); padding: 30px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border-top: 4px solid var(--blue-main);">
+    <h2 style="text-align: center; color: var(--blue-main); margin-top: 0;"><i class="fas fa-lock"></i> Dashboard 2FA</h2>
+    <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--danger); padding: 12px; margin-bottom: 20px; border-radius: 0 5px 5px 0;">
+        <p style="color: var(--danger); margin: 0; font-size: 13px; font-weight: 800; text-transform: uppercase;"><i class="fas fa-shield-alt"></i> Zabezpečená zóna</p>
+        <p style="color: var(--text-muted); margin: 5px 0 0 0; font-size: 12px; line-height: 1.4;">Tato databáze je přísně vyhrazena <b>pouze pro administrátory a pověřené správce</b> projektu. Běžní uživatelé sem nemají přístup. Každý pokus o neoprávněné přihlášení je monitorován a logován.</p>
+    </div>
+    <p style="color: var(--text-muted); text-align: center; font-size: 13px;">Pro přístup do systému zadejte své <b>Discord ID</b>.</p>
+    <form method="POST" action="/login_request">
+        <label style="font-weight: bold; font-size: 12px; color: var(--text-muted);">VAŠE DISCORD ID</label>
+        <input type="text" name="discord_id" placeholder="Např. 123456789012345678" required>
+        <button type="submit" class="btn" style="width: 100%; margin-top: 10px;"><i class="fab fa-discord"></i> Odeslat žádost o přihlášení</button>
+    </form>
+</div>
+"""
+
+HTML_WAIT_AUTH = """
+<div style="max-width: 500px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; border-top: 4px solid var(--warning);">
+    <h2 style="color: var(--warning); margin-top: 0;"><i class="fas fa-spinner fa-spin"></i> Čekání na ověření</h2>
+    <p style="color: var(--text-main); font-size: 16px;">Byla Vám odeslána soukromá zpráva na Discord.</p>
+    <p style="color: var(--text-muted); font-size: 14px;">Zkontrolujte si aplikaci Discord a klikněte na tlačítko <b>Ověřit přístup</b>.</p>
+</div>
+<script>
+    setInterval(() => {
+        fetch('/api/check_auth/{{ discord_id }}')
+        .then(r => r.json())
+        .then(data => {
+            if(data.status === 'approved') { window.location.href = '/dashboard/login_finalize?discord_id={{ discord_id }}'; } 
+            else if(data.status === 'rejected') { window.location.href = '/dashboard'; }
+        });
+    }, 2000);
+</script>
+"""
+
+HTML_TEAM = """
+<style>
+    .team-card { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .team-card:hover { transform: translateY(-10px); box-shadow: 0 15px 35px rgba(56, 189, 248, 0.4); }
+</style>
+<h2 style="color: var(--blue-main); border-bottom: 2px solid #334155; padding-bottom: 10px; text-align:center;">Náš Tým</h2>
+<div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 20px;">
+    {% for member in team %}
+    <div class="team-card" style="background-color: var(--bg-panel); border-radius: 10px; padding: 20px; text-align: center; border-top: 4px solid var(--blue-main); width: 300px; max-width:100%;">
+        <img src="{{ member.get('image_url', '') }}" alt="Fotka" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; border: 3px solid #334155;" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+        <h3 style="font-size: 20px; font-weight: bold; margin: 0 0 5px 0;">{{ member.get('name', '') }}</h3>
+        <div style="color: var(--blue-main); font-size: 14px; margin-bottom: 15px;">@{{ member.get('discord_nick', '') }}</div>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 15px;">{{ member.get('description', '') }}</p>
+        <div>
+            {% set roles_input = member.get('role_name', '').split(',') if member.get('role_name') else [] %}
+            {% for r in roles_input %}
+                {% set parts = r.split('|') %}
+                {% set r_name = parts[0].strip() %}
+                {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
+                <span class="role-tag" style="background-color: {{ r_color }}33; color: {{ r_color }}; border: 1px solid {{ r_color }};">{{ r_name }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <p style="color: var(--text-muted); text-align:center; width:100%;">Zatím nebyli přidáni žádní členové týmu.</p>
+    {% endfor %}
+</div>
+"""
+
 HTML_DOWNLOADS_MGMT = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2 style="margin: 0; color: var(--text-main);">Správa Stahování</h2>
