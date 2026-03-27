@@ -20,7 +20,7 @@ from html_templates import *
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
 app = Flask(__name__)
-# Aktivujeme CORS pro celou aplikaci, aby se PC aplikace mohla připojit
+# Aktivujeme CORS pro celou aplikaci (čistě přes knihovnu)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 app.secret_key = "ois_idpk_super_tajny_klic" 
@@ -158,11 +158,7 @@ def send_log(title, description, color=0x38bdf8):
         asyncio.run_coroutine_threadsafe(async_send_log(title, description, color), bot.loop)
 
 def _cors_jsonify(data):
-    resp = jsonify(data)
-    resp.headers['Access-Control-Allow-Origin'] = '*'
-    resp.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-    resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    return resp
+    return jsonify(data)
 
 def render_public(template_string, **kwargs):
     html = PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
@@ -297,9 +293,8 @@ def supporters():
     except: pass
     return render_public(HTML_SUPPORTERS, supporters=support_data)
 
-@app.route('/api/supporters', methods=['GET', 'OPTIONS'])
+@app.route('/api/supporters', methods=['GET'])
 def api_supporters():
-    if request.method == 'OPTIONS': return Response(status=200, headers={'Access-Control-Allow-Origin': '*'})
     try:
         db = get_db()
         if not db: return _cors_jsonify({"error": "DB not ready"}), 500
@@ -461,9 +456,8 @@ def api_get_file(token):
         return Response(stream_with_context(generate()), headers={'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name.replace(" ", "_")}.{file_ext}"', 'Content-Type': content_type})
     except Exception as e: return f"Chyba odkazu: {e}"
 
-@app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
+@app.route('/api/status', methods=['GET'], strict_slashes=False)
 def api_status():
-    if request.method == 'OPTIONS': return _cors_jsonify({})
     try:
         db = get_db()
         set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
@@ -472,9 +466,8 @@ def api_status():
     except: pass
     return _cors_jsonify({"status": "enabled"})
 
-@app.route('/api/app_login', methods=['POST', 'OPTIONS'], strict_slashes=False)
+@app.route('/api/app_login', methods=['POST'], strict_slashes=False)
 def api_app_login():
-    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     if not data: return _cors_jsonify({"status": "error", "message": "Chybí data."})
     identifier = str(data.get("identifier", ""))
@@ -517,9 +510,8 @@ def api_app_login():
         return _cors_jsonify({"status": "waiting", "discord_id": user.get("discord_id")})
     except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
 
-@app.route('/api/app_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
+@app.route('/api/app_check', methods=['POST'], strict_slashes=False)
 def api_app_check():
-    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     req_hwid = str(data.get("hwid", ""))
@@ -541,9 +533,8 @@ def api_app_check():
         return _cors_jsonify({"status": "pending"})
     except: return _cors_jsonify({"status": "error"})
 
-@app.route('/api/silent_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
+@app.route('/api/silent_check', methods=['POST'], strict_slashes=False)
 def api_silent_check():
-    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     req_hwid = str(data.get("hwid", ""))
@@ -574,9 +565,8 @@ def api_silent_check():
         return _cors_jsonify({"status": "success", "app_id": str(user.get("app_id", ""))})
     except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
 
-@app.route('/api/app_ping', methods=['POST', 'OPTIONS'], strict_slashes=False)
+@app.route('/api/app_ping', methods=['POST'], strict_slashes=False)
 def api_app_ping():
-    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     action = data.get("action", "ping")
@@ -611,9 +601,8 @@ def api_app_ping():
         return _cors_jsonify({"status": "ok", "session_id": session_id})
     except: return _cors_jsonify({"status": "error"})
 
-@app.route('/api/get_profile_data/<discord_id>', methods=['GET', 'OPTIONS'], strict_slashes=False)
+@app.route('/api/get_profile_data/<discord_id>', methods=['GET'], strict_slashes=False)
 def api_get_profile_data(discord_id):
-    if request.method == 'OPTIONS': return _cors_jsonify({})
     if not session.get('logged_in'): return _cors_jsonify({"error": "Unauthorized"}), 401
     
     if not discord_id or discord_id == 'None' or discord_id.strip() == '':
@@ -667,9 +656,8 @@ def api_get_profile_data(discord_id):
     except Exception as e:
         return _cors_jsonify({"error": str(e)}), 500
 
-@app.route('/api/get_messages', methods=['POST', 'OPTIONS'], strict_slashes=False)
+@app.route('/api/get_messages', methods=['POST'], strict_slashes=False)
 def api_get_messages():
-    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     app_id = str(data.get("app_id", ""))
@@ -731,9 +719,8 @@ def api_get_messages():
         return _cors_jsonify({"messages": valid_msgs})
     except: return _cors_jsonify({"messages": []})
 
-@app.route('/api/mark_message_read', methods=['POST', 'OPTIONS'], strict_slashes=False)
+@app.route('/api/mark_message_read', methods=['POST'], strict_slashes=False)
 def api_mark_message_read():
-    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get("discord_id", ""))
     message_id = str(data.get("message_id", ""))
@@ -745,9 +732,8 @@ def api_mark_message_read():
         except: pass
     return _cors_jsonify({"status": "ok"})
 
-@app.route('/api/submit_feedback', methods=['POST', 'OPTIONS'], strict_slashes=False)
+@app.route('/api/submit_feedback', methods=['POST'], strict_slashes=False)
 def api_submit_feedback():
-    if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     db = get_db()
     if not db: return _cors_jsonify({"status": "error", "message": "DB Error"})
