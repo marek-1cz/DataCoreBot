@@ -357,6 +357,64 @@ HTML_HOME = """
 </div>
 """
 
+HTML_DOWNLOADS_MAIN = """
+<div style="max-width: 800px; margin: 60px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h2 style="color: var(--text-main); margin-top: 0; display: flex; align-items: center; justify-content: center; gap: 15px; font-size: 28px;">
+            <i class="fas fa-shield-alt" style="color: var(--blue-main); font-size: 32px;"></i> Oficiální distribuce softwaru
+        </h2>
+        <p style="color: var(--text-muted); line-height: 1.6; font-size: 16px; margin-top: 20px;">
+            Z důvodu ochrany projektu a samotného softwaru jsme se rozhodli přesunout jeho distribuci na náš Discord server. Díky tomu máme větší kontrolu nad přístupem k softwaru a můžeme lépe zabránit jeho zneužití nebo neautorizovanému šíření.
+        </p>
+    </div>
+    <div style="border: 1px solid #334155; border-radius: 10px; padding: 30px; text-align: center; background: rgba(15, 23, 42, 0.5);">
+        <h3 style="color: var(--text-main); margin-top: 0; margin-bottom: 15px; font-size: 20px;">Jak získat software:</h3>
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">
+            Připojte se na náš Discord, ověřte, že nejste robot, a poté přejděte do kanálu 💾・download, kde stačí postupovat podle pokynů DataCoreBota. 🚀
+        </p>
+        <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: 0.3s; color: #5865F2; font-size: 80px; text-shadow: 0 0 20px rgba(88, 101, 242, 0.5);" onmouseover="this.style.transform='scale(1.1)'; this.style.textShadow='0 0 30px rgba(88, 101, 242, 0.8)';" onmouseout="this.style.transform='scale(1)'; this.style.textShadow='0 0 20px rgba(88, 101, 242, 0.5)';">
+            <i class="fab fa-discord"></i>
+        </a>
+    </div>
+</div>
+"""
+
+HTML_TEAM = """
+<style>
+    .team-card { transition: all 0.3s ease; cursor: default; }
+    .team-card:hover { box-shadow: 0 0 25px rgba(56, 189, 248, 0.8) !important; transform: translateY(-10px) !important; border-color: var(--blue-main) !important; }
+</style>
+<div style="text-align: center; margin-bottom: 40px;">
+    <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Náš Tým</h1>
+    <p style="color: var(--text-muted); font-size: 16px;">Lidé, kteří stojí za tímto projektem a starají se o jeho chod.</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;">
+    {% for member in team %}
+    <div class="team-card" style="background-color: var(--bg-panel); border: 1px solid #334155; border-radius: 10px; width: 300px; padding: 20px; text-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.3);">
+        {% set img_url = member.get('image_url', '') %}
+        {% if 'hynek' in member.get('name', '').lower() %}
+            {% set img_url = 'https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/IMG_3650.jpg' %}
+        {% endif %}
+        <img src="{{ img_url }}" onerror="this.onerror=null; this.src='{{ logo_male }}';" alt="Avatar" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid var(--blue-main); margin-bottom: 15px; background-color: var(--bg-dark);">
+        <h3 style="color: var(--text-main); margin: 0 0 5px 0; font-size: 22px;">{{ member.get('name', '') }}</h3>
+        <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 15px;"><i class="fab fa-discord"></i> {{ member.get('discord_nick', '') }}</div>
+        <div style="margin-bottom: 15px;">
+            {% set roles_input = member.get('role_name', '').split(',') if member.get('role_name') else [] %}
+            {% for r in roles_input %}
+                {% set parts = r.split('|') %}
+                {% set r_name = parts[0].strip() %}
+                {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
+                <span class="role-tag" style="color: {{ r_color }}; border: 1px solid {{ r_color }}; background-color: {{ r_color }}33;">{{ r_name }}</span>
+            {% endfor %}
+        </div>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5; font-style: italic;">"{{ member.get('description', '') }}"</p>
+    </div>
+    {% else %}
+    <div style="color: var(--text-muted); width: 100%; text-align: center; padding: 50px;">Zatím zde nejsou žádní členové.</div>
+    {% endfor %}
+</div>
+"""
+
 HTML_CLAIM = """
 <div style="max-width: 500px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--blue-main); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
     <h2 style="color: var(--blue-main); text-align: center; margin-top: 0;"><i class="fas fa-gift"></i> Vyzvednutí VIP Role</h2>
@@ -1390,48 +1448,6 @@ HTML_WAIT_AUTH = """
         }, 2000);
     </script>
     <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-</div>
-"""
-
-HTML_DOWNLOADS_MAIN = """
-<div style="text-align: center; max-width: 600px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--blue-main); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-    <h2 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-download"></i> Stažení aplikace</h2>
-    <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 30px;">
-        Software není ke stažení veřejně k dispozici. Pro získání softwaru se musíte připojit na náš oficiální Discord server, propojit si účet a vygenerovat si svůj vlastní unikátní odkaz.
-    </p>
-    <a href="https://discord.gg/vmTagbC9mF" target="_blank" class="btn" style="font-size: 18px; padding: 15px 30px; border-radius: 30px; box-shadow: 0 5px 15px rgba(56, 189, 248, 0.4);"><i class="fab fa-discord"></i> Připojit se na Discord</a>
-</div>
-"""
-
-HTML_TEAM = """
-<div style="text-align: center; margin-bottom: 40px;">
-    <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Náš Tým</h1>
-    <p style="color: var(--text-muted); font-size: 16px;">Lidé, kteří stojí za tímto projektem a starají se o jeho chod.</p>
-</div>
-<div style="display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;">
-    {% for member in team %}
-    <div style="background-color: var(--bg-panel); border: 1px solid #334155; border-radius: 10px; width: 300px; padding: 20px; text-align: center; transition: 0.3s; box-shadow: 0 10px 20px rgba(0,0,0,0.3);">
-        {% set img_url = member.get('image_url', '') %}
-        {% if 'hynek' in member.get('name', '').lower() %}
-            {% set img_url = 'https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/IMG_3650.jpg' %}
-        {% endif %}
-        <img src="{{ img_url }}" onerror="this.onerror=null; this.src='{{ logo_male }}';" alt="Avatar" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid var(--blue-main); margin-bottom: 15px; background-color: var(--bg-dark);">
-        <h3 style="color: var(--text-main); margin: 0 0 5px 0; font-size: 22px;">{{ member.get('name', '') }}</h3>
-        <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 15px;"><i class="fab fa-discord"></i> {{ member.get('discord_nick', '') }}</div>
-        <div style="margin-bottom: 15px;">
-            {% set roles_input = member.get('role_name', '').split(',') if member.get('role_name') else [] %}
-            {% for r in roles_input %}
-                {% set parts = r.split('|') %}
-                {% set r_name = parts[0].strip() %}
-                {% set r_color = parts[1].strip() if parts|length > 1 else '#38bdf8' %}
-                <span class="role-tag" style="color: {{ r_color }}; border: 1px solid {{ r_color }}; background-color: {{ r_color }}33;">{{ r_name }}</span>
-            {% endfor %}
-        </div>
-        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5; font-style: italic;">"{{ member.get('description', '') }}"</p>
-    </div>
-    {% else %}
-    <div style="color: var(--text-muted); width: 100%; text-align: center; padding: 50px;">Zatím zde nejsou žádní členové.</div>
-    {% endfor %}
 </div>
 """
 
