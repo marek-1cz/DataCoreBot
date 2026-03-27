@@ -202,23 +202,43 @@ def sync_roles_from_flask(discord_id, role_string):
     if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
 def check_version_access(db, version_name, user_role_str):
-    if not version_name or str(version_name).strip() == "": return True
+    if not version_name or str(version_name).strip() == "": return {"allowed": True}
     
     try:
-        v_data = db.table("software_versions").select("target_role").eq("version_name", version_name).execute().data
-        if not v_data: return True 
+        v_data = db.table("software_versions").select("*").eq("version_name", version_name).execute().data
+        if not v_data: return {"allowed": False, "msg": f"Verze '{version_name}' neexistuje v databázi! Stáhněte si aktuální verzi z našeho Discordu."}
         
-        target = v_data[0].get("target_role", "User")
-        if target == "User": return True 
+        v_info = v_data[0]
         
-        roles = [r.strip() for r in user_role_str.split(",")] if user_role_str else []
-        
-        if "SA" in roles or "DEV" in roles: return True
-        if target == "BT" and "BT" in roles: return True
-        
-        return False
-    except:
-        return True 
+        # 1. Kontrola, zda je verze aktivní (Zda nebyla ručně vypnuta)
+        if str(v_info.get("is_active", "True")).lower() == "false":
+            return {"allowed": False, "msg": f"Tato verze ({version_name}) již není podporována. Stáhněte si prosím nejnovější aktualizaci z našeho Discordu."}
+            
+        # 2. Kontrola EOL data (End of Life)
+        eol = v_info.get("eol_date")
+        if eol and str(eol).strip():
+            try:
+                eol_dt = datetime.strptime(str(eol).strip(), "%d.%m.%Y")
+                if datetime.now() > eol_dt:
+                    # Automaticky zablokovat v DB
+                    db.table("software_versions").update({"is_active": False}).eq("id", v_info["id"]).execute()
+                    return {"allowed": False, "msg": f"Platnost této verze ({version_name}) vypršela dne {eol}. Stáhněte si prosím nejnovější aktualizaci z našeho Discordu."}
+            except Exception as d_err:
+                pass # Špatný formát data ignorujeme
+
+        # 3. Kontrola oprávnění (Role)
+        target = v_info.get("target_role", "User")
+        if target != "User":
+            roles = [r.strip() for r in user_role_str.split(",")] if user_role_str else []
+            if "SA" not in roles and "DEV" not in roles:
+                if target == "BT" and "BT" not in roles:
+                    return {"allowed": False, "msg": f"Tato verze je omezena pouze pro Beta Testery. Nemáte dostatečné oprávnění."}
+                elif target == "DEV_SA":
+                    return {"allowed": False, "msg": f"Tato verze je neveřejná. Nemáte dostatečné oprávnění pro její spuštění."}
+
+        return {"allowed": True}
+    except Exception as e:
+        return {"allowed": True} # Při chybě spojení pustíme dovnitř, ať to neshodí přihlášení
 
 @app.route('/api/keepalive', methods=['GET'])
 def api_keepalive():
@@ -475,9 +495,10 @@ def api_app_login():
             send_log("⛔ Pokus o přihlášení (BAN)", f"Zabanovaný uživatel `{user.get('nick')}` se pokusil zapnout software.", 0xef4444)
             return _cors_jsonify({"status": "banned", "message": "Tento účet má BAN."})
             
-        if not check_version_access(db, app_version, user.get("role")):
-            send_log("🛡️ Neoprávněný přístup verze", f"Uživatel `{user.get('nick')}` se pokusil zapnout verzi **{app_version}**, ale nemá na ni roli!", 0xf59e0b)
-            return _cors_jsonify({"status": "error", "message": f"Nemáte dostatečnou roli pro hraní verze '{app_version}'."})
+        version_check = check_version_access(db, app_version, user.get("role"))
+        if not version_check["allowed"]:
+            send_log("🛡️ Neoprávněný přístup verze", f"Uživatel `{user.get('nick')}` se pokusil zapnout zakázanou/neoprávněnou verzi: **{app_version}**", 0xf59e0b)
+            return _cors_jsonify({"status": "error", "message": version_check["msg"]})
             
         db_hwid = user.get("hwid")
         if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "":
@@ -539,8 +560,9 @@ def api_silent_check():
         if user.get("is_banned"): return _cors_jsonify({"status": "error", "message": "Tento účet má BAN."})
         if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."})
         
-        if not check_version_access(db, app_version, user.get("role")):
-            return _cors_jsonify({"status": "error", "message": f"Nemáte dostatečnou roli pro verzi '{app_version}'."})
+        version_check = check_version_access(db, app_version, user.get("role"))
+        if not version_check["allowed"]:
+            return _cors_jsonify({"status": "error", "message": version_check["msg"]})
             
         db_hwid = user.get("hwid")
         if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
@@ -1082,7 +1104,7 @@ def dashboard_downloads():
         if db:
             set_resp = db.table("settings").select("*").eq("setting_key", "downloads_enabled").execute().data or []
             if set_resp and str(set_resp[0].get('setting_value')).lower() == 'false': enabled = False
-            versions = db.table("software_versions").select("*").order("id").execute().data or []
+            versions = db.table("software_versions").select("*").order("id", desc=True).execute().data or []
     except Exception as e: flash(f"Chyba DB: {e}", "error")
     return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled, deploy_time=DEPLOY_TIME)
 
@@ -1120,16 +1142,30 @@ def add_version():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     try:
         v_name = request.form.get("version_name")
-        get_db().table("software_versions").insert({"version_name": v_name, "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role")}).execute()
-        send_log("📦 Nová verze softwaru", f"Administrátor přidal novou verzi: **{v_name}**.", 0x10b981)
-    except: pass
+        get_db().table("software_versions").insert({
+            "version_name": v_name, 
+            "file_url": request.form.get("file_url"), 
+            "target_role": request.form.get("target_role"),
+            "is_active": True,
+            "eol_date": ""
+        }).execute()
+        send_log("📦 Nová verze softwaru", f"Administrátor přidal novou verzi do Manažeru: **{v_name}**.", 0x10b981)
+        flash('Nová verze úspěšně vydána!', 'success')
+    except Exception as e: 
+        flash(f'Chyba při přidávání verze: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
 
 @app.route('/dashboard/edit_version', methods=['POST'])
 def edit_version():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     try: 
-        get_db().table("software_versions").update({"version_name": request.form.get("version_name"), "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role")}).eq("id", request.form.get("version_id")).execute()
+        get_db().table("software_versions").update({
+            "version_name": request.form.get("version_name"), 
+            "file_url": request.form.get("file_url"), 
+            "target_role": request.form.get("target_role"),
+            "is_active": True if request.form.get("is_active") else False,
+            "eol_date": request.form.get("eol_date", "")
+        }).eq("id", request.form.get("version_id")).execute()
         flash('Verze byla úspěšně upravena.', 'success')
     except Exception as e: flash(f'Chyba při úpravě verze: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
@@ -1139,7 +1175,7 @@ def delete_version():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     try:
         get_db().table("software_versions").delete().eq("id", request.form.get("version_id")).execute()
-        send_log("🗑️ Verze smazána", "Administrátor smazal jednu z verzí ke stažení.", 0xef4444)
+        send_log("🗑️ Verze smazána", "Administrátor smazal jednu z verzí v Manažeru stahování.", 0xef4444)
     except: pass
     return redirect(url_for('dashboard_downloads'))
 
@@ -1464,19 +1500,23 @@ class DynamicDownloadView(discord.ui.View):
                     class DynamicVersionSelect(discord.ui.Select):
                         def __init__(self, u_lvl):
                             opts = []
-                            vers_data = get_db().table("software_versions").select("*").order("id").execute().data or []
+                            # Zobrazí jen verze, které jsou v databázi aktivní
+                            vers_data = get_db().table("software_versions").select("*").eq("is_active", True).order("id", desc=True).execute().data or []
                             for v in vers_data:
                                 req = 2 if v['target_role'] == 'BT' else (3 if v['target_role'] == 'DEV_SA' else 1)
                                 if u_lvl >= req: opts.append(discord.SelectOption(label=v['version_name'], value=str(v['id']), emoji="📦"))
-                            if not opts: opts.append(discord.SelectOption(label="Žádná verze nenalezena", description="Pro vaše role nejsou dostupné žádné verze.", value="none"))
+                            if not opts: opts.append(discord.SelectOption(label="Žádná verze nenalezena", description="Pro vaše role nejsou dostupné žádné aktivní verze.", value="none"))
                             super().__init__(placeholder="Vyber verzi k instalaci...", options=opts)
                             
                         async def callback(self, i3):
-                            if self.values[0] == "none": return await i3.response.send_message("Pro vaše role nejsou dostupné žádné verze hry.", ephemeral=True)
+                            if self.values[0] == "none": return await i3.response.send_message("Pro vaše role nejsou dostupné žádné verze.", ephemeral=True)
                             await i3.response.send_message("<a:loading:123> Generuji odkaz...", ephemeral=True)
                             t = str(uuid.uuid4())
                             get_db().table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
-                            await i3.edit_original_response(content=f"**Odkaz připraven:**\n🔗 https://datacorebot.koyeb.app/download/{t}?v={self.values[0]}\n*Platí jen pro Vás.*")
+                            
+                            # Tady je natvrdo nová KOYEB adresa pro bota!
+                            link = f"https://datacorebot.koyeb.app/download/{t}?v={self.values[0]}"
+                            await i3.edit_original_response(content=f"**Odkaz připraven:**\n🔗 {link}\n*Platí jen pro Vás.*")
                             
                     v_view = discord.ui.View()
                     v_view.add_item(DynamicVersionSelect(3 if 'SA' in u_role or 'DEV' in u_role else (2 if 'BT' in u_role else 1)))
