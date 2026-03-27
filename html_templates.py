@@ -763,7 +763,7 @@ HTML_DOWNLOADS_MGMT = """
                 <th>Akce</th>
             </tr>
             {% for v in versions %}
-            {% set is_active = str(v.get('is_active', 'True')).lower() == 'true' %}
+            {% set is_active = (v.get('is_active', True) | string | lower) != 'false' %}
             <tr style="opacity: {{ '1' if is_active else '0.5' }};">
                 <td><strong>{{ v.get('version_name', '') }}</strong></td>
                 <td>
