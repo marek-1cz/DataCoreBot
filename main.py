@@ -52,6 +52,66 @@ def get_db():
     except Exception as e: print(f"Chyba připojení k DB: {e}")
     return None
 
+# ==========================================
+# SYSTÉM AUTOMATICKÉ AKTUALIZACE ZPRÁV NA DISCORDU
+# ==========================================
+def get_setup_messages(db):
+    resp = db.table("settings").select("setting_value").eq("setting_key", "setup_messages").execute()
+    if not resp.data: return []
+    try: return json.loads(resp.data[0]['setting_value'])
+    except: return []
+
+def save_setup_message(db, channel_id, message_id):
+    msgs = get_setup_messages(db)
+    msgs.append({"channel_id": str(channel_id), "message_id": str(message_id)})
+    msgs = msgs[-15:] # Uchováme jen posledních 15 odeslaných zpráv (aby to nebylo moc)
+    check = db.table("settings").select("*").eq("setting_key", "setup_messages").execute().data
+    if not check:
+        db.table("settings").insert({"setting_key": "setup_messages", "setting_value": json.dumps(msgs)}).execute()
+    else:
+        db.table("settings").update({"setting_value": json.dumps(msgs)}).eq("setting_key", "setup_messages").execute()
+
+def build_setup_embed(db):
+    embed = discord.Embed(title="📥 Projekt OIS IDPK - Instalace", description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a stahování.\n**Při stahování se automaticky přihlásíte do databáze.**\n*(Stahování lze ve vašem prohlížeči kdykoliv pozastavit a obnovit)*", color=0x38bdf8)
+    versions = db.table("software_versions").select("*").eq("is_active", True).order("id", desc=True).execute().data or []
+    
+    user_v = [v['version_name'] for v in versions if v['target_role'] == 'User']
+    bt_v = [v['version_name'] for v in versions if v['target_role'] == 'BT']
+    
+    if user_v: embed.add_field(name="🌍 Dostupné pro všechny (User)", value="\n".join([f"• {x}" for x in user_v]), inline=False)
+    if bt_v: embed.add_field(name="🛠️ Dostupné pro Beta Testery (BT)", value="\n".join([f"• {x}" for x in bt_v]), inline=False)
+    if not user_v and not bt_v: embed.add_field(name="Zatím nejsou dostupné žádné veřejné verze.", value="-", inline=False)
+        
+    embed.set_footer(text="Neveřejné verze jsou skryté. Pro výpis úplně všech verzí použijte příkaz !verze")
+    return embed
+
+async def update_setup_messages_async():
+    if not bot.is_ready(): return
+    db = get_db()
+    if not db: return
+    msgs = get_setup_messages(db)
+    if not msgs: return
+    
+    embed = build_setup_embed(db)
+    view = DynamicDownloadView()
+    valid_msgs = []
+    
+    for m in msgs:
+        try:
+            channel = bot.get_channel(int(m['channel_id'])) or await bot.fetch_channel(int(m['channel_id']))
+            if channel:
+                msg = await channel.fetch_message(int(m['message_id']))
+                await msg.edit(embed=embed, view=view)
+                valid_msgs.append(m) # Uchováme jen platné existující zprávy
+        except Exception as e: pass
+        
+    db.table("settings").update({"setting_value": json.dumps(valid_msgs)}).eq("setting_key", "setup_messages").execute()
+
+def trigger_setup_messages_update():
+    if bot.loop and bot.loop.is_running() and bot.is_ready():
+        asyncio.run_coroutine_threadsafe(update_setup_messages_async(), bot.loop)
+# ==========================================
+
 def process_supporters(data_list):
     for s in data_list:
         amt_str = str(s.get('amount', '0'))
@@ -197,20 +257,21 @@ def sync_roles_from_flask(discord_id, role_string):
         except: pass
     if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
-def check_version_access(db, version_name, user_role_str):
-    # ZDE JE TEN ZÁMEK: Pokud se aplikace neohlásí verzí, dostane tvrdej ban
-    if not version_name or str(version_name).strip() == "": 
-        return {"allowed": False, "msg": "Nepodporovaná verze aplikace. Stáhnite jsi novou verzyi přes náš discord."}
+def check_version_access(db, app_version_from_pc, user_role_str):
+    # Pokud se aplikace ve verzi neohlásí (např. verze 1.4 z renderu), rovnou jí to zařízne a nepustí k přihlášení
+    if not app_version_from_pc or str(app_version_from_pc).strip() == "": 
+        return {"allowed": False, "msg": "Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
     
     try:
-        v_data = db.table("software_versions").select("*").eq("version_name", version_name).execute().data
-        if not v_data: return {"allowed": False, "msg": f"Verze '{version_name}' neexistuje v databázi! Stáhněte si aktuální verzi z našeho Discordu."}
+        # Kontroluje se PŘESNĚ pod novým sloupcem db_version
+        v_data = db.table("software_versions").select("*").eq("db_version", app_version_from_pc).execute().data
+        if not v_data: return {"allowed": False, "msg": f"Verze '{app_version_from_pc}' neexistuje v databázi! Stáhněte si aktuální verzi z našeho Discordu."}
         
         v_info = v_data[0]
         
         # 1. Kontrola, zda je verze aktivní (Zda nebyla ručně vypnuta)
         if str(v_info.get("is_active", "True")).lower() == "false":
-            return {"allowed": False, "msg": f"Tato verze ({version_name}) již není podporována. Stáhněte si prosím nejnovější aktualizaci z našeho Discordu."}
+            return {"allowed": False, "msg": f"Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
             
         # 2. Kontrola EOL data (End of Life)
         eol = v_info.get("eol_date")
@@ -218,11 +279,11 @@ def check_version_access(db, version_name, user_role_str):
             try:
                 eol_dt = datetime.strptime(str(eol).strip(), "%d.%m.%Y")
                 if datetime.now() > eol_dt:
-                    # Automaticky zablokovat v DB
+                    # Automaticky zablokovat v DB, jakmile čas vyprší
                     db.table("software_versions").update({"is_active": False}).eq("id", v_info["id"]).execute()
-                    return {"allowed": False, "msg": f"Platnost této verze ({version_name}) vypršela dne {eol}. Stáhněte si prosím nejnovější aktualizaci z našeho Discordu."}
+                    return {"allowed": False, "msg": f"Platnost této verze vypršela dne {eol}. Stáhněte si novou verzi přes náš Discord."}
             except Exception as d_err:
-                pass # Špatný formát data ignorujeme
+                pass 
 
         # 3. Kontrola oprávnění (Role)
         target = v_info.get("target_role", "User")
@@ -236,7 +297,7 @@ def check_version_access(db, version_name, user_role_str):
 
         return {"allowed": True}
     except Exception as e:
-        return {"allowed": True} # Při chybě spojení pustíme dovnitř, ať to neshodí přihlášení
+        return {"allowed": True}
 
 @app.route('/api/keepalive', methods=['GET'])
 def api_keepalive():
@@ -437,26 +498,56 @@ def api_get_file(token):
         version_id = request.args.get('v')
         v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
         if not v_resp.data: return "Verze nenalezena."
-        file_url = v_resp.data[0]['file_url']; version_name = v_resp.data[0]['version_name']
-        try:
-            db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
-            send_log("📥 Stahování", f"Uživatel `{user.get('nick')}` zahájil stahování: **{version_name}**.", 0x38bdf8)
-        except: pass
+        
+        file_url = v_resp.data[0]['file_url']
+        version_name = v_resp.data[0]['version_name']
+        
+        # Uložení logu POUZE PŘI PRVNÍM REQUESTU (ne při pauza/pokračování Range)
+        if not request.headers.get('Range') or request.headers.get('Range') == 'bytes=0-':
+            try:
+                db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+                send_log("📥 Stahování", f"Uživatel `{user.get('nick')}` zahájil stahování: **{version_name}**.", 0x38bdf8)
+            except: pass
+            
         file_ext = "zip" 
         if "pixeldrain.com/u/" in file_url: file_url = file_url.replace("/u/", "/api/file/")
         if "1drv.ms" in file_url or "onedrive.live.com" in file_url or "1drv.com" in file_url: file_url = file_url.split("?")[0] + "?download=1"
         if "dropbox.com" in file_url:
             file_url = file_url.replace("dl=0", "dl=1")
             if "dl=1" not in file_url: file_url += "?dl=1" if "?" not in file_url else "&dl=1"
-        req = urllib.request.Request(file_url, headers={'User-Agent': 'Mozilla/5.0'})
-        remote_response = urllib.request.urlopen(req)
+            
+        # PODPORA PRO PAUZA / POKRAČOVAT (RANGE REQUESTS)
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        range_header = request.headers.get('Range')
+        if range_header:
+            headers['Range'] = range_header
+            
+        req = urllib.request.Request(file_url, headers=headers)
+        try:
+            remote_response = urllib.request.urlopen(req)
+        except urllib.error.HTTPError as e:
+            remote_response = e
+            if e.code not in [200, 206]:
+                return f"Chyba vzdáleného serveru: {e.code}"
+                
         def generate():
             while True:
                 chunk = remote_response.read(8192)
                 if not chunk: break
                 yield chunk
+                
         content_type = remote_response.headers.get('Content-Type', 'application/octet-stream')
-        return Response(stream_with_context(generate()), headers={'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name.replace(" ", "_")}.{file_ext}"', 'Content-Type': content_type})
+        resp_headers = {
+            'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name.replace(" ", "_")}.{file_ext}"',
+            'Content-Type': content_type,
+            'Accept-Ranges': 'bytes'
+        }
+        
+        for h in ['Content-Length', 'Content-Range']:
+            if remote_response.headers.get(h):
+                resp_headers[h] = remote_response.headers.get(h)
+                
+        return Response(stream_with_context(generate()), status=remote_response.status, headers=resp_headers)
     except Exception as e: return f"Chyba odkazu: {e}"
 
 @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
@@ -591,22 +682,18 @@ def api_app_ping():
         if action == "start": 
             updates["launch_count"] = (user_resp.data[0].get("launch_count") or 0) + 1
             new_session_id = str(uuid.uuid4())
-            # Vytvoření sezení s identickým start_time a end_time (zatím)
             db.table("app_sessions").insert({"session_id": new_session_id, "discord_id": discord_id, "start_time": now_str, "end_time": now_str}).execute()
             db.table("users").update(updates).eq("discord_id", discord_id).execute()
             return _cors_jsonify({"status": "ok", "session_id": new_session_id})
             
         elif action == "ping": 
-            # Přičte přesně 1 minutu (protože interval v JS bude odteď 60000ms = 60s)
             updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 1
             if session_id: 
-                # Posune konec sezení na aktuální čas, takže uvidíme od kdy do kdy hrál
                 db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
                 
         elif action == "stop": 
             updates["is_online"] = False
             if session_id: 
-                # Finálně uzavře sezení
                 db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
             
         db.table("users").update(updates).eq("discord_id", discord_id).execute()
@@ -1144,8 +1231,10 @@ def add_version():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     try:
         v_name = request.form.get("version_name")
+        db_ver = request.form.get("db_version")
         get_db().table("software_versions").insert({
             "version_name": v_name, 
+            "db_version": db_ver,
             "file_url": request.form.get("file_url"), 
             "target_role": request.form.get("target_role"),
             "is_active": True,
@@ -1153,6 +1242,7 @@ def add_version():
         }).execute()
         send_log("📦 Nová verze softwaru", f"Administrátor přidal novou verzi do Manažeru: **{v_name}**.", 0x10b981)
         flash('Nová verze úspěšně vydána!', 'success')
+        trigger_setup_messages_update() # Aktualizuje Discord zprávy
     except Exception as e: 
         flash(f'Chyba při přidávání verze: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
@@ -1163,12 +1253,14 @@ def edit_version():
     try: 
         get_db().table("software_versions").update({
             "version_name": request.form.get("version_name"), 
+            "db_version": request.form.get("db_version"),
             "file_url": request.form.get("file_url"), 
             "target_role": request.form.get("target_role"),
             "is_active": True if request.form.get("is_active") else False,
             "eol_date": request.form.get("eol_date", "")
         }).eq("id", request.form.get("version_id")).execute()
         flash('Verze byla úspěšně upravena.', 'success')
+        trigger_setup_messages_update() # Aktualizuje Discord zprávy
     except Exception as e: flash(f'Chyba při úpravě verze: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
 
@@ -1178,6 +1270,8 @@ def delete_version():
     try:
         get_db().table("software_versions").delete().eq("id", request.form.get("version_id")).execute()
         send_log("🗑️ Verze smazána", "Administrátor smazal jednu z verzí v Manažeru stahování.", 0xef4444)
+        flash('Verze smazána.', 'success')
+        trigger_setup_messages_update() # Aktualizuje Discord zprávy
     except: pass
     return redirect(url_for('dashboard_downloads'))
 
@@ -1611,6 +1705,7 @@ async def on_ready():
     try:
         for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
     except: pass
+    trigger_setup_messages_update() # Při startu zkontroluje a případně upraví stahovací zprávy
     if not pixeldrain_keepalive.is_running(): pixeldrain_keepalive.start()
     if not check_pending_supporters.is_running(): check_pending_supporters.start()
     if not connection_watchdog.is_running(): connection_watchdog.start()
@@ -1656,8 +1751,10 @@ async def on_command_error(ctx, error):
 @bot.command()
 @check_web_sa()
 async def setup_download(ctx):
-    embed = discord.Embed(title="📥 Projekt OIS IDPK - Instalace", description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a generování osobního odkazu ke stažení.\n\n**Při stahování se automaticky přihlásíte do databáze.**", color=0x38bdf8)
-    await ctx.send(embed=embed, view=DynamicDownloadView())
+    db = get_db()
+    embed = build_setup_embed(db)
+    msg = await ctx.send(embed=embed, view=DynamicDownloadView())
+    save_setup_message(db, ctx.channel.id, msg.id)
     try: await ctx.message.delete()
     except: pass
 
@@ -1677,10 +1774,13 @@ async def auth(ctx):
 async def verze(ctx):
     db = get_db()
     if not db: return await ctx.send("❌ Databáze není dostupná.")
-    versions = db.table("software_versions").select("*").execute().data or []
+    versions = db.table("software_versions").select("*").order("id", desc=True).execute().data or []
     if not versions: return await ctx.send("Zatím nejsou dostupné žádné verze ke stažení.")
-    embed = discord.Embed(title="📦 Dostupné verze softwaru", color=0x38bdf8)
-    for v in versions: embed.add_field(name=v['version_name'], value=f"Dostupné pro: `{v['target_role']}`", inline=False)
+    
+    embed = discord.Embed(title="📦 Kompletní seznam verzí", description="Seznam všech verzí softwaru, včetně neveřejných pro DEV/SA.", color=0x38bdf8)
+    for v in versions:
+        status = "✅ Aktivní" if str(v.get('is_active', 'True')).lower() == 'true' else "❌ Zablokováno"
+        embed.add_field(name=f"{v['version_name']} [{v.get('db_version', 'Neznámá v DB')}]", value=f"Dostupné pro: `{v['target_role']}`\nStav: {status}", inline=False)
     await ctx.send(embed=embed)
 
 @bot.command()
