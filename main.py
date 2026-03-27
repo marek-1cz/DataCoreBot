@@ -202,27 +202,23 @@ def sync_roles_from_flask(discord_id, role_string):
     if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
 def check_version_access(db, version_name, user_role_str):
-    # Pokud app_version není předáno, necháme projít (pro zpětnou kompatibilitu)
     if not version_name or str(version_name).strip() == "": return True
     
     try:
         v_data = db.table("software_versions").select("target_role").eq("version_name", version_name).execute().data
-        if not v_data: return True # Verze nenalezena v DB, nebudeme zbytečně blokovat
+        if not v_data: return True 
         
         target = v_data[0].get("target_role", "User")
-        if target == "User": return True # Přístupné pro všechny
+        if target == "User": return True 
         
         roles = [r.strip() for r in user_role_str.split(",")] if user_role_str else []
         
-        # SA a DEV mohou hrát všechno
         if "SA" in roles or "DEV" in roles: return True
-        
-        # Pokud je to BT verze, musí mít aspoň BT roli
         if target == "BT" and "BT" in roles: return True
         
         return False
     except:
-        return True # Při chybě DB pustíme, ať neshodíme přihlášení
+        return True 
 
 @app.route('/api/keepalive', methods=['GET'])
 def api_keepalive():
@@ -575,22 +571,18 @@ def api_app_ping():
         if action == "start": 
             updates["launch_count"] = (user_resp.data[0].get("launch_count") or 0) + 1
             new_session_id = str(uuid.uuid4())
-            # Vytvoření sezení s identickým start_time a end_time (zatím)
             db.table("app_sessions").insert({"session_id": new_session_id, "discord_id": discord_id, "start_time": now_str, "end_time": now_str}).execute()
             db.table("users").update(updates).eq("discord_id", discord_id).execute()
             return _cors_jsonify({"status": "ok", "session_id": new_session_id})
             
         elif action == "ping": 
-            # Přičte přesně 1 minutu (protože interval v JS bude odteď 60000ms = 60s)
             updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 1
             if session_id: 
-                # Posune konec sezení na aktuální čas, takže uvidíme od kdy do kdy hrál
                 db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
                 
         elif action == "stop": 
             updates["is_online"] = False
             if session_id: 
-                # Finálně uzavře sezení
                 db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
             
         db.table("users").update(updates).eq("discord_id", discord_id).execute()
@@ -1484,7 +1476,7 @@ class DynamicDownloadView(discord.ui.View):
                             await i3.response.send_message("<a:loading:123> Generuji odkaz...", ephemeral=True)
                             t = str(uuid.uuid4())
                             get_db().table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
-                            await i3.edit_original_response(content=f"**Odkaz připraven:**\n🔗 {os.environ.get('RENDER_EXTERNAL_URL', 'https://datacorebot.onrender.com')}/download/{t}?v={self.values[0]}\n*Platí jen pro Vás.*")
+                            await i3.edit_original_response(content=f"**Odkaz připraven:**\n🔗 https://datacorebot.koyeb.app/download/{t}?v={self.values[0]}\n*Platí jen pro Vás.*")
                             
                     v_view = discord.ui.View()
                     v_view.add_item(DynamicVersionSelect(3 if 'SA' in u_role or 'DEV' in u_role else (2 if 'BT' in u_role else 1)))
@@ -1520,7 +1512,7 @@ def check_sm_role():
 @tasks.loop(minutes=5)
 async def keepalive_ping():
     try:
-        url = os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:8080") + "/api/keepalive"
+        url = "https://datacorebot.koyeb.app/api/keepalive"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
     except: pass
