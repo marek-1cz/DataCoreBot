@@ -62,7 +62,7 @@ def get_db():
     return None
 
 # ==========================================
-# ULTIMÁTNÍ PROXY STREAMER (Zabiják 3KB zmetků)
+# ULTIMÁTNÍ PROXY STREAMER (G-Drive Bypass 2.0)
 # ==========================================
 def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
     urls = [u.strip() for u in file_url_raw.split(',') if u.strip()]
@@ -70,71 +70,81 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
 
     cj = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj), urllib.request.HTTPRedirectHandler())
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
     
     try:
-        # GOOGLE DRIVE ZABIJÁK (Vylepšená detekce tokenů)
+        # GOOGLE DRIVE ZABIJÁK 2.0
         if "drive.google.com" in file_url and "/d/" in file_url:
             match = re.search(r'/d/([a-zA-Z0-9_-]+)', file_url)
             if match:
                 file_id = match.group(1)
                 url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                req = urllib.request.Request(url, headers=headers)
                 resp = opener.open(req, timeout=15)
                 
                 # Obejití varovné stránky
                 if 'text/html' in resp.headers.get('Content-Type', '').lower():
                     text = resp.read().decode('utf-8', errors='ignore')
-                    # Hledáme schovaný token dvěma různými způsoby, které Google používá
                     token = None
-                    match1 = re.search(r'name="confirm" value="([^"]+)"', text)
-                    match2 = re.search(r'confirm=([a-zA-Z0-9_-]+)', text)
-                    if match1: token = match1.group(1)
-                    elif match2: token = match2.group(1)
                     
+                    # 1. Hledání v Cookies (Nejčastější u velkých souborů)
+                    for cookie in cj:
+                        if cookie.name.startswith("download_warning"):
+                            token = cookie.value
+                            break
+                            
+                    # 2. Hledání v HTML kódu
+                    if not token:
+                        match1 = re.search(r'confirm=([a-zA-Z0-9_-]+)', text)
+                        match2 = re.search(r'name="confirm" value="([^"]+)"', text)
+                        if match1: token = match1.group(1)
+                        elif match2: token = match2.group(1)
+                        
                     if token:
                         url = f"{url}&confirm={token}"
-                        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                        req = urllib.request.Request(url, headers=headers)
                         resp = opener.open(req, timeout=15)
                     else:
-                        # Pokud token nenajdeme, je téměř 100% jisté, že soubor není veřejný
-                        send_log("❌ Selhání stahování", f"Úložiště zablokovalo stahování pro hráče `{nick}`.\n**Možný důvod:** Soubor na Google Drive NENÍ nastaven na 'Všichni, kdo mají odkaz', nebo se odkaz změnil.", 0xef4444)
-                        return "Chyba: Soubor na Google Drive je buď soukromý, nebo chráněný."
+                        send_log("❌ Selhání stahování", f"Nepodařilo se prolomit Google Drive ochranu pro hráče `{nick}`. Zkontrolujte, zda je soubor nastaven na 'Všichni, kdo mají odkaz'.", 0xef4444)
+                        return "Chyba: Soubor na Google Drive je uzamčen nebo vyžaduje potvrzení, které nelze obejít."
             else:
-                req = urllib.request.Request(file_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                req = urllib.request.Request(file_url, headers=headers)
                 resp = opener.open(req, timeout=15)
         else:
             # Ostatní servery (např. Dropbox)
             if "dropbox.com" in file_url:
                 file_url = file_url.replace("dl=0", "dl=1")
                 if "dl=1" not in file_url: file_url += "?dl=1" if "?" not in file_url else "&dl=1"
-            req = urllib.request.Request(file_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            req = urllib.request.Request(file_url, headers=headers)
             resp = opener.open(req, timeout=15)
 
-        # Finální kontrola, zda to opravdu není HTML (zabrání 3KB ZIPům)
+        # Finální kontrola: Pokud nám i tak cloud poslal HTML, je to zmetek a stahování se nesmí pustit.
         if 'text/html' in resp.headers.get('Content-Type', '').lower():
-            send_log("❌ Selhání stahování", f"Úložiště zablokovalo stahování pro hráče `{nick}` (Poslalo chybovou HTML stránku místo ZIPu!). Zkontrolujte URL.", 0xef4444)
-            return "Chyba na straně úložiště. Soubor nelze stáhnout."
+            send_log("❌ Selhání stahování", f"Úložiště zablokovalo stahování pro hráče `{nick}` (Zase to posílá HTML místo ZIPu!). Zkuste jiný hosting.", 0xef4444)
+            return "Chyba na straně úložiště. Soubor byl zablokován poskytovatelem."
 
         def generate():
             try:
                 while True:
+                    # Stahování po bezpečných 128KB blocích
                     chunk = resp.read(1024 * 128) 
                     if not chunk: break
                     yield chunk
             except Exception as stream_err:
-                send_log("⚠️ Spojení přerušeno", f"Uživateli `{nick}` se přerušilo stahování v půlce.\nDůvod: {stream_err}", 0xf59e0b)
+                send_log("⚠️ Spojení přerušeno", f"Uživateli `{nick}` se stahování přerušilo v průběhu.\nDůvod: {stream_err}", 0xf59e0b)
             finally:
                 resp.close()
                 
-        headers = {
+        # Prohlížeči vnutíme stahování ZIPu
+        resp_headers = {
             'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name.replace(" ", "_")}.zip"',
             'Content-Type': resp.headers.get('Content-Type', 'application/octet-stream')
         }
         if resp.headers.get('Content-Length'):
-            headers['Content-Length'] = resp.headers.get('Content-Length')
+            resp_headers['Content-Length'] = resp.headers.get('Content-Length')
             
-        send_log("✅ Úspěšné stahování", f"Uživatel `{nick}` (ID: `{discord_id}`) právě skrytě stahuje soubor: **{version_name}**.", 0x10b981)
-        return Response(stream_with_context(generate()), headers=headers)
+        send_log("✅ Úspěšné stahování", f"Uživatel `{nick}` (ID: `{discord_id}`) právě skrytě stahuje soubor z proxy: **{version_name}**.", 0x10b981)
+        return Response(stream_with_context(generate()), headers=resp_headers)
         
     except Exception as e:
         send_log("❌ Selhání stahování", f"Kritická chyba Proxy pro hráče `{nick}`:\n`{e}`", 0xef4444)
@@ -569,7 +579,6 @@ def secure_download(token):
         if not v_resp.data: return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--warning);'>Chyba verze</h2></div>")
         v_data = v_resp.data[0]
         
-        # UŽIVATEL ZŮSTÁVÁ ZDE A JAVASCRIPT ZVLÁDÁ KONTROLU I CHYBY
         html = f"""<div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);">
             <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2>
             <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Přihlášen jako: <strong>{user.get('nick', '')}</strong></p>
@@ -697,12 +706,10 @@ def api_stream_download(token):
     # Okamžité zneplatnění tokenu (konec zneužívání)
     db.table("users").update({"download_token": ""}).eq("discord_id", user['discord_id']).execute()
     
-    # Zapsat oficiální log spuštění stahování do DB
     try:
         db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")}).execute()
     except: pass
     
-    # Předání do naší proxy, která ukrývá link a obchází Google limity
     return stream_proxy_file(file_url_raw, version_name, user['discord_id'], user.get('nick', 'Neznámý'))
 
 @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
@@ -1588,6 +1595,162 @@ def edit_user():
                 if str(session.get('discord_id')) == str(discord_id): session.clear()
         except: pass
     return redirect(url_for('dashboard_main'))
+
+class DashboardAuthView(discord.ui.View):
+    def __init__(self, token, discord_id):
+        super().__init__(timeout=300)
+        self.token = token
+        self.discord_id = discord_id
+        
+    @discord.ui.button(label="Ověřit přístup", style=discord.ButtonStyle.success, emoji="✅")
+    async def verify_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        db = get_db()
+        if db:
+            user = db.table("users").select("login_token").eq("discord_id", self.discord_id).execute().data
+            if user and user[0].get("login_token") == self.token:
+                db.table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
+                await interaction.edit_original_response(content="✅ **Přístup do administrace byl úspěšně schválen!**", view=None)
+            else: await interaction.edit_original_response(content="❌ **Platnost vypršela.**", view=None)
+                
+    @discord.ui.button(label="Zamítnout", style=discord.ButtonStyle.danger, emoji="❌")
+    async def decline_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        db = get_db()
+        if db: db.table("users").update({"login_token": "rejected"}).eq("discord_id", self.discord_id).execute()
+        await interaction.edit_original_response(content="⛔ **Zamítnuto.**", view=None)
+
+class AppAuthView(discord.ui.View):
+    def __init__(self, token, discord_id, is_dm=True):
+        super().__init__(timeout=180)
+        self.token = token
+        self.discord_id = discord_id
+        self.is_dm = is_dm
+        
+    @discord.ui.button(label="Ano, ověřit", style=discord.ButtonStyle.success)
+    async def ok(self, interaction, button):
+        if str(interaction.user.id) != str(self.discord_id): return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        db = get_db()
+        if db: db.table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
+        await interaction.response.edit_message(content="✅ **Ověřeno! Můžete se vrátit do aplikace.**", view=None)
+        send_log("🖥️ Přihlášení do Aplikace", f"Uživatel s ID `{self.discord_id}` se úspěšně ověřil a vstoupil do softwaru.", 0x10b981)
+        if not self.is_dm:
+            await asyncio.sleep(2); await interaction.message.delete()
+
+class PerDeleteConfirm(discord.ui.View):
+    def __init__(self, target_id, author_id):
+        super().__init__(timeout=60)
+        self.target_id = target_id
+        self.author_id = author_id
+
+    @discord.ui.button(label="Ano, trvale smazat", style=discord.ButtonStyle.danger, emoji="⚠️")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        await interaction.response.defer()
+        db = get_db()
+        if db:
+            db.table("users").delete().eq("discord_id", self.target_id).execute()
+            await interaction.edit_original_response(content=f"✅ Účet `{self.target_id}` byl z databáze PERMANENTNĚ smazán.", view=None, embed=None)
+
+    @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        await interaction.response.edit_message(content="❌ Akce zrušena.", view=None, embed=None)
+
+class DynamicDownloadView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+    @discord.ui.button(label="Zahájit instalaci softwaru", style=discord.ButtonStyle.primary, emoji="📥", custom_id="persistent_install_main_btn")
+    async def dl_btn(self, interaction, button):
+        class DynamicRulesView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=None)
+                
+            @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, emoji="✅")
+            async def agree(self, i2, b2):
+                await i2.response.edit_message(content="<a:loading:123> Ověřuji profil...", view=None)
+                try:
+                    db = get_db()
+                    d_id = str(i2.user.id)
+                    n = i2.user.display_name
+                    u_role = "User"
+                    settings_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}]
+                    if str(settings_resp[0].get('setting_value', '')).lower() == 'false': return await i2.edit_original_response(content="**Stahování je globálně vypnuto.**")
+                    chk = db.table("users").select("*").eq("discord_id", d_id).execute()
+                    pend_data = db.table("pending_roles").select("*").execute().data or []
+                    pend = next((p for p in pend_data if p['discord_identifier'] in [d_id, n]), None)
+                    if chk.data:
+                        if chk.data[0].get('is_banned'): return await i2.edit_original_response(content="**Přístup zamítnut:** Máte BAN.")
+                        if chk.data[0].get('is_deleted'):
+                            hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                            nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
+                            r = pend['roles'] if pend else "User"
+                            db.table("users").update({"app_id": nid, "nick": n, "is_deleted": False, "role": r}).eq("discord_id", d_id).execute()
+                            u_role = r
+                            if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
+                        else: u_role = chk.data[0].get('role', 'User')
+                    else:
+                        hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                        nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
+                        r = pend['roles'] if pend else "User"
+                        db.table("users").insert({"app_id": nid, "discord_id": d_id, "nick": n, "role": r, "hwid": "", "is_banned": False, "is_deleted": False, "dashboard_access": False, "login_token": "", "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+                        u_role = r
+                        if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
+                            
+                    if isinstance(i2.user, discord.Member): 
+                        try: await update_member_roles(i2.user, u_role)
+                        except: pass
+                            
+                    class DynamicVersionSelect(discord.ui.Select):
+                        def __init__(self, u_lvl):
+                            opts = []
+                            vers_data = get_db().table("software_versions").select("*").eq("is_active", True).order("id", desc=True).execute().data or []
+                            for v in vers_data:
+                                req = 2 if v['target_role'] == 'BT' else (3 if v['target_role'] == 'DEV_SA' else 1)
+                                if u_lvl >= req: opts.append(discord.SelectOption(label=v['version_name'], value=str(v['id']), emoji="📦"))
+                            if not opts: opts.append(discord.SelectOption(label="Žádná verze nenalezena", description="Pro vaše role nejsou dostupné žádné aktivní verze.", value="none"))
+                            super().__init__(placeholder="Vyber verzi k instalaci...", options=opts)
+                            
+                        async def callback(self, i3):
+                            if self.values[0] == "none": return await i3.response.send_message("Pro vaše role nejsou dostupné žádné verze.", ephemeral=True)
+                            await i3.response.send_message("<a:loading:123> Generuji odkaz...", ephemeral=True)
+                            t = str(uuid.uuid4())
+                            get_db().table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
+                            
+                            link = f"https://datacorebot.koyeb.app/download/{t}?v={self.values[0]}"
+                            await i3.edit_original_response(content=f"**Odkaz připraven:**\n🔗 {link}\n*Platí jen pro Vás.*")
+                            
+                    v_view = discord.ui.View()
+                    v_view.add_item(DynamicVersionSelect(3 if 'SA' in u_role or 'DEV' in u_role else (2 if 'BT' in u_role else 1)))
+                    await i2.edit_original_response(content="**Ověření úspěšné.** Vyberte soubor:", view=v_view)
+                except Exception as e: await i2.edit_original_response(content=f"Chyba DB: {e}")
+                    
+            @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, emoji="❌")
+            async def disagree(self, i2, b2): await i2.response.edit_message(content="**Akce zrušena.**", view=None)
+                
+        await interaction.response.send_message("**PODMÍNKY UŽÍVÁNÍ:**\n1. Přísný zákaz šíření, kopírování nebo sdílení aplikace bez výslovného souhlasu autora.\n2. Systém využívá HWID ochranu a shromažďuje telemetrická data pro zajištění správného chodu a bezpečnosti aplikace.\n3. Každý pokus o modifikaci kódu nebo obcházení zabezpečení povede k okamžitému a trvalému zablokování.\n\nSouhlasíte s těmito podmínkami?", view=DynamicRulesView(), ephemeral=True)
+
+intents = discord.Intents.default()
+intents.members = True
+intents.message_content = True
+intents.presences = True
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=None, max_messages=10)
+bot.invites_cache = {}
+
+def check_web_sa():
+    async def predicate(ctx):
+        if discord.utils.get(ctx.author.roles, name="web-sa") or ctx.author.guild_permissions.administrator: return True
+        await ctx.send(f"❌ {ctx.author.mention}, nemáš oprávnění k tomuto příkazu.", delete_after=10)
+        return False
+    return commands.check(predicate)
+
+def check_sm_role():
+    async def predicate(ctx):
+        if discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator: return True
+        await ctx.send(f"❌ {ctx.author.mention}, nemáš oprávnění k tomuto příkazu.", delete_after=10)
+        return False
+    return commands.check(predicate)
 
 @bot.command()
 @check_web_sa()
