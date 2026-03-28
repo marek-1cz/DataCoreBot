@@ -13,7 +13,6 @@ import traceback
 import re
 import gc
 import time
-import random
 from werkzeug.exceptions import HTTPException
 from html_templates import *
 
@@ -266,10 +265,13 @@ def sync_roles_from_flask(discord_id, role_string):
     if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
 def check_version_access(db, app_version_from_pc, user):
+    # ADMIN BYPASS: Pokud má uživatel aktivní bypass, ignorujeme všechny kontroly verze!
     if user.get("admin_bypass") == True:
         return {"allowed": True}
 
     user_role_str = user.get("role", "")
+    
+    # Pokud se aplikace ve verzi neohlásí (např. verze 1.4 z renderu), rovnou jí to zařízne a nepustí k přihlášení
     if not app_version_from_pc or str(app_version_from_pc).strip() == "": 
         return {"allowed": False, "msg": "Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
     
@@ -278,9 +280,12 @@ def check_version_access(db, app_version_from_pc, user):
         if not v_data: return {"allowed": False, "msg": f"Verze '{app_version_from_pc}' neexistuje v databázi! Stáhněte si aktuální verzi z našeho Discordu."}
         
         v_info = v_data[0]
+        
+        # 1. Kontrola, zda je verze aktivní (Zda nebyla ručně vypnuta)
         if str(v_info.get("is_active", "True")).lower() == "false":
             return {"allowed": False, "msg": f"Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
             
+        # 2. Kontrola EOL data (End of Life)
         eol = v_info.get("eol_date")
         if eol and str(eol).strip():
             try:
@@ -291,6 +296,7 @@ def check_version_access(db, app_version_from_pc, user):
             except Exception as d_err:
                 pass 
 
+        # 3. Kontrola oprávnění (Role)
         target = v_info.get("target_role", "User")
         if target != "User":
             roles = [r.strip() for r in user_role_str.split(",")] if user_role_str else []
@@ -482,14 +488,14 @@ def secure_download(token):
     if not db: return "Chyba databáze."
     try:
         resp = db.table("users").select("*").eq("download_token", token).execute()
-        if not resp.data: return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Neplatný odkaz, nebo již vypršel!</h2><p style='color: #aaa;'>Vraťte se na Discord a vygenerujte si odkaz znovu.</p></div>")
+        if not resp.data: return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Neplatný odkaz!</h2></div>")
         user = resp.data[0]
         if user.get("is_banned") or user.get("is_deleted"): return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Přístup zamítnut</h2></div>")
         version_id = request.args.get('v')
         v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
         if not v_resp.data: return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--warning);'>Chyba verze</h2></div>")
         v_data = v_resp.data[0]
-        html = f"""<div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);"><h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2><p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Přihlášen jako: <strong>{user.get('nick', '')}</strong></p><div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;"><h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3><p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{v_data.get('version_name', '')}</strong></p></div><div id="download-area"><a href="#" onclick="startDownload()" class="btn btn-success" style="font-size: 18px; padding: 15px 30px; display: inline-block;" id="dl-btn"><i class="fas fa-download"></i> Stáhnout Soubor</a></div><div id="loading-area" style="display: none;"><div class="spinner" style="margin: 0 auto 10px auto; border-color: rgba(16, 185, 129, 0.3); border-top-color: #10b981;"></div><p style="color: var(--text-main); font-weight: bold;">Připravuji stahování...</p></div><div id="success-area" style="display: none; margin-top: 20px;"><h3 style="color: var(--success); margin-top: 0;"><i class="fas fa-check"></i> Úspěšně přesměrováno ke stažení</h3><p style="color: var(--text-main); font-size: 14px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 3px solid var(--blue-main);">Po stažení souboru jej nezapomeňte rozbalit pomocí programů jako <b>7-ZIP</b> nebo <b>WinRAR</b>.</p></div><script>function startDownload() {{ document.getElementById('download-area').style.display = 'none'; document.getElementById('loading-area').style.display = 'block'; window.location.href = "/api/get_file/{token}?v={version_id}"; setTimeout(() => {{ document.getElementById('loading-area').style.display = 'none'; document.getElementById('success-area').style.display = 'block'; }}, 2000); }}</script></div>"""
+        html = f"""<div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);"><h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2><p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Přihlášen jako: <strong>{user.get('nick', '')}</strong></p><div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;"><h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3><p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{v_data.get('version_name', '')}</strong></p></div><div id="download-area"><a href="#" onclick="startDownload()" class="btn btn-success" style="font-size: 18px; padding: 15px 30px; display: inline-block;" id="dl-btn"><i class="fas fa-download"></i> Stáhnout Soubor</a></div><div id="loading-area" style="display: none;"><div class="spinner" style="margin: 0 auto 10px auto; border-color: rgba(16, 185, 129, 0.3); border-top-color: #10b981;"></div><p style="color: var(--text-main); font-weight: bold;">Připravuji stahování...</p></div><div id="success-area" style="display: none; margin-top: 20px;"><h3 style="color: var(--success); margin-top: 0;"><i class="fas fa-check"></i> Úspěšně staženo</h3><p style="color: var(--text-main); font-size: 14px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 3px solid var(--blue-main);">Po stažení souboru jej nezapomeňte rozbalit pomocí programů jako <b>7-ZIP</b> nebo <b>WinRAR</b>.</p><a href="/api/get_file/{token}?v={version_id}" style="color: var(--text-muted); font-size: 12px; text-decoration: underline; margin-top: 15px; display: inline-block;">Nestáhlo se to? Stáhnout znova</a></div><iframe id="dl-frame" style="display:none;"></iframe><script>function startDownload() {{ document.getElementById('download-area').style.display = 'none'; document.getElementById('loading-area').style.display = 'block'; document.getElementById('dl-frame').src = "/api/get_file/{token}?v={version_id}"; setTimeout(() => {{ document.getElementById('loading-area').style.display = 'none'; document.getElementById('success-area').style.display = 'block'; }}, 3000); }}</script></div>"""
         return render_public(html)
     except: return "Systémová chyba."
 
@@ -499,50 +505,60 @@ def api_get_file(token):
     if not db: return "Chyba databáze."
     try:
         resp = db.table("users").select("*").eq("download_token", token).execute()
-        if not resp.data: return "Neplatný token nebo vypršel."
+        if not resp.data: return "Neplatný token."
         user = resp.data[0]
         if user.get("is_banned") or user.get("is_deleted"): return "Přístup zamítnut."
         version_id = request.args.get('v')
         v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
         if not v_resp.data: return "Verze nenalezena."
         
-        # --- ANTI SPAM KONTROLA (30 VTEŘIN) ---
-        now_prague = get_prague_time().replace(tzinfo=None)
-        last_log = db.table("download_logs").select("*").eq("discord_id", user['discord_id']).order("id", desc=True).limit(1).execute().data
-        if last_log:
-            try:
-                time_str = last_log[0]['downloaded_at']
-                if time_str.count(':') == 2: last_dt = datetime.strptime(time_str, "%d.%m.%Y %H:%M:%S")
-                else: last_dt = datetime.strptime(time_str, "%d.%m.%Y %H:%M")
-                if (now_prague - last_dt).total_seconds() < 30:
-                    return "Detekován SPAM! Počkejte prosím 30 vteřin před dalším stažením."
-            except: pass
-        
-        file_url_raw = v_resp.data[0]['file_url']
+        file_url = v_resp.data[0]['file_url']
         version_name = v_resp.data[0]['version_name']
         
-        # Zneplatnění tokenu - zabrání F5 refreshům a neustálému mačkání tlačítka!
-        db.table("users").update({"download_token": ""}).eq("discord_id", user['discord_id']).execute()
-        
-        # Zapsat nový log
-        try:
-            db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")}).execute()
-            send_log("📥 Stahování", f"Uživatel `{user.get('nick')}` zahájil stahování: **{version_name}**.", 0x38bdf8)
-        except: pass
-        
-        # --- MULTI-MIRROR LOAD BALANCER ---
-        # Rozdělí odkazy podle čárky a náhodně vybere jeden.
-        urls = [u.strip() for u in file_url_raw.split(',') if u.strip()]
-        file_url = random.choice(urls) if urls else file_url_raw
-        
-        # --- PŘÍMÉ PŘESMĚROVÁNÍ (0% ZÁTĚŽ NA KOYEB CPU) ---
+        if not request.headers.get('Range') or request.headers.get('Range') == 'bytes=0-':
+            try:
+                db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+                send_log("📥 Stahování", f"Uživatel `{user.get('nick')}` zahájil stahování: **{version_name}**.", 0x38bdf8)
+            except: pass
+            
+        file_ext = "zip" 
         if "pixeldrain.com/u/" in file_url: file_url = file_url.replace("/u/", "/api/file/")
         if "1drv.ms" in file_url or "onedrive.live.com" in file_url or "1drv.com" in file_url: file_url = file_url.split("?")[0] + "?download=1"
         if "dropbox.com" in file_url:
             file_url = file_url.replace("dl=0", "dl=1")
             if "dl=1" not in file_url: file_url += "?dl=1" if "?" not in file_url else "&dl=1"
             
-        return redirect(file_url)
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        range_header = request.headers.get('Range')
+        if range_header:
+            headers['Range'] = range_header
+            
+        req = urllib.request.Request(file_url, headers=headers)
+        try:
+            remote_response = urllib.request.urlopen(req)
+        except urllib.error.HTTPError as e:
+            remote_response = e
+            if e.code not in [200, 206]:
+                return f"Chyba vzdáleného serveru: {e.code}"
+                
+        def generate():
+            while True:
+                chunk = remote_response.read(8192)
+                if not chunk: break
+                yield chunk
+                
+        content_type = remote_response.headers.get('Content-Type', 'application/octet-stream')
+        resp_headers = {
+            'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name.replace(" ", "_")}.{file_ext}"',
+            'Content-Type': content_type,
+            'Accept-Ranges': 'bytes'
+        }
+        
+        for h in ['Content-Length', 'Content-Range']:
+            if remote_response.headers.get(h):
+                resp_headers[h] = remote_response.headers.get(h)
+                
+        return Response(stream_with_context(generate()), status=remote_response.status, headers=resp_headers)
     except Exception as e: return f"Chyba odkazu: {e}"
 
 @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
