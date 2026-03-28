@@ -358,21 +358,21 @@ HTML_HOME = """
 """
 
 HTML_DOWNLOADS_MAIN = """
-<div style="max-width: 800px; margin: 60px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+<div style="max-width: 650px; margin: 60px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
     <div style="text-align: center; margin-bottom: 30px;">
-        <h2 style="color: var(--text-main); margin-top: 0; display: flex; align-items: center; justify-content: center; gap: 15px; font-size: 28px;">
-            <i class="fas fa-shield-alt" style="color: var(--blue-main); font-size: 32px;"></i> Oficiální distribuce softwaru
+        <h2 style="color: var(--text-main); margin-top: 0; display: flex; align-items: center; justify-content: center; gap: 15px; font-size: 26px;">
+            <i class="fas fa-shield-alt" style="color: var(--blue-main); font-size: 30px;"></i> Oficiální distribuce softwaru
         </h2>
-        <p style="color: var(--text-muted); line-height: 1.6; font-size: 16px; margin-top: 20px;">
+        <p style="color: var(--text-muted); line-height: 1.6; font-size: 15px; margin-top: 20px;">
             Z důvodu ochrany projektu a samotného softwaru jsme se rozhodli přesunout jeho distribuci na náš Discord server. Díky tomu máme větší kontrolu nad přístupem k softwaru a můžeme lépe zabránit jeho zneužití nebo neautorizovanému šíření.
         </p>
     </div>
-    <div style="border: 1px solid #334155; border-radius: 10px; padding: 30px; text-align: center; background: rgba(15, 23, 42, 0.5);">
-        <h3 style="color: var(--text-main); margin-top: 0; margin-bottom: 15px; font-size: 20px;">Jak získat software:</h3>
+    <div style="border: 1px solid #334155; border-radius: 10px; padding: 30px; text-align: center; background: rgba(15, 23, 42, 0.4);">
+        <h3 style="color: var(--text-main); margin-top: 0; margin-bottom: 15px; font-size: 18px;">Jak získat software:</h3>
         <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">
-            Připojte se na náš Discord, ověřte, že nejste robot, a poté přejděte do kanálu 💾・download, kde stačí postupovat podle pokynů DataCoreBota. 🚀
+            Připojte se na náš Discord, ověřte, že nejste robot, a poté přejděte do kanálu 💾 • download, kde stačí postupovat podle pokynů DataCoreBota. 🚀
         </p>
-        <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: 0.3s; color: #5865F2; font-size: 80px; text-shadow: 0 0 20px rgba(88, 101, 242, 0.5);" onmouseover="this.style.transform='scale(1.1)'; this.style.textShadow='0 0 30px rgba(88, 101, 242, 0.8)';" onmouseout="this.style.transform='scale(1)'; this.style.textShadow='0 0 20px rgba(88, 101, 242, 0.5)';">
+        <a href="https://discord.gg/vmTagbC9mF" target="_blank" style="display: inline-block; transition: 0.3s; color: #5865F2; font-size: 90px; filter: drop-shadow(0 0 15px rgba(88, 101, 242, 0.4)); text-decoration: none;" onmouseover="this.style.transform='scale(1.1)'; this.style.filter='drop-shadow(0 0 25px rgba(88, 101, 242, 0.8))';" onmouseout="this.style.transform='scale(1)'; this.style.filter='drop-shadow(0 0 15px rgba(88, 101, 242, 0.4))';">
             <i class="fab fa-discord"></i>
         </a>
     </div>
@@ -381,7 +381,7 @@ HTML_DOWNLOADS_MAIN = """
 
 HTML_TEAM = """
 <style>
-    .team-card { transition: all 0.3s ease; cursor: default; }
+    .team-card { transition: all 0.3s ease; cursor: default; border: 1px solid #334155; }
     .team-card:hover { box-shadow: 0 0 25px rgba(56, 189, 248, 0.8) !important; transform: translateY(-10px) !important; border-color: var(--blue-main) !important; }
 </style>
 <div style="text-align: center; margin-bottom: 40px;">
@@ -390,7 +390,7 @@ HTML_TEAM = """
 </div>
 <div style="display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;">
     {% for member in team %}
-    <div class="team-card" style="background-color: var(--bg-panel); border: 1px solid #334155; border-radius: 10px; width: 300px; padding: 20px; text-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.3);">
+    <div class="team-card" style="background-color: var(--bg-panel); border-radius: 10px; width: 300px; padding: 20px; text-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.3);">
         {% set img_url = member.get('image_url', '') %}
         {% if 'hynek' in member.get('name', '').lower() %}
             {% set img_url = 'https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/IMG_3650.jpg' %}
@@ -796,7 +796,7 @@ HTML_DOWNLOADS_MGMT = """
         <form action="/dashboard/add_version" method="POST">
             <input type="text" name="version_name" placeholder="Zobrazený Název (např. Jarní Update 1.5)" required>
             <input type="text" name="db_version" placeholder="Verze Databáze (Přesně z logic-ovladac.js!)" required>
-            <input type="url" name="file_url" placeholder="Přímý odkaz na stažení souboru" required>
+            <input type="text" name="file_url" placeholder="Odkaz(y) na stažení (více odkazů oddělte čárkou)" required>
             
             <label style="color: var(--text-muted); font-size: 13px;">Pro jakou roli je tato verze určena?</label>
             <select name="target_role" required>
@@ -878,8 +878,8 @@ HTML_DOWNLOADS_MGMT = """
                 <label style="color: var(--text-muted); font-size: 13px;">Verze Databáze (Z logic-ovladac.js):</label>
                 <input type="text" name="db_version" id="ev_db" required>
                 
-                <label style="color: var(--text-muted); font-size: 13px;">URL odkazu:</label>
-                <input type="url" name="file_url" id="ev_url" required>
+                <label style="color: var(--text-muted); font-size: 13px;">URL odkazu (více odkazů oddělte čárkou):</label>
+                <input type="text" name="file_url" id="ev_url" required>
                 
                 <label style="color: var(--text-muted); font-size: 13px;">Pro jakou minimální roli?</label>
                 <select name="target_role" id="ev_role" required>
@@ -1417,259 +1417,6 @@ HTML_FEEDBACK = """
             document.getElementById('reply_msg_' + id).value = msg;
             document.getElementById('form_general_reply_' + id).submit();
         }
-    }
-</script>
-"""
-
-HTML_LOGIN = """
-<div style="max-width: 400px; margin: 100px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--blue-main); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-    <h2 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-lock"></i> Administrace</h2>
-    <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Zadejte své Discord ID pro přihlášení.</p>
-    <form action="/login_request" method="POST">
-        <input type="text" name="discord_id" placeholder="Vaše Discord ID" required style="text-align: center; font-size: 16px; letter-spacing: 2px;">
-        <button type="submit" class="btn" style="width: 100%; margin-top: 20px; font-size: 16px;"><i class="fas fa-sign-in-alt"></i> Přihlásit se</button>
-    </form>
-</div>
-"""
-
-HTML_WAIT_AUTH = """
-<div style="max-width: 400px; margin: 100px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--warning); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-    <div class="spinner" style="border: 4px solid rgba(245, 158, 11, 0.3); border-top: 4px solid var(--warning); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0 auto 20px auto;"></div>
-    <h2 style="color: var(--warning); margin-top: 0;">Čekám na ověření</h2>
-    <p style="color: var(--text-muted); font-size: 14px;">Byla Vám odeslána soukromá zpráva na Discordu s žádostí o schválení přístupu.<br><br>Jakmile přístup potvrdíte, budete automaticky přesměrováni.</p>
-    <script>
-        setInterval(() => {
-            fetch('/api/check_auth/{{ discord_id }}')
-            .then(r => r.json())
-            .then(data => {
-                if (data.status === 'approved') { window.location.href = '/dashboard/login_finalize?discord_id={{ discord_id }}'; }
-                else if (data.status === 'rejected') { window.location.href = '/'; }
-            });
-        }, 2000);
-    </script>
-    <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-</div>
-"""
-
-HTML_SUPPORTERS = """
-<style>
-    .glowing-btn-blue { background-color: var(--blue-main); color: #000; padding: 15px 40px; font-size: 20px; font-weight: 900; border-radius: 50px; text-decoration: none; display: inline-block; margin-top: 20px; box-shadow: 0 0 20px rgba(56, 189, 248, 0.6); transition: all 0.3s ease; text-transform: uppercase; letter-spacing: 1px; border: none; cursor: pointer; }
-    .glowing-btn-blue:hover { box-shadow: 0 0 40px rgba(56, 189, 248, 1); transform: scale(1.05); color: #000; }
-    .supporter-wrapper { width: 100%; max-width: 500px; min-height: 230px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; text-align: center; box-sizing: border-box; }
-    .tier-1 { background-color: rgba(15, 23, 42, 0.8); padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.3); border-left: 5px solid #38bdf8; transition: transform 0.5s ease, box-shadow 0.5s ease; }
-    .tier-1:hover { transform: scale(1.05); box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4); }
-    .tier-1 .name-title { color: #e0f2fe; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); font-size: 20px; margin: 0 0 10px 0; }
-    .tier-1 .title-badge { font-size: 10px; color: #38bdf8; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin-bottom: 10px; }
-    .tier-1 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; border: 1px solid rgba(56, 189, 248, 0.3); }
-    @keyframes pulseMedium { from { box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); } to { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); } }
-    .tier-2 { background-color: rgba(30, 41, 59, 0.9); padding: 25px; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.6); border-left: 6px solid #f59e0b; animation: pulseMedium 2s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
-    .tier-2:hover { transform: scale(1.05) !important; animation: none; box-shadow: 0 10px 35px rgba(245, 158, 11, 0.8); }
-    .tier-2 .name-title { color: #fcd34d; font-size: 26px; margin: 0 0 10px 0; text-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
-    .tier-2 .title-badge { font-size: 12px; color: #f59e0b; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; margin-bottom: 10px; }
-    .tier-2 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(245, 158, 11, 0.1); color: var(--warning); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(245, 158, 11, 0.5); }
-    @keyframes epicWebGlow { from { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); } to { box-shadow: 0 0 50px rgba(239, 68, 68, 0.9), inset 0 0 30px rgba(239, 68, 68, 0.3); } }
-    .tier-3 { background: linear-gradient(135deg, #2a0a18, #450a0a); padding: 30px; border-radius: 15px; border: 2px solid #ef4444; animation: epicWebGlow 1.5s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
-    .tier-3:hover { transform: scale(1.08) !important; animation: none; box-shadow: 0 15px 60px rgba(239, 68, 68, 1); }
-    .tier-3 .name-title { color: #fca5a5; font-size: 32px !important; margin: 0 0 15px 0; text-shadow: 0 0 20px #ef4444, 0 0 40px #ef4444; text-transform: uppercase; font-weight: 900; }
-    .tier-3 .title-badge { font-size: 14px; color: #ef4444; text-transform: uppercase; font-weight: 900; letter-spacing: 3px; margin-bottom: 10px; text-shadow: 0 0 10px #ef4444; }
-    .tier-3 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: #ef4444 !important; color: #fff !important; border: 2px solid #fca5a5 !important; padding: 8px 20px; border-radius: 25px; font-weight: bold; font-size: 20px !important; box-shadow: 0 0 20px #ef4444; }
-</style>
-
-<div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
-    <div style="text-align: center; margin-bottom: 40px;">
-        <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Děkuji všem za podporu!</h1>
-        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!</p>
-        <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue"><i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK</a>
-    </div>
-    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 40px 0;">
-    <h2 style="text-align: center; color: var(--text-main); letter-spacing: 3px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,255,255,0.2);">SEZNAM PODPOROVATELŮ</h2>
-    <div style="display: flex; flex-direction: column; gap: 40px; padding-bottom: 50px; align-items: center;">
-        {% for s in supporters %}
-        <div class="tier-{{ s.get('tier', 1) }} supporter-wrapper">
-            <div style="width: 100%;">
-                {% if s.get('tier') == 3 %} <div class="title-badge">MEGA PODPOROVATEL</div>
-                {% elif s.get('tier') == 2 %} <div class="title-badge">VELKÝ PODPOROVATEL</div>
-                {% else %} <div class="title-badge">PODPOROVATEL</div> {% endif %}
-                <h3 class="name-title">{{ s.get('name', 'Neznámý dárce') }}</h3>
-                <div class="amt-badge">{{ s.get('amount', '') }}</div>
-            </div>
-            <div style="width: 100%; margin-top: auto;">
-                {% if s.get('message') %}
-                <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0 auto 15px auto; line-height: 1.5; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 2px solid rgba(255,255,255,0.2); max-width: 90%;">
-                    "{{ s.get('message') }}"
-                </p>
-                {% endif %}
-                <div style="font-size: 11px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; text-align: center;">Datum podpory: {{ s.get('created_at', '') }}</div>
-            </div>
-        </div>
-        {% else %}
-        <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1); width: 100%;">Zatím zde nikdo není. Buďte první!</div>
-        {% endfor %}
-    </div>
-</div>
-"""
-
-HTML_SUPPORTERS_MGMT = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-star" style="color:var(--warning);"></i> Správa Podporovatelů</h2>
-</div>
-
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--warning); margin-bottom: 20px;">
-    <h3 style="color: var(--warning); margin-top: 0;"><i class="fas fa-exclamation-triangle"></i> Ke schválení (Manuální kontrola)</h3>
-    <p style="color: var(--text-muted); font-size: 13px;">Zde se zobrazují lidé, kteří si zažádali o roli na webu, ale systém nenašel shodu nebo jejich účet na Discordu.</p>
-    <div style="overflow-x: auto;">
-        <table>
-            <tr>
-                <th>BMAC Jméno</th>
-                <th>Discord Nick</th>
-                <th>Částka</th>
-                <th>Systémová Zpráva</th>
-                <th>Akce</th>
-            </tr>
-            {% for p in pending_claims %}
-            <tr>
-                <td style="color:var(--blue-main); font-weight:bold;">{{ p.get('name', 'Neznámý') }}</td>
-                <td style="color:white; font-weight:bold;">{{ p.get('discord_nick', 'Nevyplněno') }}</td>
-                <td><span class="role-tag" style="background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning);">{{ p.get('amount', '?') }}</span></td>
-                <td style="color: var(--danger); font-size: 12px; font-weight: bold; max-width: 200px;">{{ p.get('sys_note', 'Čeká na schválení') }}</td>
-                <td style="display: flex; gap: 5px;">
-                    <form action="/dashboard/approve_claim" method="POST" style="display:inline; margin:0;">
-                        <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
-                        <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
-                        <input type="hidden" name="amount" value="{{ p.get('amount', '0') }}">
-                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a přidat roli"><i class="fas fa-check"></i></button>
-                    </form>
-                    
-                    <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily"
-                        data-id="{{ p.get('id', '') }}"
-                        data-name="{{ (p.get('name') or '') | e }}"
-                        data-nick="{{ (p.get('discord_nick') or '') | e }}"
-                        data-amount="{{ (p.get('amount') or '') | e }}"
-                        data-msg="{{ (p.get('message') or '') | e }}"
-                        onclick="openSupporterEdit(this)"><i class="fas fa-edit"></i></button>
-                    
-                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout" onclick="rejectClaim('{{ p.get('id', '') }}', '{{ (p.get('discord_nick') or '') | e }}')"><i class="fas fa-times"></i></button>
-                    <form id="form_reject_{{ p.get('id', '') }}" action="/dashboard/reject_claim" method="POST" style="display:none;">
-                        <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
-                        <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
-                        <input type="hidden" name="sys_note" id="reject_reason_{{ p.get('id', '') }}">
-                    </form>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Vše je vyřízeno, žádné čekající požadavky.</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-</div>
-
-<script>
-    function rejectClaim(claimId, discordNick) {
-        let reason = prompt("Zadejte důvod zamítnutí žádosti pro " + (discordNick || "uživatele") + ":", "Neplatné údaje / Platba nenalezena");
-        if (reason !== null) {
-            document.getElementById('reject_reason_' + claimId).value = reason;
-            document.getElementById('form_reject_' + claimId).submit();
-        }
-    }
-</script>
-
-<div style="display: flex; gap: 20px; flex-wrap: wrap;">
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Ruční přidání podporovatele</h3>
-        <p style="color: var(--text-muted); font-size: 13px;">(Pokud Vám někdo poslal peníze mimo Buy Me a Coffee)</p>
-        <form action="/dashboard/add_supporter" method="POST">
-            <input type="text" name="name" placeholder="Jméno podporovatele" required>
-            <input type="text" name="discord_nick" placeholder="Discord Nick (Volitelně)">
-            <input type="text" name="amount" placeholder="Částka (např. 150 CZK nebo 10 USD)" required>
-            <textarea name="message" placeholder="Zpráva od podporovatele (volitelně)..." rows="3"></textarea>
-            <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Přidat do databáze</button>
-        </form>
-    </div>
-    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">☕ Historie podporovatelů (Schválení i Zamítnutí)</h3>
-        <div style="overflow-x: auto;">
-            <table>
-                <tr>
-                    <th>Stav</th>
-                    <th>Jméno</th>
-                    <th>Discord</th>
-                    <th>Částka</th>
-                    <th>Systémová Zpráva</th>
-                    <th>Datum</th>
-                    <th>Akce</th>
-                </tr>
-                {% for s in supporters_history %}
-                <tr style="opacity: {{ '0.6' if s.get('status') == 'rejected' else '1' }};">
-                    <td>
-                        {% if s.get('status') == 'rejected' %}
-                            <span class="role-tag" style="background-color: var(--danger); color: white;">Zamítnuto</span>
-                        {% else %}
-                            <span class="role-tag" style="background-color: var(--success); color: white;">Schváleno</span>
-                        {% endif %}
-                    </td>
-                    <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
-                    <td style="color:#aaa; font-size:12px;">{{ s.get('discord_nick', '') }}</td>
-                    <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
-                    <td style="font-style:italic; font-size: 12px; color: {{ 'var(--danger)' if s.get('status') == 'rejected' else 'var(--text-muted)' }}; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ s.get('sys_note', '') }}">{{ s.get('sys_note', 'OK') }}</td>
-                    <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
-                    <td style="display: flex; gap: 5px;">
-                        <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily"
-                            data-id="{{ s.get('id', '') }}"
-                            data-name="{{ (s.get('name') or '') | e }}"
-                            data-nick="{{ (s.get('discord_nick') or '') | e }}"
-                            data-amount="{{ (s.get('amount') or '') | e }}"
-                            data-msg="{{ (s.get('message') or '') | e }}"
-                            onclick="openSupporterEdit(this)"><i class="fas fa-edit"></i></button>
-                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline; margin: 0;">
-                            <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
-                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Smazat z historie" onclick="return confirm('Opravdu smazat tohoto podporovatele z webu?')"><i class="fas fa-trash"></i></button>
-                        </form>
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Zatím žádná historie.</td></tr>
-                {% endfor %}
-            </table>
-        </div>
-    </div>
-</div>
-
-<div class="modal-overlay" id="editSupporterModal">
-    <div class="modal" style="width: 500px; border-top: 5px solid var(--warning);">
-        <div style="width: 100%;">
-            <h2 style="color: var(--warning); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">
-                <i class="fas fa-edit"></i> Úprava Podporovatele
-            </h2>
-            <form action="/dashboard/edit_supporter" method="POST">
-                <input type="hidden" name="supporter_id" id="es_id">
-                
-                <label style="color: var(--text-muted); font-size: 13px;">Jméno (BMAC):</label>
-                <input type="text" name="name" id="es_name" required>
-                
-                <label style="color: var(--text-muted); font-size: 13px;">Discord Nick (Slouží pro spárování):</label>
-                <input type="text" name="discord_nick" id="es_nick">
-                
-                <label style="color: var(--text-muted); font-size: 13px;">Částka (Formát: např. 150 CZK):</label>
-                <input type="text" name="amount" id="es_amount" required>
-                
-                <label style="color: var(--text-muted); font-size: 13px;">Vzkaz od podporovatele:</label>
-                <textarea name="message" id="es_message" rows="3"></textarea>
-                
-                <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 15px;"><i class="fas fa-save"></i> Uložit změny</button>
-            </form>
-            <button type="button" class="btn" style="width: 100%; margin-top: 10px; background: transparent; border: 1px solid #334155; color: var(--text-muted);" onclick="document.getElementById('editSupporterModal').style.display='none'">Zrušit</button>
-        </div>
-    </div>
-</div>
-
-<script>
-    function openSupporterEdit(btn) {
-        document.getElementById('es_id').value = btn.getAttribute('data-id');
-        document.getElementById('es_name').value = btn.getAttribute('data-name');
-        document.getElementById('es_nick').value = btn.getAttribute('data-nick');
-        document.getElementById('es_amount').value = btn.getAttribute('data-amount');
-        document.getElementById('es_message').value = btn.getAttribute('data-msg');
-        document.getElementById('editSupporterModal').style.display = 'flex';
     }
 </script>
 """
