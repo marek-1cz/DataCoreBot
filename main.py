@@ -15,6 +15,7 @@ import re
 import gc
 import time
 import random
+import logging
 from werkzeug.exceptions import HTTPException
 from html_templates import *
 
@@ -105,8 +106,8 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
                         req = urllib.request.Request(url, headers=headers)
                         resp = opener.open(req, timeout=15)
                     else:
-                        send_log("❌ Selhání stahování", f"Nepodařilo se prolomit Google Drive ochranu pro hráče `{nick}`. Zkontrolujte, zda je soubor nastaven na 'Všichni, kdo mají odkaz'.", 0xef4444)
-                        return "Chyba: Soubor na Google Drive je uzamčen nebo vyžaduje potvrzení, které nelze obejít."
+                        send_log("❌ Selhání stahování", f"Úložiště zablokovalo stahování pro hráče `{nick}`.\n**Možný důvod:** Soubor na Google Drive NENÍ nastaven na 'Všichni, kdo mají odkaz', nebo se odkaz změnil.", 0xef4444)
+                        return "Chyba: Soubor na Google Drive je buď soukromý, nebo chráněný."
             else:
                 req = urllib.request.Request(file_url, headers=headers)
                 resp = opener.open(req, timeout=15)
@@ -120,8 +121,8 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
 
         # Finální kontrola: Pokud nám i tak cloud poslal HTML, je to zmetek a stahování se nesmí pustit.
         if 'text/html' in resp.headers.get('Content-Type', '').lower():
-            send_log("❌ Selhání stahování", f"Úložiště zablokovalo stahování pro hráče `{nick}` (Zase to posílá HTML místo ZIPu!). Zkuste jiný hosting.", 0xef4444)
-            return "Chyba na straně úložiště. Soubor byl zablokován poskytovatelem."
+            send_log("❌ Selhání stahování", f"Úložiště zablokovalo stahování pro hráče `{nick}` (Zase to posílá HTML místo ZIPu!). Zkontrolujte URL.", 0xef4444)
+            return "Chyba na straně úložiště. Soubor nelze stáhnout."
 
         def generate():
             try:
@@ -710,6 +711,7 @@ def api_stream_download(token):
         db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")}).execute()
     except: pass
     
+    # Předání do naší proxy
     return stream_proxy_file(file_url_raw, version_name, user['discord_id'], user.get('nick', 'Neznámý'))
 
 @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
@@ -1439,7 +1441,7 @@ def add_version():
             "eol_date": ""
         }).execute()
         send_log("📦 Nová verze softwaru", f"Administrátor přidal novou verzi do Manažeru: **{v_name}**.", 0x10b981)
-        flash('Nová verze úspěšně vydána!', 'success')
+        flash('Nová verze úspěš vydána!', 'success')
         trigger_setup_messages_update() # Aktualizuje Discord zprávy
     except Exception as e: 
         flash(f'Chyba při přidávání verze: {e}', 'error')
@@ -1596,6 +1598,95 @@ def edit_user():
         except: pass
     return redirect(url_for('dashboard_main'))
 
+@app.route('/dashboard/approve_claim', methods=['POST'])
+def approve_claim():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    claim_id = request.form.get("claim_id")
+    discord_nick = request.form.get("discord_nick")
+    amount = request.form.get("amount", "0")
+    db = get_db()
+    if db and claim_id and discord_nick:
+        discord_roles, db_role_string = calculate_roles_for_supporter(amount)
+        if bot.loop and bot.loop.is_running() and bot.is_ready():
+            asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, discord_roles), bot.loop)
+            rec = db.table("supporters").select("*").eq("id", claim_id).execute().data
+            if rec: asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_nick, amount, rec[0].get('message', ''), discord_roles), bot.loop)
+        db.table("supporters").update({"status": "completed", "sys_note": "Schváleno manuálně", "discord_nick": discord_nick}).eq("id", claim_id).execute()
+        send_log("✅ Manuální schválení", f"Administrátor právě schválil roli pro uživatele **{discord_nick}**.", 0x10b981)
+        db_user = db.table("users").select("*").or_(f"discord_id.eq.{discord_nick},nick.ilike.{discord_nick}").execute().data
+        if db_user:
+            current_roles = db_user[0].get('role', '')
+            roles_list = [r.strip() for r in current_roles.split(',')] if current_roles else []
+            for new_r in db_role_string.split(','):
+                if new_r.strip() not in roles_list: roles_list.append(new_r.strip())
+            db.table("users").update({"role": ",".join(roles_list)}).eq("discord_id", db_user[0]['discord_id']).execute()
+        else: db.table("pending_roles").insert({"discord_identifier": discord_nick, "roles": db_role_string}).execute()
+        flash(f'Požadavek schválen pro: {discord_nick}', 'success')
+    return redirect(url_for('dashboard_supporters'))
+
+@app.route('/dashboard/reject_claim', methods=['POST'])
+def reject_claim():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    claim_id = request.form.get("claim_id")
+    discord_nick = request.form.get("discord_nick", "")
+    sys_note = request.form.get("sys_note", "Zamítnuto administrátorem bez udání důvodu.")
+    db = get_db()
+    if db and claim_id:
+        now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+        db.table("supporters").update({"status": "rejected", "sys_note": f"Zamítnuto: {sys_note} [{now_str}]"}).eq("id", claim_id).execute()
+        send_log("❌ Manuální zamítnutí", f"Administrátor zamítl platbu pro uživatele **{discord_nick}**.\nDůvod: {sys_note}", 0xef4444)
+        if discord_nick and bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_nick, "❌ Žádost o roli zamítnuta", f"Tvoje žádost o spárování platby byla zamítnuta administrátorem.\n\n**Důvod:** {sys_note}", 0xef4444), bot.loop)
+        flash('Požadavek byl zamítnut.', 'success')
+    return redirect(url_for('dashboard_supporters'))
+
+@app.route('/dashboard/edit_supporter', methods=['POST'])
+def edit_supporter():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    supporter_id = request.form.get("supporter_id")
+    db = get_db()
+    if db and supporter_id:
+        try:
+            db.table("supporters").update({"name": request.form.get("name"), "discord_nick": request.form.get("discord_nick", ""), "amount": request.form.get("amount"), "message": request.form.get("message", "")}).eq("id", supporter_id).execute()
+            flash('Údaje podporovatele byly úspěšně upraveny!', 'success')
+        except Exception as e: flash(f'Chyba při úpravě: {e}', 'error')
+    return redirect(url_for('dashboard_supporters'))
+
+@app.route('/dashboard/add_supporter', methods=['POST'])
+def add_supporter():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    try: 
+        db = get_db()
+        d_nick = request.form.get("discord_nick", "").strip()
+        amt = request.form.get("amount", "0 CZK")
+        msg = request.form.get("message", "")
+        db.table("supporters").insert({"name": request.form.get("name"), "discord_nick": d_nick, "amount": amt, "message": msg, "status": "completed", "sys_note": "Přidáno manuálně z Dashboardu", "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+        if d_nick:
+            discord_roles, db_role_string = calculate_roles_for_supporter(amt)
+            if bot.loop and bot.loop.is_running() and bot.is_ready():
+                asyncio.run_coroutine_threadsafe(assign_supporter_role(d_nick, discord_roles), bot.loop)
+                asyncio.run_coroutine_threadsafe(announce_new_supporter(d_nick, amt, msg, discord_roles), bot.loop)
+            db_user = db.table("users").select("*").or_(f"discord_id.eq.{d_nick},nick.ilike.{d_nick}").execute().data
+            if db_user:
+                current_roles = db_user[0].get('role', '')
+                roles_list = [r.strip() for r in current_roles.split(',')] if current_roles else []
+                for new_r in db_role_string.split(','):
+                    if new_r.strip() not in roles_list: roles_list.append(new_r.strip())
+                db.table("users").update({"role": ",".join(roles_list)}).eq("discord_id", db_user[0]['discord_id']).execute()
+            else: db.table("pending_roles").insert({"discord_identifier": d_nick, "roles": db_role_string}).execute()
+        send_log("➕ Přidán podporovatel", f"Administrátor ručně přidal podporovatele **{request.form.get('name')}** (Discord: {d_nick}).\nČástka: {amt}", 0x10b981)
+        flash('Podporovatel přidán!', 'success')
+    except Exception as e: flash(f'Chyba při přidávání: {e}', 'error')
+    return redirect(url_for('dashboard_supporters'))
+
+@app.route('/dashboard/delete_supporter', methods=['POST'])
+def delete_supporter():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    try: 
+        get_db().table("supporters").delete().eq("id", request.form.get("supporter_id")).execute()
+        flash('Podporovatel smazán.', 'success')
+    except Exception as e: flash(f'Chyba při mazání: {e}', 'error')
+    return redirect(url_for('dashboard_supporters'))
+
 class DashboardAuthView(discord.ui.View):
     def __init__(self, token, discord_id):
         super().__init__(timeout=300)
@@ -1751,6 +1842,63 @@ def check_sm_role():
         await ctx.send(f"❌ {ctx.author.mention}, nemáš oprávnění k tomuto příkazu.", delete_after=10)
         return False
     return commands.check(predicate)
+
+@tasks.loop(minutes=5)
+async def keepalive_ping():
+    try:
+        url = "https://datacorebot.koyeb.app/api/keepalive"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
+    except: pass
+
+@bot.event
+async def on_ready():
+    print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
+    send_log("🔄 Systém Online", "Bot byl úspěšně (re)startován a je plně připojen k Discordu.", 0x10b981)
+    try: bot.add_view(DynamicDownloadView())
+    except: pass
+    try:
+        for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
+    except: pass
+    trigger_setup_messages_update() 
+    if not keepalive_ping.is_running(): keepalive_ping.start()
+
+@bot.event
+async def on_message(message):
+    if message.author.bot: return
+    if not message.guild:
+        for guild in bot.guilds:
+            channel = discord.utils.get(guild.channels, name="🖲️・bot-dm")
+            if channel:
+                embed = discord.Embed(title="📩 Nová zpráva do DM bota", description=message.content, color=0xa855f7)
+                embed.set_author(name=f"{message.author.display_name} (@{message.author.name})")
+                embed.set_footer(text=f"ID: {message.author.id}")
+                try: await channel.send(embed=embed)
+                except: pass
+                break
+    await bot.process_commands(message)
+
+@bot.event
+async def on_member_join(member):
+    used_invite = None
+    try:
+        new_invites = await member.guild.invites()
+        old_invites = bot.invites_cache.get(member.guild.id, [])
+        for invite in new_invites:
+            for old_invite in old_invites:
+                if invite.code == old_invite.code and invite.uses > old_invite.uses:
+                    used_invite = invite; break
+            if used_invite: break
+        bot.invites_cache[member.guild.id] = new_invites
+    except: pass
+    link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!" if used_invite and used_invite.code == "vmTagbC9mF" else ""
+    await async_send_log("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {get_prague_time().strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument): await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Zkontroluj si `!help`.", delete_after=15)
+    elif isinstance(error, commands.MemberNotFound): await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
+    elif isinstance(error, commands.CheckFailure): pass 
 
 @bot.command()
 @check_web_sa()
@@ -1920,6 +2068,13 @@ async def dm(ctx, member: discord.Member, *, text: str):
     except: await ctx.send("❌ Zablokované SZ.")
 
 def run_discord_bot(bot_token):
+    # Zapneme logování pro Discord, ať vidíme, co potichu dělá (např. Rate Limity)
+    logger = logging.getLogger('discord')
+    logger.setLevel(logging.INFO)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+    logger.addHandler(handler)
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     while True:
@@ -1928,8 +2083,8 @@ def run_discord_bot(bot_token):
             loop.run_until_complete(bot.start(bot_token))
         except Exception as e:
             print(f"==> [DISCORD CHYBA] Bot havaroval: {e}", flush=True)
-            print("==> VYNUCUJI TVRDÝ RESTART SERVERU!", flush=True)
-            os._exit(1)
+            print("==> Čekám 10 vteřin před novým pokusem...", flush=True)
+            time.sleep(10)
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
