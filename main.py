@@ -266,12 +266,10 @@ def sync_roles_from_flask(discord_id, role_string):
     if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
 def check_version_access(db, app_version_from_pc, user):
-    # ADMIN BYPASS: Pokud má uživatel aktivní bypass, ignorujeme všechny kontroly verze!
     if user.get("admin_bypass") == True:
         return {"allowed": True}
 
     user_role_str = user.get("role", "")
-    
     if not app_version_from_pc or str(app_version_from_pc).strip() == "": 
         return {"allowed": False, "msg": "Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
     
@@ -280,12 +278,9 @@ def check_version_access(db, app_version_from_pc, user):
         if not v_data: return {"allowed": False, "msg": f"Verze '{app_version_from_pc}' neexistuje v databázi! Stáhněte si aktuální verzi z našeho Discordu."}
         
         v_info = v_data[0]
-        
-        # 1. Kontrola, zda je verze aktivní
         if str(v_info.get("is_active", "True")).lower() == "false":
             return {"allowed": False, "msg": f"Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
             
-        # 2. Kontrola EOL data (End of Life)
         eol = v_info.get("eol_date")
         if eol and str(eol).strip():
             try:
@@ -296,7 +291,6 @@ def check_version_access(db, app_version_from_pc, user):
             except Exception as d_err:
                 pass 
 
-        # 3. Kontrola oprávnění (Role)
         target = v_info.get("target_role", "User")
         if target != "User":
             roles = [r.strip() for r in user_role_str.split(",")] if user_role_str else []
@@ -495,7 +489,9 @@ def secure_download(token):
         v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
         if not v_resp.data: return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--warning);'>Chyba verze</h2></div>")
         v_data = v_resp.data[0]
-        html = f"""<div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);"><h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2><p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Přihlášen jako: <strong>{user.get('nick', '')}</strong></p><div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;"><h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3><p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{v_data.get('version_name', '')}</strong></p></div><div id="download-area"><a href="#" onclick="startDownload()" class="btn btn-success" style="font-size: 18px; padding: 15px 30px; display: inline-block;" id="dl-btn"><i class="fas fa-download"></i> Stáhnout Soubor</a></div><div id="loading-area" style="display: none;"><div class="spinner" style="margin: 0 auto 10px auto; border-color: rgba(16, 185, 129, 0.3); border-top-color: #10b981;"></div><p style="color: var(--text-main); font-weight: bold;">Připravuji stahování...</p></div><div id="success-area" style="display: none; margin-top: 20px;"><h3 style="color: var(--success); margin-top: 0;"><i class="fas fa-check"></i> Úspěšně přesměrováno ke stažení</h3><p style="color: var(--text-main); font-size: 14px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 3px solid var(--blue-main);">Po stažení souboru jej nezapomeňte rozbalit pomocí programů jako <b>7-ZIP</b> nebo <b>WinRAR</b>.</p></div><script>function startDownload() {{ document.getElementById('download-area').style.display = 'none'; document.getElementById('loading-area').style.display = 'block'; window.location.href = "/api/get_file/{token}?v={version_id}"; setTimeout(() => {{ document.getElementById('loading-area').style.display = 'none'; document.getElementById('success-area').style.display = 'block'; }}, 2000); }}</script></div>"""
+        
+        # JS volá window.location.href, což spustí stahování přímo z prohlížeče
+        html = f"""<div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);"><h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2><p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Přihlášen jako: <strong>{user.get('nick', '')}</strong></p><div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;"><h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3><p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{v_data.get('version_name', '')}</strong></p></div><div id="download-area"><a href="#" onclick="startDownload()" class="btn btn-success" style="font-size: 18px; padding: 15px 30px; display: inline-block;" id="dl-btn"><i class="fas fa-download"></i> Stáhnout Soubor</a></div><div id="loading-area" style="display: none;"><div class="spinner" style="margin: 0 auto 10px auto; border-color: rgba(16, 185, 129, 0.3); border-top-color: #10b981;"></div><p style="color: var(--text-main); font-weight: bold;">Připravuji stahování...</p></div><div id="success-area" style="display: none; margin-top: 20px;"><h3 style="color: var(--success); margin-top: 0;"><i class="fas fa-check"></i> Úspěšně zahájeno stahování</h3><p style="color: var(--text-main); font-size: 14px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 3px solid var(--blue-main);">Po stažení souboru jej nezapomeňte rozbalit pomocí programů jako <b>7-ZIP</b> nebo <b>WinRAR</b>.</p></div><script>function startDownload() {{ document.getElementById('download-area').style.display = 'none'; document.getElementById('loading-area').style.display = 'block'; window.location.href = "/api/get_file/{token}?v={version_id}"; setTimeout(() => {{ document.getElementById('loading-area').style.display = 'none'; document.getElementById('success-area').style.display = 'block'; }}, 2000); }}</script></div>"""
         return render_public(html)
     except: return "Systémová chyba."
 
@@ -527,28 +523,36 @@ def api_get_file(token):
         file_url_raw = v_resp.data[0]['file_url']
         version_name = v_resp.data[0]['version_name']
         
-        # Zneplatnění tokenu - zabrání F5 refreshům a neustálému mačkání tlačítka!
+        # Zneplatnění tokenu
         db.table("users").update({"download_token": ""}).eq("discord_id", user['discord_id']).execute()
         
-        # Zapsat nový log
+        # Zapsat log
         try:
             db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")}).execute()
             send_log("📥 Stahování", f"Uživatel `{user.get('nick')}` zahájil stahování: **{version_name}**.", 0x38bdf8)
         except: pass
         
         # --- MULTI-MIRROR LOAD BALANCER ---
-        # Rozdělí odkazy podle čárky a náhodně vybere jeden.
         urls = [u.strip() for u in file_url_raw.split(',') if u.strip()]
         file_url = random.choice(urls) if urls else file_url_raw
         
-        # --- PŘÍMÉ PŘESMĚROVÁNÍ (0% ZÁTĚŽ NA KOYEB CPU) ---
-        # Pixeldrain nepodporuje přímé stahování (hotlinking) pro free účty, takže je pošleme na jejich stránku.
-        # Dropbox a OneDrive přímé stahování podporují.
-        if "1drv.ms" in file_url or "onedrive.live.com" in file_url or "1drv.com" in file_url: file_url = file_url.split("?")[0] + "?download=1"
+        # --- PŘÍMÉ PŘESMĚROVÁNÍ PRO PŘÍMÉ STAŽENÍ (0% ZÁTĚŽ NA KOYEB CPU) ---
+        # Dropbox podpora
         if "dropbox.com" in file_url:
             file_url = file_url.replace("dl=0", "dl=1")
             if "dl=1" not in file_url: file_url += "?dl=1" if "?" not in file_url else "&dl=1"
+        # OneDrive podpora
+        elif "1drv.ms" in file_url or "onedrive.live.com" in file_url or "1drv.com" in file_url:
+            file_url = file_url.split("?")[0] + "?download=1"
+        # Google Drive podpora
+        elif "drive.google.com" in file_url and "/d/" in file_url:
+            match = re.search(r'/d/([a-zA-Z0-9_-]+)', file_url)
+            if match:
+                file_id = match.group(1)
+                file_url = f"https://drive.google.com/uc?export=download&id={file_id}"
             
+        # Prohlížeč zachytí redirect, a protože jde o přímý download link, tak stáhne soubor
+        # a vizuálně uživatel zůstane na stránce "Úspěšně staženo"
         return redirect(file_url)
     except Exception as e: return f"Chyba odkazu: {e}"
 
