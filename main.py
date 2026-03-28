@@ -266,10 +266,12 @@ def sync_roles_from_flask(discord_id, role_string):
     if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
 def check_version_access(db, app_version_from_pc, user):
+    # ADMIN BYPASS: Pokud má uživatel aktivní bypass, ignorujeme všechny kontroly verze!
     if user.get("admin_bypass") == True:
         return {"allowed": True}
 
     user_role_str = user.get("role", "")
+    
     if not app_version_from_pc or str(app_version_from_pc).strip() == "": 
         return {"allowed": False, "msg": "Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
     
@@ -278,9 +280,12 @@ def check_version_access(db, app_version_from_pc, user):
         if not v_data: return {"allowed": False, "msg": f"Verze '{app_version_from_pc}' neexistuje v databázi! Stáhněte si aktuální verzi z našeho Discordu."}
         
         v_info = v_data[0]
+        
+        # 1. Kontrola, zda je verze aktivní
         if str(v_info.get("is_active", "True")).lower() == "false":
             return {"allowed": False, "msg": f"Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
             
+        # 2. Kontrola EOL data (End of Life)
         eol = v_info.get("eol_date")
         if eol and str(eol).strip():
             try:
@@ -291,6 +296,7 @@ def check_version_access(db, app_version_from_pc, user):
             except Exception as d_err:
                 pass 
 
+        # 3. Kontrola oprávnění (Role)
         target = v_info.get("target_role", "User")
         if target != "User":
             roles = [r.strip() for r in user_role_str.split(",")] if user_role_str else []
@@ -536,7 +542,8 @@ def api_get_file(token):
         file_url = random.choice(urls) if urls else file_url_raw
         
         # --- PŘÍMÉ PŘESMĚROVÁNÍ (0% ZÁTĚŽ NA KOYEB CPU) ---
-        if "pixeldrain.com/u/" in file_url: file_url = file_url.replace("/u/", "/api/file/")
+        # Pixeldrain nepodporuje přímé stahování (hotlinking) pro free účty, takže je pošleme na jejich stránku.
+        # Dropbox a OneDrive přímé stahování podporují.
         if "1drv.ms" in file_url or "onedrive.live.com" in file_url or "1drv.com" in file_url: file_url = file_url.split("?")[0] + "?download=1"
         if "dropbox.com" in file_url:
             file_url = file_url.replace("dl=0", "dl=1")
