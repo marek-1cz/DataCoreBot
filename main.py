@@ -490,7 +490,7 @@ def secure_download(token):
         if not v_resp.data: return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--warning);'>Chyba verze</h2></div>")
         v_data = v_resp.data[0]
         
-        # JS volá window.location.href, což spustí stahování přímo z prohlížeče
+        # UŽIVATEL NIKAM NEODCHÁZÍ, PROHLÍŽEČ STÁHNE SOUBOR PŘÍMO V POZADÍ!
         html = f"""<div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);"><h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2><p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Přihlášen jako: <strong>{user.get('nick', '')}</strong></p><div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;"><h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3><p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{v_data.get('version_name', '')}</strong></p></div><div id="download-area"><a href="#" onclick="startDownload()" class="btn btn-success" style="font-size: 18px; padding: 15px 30px; display: inline-block;" id="dl-btn"><i class="fas fa-download"></i> Stáhnout Soubor</a></div><div id="loading-area" style="display: none;"><div class="spinner" style="margin: 0 auto 10px auto; border-color: rgba(16, 185, 129, 0.3); border-top-color: #10b981;"></div><p style="color: var(--text-main); font-weight: bold;">Připravuji stahování...</p></div><div id="success-area" style="display: none; margin-top: 20px;"><h3 style="color: var(--success); margin-top: 0;"><i class="fas fa-check"></i> Úspěšně zahájeno stahování</h3><p style="color: var(--text-main); font-size: 14px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 3px solid var(--blue-main);">Po stažení souboru jej nezapomeňte rozbalit pomocí programů jako <b>7-ZIP</b> nebo <b>WinRAR</b>.</p></div><script>function startDownload() {{ document.getElementById('download-area').style.display = 'none'; document.getElementById('loading-area').style.display = 'block'; window.location.href = "/api/get_file/{token}?v={version_id}"; setTimeout(() => {{ document.getElementById('loading-area').style.display = 'none'; document.getElementById('success-area').style.display = 'block'; }}, 2000); }}</script></div>"""
         return render_public(html)
     except: return "Systémová chyba."
@@ -536,24 +536,47 @@ def api_get_file(token):
         urls = [u.strip() for u in file_url_raw.split(',') if u.strip()]
         file_url = random.choice(urls) if urls else file_url_raw
         
-        # --- PŘÍMÉ PŘESMĚROVÁNÍ PRO PŘÍMÉ STAŽENÍ (0% ZÁTĚŽ NA KOYEB CPU) ---
-        # Dropbox podpora
+        # --- PROXY REŽIM: SERVER STAHUJE A OKAMŽITĚ POSÍLÁ (LINK ZŮSTÁVÁ SKRYTÝ) ---
+        if "pixeldrain.com/u/" in file_url: file_url = file_url.replace("/u/", "/api/file/")
+        if "1drv.ms" in file_url or "onedrive.live.com" in file_url or "1drv.com" in file_url: file_url = file_url.split("?")[0] + "?download=1"
         if "dropbox.com" in file_url:
             file_url = file_url.replace("dl=0", "dl=1")
             if "dl=1" not in file_url: file_url += "?dl=1" if "?" not in file_url else "&dl=1"
-        # OneDrive podpora
-        elif "1drv.ms" in file_url or "onedrive.live.com" in file_url or "1drv.com" in file_url:
-            file_url = file_url.split("?")[0] + "?download=1"
-        # Google Drive podpora
-        elif "drive.google.com" in file_url and "/d/" in file_url:
-            match = re.search(r'/d/([a-zA-Z0-9_-]+)', file_url)
-            if match:
-                file_id = match.group(1)
-                file_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+        
+        # Maskujeme se jako normální prohlížeč kvůli Pixeldrain ochranám
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        req = urllib.request.Request(file_url, headers=headers)
+        
+        try:
+            remote_response = urllib.request.urlopen(req, timeout=15)
+        except Exception as e:
+            return f"Chyba při stahování ze vzdáleného serveru (Pravděpodobně Pixeldrain omezil stažení!): {e}"
             
-        # Prohlížeč zachytí redirect, a protože jde o přímý download link, tak stáhne soubor
-        # a vizuálně uživatel zůstane na stránce "Úspěšně staženo"
-        return redirect(file_url)
+        def generate():
+            try:
+                while True:
+                    # 64KB (Místo 8KB) pro drastické ulehčení CPU serveru (Koyeb)
+                    chunk = remote_response.read(65536) 
+                    if not chunk: break
+                    yield chunk
+            except:
+                pass
+            finally:
+                remote_response.close()
+                
+        content_type = remote_response.headers.get('Content-Type', 'application/octet-stream')
+        resp_headers = {
+            # Prohlížeči natvrdo vnutíme, že jde o ZIP soubor, ať ho okamžitě stáhne a nikam nepřesměrovává!
+            'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name.replace(" ", "_")}.zip"',
+            'Content-Type': content_type,
+            'Accept-Ranges': 'bytes'
+        }
+        
+        for h in ['Content-Length', 'Content-Range']:
+            if remote_response.headers.get(h):
+                resp_headers[h] = remote_response.headers.get(h)
+                
+        return Response(stream_with_context(generate()), status=remote_response.status, headers=resp_headers)
     except Exception as e: return f"Chyba odkazu: {e}"
 
 @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
