@@ -757,7 +757,7 @@ def api_stream_download(token):
     file_url_raw = v_data['file_url']
     version_name = v_data['version_name']
     
-    # Okamžité zneplatnění tokenu (konec zneužívání)
+    # Okamžité zneplatnění tokenu
     db.table("users").update({"download_token": ""}).eq("discord_id", user['discord_id']).execute()
     
     try:
@@ -777,12 +777,16 @@ def api_status():
     except: pass
     return _cors_jsonify({"status": "enabled"})
 
+# ==========================================
+# OPRAVA: PŘIHLAŠOVÁNÍ S EMOJI
+# ==========================================
 @app.route('/api/app_login', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_app_login():
     if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     if not data: return _cors_jsonify({"status": "error", "message": "Chybí data."})
-    identifier = str(data.get("identifier", ""))
+    
+    identifier = str(data.get("identifier", "")).strip()
     req_hwid = str(data.get("hwid", ""))
     app_version = str(data.get("app_version", ""))
     db = get_db()
@@ -791,9 +795,15 @@ def api_app_login():
         if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false':
             return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ VYPNUT."})
             
-        user_resp = db.table("users").select("*").or_(f"discord_id.eq.{identifier},nick.ilike.{identifier}").execute()
-        if not user_resp.data and identifier.isdigit(): user_resp = db.table("users").select("*").eq("app_id", int(identifier)).execute()
-        if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Uživatel nenalezen."})
+        # Záchrana pro emoji: Čísla vyhledáváme přes ID, znaky/emoji přes Nick pomocí bezpečné '.eq()' shody
+        if identifier.isdigit():
+            user_resp = db.table("users").select("*").or_(f"discord_id.eq.{identifier},app_id.eq.{int(identifier)}").execute()
+        else:
+            user_resp = db.table("users").select("*").eq("nick", identifier).execute()
+            
+        if not user_resp.data: 
+            return _cors_jsonify({"status": "error", "message": "Uživatel nenalezen. Pokud má váš Nick speciální znaky, použijte k přihlášení raději číselné Discord ID."})
+            
         user = user_resp.data[0]
         
         if user.get("is_banned"):
@@ -1051,17 +1061,33 @@ def api_mark_message_read():
         except: pass
     return _cors_jsonify({"status": "ok"})
 
+# ==========================================
+# OPRAVA: ZÁCHRANNÝ MÓD PRO CHYBĚJÍCÍ ID U FEEDBACKU
+# ==========================================
 @app.route('/api/submit_feedback', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_submit_feedback():
     if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     db = get_db()
     if not db: return _cors_jsonify({"status": "error", "message": "DB Error"})
+    
     try:
-        d_id = data.get("discord_id", "")
-        nick = data.get("nick", "Neznámý")
-        type_str = data.get("type", "GENERAL")
-        msg = data.get("message", "")
+        d_id = str(data.get("discord_id", "")).strip()
+        nick = str(data.get("nick", "Neznámý Uživatel")).strip()
+        type_str = str(data.get("type", "GENERAL")).strip()
+        msg = str(data.get("message", "")).strip()
+
+        # Záchranná brzda: Pokud je ID prázdné nebo "Není zadáno"
+        if not d_id or d_id.lower() in ["není zadáno", "none", "null", ""]:
+            # Podíváme se, jestli ho nenapsal přímo do zprávy (hledáme nějakých 17+ čísel)
+            if not re.search(r'\d{17,}', msg):
+                return _cors_jsonify({
+                    "status": "error", 
+                    "message": "⚠️ OCHRANA: Aplikace nedokázala načíst vaše ID (např. kvůli emoji v nicku). Napište prosím své číselné DISCORD ID přímo do textu žádosti, abychom účet dohledali!"
+                })
+            else:
+                d_id = "Napsáno v textu"
+
         db.table("feedback").insert({
             "discord_id": d_id, "nick": nick, "type": type_str, "message": msg,
             "status": "pending", "sys_note": "", "fcreated_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
@@ -1895,126 +1921,6 @@ def check_sm_role():
         return False
     return commands.check(predicate)
 
-@tasks.loop(minutes=5)
-async def keepalive_ping():
-    try:
-        url = "https://datacorebot.koyeb.app/api/keepalive"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
-    except: pass
-
-@bot.event
-async def on_ready():
-    print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
-    send_log("🔄 Systém Online", "Bot byl úspěšně (re)startován a je plně připojen k Discordu.", 0x10b981)
-    try: bot.add_view(DynamicDownloadView())
-    except: pass
-    try:
-        for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
-    except: pass
-    trigger_setup_messages_update() 
-    if not keepalive_ping.is_running(): keepalive_ping.start()
-
-# OPRAVA: PŘEPOSÍLÁNÍ ZPRÁV Z DM + PODPORA OBRÁZKŮ
-@bot.event
-async def on_message(message):
-    if message.author.bot: return
-    
-    # Detekce DM - Pokud zpráva nemá guild (server), je to soukromá zpráva botovi
-    if not message.guild:
-        print(f"Přijata zpráva do DM od: {message.author.name} - Text: {message.content}", flush=True)
-        for guild in bot.guilds:
-            # Opraveno: hledá jakýkoliv kanál, co má v názvu bot-dm (ignoruje různá emoji na začátku)
-            channel = discord.utils.find(lambda c: "bot-dm" in c.name.lower(), guild.text_channels)
-            if channel:
-                embed = discord.Embed(title="📩 Nová zpráva do DM bota", description=message.content or "*[Žádný text]*", color=0xa855f7)
-                embed.set_author(name=f"{message.author.display_name} (@{message.author.name})", icon_url=message.author.display_avatar.url)
-                embed.set_footer(text=f"ID: {message.author.id}")
-                
-                # Podpora pro obrázky a přílohy v DM!
-                if message.attachments:
-                    urls = "\n".join([f"• [{a.filename}]({a.url})" for a in message.attachments])
-                    embed.add_field(name="📎 Přílohy:", value=urls, inline=False)
-                    # Pokud je to přímo obrázek, ať se rovnou zobrazí v embedu
-                    if message.attachments[0].url.lower().endswith(('png', 'jpg', 'jpeg', 'gif', 'webp')):
-                        embed.set_image(url=message.attachments[0].url)
-                        
-                try: 
-                    await channel.send(embed=embed)
-                except Exception as e: 
-                    print(f"Chyba při odesílání DM do kanálu: {e}", flush=True)
-                break
-                
-    await bot.process_commands(message)
-
-@bot.event
-async def on_member_join(member):
-    used_invite = None
-    try:
-        new_invites = await member.guild.invites()
-        old_invites = bot.invites_cache.get(member.guild.id, [])
-        for invite in new_invites:
-            for old_invite in old_invites:
-                if invite.code == old_invite.code and invite.uses > old_invite.uses:
-                    used_invite = invite; break
-            if used_invite: break
-        bot.invites_cache[member.guild.id] = new_invites
-    except: pass
-    link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!" if used_invite and used_invite.code == "vmTagbC9mF" else ""
-    await async_send_log("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {get_prague_time().strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
-
-@bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.MissingRequiredArgument): await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Zkontroluj si `!help`.", delete_after=15)
-    elif isinstance(error, commands.MemberNotFound): await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
-    elif isinstance(error, commands.CheckFailure): pass 
-
-# NOVÁ FUNKCE PRO ZOBRAZENÍ DM HISTORIE
-@bot.command()
-@check_sm_role()
-async def dm_view(ctx, discord_id: str):
-    if not discord_id.isdigit():
-        return await ctx.send("❌ Zadej platné číselné ID uživatele.")
-        
-    status_msg = await ctx.send("<a:loading:123> Načítám historii zpráv (Může to chvíli trvat)...")
-    
-    try:
-        user = await bot.fetch_user(int(discord_id))
-        if not user.dm_channel:
-            await user.create_dm()
-            
-        # Stáhne posledních 100 zpráv (lze zvýšit na limit=200 atd.)
-        messages = [msg async for msg in user.dm_channel.history(limit=100)]
-        messages.reverse() # Od nejstarší zprávy po nejnovější
-        
-        if not messages:
-            return await status_msg.edit(content=f"📭 Historie DM s uživatelem `{user.display_name}` je prázdná.")
-            
-        log_content = f"--- HISTORIE DM S UŽIVATELEM {user.display_name} ({user.name} | ID: {user.id}) ---\n\n"
-        for m in messages:
-            # Časové razítko zprávy
-            time_str = (m.created_at + timedelta(hours=1)).strftime("%d.%m.%Y %H:%M:%S")
-            # Kdo to napsal
-            author_name = "🤖 BOT" if m.author.bot else f"👤 {m.author.display_name}"
-            # Přidání do logu
-            log_content += f"[{time_str}] {author_name}: {m.content}\n"
-            if m.attachments:
-                log_content += f"    [Příloha]: {', '.join([a.url for a in m.attachments])}\n"
-        
-        # Uložíme to do textového souboru .txt (aby to nezahlcovalo chat a obešlo limit znaků)
-        file_stream = io.BytesIO(log_content.encode('utf-8'))
-        file = discord.File(file_stream, filename=f"ChatLog_{user.display_name}.txt")
-        
-        await status_msg.delete()
-        await ctx.send(f"📄 Tady je posledních 100 zpráv ze soukromé konverzace s uživatelem `{user.display_name}`:", file=file)
-        
-    except discord.NotFound:
-        await status_msg.edit(content="❌ Uživatel s tímto ID nebyl nalezen na Discordu.")
-    except discord.Forbidden:
-        await status_msg.edit(content="❌ Nemám oprávnění k DM tohoto uživatele (pravděpodobně má mě zablokovaného, nebo má vypnuté SZ).")
-    except Exception as e:
-        await status_msg.edit(content=f"❌ Nastala chyba při čtení DM zpráv:\n`{e}`")
-
 @bot.command()
 @check_web_sa()
 async def setup_download(ctx):
@@ -2181,6 +2087,70 @@ async def dm(ctx, member: discord.Member, *, text: str):
         await member.send(embed=discord.Embed(title="Zpráva od administrace", description=text, color=0x38bdf8))
         await ctx.send(f"✅ Odesláno.")
     except: await ctx.send("❌ Zablokované SZ.")
+
+@bot.command()
+@check_sm_role()
+async def dm_view(ctx, discord_id: str):
+    if not discord_id.isdigit():
+        return await ctx.send("❌ Zadej platné číselné ID uživatele.")
+        
+    status_msg = await ctx.send("<a:loading:123> Načítám historii zpráv (Může to chvíli trvat)...")
+    
+    try:
+        user = await bot.fetch_user(int(discord_id))
+        if not user.dm_channel:
+            await user.create_dm()
+            
+        messages = [msg async for msg in user.dm_channel.history(limit=100)]
+        messages.reverse()
+        
+        if not messages:
+            return await status_msg.edit(content=f"📭 Historie DM s uživatelem `{user.display_name}` je prázdná.")
+            
+        log_content = f"--- HISTORIE DM S UŽIVATELEM {user.display_name} ({user.name} | ID: {user.id}) ---\n\n"
+        for m in messages:
+            time_str = (m.created_at + timedelta(hours=1)).strftime("%d.%m.%Y %H:%M:%S")
+            author_name = "🤖 BOT" if m.author.bot else f"👤 {m.author.display_name}"
+            log_content += f"[{time_str}] {author_name}: {m.content}\n"
+            if m.attachments:
+                log_content += f"    [Příloha]: {', '.join([a.url for a in m.attachments])}\n"
+        
+        file_stream = io.BytesIO(log_content.encode('utf-8'))
+        file = discord.File(file_stream, filename=f"ChatLog_{user.display_name}.txt")
+        
+        await status_msg.delete()
+        await ctx.send(f"📄 Tady je posledních 100 zpráv ze soukromé konverzace s uživatelem `{user.display_name}`:", file=file)
+        
+    except discord.NotFound:
+        await status_msg.edit(content="❌ Uživatel s tímto ID nebyl nalezen na Discordu.")
+    except discord.Forbidden:
+        await status_msg.edit(content="❌ Nemám oprávnění k DM tohoto uživatele (pravděpodobně má mě zablokovaného, nebo má vypnuté SZ).")
+    except Exception as e:
+        await status_msg.edit(content=f"❌ Nastala chyba při čtení DM zpráv:\n`{e}`")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot: return
+    
+    if not message.guild:
+        for guild in bot.guilds:
+            channel = discord.utils.find(lambda c: "bot-dm" in c.name.lower(), guild.text_channels)
+            if channel:
+                embed = discord.Embed(title="📩 Nová zpráva do DM bota", description=message.content or "*[Žádný text]*", color=0xa855f7)
+                embed.set_author(name=f"{message.author.display_name} (@{message.author.name})", icon_url=message.author.display_avatar.url)
+                embed.set_footer(text=f"ID: {message.author.id}")
+                
+                if message.attachments:
+                    urls = "\n".join([f"• [{a.filename}]({a.url})" for a in message.attachments])
+                    embed.add_field(name="📎 Přílohy:", value=urls, inline=False)
+                    if message.attachments[0].url.lower().endswith(('png', 'jpg', 'jpeg', 'gif', 'webp')):
+                        embed.set_image(url=message.attachments[0].url)
+                        
+                try: await channel.send(embed=embed)
+                except: pass
+                break
+                
+    await bot.process_commands(message)
 
 def run_discord_bot(bot_token):
     logger = logging.getLogger('discord')
