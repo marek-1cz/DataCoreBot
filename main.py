@@ -5,6 +5,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 from threading import Thread
 from supabase import create_client
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo  # Přidáno pro automatický Letní/Zimní čas
 import asyncio
 import uuid
 import urllib.request
@@ -37,7 +38,10 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
     return response
 
-def get_prague_time(): return datetime.utcnow() + timedelta(hours=1)
+# AUTOMATICKÝ LETNÍ / ZIMNÍ ČAS PRO PRAHU
+def get_prague_time(): 
+    return datetime.now(ZoneInfo('Europe/Prague')).replace(tzinfo=None)
+
 DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
 
 @app.errorhandler(Exception)
@@ -253,6 +257,20 @@ def check_session_validity():
                             flash('Váš přístup byl zablokován.', 'error')
                             return redirect(url_for('dashboard_main'))
             except: pass
+
+# ==========================================
+# OPRAVA ERRORU 500: PŘIDÁNA CHYBĚJÍCÍ FUNKCE PRO SYNCHRONIZACI ROLÍ
+# ==========================================
+async def update_member_roles(member, role_string):
+    if not member or not role_string: return
+    try:
+        roles_to_assign = [r.strip() for r in role_string.split(',') if r.strip()]
+        for r_name in roles_to_assign:
+            role = discord.utils.get(member.guild.roles, name=r_name)
+            if role and role not in member.roles:
+                await member.add_roles(role)
+    except Exception as e:
+        print(f"Chyba při updatu rolí pro {member.display_name}: {e}", flush=True)
 
 def sync_roles_from_flask(discord_id, role_string):
     async def sync():
@@ -1690,111 +1708,6 @@ def check_sm_role():
         return False
     return commands.check(predicate)
 
-@tasks.loop(minutes=5)
-async def keepalive_ping():
-    try:
-        url = "https://datacorebot.koyeb.app/api/keepalive"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
-    except: pass
-
-@tasks.loop(minutes=2)
-async def connection_watchdog():
-    if bot.is_closed() or not bot.is_ready():
-        print("Watchdog: Spojení ztraceno! Vynucuji restart celého serveru!", flush=True)
-        os._exit(1)
-
-@tasks.loop(hours=24)
-async def pixeldrain_keepalive():
-    db = get_db()
-    if not db: return
-    try:
-        resp = db.table("software_versions").select("version_name, file_url").execute()
-        versions = getattr(resp, "data", []) or []
-        refreshed = []
-        for v in versions:
-            url = v.get("file_url", "")
-            name = v.get("version_name", "Neznámá verze")
-            if "pixeldrain.com/u/" in url:
-                api_url = url.replace("/u/", "/api/file/")
-                try:
-                    req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0', 'Range': 'bytes=0-10'})
-                    await asyncio.to_thread(urllib.request.urlopen, req, timeout=15)
-                    refreshed.append(name)
-                except: pass
-        if refreshed:
-            files_str = "\n• ".join(refreshed)
-            await async_send_log("🔄 Anti-Delete Ochrana", f"Systém právě úspěšně nasimuloval stažení.\n**Ochráněné soubory:**\n• {files_str}", 0x3b82f6)
-    except: pass
-
-@tasks.loop(minutes=1)
-async def check_pending_supporters():
-    db = get_db()
-    if not db: return
-    try:
-        pending = db.table("supporters").select("*").eq("status", "pending").execute().data or []
-        now = get_prague_time().replace(tzinfo=None)
-        for p in pending:
-            try:
-                created_time = datetime.strptime(p['created_at'], "%d.%m.%Y %H:%M")
-                if (now - created_time).total_seconds() > 300: 
-                    db.table("supporters").update({"status": "manual_review", "sys_note": "Vypršel čas 5 minut na spárování."}).eq("id", p['id']).execute()
-                    send_log("⏳ Platba propadla do kontroly", f"Uživatel si do 5 minut na webu nevyzvedl roli za jméno BMAC: **{p.get('name')}**.\nPřesunuto do manuálního schvalování. *(Pozn.: Stále si ji ale může vyzvednout přes /claim)*", 0xf59e0b)
-            except Exception as e: pass
-    except Exception as e: pass
-
-@bot.event
-async def on_ready():
-    print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
-    send_log("🔄 Systém Online", "Bot byl úspěšně (re)startován a je plně připojen k Discordu.", 0x10b981)
-    try: bot.add_view(DynamicDownloadView())
-    except: pass
-    try:
-        for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
-    except: pass
-    trigger_setup_messages_update() 
-    if not pixeldrain_keepalive.is_running(): pixeldrain_keepalive.start()
-    if not check_pending_supporters.is_running(): check_pending_supporters.start()
-    if not connection_watchdog.is_running(): connection_watchdog.start()
-    if not keepalive_ping.is_running(): keepalive_ping.start()
-
-@bot.event
-async def on_message(message):
-    if message.author.bot: return
-    if not message.guild:
-        for guild in bot.guilds:
-            channel = discord.utils.get(guild.channels, name="🖲️・bot-dm")
-            if channel:
-                embed = discord.Embed(title="📩 Nová zpráva do DM bota", description=message.content, color=0xa855f7)
-                embed.set_author(name=f"{message.author.display_name} (@{message.author.name})")
-                embed.set_footer(text=f"ID: {message.author.id}")
-                try: await channel.send(embed=embed)
-                except: pass
-                break
-    await bot.process_commands(message)
-
-@bot.event
-async def on_member_join(member):
-    used_invite = None
-    try:
-        new_invites = await member.guild.invites()
-        old_invites = bot.invites_cache.get(member.guild.id, [])
-        for invite in new_invites:
-            for old_invite in old_invites:
-                if invite.code == old_invite.code and invite.uses > old_invite.uses:
-                    used_invite = invite; break
-            if used_invite: break
-        bot.invites_cache[member.guild.id] = new_invites
-    except: pass
-    link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!" if used_invite and used_invite.code == "vmTagbC9mF" else ""
-    await async_send_log("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {get_prague_time().strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
-
-@bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.MissingRequiredArgument): await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Zkontroluj si `!help`.", delete_after=15)
-    elif isinstance(error, commands.MemberNotFound): await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
-    elif isinstance(error, commands.CheckFailure): pass 
-
 @bot.command()
 @check_web_sa()
 async def setup_download(ctx):
@@ -1963,6 +1876,13 @@ async def dm(ctx, member: discord.Member, *, text: str):
     except: await ctx.send("❌ Zablokované SZ.")
 
 def run_discord_bot(bot_token):
+    import logging
+    logger = logging.getLogger('discord')
+    logger.setLevel(logging.INFO)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+    logger.addHandler(handler)
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     while True:
@@ -1971,8 +1891,8 @@ def run_discord_bot(bot_token):
             loop.run_until_complete(bot.start(bot_token))
         except Exception as e:
             print(f"==> [DISCORD CHYBA] Bot havaroval: {e}", flush=True)
-            print("==> VYNUCUJI TVRDÝ RESTART SERVERU!", flush=True)
-            os._exit(1)
+            print("==> Čekám 10 vteřin před novým pokusem...", flush=True)
+            time.sleep(10)
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
