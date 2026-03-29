@@ -1643,3 +1643,38 @@ HTML_SUPPORTERS = """
     </div>
 </div>
 """
+
+HTML_WAIT_AUTH = """
+<div style="text-align: center; margin-top: 100px;">
+    <h2 style="color: var(--blue-main);"><i class="fas fa-shield-alt"></i> Čekání na ověření...</h2>
+    <p style="color: var(--text-muted);">Byla vám zaslána zpráva na Discord (uživateli s ID {{ discord_id }}). Prosím, potvrďte přihlášení kliknutím na tlačítko ve zprávě.</p>
+    <div class="spinner" style="margin: 30px auto; width: 50px; height: 50px; border: 5px solid rgba(56, 189, 248, 0.2); border-top-color: var(--blue-main); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+    <p id="status-text" style="color: var(--warning); font-weight: bold;">Čekám na vaši akci...</p>
+</div>
+<style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+<script>
+    setInterval(() => {
+        fetch('/api/check_auth/{{ discord_id }}')
+        .then(r => r.json())
+        .then(d => {
+            if (d.status === 'approved') window.location.href = '/dashboard/login_finalize?discord_id={{ discord_id }}';
+            else if (d.status === 'rejected') {
+                document.getElementById('status-text').innerText = "Přihlášení bylo zamítnuto!";
+                document.getElementById('status-text').style.color = "var(--danger)";
+                setTimeout(() => window.location.href = '/', 2000);
+            }
+        });
+    }, 2000);
+</script>
+"""
+
+HTML_LOGIN = """
+<div style="max-width: 400px; margin: 100px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border-top: 4px solid var(--blue-main);">
+    <h2 style="color: var(--text-main); margin-top: 0;"><i class="fas fa-lock"></i> Administrace</h2>
+    <p style="color: var(--text-muted); margin-bottom: 30px; font-size: 14px;">Zadejte své Discord ID pro přihlášení. Systém vám zašle ověřovací zprávu.</p>
+    <form action="/login_request" method="POST">
+        <input type="text" name="discord_id" placeholder="Vaše Discord ID (např. 1234567890)" required style="text-align: center; font-size: 16px; letter-spacing: 1px;">
+        <button type="submit" class="btn" style="width: 100%; font-size: 16px; margin-top: 10px;"><i class="fas fa-sign-in-alt"></i> Přihlásit se</button>
+    </form>
+</div>
+"""
