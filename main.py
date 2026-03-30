@@ -68,7 +68,6 @@ intents.message_content = True
 intents.presences = True
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None, max_messages=10)
 bot.invites_cache = {}
-
 def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
     urls = [u.strip() for u in file_url_raw.split(',') if u.strip()]
     file_url = random.choice(urls) if urls else file_url_raw
@@ -223,8 +222,7 @@ async def update_setup_messages_async():
 def trigger_setup_messages_update():
     if bot.loop and bot.loop.is_running() and bot.is_ready():
         asyncio.run_coroutine_threadsafe(update_setup_messages_async(), bot.loop)
-
-def process_supporters(data_list):
+                        def process_supporters(data_list):
     for s in data_list:
         amt_str = str(s.get('amount', '0'))
         match = re.search(r'([\d\.,]+)', amt_str)
@@ -315,6 +313,7 @@ async def announce_new_supporter(discord_nick, amount_str, message, role_names_l
             try: await channel.send(embed=embed)
             except: pass
             break
+
 async def async_send_log(title, description, color=0x38bdf8):
     if not bot.is_ready(): return
     for guild in bot.guilds:
@@ -327,8 +326,7 @@ async def async_send_log(title, description, color=0x38bdf8):
 def send_log(title, description, color=0x38bdf8):
     if bot.loop and bot.loop.is_running() and bot.is_ready(): 
         asyncio.run_coroutine_threadsafe(async_send_log(title, description, color), bot.loop)
-
-def _cors_jsonify(data):
+        def _cors_jsonify(data):
     return jsonify(data)
 
 def render_public(template_string, **kwargs):
@@ -455,8 +453,7 @@ def home():
     country = request.headers.get('CF-IPCountry', 'Neznámá')
     Thread(target=log_visit, args=(ip, country)).start()
     return render_public(HTML_HOME)
-
-@app.route('/download')
+    @app.route('/download')
 def download_home(): return render_public(HTML_DOWNLOADS_MAIN)
 
 @app.route('/team')
@@ -534,7 +531,8 @@ def api_supporters():
         return _cors_jsonify({"supporters": support_data})
     except Exception as e:
         return _cors_jsonify({"error": str(e)}), 500
-    @app.route('/claim', methods=['GET', 'POST'])
+
+@app.route('/claim', methods=['GET', 'POST'])
 def claim_role():
     if request.method == 'POST':
         bmac_name = request.form.get('bmac_name', '').strip()
@@ -590,8 +588,7 @@ def claim_role():
                 flash('Platba nenalezena. Odesláno administrátorovi k ruční kontrole.', 'warning')
         return redirect(url_for('claim_role'))
     return render_public(HTML_CLAIM)
-
-@app.route('/webhook/bmac', methods=['GET', 'POST', 'OPTIONS'])
+    @app.route('/webhook/bmac', methods=['GET', 'POST', 'OPTIONS'])
 def bmac_webhook():
     if request.method == 'OPTIONS': return _cors_jsonify({})
     try:
@@ -755,8 +752,7 @@ def api_pre_download(token):
         except: pass
         
     return jsonify({"status": "ok"})
-
-@app.route('/api/stream_download/<token>')
+        @app.route('/api/stream_download/<token>')
 def api_stream_download(token):
     db = get_db()
     if not db: return "Chyba databáze."
@@ -1132,8 +1128,7 @@ def login_request():
 
 @app.route('/dashboard/wait_auth')
 def wait_auth(): return render_public(HTML_WAIT_AUTH, discord_id=request.args.get("discord_id"))
-
-@app.route('/api/check_auth/<discord_id>')
+                        @app.route('/api/check_auth/<discord_id>')
 def check_auth(discord_id):
     try:
         db = get_db()
@@ -1358,6 +1353,7 @@ def feedback_delete():
         db.table("feedback").delete().eq("id", fb_id).execute()
         flash('Záznam smazán.', 'success')
     return redirect(url_for('dashboard_feedback'))
+
 @app.route('/dashboard/app_management', methods=['GET'])
 def dashboard_app_management():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
@@ -1396,8 +1392,7 @@ def dashboard_notifications():
             messages = msgs
     except: pass
     return render_dashboard(HTML_NOTIFICATIONS, messages=messages, deploy_time=DEPLOY_TIME)
-
-@app.route('/dashboard/send_app_message', methods=['POST'])
+        @app.route('/dashboard/send_app_message', methods=['POST'])
 def send_app_message():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db()
@@ -1524,7 +1519,7 @@ def add_version():
         }).execute()
         send_log("📦 Nová verze softwaru", f"Administrátor přidal novou verzi do Manažeru: **{v_name}**.", 0x10b981)
         flash('Nová verze úspěšně vydána!', 'success')
-        trigger_setup_messages_update() # Aktualizuje Discord zprávy
+        trigger_setup_messages_update() 
     except Exception as e: 
         flash(f'Chyba při přidávání verze: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
@@ -1542,7 +1537,7 @@ def edit_version():
             "eol_date": request.form.get("eol_date", "")
         }).eq("id", request.form.get("version_id")).execute()
         flash('Verze byla úspěšně upravena.', 'success')
-        trigger_setup_messages_update() # Aktualizuje Discord zprávy
+        trigger_setup_messages_update() 
     except Exception as e: flash(f'Chyba při úpravě verze: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
 
@@ -1553,7 +1548,7 @@ def delete_version():
         get_db().table("software_versions").delete().eq("id", request.form.get("version_id")).execute()
         send_log("🗑️ Verze smazána", "Administrátor smazal jednu z verzí v Manažeru stahování.", 0xef4444)
         flash('Verze smazána.', 'success')
-        trigger_setup_messages_update() # Aktualizuje Discord zprávy
+        trigger_setup_messages_update() 
     except: pass
     return redirect(url_for('dashboard_downloads'))
 
@@ -1680,6 +1675,95 @@ def edit_user():
         except: pass
     return redirect(url_for('dashboard_main'))
 
+@app.route('/dashboard/approve_claim', methods=['POST'])
+def approve_claim():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    claim_id = request.form.get("claim_id")
+    discord_nick = request.form.get("discord_nick")
+    amount = request.form.get("amount", "0")
+    db = get_db()
+    if db and claim_id and discord_nick:
+        discord_roles, db_role_string = calculate_roles_for_supporter(amount)
+        if bot.loop and bot.loop.is_running() and bot.is_ready():
+            asyncio.run_coroutine_threadsafe(assign_supporter_role(discord_nick, discord_roles), bot.loop)
+            rec = db.table("supporters").select("*").eq("id", claim_id).execute().data
+            if rec: asyncio.run_coroutine_threadsafe(announce_new_supporter(discord_nick, amount, rec[0].get('message', ''), discord_roles), bot.loop)
+        db.table("supporters").update({"status": "completed", "sys_note": "Schváleno manuálně", "discord_nick": discord_nick}).eq("id", claim_id).execute()
+        send_log("✅ Manuální schválení", f"Administrátor právě schválil roli pro uživatele **{discord_nick}**.", 0x10b981)
+        db_user = db.table("users").select("*").or_(f"discord_id.eq.{discord_nick},nick.ilike.{discord_nick}").execute().data
+        if db_user:
+            current_roles = db_user[0].get('role', '')
+            roles_list = [r.strip() for r in current_roles.split(',')] if current_roles else []
+            for new_r in db_role_string.split(','):
+                if new_r.strip() not in roles_list: roles_list.append(new_r.strip())
+            db.table("users").update({"role": ",".join(roles_list)}).eq("discord_id", db_user[0]['discord_id']).execute()
+        else: db.table("pending_roles").insert({"discord_identifier": discord_nick, "roles": db_role_string}).execute()
+        flash(f'Požadavek schválen pro: {discord_nick}', 'success')
+    return redirect(url_for('dashboard_supporters'))
+
+@app.route('/dashboard/reject_claim', methods=['POST'])
+def reject_claim():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    claim_id = request.form.get("claim_id")
+    discord_nick = request.form.get("discord_nick", "")
+    sys_note = request.form.get("sys_note", "Zamítnuto administrátorem bez udání důvodu.")
+    db = get_db()
+    if db and claim_id:
+        now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+        db.table("supporters").update({"status": "rejected", "sys_note": f"Zamítnuto: {sys_note} [{now_str}]"}).eq("id", claim_id).execute()
+        send_log("❌ Manuální zamítnutí", f"Administrátor zamítl platbu pro uživatele **{discord_nick}**.\nDůvod: {sys_note}", 0xef4444)
+        if discord_nick and bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_nick, "❌ Žádost o roli zamítnuta", f"Tvoje žádost o spárování platby byla zamítnuta administrátorem.\n\n**Důvod:** {sys_note}", 0xef4444), bot.loop)
+        flash('Požadavek byl zamítnut.', 'success')
+    return redirect(url_for('dashboard_supporters'))
+
+@app.route('/dashboard/edit_supporter', methods=['POST'])
+def edit_supporter():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    supporter_id = request.form.get("supporter_id")
+    db = get_db()
+    if db and supporter_id:
+        try:
+            db.table("supporters").update({"name": request.form.get("name"), "discord_nick": request.form.get("discord_nick", ""), "amount": request.form.get("amount"), "message": request.form.get("message", "")}).eq("id", supporter_id).execute()
+            flash('Údaje podporovatele byly úspěšně upraveny!', 'success')
+        except Exception as e: flash(f'Chyba při úpravě: {e}', 'error')
+    return redirect(url_for('dashboard_supporters'))
+
+@app.route('/dashboard/add_supporter', methods=['POST'])
+def add_supporter():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    try: 
+        db = get_db()
+        d_nick = request.form.get("discord_nick", "").strip()
+        amt = request.form.get("amount", "0 CZK")
+        msg = request.form.get("message", "")
+        db.table("supporters").insert({"name": request.form.get("name"), "discord_nick": d_nick, "amount": amt, "message": msg, "status": "completed", "sys_note": "Přidáno manuálně z Dashboardu", "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+        if d_nick:
+            discord_roles, db_role_string = calculate_roles_for_supporter(amt)
+            if bot.loop and bot.loop.is_running() and bot.is_ready():
+                asyncio.run_coroutine_threadsafe(assign_supporter_role(d_nick, discord_roles), bot.loop)
+                asyncio.run_coroutine_threadsafe(announce_new_supporter(d_nick, amt, msg, discord_roles), bot.loop)
+            db_user = db.table("users").select("*").or_(f"discord_id.eq.{d_nick},nick.ilike.{d_nick}").execute().data
+            if db_user:
+                current_roles = db_user[0].get('role', '')
+                roles_list = [r.strip() for r in current_roles.split(',')] if current_roles else []
+                for new_r in db_role_string.split(','):
+                    if new_r.strip() not in roles_list: roles_list.append(new_r.strip())
+                db.table("users").update({"role": ",".join(roles_list)}).eq("discord_id", db_user[0]['discord_id']).execute()
+            else: db.table("pending_roles").insert({"discord_identifier": d_nick, "roles": db_role_string}).execute()
+        send_log("➕ Přidán podporovatel", f"Administrátor ručně přidal podporovatele **{request.form.get('name')}** (Discord: {d_nick}).\nČástka: {amt}", 0x10b981)
+        flash('Podporovatel přidán!', 'success')
+    except Exception as e: flash(f'Chyba při přidávání: {e}', 'error')
+    return redirect(url_for('dashboard_supporters'))
+
+@app.route('/dashboard/delete_supporter', methods=['POST'])
+def delete_supporter():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    try: 
+        get_db().table("supporters").delete().eq("id", request.form.get("supporter_id")).execute()
+        flash('Podporovatel smazán.', 'success')
+    except Exception as e: flash(f'Chyba při mazání: {e}', 'error')
+    return redirect(url_for('dashboard_supporters'))
+
 class DashboardAuthView(discord.ui.View):
     def __init__(self, token, discord_id):
         super().__init__(timeout=300)
@@ -1687,18 +1771,6 @@ class DashboardAuthView(discord.ui.View):
         self.discord_id = discord_id
         
     @discord.ui.button(label="Ověřit přístup", style=discord.ButtonStyle.success, emoji="✅")
-    async def verify_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-        db = get_db()
-        if db:
-            user = db.table("users").select("login_token").eq("discord_id", self.discord_id).execute().data
-            if user and user[0].get("login_token") == self.token:
-                db.table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
-                await interaction.edit_original_response(content="✅ **Přístup do administrace byl úspěšně schválen!**", view=None)
-            else: await interaction.edit_original_response(content="❌ **Platnost vypršela.**", view=None)
-                
-    @discord.ui.button(label="Zamítnout", style=discord.ButtonStyle
-                       (label="Ověřit přístup", style=discord.ButtonStyle.success, emoji="✅")
     async def verify_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         db = get_db()
@@ -1752,8 +1824,7 @@ class PerDeleteConfirm(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
         await interaction.response.edit_message(content="❌ Akce zrušena.", view=None, embed=None)
-
-class DynamicDownloadView(discord.ui.View):
+        class DynamicDownloadView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         
@@ -1910,8 +1981,7 @@ async def on_message(message):
                 break
                 
     await bot.process_commands(message)
-
-@bot.event
+                        @bot.event
 async def on_member_join(member):
     used_invite = None
     try:
@@ -2154,3 +2224,4 @@ if __name__ == "__main__":
         print("KRITICKÁ CHYBA: DISCORD_TOKEN chybí! (Web běží dál bez Bota)")
 
     run_web()
+        
