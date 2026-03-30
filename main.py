@@ -2246,15 +2246,6 @@
       "metadata": {
         "id": "zPimL_yfXoQL"
       }
-    },
-    {
-      "cell_type": "markdown",
-      "source": [
-        "Chceš se mrknout ještě na něco dalšího, nebo to rovnou pošleš na Koyeb?"
-      ],
-      "metadata": {
-        "id": "pY4PwHvfXoQd"
-      }
     }
   ],
   "metadata": {
