@@ -1,16 +1,6 @@
 {
   "cells": [
     {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "view-in-github",
-        "colab_type": "text"
-      },
-      "source": [
-        "<a href=\"https://colab.research.google.com/github/marek-1cz/DataCoreBot/blob/main/main.py\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
-      ]
-    },
-    {
       "cell_type": "code",
       "source": [
         "import os\n",
@@ -2254,7 +2244,7 @@
       "outputs": [],
       "execution_count": null,
       "metadata": {
-        "id": "6GM4xvddVRhl"
+        "id": "zPimL_yfXoQL"
       }
     },
     {
@@ -2263,14 +2253,13 @@
         "Chceš se mrknout ještě na něco dalšího, nebo to rovnou pošleš na Koyeb?"
       ],
       "metadata": {
-        "id": "VLXzyylCVRh0"
+        "id": "pY4PwHvfXoQd"
       }
     }
   ],
   "metadata": {
     "colab": {
-      "provenance": [],
-      "include_colab_link": true
+      "provenance": []
     },
     "kernelspec": {
       "display_name": "Python 3",
