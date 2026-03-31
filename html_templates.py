@@ -742,7 +742,8 @@ HTML_APP_MANAGEMENT = """
                 <button type="submit" class="btn btn-primary" style="background-color: var(--blue-main); border: none; padding: 10px 20px; font-weight: bold;"><i class="fas fa-save"></i> Uložit statusy</button>
             </form>
         </div>
-
+</div>
+"""
 
 HTML_APP_MANAGEMENT = """
 <h2 style="color: var(--blue-main);"><i class="fas fa-cogs"></i> Správa aplikace</h2>
