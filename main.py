@@ -545,8 +545,26 @@ def public_stats():
     
     activated_users = len([u for u in all_users if u.get('hwid') and str(u.get('hwid')) not in ['None', '']])
     total_launches = sum([int(u.get('launch_count') or 0) for u in all_users])
-    total_time_mins = sum([int(u.get('total_time') or 0) for u in all_users])
-    total_hours = total_time_mins // 60
+    
+    # Kalkulace dnešního času z app_sessions
+    today_str = get_prague_time().strftime("%d.%m.%Y")
+    sessions_today = db.table("app_sessions").select("start_time, end_time").like("start_time", f"{today_str}%").execute().data or []
+    today_mins = 0
+    for s in sessions_today:
+        try:
+            st_str = s.get('start_time')
+            et_str = s.get('end_time')
+            if st_str and et_str:
+                fmt_st = "%d.%m.%Y %H:%M:%S" if st_str.count(':') == 2 else "%d.%m.%Y %H:%M"
+                fmt_et = "%d.%m.%Y %H:%M:%S" if et_str.count(':') == 2 else "%d.%m.%Y %H:%M"
+                st = datetime.strptime(st_str, fmt_st)
+                et = datetime.strptime(et_str, fmt_et)
+                diff = int((et - st).total_seconds() / 60)
+                if diff > 0: today_mins += diff
+        except: pass
+    today_hours = today_mins // 60
+    today_rem_mins = today_mins % 60
+    today_time_str = f"{today_hours}h {today_rem_mins}m" if today_hours > 0 else f"{today_rem_mins}m"
     
     supporters_data = db.table("supporters").select("id").eq("status", "completed").execute().data or []
     total_supporters = len(supporters_data)
@@ -565,7 +583,7 @@ def public_stats():
                          user_ver=user_ver, bt_ver=bt_ver, 
                          activated_users=activated_users, 
                          total_supporters=total_supporters,
-                         total_hours=total_hours, 
+                         today_time_str=today_time_str, 
                          total_launches=total_launches,
                          top_time=top_time_users, top_launches=top_launches,
                          top_lines=top_lines, top_stops=top_stops,
