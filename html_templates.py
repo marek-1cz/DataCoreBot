@@ -449,6 +449,12 @@ HTML_PUBLIC_STATS = """
             <div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase;">Role</div>
             <div style="color: var(--text-main); font-size: 18px; font-weight: bold;">{{ searched_user.get('role', 'User') }}</div>
         </div>
+        <div style="background: var(--bg-dark); padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+            <div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase;">Naposledy hráno</div>
+            <div style="color: var(--blue-main); font-size: 18px; font-weight: bold;">
+                {% if searched_user.get('is_online') %}<span style="color: var(--success);">Nyní hraje</span>{% else %}{{ searched_user.get('last_active', 'Nikdy') }}{% endif %}
+            </div>
+        </div>
     </div>
     <a href="/stats" class="btn btn-dark" style="margin-top: 20px; font-size: 12px;"><i class="fas fa-times"></i> Zavřít profil</a>
 </div>
@@ -480,6 +486,7 @@ HTML_PUBLIC_STATS = """
         <i class="fas fa-clock" style="font-size: 40px; color: var(--warning); margin-bottom: 15px; text-shadow: 0 0 15px rgba(245, 158, 11, 0.5);"></i>
         <div style="font-size: 36px; font-weight: 900; color: var(--text-main);">{{ total_hours }}h</div>
         <div style="color: var(--text-muted); font-size: 14px; text-transform: uppercase;">Celkově nahráno</div>
+        <div style="color: var(--warning); font-size: 12px; font-weight: bold; margin-top: 5px;">Dnes: {{ today_time_str }}</div>
     </div>
     <div style="background: var(--bg-panel); padding: 25px; border-radius: 10px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
         <i class="fas fa-rocket" style="font-size: 40px; color: var(--blue-main); margin-bottom: 15px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.5);"></i>
