@@ -436,6 +436,37 @@ def api_keepalive():
     if request.method == 'OPTIONS': return _cors_jsonify({})
     return _cors_jsonify({"status": "alive", "time": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")})
 
+# === NOVÝ PŘIJÍMAČ STATISTIK ===
+@app.route('/api/submit_stats', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_submit_stats():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+    data = request.get_json(silent=True) or {}
+    line = str(data.get("line", "")).strip()
+    stops = data.get("stops", [])
+    
+    db = get_db()
+    if not db or not line: return _cors_jsonify({"status": "error"})
+    
+    try:
+        line_res = db.table("stats_lines").select("*").eq("line_name", line).execute().data
+        if line_res:
+            db.table("stats_lines").update({"play_count": int(line_res[0].get("play_count", 0)) + 1}).eq("id", line_res[0]["id"]).execute()
+        else:
+            db.table("stats_lines").insert({"line_name": line, "play_count": 1}).execute()
+            
+        for stop in stops:
+            stop_name = str(stop).strip()
+            if not stop_name: continue
+            stop_res = db.table("stats_stops").select("*").eq("stop_name", stop_name).execute().data
+            if stop_res:
+                db.table("stats_stops").update({"announce_count": int(stop_res[0].get("announce_count", 0)) + 1}).eq("id", stop_res[0]["id"]).execute()
+            else:
+                db.table("stats_stops").insert({"stop_name": stop_name, "announce_count": 1}).execute()
+                
+        return _cors_jsonify({"status": "success"})
+    except Exception as e:
+        return _cors_jsonify({"status": "error", "message": str(e)})
+
 @app.route('/')
 def home(): 
     def log_visit(ip, cf_country):
@@ -521,10 +552,14 @@ def public_stats():
     total_supporters = len(supporters_data)
     
     valid_time_users = [u for u in all_users if int(u.get('total_time') or 0) > 0]
-    top_time = sorted(valid_time_users, key=lambda x: int(x.get('total_time') or 0), reverse=True)[:3]
+    top_time_users = sorted(valid_time_users, key=lambda x: int(x.get('total_time') or 0), reverse=True)[:3]
     
     valid_launch_users = [u for u in all_users if int(u.get('launch_count') or 0) > 0]
     top_launches = sorted(valid_launch_users, key=lambda x: int(x.get('launch_count') or 0), reverse=True)[:3]
+    
+    # --- NOVÉ STATISTIKY (Načtení z DB) ---
+    top_lines = db.table("stats_lines").select("*").order("play_count", desc=True).limit(5).execute().data or []
+    top_stops = db.table("stats_stops").select("*").order("announce_count", desc=True).limit(15).execute().data or []
     
     return render_public(HTML_PUBLIC_STATS, 
                          user_ver=user_ver, bt_ver=bt_ver, 
@@ -532,7 +567,8 @@ def public_stats():
                          total_supporters=total_supporters,
                          total_hours=total_hours, 
                          total_launches=total_launches,
-                         top_time=top_time, top_launches=top_launches,
+                         top_time=top_time_users, top_launches=top_launches,
+                         top_lines=top_lines, top_stops=top_stops,
                          searched_user=searched_user)
 
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'])
@@ -826,7 +862,7 @@ def api_app_login():
             user_resp = db.table("users").select("*").eq("nick", identifier).execute()
             
         if not user_resp.data: 
-            return _cors_jsonify({"status": "error", "message": "Uživatel nenalezen."})
+            return _cors_jsonify({"status": "error", "message": "Uživatel nenalezen. Pokud má váš Nick speciální znaky, použijte k přihlášení raději číselné Discord ID."})
             
         user = user_resp.data[0]
         
