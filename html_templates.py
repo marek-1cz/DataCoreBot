@@ -741,7 +741,6 @@ HTML_APP_MANAGEMENT = """
 </div>
 """
 
-
 HTML_NOTIFICATIONS = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-bell" style="color:#f59e0b;"></i> Systém Oznámení (Pop-up do aplikace)</h2>
