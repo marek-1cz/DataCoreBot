@@ -1,5 +1,3 @@
-
-
 import os
 import discord
 from discord.ext import commands, tasks
@@ -26,8 +24,8 @@ from html_templates import *
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
 app = Flask(__name__)
-app.secret_key = "ois_idpk_super_tajny_klic"
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+app.secret_key = "ois_idpk_super_tajny_klic" 
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png"
@@ -78,7 +76,7 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
     cj = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj), urllib.request.HTTPRedirectHandler())
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-
+    
     try:
         if "drive.google.com" in file_url and "/d/" in file_url:
             match = re.search(r'/d/([a-zA-Z0-9_-]+)', file_url)
@@ -87,7 +85,7 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
                 url = f"https://drive.google.com/uc?export=download&id={file_id}"
                 req = urllib.request.Request(url, headers=headers)
                 resp = opener.open(req, timeout=15)
-
+                
                 if 'text/html' in resp.headers.get('Content-Type', '').lower():
                     text = resp.read().decode('utf-8', errors='ignore')
                     token = None
@@ -100,7 +98,7 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
                         match2 = re.search(r'name="confirm" value="([^"]+)"', text)
                         if match1: token = match1.group(1)
                         elif match2: token = match2.group(1)
-
+                        
                     if token:
                         url = f"{url}&confirm={token}"
                         req = urllib.request.Request(url, headers=headers)
@@ -125,24 +123,24 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
         def generate():
             try:
                 while True:
-                    chunk = resp.read(1024 * 128)
+                    chunk = resp.read(1024 * 128) 
                     if not chunk: break
                     yield chunk
             except Exception as stream_err:
                 send_log("⚠️ Spojení přerušeno", f"Uživateli `{nick}` se přerušilo stahování v půlce.\nDůvod: {stream_err}", 0xf59e0b)
             finally:
                 resp.close()
-
+                
         resp_headers = {
             'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name.replace(" ", "_")}.zip"',
             'Content-Type': resp.headers.get('Content-Type', 'application/octet-stream')
         }
         if resp.headers.get('Content-Length'):
             resp_headers['Content-Length'] = resp.headers.get('Content-Length')
-
+            
         send_log("✅ Úspěšné stahování", f"Uživatel `{nick}` právě stahuje: **{version_name}**.", 0x10b981)
         return Response(stream_with_context(generate()), headers=resp_headers)
-
+        
     except Exception as e:
         send_log("❌ Selhání stahování", f"Kritická chyba Proxy pro hráče `{nick}`:\n`{e}`", 0xef4444)
         return "Došlo k interní chybě při stahování. Odkaz na pozadí je nefunkční."
@@ -166,9 +164,9 @@ def save_setup_message(db, channel_id, message_id):
 def build_setup_embed(db):
     settings_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}]
     dl_enabled = str(settings_resp[0].get('setting_value', '')).lower() != 'false'
-
+    
     embed = discord.Embed(title="📥 Projekt OIS IDPK - Instalace", description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a stahování.\n**Při stahování se automaticky přihlásíte do databáze.**\n*(Stahování lze ve vašem prohlížeči kdykoliv pozastavit a obnovit)*", color=0x38bdf8)
-
+    
     if not dl_enabled:
         embed.color = 0xef4444
         embed.add_field(name="⛔ STAHOVÁNÍ JE NYNÍ VYPNUTO", value="Administrátor dočasně zakázal stahování. Zkuste to prosím později.", inline=False)
@@ -176,7 +174,7 @@ def build_setup_embed(db):
 
     versions = db.table("software_versions").select("*").eq("is_active", True).order("id", desc=True).execute().data or []
     now = get_prague_time().replace(tzinfo=None)
-
+    
     def format_version(v):
         eol_str = v.get('eol_date', '').strip()
         if eol_str:
@@ -193,11 +191,11 @@ def build_setup_embed(db):
 
     user_v = [format_version(v) for v in versions if v['target_role'] == 'User']
     bt_v = [format_version(v) for v in versions if v['target_role'] == 'BT']
-
+    
     if user_v: embed.add_field(name="🌍 Dostupné pro všechny (User)", value="\n".join(user_v), inline=False)
     if bt_v: embed.add_field(name="🛠️ Dostupné pro Beta Testery (BT)", value="\n".join(bt_v), inline=False)
     if not user_v and not bt_v: embed.add_field(name="Zatím nejsou dostupné žádné veřejné verze.", value="-", inline=False)
-
+        
     embed.set_footer(text="Neveřejné verze jsou skryté. Pokud máte BAN, systém vás ke stahování nepustí.")
     return embed
 
@@ -207,10 +205,10 @@ async def update_setup_messages_async():
     if not db: return
     msgs = get_setup_messages(db)
     if not msgs: return
-
+    
     embed = build_setup_embed(db)
     valid_msgs = []
-
+    
     for m in msgs:
         try:
             channel = bot.get_channel(int(m['channel_id'])) or await bot.fetch_channel(int(m['channel_id']))
@@ -219,7 +217,7 @@ async def update_setup_messages_async():
                 await msg.edit(embed=embed)
                 valid_msgs.append(m)
         except Exception as e: pass
-
+        
     db.table("settings").update({"setting_value": json.dumps(valid_msgs)}).eq("setting_key", "setup_messages").execute()
 
 def trigger_setup_messages_update():
@@ -328,7 +326,7 @@ async def async_send_log(title, description, color=0x38bdf8):
             break
 
 def send_log(title, description, color=0x38bdf8):
-    if bot.loop and bot.loop.is_running() and bot.is_ready():
+    if bot.loop and bot.loop.is_running() and bot.is_ready(): 
         asyncio.run_coroutine_threadsafe(async_send_log(title, description, color), bot.loop)
 
 def _cors_jsonify(data):
@@ -387,17 +385,17 @@ def check_version_access(db, app_version_from_pc, user):
         return {"allowed": True}
 
     user_role_str = user.get("role", "")
-    if not app_version_from_pc or str(app_version_from_pc).strip() == "":
+    if not app_version_from_pc or str(app_version_from_pc).strip() == "": 
         return {"allowed": False, "msg": "Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
-
+    
     try:
         v_data = db.table("software_versions").select("*").eq("db_version", app_version_from_pc).execute().data
         if not v_data: return {"allowed": False, "msg": f"Verze '{app_version_from_pc}' neexistuje v databázi! Stáhněte si aktuální verzi z našeho Discordu."}
-
+        
         v_info = v_data[0]
         if str(v_info.get("is_active", "True")).lower() == "false":
             return {"allowed": False, "msg": f"Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
-
+            
         eol = v_info.get("eol_date")
         if eol and str(eol).strip():
             try:
@@ -406,7 +404,7 @@ def check_version_access(db, app_version_from_pc, user):
                     db.table("software_versions").update({"is_active": False}).eq("id", v_info["id"]).execute()
                     return {"allowed": False, "msg": f"Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
             except Exception as d_err:
-                pass
+                pass 
 
         target = v_info.get("target_role", "User")
         if target != "User":
@@ -427,7 +425,7 @@ def api_keepalive():
     return _cors_jsonify({"status": "alive", "time": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")})
 
 @app.route('/')
-def home():
+def home(): 
     def log_visit(ip, cf_country):
         try:
             if not ip or ip in ["127.0.0.1", "::1", "0.0.0.0"]: return
@@ -450,7 +448,7 @@ def home():
                         region = geo_data.get("regionName", "")
                         country_code = geo_data.get("countryCode", "").lower()
             except: pass
-            if not country_code or country_code.lower() == 'us' or country_name.lower() in ["neznámá", "unknown", "none", "united states", "us"]: return
+            if not country_code or country_code.lower() == 'us' or country_name.lower() in ["neznámá", "unknown", "none", "united states", "us"]: return 
             combined_location = f"{country_code}|{country_name}|{region}"
             db.table("page_visits").insert({"ip": clean_ip, "country": combined_location, "visited_at": now_str}).execute()
         except: pass
@@ -463,7 +461,7 @@ def home():
 def download_home(): return render_public(HTML_DOWNLOADS_MAIN)
 
 @app.route('/team')
-def team():
+def team(): 
     try: team_members = get_db().table("team").select("*").execute().data or [] if get_db() else []
     except: team_members = []
     return render_public(HTML_TEAM, team=team_members)
@@ -471,7 +469,7 @@ def team():
 @app.route('/supporters')
 def supporters():
     support_data = []
-    try:
+    try: 
         db = get_db()
         if db:
             data = db.table("supporters").select("*").eq("status", "completed").execute().data or []
@@ -485,12 +483,12 @@ def public_stats():
     if not db:
         flash("Databáze není dostupná.", "error")
         return redirect(url_for('home'))
-
+    
     search_query = request.args.get('q', '').strip()
     searched_user = None
-
+    
     all_users = db.table("users").select("*").execute().data or []
-
+    
     if search_query:
         for u in all_users:
             if str(u.get('discord_id')) == search_query or str(u.get('nick', '')).lower() == search_query.lower():
@@ -498,30 +496,30 @@ def public_stats():
                 break
         if not searched_user:
             flash(f"Hráč s ID nebo Nickem '{search_query}' nebyl nalezen.", "warning")
-
+            
     versions = db.table("software_versions").select("*").eq("is_active", True).order("id", desc=True).execute().data or []
     user_ver = next((v['version_name'] for v in versions if v['target_role'] == 'User'), "Žádná")
     bt_ver = next((v['version_name'] for v in versions if v['target_role'] == 'BT'), "Žádná")
-
+    
     activated_users = len([u for u in all_users if u.get('hwid') and str(u.get('hwid')) not in ['None', '']])
     total_launches = sum([int(u.get('launch_count') or 0) for u in all_users])
     total_time_mins = sum([int(u.get('total_time') or 0) for u in all_users])
     total_hours = total_time_mins // 60
-
+    
     supporters_data = db.table("supporters").select("id").eq("status", "completed").execute().data or []
     total_supporters = len(supporters_data)
-
+    
     valid_time_users = [u for u in all_users if int(u.get('total_time') or 0) > 0]
     top_time = sorted(valid_time_users, key=lambda x: int(x.get('total_time') or 0), reverse=True)[:3]
-
+    
     valid_launch_users = [u for u in all_users if int(u.get('launch_count') or 0) > 0]
     top_launches = sorted(valid_launch_users, key=lambda x: int(x.get('launch_count') or 0), reverse=True)[:3]
-
-    return render_public(HTML_PUBLIC_STATS,
-                         user_ver=user_ver, bt_ver=bt_ver,
-                         activated_users=activated_users,
+    
+    return render_public(HTML_PUBLIC_STATS, 
+                         user_ver=user_ver, bt_ver=bt_ver, 
+                         activated_users=activated_users, 
                          total_supporters=total_supporters,
-                         total_hours=total_hours,
+                         total_hours=total_hours, 
                          total_launches=total_launches,
                          top_time=top_time, top_launches=top_launches,
                          searched_user=searched_user)
@@ -544,7 +542,7 @@ def claim_role():
         bmac_name = request.form.get('bmac_name', '').strip()
         discord_nick = request.form.get('discord_nick', '').strip()
         db = get_db()
-        if not db:
+        if not db: 
             flash('Chyba připojení k databázi.', 'error')
             return redirect(url_for('claim_role'))
         all_records = db.table("supporters").select("*").eq("name", bmac_name).execute().data
@@ -653,56 +651,56 @@ def secure_download(token):
         v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
         if not v_resp.data: return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--warning);'>Chyba verze</h2></div>")
         v_data = v_resp.data[0]
-
+        
         html = f"""<div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);">
             <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2>
             <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Přihlášen jako: <strong>{user.get('nick', '')}</strong></p>
-
+            
             <div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;">
                 <h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3>
                 <p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{v_data.get('version_name', '')}</strong></p>
             </div>
-
+            
             <div id="download-area">
                 <a href="#" onclick="startDownload()" class="btn btn-success" style="font-size: 18px; padding: 15px 30px; display: inline-block;" id="dl-btn">
                     <i class="fas fa-download"></i> Stáhnout Soubor
                 </a>
             </div>
-
+            
             <div id="loading-area" style="display: none;">
                 <div class="spinner" style="margin: 0 auto 10px auto; border-color: rgba(16, 185, 129, 0.3); border-top-color: #10b981;"></div>
                 <p style="color: var(--text-main); font-weight: bold;">Zahajuji stahování...</p>
                 <p style="color: var(--text-muted); font-size: 12px;">Generuji bezpečné připojení...</p>
             </div>
-
+            
             <div id="success-area" style="display: none; margin-top: 20px;">
                 <h3 style="color: var(--success); margin-top: 0;"><i class="fas fa-check"></i> Úspěšně zahájeno</h3>
                 <p style="color: var(--text-main); font-size: 14px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 3px solid var(--blue-main);">
                     Stahování běží. Po stažení souboru jej nezapomeňte rozbalit pomocí programů jako <b>7-ZIP</b> nebo <b>WinRAR</b>.
                 </p>
             </div>
-
+            
             <div id="error-area" style="display: none; margin-top: 20px;">
                 <h3 style="color: var(--danger); margin-top: 0;"><i class="fas fa-times-circle"></i> Stahování se nezdařilo</h3>
                 <p style="color: var(--text-main); font-size: 14px; background: rgba(239,68,68,0.1); padding: 15px; border-radius: 8px; border-left: 3px solid var(--danger);">
                     Omlouváme se, stahování nebylo možné spustit.<br><b>Důvod:</b> <span id="error-msg"></span><br><br>Zkuste to prosím později, administrátor byl o chybě informován do logu.
                 </p>
             </div>
-
+            
             <style>
                 .spinner {{ width: 40px; height: 40px; border: 4px solid; border-radius: 50%; animation: spin 1s linear infinite; }}
                 @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
             </style>
-
+            
             <script>
             async function startDownload() {{
                 document.getElementById('download-area').style.display = 'none';
                 document.getElementById('loading-area').style.display = 'block';
-
+                
                 try {{
                     let response = await fetch("/api/pre_download/{token}?v={version_id}");
                     let data = await response.json();
-
+                    
                     if (data.status === 'ok') {{
                         window.location.href = "/api/stream_download/{token}?v={version_id}";
                         setTimeout(() => {{
@@ -729,23 +727,24 @@ def secure_download(token):
 def api_pre_download(token):
     db = get_db()
     if not db: return jsonify({"status": "error", "message": "Chyba databáze."})
-
+    
     resp = db.table("users").select("*").eq("download_token", token).execute()
     if not resp.data:
         send_log("⚠️ Neplatný odkaz", "Někdo se pokusil použít propadlý nebo cizí odkaz na stahování.", 0xf59e0b)
         return jsonify({"status": "error", "message": "Neplatný nebo vypršelý odkaz. Vygenerujte si na Discordu nový."})
-
+        
     user = resp.data[0]
     if user.get("is_banned") or user.get("is_deleted"):
         send_log("⛔ Zablokovaný přístup", f"Zablokovaný uživatel `{user.get('nick')}` se pokusil stahovat.", 0xef4444)
         return jsonify({"status": "error", "message": "Přístup zamítnut administrátorem."})
-
+        
     version_id = request.args.get('v')
     v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
     if not v_resp.data:
         send_log("❌ Selhání stahování", f"Hráč `{user.get('nick')}` zkusil stáhnout verzi, která už neexistuje v DB.", 0xef4444)
         return jsonify({"status": "error", "message": "Tato verze již není k dispozici."})
-
+        
+    # ANTI SPAM KONTROLA
     now_prague = get_prague_time()
     last_log = db.table("download_logs").select("*").eq("discord_id", user['discord_id']).order("id", desc=True).limit(1).execute().data
     if last_log:
@@ -757,32 +756,32 @@ def api_pre_download(token):
                 send_log("🛑 SPAM Ochrana", f"Uživatel `{user.get('nick')}` klikal na stahování příliš rychle.", 0xf59e0b)
                 return jsonify({"status": "error", "message": "Detekován SPAM! Počkejte 30 vteřin před dalším stažením."})
         except: pass
-
+        
     return jsonify({"status": "ok"})
 
 @app.route('/api/stream_download/<token>')
 def api_stream_download(token):
     db = get_db()
     if not db: return "Chyba databáze."
-
+    
     resp = db.table("users").select("*").eq("download_token", token).execute()
     if not resp.data: return "Neplatný odkaz."
     user = resp.data[0]
-
+    
     version_id = request.args.get('v')
     v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
     if not v_resp.data: return "Verze nenalezena."
-
+    
     v_data = v_resp.data[0]
     file_url_raw = v_data['file_url']
     version_name = v_data['version_name']
-
+    
     db.table("users").update({"download_token": ""}).eq("discord_id", user['discord_id']).execute()
-
+    
     try:
         db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")}).execute()
     except: pass
-
+    
     return stream_proxy_file(file_url_raw, version_name, user['discord_id'], user.get('nick', 'Neznámý'))
 
 @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
@@ -801,7 +800,7 @@ def api_app_login():
     if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
     if not data: return _cors_jsonify({"status": "error", "message": "Chybí data."})
-
+    
     identifier = str(data.get("identifier", "")).strip()
     req_hwid = str(data.get("hwid", ""))
     app_version = str(data.get("app_version", ""))
@@ -810,32 +809,32 @@ def api_app_login():
         set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
         if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false':
             return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ VYPNUT."})
-
+            
         if identifier.isdigit():
             user_resp = db.table("users").select("*").or_(f"discord_id.eq.{identifier},app_id.eq.{int(identifier)}").execute()
         else:
             user_resp = db.table("users").select("*").eq("nick", identifier).execute()
-
-        if not user_resp.data:
+            
+        if not user_resp.data: 
             return _cors_jsonify({"status": "error", "message": "Uživatel nenalezen. Pokud má váš Nick speciální znaky, použijte k přihlášení raději číselné Discord ID."})
-
+            
         user = user_resp.data[0]
-
+        
         if user.get("is_banned"):
             send_log("⛔ Pokus o přihlášení (BAN)", f"Zabanovaný uživatel `{user.get('nick')}` se pokusil zapnout software.", 0xef4444)
             return _cors_jsonify({"status": "banned", "message": "Tento účet má BAN."})
-
+            
         version_check = check_version_access(db, app_version, user)
         if not version_check["allowed"]:
             send_log("🛡️ Neoprávněný přístup verze", f"Uživatel `{user.get('nick')}` se pokusil zapnout zakázanou/neoprávněnou verzi: **{app_version}**", 0xf59e0b)
             return _cors_jsonify({"status": "error", "message": version_check["msg"]})
-
+            
         db_hwid = user.get("hwid")
         if db_hwid and str(db_hwid) != "None" and str(db_hwid).strip() != "":
             if str(db_hwid) != req_hwid:
                 send_log("🔒 HWID Neshoda", f"Uživatel `{user.get('nick')}` se hlásí z jiného PC!\nUloženo: `{db_hwid}`\nNové: `{req_hwid}`", 0xf59e0b)
                 return _cors_jsonify({"status": "hwid_error", "message": "Tento účet je vázán na jiný počítač."})
-
+                
         token = str(uuid.uuid4())
         db.table("users").update({"login_token": token}).eq("discord_id", user.get("discord_id")).execute()
         async def send():
@@ -882,18 +881,18 @@ def api_silent_check():
     try:
         set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
         if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false': return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ VYPNUT."})
-
+        
         user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
         if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Tento účet neexistuje."})
         user = user_resp.data[0]
-
+        
         if user.get("is_banned"): return _cors_jsonify({"status": "error", "message": "Tento účet má BAN."})
         if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."})
-
+        
         version_check = check_version_access(db, app_version, user)
         if not version_check["allowed"]:
             return _cors_jsonify({"status": "error", "message": version_check["msg"]})
-
+            
         db_hwid = user.get("hwid")
         if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
             if req_hwid and req_hwid.startswith("PC-"):
@@ -917,27 +916,27 @@ def api_app_ping():
         now_str = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
         user_resp = db.table("users").select("launch_count, total_time").eq("discord_id", discord_id).execute()
         if not user_resp.data: return _cors_jsonify({"status": "error"})
-
+        
         updates = {"last_active": now_str, "is_online": True}
-
-        if action == "start":
+        
+        if action == "start": 
             updates["launch_count"] = (user_resp.data[0].get("launch_count") or 0) + 1
             new_session_id = str(uuid.uuid4())
             db.table("app_sessions").insert({"session_id": new_session_id, "discord_id": discord_id, "start_time": now_str, "end_time": now_str}).execute()
             db.table("users").update(updates).eq("discord_id", discord_id).execute()
             return _cors_jsonify({"status": "ok", "session_id": new_session_id})
-
-        elif action == "ping":
+            
+        elif action == "ping": 
             updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 1
-            if session_id:
+            if session_id: 
                 db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
-
-        elif action == "stop":
+                
+        elif action == "stop": 
             updates["is_online"] = False
-            updates["admin_bypass"] = False
-            if session_id:
+            updates["admin_bypass"] = False 
+            if session_id: 
                 db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
-
+            
         db.table("users").update(updates).eq("discord_id", discord_id).execute()
         return _cors_jsonify({"status": "ok", "session_id": session_id})
     except: return _cors_jsonify({"status": "error"})
@@ -946,29 +945,29 @@ def api_app_ping():
 def api_get_profile_data(discord_id):
     if request.method == 'OPTIONS': return _cors_jsonify({})
     if not session.get('logged_in'): return _cors_jsonify({"error": "Unauthorized"}), 401
-
+    
     if not discord_id or discord_id == 'None' or discord_id.strip() == '':
         return _cors_jsonify({"error": "Chybí Discord ID"})
 
     try:
         db = get_db()
         if not db: return _cors_jsonify({"error": "DB Error"}), 500
-
+        
         u_data = db.table("users").select("*").eq("discord_id", discord_id).execute().data
         stats = ""
         app_status = "<span style='color: var(--text-muted);'>Neznámý</span>"
-
+        
         if u_data:
             u = u_data[0]
             try: t_time = int(u.get("total_time") or 0)
             except: t_time = 0
             try: l_count = int(u.get("launch_count") or 0)
             except: l_count = 0
-
+            
             hours = t_time // 60
             mins = t_time % 60
             stats = f"<div style='margin-bottom:5px;'><b style='color:var(--blue-main);'>{hours}h {mins}m</b> v aplikaci</div><div><b style='color:var(--blue-main);'>{l_count}x</b> spuštěno</div>"
-
+            
             if u.get("is_online"):
                 app_status = "<span style='color: var(--success); font-weight:bold;'><i class='fas fa-circle'></i> Nyní hraje</span>"
             else:
@@ -986,10 +985,10 @@ def api_get_profile_data(discord_id):
 
         downloads = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(10).execute().data or []
         sessions_data = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data or []
-
+        
         return _cors_jsonify({
             "joined_at": joined_at,
-            "status": "",
+            "status": "", 
             "app_status": app_status,
             "stats": stats,
             "downloads": downloads,
@@ -1018,12 +1017,12 @@ def api_get_messages():
         all_msgs = db.table("app_messages").select("*").execute().data or []
         read_msgs = db.table("read_messages").select("message_id").eq("discord_id", discord_id).execute().data or []
         read_ids = [m['message_id'] for m in read_msgs]
-
+        
         valid_msgs = []
         now = get_prague_time().replace(tzinfo=None)
 
         for msg in all_msgs:
-            if str(msg.get("is_archived")).lower() == 'true':
+            if str(msg.get("is_archived")).lower() == 'true': 
                 continue
 
             expires_at_str = msg.get("expires_at")
@@ -1054,8 +1053,8 @@ def api_get_messages():
                 is_repeat = str(msg.get('repeat')).lower() == 'true'
                 if is_repeat or msg['message_id'] not in read_ids:
                     valid_msgs.append({
-                        "id": msg['message_id'],
-                        "title": msg['title'],
+                        "id": msg['message_id'], 
+                        "title": msg['title'], 
                         "content": msg['content'],
                         "link_url": msg.get('link_url', "")
                     })
@@ -1082,7 +1081,7 @@ def api_submit_feedback():
     data = request.get_json(silent=True) or {}
     db = get_db()
     if not db: return _cors_jsonify({"status": "error", "message": "DB Error"})
-
+    
     try:
         d_id = str(data.get("discord_id", "")).strip()
         nick = str(data.get("nick", "Neznámý Uživatel")).strip()
@@ -1092,7 +1091,7 @@ def api_submit_feedback():
         if not d_id or d_id.lower() in ["není zadáno", "none", "null", ""]:
             if not re.search(r'\d{17,}', msg):
                 return _cors_jsonify({
-                    "status": "error",
+                    "status": "error", 
                     "message": "⚠️ OCHRANA: Aplikace nedokázala načíst vaše ID (např. kvůli emoji v nicku). Napište prosím své číselné DISCORD ID přímo do textu žádosti, abychom účet dohledali!"
                 })
             else:
@@ -1102,14 +1101,14 @@ def api_submit_feedback():
             "discord_id": d_id, "nick": nick, "type": type_str, "message": msg,
             "status": "pending", "sys_note": "", "fcreated_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
         }).execute()
-
+        
         if type_str == "HWID": log_title = "🚨 VYŽADUJE KONTROLU: Žádost o HWID 🚨"; log_color = 0xef4444
         elif type_str == "ADMIN_BYPASS": log_title = "🔓 VYŽADUJE SCHVÁLENÍ: Admin Bypass 🔓"; log_color = 0xf59e0b
         else: log_title = "🔔 NOVÁ ZPĚTNÁ VAZBA (NÁPAD/CHYBA) 🔔"; log_color = 0xa855f7
-
+            
         desc = f"**Od:** {nick} (`{d_id}`)\n**Zpráva:**\n*{msg}*\n\n👉 **BĚŽTE DO DASHBOARDU A VYŘEŠTE TO!**"
         send_log(log_title, desc, log_color)
-
+        
         return _cors_jsonify({"status": "success"})
     except Exception as e:
         return _cors_jsonify({"status": "error", "message": str(e)})
@@ -1243,9 +1242,9 @@ def dashboard_main():
 
 @app.route('/dashboard/supporters', methods=['GET'])
 def dashboard_supporters():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
     pending_claims = []; supporters_history = []
-    try:
+    try: 
         db = get_db()
         if db:
             pending_claims = db.table("supporters").select("*").eq("status", "manual_review").execute().data or []
@@ -1384,7 +1383,7 @@ def dashboard_notifications():
     messages = []
     try:
         db = get_db()
-        if db:
+        if db: 
             now = get_prague_time().replace(tzinfo=None)
             msgs = db.table("app_messages").select("*").order("created_at", desc=True).execute().data or []
             for m in msgs:
@@ -1417,12 +1416,12 @@ def send_app_message():
             has_link = True if request.form.get("has_link") else False
             link_url = request.form.get("link_url", "") if has_link else ""
             expires_at = request.form.get("expires_at", "")
-
+            
             now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
             new_msg_id = str(uuid.uuid4())
             db.table("app_messages").insert({
-                "message_id": new_msg_id, "target_type": target_type, "target_data": target_data,
-                "title": title, "content": content, "repeat": repeat, "link_url": link_url,
+                "message_id": new_msg_id, "target_type": target_type, "target_data": target_data, 
+                "title": title, "content": content, "repeat": repeat, "link_url": link_url, 
                 "expires_at": expires_at, "is_archived": False, "created_at": now_str
             }).execute()
             flash('Oznámení pro aplikaci bylo úspěšně odesláno!', 'success')
@@ -1444,9 +1443,9 @@ def edit_app_message():
             has_link = True if request.form.get("has_link") else False
             link_url = request.form.get("link_url", "") if has_link else ""
             expires_at = request.form.get("expires_at", "")
-
+            
             db.table("app_messages").update({
-                "target_type": target_type, "target_data": target_data, "title": title,
+                "target_type": target_type, "target_data": target_data, "title": title, 
                 "content": content, "repeat": repeat, "link_url": link_url, "expires_at": expires_at
             }).eq("message_id", msg_id).execute()
             flash('Oznámení bylo úspěšně upraveno!', 'success')
@@ -1474,7 +1473,7 @@ def delete_app_message():
 
 @app.route('/dashboard/downloads', methods=['GET'])
 def dashboard_downloads():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
     versions = []; enabled = True
     try:
         db = get_db()
@@ -1504,7 +1503,7 @@ def toggle_downloads():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db(); new_status = request.form.get("new_status"); return_to = request.form.get("return_to", "downloads")
     if db:
-        try:
+        try: 
             check = db.table("settings").select("*").eq("setting_key", "downloads_enabled").execute().data or []
             if not check: db.table("settings").insert({"setting_key": "downloads_enabled", "setting_value": new_status}).execute()
             else: db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute()
@@ -1521,34 +1520,34 @@ def add_version():
         v_name = request.form.get("version_name")
         db_ver = request.form.get("db_version")
         get_db().table("software_versions").insert({
-            "version_name": v_name,
+            "version_name": v_name, 
             "db_version": db_ver,
-            "file_url": request.form.get("file_url"),
+            "file_url": request.form.get("file_url"), 
             "target_role": request.form.get("target_role"),
             "is_active": True,
             "eol_date": ""
         }).execute()
         send_log("📦 Nová verze softwaru", f"Administrátor přidal novou verzi do Manažeru: **{v_name}**.", 0x10b981)
         flash('Nová verze úspěšně vydána!', 'success')
-        trigger_setup_messages_update()
-    except Exception as e:
+        trigger_setup_messages_update() 
+    except Exception as e: 
         flash(f'Chyba při přidávání verze: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
 
 @app.route('/dashboard/edit_version', methods=['POST'])
 def edit_version():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    try:
+    try: 
         get_db().table("software_versions").update({
-            "version_name": request.form.get("version_name"),
+            "version_name": request.form.get("version_name"), 
             "db_version": request.form.get("db_version"),
-            "file_url": request.form.get("file_url"),
+            "file_url": request.form.get("file_url"), 
             "target_role": request.form.get("target_role"),
             "is_active": True if request.form.get("is_active") else False,
             "eol_date": request.form.get("eol_date", "")
         }).eq("id", request.form.get("version_id")).execute()
         flash('Verze byla úspěšně upravena.', 'success')
-        trigger_setup_messages_update()
+        trigger_setup_messages_update() 
     except Exception as e: flash(f'Chyba při úpravě verze: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
 
@@ -1559,24 +1558,24 @@ def delete_version():
         get_db().table("software_versions").delete().eq("id", request.form.get("version_id")).execute()
         send_log("🗑️ Verze smazána", "Administrátor smazal jednu z verzí v Manažeru stahování.", 0xef4444)
         flash('Verze smazána.', 'success')
-        trigger_setup_messages_update()
+        trigger_setup_messages_update() 
     except: pass
     return redirect(url_for('dashboard_downloads'))
 
 @app.route('/dashboard/pending_roles', methods=['GET'])
-def pending_roles():
+def pending_roles(): 
     try: data = get_db().table("pending_roles").select("*").order("id").execute().data or [] if get_db() else []
     except: data = []
     return render_dashboard(HTML_PENDING_ROLES, pending=data, deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/ids', methods=['GET'])
-def dashboard_ids():
+def dashboard_ids(): 
     try: data = get_db().table("users").select("*").order("app_id").execute().data or [] if get_db() else []
     except: data = []
     return render_dashboard(HTML_IDS, users=data, deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/team', methods=['GET'])
-def dashboard_team_page():
+def dashboard_team_page(): 
     try: data = get_db().table("team").select("*").execute().data or [] if get_db() else []
     except: data = []
     return render_dashboard(HTML_TEAM_ADD, team=data, deploy_time=DEPLOY_TIME)
@@ -1599,7 +1598,7 @@ def add_pending_role():
 def delete_pending_role():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db(); p_id = request.form.get("pending_id")
-    if db and p_id:
+    if db and p_id: 
         try: db.table("pending_roles").delete().eq("id", p_id).execute()
         except: pass
     return redirect(url_for('pending_roles'))
@@ -1608,7 +1607,7 @@ def delete_pending_role():
 def change_id():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db()
-    if db:
+    if db: 
         try:
             discord_id = request.form.get("discord_id"); new_app_id = int(request.form.get("new_app_id"))
             user_info = db.table("users").select("nick, app_id").eq("discord_id", discord_id).execute().data
@@ -1636,7 +1635,7 @@ def add_team():
 def delete_team():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db()
-    if db:
+    if db: 
         try:
             dc_nick = request.form.get("discord_nick")
             db.table("team").delete().eq("discord_nick", dc_nick).execute()
@@ -1742,7 +1741,7 @@ def edit_supporter():
 @app.route('/dashboard/add_supporter', methods=['POST'])
 def add_supporter():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    try:
+    try: 
         db = get_db()
         d_nick = request.form.get("discord_nick", "").strip()
         amt = request.form.get("amount", "0 CZK")
@@ -1769,7 +1768,7 @@ def add_supporter():
 @app.route('/dashboard/delete_supporter', methods=['POST'])
 def delete_supporter():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    try:
+    try: 
         get_db().table("supporters").delete().eq("id", request.form.get("supporter_id")).execute()
         flash('Podporovatel smazán.', 'success')
     except Exception as e: flash(f'Chyba při mazání: {e}', 'error')
@@ -1780,7 +1779,7 @@ class DashboardAuthView(discord.ui.View):
         super().__init__(timeout=300)
         self.token = token
         self.discord_id = discord_id
-
+        
     @discord.ui.button(label="Ověřit přístup", style=discord.ButtonStyle.success, emoji="✅")
     async def verify_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
@@ -1791,7 +1790,7 @@ class DashboardAuthView(discord.ui.View):
                 db.table("users").update({"login_token": "approved"}).eq("discord_id", self.discord_id).execute()
                 await interaction.edit_original_response(content="✅ **Přístup do administrace byl úspěšně schválen!**", view=None)
             else: await interaction.edit_original_response(content="❌ **Platnost vypršela.**", view=None)
-
+                
     @discord.ui.button(label="Zamítnout", style=discord.ButtonStyle.danger, emoji="❌")
     async def decline_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
@@ -1805,7 +1804,7 @@ class AppAuthView(discord.ui.View):
         self.token = token
         self.discord_id = discord_id
         self.is_dm = is_dm
-
+        
     @discord.ui.button(label="Ano, ověřit", style=discord.ButtonStyle.success)
     async def ok(self, interaction, button):
         if str(interaction.user.id) != str(self.discord_id): return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
@@ -1839,14 +1838,14 @@ class PerDeleteConfirm(discord.ui.View):
 class DynamicDownloadView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-
+        
     @discord.ui.button(label="Zahájit instalaci softwaru", style=discord.ButtonStyle.primary, emoji="📥", custom_id="persistent_install_main_btn")
     async def dl_btn(self, interaction, button):
         db = get_db()
         settings_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}]
-        if str(settings_resp[0].get('setting_value', '')).lower() == 'false':
+        if str(settings_resp[0].get('setting_value', '')).lower() == 'false': 
             return await interaction.response.send_message("**⛔ Stahování je momentálně globálně zakázáno administrátorem.** Zkuste to prosím později.", ephemeral=True)
-
+            
         chk = db.table("users").select("is_banned").eq("discord_id", str(interaction.user.id)).execute()
         if chk.data and chk.data[0].get('is_banned'):
             return await interaction.response.send_message("**⛔ Přístup zamítnut:** Váš účet má udělený BAN a stahování bylo zablokováno.", ephemeral=True)
@@ -1854,7 +1853,7 @@ class DynamicDownloadView(discord.ui.View):
         class DynamicRulesView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=None)
-
+                
             @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, emoji="✅")
             async def agree(self, i2, b2):
                 await i2.response.edit_message(content="<a:loading:123> Ověřuji profil...", view=None)
@@ -1863,7 +1862,7 @@ class DynamicDownloadView(discord.ui.View):
                     d_id = str(i2.user.id)
                     n = i2.user.display_name
                     u_role = "User"
-
+                    
                     chk = db.table("users").select("*").eq("discord_id", d_id).execute()
                     pend_data = db.table("pending_roles").select("*").execute().data or []
                     pend = next((p for p in pend_data if p['discord_identifier'] in [d_id, n]), None)
@@ -1884,17 +1883,17 @@ class DynamicDownloadView(discord.ui.View):
                         db.table("users").insert({"app_id": nid, "discord_id": d_id, "nick": n, "role": r, "hwid": "", "is_banned": False, "is_deleted": False, "dashboard_access": False, "login_token": "", "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
                         u_role = r
                         if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
-
-                    if isinstance(i2.user, discord.Member):
+                            
+                    if isinstance(i2.user, discord.Member): 
                         try: await update_member_roles(i2.user, u_role)
                         except: pass
-
+                            
                     class DynamicVersionSelect(discord.ui.Select):
                         def __init__(self, u_lvl):
                             opts = []
                             vers_data = get_db().table("software_versions").select("*").eq("is_active", True).order("id", desc=True).execute().data or []
                             now = get_prague_time().replace(tzinfo=None)
-
+                            
                             for v in vers_data:
                                 req = 2 if v['target_role'] == 'BT' else (3 if v['target_role'] == 'DEV_SA' else 1)
                                 if u_lvl >= req:
@@ -1910,30 +1909,30 @@ class DynamicDownloadView(discord.ui.View):
                                             else:
                                                 desc = f"Končí podpora: {eol_str}"
                                         except: pass
-
+                                    
                                     if is_dl:
                                         opts.append(discord.SelectOption(label=v['version_name'], description=desc or "Dostupné pro vaši roli", value=str(v['id']), emoji="📦"))
-
+                            
                             if not opts: opts.append(discord.SelectOption(label="Žádná verze nenalezena", description="Pro vaše oprávnění aktuálně není nic ke stažení.", value="none"))
                             super().__init__(placeholder="Vyber verzi k instalaci...", options=opts)
-
+                            
                         async def callback(self, i3):
                             if self.values[0] == "none": return await i3.response.send_message("Pro vaše role nejsou dostupné žádné verze.", ephemeral=True)
                             await i3.response.send_message("<a:loading:123> Generuji odkaz...", ephemeral=True)
                             t = str(uuid.uuid4())
                             get_db().table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
-
+                            
                             link = f"https://datacorebot.koyeb.app/download/{t}?v={self.values[0]}"
                             await i3.edit_original_response(content=f"**Odkaz připraven:**\n🔗 {link}\n*Platí jen pro Vás.*")
-
+                            
                     v_view = discord.ui.View()
                     v_view.add_item(DynamicVersionSelect(3 if 'SA' in u_role or 'DEV' in u_role else (2 if 'BT' in u_role else 1)))
                     await i2.edit_original_response(content="**Ověření úspěšné.** Vyberte soubor:", view=v_view)
                 except Exception as e: await i2.edit_original_response(content=f"Chyba DB: {e}")
-
+                    
             @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, emoji="❌")
             async def disagree(self, i2, b2): await i2.response.edit_message(content="**Akce zrušena.**", view=None)
-
+                
         await interaction.response.send_message("**PODMÍNKY UŽÍVÁNÍ:**\n1. Přísný zákaz šíření, kopírování nebo sdílení aplikace bez výslovného souhlasu autora.\n2. Systém využívá HWID ochranu a shromažďuje telemetrická data pro zajištění správného chodu a bezpečnosti aplikace.\n3. Každý pokus o modifikaci kódu nebo obcházení zabezpečení povede k okamžitému a trvalému zablokování.\n\nSouhlasíte s těmito podmínkami?", view=DynamicRulesView(), ephemeral=True)
 
 def check_web_sa():
@@ -1967,13 +1966,13 @@ async def on_ready():
     try:
         for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
     except: pass
-    trigger_setup_messages_update()
+    trigger_setup_messages_update() 
     if not keepalive_ping.is_running(): keepalive_ping.start()
 
 @bot.event
 async def on_message(message):
     if message.author.bot: return
-
+    
     if not message.guild:
         for guild in bot.guilds:
             channel = discord.utils.find(lambda c: "bot-dm" in c.name.lower(), guild.text_channels)
@@ -1981,17 +1980,17 @@ async def on_message(message):
                 embed = discord.Embed(title="📩 Nová zpráva do DM bota", description=message.content or "*[Žádný text]*", color=0xa855f7)
                 embed.set_author(name=f"{message.author.display_name} (@{message.author.name})", icon_url=message.author.display_avatar.url)
                 embed.set_footer(text=f"ID: {message.author.id}")
-
+                
                 if message.attachments:
                     urls = "\n".join([f"• [{a.filename}]({a.url})" for a in message.attachments])
                     embed.add_field(name="📎 Přílohy:", value=urls, inline=False)
                     if message.attachments[0].url.lower().endswith(('png', 'jpg', 'jpeg', 'gif', 'webp')):
                         embed.set_image(url=message.attachments[0].url)
-
+                        
                 try: await channel.send(embed=embed)
                 except: pass
                 break
-
+                
     await bot.process_commands(message)
 
 @bot.event
@@ -2014,27 +2013,27 @@ async def on_member_join(member):
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument): await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Zkontroluj si `!help`.", delete_after=15)
     elif isinstance(error, commands.MemberNotFound): await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
-    elif isinstance(error, commands.CheckFailure): pass
+    elif isinstance(error, commands.CheckFailure): pass 
 
 @bot.command()
 @check_sm_role()
 async def dm_view(ctx, discord_id: str):
     if not discord_id.isdigit():
         return await ctx.send("❌ Zadej platné číselné ID uživatele.")
-
+        
     status_msg = await ctx.send("<a:loading:123> Načítám historii zpráv (Může to chvíli trvat)...")
-
+    
     try:
         user = await bot.fetch_user(int(discord_id))
         if not user.dm_channel:
             await user.create_dm()
-
+            
         messages = [msg async for msg in user.dm_channel.history(limit=100)]
         messages.reverse()
-
+        
         if not messages:
             return await status_msg.edit(content=f"📭 Historie DM s uživatelem `{user.display_name}` je prázdná.")
-
+            
         log_content = f"--- HISTORIE DM S UŽIVATELEM {user.display_name} ({user.name} | ID: {user.id}) ---\n\n"
         for m in messages:
             time_str = (m.created_at + timedelta(hours=1)).strftime("%d.%m.%Y %H:%M:%S")
@@ -2042,13 +2041,13 @@ async def dm_view(ctx, discord_id: str):
             log_content += f"[{time_str}] {author_name}: {m.content}\n"
             if m.attachments:
                 log_content += f"    [Příloha]: {', '.join([a.url for a in m.attachments])}\n"
-
+        
         file_stream = io.BytesIO(log_content.encode('utf-8'))
         file = discord.File(file_stream, filename=f"ChatLog_{user.display_name}.txt")
-
+        
         await status_msg.delete()
         await ctx.send(f"📄 Tady je posledních 100 zpráv ze soukromé konverzace s uživatelem `{user.display_name}`:", file=file)
-
+        
     except discord.NotFound:
         await status_msg.edit(content="❌ Uživatel s tímto ID nebyl nalezen na Discordu.")
     except discord.Forbidden:
@@ -2084,7 +2083,7 @@ async def verze(ctx):
     if not db: return await ctx.send("❌ Databáze není dostupná.")
     versions = db.table("software_versions").select("*").order("id", desc=True).execute().data or []
     if not versions: return await ctx.send("Zatím nejsou dostupné žádné verze ke stažení.")
-
+    
     embed = discord.Embed(title="📦 Kompletní seznam verzí", description="Seznam všech verzí softwaru, včetně neveřejných pro DEV/SA.", color=0x38bdf8)
     for v in versions:
         status = "✅ Aktivní" if str(v.get('is_active', 'True')).lower() == 'true' else "❌ Zablokováno"
@@ -2177,7 +2176,7 @@ async def register(ctx, target_id: str = None):
         discord_id = str(ctx.author.id)
         nick = ctx.author.display_name
         target_member = ctx.author
-
+        
     now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
     check = db.table("users").select("*").eq("discord_id", discord_id).execute().data
     if check:
