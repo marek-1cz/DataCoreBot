@@ -527,6 +527,36 @@ HTML_PUBLIC_STATS = """
         </div>
     </div>
 </div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 40px; margin-bottom: 40px;">
+    <div style="background: var(--bg-panel); padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <h2 style="color: var(--blue-main); margin-top: 0; text-align: center; border-bottom: 1px solid #334155; padding-bottom: 15px;"><i class="fas fa-route"></i> TOP 5: Nejhranější linky</h2>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
+            {% for l in top_lines %}
+            <div style="display: flex; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 12px 20px; border-radius: 8px; border-left: 4px solid var(--blue-main);">
+                <div style="font-weight: bold; color: white; font-size: 18px;">{{ l.get('line_name', '') }}</div>
+                <div style="color: var(--blue-main); font-weight: bold;">{{ l.get('play_count', 0) }}x</div>
+            </div>
+            {% else %}
+            <div style="text-align: center; color: var(--text-muted);">Zatím žádná data.</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div style="background: var(--bg-panel); padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <h2 style="color: var(--success); margin-top: 0; text-align: center; border-bottom: 1px solid #334155; padding-bottom: 15px;"><i class="fas fa-map-marker-alt"></i> Nejoblíbenější zastávky</h2>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px; max-height: 400px; overflow-y: auto; padding-right: 10px;">
+            {% for s in top_stops %}
+            <div style="display: flex; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 10px 15px; border-radius: 8px; border-left: 4px solid var(--success);">
+                <div style="font-weight: bold; color: white; font-size: 14px;">{{ loop.index }}. {{ s.get('stop_name', '') }}</div>
+                <div style="color: var(--success); font-weight: bold; font-size: 14px;">{{ s.get('announce_count', 0) }}x</div>
+            </div>
+            {% else %}
+            <div style="text-align: center; color: var(--text-muted);">Zatím žádná data.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
 """
 
 HTML_SUPPORTERS = """
