@@ -713,6 +713,36 @@ HTML_APP_MANAGEMENT = """
         </form>
     </div>
 </div>
+
+        <div class="card" style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-top: 20px;">
+            <h3 style="color: var(--blue-main); margin-top: 0; margin-bottom: 15px;"><i class="fas fa-satellite-dish"></i> Veřejné statusy systému</h3>
+            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">Nastavení textů, které se budou veřejně zobrazovat uživatelům (např. při výpadku nebo údržbě).</p>
+            
+            <form action="/dashboard/update_statuses" method="POST">
+                <div style="margin-bottom: 15px;">
+                    <label style="color: var(--text-main); font-weight: bold; display: block; margin-bottom: 5px;">Discord Bot:</label>
+                    <input type="text" name="status_bot" class="form-control" style="background: var(--bg-panel); color: white; border: 1px solid #475569; width: 100%;" value="{{ status_bot | default('🟢 Discord bot je plně aktivní a bez výpadků.') }}">
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="color: var(--text-main); font-weight: bold; display: block; margin-bottom: 5px;">Stahování (Downloads):</label>
+                    <input type="text" name="status_dl" class="form-control" style="background: var(--bg-panel); color: white; border: 1px solid #475569; width: 100%;" value="{{ status_dl | default('🟢 Stahování softwaru a instalátorů běží v pořádku.') }}">
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="color: var(--text-main); font-weight: bold; display: block; margin-bottom: 5px;">Databáze:</label>
+                    <input type="text" name="status_db" class="form-control" style="background: var(--bg-panel); color: white; border: 1px solid #475569; width: 100%;" value="{{ status_db | default('🟢 Databáze je stabilní a synchronizovaná.') }}">
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="color: var(--text-main); font-weight: bold; display: block; margin-bottom: 5px;">Globální vypínač (Software):</label>
+                    <input type="text" name="status_global" class="form-control" style="background: var(--bg-panel); color: white; border: 1px solid #475569; width: 100%;" value="{{ status_global | default('🟢 Všechny systémy softwaru jsou online a v provozu.') }}">
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="background-color: var(--blue-main); border: none; padding: 10px 20px; font-weight: bold;"><i class="fas fa-save"></i> Uložit statusy</button>
+            </form>
+        </div>
+
 """
 
 HTML_NOTIFICATIONS = """
