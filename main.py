@@ -436,7 +436,7 @@ def api_keepalive():
     if request.method == 'OPTIONS': return _cors_jsonify({})
     return _cors_jsonify({"status": "alive", "time": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")})
 
-# === NOVÝ PŘIJÍMAČ STATISTIK ===
+# === PŘIJÍMAČ STATISTIK ===
 @app.route('/api/submit_stats', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_submit_stats():
     if request.method == 'OPTIONS': return _cors_jsonify({})
@@ -544,7 +544,21 @@ def public_stats():
     bt_ver = next((v['version_name'] for v in versions if v['target_role'] == 'BT'), "Žádná")
     
     activated_users = len([u for u in all_users if u.get('hwid') and str(u.get('hwid')) not in ['None', '']])
-    total_launches = sum([int(u.get('launch_count') or 0) for u in all_users])
+    
+    # Bezpečné sčítání celkového času a spuštění
+    total_time_mins = 0
+    total_launches = 0
+    for u in all_users:
+        try:
+            t = u.get('total_time')
+            if t: total_time_mins += int(t)
+        except: pass
+        try:
+            l = u.get('launch_count')
+            if l: total_launches += int(l)
+        except: pass
+        
+    total_hours = total_time_mins // 60
     
     # Kalkulace dnešního času z app_sessions
     today_str = get_prague_time().strftime("%d.%m.%Y")
@@ -575,15 +589,16 @@ def public_stats():
     valid_launch_users = [u for u in all_users if int(u.get('launch_count') or 0) > 0]
     top_launches = sorted(valid_launch_users, key=lambda x: int(x.get('launch_count') or 0), reverse=True)[:3]
     
-    # --- NOVÉ STATISTIKY (Načtení z DB) ---
-    top_lines = db.table("stats_lines").select("*").order("play_count", desc=True).limit(5).execute().data or []
-    top_stops = db.table("stats_stops").select("*").order("announce_count", desc=True).limit(15).execute().data or []
+    # --- TOP 10 LINEK A ZASTÁVEK ---
+    top_lines = db.table("stats_lines").select("*").order("play_count", desc=True).limit(10).execute().data or []
+    top_stops = db.table("stats_stops").select("*").order("announce_count", desc=True).limit(10).execute().data or []
     
     return render_public(HTML_PUBLIC_STATS, 
                          user_ver=user_ver, bt_ver=bt_ver, 
                          activated_users=activated_users, 
                          total_supporters=total_supporters,
                          today_time_str=today_time_str, 
+                         total_hours=total_hours,
                          total_launches=total_launches,
                          top_time=top_time_users, top_launches=top_launches,
                          top_lines=top_lines, top_stops=top_stops,
