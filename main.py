@@ -744,7 +744,6 @@ def api_pre_download(token):
         send_log("❌ Selhání stahování", f"Hráč `{user.get('nick')}` zkusil stáhnout verzi, která už neexistuje v DB.", 0xef4444)
         return jsonify({"status": "error", "message": "Tato verze již není k dispozici."})
         
-    # ANTI SPAM KONTROLA
     now_prague = get_prague_time()
     last_log = db.table("download_logs").select("*").eq("discord_id", user['discord_id']).order("id", desc=True).limit(1).execute().data
     if last_log:
@@ -1963,9 +1962,17 @@ async def on_ready():
     send_log("🔄 Systém Online", "Bot byl úspěšně (re)startován a je plně připojen k Discordu.", 0x10b981)
     try: bot.add_view(DynamicDownloadView())
     except: pass
+    
     try:
-        for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
+        for guild in bot.guilds: 
+            bot.invites_cache[guild.id] = await guild.invites()
+            # Přidání notifikace do statusu pro jistotu
+            status_channel = discord.utils.get(guild.channels, name="🛜・status")
+            if status_channel:
+                embed = discord.Embed(title="🟢 Bot je ONLINE", description=f"Systém byl úspěšně restartován a je připraven.\nČas startu: {get_prague_time().strftime('%d.%m.%Y %H:%M:%S')}", color=0x10b981)
+                await status_channel.send(embed=embed)
     except: pass
+    
     trigger_setup_messages_update() 
     if not keepalive_ping.is_running(): keepalive_ping.start()
 
@@ -2054,6 +2061,26 @@ async def dm_view(ctx, discord_id: str):
         await status_msg.edit(content="❌ Nemám oprávnění k DM tohoto uživatele (pravděpodobně má mě zablokovaného, nebo má vypnuté SZ).")
     except Exception as e:
         await status_msg.edit(content=f"❌ Nastala chyba při čtení DM zpráv:\n`{e}`")
+
+@bot.command()
+@check_sm_role()
+async def dm(ctx, user: discord.User, *, text: str):
+    try:
+        await user.send(text)
+        await ctx.send(f"✅ Zpráva odeslána do DM uživateli {user.mention}.")
+    except discord.Forbidden:
+        await ctx.send(f"❌ Nelze odeslat DM. Uživatel {user.mention} má pravděpodobně zablokované soukromé zprávy.")
+    except Exception as e:
+        await ctx.send(f"❌ Nastala chyba: {e}")
+
+@bot.command()
+@check_sm_role()
+async def message(ctx, channel: discord.TextChannel, *, text: str):
+    try:
+        await channel.send(text)
+        await ctx.send(f"✅ Zpráva úspěšně odeslána do kanálu {channel.mention}.")
+    except Exception as e:
+        await ctx.send(f"❌ Nelze odeslat zprávu do tohoto kanálu: {e}")
 
 @bot.command()
 @check_web_sa()
