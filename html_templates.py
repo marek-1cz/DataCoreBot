@@ -687,6 +687,19 @@ HTML_APP_MANAGEMENT = """
 <h2 style="color: var(--blue-main);"><i class="fas fa-cogs"></i> Správa aplikace</h2>
 <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
     <div class="card" style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; flex: 1; min-width: 250px; text-align: center; border: 1px solid #334155;">
+        
+        <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+            {% if soft_enabled %}
+                <div style="width: 80px; height: 80px; border-radius: 50%; background-color: #10b981; box-shadow: 0 0 25px #10b981; display: flex; align-items: center; justify-content: center; transition: all 0.3s;">
+                    <i class="fas fa-globe" style="color: white; font-size: 35px;"></i>
+                </div>
+            {% else %}
+                <div style="width: 80px; height: 80px; border-radius: 50%; background-color: #ef4444; box-shadow: 0 0 25px #ef4444; display: flex; align-items: center; justify-content: center; transition: all 0.3s;">
+                    <i class="fas fa-power-off" style="color: white; font-size: 35px;"></i>
+                </div>
+            {% endif %}
+        </div>
+
         <h3 style="color: white; margin-top: 0;">Globální stav softwaru</h3>
         <p style="color: var(--text-muted); font-size: 14px;">Vypne nebo zapne celou aplikaci.</p>
         <form action="/dashboard/toggle_software" method="POST">
@@ -700,6 +713,19 @@ HTML_APP_MANAGEMENT = """
     </div>
 
     <div class="card" style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; flex: 1; min-width: 250px; text-align: center; border: 1px solid #334155;">
+        
+        <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+            {% if dl_enabled %}
+                <div style="width: 80px; height: 80px; border-radius: 50%; background-color: #3b82f6; box-shadow: 0 0 25px #3b82f6; display: flex; align-items: center; justify-content: center; transition: all 0.3s;">
+                    <i class="fas fa-download" style="color: white; font-size: 35px;"></i>
+                </div>
+            {% else %}
+                <div style="width: 80px; height: 80px; border-radius: 50%; background-color: #ef4444; box-shadow: 0 0 25px #ef4444; display: flex; align-items: center; justify-content: center; transition: all 0.3s;">
+                    <i class="fas fa-times" style="color: white; font-size: 35px;"></i>
+                </div>
+            {% endif %}
+        </div>
+
         <h3 style="color: white; margin-top: 0;">Stahování softwaru</h3>
         <p style="color: var(--text-muted); font-size: 14px;">Povolí nebo zakáže stahování.</p>
         <form action="/dashboard/toggle_downloads" method="POST">
