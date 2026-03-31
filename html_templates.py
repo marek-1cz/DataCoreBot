@@ -684,68 +684,6 @@ HTML_STATS = """
 """
 
 HTML_APP_MANAGEMENT = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-desktop" style="color:var(--blue-main);"></i> Správa Aplikace</h2>
-</div>
-<div style="display: flex; gap: 20px; flex-wrap: wrap;">
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {{ 'var(--success)' if soft_enabled else 'var(--danger)' }}; text-align: center;">
-        <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-power-off"></i> Status Softwaru (Kill-Switch)</h3>
-        <div style="font-size: 50px; margin: 15px 0; color: {{ 'var(--success)' if soft_enabled else 'var(--danger)' }}; text-shadow: 0 0 15px {{ 'rgba(16, 185, 129, 0.5)' if soft_enabled else 'rgba(239, 68, 68, 0.5)' }};">
-            <i class="fas {{ 'fa-check-circle' if soft_enabled else 'fa-ban' }}"></i>
-        </div>
-        <p style="color: var(--text-muted); font-size: 14px;">Globální vypínač celé PC aplikace. Pokud je vypnuto, nepustí nikoho dál.</p>
-        <form action="/dashboard/toggle_software" method="POST" style="margin-top: 20px;">
-            <input type="hidden" name="new_status" value="{{ 'False' if soft_enabled else 'True' }}">
-            <button type="submit" class="btn {{ 'btn-danger' if soft_enabled else 'btn-success' }}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {{ 'VYPNOUT SOFTWARE GLOBÁLNĚ' if soft_enabled else 'ZAPNOUT SOFTWARE' }}</button>
-        </form>
-    </div>
-
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid {{ 'var(--success)' if dl_enabled else 'var(--danger)' }}; text-align: center;">
-        <h3 style="margin-top: 0; color: var(--text-main);"><i class="fas fa-cloud-download-alt"></i> Status Stahování</h3>
-        <div style="font-size: 50px; margin: 15px 0; color: {{ 'var(--success)' if dl_enabled else 'var(--danger)' }}; text-shadow: 0 0 15px {{ 'rgba(16, 185, 129, 0.5)' if dl_enabled else 'rgba(239, 68, 68, 0.5)' }};">
-            <i class="fas {{ 'fa-check-circle' if dl_enabled else 'fa-ban' }}"></i>
-        </div>
-        <p style="color: var(--text-muted); font-size: 14px;">Vypínač instalačního procesu přes Discord bota.</p>
-        <form action="/dashboard/toggle_downloads" method="POST" style="margin-top: 20px;">
-            <input type="hidden" name="new_status" value="{{ 'False' if dl_enabled else 'True' }}">
-            <input type="hidden" name="return_to" value="app_management">
-            <button type="submit" class="btn {{ 'btn-danger' if dl_enabled else 'btn-success' }}" style="width: 100%; font-size: 16px;"><i class="fas fa-power-off"></i> {{ 'ZAKÁZAT STAHOVÁNÍ' if dl_enabled else 'POVOLIT STAHOVÁNÍ' }}</button>
-        </form>
-    </div>
-</div>
-
-        <div class="card" style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-top: 20px;">
-            <h3 style="color: var(--blue-main); margin-top: 0; margin-bottom: 15px;"><i class="fas fa-satellite-dish"></i> Veřejné statusy systému</h3>
-            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">Nastavení textů, které se budou veřejně zobrazovat uživatelům (např. při výpadku nebo údržbě).</p>
-            
-            <form action="/dashboard/update_statuses" method="POST">
-                <div style="margin-bottom: 15px;">
-                    <label style="color: var(--text-main); font-weight: bold; display: block; margin-bottom: 5px;">Discord Bot:</label>
-                    <input type="text" name="status_bot" class="form-control" style="background: var(--bg-panel); color: white; border: 1px solid #475569; width: 100%;" value="{{ status_bot | default('🟢 Discord bot je plně aktivní a bez výpadků.') }}">
-                </div>
-                
-                <div style="margin-bottom: 15px;">
-                    <label style="color: var(--text-main); font-weight: bold; display: block; margin-bottom: 5px;">Stahování (Downloads):</label>
-                    <input type="text" name="status_dl" class="form-control" style="background: var(--bg-panel); color: white; border: 1px solid #475569; width: 100%;" value="{{ status_dl | default('🟢 Stahování softwaru a instalátorů běží v pořádku.') }}">
-                </div>
-
-                <div style="margin-bottom: 15px;">
-                    <label style="color: var(--text-main); font-weight: bold; display: block; margin-bottom: 5px;">Databáze:</label>
-                    <input type="text" name="status_db" class="form-control" style="background: var(--bg-panel); color: white; border: 1px solid #475569; width: 100%;" value="{{ status_db | default('🟢 Databáze je stabilní a synchronizovaná.') }}">
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="color: var(--text-main); font-weight: bold; display: block; margin-bottom: 5px;">Globální vypínač (Software):</label>
-                    <input type="text" name="status_global" class="form-control" style="background: var(--bg-panel); color: white; border: 1px solid #475569; width: 100%;" value="{{ status_global | default('🟢 Všechny systémy softwaru jsou online a v provozu.') }}">
-                </div>
-
-                <button type="submit" class="btn btn-primary" style="background-color: var(--blue-main); border: none; padding: 10px 20px; font-weight: bold;"><i class="fas fa-save"></i> Uložit statusy</button>
-            </form>
-        </div>
-</div>
-"""
-
-HTML_APP_MANAGEMENT = """
 <h2 style="color: var(--blue-main);"><i class="fas fa-cogs"></i> Správa aplikace</h2>
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
     
