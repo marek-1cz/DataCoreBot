@@ -744,44 +744,70 @@ HTML_APP_MANAGEMENT = """
         </div>
 
 
-        <div class="card" style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-top: 20px;">
-            <h3 style="color: var(--blue-main); margin-top: 0; margin-bottom: 15px;"><i class="fas fa-satellite-dish"></i> Veřejné statusy systému</h3>
-            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">Texty pro Discord kanál <strong>🛜・status</strong>. Zpráva se odešle/zaktualizuje <strong>POUZE</strong>, když zaškrtneš políčko dole.</p>
-            
-            <form action="/dashboard/update_statuses" method="POST">
-                <div style="margin-bottom: 15px;">
-                    <label style="color: var(--text-main); font-weight: bold; display: block; margin-bottom: 5px;">Databáze:</label>
-                    <input type="text" name="status_db" class="form-control" style="background: var(--bg-panel); color: white; border: 1px solid #475569; width: 100%;" value="{{ status_db | default('🟢 Databáze je stabilní a synchronizovaná.') }}">
-                </div>
+HTML_APP_MANAGEMENT = """
+<h2 style="color: var(--blue-main);"><i class="fas fa-cogs"></i> Správa aplikace</h2>
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+    
+    <form action="/dashboard/toggle_software" method="POST" style="margin-bottom: 20px;">
+        <label style="color: var(--text-main); font-weight: bold; margin-bottom: 10px; display: block;">Globální stav softwaru:</label>
+        <select name="new_status" class="form-control" style="background-color: var(--bg-dark); color: white; border: 1px solid #334155; margin-bottom: 10px;">
+            <option value="True" {% if soft_enabled %}selected{% endif %}>🟢 ZAPNUTO (Běžný provoz)</option>
+            <option value="False" {% if not soft_enabled %}selected{% endif %}>🔴 VYPNUTO (Údržba)</option>
+        </select>
+        <button type="submit" class="btn btn-primary" style="background-color: var(--blue-main); border: none;"><i class="fas fa-save"></i> Uložit</button>
+    </form>
 
-                <div style="margin-bottom: 15px;">
-                    <label style="color: var(--text-main); font-weight: bold; display: block; margin-bottom: 5px;">Globální vypínač (Software):</label>
-                    <input type="text" name="status_global" class="form-control" style="background: var(--bg-panel); color: white; border: 1px solid #475569; width: 100%;" value="{{ status_global | default('🟢 Všechny systémy softwaru jsou online a v provozu.') }}">
-                </div>
+    <hr style="border-color: #334155; margin: 20px 0;">
 
-                <div style="margin-bottom: 15px; padding: 15px; background: rgba(245, 158, 11, 0.1); border-left: 4px solid #f59e0b; border-radius: 4px;">
-                    <label style="color: #f59e0b; font-weight: bold; display: block; margin-bottom: 5px;"><i class="fas fa-exclamation-triangle"></i> Manuální status Stahování (Oranžový mód):</label>
-                    <p style="color: var(--text-muted); font-size: 13px; margin-top: 0;">Pokud je zapnuto, ignoruje se běžný zelený text a odešle se varování, že probíhá oprava systému a stahování některých souborů nemusí fungovat.</p>
-                    <label class="switch" style="display: flex; align-items: center; cursor: pointer; margin-top: 10px;">
-                        <input type="checkbox" name="status_dl_manual" value="True" {% if status_dl_manual %}checked{% endif %} style="width: 20px; height: 20px; margin-right: 10px; cursor: pointer;">
-                        <span style="color: white; font-weight: bold;">Zapnout oranžový varovný mód stahování</span>
-                    </label>
-                </div>
+    <form action="/dashboard/toggle_downloads" method="POST">
+        <input type="hidden" name="return_to" value="app_management">
+        <label style="color: var(--text-main); font-weight: bold; margin-bottom: 10px; display: block;">Stahování softwaru:</label>
+        <select name="new_status" class="form-control" style="background-color: var(--bg-dark); color: white; border: 1px solid #334155; margin-bottom: 10px;">
+            <option value="True" {% if dl_enabled %}selected{% endif %}>✅ POVOLENO</option>
+            <option value="False" {% if not dl_enabled %}selected{% endif %}>⛔ ZAKÁZÁNO</option>
+        </select>
+        <button type="submit" class="btn btn-warning" style="background-color: #f59e0b; border: none; color: black;"><i class="fas fa-save"></i> Uložit</button>
+    </form>
+</div>
 
-                <hr style="border-color: #334155; margin: 20px 0;">
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: flex; align-items: center; cursor: pointer; background: rgba(16, 185, 129, 0.1); padding: 15px; border-radius: 5px; border: 1px solid rgba(16, 185, 129, 0.3);">
-                        <input type="checkbox" name="send_to_discord" value="True" style="width: 20px; height: 20px; margin-right: 10px; cursor: pointer;">
-                        <span style="color: #10b981; font-weight: bold; font-size: 16px;"><i class="fab fa-discord"></i> Odeslat / Aktualizovat zprávu na Discordu (kanál 🛜・status)</span>
-                    </label>
-                </div>
-
-                <button type="submit" class="btn btn-primary" style="background-color: var(--blue-main); border: none; padding: 12px 20px; font-weight: bold; width: 100%; font-size: 16px;"><i class="fas fa-save"></i> Uložit a provést</button>
-            </form>
+<div class="card" style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-top: 20px;">
+    <h3 style="color: var(--blue-main); margin-top: 0; margin-bottom: 15px;"><i class="fas fa-satellite-dish"></i> Veřejné statusy systému</h3>
+    <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">Texty pro Discord kanál <strong>🛜・status</strong>. Zpráva se odešle/zaktualizuje <strong>POUZE</strong>, když zaškrtneš políčko dole.</p>
+    
+    <form action="/dashboard/update_statuses" method="POST">
+        <div style="margin-bottom: 15px;">
+            <label style="color: var(--text-main); font-weight: bold; display: block; margin-bottom: 5px;">Databáze:</label>
+            <input type="text" name="status_db" class="form-control" style="background: var(--bg-panel); color: white; border: 1px solid #475569; width: 100%;" value="{{ status_db | default('🟢 Databáze je stabilní a synchronizovaná.') }}">
         </div>
 
+        <div style="margin-bottom: 15px;">
+            <label style="color: var(--text-main); font-weight: bold; display: block; margin-bottom: 5px;">Globální vypínač (Software):</label>
+            <input type="text" name="status_global" class="form-control" style="background: var(--bg-panel); color: white; border: 1px solid #475569; width: 100%;" value="{{ status_global | default('🟢 Všechny systémy softwaru jsou online a v provozu.') }}">
+        </div>
+
+        <div style="margin-bottom: 15px; padding: 15px; background: rgba(245, 158, 11, 0.1); border-left: 4px solid #f59e0b; border-radius: 4px;">
+            <label style="color: #f59e0b; font-weight: bold; display: block; margin-bottom: 5px;"><i class="fas fa-exclamation-triangle"></i> Manuální status Stahování (Oranžový mód):</label>
+            <p style="color: var(--text-muted); font-size: 13px; margin-top: 0;">Pokud je zapnuto, ignoruje se běžný zelený text a odešle se varování, že probíhá oprava systému.</p>
+            <label class="switch" style="display: flex; align-items: center; cursor: pointer; margin-top: 10px;">
+                <input type="checkbox" name="status_dl_manual" value="True" {% if status_dl_manual %}checked{% endif %} style="width: 20px; height: 20px; margin-right: 10px; cursor: pointer;">
+                <span style="color: white; font-weight: bold;">Zapnout oranžový varovný mód stahování</span>
+            </label>
+        </div>
+
+        <hr style="border-color: #334155; margin: 20px 0;">
+
+        <div style="margin-bottom: 20px;">
+            <label style="display: flex; align-items: center; cursor: pointer; background: rgba(16, 185, 129, 0.1); padding: 15px; border-radius: 5px; border: 1px solid rgba(16, 185, 129, 0.3);">
+                <input type="checkbox" name="send_to_discord" value="True" style="width: 20px; height: 20px; margin-right: 10px; cursor: pointer;">
+                <span style="color: #10b981; font-weight: bold; font-size: 16px;"><i class="fab fa-discord"></i> Odeslat / Aktualizovat zprávu na Discordu (kanál 🛜・status)</span>
+            </label>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="background-color: var(--blue-main); border: none; padding: 12px 20px; font-weight: bold; width: 100%; font-size: 16px;"><i class="fas fa-save"></i> Uložit a provést</button>
+    </form>
+</div>
 """
+
 
 HTML_NOTIFICATIONS = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
