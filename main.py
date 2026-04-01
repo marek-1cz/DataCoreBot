@@ -1,4 +1,3 @@
-
 import os
 import time
 import discord
@@ -27,7 +26,7 @@ os.environ['TZ'] = 'Europe/Prague'
 try:
     time.tzset()
 except AttributeError:
-    pass
+    pass # Fallback pro Windows, kdyby se to testovalo lokálně
 
 try:
     from status_dashboard import HTML_STATUS_SECTION
@@ -557,6 +556,7 @@ def public_stats():
     
     activated_users = len([u for u in all_users if u.get('hwid') and str(u.get('hwid')) not in ['None', '']])
     
+    # Bezpečné sčítání celkového času a spuštění
     total_time_mins = 0
     total_launches = 0
     for u in all_users:
@@ -571,6 +571,7 @@ def public_stats():
         
     total_hours = total_time_mins // 60
     
+    # Kalkulace dnešního času z app_sessions
     today_str = get_prague_time().strftime("%d.%m.%Y")
     sessions_today = db.table("app_sessions").select("start_time, end_time").like("start_time", f"{today_str}%").execute().data or []
     today_mins = 0
