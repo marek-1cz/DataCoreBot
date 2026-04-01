@@ -458,6 +458,36 @@ HTML_PUBLIC_STATS = """
             </div>
         </div>
     </div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+        <div style="background: var(--bg-dark); padding: 20px; border-radius: 8px; border: 1px solid #334155;">
+            <h3 style="color: var(--blue-main); margin-top: 0; font-size: 16px;">Nejhranější linky hráče (TOP 5)</h3>
+            <table style="width: 100%; margin: 0; background: transparent;">
+                {% for l in searched_user_lines %}
+                <tr>
+                    <td style="padding: 5px 0; color: white;">{{ loop.index }}. {{ l.get('line_name', '') }}</td>
+                    <td style="padding: 5px 0; text-align: right; color: var(--blue-main); font-weight: bold;">{{ l.get('play_count', 0) }}x</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="2" style="padding: 5px 0; color: var(--text-muted);">Zatím nehrál žádnou linku.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+        <div style="background: var(--bg-dark); padding: 20px; border-radius: 8px; border: 1px solid #334155;">
+            <h3 style="color: var(--success); margin-top: 0; font-size: 16px;">Nejoblíbenější zastávky hráče (TOP 5)</h3>
+            <table style="width: 100%; margin: 0; background: transparent;">
+                {% for s in searched_user_stops %}
+                <tr>
+                    <td style="padding: 5px 0; color: white;">{{ loop.index }}. {{ s.get('stop_name', '') }}</td>
+                    <td style="padding: 5px 0; text-align: right; color: var(--success); font-weight: bold;">{{ s.get('announce_count', 0) }}x</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="2" style="padding: 5px 0; color: var(--text-muted);">Zatím nevyhlásil žádnou zastávku.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+
     <a href="/stats" class="btn btn-dark" style="margin-top: 20px; font-size: 12px;"><i class="fas fa-times"></i> Zavřít profil</a>
 </div>
 {% endif %}
@@ -743,6 +773,88 @@ HTML_CLAIM = """
         <button type="submit" class="btn" style="width: 100%; margin-top: 20px; font-size: 16px; padding: 15px;"><i class="fab fa-discord"></i> Propojit a získat roli</button>
     </form>
 </div>
+"""
+
+HTML_STATS = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-chart-line" style="color:var(--blue-main);"></i> Statistiky Webu</h2>
+    <div style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;">
+        <i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Automaticky aktualizováno
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px;">
+    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--blue-main); text-align: center;">
+        <h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Unikátní zobrazení (Celkem)</h3>
+        <div style="font-size: 40px; font-weight: 900; color: var(--text-main);">{{ total_visits }}</div>
+    </div>
+    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--success); text-align: center;">
+        <h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Zobrazení za 7 dní</h3>
+        <div style="font-size: 40px; font-weight: 900; color: var(--success);">{{ last_7_days }}</div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-calendar-week"></i> Návštěvnost za posledních 7 dní</h3>
+        <div style="position: relative; height: 250px; width: 100%;">
+            <canvas id="chart7d"></canvas>
+        </div>
+    </div>
+    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-clock"></i> Dnešní aktivita po hodinách</h3>
+        <div style="position: relative; height: 250px; width: 100%;">
+            <canvas id="chart24h"></canvas>
+        </div>
+    </div>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+    <h3 style="color: var(--warning); margin-top: 0;"><i class="fas fa-globe"></i> Návštěvnost podle států (Souhrn)</h3>
+    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+        {% for cc, data in country_totals.items() %}
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid #334155; padding: 10px 20px; border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+            <img src="{{ data.flag }}" alt="" style="border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">
+            <span style="color: var(--text-main); font-weight: bold;">{{ data.name }}</span>
+            <span style="background: var(--blue-main); color: #000; padding: 2px 8px; border-radius: 12px; font-weight: 900; font-size: 12px;">{{ data.count }}</span>
+        </div>
+        {% else %}
+        <div style="color: var(--text-muted);">Zatím žádná data k zobrazení.</div>
+        {% endfor %}
+    </div>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-map-marker-alt"></i> Detailní přehled regionů</h3>
+    <table style="width: 100%;">
+        <tr>
+            <th>Stát / Region</th>
+            <th>Počet zobrazení</th>
+        </tr>
+        {% for c_name, data in region_totals.items() %}
+        <tr>
+            <td style="font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+                {% if data.flag %}
+                <img src="{{ data.flag }}" alt="" style="border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">
+                {% endif %}
+                {{ c_name }}
+            </td>
+            <td style="color: var(--blue-main); font-weight: bold; font-size: 16px;">{{ data.count }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Zatím žádná data k zobrazení. Tabulka "page_visits" je prázdná.</td></tr>
+        {% endfor %}
+    </table>
+</div>
+
+<script>
+    const labels7d = {{ labels_7d | safe }};
+    const data7d = {{ data_7d | safe }};
+    const labels24h = {{ labels_24h | safe }};
+    const data24h = {{ data_24h | safe }};
+    new Chart(document.getElementById('chart7d').getContext('2d'), { type: 'line', data: { labels: labels7d, datasets: [{ label: 'Počet návštěv', data: data7d, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)', borderWidth: 3, tension: 0.3, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8' }, grid: { display: false } } } } });
+    new Chart(document.getElementById('chart24h').getContext('2d'), { type: 'bar', data: { labels: labels24h, datasets: [{ label: 'Dnešní návštěvy', data: data24h, backgroundColor: '#38bdf8', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { display: false } } } } });
+</script>
 """
 
 HTML_APP_MANAGEMENT = """
@@ -1356,6 +1468,494 @@ HTML_IDS = """
         </table>
     </div>
 </div>
+"""
+
+HTML_DASHBOARD_MAIN = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
+    
+    <div id="refresh-timer" style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;">
+        <i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Aktualizace za: <span id="timer-sec" style="color: white;">60</span>s
+    </div>
+</div>
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <div style="overflow-x: auto;">
+        <table id="usersTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0)">App ID ↕</th>
+                    <th onclick="sortTable(1)">Nick ↕</th>
+                    <th onclick="sortTable(2)">Stav ↕</th>
+                    <th onclick="sortTable(3)">Role ↕</th>
+                    <th onclick="sortTable(4)">Poslední Aktivita ↕</th>
+                    <th>Akce</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for user in users %}
+            <tr>
+                <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
+                <td><strong>{{ user.get('nick', '') }}</strong></td>
+                <td>
+                    {% if user.get('is_banned') %}
+                        <span style="color: var(--danger); font-size: 11px; font-weight:bold; border:1px solid var(--danger); padding:2px 5px; border-radius:4px;">BANNED</span>
+                    {% elif user.get('is_deleted') %}
+                        <span style="color: var(--text-muted); font-size: 11px; font-weight:bold; border:1px solid var(--text-muted); padding:2px 5px; border-radius:4px;">DELETED</span>
+                    {% elif not user.get('hwid') or user.get('hwid') == 'None' or user.get('hwid') == '' %}
+                        <span style="color: var(--warning); font-size: 11px; font-weight:bold; border:1px solid var(--warning); padding:2px 5px; border-radius:4px;">NOT ACTIVATED</span>
+                    {% else %}
+                        <span style="color: var(--success); font-size: 11px; font-weight:bold; border:1px solid var(--success); padding:2px 5px; border-radius:4px;">ACTIVATED</span>
+                    {% endif %}
+                </td>
+                
+                {% set role_weight = 1 %}
+                {% if 'SA' in user.get('role', '') %}{% set role_weight = 4 %}
+                {% elif 'DEV' in user.get('role', '') %}{% set role_weight = 3 %}
+                {% elif 'BT' in user.get('role', '') %}{% set role_weight = 2 %}
+                {% endif %}
+                <td data-sort="{{ role_weight }}">
+                    {% set role_list = user.get('role', '').split(',') %}
+                    {% for r in role_list %}
+                        {% set r_clean = r.strip() %}
+                        {% if r_clean == 'SA' %}
+                            <span class="role-tag" style="background-color: #ef4444; color: white;">SA</span>
+                        {% elif r_clean == 'DEV' %}
+                            <span class="role-tag" style="background-color: #10b981; color: white;">DEV</span>
+                        {% elif r_clean == 'BT' %}
+                            <span class="role-tag" style="background-color: #3b82f6; color: white;">BT</span>
+                        {% elif r_clean == 'User' %}
+                            <span class="role-tag" style="background-color: #64748b; color: white;">User</span>
+                        {% endif %}
+                    {% endfor %}
+                    {% if user.get('dashboard_access') %}
+                        <i class="fas fa-shield-alt" style="color:var(--blue-main); font-size:12px; margin-left:5px;" title="Má přístup do DB"></i>
+                    {% endif %}
+                </td>
+                <td style="color: var(--text-muted); font-size: 13px;" data-sort="{{ '99999999999' if user.get('is_online') else user.get('last_active', '0') }}">
+                    {% if user.get('is_online') %}
+                        <span style="color: var(--success); font-weight: bold;">🟢 AKTIVNÍ</span>
+                    {% else %}
+                        {{ user.get('last_active', 'Nikdy nehrál') }}
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" 
+                        data-app-id="{{ user.get('app_id', '') }}"
+                        data-discord-id="{{ user.get('discord_id', '') }}"
+                        data-nick="{{ (user.get('nick') or '') | e }}"
+                        data-roles="{{ (user.get('role') or '') | e }}"
+                        data-hwid="{{ (user.get('hwid') or '') | e }}"
+                        data-banned="{{ user.get('is_banned', False) }}"
+                        data-deleted="{{ user.get('is_deleted', False) }}"
+                        data-db-access="{{ user.get('dashboard_access', False) }}"
+                        data-reg-at="{{ (user.get('registered_at') or '') | e }}"
+                        onclick="openModal(this)"><i class="fas fa-edit"></i> Upravit</button>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let timeLeft = 60;
+    setInterval(() => {
+        if(timeLeft > 0) {
+            timeLeft--;
+            let secEl = document.getElementById('timer-sec');
+            if(secEl) secEl.innerText = timeLeft;
+        }
+        if(timeLeft === 0) {
+            timeLeft = -1; // Aby se to nevolalo pořád dokola
+            location.reload();
+        }
+    }, 1000);
+
+    let sortDir = {};
+    function sortTable(n) {
+        let table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+        table = document.getElementById("usersTable");
+        switching = true;
+        
+        dir = sortDir[n] === "asc" ? "desc" : "asc";
+        sortDir[n] = dir;
+
+        while (switching) {
+            switching = false;
+            rows = table.rows;
+            for (i = 1; i < (rows.length - 1); i++) {
+                shouldSwitch = false;
+                x = rows[i].getElementsByTagName("TD")[n];
+                y = rows[i + 1].getElementsByTagName("TD")[n];
+                
+                let xContent = x.hasAttribute("data-sort") ? x.getAttribute("data-sort") : x.innerHTML.replace(/<[^>]*>?/gm, '').trim();
+                let yContent = y.hasAttribute("data-sort") ? y.getAttribute("data-sort") : y.innerHTML.replace(/<[^>]*>?/gm, '').trim();
+                
+                if (!isNaN(xContent) && !isNaN(yContent)) {
+                    xContent = parseFloat(xContent);
+                    yContent = parseFloat(yContent);
+                } else {
+                    xContent = xContent.toLowerCase();
+                    yContent = yContent.toLowerCase();
+                }
+
+                if (dir == "asc") {
+                    if (xContent > yContent) { shouldSwitch = true; break; }
+                } else if (dir == "desc") {
+                    if (xContent < yContent) { shouldSwitch = true; break; }
+                }
+            }
+            if (shouldSwitch) {
+                rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                switching = true;
+                switchcount ++;
+            } 
+        }
+    }
+</script>
+"""
+
+HTML_SUPPORTERS_MGMT = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-star" style="color:var(--warning);"></i> Správa Podporovatelů</h2>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--warning); margin-bottom: 20px;">
+    <h3 style="color: var(--warning); margin-top: 0;"><i class="fas fa-exclamation-triangle"></i> Ke schválení (Manuální kontrola)</h3>
+    <p style="color: var(--text-muted); font-size: 13px;">Zde se zobrazují lidé, kteří si zažádali o roli na webu, ale systém nenašel shodu nebo jejich účet na Discordu.</p>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>BMAC Jméno</th>
+                <th>Discord Nick</th>
+                <th>Částka</th>
+                <th>Systémová Zpráva</th>
+                <th>Akce</th>
+            </tr>
+            {% for p in pending_claims %}
+            <tr>
+                <td style="color:var(--blue-main); font-weight:bold;">{{ p.get('name', 'Neznámý') }}</td>
+                <td style="color:white; font-weight:bold;">{{ p.get('discord_nick', 'Nevyplněno') }}</td>
+                <td><span class="role-tag" style="background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning);">{{ p.get('amount', '?') }}</span></td>
+                <td style="color: var(--danger); font-size: 12px; font-weight: bold; max-width: 200px;">{{ p.get('sys_note', 'Čeká na schválení') }}</td>
+                <td style="display: flex; gap: 5px;">
+                    <form action="/dashboard/approve_claim" method="POST" style="display:inline; margin:0;">
+                        <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
+                        <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
+                        <input type="hidden" name="amount" value="{{ p.get('amount', '0') }}">
+                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a přidat roli"><i class="fas fa-check"></i></button>
+                    </form>
+                    
+                    <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily"
+                        data-id="{{ p.get('id', '') }}"
+                        data-name="{{ (p.get('name') or '') | e }}"
+                        data-nick="{{ (p.get('discord_nick') or '') | e }}"
+                        data-amount="{{ (p.get('amount') or '') | e }}"
+                        data-msg="{{ (p.get('message') or '') | e }}"
+                        onclick="openSupporterEdit(this)"><i class="fas fa-edit"></i></button>
+                    
+                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout" onclick="rejectClaim('{{ p.get('id', '') }}', '{{ (p.get('discord_nick') or '') | e }}')"><i class="fas fa-times"></i></button>
+                    <form id="form_reject_{{ p.get('id', '') }}" action="/dashboard/reject_claim" method="POST" style="display:none;">
+                        <input type="hidden" name="claim_id" value="{{ p.get('id', '') }}">
+                        <input type="hidden" name="discord_nick" value="{{ p.get('discord_nick', '') }}">
+                        <input type="hidden" name="sys_note" id="reject_reason_{{ p.get('id', '') }}">
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Vše je vyřízeno, žádné čekající požadavky.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<script>
+    function rejectClaim(claimId, discordNick) {
+        let reason = prompt("Zadejte důvod zamítnutí žádosti pro " + (discordNick || "uživatele") + ":", "Neplatné údaje / Platba nenalezena");
+        if (reason !== null) {
+            document.getElementById('reject_reason_' + claimId).value = reason;
+            document.getElementById('form_reject_' + claimId).submit();
+        }
+    }
+</script>
+
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Ruční přidání podporovatele</h3>
+        <p style="color: var(--text-muted); font-size: 13px;">(Pokud Vám někdo poslal peníze mimo Buy Me a Coffee)</p>
+        <form action="/dashboard/add_supporter" method="POST">
+            <input type="text" name="name" placeholder="Jméno podporovatele" required>
+            <input type="text" name="discord_nick" placeholder="Discord Nick (Volitelně)">
+            <input type="text" name="amount" placeholder="Částka (např. 150 CZK nebo 10 USD)" required>
+            <textarea name="message" placeholder="Zpráva od podporovatele (volitelně)..." rows="3"></textarea>
+            <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">Přidat do databáze</button>
+        </form>
+    </div>
+    <div style="flex: 2; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">☕ Historie podporovatelů (Schválení i Zamítnutí)</h3>
+        <div style="overflow-x: auto;">
+            <table>
+                <tr>
+                    <th>Stav</th>
+                    <th>Jméno</th>
+                    <th>Discord</th>
+                    <th>Částka</th>
+                    <th>Systémová Zpráva</th>
+                    <th>Datum</th>
+                    <th>Akce</th>
+                </tr>
+                {% for s in supporters_history %}
+                <tr style="opacity: {{ '0.6' if s.get('status') == 'rejected' else '1' }};">
+                    <td>
+                        {% if s.get('status') == 'rejected' %}
+                            <span class="role-tag" style="background-color: var(--danger); color: white;">Zamítnuto</span>
+                        {% else %}
+                            <span class="role-tag" style="background-color: var(--success); color: white;">Schváleno</span>
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--blue-main); font-weight:bold;">{{ s.get('name', 'Neznámý') }}</td>
+                    <td style="color:#aaa; font-size:12px;">{{ s.get('discord_nick', '') }}</td>
+                    <td style="color:var(--success); font-weight:bold;">{{ s.get('amount', '') }}</td>
+                    <td style="font-style:italic; font-size: 12px; color: {{ 'var(--danger)' if s.get('status') == 'rejected' else 'var(--text-muted)' }}; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ s.get('sys_note', '') }}">{{ s.get('sys_note', 'OK') }}</td>
+                    <td style="color:var(--text-muted); font-size:12px;">{{ s.get('created_at', '') }}</td>
+                    <td style="display: flex; gap: 5px;">
+                        <button class="btn btn-warning" style="padding: 5px 10px; font-size: 12px;" title="Upravit detaily"
+                            data-id="{{ s.get('id', '') }}"
+                            data-name="{{ (s.get('name') or '') | e }}"
+                            data-nick="{{ (s.get('discord_nick') or '') | e }}"
+                            data-amount="{{ (s.get('amount') or '') | e }}"
+                            data-msg="{{ (s.get('message') or '') | e }}"
+                            onclick="openSupporterEdit(this)"><i class="fas fa-edit"></i></button>
+                        <form action="/dashboard/delete_supporter" method="POST" style="display:inline; margin: 0;">
+                            <input type="hidden" name="supporter_id" value="{{ s.get('id', '') }}">
+                            <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Smazat z historie" onclick="return confirm('Opravdu smazat tohoto podporovatele z webu?')"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Zatím žádná historie.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="editSupporterModal">
+    <div class="modal" style="width: 500px; border-top: 5px solid var(--warning);">
+        <div style="width: 100%;">
+            <h2 style="color: var(--warning); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+                <i class="fas fa-edit"></i> Úprava Podporovatele
+            </h2>
+            <form action="/dashboard/edit_supporter" method="POST">
+                <input type="hidden" name="supporter_id" id="es_id">
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Jméno (BMAC):</label>
+                <input type="text" name="name" id="es_name" required>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Discord Nick (Slouží pro spárování):</label>
+                <input type="text" name="discord_nick" id="es_nick">
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Částka (Formát: např. 150 CZK):</label>
+                <input type="text" name="amount" id="es_amount" required>
+                
+                <label style="color: var(--text-muted); font-size: 13px;">Vzkaz od podporovatele:</label>
+                <textarea name="message" id="es_message" rows="3"></textarea>
+                
+                <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 15px;"><i class="fas fa-save"></i> Uložit změny</button>
+            </form>
+            <button type="button" class="btn" style="width: 100%; margin-top: 10px; background: transparent; border: 1px solid #334155; color: var(--text-muted);" onclick="document.getElementById('editSupporterModal').style.display='none'">Zrušit</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openSupporterEdit(btn) {
+        document.getElementById('es_id').value = btn.getAttribute('data-id');
+        document.getElementById('es_name').value = btn.getAttribute('data-name');
+        document.getElementById('es_nick').value = btn.getAttribute('data-nick');
+        document.getElementById('es_amount').value = btn.getAttribute('data-amount');
+        document.getElementById('es_message').value = btn.getAttribute('data-msg');
+        document.getElementById('editSupporterModal').style.display = 'flex';
+    }
+</script>
+"""
+
+HTML_FEEDBACK = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-comments" style="color:#a855f7;"></i> Zpětná vazba a Žádosti</h2>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid #ef4444; margin-bottom: 20px;">
+    <h3 style="color: #ef4444; margin-top: 0;"><i class="fas fa-unlock"></i> Žádosti o Admin Bypass (Vstup do staré verze)</h3>
+    <p style="color: var(--text-muted); font-size: 13px;">Pokud to schválíte, aplikace hráče pro jednu relaci ignoruje kontrolu verze a odemkne se.</p>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>Uživatel (ID)</th>
+                <th>Důvod (Zpráva)</th>
+                <th>Datum</th>
+                <th>Akce</th>
+            </tr>
+            {% for f in bypass_pending %}
+            <tr>
+                <td style="color:white; font-weight:bold;">{{ f.get('nick', 'Neznámý') }} <br><span style="font-size:11px; color:#aaa; font-weight:normal;">{{ f.get('discord_id', '') }}</span></td>
+                <td style="color:#ddd; font-style:italic;">Žádost o jednorázové odemknutí staré verze.</td>
+                <td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td>
+                <td style="display:flex; gap:5px;">
+                    <form action="/dashboard/bypass_approve" method="POST" style="margin:0;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit jednorázový vstup"><i class="fas fa-check"></i> Schválit Vstup</button>
+                    </form>
+                    <form action="/dashboard/bypass_reject" method="POST" style="margin:0;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout"><i class="fas fa-times"></i> Zamítnout</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Zatím žádné žádosti o Admin Bypass.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--warning); margin-bottom: 20px;">
+    <h3 style="color: var(--warning); margin-top: 0;">Nové žádosti o HWID Reset</h3>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>Uživatel (ID)</th>
+                <th>Důvod (Zpráva)</th>
+                <th>Datum</th>
+                <th>Akce</th>
+            </tr>
+            {% for f in hwid_pending %}
+            <tr>
+                <td style="color:white; font-weight:bold;">{{ f.get('nick', 'Neznámý') }} <br><span style="font-size:11px; color:#aaa; font-weight:normal;">{{ f.get('discord_id', '') }}</span></td>
+                <td style="color:#ddd; font-style:italic;">{{ f.get('message', '') }}</td>
+                <td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td>
+                <td style="display:flex; gap:5px;">
+                    <form action="/dashboard/feedback_reset_hwid" method="POST" style="margin:0;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
+                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a Resetovat HWID"><i class="fas fa-check"></i> Resetovat</button>
+                    </form>
+                    <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout žádost" 
+                        data-id="{{ f.get('id', '') }}"
+                        data-nick="{{ (f.get('nick') or '') | e }}"
+                        onclick="rejectHwid(this)"><i class="fas fa-times"></i> Zamítnout</button>
+                    <form id="form_hwid_reject_{{ f.get('id', '') }}" action="/dashboard/feedback_reject" method="POST" style="display:none;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
+                        <input type="hidden" name="reason" id="reject_reason_{{ f.get('id', '') }}">
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Zatím žádné žádosti o HWID reset.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--blue-main); margin-bottom: 20px;">
+    <h3 style="color: var(--blue-main); margin-top: 0;">Nové zprávy od uživatelů (Všeobecné)</h3>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>Uživatel (ID)</th>
+                <th>Zpráva / Nápad / Chyba</th>
+                <th>Datum</th>
+                <th>Akce</th>
+            </tr>
+            {% for f in general_pending %}
+            <tr>
+                <td style="color:white; font-weight:bold;">{{ f.get('nick', 'Neznámý') }} <br><span style="font-size:11px; color:#aaa; font-weight:normal;">{{ f.get('discord_id', '') }}</span></td>
+                <td style="color:#ddd; font-style:italic;">{{ f.get('message', '') }}</td>
+                <td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td>
+                <td style="display:flex; gap:5px;">
+                    <button type="button" class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;"
+                        data-id="{{ f.get('id', '') }}"
+                        data-nick="{{ (f.get('nick') or '') | e }}"
+                        onclick="replyGeneral(this)"><i class="fas fa-reply"></i> Odpovědět</button>
+                    <form id="form_general_reply_{{ f.get('id', '') }}" action="/dashboard/feedback_reply" method="POST" style="display:none;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
+                        <input type="hidden" name="message" id="reply_msg_{{ f.get('id', '') }}">
+                    </form>
+                    
+                    <form action="/dashboard/feedback_resolve" method="POST" style="margin:0;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-check-circle"></i> Vyřešeno</button>
+                    </form>
+                    
+                    <form action="/dashboard/feedback_delete" method="POST" style="margin:0;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-trash"></i> Smazat</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Zatím žádná nová zpětná vazba.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <h3 style="color: var(--success); margin-top: 0;">Vyřešeno / Uzavřeno</h3>
+    <div style="overflow-x: auto;">
+        <table>
+            <tr>
+                <th>Uživatel</th>
+                <th>Typ</th>
+                <th>Zpráva uživatele</th>
+                <th>Vaše odpověď / Status</th>
+                <th>Akce</th>
+            </tr>
+            {% for f in resolved_all %}
+            <tr style="opacity: 0.7;">
+                <td style="color:white; font-weight:bold;">{{ f.get('nick', '') }}</td>
+                <td>{{ 'HWID Reset' if f.get('type') == 'HWID' else ('Admin Bypass' if f.get('type') == 'ADMIN_BYPASS' else 'Zpětná vazba') }}</td>
+                <td style="color:#aaa; font-style:italic;">{{ f.get('message', '') }}</td>
+                <td style="color:var(--success); font-weight:bold;">{{ f.get('sys_note', 'Vyřešeno') }}</td>
+                <td>
+                    <form action="/dashboard/feedback_delete" method="POST" style="margin:0;">
+                        <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-trash"></i></button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádné uzavřené tickety.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<script>
+    function rejectHwid(btn) {
+        let id = btn.getAttribute('data-id');
+        let nick = btn.getAttribute('data-nick');
+        let reason = prompt("Zadejte důvod zamítnutí pro hráče " + nick + ":", "Reset HWID nyní není možný.");
+        if (reason) {
+            document.getElementById('reject_reason_' + id).value = reason;
+            document.getElementById('form_hwid_reject_' + id).submit();
+        }
+    }
+    function replyGeneral(btn) {
+        let id = btn.getAttribute('data-id');
+        let nick = btn.getAttribute('data-nick');
+        let msg = prompt("Napište zprávu pro hráče " + nick + " (Přijde mu to do DM):");
+        if (msg) {
+            document.getElementById('reply_msg_' + id).value = msg;
+            document.getElementById('form_general_reply_' + id).submit();
+        }
+    }
+</script>
 """
 
 HTML_WAIT_AUTH = """
