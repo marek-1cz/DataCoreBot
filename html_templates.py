@@ -51,7 +51,7 @@ BASE_HTML = """
         .alert-warning { background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
         .checkbox-group { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
         .checkbox-group label { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: bold; cursor: pointer; }
-        .profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .profile-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 20px; }
         .profile-card { background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; }
         .profile-stat { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
         .profile-val { font-size: 14px; font-weight: bold; color: var(--text-main); }
@@ -142,10 +142,10 @@ DASHBOARD_LAYOUT = """
 </div>
 
 <div class="modal-overlay" id="editModal">
-    <div class="modal" id="modalContent" style="max-width: 1100px;">
+    <div class="modal" id="modalContent">
         <div style="width: 100%;">
             <h2 style="color: var(--blue-main); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px; display: flex; justify-content: space-between;">
-                <span><i class="fas fa-user"></i> Profil hráče <span id="modalAppId" style="color: var(--text-muted); font-size: 16px;"></span></span>
+                <span><i class="fas fa-user"></i> Profil <span id="modalAppId" style="color: var(--text-muted); font-size: 16px;"></span></span>
                 <span id="modalStatusDot" style="font-size: 14px;"></span>
             </h2>
             
@@ -163,18 +163,18 @@ DASHBOARD_LAYOUT = """
                 </div>
                 
                 <div class="profile-card" style="max-height: 250px; overflow-y: auto;">
-                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--blue-main);">Nejhranější linky (Hráče):</div>
+                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--blue-main);">Historie stahování:</div>
                     <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent; border-radius: 0;">
-                        <tbody id="profTopLines">
+                        <tbody id="profDownloads">
                             <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
                         </tbody>
                     </table>
                 </div>
 
                 <div class="profile-card" style="max-height: 250px; overflow-y: auto;">
-                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--success);">Nejoblíbenější zastávky (Hráče):</div>
+                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--warning);">Historie sezení (Logy):</div>
                     <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent; border-radius: 0;">
-                        <tbody id="profTopStops">
+                        <tbody id="profSessions">
                             <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
                         </tbody>
                     </table>
@@ -183,48 +183,42 @@ DASHBOARD_LAYOUT = """
 
             <form action="/dashboard/edit_user" method="POST" style="border-top: 1px solid #334155; padding-top: 15px; margin-top: 15px;">
                 <input type="hidden" name="discord_id" id="modalDiscordId">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                    <div>
-                        <label>Herní Nick:</label>
-                        <input type="text" name="nick" id="modalNick" required>
-                        <label>HWID (Zámek na PC):</label>
-                        <input type="text" name="hwid" id="modalHwid" placeholder="Pro odblokování smažte text zde">
-                        <div style="background-color: rgba(56, 189, 248, 0.1); padding: 10px; border-radius: 5px; border: 1px solid var(--blue-main); margin-bottom: 15px; margin-top: 10px;">
-                            <label style="cursor: pointer; font-weight: bold; color: var(--blue-main); margin: 0; display: flex; align-items: center; gap: 10px;">
-                                <input type="checkbox" name="dashboard_access" id="modalDashboardAccess" value="True" style="width: auto; margin: 0;"> 
-                                Přístup do Dashboardu (2FA)
-                            </label>
-                        </div>
+                <label>Herní Nick:</label>
+                <input type="text" name="nick" id="modalNick" required>
+                <label>Role:</label>
+                <div class="checkbox-group">
+                    <label style="color: #ef4444;"><input type="checkbox" name="roles" value="SA"> SA</label>
+                    <label style="color: #10b981;"><input type="checkbox" name="roles" value="DEV"> DEV</label>
+                    <label style="color: #3b82f6;"><input type="checkbox" name="roles" value="BT"> BT</label>
+                    <label style="color: #94a3b8;"><input type="checkbox" name="roles" value="User"> User</label>
+                </div>
+                <label>HWID (Zámek na PC):</label>
+                <input type="text" name="hwid" id="modalHwid" placeholder="Pro odblokování smažte text zde">
+                <div style="background-color: rgba(56, 189, 248, 0.1); padding: 10px; border-radius: 5px; border: 1px solid var(--blue-main); margin-bottom: 15px;">
+                    <label style="cursor: pointer; font-weight: bold; color: var(--blue-main); margin: 0; display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" name="dashboard_access" id="modalDashboardAccess" value="True" style="width: auto; margin: 0;"> 
+                        Povolit přístup do Dashboardu (2FA ověření)
+                    </label>
+                </div>
+                <div id="activeActions">
+                    <div style="display: flex; gap: 10px; margin-top: 10px;">
+                        <button type="submit" name="action" value="save" class="btn" style="flex: 2;"><i class="fas fa-save"></i> Uložit úpravy</button>
+                        <button type="submit" name="action" value="ban" id="btnBan" class="btn btn-warning" style="flex: 1;"><i class="fas fa-ban"></i> Dát BAN</button>
+                        <button type="submit" name="action" value="unban" id="btnUnban" class="btn btn-success" style="flex: 1; display: none;"><i class="fas fa-check"></i> Un-BAN</button>
                     </div>
-                    <div>
-                        <label>Role:</label>
-                        <div class="checkbox-group" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid #334155;">
-                            <label style="color: #ef4444;"><input type="checkbox" name="roles" value="SA"> SA</label>
-                            <label style="color: #10b981;"><input type="checkbox" name="roles" value="DEV"> DEV</label>
-                            <label style="color: #3b82f6;"><input type="checkbox" name="roles" value="BT"> BT</label>
-                            <label style="color: #94a3b8;"><input type="checkbox" name="roles" value="User"> User</label>
-                        </div>
-                        <div id="activeActions" style="margin-top: 20px;">
-                            <div style="display: flex; gap: 10px;">
-                                <button type="submit" name="action" value="save" class="btn" style="flex: 2;"><i class="fas fa-save"></i> Uložit</button>
-                                <button type="submit" name="action" value="ban" id="btnBan" class="btn btn-warning" style="flex: 1;"><i class="fas fa-ban"></i> Dát BAN</button>
-                                <button type="submit" name="action" value="unban" id="btnUnban" class="btn btn-success" style="flex: 1; display: none;"><i class="fas fa-check"></i> Un-BAN</button>
-                            </div>
-                            <div style="margin-top: 10px;">
-                                <button type="submit" name="action" value="delete" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Smazat účet? (Zablokuje ID, umožní novou registraci)')"><i class="fas fa-trash"></i> Smazat (Soft Delete)</button>
-                            </div>
-                        </div>
-                        <div id="deletedActions" style="display: none; margin-top: 20px;">
-                            <p style="color: var(--danger); font-weight: bold; text-align: center; margin-top: 0; margin-bottom: 5px;">Tento účet je smazaný.</p>
-                            <div style="display: flex; gap: 10px;">
-                                <button type="submit" name="action" value="restore" class="btn btn-success" style="flex: 1;"><i class="fas fa-undo"></i> Obnovit účet</button>
-                                <button type="submit" name="action" value="hard_delete" class="btn btn-dark" style="flex: 1;" onclick="return confirm('PERMANENTNÍ SMAZÁNÍ: Tato akce kompletně vymaže veškerá data. Pokračovat?')"><i class="fas fa-skull"></i> Smazat permanentně</button>
-                            </div>
-                        </div>
+                    <div style="margin-top: 15px; border-top: 1px solid #334155; padding-top: 15px;">
+                        <button type="submit" name="action" value="delete" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Smazat účet? (Zablokuje ID, umožní novou registraci)')"><i class="fas fa-trash"></i> Smazat účet (Soft Delete)</button>
+                    </div>
+                </div>
+                <div id="deletedActions" style="display: none; margin-top: 20px; border-top: 1px solid #334155; padding-top: 15px;">
+                    <p style="color: var(--danger); font-weight: bold; text-align: center; margin-top: 0;">Tento účet je smazaný.</p>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="submit" name="action" value="restore" class="btn btn-success" style="flex: 1;"><i class="fas fa-undo"></i> Obnovit účet</button>
+                        <button type="submit" name="action" value="hard_delete" class="btn btn-dark" style="flex: 1;" onclick="return confirm('PERMANENTNÍ SMAZÁNÍ: Tato akce kompletně vymaže veškerá data o tomto uživateli. Pokračovat?')"><i class="fas fa-skull"></i> Smazat permanentně</button>
                     </div>
                 </div>
             </form>
-            <button class="btn" onclick="closeModal()" style="background: transparent; color: var(--text-muted); width: 100%; margin-top: 15px; border: 1px solid #334155;">Zrušit / Zavřít profil</button>
+            <button class="btn" onclick="closeModal()" style="background: transparent; color: var(--text-muted); width: 100%; margin-top: 10px; border: 1px solid #334155;">Zrušit</button>
         </div>
     </div>
 </div>
@@ -276,14 +270,16 @@ DASHBOARD_LAYOUT = """
             
             document.getElementById('profJoined').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
             document.getElementById('modalStatusDot').innerHTML = '';
-            document.getElementById('profTopLines').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
-            document.getElementById('profTopStops').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
+            document.getElementById('profDownloads').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
+            document.getElementById('profSessions').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
             document.getElementById('profAppStatus').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
             document.getElementById('profStats').innerHTML = '';
             
             if (!discord_id || discord_id.trim() === '' || discord_id === 'None') {
                 document.getElementById('profJoined').innerText = "Chybí ID";
                 document.getElementById('profAppStatus').innerHTML = "<span style='color:#ef4444;'>Chyba dat (ID nenalezeno)</span>";
+                document.getElementById('profDownloads').innerHTML = "<tr><td colspan='2' style='color: var(--text-muted);'>Nelze načíst data.</td></tr>";
+                document.getElementById('profSessions').innerHTML = "<tr><td colspan='2' style='color: var(--text-muted);'>Nelze načíst data.</td></tr>";
                 return;
             }
 
@@ -299,27 +295,29 @@ DASHBOARD_LAYOUT = """
                     document.getElementById('profAppStatus').innerHTML = data.app_status || "";
                     document.getElementById('profStats').innerHTML = data.stats || "";
                     
-                    let linesHtml = "";
-                    if(data.top_lines && data.top_lines.length > 0) {
-                        data.top_lines.forEach((l, i) => {
-                            let color = i===0 ? '#ffd700' : (i===1 ? '#c0c0c0' : (i===2 ? '#cd7f32' : 'var(--text-main)'));
-                            linesHtml += `<tr><td style="color: ${color}; font-weight:bold;">${i+1}. ${l.line_name}</td><td style="color: var(--blue-main); font-weight:bold; text-align:right;">${l.play_count}x</td></tr>`;
+                    let dlHtml = "";
+                    if(data.downloads && data.downloads.length > 0) {
+                        data.downloads.forEach(d => {
+                            dlHtml += `<tr><td style="color: var(--blue-main);"><b>${d.version_name}</b></td><td style="color: var(--text-muted);">${d.downloaded_at}</td></tr>`;
                         });
                     } else {
-                        linesHtml = "<tr><td colspan='2' style='color: var(--text-muted); text-align:center;'>Zatím nehrál žádnou linku.</td></tr>";
+                        dlHtml = "<tr><td colspan='2' style='color: var(--text-muted);'>Zatím nestáhl žádný soubor.</td></tr>";
                     }
-                    document.getElementById('profTopLines').innerHTML = linesHtml;
+                    document.getElementById('profDownloads').innerHTML = dlHtml;
 
-                    let stopsHtml = "";
-                    if(data.top_stops && data.top_stops.length > 0) {
-                        data.top_stops.forEach((s, i) => {
-                            let color = i===0 ? '#ffd700' : (i===1 ? '#c0c0c0' : (i===2 ? '#cd7f32' : 'var(--text-main)'));
-                            stopsHtml += `<tr><td style="color: ${color}; font-weight:bold;">${i+1}. ${s.stop_name}</td><td style="color: var(--success); font-weight:bold; text-align:right;">${s.announce_count}x</td></tr>`;
+                    let sessHtml = "";
+                    if(data.sessions && data.sessions.length > 0) {
+                        data.sessions.forEach(s => {
+                            sessHtml += `<tr>
+                                <td style="color: var(--success); font-weight:bold; white-space:nowrap;">🟢 ${s.start_time.split(' ')[1] || s.start_time}</td>
+                                <td style="color: var(--danger); font-weight:bold; white-space:nowrap;">🔴 ${s.end_time.split(' ')[1] || s.end_time}</td>
+                            </tr>
+                            <tr><td colspan="2" style="color: var(--text-muted); padding-top:0; padding-bottom:10px; border-bottom:1px solid #334155; text-align:center;">${s.start_time.split(' ')[0]}</td></tr>`;
                         });
                     } else {
-                        stopsHtml = "<tr><td colspan='2' style='color: var(--text-muted); text-align:center;'>Zatím nevyhlásil žádnou zastávku.</td></tr>";
+                        sessHtml = "<tr><td colspan='2' style='color: var(--text-muted);'>Zatím žádná aktivita.</td></tr>";
                     }
-                    document.getElementById('profTopStops').innerHTML = stopsHtml;
+                    document.getElementById('profSessions').innerHTML = sessHtml;
                 })
                 .catch(e => {
                     document.getElementById('profAppStatus').innerHTML = "<span style='color:#ef4444;'>Spojení selhalo</span>";
@@ -465,7 +463,8 @@ HTML_PUBLIC_STATS = """
             <table style="width: 100%; margin: 0; background: transparent;">
                 {% for l in searched_user_lines %}
                 <tr>
-                    <td style="padding: 5px 0; color: white;">{{ loop.index }}. {{ l.get('line_name', '') }}</td>
+                    {% set color = '#ffd700' if loop.index0 == 0 else ('#c0c0c0' if loop.index0 == 1 else ('#cd7f32' if loop.index0 == 2 else 'white')) %}
+                    <td style="padding: 5px 0; color: {{color}}; font-weight:bold;">{{ loop.index }}. {{ l.get('line_name', '') }}</td>
                     <td style="padding: 5px 0; text-align: right; color: var(--blue-main); font-weight: bold;">{{ l.get('play_count', 0) }}x</td>
                 </tr>
                 {% else %}
@@ -478,7 +477,8 @@ HTML_PUBLIC_STATS = """
             <table style="width: 100%; margin: 0; background: transparent;">
                 {% for s in searched_user_stops %}
                 <tr>
-                    <td style="padding: 5px 0; color: white;">{{ loop.index }}. {{ s.get('stop_name', '') }}</td>
+                    {% set color = '#ffd700' if loop.index0 == 0 else ('#c0c0c0' if loop.index0 == 1 else ('#cd7f32' if loop.index0 == 2 else 'white')) %}
+                    <td style="padding: 5px 0; color: {{color}}; font-weight:bold;">{{ loop.index }}. {{ s.get('stop_name', '') }}</td>
                     <td style="padding: 5px 0; text-align: right; color: var(--success); font-weight: bold;">{{ s.get('announce_count', 0) }}x</td>
                 </tr>
                 {% else %}
