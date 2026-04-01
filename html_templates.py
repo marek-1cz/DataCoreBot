@@ -51,7 +51,7 @@ BASE_HTML = """
         .alert-warning { background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
         .checkbox-group { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
         .checkbox-group label { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: bold; cursor: pointer; }
-        .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px; }
         .profile-card { background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; }
         .profile-stat { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
         .profile-val { font-size: 14px; font-weight: bold; color: var(--text-main); }
@@ -140,6 +140,198 @@ DASHBOARD_LAYOUT = """
         {% block content %}{% endblock %}
     </div>
 </div>
+
+<div class="modal-overlay" id="editModal">
+    <div class="modal" id="modalContent" style="max-width: 1100px;">
+        <div style="width: 100%;">
+            <h2 style="color: var(--blue-main); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px; display: flex; justify-content: space-between;">
+                <span><i class="fas fa-user"></i> Profil hráče <span id="modalAppId" style="color: var(--text-muted); font-size: 16px;"></span></span>
+                <span id="modalStatusDot" style="font-size: 14px;"></span>
+            </h2>
+            
+            <div class="profile-grid">
+                <div class="profile-card">
+                    <div class="profile-stat">Členem Discordu od:</div>
+                    <div class="profile-val" id="profJoined"><i class="fas fa-spinner fa-spin"></i> Načítání...</div>
+                    <div class="profile-stat" style="margin-top: 10px;">Datum registrace v DB:</div>
+                    <div class="profile-val" id="profRegistered"></div>
+                    <div class="profile-stat" style="margin-top: 10px;">Aktivita v aplikaci (Status):</div>
+                    <div class="profile-val" id="profAppStatus" style="color: #64748b;"><i>Připravuje se...</i></div>
+                    <div id="profStats" style="margin-top: 10px;"></div>
+                    <div class="profile-stat" style="margin-top: 10px;">Přístup do webové DB:</div>
+                    <div class="profile-val" id="profDbAccess"></div>
+                </div>
+                
+                <div class="profile-card" style="max-height: 250px; overflow-y: auto;">
+                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--blue-main);">Historie stahování:</div>
+                    <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent; border-radius: 0;">
+                        <tbody id="profDownloads">
+                            <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="profile-card" style="max-height: 250px; overflow-y: auto;">
+                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--warning);">Historie sezení (Logy):</div>
+                    <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent; border-radius: 0;">
+                        <tbody id="profSessions">
+                            <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <form action="/dashboard/edit_user" method="POST" style="border-top: 1px solid #334155; padding-top: 15px; margin-top: 15px;">
+                <input type="hidden" name="discord_id" id="modalDiscordId">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <label>Herní Nick:</label>
+                        <input type="text" name="nick" id="modalNick" required>
+                        <label>Zámek na PC (HWID a IP adresa):</label>
+                        <input type="text" name="hwid" id="modalHwid" placeholder="Pro odblokování smažte text zde (vymaže HWID i IP)">
+                        <div style="background-color: rgba(56, 189, 248, 0.1); padding: 10px; border-radius: 5px; border: 1px solid var(--blue-main); margin-bottom: 15px; margin-top: 10px;">
+                            <label style="cursor: pointer; font-weight: bold; color: var(--blue-main); margin: 0; display: flex; align-items: center; gap: 10px;">
+                                <input type="checkbox" name="dashboard_access" id="modalDashboardAccess" value="True" style="width: auto; margin: 0;"> 
+                                Přístup do Dashboardu (2FA)
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label>Role:</label>
+                        <div class="checkbox-group" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+                            <label style="color: #ef4444;"><input type="checkbox" name="roles" value="SA"> SA</label>
+                            <label style="color: #10b981;"><input type="checkbox" name="roles" value="DEV"> DEV</label>
+                            <label style="color: #3b82f6;"><input type="checkbox" name="roles" value="BT"> BT</label>
+                            <label style="color: #94a3b8;"><input type="checkbox" name="roles" value="User"> User</label>
+                        </div>
+                        <div id="activeActions" style="margin-top: 20px;">
+                            <div style="display: flex; gap: 10px;">
+                                <button type="submit" name="action" value="save" class="btn" style="flex: 2;"><i class="fas fa-save"></i> Uložit</button>
+                                <button type="submit" name="action" value="ban" id="btnBan" class="btn btn-warning" style="flex: 1;"><i class="fas fa-ban"></i> Dát BAN</button>
+                                <button type="submit" name="action" value="unban" id="btnUnban" class="btn btn-success" style="flex: 1; display: none;"><i class="fas fa-check"></i> Un-BAN</button>
+                            </div>
+                            <div style="margin-top: 10px;">
+                                <button type="submit" name="action" value="delete" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Smazat účet? (Zablokuje ID, umožní novou registraci)')"><i class="fas fa-trash"></i> Smazat (Soft Delete)</button>
+                            </div>
+                        </div>
+                        <div id="deletedActions" style="display: none; margin-top: 20px;">
+                            <p style="color: var(--danger); font-weight: bold; text-align: center; margin-top: 0; margin-bottom: 5px;">Tento účet je smazaný.</p>
+                            <div style="display: flex; gap: 10px;">
+                                <button type="submit" name="action" value="restore" class="btn btn-success" style="flex: 1;"><i class="fas fa-undo"></i> Obnovit účet</button>
+                                <button type="submit" name="action" value="hard_delete" class="btn btn-dark" style="flex: 1;" onclick="return confirm('PERMANENTNÍ SMAZÁNÍ: Tato akce kompletně vymaže veškerá data. Pokračovat?')"><i class="fas fa-skull"></i> Smazat permanentně</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+            <button class="btn" onclick="closeModal()" style="background: transparent; color: var(--text-muted); width: 100%; margin-top: 15px; border: 1px solid #334155;">Zavřít profil</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openModal(btn) {
+        try {
+            document.getElementById('editModal').style.display = 'flex';
+            document.getElementById('modalAppId').innerText = "#" + (btn.getAttribute('data-app-id') || "");
+            
+            let discord_id = btn.getAttribute('data-discord-id') || "";
+            document.getElementById('modalDiscordId').value = discord_id;
+            
+            document.getElementById('modalNick').value = btn.getAttribute('data-nick') || "";
+            
+            let hwid = btn.getAttribute('data-hwid');
+            document.getElementById('modalHwid').value = (!hwid || hwid === 'None') ? '' : hwid;
+            
+            let registered_at = btn.getAttribute('data-reg-at');
+            document.getElementById('profRegistered').innerText = (registered_at && registered_at !== 'None') ? registered_at : 'Neznámé (Starý účet)';
+            
+            let dashboard_access = btn.getAttribute('data-db-access');
+            document.getElementById('modalDashboardAccess').checked = (dashboard_access === 'True');
+            document.getElementById('profDbAccess').innerHTML = dashboard_access === 'True' ? '<span style="color: var(--success);"><i class="fas fa-check-circle"></i> Povoleno</span>' : '<span style="color: var(--danger);"><i class="fas fa-times-circle"></i> Zakázáno</span>';
+            
+            document.querySelectorAll('input[name="roles"]').forEach(cb => cb.checked = false);
+            let rolesStr = btn.getAttribute('data-roles') || "";
+            rolesStr.split(',').forEach(r => {
+                let el = document.querySelector(`input[name="roles"][value="${r.trim()}"]`);
+                if(el) el.checked = true;
+            });
+            
+            let is_deleted = btn.getAttribute('data-deleted');
+            let is_banned = btn.getAttribute('data-banned');
+            if (is_deleted === 'True') {
+                document.getElementById('activeActions').style.display = 'none';
+                document.getElementById('deletedActions').style.display = 'block';
+            } else {
+                document.getElementById('activeActions').style.display = 'block';
+                document.getElementById('deletedActions').style.display = 'none';
+                if (is_banned === 'True') {
+                    document.getElementById('btnBan').style.display = 'none';
+                    document.getElementById('btnUnban').style.display = 'block';
+                } else {
+                    document.getElementById('btnBan').style.display = 'block';
+                    document.getElementById('btnUnban').style.display = 'none';
+                }
+            }
+            
+            document.getElementById('profJoined').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            document.getElementById('modalStatusDot').innerHTML = '';
+            document.getElementById('profDownloads').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
+            document.getElementById('profSessions').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
+            document.getElementById('profAppStatus').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            document.getElementById('profStats').innerHTML = '';
+            
+            if (!discord_id || discord_id.trim() === '' || discord_id === 'None') {
+                document.getElementById('profJoined').innerText = "Chybí ID";
+                document.getElementById('profAppStatus').innerHTML = "<span style='color:#ef4444;'>Chyba dat (ID nenalezeno)</span>";
+                return;
+            }
+
+            fetch('/api/get_profile_data/' + discord_id)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('profAppStatus').innerHTML = "<span style='color:#ef4444;'>Chyba dat: " + data.error + "</span>";
+                        return;
+                    }
+                    document.getElementById('profJoined').innerText = data.joined_at || "Nenalezen";
+                    document.getElementById('modalStatusDot').innerHTML = data.status || "";
+                    document.getElementById('profAppStatus').innerHTML = data.app_status || "";
+                    document.getElementById('profStats').innerHTML = data.stats || "";
+                    
+                    let dlHtml = "";
+                    if(data.downloads && data.downloads.length > 0) {
+                        data.downloads.forEach(d => {
+                            dlHtml += `<tr><td style="color: var(--blue-main);"><b>${d.version_name}</b></td><td style="color: var(--text-muted);">${d.downloaded_at}</td></tr>`;
+                        });
+                    } else {
+                        dlHtml = "<tr><td colspan='2' style='color: var(--text-muted);'>Zatím nestáhl žádný soubor.</td></tr>";
+                    }
+                    document.getElementById('profDownloads').innerHTML = dlHtml;
+
+                    let sessHtml = "";
+                    if(data.sessions && data.sessions.length > 0) {
+                        data.sessions.forEach(s => {
+                            sessHtml += `<tr>
+                                <td style="color: var(--success); font-weight:bold; white-space:nowrap;">🟢 ${s.start_time.split(' ')[1] || s.start_time}</td>
+                                <td style="color: var(--danger); font-weight:bold; white-space:nowrap;">🔴 ${s.end_time.split(' ')[1] || s.end_time}</td>
+                            </tr>
+                            <tr><td colspan="2" style="color: var(--text-muted); padding-top:0; padding-bottom:10px; border-bottom:1px solid #334155; text-align:center;">${s.start_time.split(' ')[0]}</td></tr>`;
+                        });
+                    } else {
+                        sessHtml = "<tr><td colspan='2' style='color: var(--text-muted);'>Zatím žádná aktivita.</td></tr>";
+                    }
+                    document.getElementById('profSessions').innerHTML = sessHtml;
+                })
+                .catch(e => {
+                    document.getElementById('profAppStatus').innerHTML = "<span style='color:#ef4444;'>Spojení selhalo</span>";
+                });
+        } catch(e) {
+            alert("Chyba při otevírání modalu: " + e.message);
+        }
+    }
+    function closeModal() { document.getElementById('editModal').style.display = 'none'; }
+</script>
 """
 
 HTML_HOME = """
@@ -283,6 +475,9 @@ HTML_PUBLIC_STATS = """
                 <tr><td colspan="2" style="padding: 5px 0; color: var(--text-muted);">Zatím nehrál žádnou linku.</td></tr>
                 {% endfor %}
             </table>
+            {% if searched_user_lines %}
+            <button class="btn btn-dark" onclick="document.getElementById('personal-lines-modal').style.display='flex'" style="width: 100%; font-size: 12px; margin-top: 15px;"><i class="fas fa-list"></i> Zobrazit celou historii linek hráče</button>
+            {% endif %}
         </div>
         <div style="background: var(--bg-dark); padding: 20px; border-radius: 8px; border: 1px solid #334155;">
             <h3 style="color: var(--success); margin-top: 0; font-size: 16px;">Nejoblíbenější zastávky hráče (TOP 5)</h3>
@@ -297,10 +492,61 @@ HTML_PUBLIC_STATS = """
                 <tr><td colspan="2" style="padding: 5px 0; color: var(--text-muted);">Zatím nevyhlásil žádnou zastávku.</td></tr>
                 {% endfor %}
             </table>
+            {% if searched_user_stops %}
+            <button class="btn btn-dark" onclick="document.getElementById('personal-stops-modal').style.display='flex'" style="width: 100%; font-size: 12px; margin-top: 15px;"><i class="fas fa-list"></i> Zobrazit celou historii zastávek hráče</button>
+            {% endif %}
         </div>
     </div>
 
     <a href="/stats" class="btn btn-dark" style="margin-top: 20px; font-size: 12px;"><i class="fas fa-times"></i> Zavřít profil</a>
+</div>
+
+<div class="modal-overlay" id="personal-lines-modal">
+    <div class="modal" style="width: 700px;">
+        <div style="width: 100%;">
+            <h2 style="color: var(--blue-main); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px; display: flex; justify-content: space-between;">
+                <span><i class="fas fa-route"></i> Všechny linky hráče</span>
+                <span onclick="document.getElementById('personal-lines-modal').style.display='none'" style="cursor:pointer; color:var(--danger);"><i class="fas fa-times"></i></span>
+            </h2>
+            <input type="text" id="personal-lines-search" placeholder="Hledat linku hráče..." onkeyup="filterPersonalLines()" style="margin-bottom: 15px; width: 100%;">
+            <div style="max-height: 500px; overflow-y: auto;">
+                <table style="width: 100%;" id="personal-lines-table">
+                    <tr><th>Linka</th><th style="text-align:right;">Počet odehrání</th></tr>
+                    {% for l in searched_user_lines %}
+                    <tr class="pline-row">
+                        <td style="color: white; font-weight:bold;">{{ l.get('line_name', '') }}</td>
+                        <td style="text-align:right; color: var(--blue-main); font-weight:bold;">{{ l.get('play_count', 0) }}x</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            <button class="btn btn-dark" style="width: 100%; margin-top: 15px;" onclick="document.getElementById('personal-lines-modal').style.display='none'">Zavřít</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="personal-stops-modal">
+    <div class="modal" style="width: 700px;">
+        <div style="width: 100%;">
+            <h2 style="color: var(--success); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px; display: flex; justify-content: space-between;">
+                <span><i class="fas fa-map-marker-alt"></i> Všechny zastávky hráče</span>
+                <span onclick="document.getElementById('personal-stops-modal').style.display='none'" style="cursor:pointer; color:var(--danger);"><i class="fas fa-times"></i></span>
+            </h2>
+            <input type="text" id="personal-stops-search" placeholder="Hledat zastávku hráče..." onkeyup="filterPersonalStops()" style="margin-bottom: 15px; width: 100%;">
+            <div style="max-height: 500px; overflow-y: auto;">
+                <table style="width: 100%;" id="personal-stops-table">
+                    <tr><th>Zastávka</th><th style="text-align:right;">Počet vyhlášení</th></tr>
+                    {% for s in searched_user_stops %}
+                    <tr class="pstop-row">
+                        <td style="color: white; font-weight:bold;">{{ s.get('stop_name', '') }}</td>
+                        <td style="text-align:right; color: var(--success); font-weight:bold;">{{ s.get('announce_count', 0) }}x</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            <button class="btn btn-dark" style="width: 100%; margin-top: 15px;" onclick="document.getElementById('personal-stops-modal').style.display='none'">Zavřít</button>
+        </div>
+    </div>
 </div>
 {% endif %}
 
@@ -381,7 +627,7 @@ HTML_PUBLIC_STATS = """
 
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 40px; margin-bottom: 40px;">
     <div style="background: var(--bg-panel); padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-        <h2 style="color: var(--blue-main); margin-top: 0; text-align: center; border-bottom: 1px solid #334155; padding-bottom: 15px;"><i class="fas fa-route"></i> TOP 10: Nejhranější linky</h2>
+        <h2 style="color: var(--blue-main); margin-top: 0; text-align: center; border-bottom: 1px solid #334155; padding-bottom: 15px;"><i class="fas fa-route"></i> TOP 10: Nejhranější linky (Globálně)</h2>
         <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
             {% set colors = ['#ffd700', '#c0c0c0', '#cd7f32'] %}
             {% set bg_colors = ['rgba(255, 215, 0, 0.1)', 'rgba(192, 192, 192, 0.1)', 'rgba(205, 127, 50, 0.1)'] %}
@@ -414,7 +660,7 @@ HTML_PUBLIC_STATS = """
     </div>
 
     <div style="background: var(--bg-panel); padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-        <h2 style="color: var(--success); margin-top: 0; text-align: center; border-bottom: 1px solid #334155; padding-bottom: 15px;"><i class="fas fa-map-marker-alt"></i> TOP 10: Nejoblíbenější zastávky</h2>
+        <h2 style="color: var(--success); margin-top: 0; text-align: center; border-bottom: 1px solid #334155; padding-bottom: 15px;"><i class="fas fa-map-marker-alt"></i> TOP 10: Nejoblíbenější zastávky (Globálně)</h2>
         <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px; max-height: 500px; overflow-y: auto; padding-right: 10px;">
             {% set colors = ['#ffd700', '#c0c0c0', '#cd7f32'] %}
             {% set bg_colors = ['rgba(255, 215, 0, 0.1)', 'rgba(192, 192, 192, 0.1)', 'rgba(205, 127, 50, 0.1)'] %}
@@ -512,7 +758,81 @@ HTML_PUBLIC_STATS = """
             r.style.display = text.indexOf(input) > -1 ? "" : "none";
         });
     }
+    function filterPersonalLines() {
+        let input = document.getElementById("personal-lines-search").value.toUpperCase();
+        let rows = document.querySelectorAll(".pline-row");
+        rows.forEach(r => {
+            let text = r.innerText.toUpperCase();
+            r.style.display = text.indexOf(input) > -1 ? "" : "none";
+        });
+    }
+    function filterPersonalStops() {
+        let input = document.getElementById("personal-stops-search").value.toUpperCase();
+        let rows = document.querySelectorAll(".pstop-row");
+        rows.forEach(r => {
+            let text = r.innerText.toUpperCase();
+            r.style.display = text.indexOf(input) > -1 ? "" : "none";
+        });
+    }
 </script>
+"""
+
+HTML_SUPPORTERS = """
+<style>
+    .glowing-btn-blue { background-color: var(--blue-main); color: #000; padding: 15px 40px; font-size: 20px; font-weight: 900; border-radius: 50px; text-decoration: none; display: inline-block; margin-top: 20px; box-shadow: 0 0 20px rgba(56, 189, 248, 0.6); transition: all 0.3s ease; text-transform: uppercase; letter-spacing: 1px; border: none; cursor: pointer; }
+    .glowing-btn-blue:hover { box-shadow: 0 0 40px rgba(56, 189, 248, 1); transform: scale(1.05); color: #000; }
+    .supporter-wrapper { width: 100%; max-width: 500px; min-height: 230px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; text-align: center; box-sizing: border-box; }
+    .tier-1 { background-color: rgba(15, 23, 42, 0.8); padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.3); border-left: 5px solid #38bdf8; transition: transform 0.5s ease, box-shadow 0.5s ease; }
+    .tier-1:hover { transform: scale(1.05); box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4); }
+    .tier-1 .name-title { color: #e0f2fe; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); font-size: 20px; margin: 0 0 10px 0; }
+    .tier-1 .title-badge { font-size: 10px; color: #38bdf8; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin-bottom: 10px; }
+    .tier-1 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; border: 1px solid rgba(56, 189, 248, 0.3); }
+    @keyframes pulseMedium { from { box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); } to { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); } }
+    .tier-2 { background-color: rgba(30, 41, 59, 0.9); padding: 25px; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.6); border-left: 6px solid #f59e0b; animation: pulseMedium 2s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
+    .tier-2:hover { transform: scale(1.05) !important; animation: none; box-shadow: 0 10px 35px rgba(245, 158, 11, 0.8); }
+    .tier-2 .name-title { color: #fcd34d; font-size: 26px; margin: 0 0 10px 0; text-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
+    .tier-2 .title-badge { font-size: 12px; color: #f59e0b; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; margin-bottom: 10px; }
+    .tier-2 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(245, 158, 11, 0.1); color: var(--warning); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(245, 158, 11, 0.5); }
+    @keyframes epicWebGlow { from { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); } to { box-shadow: 0 0 50px rgba(239, 68, 68, 0.9), inset 0 0 30px rgba(239, 68, 68, 0.3); } }
+    .tier-3 { background: linear-gradient(135deg, #2a0a18, #450a0a); padding: 30px; border-radius: 15px; border: 2px solid #ef4444; animation: epicWebGlow 1.5s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
+    .tier-3:hover { transform: scale(1.08) !important; animation: none; box-shadow: 0 15px 60px rgba(239, 68, 68, 1); }
+    .tier-3 .name-title { color: #fca5a5; font-size: 32px !important; margin: 0 0 15px 0; text-shadow: 0 0 20px #ef4444, 0 0 40px #ef4444; text-transform: uppercase; font-weight: 900; }
+    .tier-3 .title-badge { font-size: 14px; color: #ef4444; text-transform: uppercase; font-weight: 900; letter-spacing: 3px; margin-bottom: 10px; text-shadow: 0 0 10px #ef4444; }
+    .tier-3 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: #ef4444 !important; color: #fff !important; border: 2px solid #fca5a5 !important; padding: 8px 20px; border-radius: 25px; font-weight: bold; font-size: 20px !important; box-shadow: 0 0 20px #ef4444; }
+</style>
+
+<div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
+    <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Děkuji všem za podporu!</h1>
+        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!</p>
+        <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue"><i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK</a>
+    </div>
+    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 40px 0;">
+    <h2 style="text-align: center; color: var(--text-main); letter-spacing: 3px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,255,255,0.2);">SEZNAM PODPOROVATELŮ</h2>
+    <div style="display: flex; flex-direction: column; gap: 40px; padding-bottom: 50px; align-items: center;">
+        {% for s in supporters %}
+        <div class="tier-{{ s.get('tier', 1) }} supporter-wrapper">
+            <div style="width: 100%;">
+                {% if s.get('tier') == 3 %} <div class="title-badge">MEGA PODPOROVATEL</div>
+                {% elif s.get('tier') == 2 %} <div class="title-badge">VELKÝ PODPOROVATEL</div>
+                {% else %} <div class="title-badge">PODPOROVATEL</div> {% endif %}
+                <h3 class="name-title">{{ s.get('name', 'Neznámý dárce') }}</h3>
+                <div class="amt-badge">{{ s.get('amount', '') }}</div>
+            </div>
+            <div style="width: 100%; margin-top: auto;">
+                {% if s.get('message') %}
+                <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0 auto 15px auto; line-height: 1.5; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 2px solid rgba(255,255,255,0.2); max-width: 90%;">
+                    "{{ s.get('message') }}"
+                </p>
+                {% endif %}
+                <div style="font-size: 11px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; text-align: center;">Datum podpory: {{ s.get('created_at', '') }}</div>
+            </div>
+        </div>
+        {% else %}
+        <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1); width: 100%;">Zatím zde nikdo není. Buďte první!</div>
+        {% endfor %}
+    </div>
+</div>
 """
 
 HTML_CLAIM = """
