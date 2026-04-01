@@ -1,3 +1,4 @@
+
 import os
 import time
 import discord
@@ -26,7 +27,7 @@ os.environ['TZ'] = 'Europe/Prague'
 try:
     time.tzset()
 except AttributeError:
-    pass # Fallback pro Windows, kdyby se to testovalo lokálně
+    pass
 
 try:
     from status_dashboard import HTML_STATUS_SECTION
@@ -443,26 +444,37 @@ def api_submit_stats():
     data = request.get_json(silent=True) or {}
     line = str(data.get("line", "")).strip()
     stops = data.get("stops", [])
+    discord_id = str(data.get("discord_id", "")).strip()
     
     db = get_db()
     if not db or not line: return _cors_jsonify({"status": "error"})
     
     try:
+        # Globální
         line_res = db.table("stats_lines").select("*").eq("line_name", line).execute().data
-        if line_res:
-            db.table("stats_lines").update({"play_count": int(line_res[0].get("play_count", 0)) + 1}).eq("id", line_res[0]["id"]).execute()
-        else:
-            db.table("stats_lines").insert({"line_name": line, "play_count": 1}).execute()
+        if line_res: db.table("stats_lines").update({"play_count": int(line_res[0].get("play_count", 0)) + 1}).eq("id", line_res[0]["id"]).execute()
+        else: db.table("stats_lines").insert({"line_name": line, "play_count": 1}).execute()
             
         for stop in stops:
             stop_name = str(stop).strip()
             if not stop_name: continue
             stop_res = db.table("stats_stops").select("*").eq("stop_name", stop_name).execute().data
-            if stop_res:
-                db.table("stats_stops").update({"announce_count": int(stop_res[0].get("announce_count", 0)) + 1}).eq("id", stop_res[0]["id"]).execute()
-            else:
-                db.table("stats_stops").insert({"stop_name": stop_name, "announce_count": 1}).execute()
+            if stop_res: db.table("stats_stops").update({"announce_count": int(stop_res[0].get("announce_count", 0)) + 1}).eq("id", stop_res[0]["id"]).execute()
+            else: db.table("stats_stops").insert({"stop_name": stop_name, "announce_count": 1}).execute()
+        
+        # Osobní (pokud máme ID hráče)
+        if discord_id and discord_id != "None" and discord_id != "":
+            u_line_res = db.table("user_stats_lines").select("*").eq("discord_id", discord_id).eq("line_name", line).execute().data
+            if u_line_res: db.table("user_stats_lines").update({"play_count": int(u_line_res[0].get("play_count", 0)) + 1}).eq("id", u_line_res[0]["id"]).execute()
+            else: db.table("user_stats_lines").insert({"discord_id": discord_id, "line_name": line, "play_count": 1}).execute()
                 
+            for stop in stops:
+                stop_name = str(stop).strip()
+                if not stop_name: continue
+                u_stop_res = db.table("user_stats_stops").select("*").eq("discord_id", discord_id).eq("stop_name", stop_name).execute().data
+                if u_stop_res: db.table("user_stats_stops").update({"announce_count": int(u_stop_res[0].get("announce_count", 0)) + 1}).eq("id", u_stop_res[0]["id"]).execute()
+                else: db.table("user_stats_stops").insert({"discord_id": discord_id, "stop_name": stop_name, "announce_count": 1}).execute()
+
         return _cors_jsonify({"status": "success"})
     except Exception as e:
         return _cors_jsonify({"status": "error", "message": str(e)})
@@ -545,7 +557,6 @@ def public_stats():
     
     activated_users = len([u for u in all_users if u.get('hwid') and str(u.get('hwid')) not in ['None', '']])
     
-    # Bezpečné sčítání celkového času a spuštění
     total_time_mins = 0
     total_launches = 0
     for u in all_users:
@@ -560,7 +571,6 @@ def public_stats():
         
     total_hours = total_time_mins // 60
     
-    # Kalkulace dnešního času z app_sessions
     today_str = get_prague_time().strftime("%d.%m.%Y")
     sessions_today = db.table("app_sessions").select("start_time, end_time").like("start_time", f"{today_str}%").execute().data or []
     today_mins = 0
@@ -589,9 +599,9 @@ def public_stats():
     valid_launch_users = [u for u in all_users if int(u.get('launch_count') or 0) > 0]
     top_launches = sorted(valid_launch_users, key=lambda x: int(x.get('launch_count') or 0), reverse=True)[:3]
     
-    # --- TOP 10 LINEK A ZASTÁVEK ---
-    top_lines = db.table("stats_lines").select("*").order("play_count", desc=True).limit(10).execute().data or []
-    top_stops = db.table("stats_stops").select("*").order("announce_count", desc=True).limit(10).execute().data or []
+    # Kompletní data z DB
+    all_lines = db.table("stats_lines").select("*").order("play_count", desc=True).execute().data or []
+    all_stops = db.table("stats_stops").select("*").order("announce_count", desc=True).execute().data or []
     
     return render_public(HTML_PUBLIC_STATS, 
                          user_ver=user_ver, bt_ver=bt_ver, 
@@ -601,7 +611,7 @@ def public_stats():
                          total_hours=total_hours,
                          total_launches=total_launches,
                          top_time=top_time_users, top_launches=top_launches,
-                         top_lines=top_lines, top_stops=top_stops,
+                         all_lines=all_lines, all_stops=all_stops,
                          searched_user=searched_user)
 
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'])
@@ -1065,13 +1075,19 @@ def api_get_profile_data(discord_id):
         downloads = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(10).execute().data or []
         sessions_data = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data or []
         
+        # Načtení OSOBNÍCH statistik uživatele
+        user_lines = db.table("user_stats_lines").select("*").eq("discord_id", discord_id).order("play_count", desc=True).limit(5).execute().data or []
+        user_stops = db.table("user_stats_stops").select("*").eq("discord_id", discord_id).order("announce_count", desc=True).limit(5).execute().data or []
+        
         return _cors_jsonify({
             "joined_at": joined_at,
             "status": "", 
             "app_status": app_status,
             "stats": stats,
             "downloads": downloads,
-            "sessions": sessions_data
+            "sessions": sessions_data,
+            "top_lines": user_lines,
+            "top_stops": user_stops
         })
     except Exception as e:
         return _cors_jsonify({"error": str(e)}), 500
