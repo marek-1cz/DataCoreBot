@@ -172,7 +172,7 @@ DASHBOARD_LAYOUT = """
                 </div>
 
                 <div class="profile-card" style="max-height: 250px; overflow-y: auto;">
-                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--success);">Nejoblíbenější zastávky:</div>
+                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--success);">Nejoblíbenější zastávky (Hráče):</div>
                     <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent; border-radius: 0;">
                         <tbody id="profTopStops">
                             <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
@@ -303,7 +303,7 @@ DASHBOARD_LAYOUT = """
                     if(data.top_lines && data.top_lines.length > 0) {
                         data.top_lines.forEach((l, i) => {
                             let color = i===0 ? '#ffd700' : (i===1 ? '#c0c0c0' : (i===2 ? '#cd7f32' : 'var(--text-main)'));
-                            linesHtml += `<tr><td style="color: ${color}; font-weight:bold;">${i+1}. ${l.line_name}</td><td style="color: var(--blue-main); font-weight:bold;">${l.play_count}x</td></tr>`;
+                            linesHtml += `<tr><td style="color: ${color}; font-weight:bold;">${i+1}. ${l.line_name}</td><td style="color: var(--blue-main); font-weight:bold; text-align:right;">${l.play_count}x</td></tr>`;
                         });
                     } else {
                         linesHtml = "<tr><td colspan='2' style='color: var(--text-muted); text-align:center;'>Zatím nehrál žádnou linku.</td></tr>";
@@ -314,7 +314,7 @@ DASHBOARD_LAYOUT = """
                     if(data.top_stops && data.top_stops.length > 0) {
                         data.top_stops.forEach((s, i) => {
                             let color = i===0 ? '#ffd700' : (i===1 ? '#c0c0c0' : (i===2 ? '#cd7f32' : 'var(--text-main)'));
-                            stopsHtml += `<tr><td style="color: ${color}; font-weight:bold;">${i+1}. ${s.stop_name}</td><td style="color: var(--success); font-weight:bold;">${s.announce_count}x</td></tr>`;
+                            stopsHtml += `<tr><td style="color: ${color}; font-weight:bold;">${i+1}. ${s.stop_name}</td><td style="color: var(--success); font-weight:bold; text-align:right;">${s.announce_count}x</td></tr>`;
                         });
                     } else {
                         stopsHtml = "<tr><td colspan='2' style='color: var(--text-muted); text-align:center;'>Zatím nevyhlásil žádnou zastávku.</td></tr>";
@@ -712,7 +712,7 @@ HTML_SUPPORTERS = """
                 {% if s.get('tier') == 3 %} <div class="title-badge">MEGA PODPOROVATEL</div>
                 {% elif s.get('tier') == 2 %} <div class="title-badge">VELKÝ PODPOROVATEL</div>
                 {% else %} <div class="title-badge">PODPOROVATEL</div> {% endif %}
-                <h3 class="name-title">{{ s.get('name', 'Neznám dárce') }}</h3>
+                <h3 class="name-title">{{ s.get('name', 'Neznámý dárce') }}</h3>
                 <div class="amt-badge">{{ s.get('amount', '') }}</div>
             </div>
             <div style="width: 100%; margin-top: auto;">
