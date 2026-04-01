@@ -361,7 +361,6 @@ HTML_HOME = """
     </div>
 </div>
 """
-
 HTML_DOWNLOADS_MAIN = """
 <div style="max-width: 650px; margin: 60px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
     <div style="text-align: center; margin-bottom: 30px;">
