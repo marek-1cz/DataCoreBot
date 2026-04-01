@@ -19,7 +19,33 @@ import random
 import logging
 import io
 from werkzeug.exceptions import HTTPException
-from html_templates import *
+
+# BEZPEČNOSTNÍ IMPORT ŠABLON (zabraňuje pádu aplikace, pokud se šablona usekne)
+try:
+    from html_templates import *
+except ImportError as e:
+    print(f"KRITICKÁ CHYBA IMPORTU ŠABLON: {e}")
+    # Nouzové definice pro zabránění pádu serveru na NameError
+    BASE_HTML = "<html><body><h1>CHYBA ŠABLON - ZKONTROLUJTE SOUBOR html_templates.py</h1></body></html>"
+    PUBLIC_LAYOUT = BASE_HTML
+    DASHBOARD_LAYOUT = BASE_HTML
+    HTML_HOME = ""
+    HTML_DOWNLOADS_MAIN = ""
+    HTML_TEAM = ""
+    HTML_PUBLIC_STATS = ""
+    HTML_CLAIM = ""
+    HTML_STATS = ""
+    HTML_APP_MANAGEMENT = ""
+    HTML_NOTIFICATIONS = ""
+    HTML_DOWNLOADS_MGMT = ""
+    HTML_PENDING_ROLES = ""
+    HTML_TEAM_ADD = ""
+    HTML_IDS = ""
+    HTML_DASHBOARD_MAIN = ""
+    HTML_SUPPORTERS_MGMT = ""
+    HTML_FEEDBACK = ""
+    HTML_WAIT_AUTH = ""
+    HTML_LOGIN = ""
 
 # --- TVRDÝ HLÍDAČ ČASU (Vynucení UTC Praha pro celý server Koyebu) ---
 os.environ['TZ'] = 'Europe/Prague'
@@ -449,11 +475,12 @@ def api_submit_stats():
     if not db or not line: return _cors_jsonify({"status": "error"})
     
     try:
-        # Globální
+        # Globální statistiky linek
         line_res = db.table("stats_lines").select("*").eq("line_name", line).execute().data
         if line_res: db.table("stats_lines").update({"play_count": int(line_res[0].get("play_count", 0)) + 1}).eq("id", line_res[0]["id"]).execute()
         else: db.table("stats_lines").insert({"line_name": line, "play_count": 1}).execute()
             
+        # Globální statistiky zastávek
         for stop in stops:
             stop_name = str(stop).strip()
             if not stop_name: continue
@@ -461,7 +488,7 @@ def api_submit_stats():
             if stop_res: db.table("stats_stops").update({"announce_count": int(stop_res[0].get("announce_count", 0)) + 1}).eq("id", stop_res[0]["id"]).execute()
             else: db.table("stats_stops").insert({"stop_name": stop_name, "announce_count": 1}).execute()
         
-        # Osobní (pokud máme ID hráče)
+        # Osobní statistiky (pokud máme ID hráče)
         if discord_id and discord_id != "None" and discord_id != "":
             u_line_res = db.table("user_stats_lines").select("*").eq("discord_id", discord_id).eq("line_name", line).execute().data
             if u_line_res: db.table("user_stats_lines").update({"play_count": int(u_line_res[0].get("play_count", 0)) + 1}).eq("id", u_line_res[0]["id"]).execute()
@@ -556,7 +583,6 @@ def public_stats():
     
     activated_users = len([u for u in all_users if u.get('hwid') and str(u.get('hwid')) not in ['None', '']])
     
-    # Bezpečné sčítání celkového času a spuštění
     total_time_mins = 0
     total_launches = 0
     for u in all_users:
@@ -571,7 +597,6 @@ def public_stats():
         
     total_hours = total_time_mins // 60
     
-    # Kalkulace dnešního času z app_sessions
     today_str = get_prague_time().strftime("%d.%m.%Y")
     sessions_today = db.table("app_sessions").select("start_time, end_time").like("start_time", f"{today_str}%").execute().data or []
     today_mins = 0
@@ -600,9 +625,21 @@ def public_stats():
     valid_launch_users = [u for u in all_users if int(u.get('launch_count') or 0) > 0]
     top_launches = sorted(valid_launch_users, key=lambda x: int(x.get('launch_count') or 0), reverse=True)[:3]
     
-    # Kompletní data z DB
+    # TOP STATISTIKY (Až 10 limit)
+    top_lines = db.table("stats_lines").select("*").order("play_count", desc=True).limit(10).execute().data or []
+    top_stops = db.table("stats_stops").select("*").order("announce_count", desc=True).limit(10).execute().data or []
+    
+    # Kompletní data z DB pro modální okna
     all_lines = db.table("stats_lines").select("*").order("play_count", desc=True).execute().data or []
     all_stops = db.table("stats_stops").select("*").order("announce_count", desc=True).execute().data or []
+    
+    # Pokud je vyhledán hráč, najdeme i jeho osobní statistiky (Všechny pro modální okna)
+    searched_user_lines = []
+    searched_user_stops = []
+    if searched_user:
+        d_id = searched_user.get('discord_id')
+        searched_user_lines = db.table("user_stats_lines").select("*").eq("discord_id", d_id).order("play_count", desc=True).execute().data or []
+        searched_user_stops = db.table("user_stats_stops").select("*").eq("discord_id", d_id).order("announce_count", desc=True).execute().data or []
     
     return render_public(HTML_PUBLIC_STATS, 
                          user_ver=user_ver, bt_ver=bt_ver, 
@@ -612,8 +649,11 @@ def public_stats():
                          total_hours=total_hours,
                          total_launches=total_launches,
                          top_time=top_time_users, top_launches=top_launches,
+                         top_lines=top_lines, top_stops=top_stops,
                          all_lines=all_lines, all_stops=all_stops,
-                         searched_user=searched_user)
+                         searched_user=searched_user,
+                         searched_user_lines=searched_user_lines,
+                         searched_user_stops=searched_user_stops)
 
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'])
 def api_supporters():
@@ -812,7 +852,8 @@ def secure_download(token):
             </script>
         </div>"""
         return render_public(html)
-    except: return "Systémová chyba."
+    except Exception as e:
+        return f"Systémová chyba: {e}"
 
 @app.route('/api/pre_download/<token>')
 def api_pre_download(token):
@@ -1077,8 +1118,8 @@ def api_get_profile_data(discord_id):
         sessions_data = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data or []
         
         # Načtení OSOBNÍCH statistik uživatele
-        user_lines = db.table("user_stats_lines").select("*").eq("discord_id", discord_id).order("play_count", desc=True).limit(5).execute().data or []
-        user_stops = db.table("user_stats_stops").select("*").eq("discord_id", discord_id).order("announce_count", desc=True).limit(5).execute().data or []
+        user_lines = db.table("user_stats_lines").select("*").eq("discord_id", discord_id).order("play_count", desc=True).execute().data or []
+        user_stops = db.table("user_stats_stops").select("*").eq("discord_id", discord_id).order("announce_count", desc=True).execute().data or []
         
         return _cors_jsonify({
             "joined_at": joined_at,
