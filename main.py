@@ -956,7 +956,9 @@ def api_app_login():
         if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false':
             return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ VYPNUT."})
             
-        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+        # ZÍSKÁNÍ IP ADRESY HRÁČE
+        client_ip_raw = request.headers.get('X-Forwarded-For', request.remote_addr)
+        client_ip = client_ip_raw.split(',')[0].strip() if client_ip_raw else "Neznámá"
         
         if identifier.isdigit():
             user_resp = db.table("users").select("*").or_(f"discord_id.eq.{identifier},app_id.eq.{int(identifier)}").execute()
@@ -981,21 +983,27 @@ def api_app_login():
         db_hwid = user.get("hwid")
         db_ip = user.get("ip_address")
         
+        # LOGIKA PRO HWID A IP OCHRANU
         if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
+            # První přihlášení (nebo po resetu z dashboardu) - uložíme rovnou obojí
             if req_hwid and req_hwid.startswith("PC-"):
                 db.table("users").update({"hwid": req_hwid, "ip_address": client_ip}).eq("discord_id", discord_id).execute()
         else:
             if str(db_hwid) != req_hwid:
+                # HWID nesedí, zkontrolujeme IP adresu
                 if db_ip and str(db_ip).strip() != "" and str(db_ip) == client_ip:
+                    # IP sedí (je doma), jen má nový PC, tak mu HWID potichu aktualizujeme
                     db.table("users").update({"hwid": req_hwid}).eq("discord_id", discord_id).execute()
                     send_log("🔄 HWID Auto-oprava", f"Uživateli `{user.get('nick')}` se změnilo HWID, ale IP adresa souhlasila. HWID bylo automaticky aktualizováno.", 0x38bdf8)
                 else:
-                    send_log("🔒 Zámek (HWID+IP)", f"Uživatel `{user.get('nick')}` se hlásí z cizího PC i sítě!\nUloženo HWID: `{db_hwid}` | IP: `{db_ip}`\nNové HWID: `{req_hwid}` | IP: `{client_ip}`", 0xf59e0b)
-                    return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Váš počítač ani IP adresa nesouhlasí s registrací."})
+                    # Nesedí ani HWID ani IP adresa -> Tvrdý zámek
+                    send_log("🔒 Zámek (HWID+IP)", f"Uživatel `{user.get('nick')}` se hlásí z cizího PC i cizí sítě!\nUloženo HWID: `{db_hwid}` | IP: `{db_ip}`\nNové HWID: `{req_hwid}` | IP: `{client_ip}`", 0xf59e0b)
+                    return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK: Váš počítač ani síť (IP adresa) nesouhlasí s registrací."})
             else:
+                # HWID sedí, pokud u starého uživatele chybí IP, doplníme ji
                 if not db_ip or str(db_ip).strip() == "":
                     db.table("users").update({"ip_address": client_ip}).eq("discord_id", discord_id).execute()
-                
+        
         token = str(uuid.uuid4())
         db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
         async def send():
@@ -1019,11 +1027,7 @@ def api_app_check():
         if not user_resp.data: return _cors_jsonify({"status": "error"})
         user = user_resp.data[0]
         if user.get("login_token") == "approved":
-            db_hwid = user.get("hwid")
-            if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
-                if req_hwid and req_hwid.startswith("PC-"): db.table("users").update({"hwid": req_hwid, "login_token": ""}).eq("discord_id", discord_id).execute()
-                else: db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-            else: db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
+            db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
             return _cors_jsonify({"status": "success", "display_name": user.get("nick"), "app_id": str(user.get("app_id", ""))})
         elif user.get("login_token") == "rejected":
             db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
@@ -1043,7 +1047,9 @@ def api_silent_check():
         set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
         if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false': return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ VYPNUT."})
         
-        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+        client_ip_raw = request.headers.get('X-Forwarded-For', request.remote_addr)
+        client_ip = client_ip_raw.split(',')[0].strip() if client_ip_raw else "Neznámá"
+        
         user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
         if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Tento účet neexistuje."})
         user = user_resp.data[0]
@@ -1070,7 +1076,7 @@ def api_silent_check():
                 send_log("🔄 HWID Auto-oprava (Tichá)", f"Uživateli `{user.get('nick')}` se změnilo HWID, ale IP seděla. Aktualizováno.", 0x38bdf8)
                 return _cors_jsonify({"status": "success", "app_id": str(user.get("app_id", ""))})
             else:
-                return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Váš počítač ani IP adresa nesouhlasí s registrací."})
+                return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID/IP: Váš počítač ani síť nesouhlasí s registrací."})
         else:
             if not db_ip or str(db_ip).strip() == "":
                 db.table("users").update({"ip_address": client_ip}).eq("discord_id", discord_id).execute()
@@ -1161,13 +1167,19 @@ def api_get_profile_data(discord_id):
         downloads = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(10).execute().data or []
         sessions_data = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data or []
         
+        # Přidány statistiky pro Modal
+        top_lines = db.table("user_stats_lines").select("*").eq("discord_id", discord_id).order("play_count", desc=True).limit(5).execute().data or []
+        top_stops = db.table("user_stats_stops").select("*").eq("discord_id", discord_id).order("announce_count", desc=True).limit(5).execute().data or []
+
         return _cors_jsonify({
             "joined_at": joined_at,
             "status": "", 
             "app_status": app_status,
             "stats": stats,
             "downloads": downloads,
-            "sessions": sessions_data
+            "sessions": sessions_data,
+            "top_lines": top_lines,
+            "top_stops": top_stops
         })
     except Exception as e:
         return _cors_jsonify({"error": str(e)}), 500
@@ -1267,7 +1279,7 @@ def api_submit_feedback():
             if not re.search(r'\d{17,}', msg):
                 return _cors_jsonify({
                     "status": "error", 
-                    "message": "⚠️ OCHRANA: Aplikace nedokázala načíst vaše ID (např. kvůli emoji v nicku). Napište prosím své číselné DISCORD ID přímo do textu žádosti, abychom účet dohledali!"
+                    "message": "⚠️ OCHRANA: Aplikace nedokázala načíst vaše ID. Napište prosím své číselné DISCORD ID přímo do textu žádosti, abychom účet dohledali!"
                 })
             else:
                 d_id = "Napsáno v textu"
@@ -1277,7 +1289,7 @@ def api_submit_feedback():
             "status": "pending", "sys_note": "", "fcreated_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
         }).execute()
         
-        if type_str == "HWID": log_title = "🚨 VYŽADUJE KONTROLU: Žádost o HWID 🚨"; log_color = 0xef4444
+        if type_str == "HWID": log_title = "🚨 VYŽADUJE KONTROLU: Žádost o HWID a IP 🚨"; log_color = 0xef4444
         elif type_str == "ADMIN_BYPASS": log_title = "🔓 VYŽADUJE SCHVÁLENÍ: Admin Bypass 🔓"; log_color = 0xf59e0b
         else: log_title = "🔔 NOVÁ ZPĚTNÁ VAZBA (NÁPAD/CHYBA) 🔔"; log_color = 0xa855f7
             
@@ -1438,7 +1450,7 @@ def dashboard_feedback():
             data = db.table("feedback").select("*").order("id", desc=True).execute().data or []
             for item in data:
                 if item.get('status') == 'pending':
-                    if item.get('type') == 'HWID': hwid_p.append(item)
+                    if item.get('type') == 'HWID' or item.get('type') == 'HWID_IP': hwid_p.append(item)
                     elif item.get('type') == 'ADMIN_BYPASS': bypass_p.append(item)
                     else: gen_p.append(item)
                 else: res_all.append(item)
@@ -1487,7 +1499,7 @@ def feedback_reset_hwid():
         db.table("users").update({"hwid": "", "ip_address": ""}).eq("discord_id", d_id).execute()
         db.table("feedback").update({"status": "resolved", "sys_note": f"HWID a IP byly resetovány [{now_str}]"}).eq("id", fb_id).execute()
         send_log("🔄 Zámek Resetován", f"Administrátor vyhověl žádosti a resetoval HWID a IP adresu pro ID: `{d_id}`.", 0x10b981)
-        if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "🔄 Zámek PC Resetován", "Vaše žádost byla schválena. HWID vašeho účtu bylo úspěšně vymazáno. Při dalším spuštění aplikace se spáruje s novým počítačem.", 0x10b981), bot.loop)
+        if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "🔄 Zámek PC Resetován", "Vaše žádost byla schválena. HWID a IP adresa vašeho účtu byly úspěšně vymazány. Při dalším spuštění aplikace se spáruje s novým počítačem.", 0x10b981), bot.loop)
         flash('HWID a IP resetováno.', 'success')
     return redirect(url_for('dashboard_feedback'))
 
@@ -2442,7 +2454,7 @@ async def register(ctx, target_id: str = None):
     else:
         highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
         new_app_id = highest[0]["app_id"] + 1 if highest else 1000
-        db.table("users").insert({ "app_id": new_app_id, "discord_id": discord_id, "nick": nick, "role": "User", "hwid": "", "is_banned": False, "is_deleted": False, "deleted_at": "", "dashboard_access": False, "login_token": "", "registered_at": now_str }).execute()
+        db.table("users").insert({ "app_id": new_app_id, "discord_id": discord_id, "nick": nick, "role": "User", "hwid": "", "ip_address": "", "is_banned": False, "is_deleted": False, "deleted_at": "", "dashboard_access": False, "login_token": "", "registered_at": now_str }).execute()
         await ctx.send(f"✅ Úspěšně zaregistrován! App ID: **#{new_app_id}**.")
 
 @bot.command()
