@@ -647,13 +647,17 @@ def public_stats():
         print(f"Chyba při načítání globálních statistik: {e}")
         top_lines, top_stops, all_lines, all_stops = [], [], [], []
     
+    all_searched_user_lines = []
+    all_searched_user_stops = []
     searched_user_lines = []
     searched_user_stops = []
     if searched_user:
         d_id = searched_user.get('discord_id')
         try:
-            searched_user_lines = db.table("user_stats_lines").select("*").eq("discord_id", d_id).order("play_count", desc=True).limit(5).execute().data or []
-            searched_user_stops = db.table("user_stats_stops").select("*").eq("discord_id", d_id).order("announce_count", desc=True).limit(5).execute().data or []
+            all_searched_user_lines = db.table("user_stats_lines").select("*").eq("discord_id", d_id).order("play_count", desc=True).execute().data or []
+            all_searched_user_stops = db.table("user_stats_stops").select("*").eq("discord_id", d_id).order("announce_count", desc=True).execute().data or []
+            searched_user_lines = all_searched_user_lines[:5]
+            searched_user_stops = all_searched_user_stops[:5]
         except Exception as e:
             print(f"Chyba při načítání osobních statistik pro /stats: {e}")
     
@@ -669,7 +673,9 @@ def public_stats():
                          all_lines=all_lines, all_stops=all_stops,
                          searched_user=searched_user,
                          searched_user_lines=searched_user_lines,
-                         searched_user_stops=searched_user_stops)
+                         searched_user_stops=searched_user_stops,
+                         all_searched_user_lines=all_searched_user_lines,
+                         all_searched_user_stops=all_searched_user_stops)
 
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'])
 def api_supporters():
@@ -992,7 +998,7 @@ def api_app_login():
                     send_log("🔄 HWID Auto-oprava", f"Uživateli `{user.get('nick')}` se změnilo HWID, ale IP adresa souhlasila. HWID bylo automaticky aktualizováno.", 0x38bdf8)
                 else:
                     send_log("🔒 Zámek (HWID+IP)", f"Uživatel `{user.get('nick')}` se hlásí z cizího PC i sítě!\nUloženo HWID: `{db_hwid}` | IP: `{db_ip}`\nNové HWID: `{req_hwid}` | IP: `{client_ip}`", 0xf59e0b)
-                    return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Váš počítač ani IP adresa nesouhlasí s registrací."})
+                    return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK: Váš počítač ani IP adresa nesouhlasí s registrací."})
             else:
                 if not db_ip or str(db_ip).strip() == "":
                     db.table("users").update({"ip_address": client_ip}).eq("discord_id", discord_id).execute()
@@ -1350,7 +1356,7 @@ def logout():
     session.clear()
     return redirect(url_for('home'))
 
-@app.route('/dashboard/stats')
+@app.route('/dashboard/stats', methods=['GET'], strict_slashes=False)
 def dashboard_stats():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     total_visits = 0; last_7_days = 0; country_totals = {}; region_totals = {}
@@ -1390,7 +1396,7 @@ def dashboard_stats():
     gc.collect()
     return render_dashboard(HTML_STATS, total_visits=total_visits, last_7_days=last_7_days, country_totals=country_totals, region_totals=region_totals, labels_7d=json.dumps(list(chart_data_7d.keys())), data_7d=json.dumps(list(chart_data_7d.values())), labels_24h=json.dumps(list(chart_data_24h.keys())), data_24h=json.dumps(list(chart_data_24h.values())), deploy_time=DEPLOY_TIME)
 
-@app.route('/dashboard', methods=['GET', 'POST'])
+@app.route('/dashboard', methods=['GET', 'POST'], strict_slashes=False)
 def dashboard_main():
     if not session.get('logged_in'): return render_public(HTML_LOGIN)
     users_data = []
@@ -1470,7 +1476,7 @@ def edit_user():
         except: pass
     return redirect(url_for('dashboard_main'))
 
-@app.route('/dashboard/supporters', methods=['GET'])
+@app.route('/dashboard/supporters', methods=['GET'], strict_slashes=False)
 def dashboard_supporters():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
     pending_claims = []; supporters_history = []
@@ -1483,7 +1489,7 @@ def dashboard_supporters():
     except Exception as e: flash(f"Chyba DB: {e}", "error")
     return render_dashboard(HTML_SUPPORTERS_MGMT, pending_claims=pending_claims, supporters_history=supporters_history, deploy_time=DEPLOY_TIME)
 
-@app.route('/dashboard/feedback', methods=['GET'])
+@app.route('/dashboard/feedback', methods=['GET'], strict_slashes=False)
 def dashboard_feedback():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     hwid_p = []; bypass_p = []; gen_p = []; res_all = []
@@ -1593,7 +1599,7 @@ def feedback_delete():
         flash('Záznam smazán.', 'success')
     return redirect(url_for('dashboard_feedback'))
 
-@app.route('/dashboard/notifications', methods=['GET'])
+@app.route('/dashboard/notifications', methods=['GET'], strict_slashes=False)
 def dashboard_notifications():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     messages = []
@@ -1687,7 +1693,7 @@ def delete_app_message():
         except: pass
     return redirect(url_for('dashboard_notifications'))
 
-@app.route('/dashboard/downloads', methods=['GET'])
+@app.route('/dashboard/downloads', methods=['GET'], strict_slashes=False)
 def dashboard_downloads():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
     versions = []; enabled = True
@@ -1749,19 +1755,19 @@ def delete_version():
     except: pass
     return redirect(url_for('dashboard_downloads'))
 
-@app.route('/dashboard/pending_roles', methods=['GET'])
+@app.route('/dashboard/pending_roles', methods=['GET'], strict_slashes=False)
 def pending_roles(): 
     try: data = get_db().table("pending_roles").select("*").order("id").execute().data or [] if get_db() else []
     except: data = []
     return render_dashboard(HTML_PENDING_ROLES, pending=data, deploy_time=DEPLOY_TIME)
 
-@app.route('/dashboard/ids', methods=['GET'])
+@app.route('/dashboard/ids', methods=['GET'], strict_slashes=False)
 def dashboard_ids(): 
     try: data = get_db().table("users").select("*").order("app_id").execute().data or [] if get_db() else []
     except: data = []
     return render_dashboard(HTML_IDS, users=data, deploy_time=DEPLOY_TIME)
 
-@app.route('/dashboard/team', methods=['GET'])
+@app.route('/dashboard/team', methods=['GET'], strict_slashes=False)
 def dashboard_team_page(): 
     try: data = get_db().table("team").select("*").execute().data or [] if get_db() else []
     except: data = []
