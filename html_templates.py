@@ -192,8 +192,8 @@ DASHBOARD_LAYOUT = """
                     <label style="color: #3b82f6;"><input type="checkbox" name="roles" value="BT"> BT</label>
                     <label style="color: #94a3b8;"><input type="checkbox" name="roles" value="User"> User</label>
                 </div>
-                <label>HWID (Zámek na PC):</label>
-                <input type="text" name="hwid" id="modalHwid" placeholder="Pro odblokování smažte text zde">
+                <label>Zámek na PC (HWID a IP adresa):</label>
+                <input type="text" name="hwid" id="modalHwid" placeholder="Pro odblokování smažte text zde (vymaže se HWID i IP adresa)">
                 <div style="background-color: rgba(56, 189, 248, 0.1); padding: 10px; border-radius: 5px; border: 1px solid var(--blue-main); margin-bottom: 15px;">
                     <label style="cursor: pointer; font-weight: bold; color: var(--blue-main); margin: 0; display: flex; align-items: center; gap: 10px;">
                         <input type="checkbox" name="dashboard_access" id="modalDashboardAccess" value="True" style="width: auto; margin: 0;"> 
@@ -278,8 +278,6 @@ DASHBOARD_LAYOUT = """
             if (!discord_id || discord_id.trim() === '' || discord_id === 'None') {
                 document.getElementById('profJoined').innerText = "Chybí ID";
                 document.getElementById('profAppStatus').innerHTML = "<span style='color:#ef4444;'>Chyba dat (ID nenalezeno)</span>";
-                document.getElementById('profDownloads').innerHTML = "<tr><td colspan='2' style='color: var(--text-muted);'>Nelze načíst data.</td></tr>";
-                document.getElementById('profSessions').innerHTML = "<tr><td colspan='2' style='color: var(--text-muted);'>Nelze načíst data.</td></tr>";
                 return;
             }
 
@@ -471,6 +469,9 @@ HTML_PUBLIC_STATS = """
                 <tr><td colspan="2" style="padding: 5px 0; color: var(--text-muted);">Zatím nehrál žádnou linku.</td></tr>
                 {% endfor %}
             </table>
+            {% if searched_user_lines %}
+            <button class="btn btn-dark" onclick="document.getElementById('personal-lines-modal').style.display='flex'" style="width: 100%; font-size: 12px; margin-top: 15px;"><i class="fas fa-list"></i> Zobrazit celou historii</button>
+            {% endif %}
         </div>
         <div style="background: var(--bg-dark); padding: 20px; border-radius: 8px; border: 1px solid #334155;">
             <h3 style="color: var(--success); margin-top: 0; font-size: 16px;">Nejoblíbenější zastávky hráče (TOP 5)</h3>
@@ -485,10 +486,60 @@ HTML_PUBLIC_STATS = """
                 <tr><td colspan="2" style="padding: 5px 0; color: var(--text-muted);">Zatím nevyhlásil žádnou zastávku.</td></tr>
                 {% endfor %}
             </table>
+            {% if searched_user_stops %}
+            <button class="btn btn-dark" onclick="document.getElementById('personal-stops-modal').style.display='flex'" style="width: 100%; font-size: 12px; margin-top: 15px;"><i class="fas fa-list"></i> Zobrazit celou historii</button>
+            {% endif %}
         </div>
     </div>
-
     <a href="/stats" class="btn btn-dark" style="margin-top: 20px; font-size: 12px;"><i class="fas fa-times"></i> Zavřít profil</a>
+</div>
+
+<div class="modal-overlay" id="personal-lines-modal">
+    <div class="modal" style="width: 700px;">
+        <div style="width: 100%;">
+            <h2 style="color: var(--blue-main); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px; display: flex; justify-content: space-between;">
+                <span><i class="fas fa-route"></i> Všechny linky hráče</span>
+                <span onclick="document.getElementById('personal-lines-modal').style.display='none'" style="cursor:pointer; color:var(--danger);"><i class="fas fa-times"></i></span>
+            </h2>
+            <input type="text" id="personal-lines-search" placeholder="Hledat linku hráče..." onkeyup="filterPersonalLines()" style="margin-bottom: 15px; width: 100%;">
+            <div style="max-height: 500px; overflow-y: auto;">
+                <table style="width: 100%;" id="personal-lines-table">
+                    <tr><th>Linka</th><th style="text-align:right;">Počet odehrání</th></tr>
+                    {% for l in searched_user_lines %}
+                    <tr class="pline-row">
+                        <td style="color: white; font-weight:bold;">{{ l.get('line_name', '') }}</td>
+                        <td style="text-align:right; color: var(--blue-main); font-weight:bold;">{{ l.get('play_count', 0) }}x</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            <button class="btn btn-dark" style="width: 100%; margin-top: 15px;" onclick="document.getElementById('personal-lines-modal').style.display='none'">Zavřít</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="personal-stops-modal">
+    <div class="modal" style="width: 700px;">
+        <div style="width: 100%;">
+            <h2 style="color: var(--success); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px; display: flex; justify-content: space-between;">
+                <span><i class="fas fa-map-marker-alt"></i> Všechny zastávky hráče</span>
+                <span onclick="document.getElementById('personal-stops-modal').style.display='none'" style="cursor:pointer; color:var(--danger);"><i class="fas fa-times"></i></span>
+            </h2>
+            <input type="text" id="personal-stops-search" placeholder="Hledat zastávku hráče..." onkeyup="filterPersonalStops()" style="margin-bottom: 15px; width: 100%;">
+            <div style="max-height: 500px; overflow-y: auto;">
+                <table style="width: 100%;" id="personal-stops-table">
+                    <tr><th>Zastávka</th><th style="text-align:right;">Počet vyhlášení</th></tr>
+                    {% for s in searched_user_stops %}
+                    <tr class="pstop-row">
+                        <td style="color: white; font-weight:bold;">{{ s.get('stop_name', '') }}</td>
+                        <td style="text-align:right; color: var(--success); font-weight:bold;">{{ s.get('announce_count', 0) }}x</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            <button class="btn btn-dark" style="width: 100%; margin-top: 15px;" onclick="document.getElementById('personal-stops-modal').style.display='none'">Zavřít</button>
+        </div>
+    </div>
 </div>
 {% endif %}
 
@@ -569,7 +620,7 @@ HTML_PUBLIC_STATS = """
 
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 40px; margin-bottom: 40px;">
     <div style="background: var(--bg-panel); padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-        <h2 style="color: var(--blue-main); margin-top: 0; text-align: center; border-bottom: 1px solid #334155; padding-bottom: 15px;"><i class="fas fa-route"></i> TOP 10: Nejhranější linky</h2>
+        <h2 style="color: var(--blue-main); margin-top: 0; text-align: center; border-bottom: 1px solid #334155; padding-bottom: 15px;"><i class="fas fa-route"></i> TOP 10: Nejhranější linky (Globálně)</h2>
         <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
             {% set colors = ['#ffd700', '#c0c0c0', '#cd7f32'] %}
             {% set bg_colors = ['rgba(255, 215, 0, 0.1)', 'rgba(192, 192, 192, 0.1)', 'rgba(205, 127, 50, 0.1)'] %}
@@ -602,7 +653,7 @@ HTML_PUBLIC_STATS = """
     </div>
 
     <div style="background: var(--bg-panel); padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-        <h2 style="color: var(--success); margin-top: 0; text-align: center; border-bottom: 1px solid #334155; padding-bottom: 15px;"><i class="fas fa-map-marker-alt"></i> TOP 10: Nejoblíbenější zastávky</h2>
+        <h2 style="color: var(--success); margin-top: 0; text-align: center; border-bottom: 1px solid #334155; padding-bottom: 15px;"><i class="fas fa-map-marker-alt"></i> TOP 10: Nejoblíbenější zastávky (Globálně)</h2>
         <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px; max-height: 500px; overflow-y: auto; padding-right: 10px;">
             {% set colors = ['#ffd700', '#c0c0c0', '#cd7f32'] %}
             {% set bg_colors = ['rgba(255, 215, 0, 0.1)', 'rgba(192, 192, 192, 0.1)', 'rgba(205, 127, 50, 0.1)'] %}
@@ -695,6 +746,22 @@ HTML_PUBLIC_STATS = """
     function filterStops() {
         let input = document.getElementById("stops-search").value.toUpperCase();
         let rows = document.querySelectorAll(".stop-row");
+        rows.forEach(r => {
+            let text = r.innerText.toUpperCase();
+            r.style.display = text.indexOf(input) > -1 ? "" : "none";
+        });
+    }
+    function filterPersonalLines() {
+        let input = document.getElementById("personal-lines-search").value.toUpperCase();
+        let rows = document.querySelectorAll(".pline-row");
+        rows.forEach(r => {
+            let text = r.innerText.toUpperCase();
+            r.style.display = text.indexOf(input) > -1 ? "" : "none";
+        });
+    }
+    function filterPersonalStops() {
+        let input = document.getElementById("personal-stops-search").value.toUpperCase();
+        let rows = document.querySelectorAll(".pstop-row");
         rows.forEach(r => {
             let text = r.innerText.toUpperCase();
             r.style.display = text.indexOf(input) > -1 ? "" : "none";
@@ -1823,7 +1890,7 @@ HTML_FEEDBACK = """
 </div>
 
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--warning); margin-bottom: 20px;">
-    <h3 style="color: var(--warning); margin-top: 0;">Nové žádosti o HWID Reset</h3>
+    <h3 style="color: var(--warning); margin-top: 0;">Nové žádosti o HWID a IP Reset</h3>
     <div style="overflow-x: auto;">
         <table>
             <tr>
@@ -1841,7 +1908,7 @@ HTML_FEEDBACK = """
                     <form action="/dashboard/feedback_reset_hwid" method="POST" style="margin:0;">
                         <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
                         <input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}">
-                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a Resetovat HWID"><i class="fas fa-check"></i> Resetovat</button>
+                        <button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" title="Schválit a Resetovat HWID a IP"><i class="fas fa-check"></i> Resetovat</button>
                     </form>
                     <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" title="Zamítnout žádost" 
                         data-id="{{ f.get('id', '') }}"
@@ -1919,7 +1986,7 @@ HTML_FEEDBACK = """
             {% for f in resolved_all %}
             <tr style="opacity: 0.7;">
                 <td style="color:white; font-weight:bold;">{{ f.get('nick', '') }}</td>
-                <td>{{ 'HWID Reset' if f.get('type') == 'HWID' else ('Admin Bypass' if f.get('type') == 'ADMIN_BYPASS' else 'Zpětná vazba') }}</td>
+                <td>{{ 'HWID a IP Reset' if f.get('type') == 'HWID' else ('Admin Bypass' if f.get('type') == 'ADMIN_BYPASS' else 'Zpětná vazba') }}</td>
                 <td style="color:#aaa; font-style:italic;">{{ f.get('message', '') }}</td>
                 <td style="color:var(--success); font-weight:bold;">{{ f.get('sys_note', 'Vyřešeno') }}</td>
                 <td>
@@ -1992,3 +2059,4 @@ HTML_LOGIN = """
     </form>
 </div>
 """
+
