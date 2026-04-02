@@ -998,7 +998,7 @@ def api_app_login():
                     send_log("🔄 HWID Auto-oprava", f"Uživateli `{user.get('nick')}` se změnilo HWID, ale IP adresa souhlasila. HWID bylo automaticky aktualizováno.", 0x38bdf8)
                 else:
                     send_log("🔒 Zámek (HWID+IP)", f"Uživatel `{user.get('nick')}` se hlásí z cizího PC i sítě!\nUloženo HWID: `{db_hwid}` | IP: `{db_ip}`\nNové HWID: `{req_hwid}` | IP: `{client_ip}`", 0xf59e0b)
-                    return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK: Váš počítač ani IP adresa nesouhlasí s registrací."})
+                    return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Váš počítač ani IP adresa nesouhlasí s registrací."})
             else:
                 if not db_ip or str(db_ip).strip() == "":
                     db.table("users").update({"ip_address": client_ip}).eq("discord_id", discord_id).execute()
