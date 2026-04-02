@@ -956,7 +956,6 @@ def api_app_login():
         if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false':
             return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ VYPNUT."})
             
-        # ZÍSKÁNÍ IP ADRESY HRÁČE
         client_ip_raw = request.headers.get('X-Forwarded-For', request.remote_addr)
         client_ip = client_ip_raw.split(',')[0].strip() if client_ip_raw else "Neznámá"
         
@@ -983,24 +982,18 @@ def api_app_login():
         db_hwid = user.get("hwid")
         db_ip = user.get("ip_address")
         
-        # LOGIKA PRO HWID A IP OCHRANU
         if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
-            # První přihlášení (nebo po resetu z dashboardu) - uložíme rovnou obojí
             if req_hwid and req_hwid.startswith("PC-"):
                 db.table("users").update({"hwid": req_hwid, "ip_address": client_ip}).eq("discord_id", discord_id).execute()
         else:
             if str(db_hwid) != req_hwid:
-                # HWID nesedí, zkontrolujeme IP adresu
                 if db_ip and str(db_ip).strip() != "" and str(db_ip) == client_ip:
-                    # IP sedí (je doma), jen má nový PC, tak mu HWID potichu aktualizujeme
                     db.table("users").update({"hwid": req_hwid}).eq("discord_id", discord_id).execute()
                     send_log("🔄 HWID Auto-oprava", f"Uživateli `{user.get('nick')}` se změnilo HWID, ale IP adresa souhlasila. HWID bylo automaticky aktualizováno.", 0x38bdf8)
                 else:
-                    # Nesedí ani HWID ani IP adresa -> Tvrdý zámek
-                    send_log("🔒 Zámek (HWID+IP)", f"Uživatel `{user.get('nick')}` se hlásí z cizího PC i cizí sítě!\nUloženo HWID: `{db_hwid}` | IP: `{db_ip}`\nNové HWID: `{req_hwid}` | IP: `{client_ip}`", 0xf59e0b)
-                    return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK: Váš počítač ani síť (IP adresa) nesouhlasí s registrací."})
+                    send_log("🔒 Zámek (HWID+IP)", f"Uživatel `{user.get('nick')}` se hlásí z cizího PC i sítě!\nUloženo HWID: `{db_hwid}` | IP: `{db_ip}`\nNové HWID: `{req_hwid}` | IP: `{client_ip}`", 0xf59e0b)
+                    return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK: Váš počítač ani IP adresa nesouhlasí s registrací."})
             else:
-                # HWID sedí, pokud u starého uživatele chybí IP, doplníme ji
                 if not db_ip or str(db_ip).strip() == "":
                     db.table("users").update({"ip_address": client_ip}).eq("discord_id", discord_id).execute()
         
@@ -1167,7 +1160,6 @@ def api_get_profile_data(discord_id):
         downloads = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(10).execute().data or []
         sessions_data = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data or []
         
-        # Přidány statistiky pro Modal
         top_lines = db.table("user_stats_lines").select("*").eq("discord_id", discord_id).order("play_count", desc=True).limit(5).execute().data or []
         top_stops = db.table("user_stats_stops").select("*").eq("discord_id", discord_id).order("announce_count", desc=True).limit(5).execute().data or []
 
@@ -1427,6 +1419,57 @@ def dashboard_main():
     gc.collect()
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů", deploy_time=DEPLOY_TIME)
 
+@app.route('/dashboard/edit_user', methods=['POST'])
+def edit_user():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db(); discord_id = request.form.get("discord_id"); action = request.form.get("action"); nick = request.form.get("nick")
+    if db and discord_id:
+        try:
+            if action == 'save':
+                r_str = ",".join(request.form.getlist("roles")) if request.form.getlist("roles") else "User"
+                new_hwid = request.form.get("hwid", "").strip()
+                new_ip = request.form.get("ip_address", "").strip()
+                
+                updates = {"nick": nick, "role": r_str, "hwid": new_hwid, "ip_address": new_ip, "dashboard_access": True if request.form.get("dashboard_access") else False}
+                
+                db.table("users").update(updates).eq("discord_id", discord_id).execute()
+                sync_roles_from_flask(discord_id, r_str)
+                
+                hwid_log = new_hwid if new_hwid else "Zrušeno"
+                ip_log = new_ip if new_ip else "Zrušeno"
+                send_log("✏️ Úprava uživatele", f"Administrátor upravil uživatele **{nick}** (ID: `{discord_id}`).\nNové role: `{r_str}`\nHWID: `{hwid_log}`\nIP Adresa: `{ip_log}`", 0xf59e0b)
+                
+                flash('Údaje upraveny!', 'success')
+            elif action == 'ban':
+                db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                send_log("🔨 BAN", f"Administrátor udělil BAN uživateli **{nick}** (ID: `{discord_id}`).", 0xef4444)
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🔨 Účet zablokován", "Váš přístup do aplikace a databáze byl trvale zablokován administrátorem.", 0xef4444), bot.loop)
+                flash('BAN udělen.', 'warning')
+                if str(session.get('discord_id')) == str(discord_id): session.clear()
+            elif action == 'unban':
+                db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
+                send_log("🕊️ UN-BAN", f"Administrátor zrušil BAN uživateli **{nick}** (ID: `{discord_id}`).", 0x10b981)
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🕊️ Účet odblokován", "Váš přístup do aplikace a databáze byl obnoven.", 0x10b981), bot.loop)
+                flash('BAN zrušen.', 'success')
+            elif action == 'delete':
+                db.table("users").update({"is_deleted": True, "deleted_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "⚠️ Účet smazán", "Váš uživatelský účet byl smazán administrátorem.", 0xf59e0b), bot.loop)
+                send_log("☠️ Účet smazán", f"Administrátor smazal účet uživatele **{nick}** (ID: `{discord_id}`).", 0xef4444)
+                flash('Účet smazán (Soft Delete).', 'danger')
+                if str(session.get('discord_id')) == str(discord_id): session.clear()
+            elif action == 'restore':
+                db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute()
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "✅ Účet obnoven", "Váš uživatelský účet byl úspěšně obnoven administrátorem.", 0x10b981), bot.loop)
+                send_log("✅ Obnova účtu", f"Administrátor obnovil účet uživatele **{nick}** (ID: `{discord_id}`).", 0x10b981)
+                flash('Účet obnoven!', 'success')
+            elif action == 'hard_delete':
+                db.table("users").delete().eq("discord_id", discord_id).execute()
+                send_log("💀 Permanentní výmaz", f"Administrátor TRVALE vymazal uživatele s ID: `{discord_id}` z databáze.", 0x0f172a)
+                flash('Účet trvale smazán.', 'dark')
+                if str(session.get('discord_id')) == str(discord_id): session.clear()
+        except: pass
+    return redirect(url_for('dashboard_main'))
+
 @app.route('/dashboard/supporters', methods=['GET'])
 def dashboard_supporters():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
@@ -1499,7 +1542,7 @@ def feedback_reset_hwid():
         db.table("users").update({"hwid": "", "ip_address": ""}).eq("discord_id", d_id).execute()
         db.table("feedback").update({"status": "resolved", "sys_note": f"HWID a IP byly resetovány [{now_str}]"}).eq("id", fb_id).execute()
         send_log("🔄 Zámek Resetován", f"Administrátor vyhověl žádosti a resetoval HWID a IP adresu pro ID: `{d_id}`.", 0x10b981)
-        if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "🔄 Zámek PC Resetován", "Vaše žádost byla schválena. HWID a IP adresa vašeho účtu byly úspěšně vymazány. Při dalším spuštění aplikace se spáruje s novým počítačem.", 0x10b981), bot.loop)
+        if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "🔄 Zámek PC Resetován", "Vaše žádost byla schválena. HWID a IP adresa vašeho účtu byly úspěšně vymazány. Při dalším spuštění aplikace se spáruje s novým počítačem/sítí.", 0x10b981), bot.loop)
         flash('HWID a IP resetováno.', 'success')
     return redirect(url_for('dashboard_feedback'))
 
@@ -1796,11 +1839,428 @@ def edit_user():
             if action == 'save':
                 r_str = ",".join(request.form.getlist("roles")) if request.form.getlist("roles") else "User"
                 new_hwid = request.form.get("hwid", "").strip()
-                updates = {"nick": nick, "role": r_str, "hwid": new_hwid, "dashboard_access": True if request.form.get("dashboard_access") else False}
-                if not new_hwid: updates["ip_address"] = "" 
+                new_ip = request.form.get("ip_address", "").strip()
+                
+                updates = {"nick": nick, "role": r_str, "hwid": new_hwid, "ip_address": new_ip, "dashboard_access": True if request.form.get("dashboard_access") else False}
+                
                 db.table("users").update(updates).eq("discord_id", discord_id).execute()
                 sync_roles_from_flask(discord_id, r_str)
-                send_log("✏️ Úprava uživatele", f"Administrátor upravil uživatele **{nick}** (ID: `{discord_id}`).\nNové role: `{r_str}`", 0xf59e0b)
+                
+                hwid_log = new_hwid if new_hwid else "Zrušeno"
+                ip_log = new_ip if new_ip else "Zrušeno"
+                send_log("✏️ Úprava uživatele", f"Administrátor upravil uživatele **{nick}** (ID: `{discord_id}`).\nNové role: `{r_str}`\nHWID: `{hwid_log}`\nIP Adresa: `{ip_log}`", 0xf59e0b)
+                
+                flash('Údaje upraveny!', 'success')
+            elif action == 'ban':
+                db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                send_log("🔨 BAN", f"Administrátor udělil BAN uživateli **{nick}** (ID: `{discord_id}`).", 0xef4444)
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🔨 Účet zablokován", "Váš přístup do aplikace a databáze byl trvale zablokován administrátorem.", 0xef4444), bot.loop)
+                flash('BAN udělen.', 'warning')
+                if str(session.get('discord_id')) == str(discord_id): session.clear()
+            elif action == 'unban':
+                db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
+                send_log("🕊️ UN-BAN", f"Administrátor zrušil BAN uživateli **{nick}** (ID: `{discord_id}`).", 0x10b981)
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🕊️ Účet odblokován", "Váš přístup do aplikace a databáze byl obnoven.", 0x10b981), bot.loop)
+                flash('BAN zrušen.', 'success')
+            elif action == 'delete':
+                db.table("users").update({"is_deleted": True, "deleted_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "⚠️ Účet smazán", "Váš uživatelský účet byl smazán administrátorem.", 0xf59e0b), bot.loop)
+                send_log("☠️ Účet smazán", f"Administrátor smazal účet uživatele **{nick}** (ID: `{discord_id}`).", 0xef4444)
+                flash('Účet smazán (Soft Delete).', 'danger')
+                if str(session.get('discord_id')) == str(discord_id): session.clear()
+            elif action == 'restore':
+                db.table("users").update({"is_deleted": False, "deleted_at": ""}).eq("discord_id", discord_id).execute()
+                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "✅ Účet obnoven", "Váš uživatelský účet byl úspěšně obnoven administrátorem.", 0x10b981), bot.loop)
+                send_log("✅ Obnova účtu", f"Administrátor obnovil účet uživatele **{nick}** (ID: `{discord_id}`).", 0x10b981)
+                flash('Účet obnoven!', 'success')
+            elif action == 'hard_delete':
+                db.table("users").delete().eq("discord_id", discord_id).execute()
+                send_log("💀 Permanentní výmaz", f"Administrátor TRVALE vymazal uživatele s ID: `{discord_id}` z databáze.", 0x0f172a)
+                flash('Účet trvale smazán.', 'dark')
+                if str(session.get('discord_id')) == str(discord_id): session.clear()
+        except: pass
+    return redirect(url_for('dashboard_main'))
+
+@app.route('/dashboard/supporters', methods=['GET'])
+def dashboard_supporters():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
+    pending_claims = []; supporters_history = []
+    try: 
+        db = get_db()
+        if db:
+            pending_claims = db.table("supporters").select("*").eq("status", "manual_review").execute().data or []
+            s_data = db.table("supporters").select("*").in_("status", ["completed", "rejected"]).execute().data or []
+            supporters_history = process_supporters(s_data)
+    except Exception as e: flash(f"Chyba DB: {e}", "error")
+    return render_dashboard(HTML_SUPPORTERS_MGMT, pending_claims=pending_claims, supporters_history=supporters_history, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/feedback', methods=['GET'])
+def dashboard_feedback():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    hwid_p = []; bypass_p = []; gen_p = []; res_all = []
+    try:
+        db = get_db()
+        if db:
+            data = db.table("feedback").select("*").order("id", desc=True).execute().data or []
+            for item in data:
+                if item.get('status') == 'pending':
+                    if item.get('type') == 'HWID' or item.get('type') == 'HWID_IP': hwid_p.append(item)
+                    elif item.get('type') == 'ADMIN_BYPASS': bypass_p.append(item)
+                    else: gen_p.append(item)
+                else: res_all.append(item)
+    except: pass
+    return render_dashboard(HTML_FEEDBACK, hwid_pending=hwid_p, bypass_pending=bypass_p, general_pending=gen_p, resolved_all=res_all, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/bypass_approve', methods=['POST'])
+def bypass_approve():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    fb_id = request.form.get("feedback_id")
+    db = get_db()
+    if db and fb_id:
+        fb = db.table("feedback").select("*").eq("id", fb_id).execute().data
+        if fb:
+            d_id = fb[0]['discord_id']
+            now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+            db.table("users").update({"admin_bypass": True}).eq("discord_id", d_id).execute()
+            db.table("feedback").update({"status": "resolved", "sys_note": f"Bypass schválen [{now_str}]"}).eq("id", fb_id).execute()
+            send_log("🔓 Admin Bypass", f"Administrátor jednorázově odemkl starou verzi pro uživatele: `{d_id}`.", 0x10b981)
+            if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "🔓 Přístup povolen", "Tvá žádost o jednorázový vstup do staré verze byla schválena. Můžeš se přihlásit. Po vypnutí aplikace se přístup opět zamkne.", 0x10b981), bot.loop)
+            flash('Bypass schválen.', 'success')
+    return redirect(url_for('dashboard_feedback'))
+
+@app.route('/dashboard/bypass_reject', methods=['POST'])
+def bypass_reject():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    fb_id = request.form.get("feedback_id")
+    db = get_db()
+    if db and fb_id:
+        fb = db.table("feedback").select("*").eq("id", fb_id).execute().data
+        if fb:
+            d_id = fb[0]['discord_id']
+            now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+            db.table("feedback").update({"status": "resolved", "sys_note": f"Bypass zamítnut [{now_str}]"}).eq("id", fb_id).execute()
+            send_log("❌ Bypass Zamítnut", f"Administrátor zamítl vstup do staré verze pro: `{d_id}`.", 0xef4444)
+            flash('Bypass zamítnut.', 'success')
+    return redirect(url_for('dashboard_feedback'))
+
+@app.route('/dashboard/feedback_reset_hwid', methods=['POST'])
+def feedback_reset_hwid():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    fb_id = request.form.get("feedback_id"); d_id = request.form.get("discord_id")
+    db = get_db()
+    if db and fb_id and d_id:
+        now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+        db.table("users").update({"hwid": "", "ip_address": ""}).eq("discord_id", d_id).execute()
+        db.table("feedback").update({"status": "resolved", "sys_note": f"HWID a IP byly resetovány [{now_str}]"}).eq("id", fb_id).execute()
+        send_log("🔄 Zámek Resetován", f"Administrátor vyhověl žádosti a resetoval HWID a IP adresu pro ID: `{d_id}`.", 0x10b981)
+        if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "🔄 Zámek PC Resetován", "Vaše žádost byla schválena. HWID a IP adresa vašeho účtu byly úspěšně vymazány. Při dalším spuštění aplikace se spáruje s novým počítačem/sítí.", 0x10b981), bot.loop)
+        flash('HWID a IP resetováno.', 'success')
+    return redirect(url_for('dashboard_feedback'))
+
+@app.route('/dashboard/feedback_reject', methods=['POST'])
+def feedback_reject():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    fb_id = request.form.get("feedback_id"); d_id = request.form.get("discord_id"); reason = request.form.get("reason", "Zamítnuto administrátorem.")
+    db = get_db()
+    if db and fb_id:
+        now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+        db.table("feedback").update({"status": "resolved", "sys_note": f"Zamítnuto: {reason} [{now_str}]"}).eq("id", fb_id).execute()
+        send_log("❌ Žádost zamítnuta", f"Administrátor zamítl žádost pro ID: `{d_id}`.\nDůvod: {reason}", 0xef4444)
+        if d_id and bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "❌ Žádost zamítnuta", f"Vaše žádost v aplikaci byla administrátorem zamítnuta.\n\n**Důvod:** {reason}", 0xef4444), bot.loop)
+        flash('Žádost zamítnuta.', 'success')
+    return redirect(url_for('dashboard_feedback'))
+
+@app.route('/dashboard/feedback_reply', methods=['POST'])
+def feedback_reply():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    fb_id = request.form.get("feedback_id"); d_id = request.form.get("discord_id"); msg = request.form.get("message")
+    db = get_db()
+    if db and fb_id and msg:
+        now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+        db.table("feedback").update({"status": "resolved", "sys_note": f"Odpověď: {msg} [{now_str}]"}).eq("id", fb_id).execute()
+        send_log("📩 Odpověď na feedback", f"Administrátor odpověděl uživateli `{d_id}`:\n*{msg}*", 0x38bdf8)
+        if d_id and bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "📩 Zpráva od administrace", f"Odpověď na vaši zprávu z aplikace:\n\n{msg}", 0x38bdf8), bot.loop)
+        flash('Odpověď odeslána a ticket uzavřen.', 'success')
+    return redirect(url_for('dashboard_feedback'))
+
+@app.route('/dashboard/feedback_resolve', methods=['POST'])
+def feedback_resolve():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    fb_id = request.form.get("feedback_id")
+    db = get_db()
+    if db and fb_id:
+        now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+        db.table("feedback").update({"status": "resolved", "sys_note": f"Označen za vyřešený [{now_str}]"}).eq("id", fb_id).execute()
+        flash('Ticket uzavřen.', 'success')
+    return redirect(url_for('dashboard_feedback'))
+
+@app.route('/dashboard/feedback_delete', methods=['POST'])
+def feedback_delete():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    fb_id = request.form.get("feedback_id")
+    db = get_db()
+    if db and fb_id:
+        db.table("feedback").delete().eq("id", fb_id).execute()
+        flash('Záznam smazán.', 'success')
+    return redirect(url_for('dashboard_feedback'))
+
+@app.route('/dashboard/notifications', methods=['GET'])
+def dashboard_notifications():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    messages = []
+    try:
+        db = get_db()
+        if db: 
+            now = get_prague_time().replace(tzinfo=None)
+            msgs = db.table("app_messages").select("*").order("created_at", desc=True).execute().data or []
+            for m in msgs:
+                if not str(m.get('is_archived')).lower() == 'true':
+                    exp_str = m.get('expires_at')
+                    if exp_str and exp_str.strip():
+                        try:
+                            exp_dt = datetime.strptime(exp_str.strip(), "%d.%m.%Y %H:%M")
+                            if now > exp_dt:
+                                db.table("app_messages").update({"is_archived": True}).eq("message_id", m["message_id"]).execute()
+                                m['is_archived'] = True
+                        except: pass
+                m['is_archived'] = str(m.get('is_archived')).lower() == 'true'
+                m['repeat'] = str(m.get('repeat')).lower() == 'true'
+            messages = msgs
+    except: pass
+    return render_dashboard(HTML_NOTIFICATIONS, messages=messages, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/send_app_message', methods=['POST'])
+def send_app_message():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    if db:
+        try:
+            target_type = request.form.get("target_type", "GLOBAL")
+            target_data = request.form.get("target_data", "").strip()
+            title = request.form.get("title", "Zpráva od vývojáře")
+            content = request.form.get("content", "")
+            repeat = True if request.form.get("repeat") else False
+            has_link = True if request.form.get("has_link") else False
+            link_url = request.form.get("link_url", "") if has_link else ""
+            expires_at = request.form.get("expires_at", "")
+            
+            now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+            new_msg_id = str(uuid.uuid4())
+            db.table("app_messages").insert({
+                "message_id": new_msg_id, "target_type": target_type, "target_data": target_data, 
+                "title": title, "content": content, "repeat": repeat, "link_url": link_url, 
+                "expires_at": expires_at, "is_archived": False, "created_at": now_str
+            }).execute()
+            flash('Oznámení pro aplikaci bylo úspěšně odesláno!', 'success')
+        except Exception as e: flash(f"Chyba: {e}", "error")
+    return redirect(url_for('dashboard_notifications'))
+
+@app.route('/dashboard/edit_app_message', methods=['POST'])
+def edit_app_message():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    msg_id = request.form.get("message_id")
+    if db and msg_id:
+        try:
+            target_type = request.form.get("target_type", "GLOBAL")
+            target_data = request.form.get("target_data", "").strip()
+            title = request.form.get("title", "Zpráva od vývojáře")
+            content = request.form.get("content", "")
+            repeat = True if request.form.get("repeat") else False
+            has_link = True if request.form.get("has_link") else False
+            link_url = request.form.get("link_url", "") if has_link else ""
+            expires_at = request.form.get("expires_at", "")
+            
+            db.table("app_messages").update({
+                "target_type": target_type, "target_data": target_data, "title": title, 
+                "content": content, "repeat": repeat, "link_url": link_url, "expires_at": expires_at
+            }).eq("message_id", msg_id).execute()
+            flash('Oznámení bylo úspěšně upraveno!', 'success')
+        except Exception as e: flash(f"Chyba: {e}", "error")
+    return redirect(url_for('dashboard_notifications'))
+
+@app.route('/dashboard/archive_app_message', methods=['POST'])
+def archive_app_message():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    msg_id = request.form.get("message_id")
+    if db and msg_id:
+        try: db.table("app_messages").update({"is_archived": True}).eq("message_id", msg_id).execute()
+        except: pass
+    return redirect(url_for('dashboard_notifications'))
+
+@app.route('/dashboard/delete_app_message', methods=['POST'])
+def delete_app_message():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db(); msg_id = request.form.get("message_id")
+    if db and msg_id:
+        try: db.table("app_messages").delete().eq("message_id", msg_id).execute()
+        except: pass
+    return redirect(url_for('dashboard_notifications'))
+
+@app.route('/dashboard/downloads', methods=['GET'])
+def dashboard_downloads():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main')) 
+    versions = []; enabled = True
+    try:
+        db = get_db()
+        if db:
+            set_resp = db.table("settings").select("*").eq("setting_key", "downloads_enabled").execute().data or []
+            if set_resp and str(set_resp[0].get('setting_value')).lower() == 'false': enabled = False
+            versions = db.table("software_versions").select("*").order("id", desc=True).execute().data or []
+    except Exception as e: flash(f"Chyba DB: {e}", "error")
+    return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/add_version', methods=['POST'])
+def add_version():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    try:
+        v_name = request.form.get("version_name")
+        db_ver = request.form.get("db_version")
+        get_db().table("software_versions").insert({
+            "version_name": v_name, 
+            "db_version": db_ver,
+            "file_url": request.form.get("file_url"), 
+            "target_role": request.form.get("target_role"),
+            "is_active": True,
+            "eol_date": ""
+        }).execute()
+        send_log("📦 Nová verze softwaru", f"Administrátor přidal novou verzi do Manažeru: **{v_name}**.", 0x10b981)
+        flash('Nová verze úspěšně vydána!', 'success')
+        trigger_setup_messages_update() 
+    except Exception as e: 
+        flash(f'Chyba při přidávání verze: {e}', 'error')
+    return redirect(url_for('dashboard_downloads'))
+
+@app.route('/dashboard/edit_version', methods=['POST'])
+def edit_version():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    try: 
+        get_db().table("software_versions").update({
+            "version_name": request.form.get("version_name"), 
+            "db_version": request.form.get("db_version"),
+            "file_url": request.form.get("file_url"), 
+            "target_role": request.form.get("target_role"),
+            "is_active": True if request.form.get("is_active") else False,
+            "eol_date": request.form.get("eol_date", "")
+        }).eq("id", request.form.get("version_id")).execute()
+        flash('Verze byla úspěšně upravena.', 'success')
+        trigger_setup_messages_update() 
+    except Exception as e: flash(f'Chyba při úpravě verze: {e}', 'error')
+    return redirect(url_for('dashboard_downloads'))
+
+@app.route('/dashboard/delete_version', methods=['POST'])
+def delete_version():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    try:
+        get_db().table("software_versions").delete().eq("id", request.form.get("version_id")).execute()
+        send_log("🗑️ Verze smazána", "Administrátor smazal jednu z verzí v Manažeru stahování.", 0xef4444)
+        flash('Verze smazána.', 'success')
+        trigger_setup_messages_update() 
+    except: pass
+    return redirect(url_for('dashboard_downloads'))
+
+@app.route('/dashboard/pending_roles', methods=['GET'])
+def pending_roles(): 
+    try: data = get_db().table("pending_roles").select("*").order("id").execute().data or [] if get_db() else []
+    except: data = []
+    return render_dashboard(HTML_PENDING_ROLES, pending=data, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/ids', methods=['GET'])
+def dashboard_ids(): 
+    try: data = get_db().table("users").select("*").order("app_id").execute().data or [] if get_db() else []
+    except: data = []
+    return render_dashboard(HTML_IDS, users=data, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/team', methods=['GET'])
+def dashboard_team_page(): 
+    try: data = get_db().table("team").select("*").execute().data or [] if get_db() else []
+    except: data = []
+    return render_dashboard(HTML_TEAM_ADD, team=data, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/add_pending_role', methods=['POST'])
+def add_pending_role():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    if db:
+        try:
+            roles_str = ",".join(request.form.getlist("roles")) if request.form.getlist("roles") else "User"
+            dc_id = request.form.get("discord_identifier")
+            db.table("pending_roles").insert({"discord_identifier": dc_id, "roles": roles_str}).execute()
+            send_log("🎫 Nová rezervace role", f"Administrátor vytvořil předpřipravenou roli pro: `{dc_id}`.\nRole: `{roles_str}`", 0x3b82f6)
+            flash('Rezervace vytvořena.', 'success')
+        except Exception as e: flash(f"Chyba: {e}", "error")
+    return redirect(url_for('pending_roles'))
+
+@app.route('/dashboard/delete_pending_role', methods=['POST'])
+def delete_pending_role():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db(); p_id = request.form.get("pending_id")
+    if db and p_id: 
+        try: db.table("pending_roles").delete().eq("id", p_id).execute()
+        except: pass
+    return redirect(url_for('pending_roles'))
+
+@app.route('/dashboard/change_id', methods=['POST'])
+def change_id():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    if db: 
+        try:
+            discord_id = request.form.get("discord_id"); new_app_id = int(request.form.get("new_app_id"))
+            user_info = db.table("users").select("nick, app_id").eq("discord_id", discord_id).execute().data
+            if user_info:
+                old_app_id = user_info[0].get('app_id'); nick = user_info[0].get('nick')
+                db.table("users").update({"app_id": new_app_id}).eq("discord_id", discord_id).execute()
+                send_log("🆔 Změna ID", f"Administrátor změnil ID hráči **{nick}** z `#{old_app_id}` na **#{new_app_id}**.", 0x38bdf8)
+        except: pass
+    return redirect(url_for('dashboard_ids'))
+
+@app.route('/dashboard/add_team', methods=['POST'])
+def add_team():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    if db:
+        try:
+            combined_roles = [f"{n.strip()}|{c.strip()}" for n, c in zip(request.form.getlist("role_name[]"), request.form.getlist("role_color[]")) if n.strip()]
+            n = request.form.get("name")
+            db.table("team").insert({"name": n, "discord_nick": request.form.get("discord_nick"), "image_url": request.form.get("image_url"), "description": request.form.get("description"), "role_name": ",".join(combined_roles)}).execute()
+            send_log("🤝 Nový člen týmu", f"Do týmu na webu byl přidán: **{n}**.", 0x10b981)
+        except: pass
+    return redirect(url_for('dashboard_team_page'))
+
+@app.route('/dashboard/delete_team', methods=['POST'])
+def delete_team():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    if db: 
+        try:
+            dc_nick = request.form.get("discord_nick")
+            db.table("team").delete().eq("discord_nick", dc_nick).execute()
+            send_log("👋 Odebrání člena týmu", f"Člen týmu `{dc_nick}` byl odebrán z webu.", 0xef4444)
+        except: pass
+    return redirect(url_for('dashboard_team_page'))
+
+@app.route('/dashboard/edit_user', methods=['POST'])
+def edit_user():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db(); discord_id = request.form.get("discord_id"); action = request.form.get("action"); nick = request.form.get("nick")
+    if db and discord_id:
+        try:
+            if action == 'save':
+                r_str = ",".join(request.form.getlist("roles")) if request.form.getlist("roles") else "User"
+                new_hwid = request.form.get("hwid", "").strip()
+                new_ip = request.form.get("ip_address", "").strip()
+                
+                updates = {"nick": nick, "role": r_str, "hwid": new_hwid, "ip_address": new_ip, "dashboard_access": True if request.form.get("dashboard_access") else False}
+                
+                db.table("users").update(updates).eq("discord_id", discord_id).execute()
+                sync_roles_from_flask(discord_id, r_str)
+                
+                hwid_log = new_hwid if new_hwid else "Zrušeno"
+                ip_log = new_ip if new_ip else "Zrušeno"
+                send_log("✏️ Úprava uživatele", f"Administrátor upravil uživatele **{nick}** (ID: `{discord_id}`).\nNové role: `{r_str}`\nHWID: `{hwid_log}`\nIP Adresa: `{ip_log}`", 0xf59e0b)
+                
                 flash('Údaje upraveny!', 'success')
             elif action == 'ban':
                 db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
