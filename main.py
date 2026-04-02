@@ -29,6 +29,13 @@ except ImportError as e:
     PUBLIC_LAYOUT = DASHBOARD_LAYOUT = BASE_HTML
     HTML_HOME = HTML_DOWNLOADS_MAIN = HTML_TEAM = HTML_PUBLIC_STATS = HTML_CLAIM = HTML_STATS = HTML_APP_MANAGEMENT = HTML_NOTIFICATIONS = HTML_DOWNLOADS_MGMT = HTML_PENDING_ROLES = HTML_TEAM_ADD = HTML_IDS = HTML_DASHBOARD_MAIN = HTML_SUPPORTERS_MGMT = HTML_FEEDBACK = HTML_WAIT_AUTH = HTML_LOGIN = ""
 
+# Import live statusů z druhého souboru
+try:
+    from status_dashboard import HTML_STATUS_SECTION
+except ImportError:
+    print("VAROVÁNÍ: Soubor status_dashboard.py nenalezen. Statusy nebudou fungovat.")
+    HTML_STATUS_SECTION = ""
+
 # --- TVRDÝ HLÍDAČ ČASU (Vynucení UTC Praha pro celý server Koyebu) ---
 os.environ['TZ'] = 'Europe/Prague'
 try:
@@ -36,20 +43,12 @@ try:
 except AttributeError:
     pass
 
-try:
-    from status_dashboard import HTML_STATUS_SECTION
-except ImportError:
-    HTML_STATUS_SECTION = ""
-
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
 app = Flask(__name__)
 app.secret_key = "ois_idpk_super_tajny_klic" 
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-
-URL_MALE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png"
-URL_VELKE_LOGO = "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png"
 
 @app.after_request
 def add_cors_headers(response):
@@ -354,11 +353,16 @@ def _cors_jsonify(data):
 
 def render_public(template_string, **kwargs):
     html = PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
-    return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html), logo_male=URL_MALE_LOGO, logo_velke=URL_VELKE_LOGO, **kwargs)
+    return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html), **kwargs)
 
 def render_dashboard(template_string, **kwargs):
     html = DASHBOARD_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
-    return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html.replace('{{ deploy_time }}', DEPLOY_TIME)), logo_male=URL_MALE_LOGO, logo_velke=URL_VELKE_LOGO, **kwargs)
+    
+    # OPRAVA: Zde se do HTML propíše HTML_STATUS_SECTION z druhého souboru!
+    if 'status_section' not in kwargs:
+        kwargs['status_section'] = HTML_STATUS_SECTION
+        
+    return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html.replace('{{ deploy_time }}', DEPLOY_TIME)), **kwargs)
 
 @app.before_request
 def check_session_validity():
@@ -562,7 +566,10 @@ def dashboard_app_management():
                 elif s['setting_key'] == 'downloads_enabled':
                     dl_enabled = str(s['setting_value']).lower() != 'false'
     except: pass
-    return render_dashboard(HTML_APP_MANAGEMENT, soft_enabled=soft_enabled, dl_enabled=dl_enabled, deploy_time=DEPLOY_TIME)
+    
+    # Připojíme HTML_STATUS_SECTION z druhého souboru přímo pod správu aplikace
+    kombinovane_html = HTML_APP_MANAGEMENT + "\n" + HTML_STATUS_SECTION
+    return render_dashboard(kombinovane_html, soft_enabled=soft_enabled, dl_enabled=dl_enabled, deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/toggle_software', methods=['POST'])
 def toggle_software():
@@ -590,6 +597,31 @@ def toggle_downloads():
     ret = request.form.get('return_to', 'app_management')
     if ret == 'downloads':
         return redirect(url_for('dashboard_downloads'))
+    return redirect(url_for('dashboard_app_management'))
+
+@app.route('/dashboard/update_statuses', methods=['POST'])
+def update_statuses():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    db = get_db()
+    if db:
+        try:
+            # Sběr dat z formuláře pro live statusy
+            statuses = {}
+            for key, value in request.form.items():
+                if key.startswith('status_'):
+                    statuses[key.replace('status_', '')] = value
+            
+            # Uložíme do databáze jako JSON do tabulky settings
+            check = db.table("settings").select("*").eq("setting_key", "system_statuses").execute().data
+            if check:
+                db.table("settings").update({"setting_value": json.dumps(statuses)}).eq("setting_key", "system_statuses").execute()
+            else:
+                db.table("settings").insert({"setting_key": "system_statuses", "setting_value": json.dumps(statuses)}).execute()
+                
+            flash('Statusy byly úspěšně uloženy a zaktualizovány!', 'success')
+            send_log("🟢 Aktualizace Statusů", "Administrátor právě upravil live statusy služeb v aplikaci.", 0x10b981)
+        except Exception as e:
+            flash(f'Chyba při ukládání statusů: {e}', 'error')
     return redirect(url_for('dashboard_app_management'))
 
 @app.route('/download')
@@ -951,6 +983,393 @@ def api_pre_download(token):
         except: pass
         
     return jsonify({"status": "ok"})
+
+@app.route('/api/stream_download/<token>')
+def api_stream_download(token):
+    db = get_db()
+    if not db: return "Chyba databáze."
+    
+    resp = db.table("users").select("*").eq("download_token", token).execute()
+    if not resp.data: return "Neplatný odkaz."
+    user = resp.data[0]
+    
+    version_id = request.args.get('v')
+    v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
+    if not v_resp.data: return "Verze nenalezena."
+    
+    v_data = v_resp.data[0]
+    file_url_raw = v_data['file_url']
+    version_name = v_data['version_name']
+    
+    db.table("users").update({"download_token": ""}).eq("discord_id", user['discord_id']).execute()
+    
+    try:
+        db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": version_name, "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")}).execute()
+    except: pass
+    
+    return stream_proxy_file(file_url_raw, version_name, user['discord_id'], user.get('nick', 'Neznámý'))
+
+@app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
+def api_status():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+    try:
+        db = get_db()
+        set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
+        if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false':
+            return _cors_jsonify({"status": "disabled", "message": "OMLOUVÁME SE, SOFTWARE JE NYNÍ GLOBÁLNĚ VYPNUT (ÚDRŽBA)."})
+    except: pass
+    return _cors_jsonify({"status": "enabled"})
+
+@app.route('/api/app_login', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_app_login():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+    data = request.get_json(silent=True) or {}
+    if not data: return _cors_jsonify({"status": "error", "message": "Chybí data."})
+    
+    identifier = str(data.get("identifier", "")).strip()
+    req_hwid = str(data.get("hwid", ""))
+    app_version = str(data.get("app_version", ""))
+    db = get_db()
+    try:
+        set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
+        if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false':
+            return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ VYPNUT."})
+            
+        client_ip_raw = request.headers.get('X-Forwarded-For', request.remote_addr)
+        client_ip = client_ip_raw.split(',')[0].strip() if client_ip_raw else "Neznámá"
+        
+        if identifier.isdigit():
+            user_resp = db.table("users").select("*").or_(f"discord_id.eq.{identifier},app_id.eq.{int(identifier)}").execute()
+        else:
+            user_resp = db.table("users").select("*").eq("nick", identifier).execute()
+            
+        if not user_resp.data: 
+            return _cors_jsonify({"status": "error", "message": "Uživatel nenalezen. Pokud má váš Nick speciální znaky, použijte k přihlášení raději číselné Discord ID."})
+            
+        user = user_resp.data[0]
+        discord_id = user.get("discord_id")
+        
+        if user.get("is_banned"):
+            send_log("⛔ Pokus o přihlášení (BAN)", f"Zabanovaný uživatel `{user.get('nick')}` se pokusil zapnout software.", 0xef4444)
+            return _cors_jsonify({"status": "banned", "message": "Tento účet má BAN."})
+            
+        version_check = check_version_access(db, app_version, user)
+        if not version_check["allowed"]:
+            send_log("🛡️ Neoprávněný přístup verze", f"Uživatel `{user.get('nick')}` se pokusil zapnout zakázanou/neoprávněnou verzi: **{app_version}**", 0xf59e0b)
+            return _cors_jsonify({"status": "error", "message": version_check["msg"]})
+            
+        db_hwid = user.get("hwid")
+        db_ip = user.get("ip_address")
+        
+        if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
+            if req_hwid and req_hwid.startswith("PC-"):
+                db.table("users").update({"hwid": req_hwid, "ip_address": client_ip}).eq("discord_id", discord_id).execute()
+        else:
+            if str(db_hwid) != req_hwid:
+                if db_ip and str(db_ip).strip() != "" and str(db_ip) == client_ip:
+                    db.table("users").update({"hwid": req_hwid}).eq("discord_id", discord_id).execute()
+                    send_log("🔄 HWID Auto-oprava", f"Uživateli `{user.get('nick')}` se změnilo HWID, ale IP adresa souhlasila. HWID bylo automaticky aktualizováno.", 0x38bdf8)
+                else:
+                    send_log("🔒 Zámek (HWID+IP)", f"Uživatel `{user.get('nick')}` se hlásí z cizího PC i sítě!\nUloženo HWID: `{db_hwid}` | IP: `{db_ip}`\nNové HWID: `{req_hwid}` | IP: `{client_ip}`", 0xf59e0b)
+                    return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Váš počítač ani IP adresa nesouhlasí s registrací."})
+            else:
+                if not db_ip or str(db_ip).strip() == "":
+                    db.table("users").update({"ip_address": client_ip}).eq("discord_id", discord_id).execute()
+        
+        token = str(uuid.uuid4())
+        db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
+        async def send():
+            try:
+                u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+                if u: await u.send(embed=discord.Embed(title="🛡️ Ověření přihlášení", description=f"Byl zaznamenán pokus o spuštění softwaru.\n**Uživatel:** {user.get('nick')}\nPotvrďte přístup tlačítkem níže.", color=0x38bdf8), view=AppAuthView(token, discord_id, is_dm=True))
+            except: pass
+        if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
+        return _cors_jsonify({"status": "waiting", "discord_id": discord_id})
+    except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
+
+@app.route('/api/app_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_app_check():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+    data = request.get_json(silent=True) or {}
+    discord_id = str(data.get("discord_id", ""))
+    req_hwid = str(data.get("hwid", ""))
+    db = get_db()
+    try:
+        user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
+        if not user_resp.data: return _cors_jsonify({"status": "error"})
+        user = user_resp.data[0]
+        if user.get("login_token") == "approved":
+            db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
+            return _cors_jsonify({"status": "success", "display_name": user.get("nick"), "app_id": str(user.get("app_id", ""))})
+        elif user.get("login_token") == "rejected":
+            db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
+            return _cors_jsonify({"status": "error", "message": "Přístup zamítnut uživatelem."})
+        return _cors_jsonify({"status": "pending"})
+    except: return _cors_jsonify({"status": "error"})
+
+@app.route('/api/silent_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_silent_check():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+    data = request.get_json(silent=True) or {}
+    discord_id = str(data.get("discord_id", ""))
+    req_hwid = str(data.get("hwid", ""))
+    app_version = str(data.get("app_version", ""))
+    db = get_db()
+    try:
+        set_resp = db.table("settings").select("setting_value").eq("setting_key", "software_enabled").execute()
+        if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false': return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ VYPNUT."})
+        
+        client_ip_raw = request.headers.get('X-Forwarded-For', request.remote_addr)
+        client_ip = client_ip_raw.split(',')[0].strip() if client_ip_raw else "Neznámá"
+        
+        user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
+        if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Tento účet neexistuje."})
+        user = user_resp.data[0]
+        
+        if user.get("is_banned"): return _cors_jsonify({"status": "error", "message": "Tento účet má BAN."})
+        if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."})
+        
+        version_check = check_version_access(db, app_version, user)
+        if not version_check["allowed"]:
+            return _cors_jsonify({"status": "error", "message": version_check["msg"]})
+            
+        db_hwid = user.get("hwid")
+        db_ip = user.get("ip_address")
+        
+        if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
+            if req_hwid and req_hwid.startswith("PC-"):
+                db.table("users").update({"hwid": req_hwid, "ip_address": client_ip}).eq("discord_id", discord_id).execute()
+                return _cors_jsonify({"status": "success", "app_id": str(user.get("app_id", ""))})
+            return _cors_jsonify({"status": "error", "message": "ZÁMEK HWID: Chyba čtení PC."})
+            
+        if str(db_hwid) != req_hwid:
+            if db_ip and str(db_ip).strip() != "" and str(db_ip) == client_ip:
+                db.table("users").update({"hwid": req_hwid}).eq("discord_id", discord_id).execute()
+                send_log("🔄 HWID Auto-oprava (Tichá)", f"Uživateli `{user.get('nick')}` se změnilo HWID, ale IP seděla. Aktualizováno.", 0x38bdf8)
+                return _cors_jsonify({"status": "success", "app_id": str(user.get("app_id", ""))})
+            else:
+                return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID/IP: Váš počítač ani síť nesouhlasí s registrací."})
+        else:
+            if not db_ip or str(db_ip).strip() == "":
+                db.table("users").update({"ip_address": client_ip}).eq("discord_id", discord_id).execute()
+                
+        return _cors_jsonify({"status": "success", "app_id": str(user.get("app_id", ""))})
+    except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
+
+@app.route('/api/app_ping', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_app_ping():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+    data = request.get_json(silent=True) or {}
+    discord_id = str(data.get("discord_id", ""))
+    action = data.get("action", "ping")
+    session_id = data.get("session_id", "")
+    db = get_db()
+    if not db: return _cors_jsonify({"status": "error"})
+    try:
+        now_str = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
+        user_resp = db.table("users").select("launch_count, total_time").eq("discord_id", discord_id).execute()
+        if not user_resp.data: return _cors_jsonify({"status": "error"})
+        
+        updates = {"last_active": now_str, "is_online": True}
+        
+        if action == "start": 
+            updates["launch_count"] = (user_resp.data[0].get("launch_count") or 0) + 1
+            new_session_id = str(uuid.uuid4())
+            db.table("app_sessions").insert({"session_id": new_session_id, "discord_id": discord_id, "start_time": now_str, "end_time": now_str}).execute()
+            db.table("users").update(updates).eq("discord_id", discord_id).execute()
+            return _cors_jsonify({"status": "ok", "session_id": new_session_id})
+            
+        elif action == "ping": 
+            updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 1
+            if session_id: 
+                db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
+                
+        elif action == "stop": 
+            updates["is_online"] = False
+            updates["admin_bypass"] = False 
+            if session_id: 
+                db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
+            
+        db.table("users").update(updates).eq("discord_id", discord_id).execute()
+        return _cors_jsonify({"status": "ok", "session_id": session_id})
+    except: return _cors_jsonify({"status": "error"})
+
+@app.route('/api/get_profile_data/<discord_id>', methods=['GET', 'OPTIONS'], strict_slashes=False)
+def api_get_profile_data(discord_id):
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+    if not session.get('logged_in'): return _cors_jsonify({"error": "Unauthorized"}), 401
+    
+    if not discord_id or discord_id == 'None' or discord_id.strip() == '':
+        return _cors_jsonify({"error": "Chybí Discord ID"})
+
+    try:
+        db = get_db()
+        if not db: return _cors_jsonify({"error": "DB Error"}), 500
+        
+        u_data = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+        stats = ""
+        app_status = "<span style='color: var(--text-muted);'>Neznámý</span>"
+        
+        if u_data:
+            u = u_data[0]
+            try: t_time = int(u.get("total_time") or 0)
+            except: t_time = 0
+            try: l_count = int(u.get("launch_count") or 0)
+            except: l_count = 0
+            
+            hours = t_time // 60
+            mins = t_time % 60
+            stats = f"<div style='margin-bottom:5px;'><b style='color:var(--blue-main);'>{hours}h {mins}m</b> v aplikaci</div><div><b style='color:var(--blue-main);'>{l_count}x</b> spuštěno</div>"
+            
+            if u.get("is_online"):
+                app_status = "<span style='color: var(--success); font-weight:bold;'><i class='fas fa-circle'></i> Nyní hraje</span>"
+            else:
+                app_status = f"<span style='color: var(--text-muted);'><i class='fas fa-moon'></i> {u.get('last_active', 'Nikdy')}</span>"
+
+        joined_at = "Nenalezen na serveru"
+        try:
+            if bot.is_ready():
+                for guild in bot.guilds:
+                    member = guild.get_member(int(discord_id))
+                    if member and member.joined_at:
+                        joined_at = member.joined_at.strftime("%d.%m.%Y")
+                        break
+        except: pass
+
+        downloads = db.table("download_logs").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(10).execute().data or []
+        sessions_data = db.table("app_sessions").select("*").eq("discord_id", discord_id).order("id", desc=True).limit(15).execute().data or []
+        
+        top_lines = db.table("user_stats_lines").select("*").eq("discord_id", discord_id).order("play_count", desc=True).limit(5).execute().data or []
+        top_stops = db.table("user_stats_stops").select("*").eq("discord_id", discord_id).order("announce_count", desc=True).limit(5).execute().data or []
+
+        return _cors_jsonify({
+            "joined_at": joined_at,
+            "status": "", 
+            "app_status": app_status,
+            "stats": stats,
+            "downloads": downloads,
+            "sessions": sessions_data,
+            "top_lines": top_lines,
+            "top_stops": top_stops
+        })
+    except Exception as e:
+        return _cors_jsonify({"error": str(e)}), 500
+
+@app.route('/api/get_messages', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_get_messages():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+    data = request.get_json(silent=True) or {}
+    discord_id = str(data.get("discord_id", ""))
+    app_id = str(data.get("app_id", ""))
+    db = get_db()
+    if not db or not discord_id: return _cors_jsonify({"messages": []})
+    try:
+        user_data = db.table("users").select("role, nick").eq("discord_id", discord_id).execute().data
+        user_roles = []
+        user_nick = ""
+        if user_data:
+            user_nick = str(user_data[0].get("nick", ""))
+            r_str = user_data[0].get("role", "")
+            user_roles = [r.strip() for r in r_str.split(",")] if r_str else ["User"]
+
+        all_msgs = db.table("app_messages").select("*").execute().data or []
+        read_msgs = db.table("read_messages").select("message_id").eq("discord_id", discord_id).execute().data or []
+        read_ids = [m['message_id'] for m in read_msgs]
+        
+        valid_msgs = []
+        now = get_prague_time().replace(tzinfo=None)
+
+        for msg in all_msgs:
+            if str(msg.get("is_archived")).lower() == 'true': 
+                continue
+
+            expires_at_str = msg.get("expires_at")
+            if expires_at_str and expires_at_str.strip():
+                try:
+                    exp_dt = datetime.strptime(expires_at_str.strip(), "%d.%m.%Y %H:%M")
+                    if now > exp_dt:
+                        db.table("app_messages").update({"is_archived": True}).eq("message_id", msg["message_id"]).execute()
+                        continue
+                except: pass
+
+            target_type = msg.get("target_type", "GLOBAL")
+            target_data = str(msg.get("target_data", ""))
+
+            is_target = False
+            if target_type == 'GLOBAL':
+                is_target = True
+            elif target_type == 'ROLE':
+                target_roles = [r.strip() for r in target_data.split(',')]
+                if any(tr in user_roles for tr in target_roles):
+                    is_target = True
+            elif target_type == 'USERS':
+                targets = [t.strip() for t in target_data.split(',')]
+                if discord_id in targets or app_id in targets or user_nick in targets:
+                    is_target = True
+
+            if is_target:
+                is_repeat = str(msg.get('repeat')).lower() == 'true'
+                if is_repeat or msg['message_id'] not in read_ids:
+                    valid_msgs.append({
+                        "id": msg['message_id'], 
+                        "title": msg['title'], 
+                        "content": msg['content'],
+                        "link_url": msg.get('link_url', "")
+                    })
+        return _cors_jsonify({"messages": valid_msgs})
+    except: return _cors_jsonify({"messages": []})
+
+@app.route('/api/mark_message_read', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_mark_message_read():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+    data = request.get_json(silent=True) or {}
+    discord_id = str(data.get("discord_id", ""))
+    message_id = str(data.get("message_id", ""))
+    db = get_db()
+    if db and discord_id and message_id:
+        try:
+            read_id = str(uuid.uuid4())
+            db.table("read_messages").insert({"read_id": read_id, "discord_id": discord_id, "message_id": message_id}).execute()
+        except: pass
+    return _cors_jsonify({"status": "ok"})
+
+@app.route('/api/submit_feedback', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_submit_feedback():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+    data = request.get_json(silent=True) or {}
+    db = get_db()
+    if not db: return _cors_jsonify({"status": "error", "message": "DB Error"})
+    
+    try:
+        d_id = str(data.get("discord_id", "")).strip()
+        nick = str(data.get("nick", "Neznámý Uživatel")).strip()
+        type_str = str(data.get("type", "GENERAL")).strip()
+        msg = str(data.get("message", "")).strip()
+
+        if not d_id or d_id.lower() in ["není zadáno", "none", "null", ""]:
+            if not re.search(r'\d{17,}', msg):
+                return _cors_jsonify({
+                    "status": "error", 
+                    "message": "⚠️ OCHRANA: Aplikace nedokázala načíst vaše ID. Napište prosím své číselné DISCORD ID přímo do textu žádosti, abychom účet dohledali!"
+                })
+            else:
+                d_id = "Napsáno v textu"
+
+        db.table("feedback").insert({
+            "discord_id": d_id, "nick": nick, "type": type_str, "message": msg,
+            "status": "pending", "sys_note": "", "fcreated_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
+        }).execute()
+        
+        if type_str == "HWID": log_title = "🚨 VYŽADUJE KONTROLU: Žádost o HWID a IP 🚨"; log_color = 0xef4444
+        elif type_str == "ADMIN_BYPASS": log_title = "🔓 VYŽADUJE SCHVÁLENÍ: Admin Bypass 🔓"; log_color = 0xf59e0b
+        else: log_title = "🔔 NOVÁ ZPĚTNÁ VAZBA (NÁPAD/CHYBA) 🔔"; log_color = 0xa855f7
+            
+        desc = f"**Od:** {nick} (`{d_id}`)\n**Zpráva:**\n*{msg}*\n\n👉 **BĚŽTE DO DASHBOARDU A VYŘEŠTE TO!**"
+        send_log(log_title, desc, log_color)
+        
+        return _cors_jsonify({"status": "success"})
+    except Exception as e:
+        return _cors_jsonify({"status": "error", "message": str(e)})
 
 @app.route('/login_request', methods=['POST'])
 def login_request():
@@ -1490,6 +1909,396 @@ def delete_team():
         except: pass
     return redirect(url_for('dashboard_team_page'))
 
+class DynamicDownloadView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+    @discord.ui.button(label="Zahájit instalaci softwaru", style=discord.ButtonStyle.primary, emoji="📥", custom_id="persistent_install_main_btn")
+    async def dl_btn(self, interaction, button):
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except Exception as e:
+            pass
+            
+        db = get_db()
+        settings_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}]
+        if str(settings_resp[0].get('setting_value', '')).lower() == 'false': 
+            return await interaction.followup.send("**⛔ Stahování je momentálně globálně zakázáno administrátorem.** Zkuste to prosím později.", ephemeral=True)
+            
+        chk = db.table("users").select("is_banned").eq("discord_id", str(interaction.user.id)).execute()
+        if chk.data and chk.data[0].get('is_banned'):
+            return await interaction.followup.send("**⛔ Přístup zamítnut:** Váš účet má udělený BAN a stahování bylo zablokováno.", ephemeral=True)
+
+        class DynamicRulesView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=None)
+                
+            @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, emoji="✅")
+            async def agree(self, i2, b2):
+                try:
+                    await i2.response.defer(ephemeral=True)
+                except:
+                    pass
+                
+                try:
+                    db = get_db()
+                    d_id = str(i2.user.id)
+                    n = i2.user.display_name
+                    u_role = "User"
+                    
+                    chk = db.table("users").select("*").eq("discord_id", d_id).execute()
+                    pend_data = db.table("pending_roles").select("*").execute().data or []
+                    pend = next((p for p in pend_data if p['discord_identifier'] in [d_id, n]), None)
+                    if chk.data:
+                        if chk.data[0].get('is_banned'): return await i2.followup.send("**Přístup zamítnut:** Máte BAN.", ephemeral=True)
+                        if chk.data[0].get('is_deleted'):
+                            hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                            nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
+                            r = pend['roles'] if pend else "User"
+                            db.table("users").update({"app_id": nid, "nick": n, "is_deleted": False, "role": r}).eq("discord_id", d_id).execute()
+                            u_role = r
+                            if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
+                        else: u_role = chk.data[0].get('role', 'User')
+                    else:
+                        hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                        nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
+                        r = pend['roles'] if pend else "User"
+                        db.table("users").insert({"app_id": nid, "discord_id": d_id, "nick": n, "role": r, "hwid": "", "ip_address": "", "is_banned": False, "is_deleted": False, "deleted_at": "", "dashboard_access": False, "login_token": "", "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+                        u_role = r
+                        if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
+                            
+                    if isinstance(i2.user, discord.Member): 
+                        try: await update_member_roles(i2.user, u_role)
+                        except: pass
+                            
+                    class DynamicVersionSelect(discord.ui.Select):
+                        def __init__(self, u_lvl):
+                            opts = []
+                            vers_data = get_db().table("software_versions").select("*").eq("is_active", True).order("id", desc=True).execute().data or []
+                            now = get_prague_time().replace(tzinfo=None)
+                            
+                            for v in vers_data:
+                                req = 2 if v['target_role'] == 'BT' else (3 if v['target_role'] == 'DEV_SA' else 1)
+                                if u_lvl >= req:
+                                    eol_str = v.get('eol_date', '').strip()
+                                    is_dl = True
+                                    desc = ""
+                                    if eol_str:
+                                        try:
+                                            eol_dt = datetime.strptime(eol_str, "%d.%m.%Y")
+                                            days_left = (eol_dt - now).days
+                                            if days_left <= 14:
+                                                is_dl = False
+                                            else:
+                                                desc = f"Končí podpora: {eol_str}"
+                                        except: pass
+                                        
+                                    if is_dl:
+                                        opts.append(discord.SelectOption(label=v['version_name'], description=desc or "Dostupné pro vaši roli", value=str(v['id']), emoji="📦"))
+                            
+                            if not opts: opts.append(discord.SelectOption(label="Žádná verze nenalezena", description="Pro vaše oprávnění aktuálně není nic ke stažení.", value="none"))
+                            super().__init__(placeholder="Vyber verzi k instalaci...", options=opts)
+                            
+                        async def callback(self, i3):
+                            try:
+                                await i3.response.defer(ephemeral=True)
+                            except:
+                                pass
+                            if self.values[0] == "none": return await i3.followup.send("Pro vaše role nejsou dostupné žádné verze.", ephemeral=True)
+                            
+                            t = str(uuid.uuid4())
+                            get_db().table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
+                            
+                            link = f"https://datacorebot.koyeb.app/download/{t}?v={self.values[0]}"
+                            await i3.followup.send(content=f"**Odkaz připraven:**\n🔗 {link}\n*Platí jen pro Vás.*", ephemeral=True)
+                            
+                    v_view = discord.ui.View()
+                    v_view.add_item(DynamicVersionSelect(3 if 'SA' in u_role or 'DEV' in u_role else (2 if 'BT' in u_role else 1)))
+                    await i2.followup.send(content="**Ověření úspěšné.** Vyberte soubor:", view=v_view, ephemeral=True)
+                except Exception as e: await i2.followup.send(content=f"Chyba DB: {e}", ephemeral=True)
+                    
+            @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, emoji="❌")
+            async def disagree(self, i2, b2): 
+                try:
+                    await i2.response.defer(ephemeral=True)
+                except:
+                    pass
+                await i2.followup.send(content="**Akce zrušena.**", ephemeral=True)
+                
+        await interaction.followup.send("**PODMÍNKY UŽÍVÁNÍ:**\n1. Přísný zákaz šíření, kopírování nebo sdílení aplikace bez výslovného souhlasu autora.\n2. Systém využívá HWID ochranu a shromažďuje telemetrická data pro zajištění správného chodu a bezpečnosti aplikace.\n3. Každý pokus o modifikaci kódu nebo obcházení zabezpečení povede k okamžitému a trvalému zablokování.\n\nSouhlasíte s těmito podmínkami?", view=DynamicRulesView(), ephemeral=True)
+
+def check_web_sa():
+    async def predicate(ctx):
+        if discord.utils.get(ctx.author.roles, name="web-sa") or ctx.author.guild_permissions.administrator: return True
+        await ctx.send(f"❌ {ctx.author.mention}, nemáš oprávnění k tomuto příkazu.", delete_after=10)
+        return False
+    return commands.check(predicate)
+
+def check_sm_role():
+    async def predicate(ctx):
+        if discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator: return True
+        await ctx.send(f"❌ {ctx.author.mention}, nemáš oprávnění k tomuto příkazu.", delete_after=10)
+        return False
+    return commands.check(predicate)
+
+@tasks.loop(minutes=5)
+async def keepalive_ping():
+    try:
+        url = "https://datacorebot.koyeb.app/api/keepalive"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
+    except: pass
+
+@bot.event
+async def on_ready():
+    print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
+    send_log("🔄 Systém Online", "Bot byl úspěšně restartován a běží.", 0x10b981)
+    try: bot.add_view(DynamicDownloadView())
+    except: pass
+    try:
+        for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
+    except: pass
+    trigger_setup_messages_update() 
+    if not keepalive_ping.is_running(): keepalive_ping.start()
+
+@bot.event
+async def on_message(message):
+    if message.author.bot: return
+    if not message.guild:
+        for guild in bot.guilds:
+            channel = discord.utils.find(lambda c: "bot-dm" in c.name.lower(), guild.text_channels)
+            if channel:
+                embed = discord.Embed(title="📩 Nová zpráva do DM bota", description=message.content or "*[Žádný text]*", color=0xa855f7)
+                embed.set_author(name=f"{message.author.display_name} (@{message.author.name})", icon_url=message.author.display_avatar.url)
+                embed.set_footer(text=f"ID: {message.author.id}")
+                if message.attachments:
+                    urls = "\n".join([f"• [{a.filename}]({a.url})" for a in message.attachments])
+                    embed.add_field(name="📎 Přílohy:", value=urls, inline=False)
+                    if message.attachments[0].url.lower().endswith(('png', 'jpg', 'jpeg', 'gif', 'webp')):
+                        embed.set_image(url=message.attachments[0].url)
+                try: await channel.send(embed=embed)
+                except: pass
+                break
+    await bot.process_commands(message)
+
+@bot.event
+async def on_member_join(member):
+    used_invite = None
+    try:
+        new_invites = await member.guild.invites()
+        old_invites = bot.invites_cache.get(member.guild.id, [])
+        for invite in new_invites:
+            for old_invite in old_invites:
+                if invite.code == old_invite.code and invite.uses > old_invite.uses:
+                    used_invite = invite; break
+            if used_invite: break
+        bot.invites_cache[member.guild.id] = new_invites
+    except: pass
+    link_info = "\n\n**🌐 Zdroj:** Uživatel se připojil z odkazu na webové stránce!" if used_invite and used_invite.code == "vmTagbC9mF" else ""
+    await async_send_log("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum připojení:** {get_prague_time().strftime('%d.%m.%Y %H:%M')}{link_info}", 0x10b981)
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument): await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!** Zkontroluj si `!help`.", delete_after=15)
+    elif isinstance(error, commands.MemberNotFound): await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
+    elif isinstance(error, commands.CheckFailure): pass 
+
+@bot.command()
+@check_sm_role()
+async def dm_view(ctx, discord_id: str):
+    if not discord_id.isdigit():
+        return await ctx.send("❌ Zadej platné číselné ID uživatele.")
+    status_msg = await ctx.send("<a:loading:123> Načítám historii zpráv (Může to chvíli trvat)...")
+    try:
+        user = await bot.fetch_user(int(discord_id))
+        if not user.dm_channel: await user.create_dm()
+        messages = [msg async for msg in user.dm_channel.history(limit=100)]
+        messages.reverse()
+        if not messages: return await status_msg.edit(content=f"📭 Historie DM s uživatelem `{user.display_name}` je prázdná.")
+        log_content = f"--- HISTORIE DM S UŽIVATELEM {user.display_name} ({user.name} | ID: {user.id}) ---\n\n"
+        for m in messages:
+            time_str = (m.created_at + timedelta(hours=1)).strftime("%d.%m.%Y %H:%M:%S")
+            author_name = "🤖 BOT" if m.author.bot else f"👤 {m.author.display_name}"
+            log_content += f"[{time_str}] {author_name}: {m.content}\n"
+            if m.attachments: log_content += f"    [Příloha]: {', '.join([a.url for a in m.attachments])}\n"
+        file_stream = io.BytesIO(log_content.encode('utf-8'))
+        file = discord.File(file_stream, filename=f"ChatLog_{user.display_name}.txt")
+        await status_msg.delete()
+        await ctx.send(f"📄 Tady je posledních 100 zpráv ze soukromé konverzace s uživatelem `{user.display_name}`:", file=file)
+    except discord.NotFound: await status_msg.edit(content="❌ Uživatel s tímto ID nebyl nalezen na Discordu.")
+    except discord.Forbidden: await status_msg.edit(content="❌ Nemám oprávnění k DM tohoto uživatele.")
+    except Exception as e: await status_msg.edit(content=f"❌ Nastala chyba při čtení DM zpráv:\n`{e}`")
+
+@bot.command()
+@check_web_sa()
+async def setup_download(ctx):
+    db = get_db()
+    embed = build_setup_embed(db)
+    msg = await ctx.send(embed=embed, view=DynamicDownloadView())
+    save_setup_message(db, ctx.channel.id, msg.id)
+    try: await ctx.message.delete()
+    except: pass
+
+@bot.command()
+async def auth(ctx):
+    try: await ctx.message.delete()
+    except: pass
+    db = get_db()
+    if db:
+        u = db.table("users").select("login_token").eq("discord_id", str(ctx.author.id)).execute().data
+        if u and u[0].get('login_token'): await ctx.send(f"🛡️ {ctx.author.mention}, potvrďte přihlášení do aplikace:", view=AppAuthView(u[0]['login_token'], str(ctx.author.id), False), delete_after=60)
+        else:
+            msg = await ctx.send(f"❌ {ctx.author.mention} Nemáš čekající požadavek na přihlášení.")
+            await asyncio.sleep(5); await msg.delete()
+
+@bot.command()
+async def verze(ctx):
+    db = get_db()
+    if not db: return await ctx.send("❌ Databáze není dostupná.")
+    versions = db.table("software_versions").select("*").order("id", desc=True).execute().data or []
+    if not versions: return await ctx.send("Zatím nejsou dostupné žádné verze ke stažení.")
+    embed = discord.Embed(title="📦 Kompletní seznam verzí", description="Seznam všech verzí softwaru, včetně neveřejných pro DEV/SA.", color=0x38bdf8)
+    for v in versions:
+        status = "✅ Aktivní" if str(v.get('is_active', 'True')).lower() == 'true' else "❌ Zablokováno"
+        embed.add_field(name=f"{v['version_name']} [{v.get('db_version', 'Neznámá v DB')}]", value=f"Dostupné pro: `{v['target_role']}`\nStav: {status}", inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def help(ctx):
+    embed = discord.Embed(title="🤖 Nápověda - Projekt OIS IDPK", description="Seznam dostupných příkazů rozdělený podle oprávnění.", color=0x38bdf8)
+    embed.add_field(name="🌍 Veřejné příkazy", value="`!auth` - Potvrzení přihlášení do aplikace.\n`!ping` - Odezva bota.\n`!verze` - Seznam dostupných verzí.\n`!help` - Tato nápověda.", inline=False)
+    embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]` - Profil.\n`!db [ID]` - 2FA do webu.\n`!ban`/`!unban [ID]` - BANY.\n`!delete [ID]` - Blokace.\n`!perdelete [ID]` - Úplné smazání.\n`!register [ID]` - Vytvoří účet cizímu.\n`!message #kanál [text]` - Zpráva přes bota.\n`!dm @uzivatel [text]` - Soukromá zpráva.\n`!dm_view [ID]` - Zobrazí celou historii DM konverzace bota s daným hráčem.", inline=False)
+    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download` - Generuje instalátor.\n`!sm @uživatel` - Přidá/odebere roli SM.", inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def ping(ctx): await ctx.send(f"🏓 Pong! Odezva: **{round(bot.latency * 1000)}ms**.")
+
+@bot.command()
+async def info(ctx, discord_id: str = None):
+    if not discord_id: return await ctx.send(f"❌ Zadejte ID.")
+    db = get_db()
+    if not db: return
+    u = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+    if not u: return await ctx.send(f"❌ Nenalezen.")
+    embed = discord.Embed(title=f"Uživatel: {u[0].get('nick')}", color=0x38bdf8)
+    embed.add_field(name="App ID", value=f"#{u[0].get('app_id')}", inline=True)
+    embed.add_field(name="Discord ID", value=u[0].get('discord_id'), inline=True)
+    embed.add_field(name="Role", value=u[0].get('role'), inline=True)
+    embed.add_field(name="Banned", value="Ano" if u[0].get('is_banned') else "Ne", inline=True)
+    await ctx.send(embed=embed)
+
+@bot.command()
+@check_sm_role()
+async def ban(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    user_data = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+    if not user_data: return await ctx.send("❌ Uživatel nenalezen.")
+    db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+    await send_user_dm(discord_id, "🔨 Účet zablokován", "Váš přístup do aplikace a databáze byl trvale zablokován administrátorem.", 0xef4444)
+    await ctx.send(f"🔨 Uživateli `{discord_id}` byl udělen BAN.")
+
+@bot.command()
+@check_sm_role()
+async def unban(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
+    await send_user_dm(discord_id, "🕊️ Účet odblokován", "Váš přístup do aplikace a databáze byl obnoven.", 0x10b981)
+    await ctx.send(f"🕊️ Uživateli `{discord_id}` byl zrušen BAN.")
+
+@bot.command(name="db")
+@check_sm_role()
+async def db_cmd(ctx, discord_id: str):
+    db_conn = get_db()
+    if not db_conn: return
+    user_data = db_conn.table("users").select("dashboard_access").eq("discord_id", discord_id).execute().data
+    if not user_data: return await ctx.send("❌ Uživatel nenalezen.")
+    new_status = not user_data[0].get("dashboard_access", False)
+    db_conn.table("users").update({"dashboard_access": new_status}).eq("discord_id", discord_id).execute()
+    await ctx.send(f"⚙️ Přístup do DB pro ID `{discord_id}`: **{'POVOLEN ✅' if new_status else 'ODEBRÁN ❌'}**.")
+
+@bot.command()
+@check_sm_role()
+async def delete(ctx, discord_id: str):
+    db = get_db()
+    if not db: return
+    now = get_prague_time().strftime("%d.%m.%Y %H:%M")
+    db.table("users").update({"is_deleted": True, "deleted_at": now, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+    await send_user_dm(discord_id, "⚠️ Účet smazán", "Váš uživatelský účet byl smazán administrátorem.", 0xf59e0b)
+    await ctx.send(f"☠️ Účet `{discord_id}` byl smazán (Soft Delete).")
+
+class PerDeleteConfirm(discord.ui.View):
+    def __init__(self, target_id, author_id):
+        super().__init__(timeout=60)
+        self.target_id = target_id
+        self.author_id = author_id
+
+    @discord.ui.button(label="Ano, trvale smazat", style=discord.ButtonStyle.danger, emoji="⚠️")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        await interaction.response.defer()
+        db = get_db()
+        if db:
+            db.table("users").delete().eq("discord_id", self.target_id).execute()
+            await interaction.edit_original_response(content=f"✅ Účet `{self.target_id}` byl z databáze PERMANENTNĚ smazán.", view=None, embed=None)
+
+    @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id: return await interaction.response.send_message("Toto není tvé tlačítko!", ephemeral=True)
+        await interaction.response.edit_message(content="❌ Akce zrušena.", view=None, embed=None)
+
+@bot.command()
+@check_sm_role()
+async def perdelete(ctx, discord_id: str):
+    embed = discord.Embed(title="⚠️ Varování: Permanentní smazání", description=f"Opravdu chceš nevratně smazat účet `{discord_id}` z databáze?", color=0xef4444)
+    await ctx.send(embed=embed, view=PerDeleteConfirm(discord_id, ctx.author.id))
+
+@bot.command()
+async def register(ctx, target_id: str = None):
+    db = get_db()
+    if not db: return await ctx.send("❌ Databáze nedostupná.")
+    if target_id:
+        is_admin = discord.utils.get(ctx.author.roles, name="web-sa") or discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator
+        if not is_admin: return await ctx.send(f"❌ {ctx.author.mention} Nemáš oprávnění.")
+        discord_id = target_id
+        target_member = ctx.guild.get_member(int(discord_id)) if discord_id.isdigit() else None
+        nick = target_member.display_name if target_member else f"Uživatel {discord_id}"
+    else:
+        discord_id = str(ctx.author.id)
+        nick = ctx.author.display_name
+        target_member = ctx.author
+        
+    now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+    check = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+    if check:
+        if check[0].get('is_banned'): return await ctx.send("❌ Tento účet má BAN.")
+        elif check[0].get('is_deleted'):
+            highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
+            new_app_id = highest[0]["app_id"] + 1 if highest else 1000
+            db.table("users").update({"app_id": new_app_id, "nick": nick, "is_deleted": False, "deleted_at": "", "registered_at": now_str}).eq("discord_id", discord_id).execute()
+            await ctx.send(f"✅ Smazaný účet byl úspěšně obnoven! Nové App ID je **#{new_app_id}**.")
+            if target_member: await update_member_roles(target_member, check[0].get('role', 'User'))
+        else: await ctx.send(f"ℹ️ Tento uživatel již je zaregistrován!")
+    else:
+        highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
+        new_app_id = highest[0]["app_id"] + 1 if highest else 1000
+        db.table("users").insert({ "app_id": new_app_id, "discord_id": discord_id, "nick": nick, "role": "User", "hwid": "", "ip_address": "", "is_banned": False, "is_deleted": False, "deleted_at": "", "dashboard_access": False, "login_token": "", "registered_at": now_str }).execute()
+        await ctx.send(f"✅ Úspěšně zaregistrován! App ID: **#{new_app_id}**.")
+
+@bot.command()
+@check_web_sa()
+async def sm(ctx, member: discord.Member):
+    role = discord.utils.get(ctx.guild.roles, name="SM")
+    if not role: return await ctx.send("❌ Role `SM` neexistuje.")
+    if role in member.roles:
+        await member.remove_roles(role)
+        await ctx.send(f"➖ Role **SM** odebrána.")
+    else:
+        await member.add_roles(role)
+        await ctx.send(f"➕ Role **SM** přidělena.")
+
 def run_discord_bot(bot_token):
     logger = logging.getLogger('discord')
     logger.setLevel(logging.INFO)
@@ -1510,7 +2319,6 @@ def run_discord_bot(bot_token):
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
-    # Přidáno run_simple, protože standartní app.run někdy na Koyebu neprochází Health Checky kvůli multi-threadingu s Botem.
     from werkzeug.serving import run_simple
     run_simple('0.0.0.0', port, app, use_reloader=False)
 
