@@ -5,7 +5,7 @@ BASE_HTML = """
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Projekt OIS IDPK</title>
-<link rel="icon" type="image/png" href="{{ logo_male }}">
+<link rel="icon" type="image/png" href="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
@@ -66,7 +66,7 @@ tr:hover { background-color: #334155; }
 
 PUBLIC_LAYOUT = """
 <nav class="top-nav">
-<a href="/" class="logo"><img src="{{ logo_male }}" alt="Logo" style="height: 30px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 8px rgba(56, 189, 248, 0.6));">OIS IDPK</a>
+<a href="/" class="logo"><img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png" alt="Logo" style="height: 30px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 8px rgba(56, 189, 248, 0.6));">OIS IDPK</a>
 <div class="nav-links">
 <a href="/">Domů</a><a href="/download">Download</a><a href="/team">Náš Tým</a><a href="/stats">Statistiky</a>
 <a href="/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-heart"></i> Podporovatelé</a>
@@ -84,7 +84,7 @@ PUBLIC_LAYOUT = """
 DASHBOARD_LAYOUT = """
 <div class="dashboard-wrapper">
 <div class="sidebar">
-<div class="sidebar-header"><a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;"><img src="{{ logo_male }}" alt="Logo" style="height: 24px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 6px rgba(56, 189, 248, 0.6));">OIS IDPK</a><div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div></div>
+<div class="sidebar-header"><a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;"><img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png" alt="Logo" style="height: 24px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 6px rgba(56, 189, 248, 0.6));">OIS IDPK</a><div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div></div>
 <div class="sidebar-menu">
 <a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a>
 <a href="/dashboard/stats" class="sidebar-link"><i class="fas fa-chart-bar"></i> Statistiky Webu</a>
@@ -649,6 +649,64 @@ HTML_PUBLIC_STATS = """
         });
     }
 </script>
+"""
+
+HTML_SUPPORTERS = """
+<style>
+    .glowing-btn-blue { background-color: var(--blue-main); color: #000; padding: 15px 40px; font-size: 20px; font-weight: 900; border-radius: 50px; text-decoration: none; display: inline-block; margin-top: 20px; box-shadow: 0 0 20px rgba(56, 189, 248, 0.6); transition: all 0.3s ease; text-transform: uppercase; letter-spacing: 1px; border: none; cursor: pointer; }
+    .glowing-btn-blue:hover { box-shadow: 0 0 40px rgba(56, 189, 248, 1); transform: scale(1.05); color: #000; }
+    .supporter-wrapper { width: 100%; max-width: 500px; min-height: 230px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; text-align: center; box-sizing: border-box; }
+    .tier-1 { background-color: rgba(15, 23, 42, 0.8); padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.3); border-left: 5px solid #38bdf8; transition: transform 0.5s ease, box-shadow 0.5s ease; }
+    .tier-1:hover { transform: scale(1.05); box-shadow: 0 10px 25px rgba(56, 189, 248, 0.4); }
+    .tier-1 .name-title { color: #e0f2fe; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); font-size: 20px; margin: 0 0 10px 0; }
+    .tier-1 .title-badge { font-size: 10px; color: #38bdf8; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin-bottom: 10px; }
+    .tier-1 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(56, 189, 248, 0.1); color: var(--blue-main); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; border: 1px solid rgba(56, 189, 248, 0.3); }
+    @keyframes pulseMedium { from { box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); } to { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); } }
+    .tier-2 { background-color: rgba(30, 41, 59, 0.9); padding: 25px; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.6); border-left: 6px solid #f59e0b; animation: pulseMedium 2s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
+    .tier-2:hover { transform: scale(1.05) !important; animation: none; box-shadow: 0 10px 35px rgba(245, 158, 11, 0.8); }
+    .tier-2 .name-title { color: #fcd34d; font-size: 26px; margin: 0 0 10px 0; text-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
+    .tier-2 .title-badge { font-size: 12px; color: #f59e0b; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; margin-bottom: 10px; }
+    .tier-2 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: rgba(245, 158, 11, 0.1); color: var(--warning); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 16px; border: 1px solid rgba(245, 158, 11, 0.5); }
+    @keyframes epicWebGlow { from { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); } to { box-shadow: 0 0 50px rgba(239, 68, 68, 0.9), inset 0 0 30px rgba(239, 68, 68, 0.3); } }
+    .tier-3 { background: linear-gradient(135deg, #2a0a18, #450a0a); padding: 30px; border-radius: 15px; border: 2px solid #ef4444; animation: epicWebGlow 1.5s infinite alternate; transition: transform 0.5s ease, box-shadow 0.5s ease; }
+    .tier-3:hover { transform: scale(1.08) !important; animation: none; box-shadow: 0 15px 60px rgba(239, 68, 68, 1); }
+    .tier-3 .name-title { color: #fca5a5; font-size: 32px !important; margin: 0 0 15px 0; text-shadow: 0 0 20px #ef4444, 0 0 40px #ef4444; text-transform: uppercase; font-weight: 900; }
+    .tier-3 .title-badge { font-size: 14px; color: #ef4444; text-transform: uppercase; font-weight: 900; letter-spacing: 3px; margin-bottom: 10px; text-shadow: 0 0 10px #ef4444; }
+    .tier-3 .amt-badge { display: inline-block; margin-bottom: 25px; background-color: #ef4444 !important; color: #fff !important; border: 2px solid #fca5a5 !important; padding: 8px 20px; border-radius: 25px; font-weight: bold; font-size: 20px !important; box-shadow: 0 0 20px #ef4444; }
+</style>
+
+<div style="max-width: 800px; margin: 0 auto; padding: 20px; position: relative;">
+    <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">Děkuji všem za podporu!</h1>
+        <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6; max-width: 600px; margin: 0 auto;">Zde vidíte lidi, kteří tento projekt finančně podpořili. Vaše příspěvky mi obrovsky pomáhají hradit náklady na servery a motivují mě do dalšího vývoje Projektu OIS IDPK. Jsem neskutečně rád za každého z vás!</p>
+        <a href="https://www.buymeacoffee.com/marekk_czz" target="_blank" class="glowing-btn-blue"><i class="fas fa-heart"></i> Podpořit Projekt OIS IDPK</a>
+    </div>
+    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 40px 0;">
+    <h2 style="text-align: center; color: var(--text-main); letter-spacing: 3px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,255,255,0.2);">SEZNAM PODPOROVATELŮ</h2>
+    <div style="display: flex; flex-direction: column; gap: 40px; padding-bottom: 50px; align-items: center;">
+        {% for s in supporters %}
+        <div class="tier-{{ s.get('tier', 1) }} supporter-wrapper">
+            <div style="width: 100%;">
+                {% if s.get('tier') == 3 %} <div class="title-badge">MEGA PODPOROVATEL</div>
+                {% elif s.get('tier') == 2 %} <div class="title-badge">VELKÝ PODPOROVATEL</div>
+                {% else %} <div class="title-badge">PODPOROVATEL</div> {% endif %}
+                <h3 class="name-title">{{ s.get('name', 'Neznámý dárce') }}</h3>
+                <div class="amt-badge">{{ s.get('amount', '') }}</div>
+            </div>
+            <div style="width: 100%; margin-top: auto;">
+                {% if s.get('message') %}
+                <p style="color: var(--text-main); font-size: 16px; font-style: italic; margin: 0 auto 15px auto; line-height: 1.5; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 2px solid rgba(255,255,255,0.2); max-width: 90%;">
+                    "{{ s.get('message') }}"
+                </p>
+                {% endif %}
+                <div style="font-size: 11px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; text-align: center;">Datum podpory: {{ s.get('created_at', '') }}</div>
+            </div>
+        </div>
+        {% else %}
+        <div style="text-align: center; color: var(--text-muted); padding: 40px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1); width: 100%;">Zatím zde nikdo není. Buďte první!</div>
+        {% endfor %}
+    </div>
+</div>
 """
 
 HTML_CLAIM = """
