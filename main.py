@@ -27,7 +27,7 @@ except ImportError as e:
     print(f"KRITICKÁ CHYBA IMPORTU ŠABLON: {e}")
     BASE_HTML = "<html><body><h1>CHYBA ŠABLON - ZKONTROLUJTE SOUBOR html_templates.py</h1></body></html>"
     PUBLIC_LAYOUT = DASHBOARD_LAYOUT = BASE_HTML
-    HTML_HOME = HTML_DOWNLOADS_MAIN = HTML_TEAM = HTML_PUBLIC_STATS = HTML_CLAIM = HTML_STATS = HTML_APP_MANAGEMENT = HTML_NOTIFICATIONS = HTML_DOWNLOADS_MGMT = HTML_PENDING_ROLES = HTML_TEAM_ADD = HTML_IDS = HTML_DASHBOARD_MAIN = HTML_SUPPORTERS_MGMT = HTML_FEEDBACK = HTML_WAIT_AUTH = HTML_LOGIN = ""
+    HTML_HOME = HTML_DOWNLOADS_MAIN = HTML_TEAM = HTML_PUBLIC_STATS = HTML_CLAIM = HTML_STATS = HTML_APP_MANAGEMENT = HTML_NOTIFICATIONS = HTML_DOWNLOADS_MGMT = HTML_PENDING_ROLES = HTML_TEAM_ADD = HTML_IDS = HTML_DASHBOARD_MAIN = HTML_SUPPORTERS = HTML_SUPPORTERS_MGMT = HTML_FEEDBACK = HTML_WAIT_AUTH = HTML_LOGIN = ""
 
 # Import live statusů z druhého souboru
 try:
@@ -357,11 +357,8 @@ def render_public(template_string, **kwargs):
 
 def render_dashboard(template_string, **kwargs):
     html = DASHBOARD_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
-    
-    # OPRAVA: Zde se do HTML propíše HTML_STATUS_SECTION z druhého souboru!
     if 'status_section' not in kwargs:
         kwargs['status_section'] = HTML_STATUS_SECTION
-        
     return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html.replace('{{ deploy_time }}', DEPLOY_TIME)), **kwargs)
 
 @app.before_request
@@ -2128,6 +2125,30 @@ async def dm_view(ctx, discord_id: str):
     except discord.NotFound: await status_msg.edit(content="❌ Uživatel s tímto ID nebyl nalezen na Discordu.")
     except discord.Forbidden: await status_msg.edit(content="❌ Nemám oprávnění k DM tohoto uživatele.")
     except Exception as e: await status_msg.edit(content=f"❌ Nastala chyba při čtení DM zpráv:\n`{e}`")
+
+@bot.command()
+@check_sm_role()
+async def dm(ctx, user: discord.User, *, text: str):
+    try:
+        embed = discord.Embed(title="📩 Zpráva od administrace", description=text, color=0x38bdf8)
+        embed.set_footer(text="Toto je automatická zpráva, na kterou lze odepsat.")
+        await user.send(embed=embed)
+        await ctx.send(f"✅ Zpráva úspěšně odeslána uživateli `{user.display_name}`.")
+    except discord.Forbidden:
+        await ctx.send(f"❌ Uživatel `{user.display_name}` má zablokované soukromé zprávy od botů.")
+    except Exception as e:
+        await ctx.send(f"❌ Nastala chyba při odesílání: `{e}`")
+
+@bot.command()
+@check_sm_role()
+async def message(ctx, channel: discord.TextChannel, *, text: str):
+    try:
+        await channel.send(text)
+        await ctx.send(f"✅ Zpráva úspěšně odeslána do kanálu {channel.mention}.")
+    except discord.Forbidden:
+        await ctx.send(f"❌ Nemám oprávnění psát do kanálu {channel.mention}.")
+    except Exception as e:
+        await ctx.send(f"❌ Nastala chyba při odesílání: `{e}`")
 
 @bot.command()
 @check_web_sa()
