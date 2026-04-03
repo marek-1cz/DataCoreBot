@@ -56,6 +56,12 @@ tr:hover { background-color: #334155; }
 .profile-stat { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
 .profile-val { font-size: 14px; font-weight: bold; color: var(--text-main); }
 .dl-table th, .dl-table td { padding: 8px; font-size: 12px; border-bottom: 1px solid #334155; }
+
+/* --- NOVÉ SVÍTÍCÍ EFEKTY PRO PODPOROVATELE --- */
+@keyframes pulseShiny { 0% { transform: scale(1); box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); } 100% { transform: scale(1.05); box-shadow: 0 0 45px rgba(245, 158, 11, 1); } }
+@keyframes glowMega { 0% { box-shadow: 0 0 30px rgba(255, 51, 51, 0.5); border-color: #ff3333; transform: scale(1); } 100% { box-shadow: 0 0 80px rgba(255, 51, 51, 1); border-color: #ffffff; transform: scale(1.02); } }
+@keyframes glowVelky { 0% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.4); border-color: #f59e0b; transform: scale(1); } 100% { box-shadow: 0 0 50px rgba(245, 158, 11, 0.9); border-color: #fcd34d; transform: scale(1.01); } }
+@keyframes glowNormal { 0% { box-shadow: 0 0 10px rgba(56, 189, 248, 0.3); border-color: #38bdf8; } 100% { box-shadow: 0 0 30px rgba(56, 189, 248, 0.7); border-color: #e0f2fe; } }
 </style>
 </head>
 <body>
@@ -651,25 +657,39 @@ HTML_PUBLIC_STATS = """
 </script>
 """
 
-# --- PŘIDANÁ ŠABLONA PODPOROVATELŮ ---
+# --- PŘIDANÁ A PŘEDĚLANÁ ŠABLONA PODPOROVATELŮ (CELÁ ŠÍŘKA A EFEKTY) ---
 HTML_SUPPORTERS = """
 <div style="text-align: center; margin-bottom: 40px;">
     <h1 style="color: var(--warning); font-size: 36px; text-shadow: 0 0 15px rgba(245, 158, 11, 0.4);"><i class="fas fa-heart"></i> Podporovatelé Projektu</h1>
-    <p style="color: var(--text-muted); font-size: 16px;">Obrovské díky všem, kteří podpořili vývoj OIS IDPK!</p>
+    <p style="color: var(--text-muted); font-size: 16px; max-width: 600px; margin: 0 auto 20px auto;">
+        Tento projekt vyvíjím ve svém volném čase a je dostupný <strong>zcela zdarma</strong>. Podpora je čistě dobrovolná, program bude vždy fungovat i bez ní. Pokud se ale rozhodneš mě podpořit, získáš exkluzivní VIP výhody a speciální role na Discordu i webu!
+    </p>
+    <a href="https://buymeacoffee.com/marekk_czz" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 15px 40px; font-size: 20px; font-weight: 900; border-radius: 50px; text-decoration: none; text-transform: uppercase; animation: pulseShiny 2s infinite; border: 2px solid #fff; margin-top: 10px;">
+        <i class="fas fa-coffee"></i> Podpořit projekt
+    </a>
 </div>
-<div style="display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;">
+
+<div style="display: flex; flex-direction: column; gap: 20px; max-width: 900px; margin: 0 auto;">
     {% for s in supporters %}
+    {% set anim_class = 'glowMega' if s.tier == 3 else ('glowVelky' if s.tier == 2 else 'glowNormal') %}
     {% set border_color = '#ff3333' if s.tier == 3 else ('#f59e0b' if s.tier == 2 else '#38bdf8') %}
     {% set title_color = '#ff3333' if s.tier == 3 else ('#fcd34d' if s.tier == 2 else '#e0f2fe') %}
     {% set badge_text = 'MEGA PODPOROVATEL' if s.tier == 3 else ('VELKÝ PODPOROVATEL' if s.tier == 2 else 'PODPOROVATEL') %}
-    <div style="background-color: var(--bg-panel); border-radius: 10px; width: 300px; padding: 20px; text-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.3); border-top: 4px solid {{ border_color }};">
-        <div style="color: {{ border_color }}; font-size: 10px; font-weight: bold; letter-spacing: 1px; margin-bottom: 10px;">{{ badge_text }}</div>
-        <h3 style="color: {{ title_color }}; margin: 0 0 10px 0; font-size: 20px;">{{ s.get('name', 'Anonym') }}</h3>
-        <div style="display: inline-block; background: rgba(0,0,0,0.3); color: {{ border_color }}; padding: 5px 12px; border-radius: 15px; font-weight: bold; font-size: 14px; margin-bottom: 15px; border: 1px solid {{ border_color }};">{{ s.get('amount', '') }}</div>
-        {% if s.get('message') %}
-        <div style="color: var(--text-main); font-size: 13px; font-style: italic; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; border-left: 2px solid {{ border_color }}; margin-bottom: 15px;">"{{ s.get('message') }}"</div>
-        {% endif %}
-        <div style="color: var(--text-muted); font-size: 11px;">{{ s.get('created_at', '') }}</div>
+    
+    <div style="background-color: var(--bg-panel); border-radius: 12px; width: 100%; padding: 25px; display: flex; justify-content: space-between; align-items: center; border-left: 6px solid {{ border_color }}; animation: {{ anim_class }} 3s infinite alternate; box-sizing: border-box;">
+        <div style="text-align: left; flex: 1;">
+            <div style="color: {{ border_color }}; font-size: 12px; font-weight: 900; letter-spacing: 2px; margin-bottom: 5px;">{{ badge_text }}</div>
+            <h3 style="color: {{ title_color }}; margin: 0 0 10px 0; font-size: 28px; text-transform: uppercase;">{{ s.get('name', 'Anonym') }}</h3>
+            {% if s.get('message') %}
+            <div style="color: var(--text-main); font-size: 15px; font-style: italic; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; border-left: 3px solid {{ border_color }}; margin-bottom: 5px;">"{{ s.get('message') }}"</div>
+            {% endif %}
+            <div style="color: var(--text-muted); font-size: 12px; margin-top: 10px;"><i class="fas fa-clock"></i> {{ s.get('created_at', '') }}</div>
+        </div>
+        <div style="margin-left: 20px; text-align: right;">
+            <div style="background: rgba(0,0,0,0.5); color: {{ border_color }}; padding: 15px 25px; border-radius: 10px; font-weight: 900; font-size: 24px; border: 2px solid {{ border_color }}; white-space: nowrap;">
+                {{ s.get('amount', '') }}
+            </div>
+        </div>
     </div>
     {% else %}
     <div style="color: var(--text-muted); width: 100%; text-align: center; padding: 50px;">Zatím zde nejsou žádní podporovatelé. Buďte první!</div>
