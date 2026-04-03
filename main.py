@@ -81,6 +81,17 @@ def get_db():
     except Exception as e: print(f"Chyba připojení k DB: {e}")
     return None
 
+# --- OPRAVA STATUSŮ: Automatické načítání pro všechny šablony ---
+def get_system_statuses():
+    try:
+        db = get_db()
+        if db:
+            s_resp = db.table("settings").select("setting_value").eq("setting_key", "system_statuses").execute().data
+            if s_resp:
+                return json.loads(s_resp[0]['setting_value'])
+    except: pass
+    return {}
+
 # --- DEFINICE TLAČÍTEK PRO AUTENTIZACI DO APLIKACE A DASHBOARDU ---
 class AppAuthView(discord.ui.View):
     def __init__(self, token, discord_id, is_dm=True):
@@ -293,6 +304,7 @@ def trigger_setup_messages_update():
     if bot.loop and bot.loop.is_running() and bot.is_ready():
         asyncio.run_coroutine_threadsafe(update_setup_messages_async(), bot.loop)
 
+# --- OPRAVA SUPPORTERS: Zabezpečení sortovací funkce ---
 def process_supporters(data_list):
     for s in data_list:
         amt_str = str(s.get('amount', '0'))
@@ -308,7 +320,8 @@ def process_supporters(data_list):
         if norm_val >= 325: s['tier'] = 3
         elif norm_val >= 195: s['tier'] = 2
         else: s['tier'] = 1
-    data_list.sort(key=lambda x: (x.get('norm_val', 0), x.get('id', 0)), reverse=True)
+    # Oprava: ID explicitně jako string a hodnota jako float
+    data_list.sort(key=lambda x: (float(x.get('norm_val', 0)), str(x.get('id', ''))), reverse=True)
     return data_list
 
 def calculate_roles_for_supporter(amount_str):
@@ -401,14 +414,19 @@ def send_log(title, description, color=0x38bdf8):
 def _cors_jsonify(data):
     return jsonify(data)
 
+# --- OPRAVA STATUSŮ: Aplikace statusů do všech template funkcí ---
 def render_public(template_string, **kwargs):
     html = PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
+    if 'statuses' not in kwargs:
+        kwargs['statuses'] = get_system_statuses()
     return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html), **kwargs)
 
 def render_dashboard(template_string, **kwargs):
     html = DASHBOARD_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
     if 'status_section' not in kwargs:
         kwargs['status_section'] = HTML_STATUS_SECTION
+    if 'statuses' not in kwargs:
+        kwargs['statuses'] = get_system_statuses()
     return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html.replace('{{ deploy_time }}', DEPLOY_TIME)), **kwargs)
 
 @app.before_request
@@ -489,11 +507,6 @@ def check_version_access(db, app_version_from_pc, user):
         return {"allowed": True}
     except Exception as e:
         return {"allowed": True}
-
-@app.route('/api/keepalive', methods=['GET', 'OPTIONS'])
-def api_keepalive():
-    if request.method == 'OPTIONS': return _cors_jsonify({})
-    return _cors_jsonify({"status": "alive", "time": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")})
 
 class DynamicDownloadView(discord.ui.View):
     def __init__(self):
