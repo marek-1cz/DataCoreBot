@@ -25,9 +25,19 @@ try:
     from html_templates import *
 except ImportError as e:
     print(f"KRITICKÁ CHYBA IMPORTU ŠABLON: {e}")
-    BASE_HTML = "<html><body><h1>CHYBA ŠABLON - ZKONTROLUJTE SOUBOR html_templates.py</h1></body></html>"
-    PUBLIC_LAYOUT = DASHBOARD_LAYOUT = BASE_HTML
-    HTML_HOME = HTML_DOWNLOADS_MAIN = HTML_TEAM = HTML_PUBLIC_STATS = HTML_CLAIM = HTML_STATS = HTML_APP_MANAGEMENT = HTML_NOTIFICATIONS = HTML_DOWNLOADS_MGMT = HTML_PENDING_ROLES = HTML_TEAM_ADD = HTML_IDS = HTML_DASHBOARD_MAIN = HTML_SUPPORTERS = HTML_SUPPORTERS_MGMT = HTML_FEEDBACK = HTML_WAIT_AUTH = HTML_LOGIN = ""
+
+# --- TVRDÁ OCHRANA ŠABLON (Už to NIKDY nespadne na NameError) ---
+_template_names = [
+    'BASE_HTML', 'PUBLIC_LAYOUT', 'DASHBOARD_LAYOUT', 'HTML_HOME', 'HTML_DOWNLOADS_MAIN', 
+    'HTML_TEAM', 'HTML_PUBLIC_STATS', 'HTML_CLAIM', 'HTML_STATS', 'HTML_APP_MANAGEMENT', 
+    'HTML_NOTIFICATIONS', 'HTML_DOWNLOADS_MGMT', 'HTML_PENDING_ROLES', 'HTML_TEAM_ADD', 
+    'HTML_IDS', 'HTML_DASHBOARD_MAIN', 'HTML_SUPPORTERS', 'HTML_SUPPORTERS_MGMT', 
+    'HTML_FEEDBACK', 'HTML_WAIT_AUTH', 'HTML_LOGIN'
+]
+for _name in _template_names:
+    if _name not in globals():
+        # Pokud šablona chybí v html_templates.py, vloží se toto nouzové HTML místo pádu serveru
+        globals()[_name] = f"<div style='background:#0f172a; color:#ef4444; padding:40px; text-align:center; font-family:sans-serif;'><h2>CHYBA ŠABLONY</h2><p>Šablona <b>{_name}</b> chybí v souboru <i>html_templates.py</i>! Prosím, zkontroluj si to a přidej ji.</p></div>"
 
 # Import live statusů z druhého souboru
 try:
