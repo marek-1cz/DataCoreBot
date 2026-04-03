@@ -651,6 +651,32 @@ HTML_PUBLIC_STATS = """
 </script>
 """
 
+# --- PŘIDANÁ ŠABLONA PODPOROVATELŮ ---
+HTML_SUPPORTERS = """
+<div style="text-align: center; margin-bottom: 40px;">
+    <h1 style="color: var(--warning); font-size: 36px; text-shadow: 0 0 15px rgba(245, 158, 11, 0.4);"><i class="fas fa-heart"></i> Podporovatelé Projektu</h1>
+    <p style="color: var(--text-muted); font-size: 16px;">Obrovské díky všem, kteří podpořili vývoj OIS IDPK!</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;">
+    {% for s in supporters %}
+    {% set border_color = '#ff3333' if s.tier == 3 else ('#f59e0b' if s.tier == 2 else '#38bdf8') %}
+    {% set title_color = '#ff3333' if s.tier == 3 else ('#fcd34d' if s.tier == 2 else '#e0f2fe') %}
+    {% set badge_text = 'MEGA PODPOROVATEL' if s.tier == 3 else ('VELKÝ PODPOROVATEL' if s.tier == 2 else 'PODPOROVATEL') %}
+    <div style="background-color: var(--bg-panel); border-radius: 10px; width: 300px; padding: 20px; text-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.3); border-top: 4px solid {{ border_color }};">
+        <div style="color: {{ border_color }}; font-size: 10px; font-weight: bold; letter-spacing: 1px; margin-bottom: 10px;">{{ badge_text }}</div>
+        <h3 style="color: {{ title_color }}; margin: 0 0 10px 0; font-size: 20px;">{{ s.get('name', 'Anonym') }}</h3>
+        <div style="display: inline-block; background: rgba(0,0,0,0.3); color: {{ border_color }}; padding: 5px 12px; border-radius: 15px; font-weight: bold; font-size: 14px; margin-bottom: 15px; border: 1px solid {{ border_color }};">{{ s.get('amount', '') }}</div>
+        {% if s.get('message') %}
+        <div style="color: var(--text-main); font-size: 13px; font-style: italic; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; border-left: 2px solid {{ border_color }}; margin-bottom: 15px;">"{{ s.get('message') }}"</div>
+        {% endif %}
+        <div style="color: var(--text-muted); font-size: 11px;">{{ s.get('created_at', '') }}</div>
+    </div>
+    {% else %}
+    <div style="color: var(--text-muted); width: 100%; text-align: center; padding: 50px;">Zatím zde nejsou žádní podporovatelé. Buďte první!</div>
+    {% endfor %}
+</div>
+"""
+
 HTML_CLAIM = """
 <div style="max-width: 500px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--blue-main); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
     <h2 style="color: var(--blue-main); text-align: center; margin-top: 0;"><i class="fas fa-gift"></i> Vyzvednutí VIP Role</h2>
