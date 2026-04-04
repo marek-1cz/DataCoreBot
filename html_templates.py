@@ -733,14 +733,6 @@ HTML_STATS = """
     </div>
 </div>
 
-HTML_STATS = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-chart-line" style="color:var(--blue-main);"></i> Statistiky Webu</h2>
-    <div style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;">
-        <i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Automaticky aktualizováno
-    </div>
-</div>
-
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px;">
     <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--blue-main); text-align: center;">
         <h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Unikátní zobrazení (Celkem)</h3>
