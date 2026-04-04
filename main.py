@@ -91,7 +91,6 @@ def get_db():
     except Exception as e: print(f"Chyba připojení k DB: {e}")
     return None
 
-# --- OPRAVA STATUSŮ: Automatické načítání pro všechny šablony ---
 def get_system_statuses():
     try:
         db = get_db()
@@ -102,7 +101,6 @@ def get_system_statuses():
     except: pass
     return {}
 
-# --- DEFINICE TLAČÍTEK PRO AUTENTIZACI DO APLIKACE A DASHBOARDU ---
 class AppAuthView(discord.ui.View):
     def __init__(self, token, discord_id, is_dm=True):
         super().__init__(timeout=300)
@@ -314,7 +312,6 @@ def trigger_setup_messages_update():
     if bot.loop and bot.loop.is_running() and bot.is_ready():
         asyncio.run_coroutine_threadsafe(update_setup_messages_async(), bot.loop)
 
-# --- OPRAVA SUPPORTERS: Zabezpečení sortovací funkce ---
 def process_supporters(data_list):
     for s in data_list:
         amt_str = str(s.get('amount', '0'))
@@ -330,7 +327,6 @@ def process_supporters(data_list):
         if norm_val >= 325: s['tier'] = 3
         elif norm_val >= 195: s['tier'] = 2
         else: s['tier'] = 1
-    # Oprava: ID explicitně jako string a hodnota jako float
     data_list.sort(key=lambda x: (float(x.get('norm_val', 0)), str(x.get('id', ''))), reverse=True)
     return data_list
 
@@ -424,7 +420,6 @@ def send_log(title, description, color=0x38bdf8):
 def _cors_jsonify(data):
     return jsonify(data)
 
-# --- OPRAVA STATUSŮ: Aplikace statusů do všech template funkcí ---
 def render_public(template_string, **kwargs):
     html = PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
     if 'statuses' not in kwargs:
@@ -657,6 +652,11 @@ def api_report_error():
         asyncio.run_coroutine_threadsafe(send_err(), bot.loop)
     return _cors_jsonify({"status": "success"})
 
+@app.route('/api/keepalive', methods=['GET', 'OPTIONS'], strict_slashes=False)
+def api_keepalive():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+    return _cors_jsonify({"status": "ok", "message": "Server is running"})
+
 @app.route('/api/submit_stats', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_submit_stats():
     if request.method == 'OPTIONS': return _cors_jsonify({})
@@ -755,7 +755,6 @@ def dashboard_app_management():
                     dl_enabled = str(s['setting_value']).lower() != 'false'
     except: pass
     
-    # Připojíme HTML_STATUS_SECTION z druhého souboru přímo pod správu aplikace
     kombinovane_html = HTML_APP_MANAGEMENT + "\n" + HTML_STATUS_SECTION
     return render_dashboard(kombinovane_html, soft_enabled=soft_enabled, dl_enabled=dl_enabled, deploy_time=DEPLOY_TIME)
 
@@ -793,13 +792,11 @@ def update_statuses():
     db = get_db()
     if db:
         try:
-            # Sběr dat z formuláře pro live statusy
             statuses = {}
             for key, value in request.form.items():
                 if key.startswith('status_'):
                     statuses[key.replace('status_', '')] = value
             
-            # Uložíme do databáze jako JSON do tabulky settings
             check = db.table("settings").select("*").eq("setting_key", "system_statuses").execute().data
             if check:
                 db.table("settings").update({"setting_value": json.dumps(statuses)}).eq("setting_key", "system_statuses").execute()
@@ -2126,7 +2123,6 @@ async def on_ready():
     try: bot.add_view(DynamicDownloadView())
     except: pass
     
-    # Zde také načteme zpět chybějící views pro DM notifikace
     bot.add_view(AppAuthView("", "", False))
     bot.add_view(DashboardAuthView("", ""))
 
