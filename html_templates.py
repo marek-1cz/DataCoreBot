@@ -10,7 +10,7 @@ BASE_HTML = """
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 :root { --bg-dark: #0f172a; --bg-panel: #1e293b; --blue-main: #38bdf8; --blue-hover: #0284c7; --text-main: #f8fafc; --text-muted: #94a3b8; --danger: #ef4444; --success: #10b981; --warning: #f59e0b; }
-body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-dark); color: var(--text-main); margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-dark); color: var(--text-main); margin: 0; padding: 0; overflow-x: hidden; }
 .top-nav { background-color: rgba(15, 23, 42, 0.9); padding: 15px 40px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; backdrop-filter: blur(10px); z-index: 100; }
 .logo { font-size: 24px; font-weight: 800; color: var(--blue-main); text-decoration: none; letter-spacing: 1px; display: flex; align-items: center; gap: 10px; }
 .nav-links a { color: var(--text-main); text-decoration: none; margin-left: 20px; font-weight: 500; transition: color 0.3s; }
@@ -59,9 +59,9 @@ tr:hover { background-color: #334155; }
 
 /* --- NOVÉ SVÍTÍCÍ EFEKTY PRO PODPOROVATELE --- */
 @keyframes pulseShiny { 0% { transform: scale(1); box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); } 100% { transform: scale(1.05); box-shadow: 0 0 45px rgba(245, 158, 11, 1); } }
-@keyframes glowMega { 0% { box-shadow: 0 0 30px rgba(255, 51, 51, 0.5); border-color: #ff3333; transform: scale(1); } 100% { box-shadow: 0 0 80px rgba(255, 51, 51, 1); border-color: #ffffff; transform: scale(1.02); } }
-@keyframes glowVelky { 0% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.4); border-color: #f59e0b; transform: scale(1); } 100% { box-shadow: 0 0 50px rgba(245, 158, 11, 0.9); border-color: #fcd34d; transform: scale(1.01); } }
-@keyframes glowNormal { 0% { box-shadow: 0 0 10px rgba(56, 189, 248, 0.3); border-color: #38bdf8; } 100% { box-shadow: 0 0 30px rgba(56, 189, 248, 0.7); border-color: #e0f2fe; } }
+@keyframes glowMega { 0% { box-shadow: 0 0 35px rgba(255, 51, 51, 0.5); border-color: #ff3333; transform: scale(1); } 100% { box-shadow: 0 0 80px rgba(255, 51, 51, 1); border-color: #ffffff; transform: scale(1.03); } }
+@keyframes glowVelky { 0% { box-shadow: 0 0 25px rgba(245, 158, 11, 0.4); border-color: #f59e0b; transform: scale(1); } 100% { box-shadow: 0 0 60px rgba(245, 158, 11, 0.9); border-color: #fcd34d; transform: scale(1.02); } }
+@keyframes glowNormal { 0% { box-shadow: 0 0 15px rgba(56, 189, 248, 0.3); border-color: #38bdf8; } 100% { box-shadow: 0 0 40px rgba(56, 189, 248, 0.7); border-color: #e0f2fe; } }
 </style>
 </head>
 <body>
@@ -654,142 +654,6 @@ HTML_PUBLIC_STATS = """
             r.style.display = text.indexOf(input) > -1 ? "" : "none";
         });
     }
-</script>
-"""
-
-# --- PŘIDANÁ A PŘEDĚLANÁ ŠABLONA PODPOROVATELŮ (CELÁ ŠÍŘKA A EFEKTY) ---
-HTML_SUPPORTERS = """
-<div style="text-align: center; margin-bottom: 40px;">
-    <h1 style="color: var(--warning); font-size: 36px; text-shadow: 0 0 15px rgba(245, 158, 11, 0.4);"><i class="fas fa-heart"></i> Podporovatelé Projektu</h1>
-    <p style="color: var(--text-muted); font-size: 16px; max-width: 600px; margin: 0 auto 20px auto;">
-        Tento projekt vyvíjím ve svém volném čase a je dostupný <strong>zcela zdarma</strong>. Podpora je čistě dobrovolná, program bude vždy fungovat i bez ní. Pokud se ale rozhodneš mě podpořit, získáš exkluzivní VIP výhody a speciální role na Discordu i webu!
-    </p>
-    <a href="https://buymeacoffee.com/marekk_czz" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 15px 40px; font-size: 20px; font-weight: 900; border-radius: 50px; text-decoration: none; text-transform: uppercase; animation: pulseShiny 2s infinite; border: 2px solid #fff; margin-top: 10px;">
-        <i class="fas fa-coffee"></i> Podpořit projekt
-    </a>
-</div>
-
-<div style="display: flex; flex-direction: column; gap: 20px; max-width: 900px; margin: 0 auto;">
-    {% for s in supporters %}
-    {% set anim_class = 'glowMega' if s.tier == 3 else ('glowVelky' if s.tier == 2 else 'glowNormal') %}
-    {% set border_color = '#ff3333' if s.tier == 3 else ('#f59e0b' if s.tier == 2 else '#38bdf8') %}
-    {% set title_color = '#ff3333' if s.tier == 3 else ('#fcd34d' if s.tier == 2 else '#e0f2fe') %}
-    {% set badge_text = 'MEGA PODPOROVATEL' if s.tier == 3 else ('VELKÝ PODPOROVATEL' if s.tier == 2 else 'PODPOROVATEL') %}
-    
-    <div style="background-color: var(--bg-panel); border-radius: 12px; width: 100%; padding: 25px; display: flex; justify-content: space-between; align-items: center; border-left: 6px solid {{ border_color }}; animation: {{ anim_class }} 3s infinite alternate; box-sizing: border-box;">
-        <div style="text-align: left; flex: 1;">
-            <div style="color: {{ border_color }}; font-size: 12px; font-weight: 900; letter-spacing: 2px; margin-bottom: 5px;">{{ badge_text }}</div>
-            <h3 style="color: {{ title_color }}; margin: 0 0 10px 0; font-size: 28px; text-transform: uppercase;">{{ s.get('name', 'Anonym') }}</h3>
-            {% if s.get('message') %}
-            <div style="color: var(--text-main); font-size: 15px; font-style: italic; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; border-left: 3px solid {{ border_color }}; margin-bottom: 5px;">"{{ s.get('message') }}"</div>
-            {% endif %}
-            <div style="color: var(--text-muted); font-size: 12px; margin-top: 10px;"><i class="fas fa-clock"></i> {{ s.get('created_at', '') }}</div>
-        </div>
-        <div style="margin-left: 20px; text-align: right;">
-            <div style="background: rgba(0,0,0,0.5); color: {{ border_color }}; padding: 15px 25px; border-radius: 10px; font-weight: 900; font-size: 24px; border: 2px solid {{ border_color }}; white-space: nowrap;">
-                {{ s.get('amount', '') }}
-            </div>
-        </div>
-    </div>
-    {% else %}
-    <div style="color: var(--text-muted); width: 100%; text-align: center; padding: 50px;">Zatím zde nejsou žádní podporovatelé. Buďte první!</div>
-    {% endfor %}
-</div>
-"""
-
-HTML_CLAIM = """
-<div style="max-width: 500px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--blue-main); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-    <h2 style="color: var(--blue-main); text-align: center; margin-top: 0;"><i class="fas fa-gift"></i> Vyzvednutí VIP Role</h2>
-    <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 30px;">Zadejte jméno, pod kterým jste před malou chvílí poslali příspěvek na Buy Me a Coffee, a Váš Discord Nick. Náš systém Vám obratem automaticky přidělí roli!</p>
-    <form method="POST">
-        <label style="color: var(--text-muted); font-size: 12px; font-weight: bold;">JMÉNO ZADANÉ NA BUY ME A COFFEE</label>
-        <input type="text" name="bmac_name" placeholder="Např. Jan Novák" required style="margin-bottom: 20px;">
-        <label style="color: var(--text-muted); font-size: 12px; font-weight: bold; display: block;">VÁŠ DISCORD NICK</label>
-        <input type="text" name="discord_nick" placeholder="Např. marekk_czz" required>
-        <button type="submit" class="btn" style="width: 100%; margin-top: 20px; font-size: 16px; padding: 15px;"><i class="fab fa-discord"></i> Propojit a získat roli</button>
-    </form>
-</div>
-"""
-
-HTML_STATS = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-chart-line" style="color:var(--blue-main);"></i> Statistiky Webu</h2>
-    <div style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;">
-        <i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Automaticky aktualizováno
-    </div>
-</div>
-
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px;">
-    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--blue-main); text-align: center;">
-        <h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Unikátní zobrazení (Celkem)</h3>
-        <div style="font-size: 40px; font-weight: 900; color: var(--text-main);">{{ total_visits }}</div>
-    </div>
-    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--success); text-align: center;">
-        <h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Zobrazení za 7 dní</h3>
-        <div style="font-size: 40px; font-weight: 900; color: var(--success);">{{ last_7_days }}</div>
-    </div>
-</div>
-
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-calendar-week"></i> Návštěvnost za posledních 7 dní</h3>
-        <div style="position: relative; height: 250px; width: 100%;">
-            <canvas id="chart7d"></canvas>
-        </div>
-    </div>
-    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-clock"></i> Dnešní aktivita po hodinách</h3>
-        <div style="position: relative; height: 250px; width: 100%;">
-            <canvas id="chart24h"></canvas>
-        </div>
-    </div>
-</div>
-
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-    <h3 style="color: var(--warning); margin-top: 0;"><i class="fas fa-globe"></i> Návštěvnost podle států (Souhrn)</h3>
-    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-        {% for cc, data in country_totals.items() %}
-        <div style="background: rgba(0,0,0,0.3); border: 1px solid #334155; padding: 10px 20px; border-radius: 8px; display: flex; align-items: center; gap: 10px;">
-            <img src="{{ data.flag }}" alt="" style="border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">
-            <span style="color: var(--text-main); font-weight: bold;">{{ data.name }}</span>
-            <span style="background: var(--blue-main); color: #000; padding: 2px 8px; border-radius: 12px; font-weight: 900; font-size: 12px;">{{ data.count }}</span>
-        </div>
-        {% else %}
-        <div style="color: var(--text-muted);">Zatím žádná data k zobrazení.</div>
-        {% endfor %}
-    </div>
-</div>
-
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-    <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-map-marker-alt"></i> Detailní přehled regionů</h3>
-    <table style="width: 100%;">
-        <tr>
-            <th>Stát / Region</th>
-            <th>Počet zobrazení</th>
-        </tr>
-        {% for c_name, data in region_totals.items() %}
-        <tr>
-            <td style="font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
-                {% if data.flag %}
-                <img src="{{ data.flag }}" alt="" style="border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">
-                {% endif %}
-                {{ c_name }}
-            </td>
-            <td style="color: var(--blue-main); font-weight: bold; font-size: 16px;">{{ data.count }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Zatím žádná data k zobrazení. Tabulka "page_visits" je prázdná.</td></tr>
-        {% endfor %}
-    </table>
-</div>
-
-<script>
-    const labels7d = {{ labels_7d | safe }};
-    const data7d = {{ data_7d | safe }};
-    const labels24h = {{ labels_24h | safe }};
-    const data24h = {{ data_24h | safe }};
-    new Chart(document.getElementById('chart7d').getContext('2d'), { type: 'line', data: { labels: labels7d, datasets: [{ label: 'Počet návštěv', data: data7d, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)', borderWidth: 3, tension: 0.3, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8' }, grid: { display: false } } } } });
-    new Chart(document.getElementById('chart24h').getContext('2d'), { type: 'bar', data: { labels: labels24h, datasets: [{ label: 'Dnešní návštěvy', data: data24h, backgroundColor: '#38bdf8', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { display: false } } } } });
 </script>
 """
 
