@@ -57,11 +57,23 @@ tr:hover { background-color: #334155; }
 .profile-val { font-size: 14px; font-weight: bold; color: var(--text-main); }
 .dl-table th, .dl-table td { padding: 8px; font-size: 12px; border-bottom: 1px solid #334155; }
 
-/* --- NOVÉ SVÍTÍCÍ EFEKTY PRO PODPOROVATELE --- */
-@keyframes pulseShiny { 0% { transform: scale(1); box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); } 100% { transform: scale(1.05); box-shadow: 0 0 45px rgba(245, 158, 11, 1); } }
-@keyframes glowMega { 0% { box-shadow: 0 0 35px rgba(255, 51, 51, 0.5); border-color: #ff3333; transform: scale(1); } 100% { box-shadow: 0 0 80px rgba(255, 51, 51, 1); border-color: #ffffff; transform: scale(1.03); } }
-@keyframes glowVelky { 0% { box-shadow: 0 0 25px rgba(245, 158, 11, 0.4); border-color: #f59e0b; transform: scale(1); } 100% { box-shadow: 0 0 60px rgba(245, 158, 11, 0.9); border-color: #fcd34d; transform: scale(1.02); } }
-@keyframes glowNormal { 0% { box-shadow: 0 0 15px rgba(56, 189, 248, 0.3); border-color: #38bdf8; } 100% { box-shadow: 0 0 40px rgba(56, 189, 248, 0.7); border-color: #e0f2fe; } }
+/* --- NOVÉ PLYNULÉ SVÍTÍCÍ EFEKTY PRO PODPOROVATELE --- */
+@keyframes pulseShiny { 
+    0% { transform: scale(1); box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); } 
+    100% { transform: scale(1.05); box-shadow: 0 0 40px rgba(245, 158, 11, 1); } 
+}
+@keyframes glowMega { 
+    0% { box-shadow: 0 0 30px rgba(255, 51, 51, 0.4); border-color: #cc0000; transform: scale(1); } 
+    100% { box-shadow: 0 0 80px rgba(255, 51, 51, 0.9); border-color: #ff6666; transform: scale(1.02); } 
+}
+@keyframes glowVelky { 
+    0% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); border-color: #d97706; transform: scale(1); } 
+    100% { box-shadow: 0 0 60px rgba(245, 158, 11, 0.8); border-color: #fcd34d; transform: scale(1.01); } 
+}
+@keyframes glowNormal { 
+    0% { box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); border-color: #0284c7; transform: scale(1); } 
+    100% { box-shadow: 0 0 35px rgba(56, 189, 248, 0.6); border-color: #bae6fd; transform: scale(1.005); } 
+}
 </style>
 </head>
 <body>
@@ -654,6 +666,152 @@ HTML_PUBLIC_STATS = """
             r.style.display = text.indexOf(input) > -1 ? "" : "none";
         });
     }
+</script>
+"""
+
+HTML_SUPPORTERS = """
+<div style="text-align: center; margin-bottom: 50px;">
+    <h1 style="color: var(--warning); font-size: 42px; font-weight: 900; text-transform: uppercase; text-shadow: 0 0 20px rgba(245, 158, 11, 0.6);"><i class="fas fa-crown"></i> Podporovatelé Projektu</h1>
+    <p style="color: var(--text-muted); font-size: 18px; max-width: 800px; margin: 0 auto 30px auto; line-height: 1.6;">
+        Tenhle projekt tvořím ve svém volném čase a je kompletně zdarma pro všechny. Podpora je čistě dobrovolná a pomáhá mi projekt dál rozvíjet a vylepšovat.<br>
+        Pokud se rozhodnete mě podpořit, odemknete si exkluzivní VIP výhody a získáte speciální role na Discordu i další bonusy &mdash; více informací najdete na stránce po kliknutí níže.
+    </p>
+    <div style="padding: 20px;">
+        <a href="https://buymeacoffee.com/marekk_czz" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 20px 50px; font-size: 24px; font-weight: 900; border-radius: 50px; text-decoration: none; text-transform: uppercase; animation: pulseShiny 3s ease-in-out infinite alternate; border: 2px solid #fff; box-shadow: 0 0 20px rgba(245, 158, 11, 0.6);">
+            <i class="fas fa-coffee"></i> Podpořit projekt
+        </a>
+    </div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 35px; max-width: 1000px; margin: 0 auto; padding: 20px;">
+    {% for s in supporters %}
+    {% set anim_class = 'glowMega' if s.tier == 3 else ('glowVelky' if s.tier == 2 else 'glowNormal') %}
+    {% set border_color = '#ff3333' if s.tier == 3 else ('#f59e0b' if s.tier == 2 else '#38bdf8') %}
+    {% set title_color = '#ff3333' if s.tier == 3 else ('#fcd34d' if s.tier == 2 else '#e0f2fe') %}
+    {% set badge_text = 'MEGA PODPOROVATEL' if s.tier == 3 else ('VELKÝ PODPOROVATEL' if s.tier == 2 else 'PODPOROVATEL') %}
+    
+    <div style="background-color: var(--bg-panel); border-radius: 12px; width: 100%; padding: 30px; display: flex; justify-content: space-between; align-items: center; border-left: 8px solid {{ border_color }}; animation: {{ anim_class }} 4s ease-in-out infinite alternate; box-sizing: border-box; position: relative;">
+        <div style="text-align: left; flex: 1;">
+            <div style="color: {{ border_color }}; font-size: 14px; font-weight: 900; letter-spacing: 3px; margin-bottom: 8px; text-shadow: 0 0 5px {{ border_color }};">{{ badge_text }}</div>
+            <h3 style="color: {{ title_color }}; margin: 0 0 10px 0; font-size: 32px; text-transform: uppercase; text-shadow: 0 0 10px {{ border_color }};">{{ s.get('name', 'Anonym') }}</h3>
+            {% if s.get('message') %}
+            <div style="color: var(--text-main); font-size: 16px; font-style: italic; background: rgba(0,0,0,0.4); padding: 15px; border-radius: 8px; border-left: 3px solid {{ border_color }}; margin-bottom: 10px; margin-top: 15px;">"{{ s.get('message') }}"</div>
+            {% endif %}
+            <div style="color: var(--text-muted); font-size: 13px; margin-top: 15px; font-weight: bold;"><i class="fas fa-clock"></i> {{ s.get('created_at', '') }}</div>
+        </div>
+        <div style="margin-left: 30px; text-align: right;">
+            <div style="background: rgba(0,0,0,0.6); color: {{ border_color }}; padding: 20px 30px; border-radius: 12px; font-weight: 900; font-size: 28px; border: 2px solid {{ border_color }}; box-shadow: inset 0 0 15px rgba(0,0,0,0.8), 0 0 15px {{ border_color }}; white-space: nowrap;">
+                {{ s.get('amount', '') }}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div style="color: var(--text-muted); width: 100%; text-align: center; padding: 50px; font-size: 18px;">Zatím zde nejsou žádní podporovatelé. Buďte první!</div>
+    {% endfor %}
+</div>
+"""
+
+HTML_CLAIM = """
+<div style="max-width: 500px; margin: 50px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; border-top: 4px solid var(--blue-main); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <h2 style="color: var(--blue-main); text-align: center; margin-top: 0;"><i class="fas fa-gift"></i> Vyzvednutí VIP Role</h2>
+    <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 30px;">Zadejte jméno, pod kterým jste před malou chvílí poslali příspěvek na Buy Me a Coffee, a Váš Discord Nick. Náš systém Vám obratem automaticky přidělí roli!</p>
+    <form method="POST">
+        <label style="color: var(--text-muted); font-size: 12px; font-weight: bold;">JMÉNO ZADANÉ NA BUY ME A COFFEE</label>
+        <input type="text" name="bmac_name" placeholder="Např. Jan Novák" required style="margin-bottom: 20px;">
+        <label style="color: var(--text-muted); font-size: 12px; font-weight: bold; display: block;">VÁŠ DISCORD NICK</label>
+        <input type="text" name="discord_nick" placeholder="Např. marekk_czz" required>
+        <button type="submit" class="btn" style="width: 100%; margin-top: 20px; font-size: 16px; padding: 15px;"><i class="fab fa-discord"></i> Propojit a získat roli</button>
+    </form>
+</div>
+"""
+
+HTML_STATS = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-chart-line" style="color:var(--blue-main);"></i> Statistiky Webu</h2>
+    <div style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;">
+        <i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Automaticky aktualizováno
+    </div>
+</div>
+
+HTML_STATS = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-chart-line" style="color:var(--blue-main);"></i> Statistiky Webu</h2>
+    <div style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;">
+        <i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Automaticky aktualizováno
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px;">
+    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--blue-main); text-align: center;">
+        <h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Unikátní zobrazení (Celkem)</h3>
+        <div style="font-size: 40px; font-weight: 900; color: var(--text-main);">{{ total_visits }}</div>
+    </div>
+    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--success); text-align: center;">
+        <h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Zobrazení za 7 dní</h3>
+        <div style="font-size: 40px; font-weight: 900; color: var(--success);">{{ last_7_days }}</div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-calendar-week"></i> Návštěvnost za posledních 7 dní</h3>
+        <div style="position: relative; height: 250px; width: 100%;">
+            <canvas id="chart7d"></canvas>
+        </div>
+    </div>
+    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-clock"></i> Dnešní aktivita po hodinách</h3>
+        <div style="position: relative; height: 250px; width: 100%;">
+            <canvas id="chart24h"></canvas>
+        </div>
+    </div>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+    <h3 style="color: var(--warning); margin-top: 0;"><i class="fas fa-globe"></i> Návštěvnost podle států (Souhrn)</h3>
+    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+        {% for cc, data in country_totals.items() %}
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid #334155; padding: 10px 20px; border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+            <img src="{{ data.flag }}" alt="" style="border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">
+            <span style="color: var(--text-main); font-weight: bold;">{{ data.name }}</span>
+            <span style="background: var(--blue-main); color: #000; padding: 2px 8px; border-radius: 12px; font-weight: 900; font-size: 12px;">{{ data.count }}</span>
+        </div>
+        {% else %}
+        <div style="color: var(--text-muted);">Zatím žádná data k zobrazení.</div>
+        {% endfor %}
+    </div>
+</div>
+
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+    <h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-map-marker-alt"></i> Detailní přehled regionů</h3>
+    <table style="width: 100%;">
+        <tr>
+            <th>Stát / Region</th>
+            <th>Počet zobrazení</th>
+        </tr>
+        {% for c_name, data in region_totals.items() %}
+        <tr>
+            <td style="font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+                {% if data.flag %}
+                <img src="{{ data.flag }}" alt="" style="border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">
+                {% endif %}
+                {{ c_name }}
+            </td>
+            <td style="color: var(--blue-main); font-weight: bold; font-size: 16px;">{{ data.count }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Zatím žádná data k zobrazení. Tabulka "page_visits" je prázdná.</td></tr>
+        {% endfor %}
+    </table>
+</div>
+
+<script>
+    const labels7d = {{ labels_7d | safe }};
+    const data7d = {{ data_7d | safe }};
+    const labels24h = {{ labels_24h | safe }};
+    const data24h = {{ data_24h | safe }};
+    new Chart(document.getElementById('chart7d').getContext('2d'), { type: 'line', data: { labels: labels7d, datasets: [{ label: 'Počet návštěv', data: data7d, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)', borderWidth: 3, tension: 0.3, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8' }, grid: { display: false } } } } });
+    new Chart(document.getElementById('chart24h').getContext('2d'), { type: 'bar', data: { labels: labels24h, datasets: [{ label: 'Dnešní návštěvy', data: data24h, backgroundColor: '#38bdf8', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { display: false } } } } });
 </script>
 """
 
@@ -1270,352 +1428,6 @@ HTML_IDS = """
 </div>
 """
 
-HTML_DASHBOARD_MAIN = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
-    
-    <div id="refresh-timer" style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;">
-        <i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Aktualizace za: <span id="timer-sec" style="color: white;">60</span>s
-    </div>
-</div>
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-    <div style="overflow-x: auto;">
-        <table id="usersTable">
-            <thead>
-                <tr>
-                    <th onclick="sortTable(0)">App ID ↕</th>
-                    <th onclick="sortTable(1)">Nick ↕</th>
-                    <th onclick="sortTable(2)">Stav ↕</th>
-                    <th onclick="sortTable(3)">Role ↕</th>
-                    <th onclick="sortTable(4)">Poslední Aktivita ↕</th>
-                    <th>Akce</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for user in users %}
-            <tr>
-                <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
-                <td><strong>{{ user.get('nick', '') }}</strong></td>
-                <td>
-                    {% if user.get('is_banned') %}
-                        <span style="color: var(--danger); font-size: 11px; font-weight:bold; border:1px solid var(--danger); padding:2px 5px; border-radius:4px;">BANNED</span>
-                    {% elif user.get('is_deleted') %}
-                        <span style="color: var(--text-muted); font-size: 11px; font-weight:bold; border:1px solid var(--text-muted); padding:2px 5px; border-radius:4px;">DELETED</span>
-                    {% elif not user.get('hwid') or user.get('hwid') == 'None' or user.get('hwid') == '' %}
-                        <span style="color: var(--warning); font-size: 11px; font-weight:bold; border:1px solid var(--warning); padding:2px 5px; border-radius:4px;">NOT ACTIVATED</span>
-                    {% else %}
-                        <span style="color: var(--success); font-size: 11px; font-weight:bold; border:1px solid var(--success); padding:2px 5px; border-radius:4px;">ACTIVATED</span>
-                    {% endif %}
-                </td>
-                
-                {% set role_weight = 1 %}
-                {% if 'SA' in user.get('role', '') %}{% set role_weight = 4 %}
-                {% elif 'DEV' in user.get('role', '') %}{% set role_weight = 3 %}
-                {% elif 'BT' in user.get('role', '') %}{% set role_weight = 2 %}
-                {% endif %}
-                <td data-sort="{{ role_weight }}">
-                    {% set role_list = user.get('role', '').split(',') %}
-                    {% for r in role_list %}
-                        {% set r_clean = r.strip() %}
-                        {% if r_clean == 'SA' %}
-                            <span class="role-tag" style="background-color: #ef4444; color: white;">SA</span>
-                        {% elif r_clean == 'DEV' %}
-                            <span class="role-tag" style="background-color: #10b981; color: white;">DEV</span>
-                        {% elif r_clean == 'BT' %}
-                            <span class="role-tag" style="background-color: #3b82f6; color: white;">BT</span>
-                        {% elif r_clean == 'User' %}
-                            <span class="role-tag" style="background-color: #64748b; color: white;">User</span>
-                        {% endif %}
-                    {% endfor %}
-                    {% if user.get('dashboard_access') %}
-                        <i class="fas fa-shield-alt" style="color:var(--blue-main); font-size:12px; margin-left:5px;" title="Má přístup do DB"></i>
-                    {% endif %}
-                </td>
-                <td style="color: var(--text-muted); font-size: 13px;" data-sort="{{ '99999999999' if user.get('is_online') else user.get('last_active', '0') }}">
-                    {% if user.get('is_online') %}
-                        <span style="color: var(--success); font-weight: bold;">🟢 AKTIVNÍ</span>
-                    {% else %}
-                        {{ user.get('last_active', 'Nikdy nehrál') }}
-                    {% endif %}
-                </td>
-                <td>
-                    <button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" 
-                        data-app-id="{{ user.get('app_id', '') }}"
-                        data-discord-id="{{ user.get('discord_id', '') }}"
-                        data-nick="{{ (user.get('nick') or '') | e }}"
-                        data-roles="{{ (user.get('role') or '') | e }}"
-                        data-hwid="{{ (user.get('hwid') or '') | e }}"
-                        data-ip="{{ (user.get('ip_address') or '') | e }}"
-                        data-banned="{{ user.get('is_banned', False) }}"
-                        data-deleted="{{ user.get('is_deleted', False) }}"
-                        data-db-access="{{ user.get('dashboard_access', False) }}"
-                        data-reg-at="{{ (user.get('registered_at') or '') | e }}"
-                        onclick="openModal(this)"><i class="fas fa-edit"></i> Upravit</button>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<div class="modal-overlay" id="editModal">
-    <div class="modal" id="modalContent">
-        <div style="width: 100%;">
-            <h2 style="color: var(--blue-main); margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px; display: flex; justify-content: space-between;">
-                <span><i class="fas fa-user"></i> Profil <span id="modalAppId" style="color: var(--text-muted); font-size: 16px;"></span></span>
-                <span id="modalStatusDot" style="font-size: 14px;"></span>
-            </h2>
-            
-            <div class="profile-grid">
-                <div class="profile-card">
-                    <div class="profile-stat">Členem Discordu od:</div>
-                    <div class="profile-val" id="profJoined"><i class="fas fa-spinner fa-spin"></i> Načítání...</div>
-                    <div class="profile-stat" style="margin-top: 10px;">Datum registrace v DB:</div>
-                    <div class="profile-val" id="profRegistered"></div>
-                    <div class="profile-stat" style="margin-top: 10px;">Aktivita v aplikaci (Status):</div>
-                    <div class="profile-val" id="profAppStatus" style="color: #64748b;"><i>Připravuje se...</i></div>
-                    <div id="profStats" style="margin-top: 10px;"></div>
-                    <div class="profile-stat" style="margin-top: 10px;">Přístup do webové DB:</div>
-                    <div class="profile-val" id="profDbAccess"></div>
-                </div>
-                
-                <div class="profile-card" style="max-height: 250px; overflow-y: auto;">
-                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--blue-main);">Historie stahování:</div>
-                    <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent; border-radius: 0;">
-                        <tbody id="profDownloads">
-                            <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="profile-card" style="max-height: 250px; overflow-y: auto;">
-                    <div class="profile-stat" style="margin-bottom: 10px; font-weight:bold; color: var(--warning);">Historie sezení (Logy):</div>
-                    <table class="dl-table" style="width: 100%; margin-top: 0; background: transparent; border-radius: 0;">
-                        <tbody id="profSessions">
-                            <tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <form action="/dashboard/edit_user" method="POST" style="border-top: 1px solid #334155; padding-top: 15px; margin-top: 15px;">
-                <input type="hidden" name="discord_id" id="modalDiscordId">
-                <label>Herní Nick:</label>
-                <input type="text" name="nick" id="modalNick" required>
-                <label>Role:</label>
-                <div class="checkbox-group">
-                    <label style="color: #ef4444;"><input type="checkbox" name="roles" value="SA"> SA</label>
-                    <label style="color: #10b981;"><input type="checkbox" name="roles" value="DEV"> DEV</label>
-                    <label style="color: #3b82f6;"><input type="checkbox" name="roles" value="BT"> BT</label>
-                    <label style="color: #94a3b8;"><input type="checkbox" name="roles" value="User"> User</label>
-                </div>
-                
-                <div style="display: flex; gap: 15px; margin-bottom: 15px;">
-                    <div style="flex: 1;">
-                        <label style="display: block; margin-bottom: 5px;">HWID (Zámek na PC):</label>
-                        <input type="text" name="hwid" id="modalHwid" placeholder="Pro odblokování smažte text" style="margin: 0;">
-                    </div>
-                    <div style="flex: 1;">
-                        <label style="display: block; margin-bottom: 5px;">IP adresa (Zámek sítě):</label>
-                        <input type="text" name="ip_address" id="modalIp" placeholder="Pro odblokování smažte text" style="margin: 0;">
-                    </div>
-                </div>
-
-                <div style="background-color: rgba(56, 189, 248, 0.1); padding: 10px; border-radius: 5px; border: 1px solid var(--blue-main); margin-bottom: 15px; margin-top: 10px;">
-                    <label style="cursor: pointer; font-weight: bold; color: var(--blue-main); margin: 0; display: flex; align-items: center; gap: 10px;">
-                        <input type="checkbox" name="dashboard_access" id="modalDashboardAccess" value="True" style="width: auto; margin: 0;"> 
-                        Povolit přístup do Dashboardu (2FA ověření)
-                    </label>
-                </div>
-                <div id="activeActions">
-                    <div style="display: flex; gap: 10px; margin-top: 10px;">
-                        <button type="submit" name="action" value="save" class="btn" style="flex: 2;"><i class="fas fa-save"></i> Uložit úpravy</button>
-                        <button type="submit" name="action" value="ban" id="btnBan" class="btn btn-warning" style="flex: 1;"><i class="fas fa-ban"></i> Dát BAN</button>
-                        <button type="submit" name="action" value="unban" id="btnUnban" class="btn btn-success" style="flex: 1; display: none;"><i class="fas fa-check"></i> Un-BAN</button>
-                    </div>
-                    <div style="margin-top: 15px; border-top: 1px solid #334155; padding-top: 15px;">
-                        <button type="submit" name="action" value="delete" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Smazat účet? (Zablokuje ID, umožní novou registraci)')"><i class="fas fa-trash"></i> Smazat účet (Soft Delete)</button>
-                    </div>
-                </div>
-                <div id="deletedActions" style="display: none; margin-top: 20px; border-top: 1px solid #334155; padding-top: 15px;">
-                    <p style="color: var(--danger); font-weight: bold; text-align: center; margin-top: 0;">Tento účet je smazaný.</p>
-                    <div style="display: flex; gap: 10px;">
-                        <button type="submit" name="action" value="restore" class="btn btn-success" style="flex: 1;"><i class="fas fa-undo"></i> Obnovit účet</button>
-                        <button type="submit" name="action" value="hard_delete" class="btn btn-dark" style="flex: 1;" onclick="return confirm('PERMANENTNÍ SMAZÁNÍ: Tato akce kompletně vymaže veškerá data o tomto uživateli. Pokračovat?')"><i class="fas fa-skull"></i> Smazat permanentně</button>
-                    </div>
-                </div>
-            </form>
-            <button class="btn" onclick="closeModal()" style="background: transparent; color: var(--text-muted); width: 100%; margin-top: 10px; border: 1px solid #334155;">Zrušit</button>
-        </div>
-    </div>
-</div>
-
-<script>
-    let timeLeft = 60;
-    setInterval(() => {
-        if(timeLeft > 0) {
-            timeLeft--;
-            let secEl = document.getElementById('timer-sec');
-            if(secEl) secEl.innerText = timeLeft;
-        }
-        if(timeLeft === 0) {
-            timeLeft = -1; // Aby se to nevolalo pořád dokola
-            location.reload();
-        }
-    }, 1000);
-
-    let sortDir = {};
-    function sortTable(n) {
-        let table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-        table = document.getElementById("usersTable");
-        switching = true;
-        
-        dir = sortDir[n] === "asc" ? "desc" : "asc";
-        sortDir[n] = dir;
-
-        while (switching) {
-            switching = false;
-            rows = table.rows;
-            for (i = 1; i < (rows.length - 1); i++) {
-                shouldSwitch = false;
-                x = rows[i].getElementsByTagName("TD")[n];
-                y = rows[i + 1].getElementsByTagName("TD")[n];
-                
-                let xContent = x.hasAttribute("data-sort") ? x.getAttribute("data-sort") : x.innerHTML.replace(/<[^>]*>?/gm, '').trim();
-                let yContent = y.hasAttribute("data-sort") ? y.getAttribute("data-sort") : y.innerHTML.replace(/<[^>]*>?/gm, '').trim();
-                
-                if (!isNaN(xContent) && !isNaN(yContent)) {
-                    xContent = parseFloat(xContent);
-                    yContent = parseFloat(yContent);
-                } else {
-                    xContent = xContent.toLowerCase();
-                    yContent = yContent.toLowerCase();
-                }
-
-                if (dir == "asc") {
-                    if (xContent > yContent) { shouldSwitch = true; break; }
-                } else if (dir == "desc") {
-                    if (xContent < yContent) { shouldSwitch = true; break; }
-                }
-            }
-            if (shouldSwitch) {
-                rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-                switching = true;
-                switchcount ++;
-            } 
-        }
-    }
-
-    function openModal(btn) {
-        try {
-            document.getElementById('editModal').style.display = 'flex';
-            document.getElementById('modalAppId').innerText = "#" + (btn.getAttribute('data-app-id') || "");
-            
-            let discord_id = btn.getAttribute('data-discord-id') || "";
-            document.getElementById('modalDiscordId').value = discord_id;
-            
-            document.getElementById('modalNick').value = btn.getAttribute('data-nick') || "";
-            
-            let hwid = btn.getAttribute('data-hwid');
-            document.getElementById('modalHwid').value = (!hwid || hwid === 'None') ? '' : hwid;
-
-            let ip = btn.getAttribute('data-ip');
-            document.getElementById('modalIp').value = (!ip || ip === 'None') ? '' : ip;
-            
-            let registered_at = btn.getAttribute('data-reg-at');
-            document.getElementById('profRegistered').innerText = (registered_at && registered_at !== 'None') ? registered_at : 'Neznámé (Starý účet)';
-            
-            let dashboard_access = btn.getAttribute('data-db-access');
-            document.getElementById('modalDashboardAccess').checked = (dashboard_access === 'True');
-            document.getElementById('profDbAccess').innerHTML = dashboard_access === 'True' ? '<span style="color: var(--success);"><i class="fas fa-check-circle"></i> Povoleno</span>' : '<span style="color: var(--danger);"><i class="fas fa-times-circle"></i> Zakázáno</span>';
-            
-            document.querySelectorAll('input[name="roles"]').forEach(cb => cb.checked = false);
-            let rolesStr = btn.getAttribute('data-roles') || "";
-            rolesStr.split(',').forEach(r => {
-                let el = document.querySelector(`input[name="roles"][value="${r.trim()}"]`);
-                if(el) el.checked = true;
-            });
-            
-            let is_deleted = btn.getAttribute('data-deleted');
-            let is_banned = btn.getAttribute('data-banned');
-            if (is_deleted === 'True') {
-                document.getElementById('activeActions').style.display = 'none';
-                document.getElementById('deletedActions').style.display = 'block';
-            } else {
-                document.getElementById('activeActions').style.display = 'block';
-                document.getElementById('deletedActions').style.display = 'none';
-                if (is_banned === 'True') {
-                    document.getElementById('btnBan').style.display = 'none';
-                    document.getElementById('btnUnban').style.display = 'block';
-                } else {
-                    document.getElementById('btnBan').style.display = 'block';
-                    document.getElementById('btnUnban').style.display = 'none';
-                }
-            }
-            
-            document.getElementById('profJoined').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            document.getElementById('modalStatusDot').innerHTML = '';
-            document.getElementById('profDownloads').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
-            document.getElementById('profSessions').innerHTML = '<tr><td colspan="2" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
-            document.getElementById('profAppStatus').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            document.getElementById('profStats').innerHTML = '';
-            
-            if (!discord_id || discord_id.trim() === '' || discord_id === 'None') {
-                document.getElementById('profJoined').innerText = "Chybí ID";
-                document.getElementById('profAppStatus').innerHTML = "<span style='color:#ef4444;'>Chyba dat (ID nenalezeno)</span>";
-                return;
-            }
-
-            fetch('/api/get_profile_data/' + discord_id)
-                .then(r => r.json())
-                .then(data => {
-                    if (data.error) {
-                        document.getElementById('profAppStatus').innerHTML = "<span style='color:#ef4444;'>Chyba dat: " + data.error + "</span>";
-                        return;
-                    }
-                    document.getElementById('profJoined').innerText = data.joined_at || "Nenalezen";
-                    document.getElementById('modalStatusDot').innerHTML = data.status || "";
-                    document.getElementById('profAppStatus').innerHTML = data.app_status || "";
-                    document.getElementById('profStats').innerHTML = data.stats || "";
-                    
-                    let dlHtml = "";
-                    if(data.downloads && data.downloads.length > 0) {
-                        data.downloads.forEach(d => {
-                            dlHtml += `<tr><td style="color: var(--blue-main);"><b>${d.version_name}</b></td><td style="color: var(--text-muted);">${d.downloaded_at}</td></tr>`;
-                        });
-                    } else {
-                        dlHtml = "<tr><td colspan='2' style='color: var(--text-muted);'>Zatím nestáhl žádný soubor.</td></tr>";
-                    }
-                    document.getElementById('profDownloads').innerHTML = dlHtml;
-
-                    let sessHtml = "";
-                    if(data.sessions && data.sessions.length > 0) {
-                        data.sessions.forEach(s => {
-                            sessHtml += `<tr>
-                                <td style="color: var(--success); font-weight:bold; white-space:nowrap;">🟢 ${s.start_time.split(' ')[1] || s.start_time}</td>
-                                <td style="color: var(--danger); font-weight:bold; white-space:nowrap;">🔴 ${s.end_time.split(' ')[1] || s.end_time}</td>
-                            </tr>
-                            <tr><td colspan="2" style="color: var(--text-muted); padding-top:0; padding-bottom:10px; border-bottom:1px solid #334155; text-align:center;">${s.start_time.split(' ')[0]}</td></tr>`;
-                        });
-                    } else {
-                        sessHtml = "<tr><td colspan='2' style='color: var(--text-muted);'>Zatím žádná aktivita.</td></tr>";
-                    }
-                    document.getElementById('profSessions').innerHTML = sessHtml;
-                })
-                .catch(e => {
-                    document.getElementById('profAppStatus').innerHTML = "<span style='color:#ef4444;'>Spojení selhalo</span>";
-                });
-        } catch(e) {
-            alert("Chyba při otevírání modalu: " + e.message);
-        }
-    }
-    function closeModal() { document.getElementById('editModal').style.display = 'none'; }
-</script>
-"""
-
 HTML_SUPPORTERS_MGMT = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-star" style="color:var(--warning);"></i> Správa Podporovatelů</h2>
@@ -1988,44 +1800,5 @@ HTML_LOGIN = """
         <input type="text" name="discord_id" placeholder="Vaše Discord ID (např. 1234567890)" required style="text-align: center; font-size: 16px; letter-spacing: 1px;">
         <button type="submit" class="btn" style="width: 100%; font-size: 16px; margin-top: 10px;"><i class="fas fa-sign-in-alt"></i> Přihlásit se</button>
     </form>
-</div>
-"""
-
-HTML_SUPPORTERS = """
-<div style="text-align: center; margin-bottom: 40px;">
-    <h1 style="color: var(--warning); font-size: 36px; text-shadow: 0 0 15px rgba(245, 158, 11, 0.4);"><i class="fas fa-heart"></i> Podporovatelé Projektu</h1>
-    <p style="color: var(--text-muted); font-size: 16px; max-width: 600px; margin: 0 auto 20px auto;">
-        Tento projekt vyvíjím ve svém volném čase a je dostupný <strong>zcela zdarma</strong>. Podpora je čistě dobrovolná, program bude vždy fungovat i bez ní. Pokud se ale rozhodneš mě podpořit, získáš exkluzivní VIP výhody a speciální role na Discordu i webu!
-    </p>
-    <a href="https://buymeacoffee.com/marekk_czz" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 15px 40px; font-size: 20px; font-weight: 900; border-radius: 50px; text-decoration: none; text-transform: uppercase; animation: pulseShiny 2s infinite; border: 2px solid #fff; margin-top: 10px;">
-        <i class="fas fa-coffee"></i> Podpořit projekt
-    </a>
-</div>
-
-<div style="display: flex; flex-direction: column; gap: 20px; max-width: 900px; margin: 0 auto;">
-    {% for s in supporters %}
-    {% set anim_class = 'glowMega' if s.tier == 3 else ('glowVelky' if s.tier == 2 else 'glowNormal') %}
-    {% set border_color = '#ff3333' if s.tier == 3 else ('#f59e0b' if s.tier == 2 else '#38bdf8') %}
-    {% set title_color = '#ff3333' if s.tier == 3 else ('#fcd34d' if s.tier == 2 else '#e0f2fe') %}
-    {% set badge_text = 'MEGA PODPOROVATEL' if s.tier == 3 else ('VELKÝ PODPOROVATEL' if s.tier == 2 else 'PODPOROVATEL') %}
-    
-    <div style="background-color: var(--bg-panel); border-radius: 12px; width: 100%; padding: 25px; display: flex; justify-content: space-between; align-items: center; border-left: 6px solid {{ border_color }}; animation: {{ anim_class }} 3s infinite alternate; box-sizing: border-box;">
-        <div style="text-align: left; flex: 1;">
-            <div style="color: {{ border_color }}; font-size: 12px; font-weight: 900; letter-spacing: 2px; margin-bottom: 5px;">{{ badge_text }}</div>
-            <h3 style="color: {{ title_color }}; margin: 0 0 10px 0; font-size: 28px; text-transform: uppercase;">{{ s.get('name', 'Anonym') }}</h3>
-            {% if s.get('message') %}
-            <div style="color: var(--text-main); font-size: 15px; font-style: italic; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; border-left: 3px solid {{ border_color }}; margin-bottom: 5px;">"{{ s.get('message') }}"</div>
-            {% endif %}
-            <div style="color: var(--text-muted); font-size: 12px; margin-top: 10px;"><i class="fas fa-clock"></i> {{ s.get('created_at', '') }}</div>
-        </div>
-        <div style="margin-left: 20px; text-align: right;">
-            <div style="background: rgba(0,0,0,0.5); color: {{ border_color }}; padding: 15px 25px; border-radius: 10px; font-weight: 900; font-size: 24px; border: 2px solid {{ border_color }}; white-space: nowrap;">
-                {{ s.get('amount', '') }}
-            </div>
-        </div>
-    </div>
-    {% else %}
-    <div style="color: var(--text-muted); width: 100%; text-align: center; padding: 50px;">Zatím zde nejsou žádní podporovatelé. Buďte první!</div>
-    {% endfor %}
 </div>
 """
