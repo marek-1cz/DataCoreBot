@@ -32,7 +32,7 @@ _template_names = [
     'HTML_TEAM', 'HTML_PUBLIC_STATS', 'HTML_CLAIM', 'HTML_STATS', 'HTML_APP_MANAGEMENT', 
     'HTML_NOTIFICATIONS', 'HTML_DOWNLOADS_MGMT', 'HTML_PENDING_ROLES', 'HTML_TEAM_ADD', 
     'HTML_IDS', 'HTML_DASHBOARD_MAIN', 'HTML_SUPPORTERS', 'HTML_SUPPORTERS_MGMT', 
-    'HTML_FEEDBACK', 'HTML_WAIT_AUTH', 'HTML_LOGIN'
+    'HTML_FEEDBACK', 'HTML_WAIT_AUTH', 'HTML_LOGIN', 'HTML_MAPA'
 ]
 for _name in _template_names:
     if _name not in globals():
@@ -738,6 +738,66 @@ def home():
     country = request.headers.get('CF-IPCountry', 'Neznámá')
     Thread(target=log_visit, args=(ip, country)).start()
     return render_public(HTML_HOME)
+
+
+# ==============================================================================
+# NOVÁ ROUTA PRO INTERAKTIVNÍ MAPU AUTOBUSŮ
+# ==============================================================================
+@app.route('/mapa')
+def mapa_idpk():
+    # Vykreslí HTML_MAPA definovanou v html_templates.py
+    return render_public(HTML_MAPA)
+
+@app.route('/api/live_buses', methods=['GET', 'OPTIONS'], strict_slashes=False)
+def api_live_buses():
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+
+    # TADY SI DOPLNÍŠ URL ADRESY TVÝCH 2 ZDROJŮ (ZATÍM PLACEHOLDERY)
+    url_mapa1 = "https://api.mapa1.cz/data" # Ta přesnější
+    url_mapa2 = "https://api.mapa2.cz/data" # Ta s více daty
+
+    data1 = []
+    data2 = []
+
+    # 1. ZKUSÍME STÁHNOUT MAPU 1 (PŘESNĚJŠÍ)
+    try:
+        req1 = urllib.request.Request(url_mapa1, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req1, timeout=3) as r1:
+            data1 = json.loads(r1.read().decode())
+    except Exception as e:
+        print(f"Výpadek Mapy 1: {e}")
+
+    # 2. ZKUSÍME STÁHNOUT MAPU 2 (ZÁLOŽNÍ/VÍCE DAT)
+    try:
+        req2 = urllib.request.Request(url_mapa2, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req2, timeout=3) as r2:
+            data2 = json.loads(r2.read().decode())
+    except Exception as e:
+        print(f"Výpadek Mapy 2: {e}")
+
+    # 3. MERGE (SPOJENÍ DAT) Logika Inflow
+    final_buses = []
+    seen_ids = set()
+
+    # Pokud data1 jsou k dispozici, projdeme je
+    if isinstance(data1, list):
+        for bus in data1:
+            # Změň "id" podle toho, jak se parametr jmenuje v jejich JSONu (např. vehicleId)
+            bus_id = bus.get("id") or bus.get("vehicleId") 
+            if bus_id:
+                seen_ids.add(bus_id)
+            final_buses.append(bus)
+
+    # Přidáme data2, ale POUZE pokud daný autobus ještě nemáme z Mapy 1
+    if isinstance(data2, list):
+        for bus in data2:
+            bus_id = bus.get("id") or bus.get("vehicleId")
+            if bus_id not in seen_ids:
+                final_buses.append(bus)
+
+    return _cors_jsonify({"status": "success", "buses": final_buses})
+# ==============================================================================
+
 
 @app.route('/dashboard/app_management', methods=['GET'], strict_slashes=False)
 def dashboard_app_management():
