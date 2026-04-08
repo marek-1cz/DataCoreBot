@@ -747,7 +747,8 @@ def home():
 def mapa_idpk():
     return render_public(HTML_MAPA)
 
-@app.route('/api/timetable/<int:bus_id>')
+# Změna z <int:bus_id> na prosté <bus_id>, aby to schroupalo i záporná ID pro vlaky!
+@app.route('/api/timetable/<bus_id>')
 def api_timetable(bus_id):
     url = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0"
     try:
@@ -788,9 +789,11 @@ def api_live_buses():
             url_arriva, 
             data=json.dumps(arriva_payload).encode('utf-8'),
             headers={
-                'User-Agent': 'Mozilla/5.0',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Accept': '*/*',
+                'Origin': 'https://www.arriva.cz',
+                'Referer': 'https://www.arriva.cz/'
             },
             method='POST'
         )
@@ -814,7 +817,10 @@ def api_live_buses():
             lat1 = bus1.get("lat", 0)
             lng1 = bus1.get("lng", 0)
             traction = str(bus1.get("traction", "BUS")).upper()
-            bus_id = bus1.get("id", 0)
+            try:
+                bus_id = int(bus1.get("id", 0))
+            except:
+                bus_id = 0
             
             # Vlaky (Záporné ID nebo traction TRAIN/UNKNOWN)
             is_train = bus_id < 0 or traction == "TRAIN" or traction == "UNKNOWN"
@@ -832,8 +838,8 @@ def api_live_buses():
                         lat2 = bus2.get("latitude", 0)
                         lng2 = bus2.get("longitude", 0)
                         
-                        # Kontrola vzdálenosti (cca 2 km rozptyl kvůli nepřesnostem mezi Inflow a Arrivou)
-                        if abs(lat1 - lat2) < 0.02 and abs(lng1 - lng2) < 0.02:
+                        # Kontrola vzdálenosti (cca rozptyl kvůli nepřesnostem mezi Inflow a Arrivou)
+                        if abs(lat1 - lat2) < 0.03 and abs(lng1 - lng2) < 0.03:
                             raw_spz = bus2.get("spz", "Neznámá")
                             spz = str(raw_spz).strip() if raw_spz else "Neznámá"
                             break
