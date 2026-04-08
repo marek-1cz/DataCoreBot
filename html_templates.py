@@ -2145,12 +2145,12 @@ HTML_MAPA = """
 <div style="padding: 20px;">
     <h2 style="color: var(--blue-main); margin-bottom: 20px;"><i class="fas fa-map-marked-alt"></i> Interaktivní Mapa Spojů</h2>
     
-    <div id="map" style="width: 100%; height: 75vh; border-radius: 10px; border: 2px solid #334155; box-shadow: 0 4px 6px rgba(0,0,0,0.3);"></div>
+    <div id="map" style="width: 100%; height: 75vh; border-radius: 10px; border: 2px solid #334155; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1;"></div>
     
-    <div id="timetable-modal" class="modal">
+    <div id="timetable-modal" class="modal" style="z-index: 9999;">
       <div class="modal-background" onclick="document.getElementById('timetable-modal').classList.remove('is-active')"></div>
-      <div class="modal-content" style="background: white; border-radius: 8px; padding: 20px; max-width: 600px;">
-        <div id="timetable-content" style="color: black;">Načítám jízdní řád...</div>
+      <div class="modal-content" style="background: white; border-radius: 8px; padding: 20px; max-width: 600px; width: 90%;">
+        <div id="timetable-content" style="color: black; overflow-x: auto;">Načítám jízdní řád...</div>
       </div>
       <button class="modal-close is-large" aria-label="close" onclick="document.getElementById('timetable-modal').classList.remove('is-active')"></button>
     </div>
@@ -2160,7 +2160,7 @@ HTML_MAPA = """
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <style>
-        /* Tvorba kulatých barevných teček na mapě (místo standardních špendlíků) */
+        /* Tvorba kulatých barevných teček na mapě pro BUSY */
         .bus-marker {
             border-radius: 50%;
             border: 2px solid white;
@@ -2171,9 +2171,20 @@ HTML_MAPA = """
             line-height: 20px;
             box-shadow: 0 0 5px rgba(0,0,0,0.5);
         }
-        .bus-green { background-color: #10b981; }
-        .bus-red { background-color: #ef4444; }
-        .bus-blue { background-color: #3b82f6; }
+        /* Tvorba obdélníků pro VLAKY */
+        .train-marker {
+            border-radius: 4px;
+            border: 2px solid white;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            font-size: 10px;
+            line-height: 20px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+        .bg-green { background-color: #10b981; }
+        .bg-red { background-color: #ef4444; }
+        .bg-blue { background-color: #3b82f6; }
     </style>
 
     <script>
@@ -2186,7 +2197,6 @@ HTML_MAPA = """
 
         var markersLayer = L.layerGroup().addTo(map);
 
-        // Funkce na zobrazení jízdního řádu (využije náš nový Python endpoint)
         async function showTimetable(busId) {
             let modal = document.getElementById('timetable-modal');
             let content = document.getElementById('timetable-content');
@@ -2213,35 +2223,37 @@ HTML_MAPA = """
                     
                     data.buses.forEach(bus => {
                         if(bus.lat && bus.lng) {
-                            
-                            // Logika barev podle tvého popisu:
-                            // Záporné obří číslo = modrá, do 240 s (4 min) = zelená, 240+ = červená
-                            let markerColor = "bus-green";
+                            let markerColor = "bg-green";
                             let delayText = Math.round(bus.delay / 60) + " min";
                             
                             if (bus.delay < 0) {
-                                markerColor = "bus-blue";
-                                delayText = "Před odjezdem";
+                                markerColor = "bg-blue";
+                                delayText = "Před odjezdem / Žádná data";
                             } else if (bus.delay >= 240) {
-                                markerColor = "bus-red";
+                                markerColor = "bg-red";
                             }
 
-                            // Vytvoření ikonky
+                            // Třída markeru (vlak vs bus)
+                            let shapeClass = bus.is_train ? 'train-marker' : 'bus-marker';
+
                             let myIcon = L.divIcon({
-                                className: 'bus-marker ' + markerColor,
+                                className: shapeClass + ' ' + markerColor,
                                 iconSize: [24, 24],
                                 html: ''
                             });
 
                             let marker = L.marker([bus.lat, bus.lng], {icon: myIcon});
                             
-                            // Bublina (Popup) - teď tam máme i SPZ a tlačítko na Jízdní řád!
+                            let spzHtml = bus.is_train ? '' : `<b>SPZ:</b> <span style="color:#f59e0b;font-weight:bold;">${bus.spz}</span><br>`;
+                            let typeName = bus.is_train ? 'Vlak' : 'Autobus';
+                            
                             let popupHTML = `
                                 <div style="font-family:sans-serif; font-size: 14px;">
+                                    <b>Typ:</b> ${typeName}<br>
                                     <b>Linka:</b> ${bus.line}<br>
                                     <b>Cíl:</b> ${bus.destination || "Neznámý"}<br>
                                     <b>Zpoždění:</b> ${delayText}<br>
-                                    <b>SPZ:</b> <span style="color:#f59e0b;font-weight:bold;">${bus.spz}</span><br>
+                                    ${spzHtml}
                                     <hr style="margin: 8px 0;">
                                     <button class="button is-small is-info" onclick="showTimetable(${bus.id})">
                                         📅 Jízdní řád
@@ -2260,7 +2272,7 @@ HTML_MAPA = """
         }
 
         fetchBuses();
-        setInterval(fetchBuses, 10000); // Aktualizace každých 10 sekund
+        setInterval(fetchBuses, 10000);
     </script>
 </div>
 """
