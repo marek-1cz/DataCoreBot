@@ -763,10 +763,7 @@ def api_live_buses():
 
     # ZDROJE DAT
     url_inflow = "https://pvvd.idpk.cz/Ajax/GetPoints" 
-    
-    # ⚠️⬇️ TADY VLOŽ TEN DRUHÝ ODKAZ CO JSI NAŠEL PŘES F12 (TEN S SPZkama) ⬇️⚠️
-    url_autobusy = "https://SEM_VLOZ_ODKAZ_Z_DRUHE_MAPY_KDE_JSOU_SPZ.cz/api/data" 
-    # ⚠️⬆️ TADY VLOŽ TEN DRUHÝ ODKAZ CO JSI NAŠEL PŘES F12 (TEN S SPZkama) ⬆️⚠️
+    url_arriva = "https://www.arriva.cz/api/graphql" 
 
     data1 = []
     data2 = []
@@ -774,22 +771,39 @@ def api_live_buses():
     # 1. STÁHNEME INFLOW
     try:
         req1 = urllib.request.Request(url_inflow, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req1, timeout=3) as r1:
+        with urllib.request.urlopen(req1, timeout=5) as r1:
             data1 = json.loads(r1.read().decode())
     except Exception as e:
         print(f"Výpadek Inflow: {e}")
 
-    # 2. STÁHNEME ZÁLOHU (AUTOBUSY S SPZ)
+    # 2. STÁHNEME ARRIVU (ZÁLOHA S SPZ - POST REQUEST GRAPHQL)
     try:
-        req2 = urllib.request.Request(url_autobusy, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req2, timeout=3) as r2:
-            data2_raw = json.loads(r2.read().decode())
-            if isinstance(data2_raw, list) and len(data2_raw) > 0 and "data" in data2_raw[0]:
-                 data2 = data2_raw[0]["data"].get("busesCurrentLocations", [])
+        arriva_payload = {
+            "operationName": "busesCurrentLocation",
+            "variables": {},
+            "query": "query busesCurrentLocation {\n  busesCurrentLocations {\n    angle\n    delay\n    destinationName\n    lastStopName\n    latitude\n    longitude\n    linkNumber\n    state\n    type\n    mainType\n    spz\n    updated\n    linkNumberAlias\n    __typename\n  }\n}"
+        }
+        
+        req2 = urllib.request.Request(
+            url_arriva, 
+            data=json.dumps(arriva_payload).encode('utf-8'),
+            headers={
+                'User-Agent': 'Mozilla/5.0',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            method='POST'
+        )
+        with urllib.request.urlopen(req2, timeout=5) as r2:
+            resp2 = json.loads(r2.read().decode())
+            if isinstance(resp2, list) and len(resp2) > 0 and "data" in resp2[0]:
+                data2 = resp2[0]["data"].get("busesCurrentLocations", [])
+            elif isinstance(resp2, dict) and "data" in resp2:
+                data2 = resp2["data"].get("busesCurrentLocations", [])
             else:
-                 data2 = []
+                data2 = []
     except Exception as e:
-        print(f"Výpadek Autobusy: {e}")
+        print(f"Výpadek Arriva: {e}")
 
     # 3. MERGE - FÚZE DAT
     final_buses = []
@@ -802,19 +816,26 @@ def api_live_buses():
             traction = str(bus1.get("traction", "BUS")).upper()
             bus_id = bus1.get("id", 0)
             
-            # 🚂 LOGIKA PRO VLAKY: Má záporné ID nebo nemá trakci BUS
+            # Vlaky (Záporné ID nebo traction TRAIN/UNKNOWN)
             is_train = bus_id < 0 or traction == "TRAIN" or traction == "UNKNOWN"
 
             spz = "Neznámá"
             
-            # Hledáme SPZ jen když to není vlak
+            # Hledáme SPZ jen u autobusů
             if not is_train and isinstance(data2, list):
                 for bus2 in data2:
-                    if str(bus2.get("linkNumber", "")).strip() == line:
+                    bus2_line = str(bus2.get("linkNumber", "")).strip()
+                    bus2_alias = str(bus2.get("linkNumberAlias", "")).strip()
+                    
+                    # Podmínka shody linky (buď přesné číslo nebo alias)
+                    if bus2_line == line or bus2_alias == line:
                         lat2 = bus2.get("latitude", 0)
                         lng2 = bus2.get("longitude", 0)
-                        if abs(lat1 - lat2) < 0.05 and abs(lng1 - lng2) < 0.05:
-                            spz = bus2.get("spz", "Neznámá").strip()
+                        
+                        # Kontrola vzdálenosti (cca 2 km rozptyl kvůli nepřesnostem mezi Inflow a Arrivou)
+                        if abs(lat1 - lat2) < 0.02 and abs(lng1 - lng2) < 0.02:
+                            raw_spz = bus2.get("spz", "Neznámá")
+                            spz = str(raw_spz).strip() if raw_spz else "Neznámá"
                             break
 
             final_buses.append({
