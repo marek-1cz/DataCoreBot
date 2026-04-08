@@ -2223,16 +2223,29 @@ HTML_MAPA = """
                     data.buses.forEach(bus => {
                         if(bus.lat && bus.lng) {
                             let markerColor = "bg-green";
-                            let delayText = Math.round(bus.delay / 60) + " min";
+                            let delayText = "";
                             
-                            // Logika barev vč. zjišťování neaktivity
-                            if (bus.inactive_minutes > 10) {
-                                markerColor = "bg-gray";
+                            // Logika zpoždění a "náskoků"
+                            if (bus.delay <= -100000) {
+                                // Ochrana proti blbosti z Inflow (-2147483648 atd.)
+                                markerColor = "bg-blue";
+                                delayText = `<span style="color:#3b82f6;font-weight:bold;">Čeká na trase (JŘ neznámý)</span>`;
                             } else if (bus.delay < 0) {
                                 markerColor = "bg-blue";
-                                delayText = "Před odjezdem / Žádná data";
+                                let aheadMin = Math.round(Math.abs(bus.delay) / 60);
+                                let depDate = new Date(Date.now() + Math.abs(bus.delay) * 1000);
+                                let depTime = depDate.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
+                                delayText = `<span style="color:#3b82f6;font-weight:bold;">Náskok: ${aheadMin} min (Odj. dle JŘ: ${depTime})</span>`;
                             } else if (bus.delay >= 240) {
                                 markerColor = "bg-red";
+                                delayText = Math.round(bus.delay / 60) + " min";
+                            } else {
+                                delayText = Math.round(bus.delay / 60) + " min";
+                            }
+
+                            // Zaseklé autobusy
+                            if (bus.inactive_minutes > 10) {
+                                markerColor = "bg-gray";
                             }
 
                             let shapeClass = bus.is_train ? 'train-marker' : 'bus-marker';
