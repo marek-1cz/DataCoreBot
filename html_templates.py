@@ -2145,66 +2145,122 @@ HTML_MAPA = """
 <div style="padding: 20px;">
     <h2 style="color: var(--blue-main); margin-bottom: 20px;"><i class="fas fa-map-marked-alt"></i> Interaktivní Mapa Spojů</h2>
     
-    <div id="map" style="width: 100%; height: 70vh; border-radius: 10px; border: 2px solid #334155; box-shadow: 0 4px 6px rgba(0,0,0,0.3);"></div>
+    <div id="map" style="width: 100%; height: 75vh; border-radius: 10px; border: 2px solid #334155; box-shadow: 0 4px 6px rgba(0,0,0,0.3);"></div>
     
+    <div id="timetable-modal" class="modal">
+      <div class="modal-background" onclick="document.getElementById('timetable-modal').classList.remove('is-active')"></div>
+      <div class="modal-content" style="background: white; border-radius: 8px; padding: 20px; max-width: 600px;">
+        <div id="timetable-content" style="color: black;">Načítám jízdní řád...</div>
+      </div>
+      <button class="modal-close is-large" aria-label="close" onclick="document.getElementById('timetable-modal').classList.remove('is-active')"></button>
+    </div>
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
+    <style>
+        /* Tvorba kulatých barevných teček na mapě (místo standardních špendlíků) */
+        .bus-marker {
+            border-radius: 50%;
+            border: 2px solid white;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            font-size: 10px;
+            line-height: 20px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+        .bus-green { background-color: #10b981; }
+        .bus-red { background-color: #ef4444; }
+        .bus-blue { background-color: #3b82f6; }
+    </style>
+
     <script>
-        // Inicializace mapy (nastaveno cca na Plzeň, můžeš si upravit souřadnice)
         var map = L.map('map').setView([49.7384, 13.3736], 12);
         
-        // Přidání podkladu mapy (OpenStreetMap)
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
+            attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        // Skupina pro fixaci ikon na mapě, abychom je mohli snadno smazat a načíst nové
         var markersLayer = L.layerGroup().addTo(map);
 
-        // Vlastní ikonka pro autobus
-        var busIcon = L.icon({
-            iconUrl: 'https://cdn-icons-png.flaticon.com/512/3448/3448339.png', // Můžeš vyměnit za vlastní obrázek autobusu
-            iconSize: [32, 32], 
-            iconAnchor: [16, 16],
-            popupAnchor: [0, -16]
-        });
+        // Funkce na zobrazení jízdního řádu (využije náš nový Python endpoint)
+        async function showTimetable(busId) {
+            let modal = document.getElementById('timetable-modal');
+            let content = document.getElementById('timetable-content');
+            
+            modal.classList.add('is-active');
+            content.innerHTML = "<p>Načítám jízdní řád z Inflow...</p>";
+            
+            try {
+                let response = await fetch('/api/timetable/' + busId);
+                let htmlText = await response.text();
+                content.innerHTML = htmlText;
+            } catch(e) {
+                content.innerHTML = "<p style='color:red;'>Chyba při načítání.</p>";
+            }
+        }
 
-        // Funkce pro stažení sjednocených dat z tvého Python serveru
         async function fetchBuses() {
             try {
                 let response = await fetch('/api/live_buses');
                 let data = await response.json();
                 
                 if(data.status === "success") {
-                    // Smažeme staré autobusy z mapy
                     markersLayer.clearLayers();
                     
-                    // Přidáme nové
                     data.buses.forEach(bus => {
-                        // Předpoklad, že API vrací lat, lon a nějaké info jako linku
-                        if(bus.lat && bus.lon) {
-                            let marker = L.marker([bus.lat, bus.lon], {icon: busIcon});
+                        if(bus.lat && bus.lng) {
                             
-                            // Popup bublina při kliknutí
-                            let info = `<b>Linka:</b> ${bus.line || "Neznámá"}<br><b>ID:</b> ${bus.id || bus.vehicleId || "Neznámé"}`;
-                            marker.bindPopup(info);
+                            // Logika barev podle tvého popisu:
+                            // Záporné obří číslo = modrá, do 240 s (4 min) = zelená, 240+ = červená
+                            let markerColor = "bus-green";
+                            let delayText = Math.round(bus.delay / 60) + " min";
                             
+                            if (bus.delay < 0) {
+                                markerColor = "bus-blue";
+                                delayText = "Před odjezdem";
+                            } else if (bus.delay >= 240) {
+                                markerColor = "bus-red";
+                            }
+
+                            // Vytvoření ikonky
+                            let myIcon = L.divIcon({
+                                className: 'bus-marker ' + markerColor,
+                                iconSize: [24, 24],
+                                html: ''
+                            });
+
+                            let marker = L.marker([bus.lat, bus.lng], {icon: myIcon});
+                            
+                            // Bublina (Popup) - teď tam máme i SPZ a tlačítko na Jízdní řád!
+                            let popupHTML = `
+                                <div style="font-family:sans-serif; font-size: 14px;">
+                                    <b>Linka:</b> ${bus.line}<br>
+                                    <b>Cíl:</b> ${bus.destination || "Neznámý"}<br>
+                                    <b>Zpoždění:</b> ${delayText}<br>
+                                    <b>SPZ:</b> <span style="color:#f59e0b;font-weight:bold;">${bus.spz}</span><br>
+                                    <hr style="margin: 8px 0;">
+                                    <button class="button is-small is-info" onclick="showTimetable(${bus.id})">
+                                        📅 Jízdní řád
+                                    </button>
+                                </div>
+                            `;
+                            
+                            marker.bindPopup(popupHTML);
                             markersLayer.addLayer(marker);
                         }
                     });
                 }
             } catch(e) {
-                console.error("Chyba při načítání autobusů:", e);
+                console.error("Chyba mapy:", e);
             }
         }
 
-        // Načíst hned při startu
         fetchBuses();
-        
-        // Aktualizovat každých 10 vteřin
-        setInterval(fetchBuses, 10000);
+        setInterval(fetchBuses, 10000); // Aktualizace každých 10 sekund
     </script>
 </div>
 """
