@@ -749,12 +749,10 @@ def mapa_idpk():
 
 @app.route('/api/timetable/<int:bus_id>')
 def api_timetable(bus_id):
-    # Tento endpoint nám stáhne HTML jízdního řádu přímo z Inflow
     url = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=5) as r:
-            # Vrátíme přímo ten HTML kód
             return Response(r.read().decode('utf-8'), mimetype='text/html')
     except Exception as e:
         return f"<div style='padding:20px;color:red;'>Nelze načíst jízdní řád. ({e})</div>"
@@ -766,14 +764,14 @@ def api_live_buses():
     # ZDROJE DAT
     url_inflow = "https://pvvd.idpk.cz/Ajax/GetPoints" 
     
-    # ⚠️ TADY JE POTŘEBA VLOŽIT ODKAZ NA DRUHOU MAPU ⚠️
-    # Zkopíruj to z F12 z té druhé mapy (kde jsi našel ten druhý JSON)
+    # ⚠️⬇️ TADY VLOŽ TEN DRUHÝ ODKAZ CO JSI NAŠEL PŘES F12 (TEN S SPZkama) ⬇️⚠️
     url_autobusy = "https://SEM_VLOZ_ODKAZ_Z_DRUHE_MAPY_KDE_JSOU_SPZ.cz/api/data" 
+    # ⚠️⬆️ TADY VLOŽ TEN DRUHÝ ODKAZ CO JSI NAŠEL PŘES F12 (TEN S SPZkama) ⬆️⚠️
 
     data1 = []
     data2 = []
 
-    # 1. STÁHNEME INFLOW (PŘESNĚJŠÍ + ID PRO JÍZDNÍ ŘÁD)
+    # 1. STÁHNEME INFLOW
     try:
         req1 = urllib.request.Request(url_inflow, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req1, timeout=3) as r1:
@@ -786,8 +784,6 @@ def api_live_buses():
         req2 = urllib.request.Request(url_autobusy, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req2, timeout=3) as r2:
             data2_raw = json.loads(r2.read().decode())
-            # Protože druhý JSON začínal "data": {"busesCurrentLocations": [...]}
-            # musíme se k tomu poli proklikat:
             if isinstance(data2_raw, list) and len(data2_raw) > 0 and "data" in data2_raw[0]:
                  data2 = data2_raw[0]["data"].get("busesCurrentLocations", [])
             else:
@@ -800,35 +796,36 @@ def api_live_buses():
 
     if isinstance(data1, list):
         for bus1 in data1:
-            # Přeskočíme vlaky (ty mají id do mínusu a traction UNKNOWN)
-            if bus1.get("id", 0) < 0:
-                continue
-                
-            line = bus1.get("text", "")
+            line = str(bus1.get("text", "")).strip()
             lat1 = bus1.get("lat", 0)
             lng1 = bus1.get("lng", 0)
+            traction = str(bus1.get("traction", "BUS")).upper()
+            bus_id = bus1.get("id", 0)
+            
+            # 🚂 LOGIKA PRO VLAKY: Má záporné ID nebo nemá trakci BUS
+            is_train = bus_id < 0 or traction == "TRAIN" or traction == "UNKNOWN"
+
             spz = "Neznámá"
             
-            # Hledáme, jestli tento autobus je i v druhé mapě a má SPZ
-            if isinstance(data2, list):
+            # Hledáme SPZ jen když to není vlak
+            if not is_train and isinstance(data2, list):
                 for bus2 in data2:
-                    # Kontrola linky a přibližné pozice (aby se nepletly dva autobusy na stejné lince)
-                    if bus2.get("linkNumber") == line:
+                    if str(bus2.get("linkNumber", "")).strip() == line:
                         lat2 = bus2.get("latitude", 0)
                         lng2 = bus2.get("longitude", 0)
-                        # Jednoduchý výpočet vzdálenosti pro jistotu
                         if abs(lat1 - lat2) < 0.05 and abs(lng1 - lng2) < 0.05:
                             spz = bus2.get("spz", "Neznámá").strip()
                             break
 
             final_buses.append({
-                "id": bus1.get("id"),
+                "id": bus_id,
                 "lat": lat1,
                 "lng": lng1,
-                "line": line,
+                "line": line if line else ("Vlak" if is_train else "Neznámá"),
                 "delay": bus1.get("delay"),
                 "destination": bus1.get("finalStopName"),
-                "spz": spz
+                "spz": spz,
+                "is_train": is_train
             })
 
     return _cors_jsonify({"status": "success", "buses": final_buses})
