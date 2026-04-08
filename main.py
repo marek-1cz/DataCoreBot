@@ -26,7 +26,7 @@ try:
 except ImportError as e:
     print(f"KRITICKÁ CHYBA IMPORTU ŠABLON: {e}")
 
-# --- TVRDÁ OCHRANA ŠABLON (Už to NIKDY nespadne na NameError) ---
+# --- TVRDÁ OCHRANA ŠABLON ---
 _template_names = [
     'BASE_HTML', 'PUBLIC_LAYOUT', 'DASHBOARD_LAYOUT', 'HTML_HOME', 'HTML_DOWNLOADS_MAIN', 
     'HTML_TEAM', 'HTML_PUBLIC_STATS', 'HTML_CLAIM', 'HTML_STATS', 'HTML_APP_MANAGEMENT', 
@@ -36,7 +36,6 @@ _template_names = [
 ]
 for _name in _template_names:
     if _name not in globals():
-        # Pokud šablona chybí v html_templates.py, vloží se toto nouzové HTML místo pádu serveru
         globals()[_name] = f"<div style='background:#0f172a; color:#ef4444; padding:40px; text-align:center; font-family:sans-serif;'><h2>CHYBA ŠABLONY</h2><p>Šablona <b>{_name}</b> chybí v souboru <i>html_templates.py</i>! Prosím, zkontroluj si to a přidej ji.</p></div>"
 
 # Import live statusů z druhého souboru
@@ -46,7 +45,6 @@ except ImportError:
     print("VAROVÁNÍ: Soubor status_dashboard.py nenalezen. Statusy nebudou fungovat.")
     HTML_STATUS_SECTION = ""
 
-# --- TVRDÝ HLÍDAČ ČASU (Vynucení UTC Praha pro celý server Koyebu) ---
 os.environ['TZ'] = 'Europe/Prague'
 try:
     time.tzset()
@@ -60,7 +58,6 @@ app.secret_key = "ois_idpk_super_tajny_klic"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-# Paměť pro trackování pohybu autobusů
 bus_tracking_cache = {}
 
 @app.after_request
@@ -163,11 +160,9 @@ bot.invites_cache = {}
 def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
     urls = [u.strip() for u in file_url_raw.split(',') if u.strip()]
     file_url = random.choice(urls) if urls else file_url_raw
-
     cj = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj), urllib.request.HTTPRedirectHandler())
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-    
     try:
         if "drive.google.com" in file_url and "/d/" in file_url:
             match = re.search(r'/d/([a-zA-Z0-9_-]+)', file_url)
@@ -176,7 +171,6 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
                 url = f"https://drive.google.com/uc?export=download&id={file_id}"
                 req = urllib.request.Request(url, headers=headers)
                 resp = opener.open(req, timeout=15)
-                
                 if 'text/html' in resp.headers.get('Content-Type', '').lower():
                     text = resp.read().decode('utf-8', errors='ignore')
                     token = None
@@ -189,7 +183,6 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
                         match2 = re.search(r'name="confirm" value="([^"]+)"', text)
                         if match1: token = match1.group(1)
                         elif match2: token = match2.group(1)
-                        
                     if token:
                         url = f"{url}&confirm={token}"
                         req = urllib.request.Request(url, headers=headers)
@@ -231,7 +224,6 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
             
         send_log("✅ Úspěšné stahování", f"Uživatel `{nick}` právě stahuje: **{version_name}**.", 0x10b981)
         return Response(stream_with_context(generate()), headers=resp_headers)
-        
     except Exception as e:
         send_log("❌ Selhání stahování", f"Kritická chyba Proxy pro hráče `{nick}`:\n`{e}`", 0xef4444)
         return "Došlo k interní chybě při stahování."
@@ -255,17 +247,13 @@ def save_setup_message(db, channel_id, message_id):
 def build_setup_embed(db):
     settings_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}]
     dl_enabled = str(settings_resp[0].get('setting_value', '')).lower() != 'false'
-    
     embed = discord.Embed(title="📥 Projekt OIS IDPK - Instalace", description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a stahování.\n**Při stahování se automaticky přihlásíte do databáze.**\n*(Stahování lze ve vašem prohlížeči kdykoliv pozastavit a obnovit)*", color=0x38bdf8)
-    
     if not dl_enabled:
         embed.color = 0xef4444
         embed.add_field(name="⛔ STAHOVÁNÍ JE NYNÍ VYPNUTO", value="Administrátor dočasně zakázal stahování. Zkuste to prosím později.", inline=False)
         return embed
-
     versions = db.table("software_versions").select("*").eq("is_active", True).order("id", desc=True).execute().data or []
     now = get_prague_time().replace(tzinfo=None)
-    
     def format_version(v):
         eol_str = v.get('eol_date', '').strip()
         if eol_str:
@@ -279,14 +267,11 @@ def build_setup_embed(db):
             except:
                 pass
         return f"• {v['version_name']}"
-
     user_v = [format_version(v) for v in versions if v['target_role'] == 'User']
     bt_v = [format_version(v) for v in versions if v['target_role'] == 'BT']
-    
     if user_v: embed.add_field(name="🌍 Dostupné pro všechny (User)", value="\n".join(user_v), inline=False)
     if bt_v: embed.add_field(name="🛠️ Dostupné pro Beta Testery (BT)", value="\n".join(bt_v), inline=False)
     if not user_v and not bt_v: embed.add_field(name="Zatím nejsou dostupné žádné veřejné verze.", value="-", inline=False)
-        
     embed.set_footer(text="Neveřejné verze jsou skryté. Pokud máte BAN, systém vás ke stahování nepustí.")
     return embed
 
@@ -296,10 +281,8 @@ async def update_setup_messages_async():
     if not db: return
     msgs = get_setup_messages(db)
     if not msgs: return
-    
     embed = build_setup_embed(db)
     valid_msgs = []
-    
     for m in msgs:
         try:
             channel = bot.get_channel(int(m['channel_id'])) or await bot.fetch_channel(int(m['channel_id']))
@@ -308,7 +291,6 @@ async def update_setup_messages_async():
                 await msg.edit(embed=embed)
                 valid_msgs.append(m)
         except Exception as e: pass
-        
     db.table("settings").update({"setting_value": json.dumps(valid_msgs)}).eq("setting_key", "setup_messages").execute()
 
 def trigger_setup_messages_update():
@@ -522,10 +504,8 @@ class DynamicDownloadView(discord.ui.View):
         
     @discord.ui.button(label="Zahájit instalaci softwaru", style=discord.ButtonStyle.primary, emoji="📥", custom_id="persistent_install_main_btn")
     async def dl_btn(self, interaction, button):
-        try:
-            await interaction.response.defer(ephemeral=True)
-        except Exception as e:
-            pass
+        try: await interaction.response.defer(ephemeral=True)
+        except: pass
             
         db = get_db()
         settings_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}]
@@ -542,10 +522,8 @@ class DynamicDownloadView(discord.ui.View):
                 
             @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, emoji="✅")
             async def agree(self, i2, b2):
-                try:
-                    await i2.response.defer(ephemeral=True)
-                except:
-                    pass
+                try: await i2.response.defer(ephemeral=True)
+                except: pass
                 
                 try:
                     db = get_db()
@@ -593,11 +571,8 @@ class DynamicDownloadView(discord.ui.View):
                                     if eol_str:
                                         try:
                                             eol_dt = datetime.strptime(eol_str, "%d.%m.%Y")
-                                            days_left = (eol_dt - now).days
-                                            if days_left <= 14:
-                                                is_dl = False
-                                            else:
-                                                desc = f"Končí podpora: {eol_str}"
+                                            if (eol_dt - now).days <= 14: is_dl = False
+                                            else: desc = f"Končí podpora: {eol_str}"
                                         except: pass
                                         
                                     if is_dl:
@@ -607,10 +582,8 @@ class DynamicDownloadView(discord.ui.View):
                             super().__init__(placeholder="Vyber verzi k instalaci...", options=opts)
                             
                         async def callback(self, i3):
-                            try:
-                                await i3.response.defer(ephemeral=True)
-                            except:
-                                pass
+                            try: await i3.response.defer(ephemeral=True)
+                            except: pass
                             if self.values[0] == "none": return await i3.followup.send("Pro vaše role nejsou dostupné žádné verze.", ephemeral=True)
                             
                             t = str(uuid.uuid4())
@@ -626,10 +599,8 @@ class DynamicDownloadView(discord.ui.View):
                     
             @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, emoji="❌")
             async def disagree(self, i2, b2): 
-                try:
-                    await i2.response.defer(ephemeral=True)
-                except:
-                    pass
+                try: await i2.response.defer(ephemeral=True)
+                except: pass
                 await i2.followup.send(content="**Akce zrušena.**", ephemeral=True)
                 
         await interaction.followup.send("**PODMÍNKY UŽÍVÁNÍ:**\n1. Přísný zákaz šíření, kopírování nebo sdílení aplikace bez výslovného souhlasu autora.\n2. Systém využívá HWID ochranu a shromažďuje telemetrická data pro zajištění správného chodu a bezpečnosti aplikace.\n3. Každý pokus o modifikaci kódu nebo obcházení zabezpečení povede k okamžitému a trvalému zablokování.\n\nSouhlasíte s těmito podmínkami?", view=DynamicRulesView(), ephemeral=True)
@@ -827,40 +798,46 @@ def api_live_buses():
             except:
                 bus_id = 0
             
-            # Je to vlak?
             is_train = bus_id < 0 or traction == "TRAIN" or traction == "UNKNOWN"
 
-            # LOGIKA PRO DUCHY (Zaseklé autobusy)
-            last_updated = now
+            # LOGIKA PRO ZASEKLÉ SPOJE
+            last_updated_dt = now
+            last_updated_str = "N/A"
+            
             if bus_id in bus_tracking_cache:
                 cached = bus_tracking_cache[bus_id]
-                # Pokud se autobus pohnul nebo změnil linku, zresetujeme časovač
                 if cached["lat"] != lat1 or cached["lng"] != lng1 or cached["line"] != line:
-                    bus_tracking_cache[bus_id] = {"lat": lat1, "lng": lng1, "line": line, "time": now}
+                    # Pohnul se
+                    bus_tracking_cache[bus_id] = {
+                        "lat": lat1, "lng": lng1, "line": line, 
+                        "first_seen": cached["first_seen"], "last_moved": now
+                    }
+                    last_updated_dt = now
+                    last_updated_str = now.strftime("%H:%M:%S")
                 else:
-                    # Stojí na místě, necháme starý čas
-                    last_updated = cached["time"]
+                    # Stojí na místě
+                    last_updated_dt = cached["last_moved"] if cached["last_moved"] else cached["first_seen"]
+                    last_updated_str = cached["last_moved"].strftime("%H:%M:%S") if cached["last_moved"] else "N/A"
             else:
-                # Nový autobus
-                bus_tracking_cache[bus_id] = {"lat": lat1, "lng": lng1, "line": line, "time": now}
+                # Nový autobus (ještě se nepohnul)
+                bus_tracking_cache[bus_id] = {
+                    "lat": lat1, "lng": lng1, "line": line, 
+                    "first_seen": now, "last_moved": None
+                }
+                last_updated_dt = now
+                last_updated_str = "N/A"
                 
             current_bus_ids.add(bus_id)
-            
-            # Výpočet jak dlouho stojí (v minutách)
-            inactive_minutes = (now - last_updated).total_seconds() / 60.0
+            inactive_minutes = (now - last_updated_dt).total_seconds() / 60.0
 
             spz = "Neznámá"
-            
-            # Hledáme SPZ jen u autobusů z Arrivy
             if not is_train and isinstance(data2, list):
                 for bus2 in data2:
                     bus2_line = str(bus2.get("linkNumber", "")).strip()
                     bus2_alias = str(bus2.get("linkNumberAlias", "")).strip()
-                    
                     if bus2_line == line or bus2_alias == line:
                         lat2 = bus2.get("latitude", 0)
                         lng2 = bus2.get("longitude", 0)
-                        
                         if abs(lat1 - lat2) < 0.03 and abs(lng1 - lng2) < 0.03:
                             raw_spz = bus2.get("spz", "Neznámá")
                             spz = str(raw_spz).strip() if raw_spz else "Neznámá"
@@ -876,10 +853,10 @@ def api_live_buses():
                 "spz": spz,
                 "is_train": is_train,
                 "inactive_minutes": inactive_minutes,
-                "last_updated": last_updated.strftime("%H:%M:%S")
+                "last_updated": last_updated_str
             })
 
-        # Vyčistíme paměť od autobusů, co už Inflow vůbec neposílá
+        # Vyčištění starých busů z paměti
         keys_to_remove = [k for k in bus_tracking_cache.keys() if k not in current_bus_ids]
         for k in keys_to_remove:
             del bus_tracking_cache[k]
