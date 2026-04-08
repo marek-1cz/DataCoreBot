@@ -741,63 +741,98 @@ def home():
 
 
 # ==============================================================================
-# NOVÁ ROUTA PRO INTERAKTIVNÍ MAPU AUTOBUSŮ
+# NOVÁ ROUTA PRO INTERAKTIVNÍ MAPU AUTOBUSŮ A JÍZDNÍ RÁD
 # ==============================================================================
 @app.route('/mapa')
 def mapa_idpk():
-    # Vykreslí HTML_MAPA definovanou v html_templates.py
     return render_public(HTML_MAPA)
+
+@app.route('/api/timetable/<int:bus_id>')
+def api_timetable(bus_id):
+    # Tento endpoint nám stáhne HTML jízdního řádu přímo z Inflow
+    url = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0"
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            # Vrátíme přímo ten HTML kód
+            return Response(r.read().decode('utf-8'), mimetype='text/html')
+    except Exception as e:
+        return f"<div style='padding:20px;color:red;'>Nelze načíst jízdní řád. ({e})</div>"
 
 @app.route('/api/live_buses', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_live_buses():
     if request.method == 'OPTIONS': return _cors_jsonify({})
 
-    # TADY SI DOPLNÍŠ URL ADRESY TVÝCH 2 ZDROJŮ (ZATÍM PLACEHOLDERY)
-    url_mapa1 = "https://api.mapa1.cz/data" # Ta přesnější
-    url_mapa2 = "https://api.mapa2.cz/data" # Ta s více daty
+    # ZDROJE DAT
+    url_inflow = "https://pvvd.idpk.cz/Ajax/GetPoints" 
+    
+    # ⚠️ TADY JE POTŘEBA VLOŽIT ODKAZ NA DRUHOU MAPU ⚠️
+    # Zkopíruj to z F12 z té druhé mapy (kde jsi našel ten druhý JSON)
+    url_autobusy = "https://SEM_VLOZ_ODKAZ_Z_DRUHE_MAPY_KDE_JSOU_SPZ.cz/api/data" 
 
     data1 = []
     data2 = []
 
-    # 1. ZKUSÍME STÁHNOUT MAPU 1 (PŘESNĚJŠÍ)
+    # 1. STÁHNEME INFLOW (PŘESNĚJŠÍ + ID PRO JÍZDNÍ ŘÁD)
     try:
-        req1 = urllib.request.Request(url_mapa1, headers={'User-Agent': 'Mozilla/5.0'})
+        req1 = urllib.request.Request(url_inflow, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req1, timeout=3) as r1:
             data1 = json.loads(r1.read().decode())
     except Exception as e:
-        print(f"Výpadek Mapy 1: {e}")
+        print(f"Výpadek Inflow: {e}")
 
-    # 2. ZKUSÍME STÁHNOUT MAPU 2 (ZÁLOŽNÍ/VÍCE DAT)
+    # 2. STÁHNEME ZÁLOHU (AUTOBUSY S SPZ)
     try:
-        req2 = urllib.request.Request(url_mapa2, headers={'User-Agent': 'Mozilla/5.0'})
+        req2 = urllib.request.Request(url_autobusy, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req2, timeout=3) as r2:
-            data2 = json.loads(r2.read().decode())
+            data2_raw = json.loads(r2.read().decode())
+            # Protože druhý JSON začínal "data": {"busesCurrentLocations": [...]}
+            # musíme se k tomu poli proklikat:
+            if isinstance(data2_raw, list) and len(data2_raw) > 0 and "data" in data2_raw[0]:
+                 data2 = data2_raw[0]["data"].get("busesCurrentLocations", [])
+            else:
+                 data2 = []
     except Exception as e:
-        print(f"Výpadek Mapy 2: {e}")
+        print(f"Výpadek Autobusy: {e}")
 
-    # 3. MERGE (SPOJENÍ DAT) Logika Inflow
+    # 3. MERGE - FÚZE DAT
     final_buses = []
-    seen_ids = set()
 
-    # Pokud data1 jsou k dispozici, projdeme je
     if isinstance(data1, list):
-        for bus in data1:
-            # Změň "id" podle toho, jak se parametr jmenuje v jejich JSONu (např. vehicleId)
-            bus_id = bus.get("id") or bus.get("vehicleId") 
-            if bus_id:
-                seen_ids.add(bus_id)
-            final_buses.append(bus)
+        for bus1 in data1:
+            # Přeskočíme vlaky (ty mají id do mínusu a traction UNKNOWN)
+            if bus1.get("id", 0) < 0:
+                continue
+                
+            line = bus1.get("text", "")
+            lat1 = bus1.get("lat", 0)
+            lng1 = bus1.get("lng", 0)
+            spz = "Neznámá"
+            
+            # Hledáme, jestli tento autobus je i v druhé mapě a má SPZ
+            if isinstance(data2, list):
+                for bus2 in data2:
+                    # Kontrola linky a přibližné pozice (aby se nepletly dva autobusy na stejné lince)
+                    if bus2.get("linkNumber") == line:
+                        lat2 = bus2.get("latitude", 0)
+                        lng2 = bus2.get("longitude", 0)
+                        # Jednoduchý výpočet vzdálenosti pro jistotu
+                        if abs(lat1 - lat2) < 0.05 and abs(lng1 - lng2) < 0.05:
+                            spz = bus2.get("spz", "Neznámá").strip()
+                            break
 
-    # Přidáme data2, ale POUZE pokud daný autobus ještě nemáme z Mapy 1
-    if isinstance(data2, list):
-        for bus in data2:
-            bus_id = bus.get("id") or bus.get("vehicleId")
-            if bus_id not in seen_ids:
-                final_buses.append(bus)
+            final_buses.append({
+                "id": bus1.get("id"),
+                "lat": lat1,
+                "lng": lng1,
+                "line": line,
+                "delay": bus1.get("delay"),
+                "destination": bus1.get("finalStopName"),
+                "spz": spz
+            })
 
     return _cors_jsonify({"status": "success", "buses": final_buses})
 # ==============================================================================
-
 
 @app.route('/dashboard/app_management', methods=['GET'], strict_slashes=False)
 def dashboard_app_management():
