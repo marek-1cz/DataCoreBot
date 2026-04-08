@@ -60,6 +60,9 @@ app.secret_key = "ois_idpk_super_tajny_klic"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
+# Paměť pro trackování pohybu autobusů
+bus_tracking_cache = {}
+
 @app.after_request
 def add_cors_headers(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
@@ -747,7 +750,6 @@ def home():
 def mapa_idpk():
     return render_public(HTML_MAPA)
 
-# Změna z <int:bus_id> na prosté <bus_id>, aby to schroupalo i záporná ID pro vlaky!
 @app.route('/api/timetable/<bus_id>')
 def api_timetable(bus_id):
     url = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0"
@@ -761,13 +763,14 @@ def api_timetable(bus_id):
 @app.route('/api/live_buses', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_live_buses():
     if request.method == 'OPTIONS': return _cors_jsonify({})
+    global bus_tracking_cache
 
-    # ZDROJE DAT
     url_inflow = "https://pvvd.idpk.cz/Ajax/GetPoints" 
     url_arriva = "https://www.arriva.cz/api/graphql" 
 
     data1 = []
     data2 = []
+    now = get_prague_time().replace(tzinfo=None)
 
     # 1. STÁHNEME INFLOW
     try:
@@ -777,7 +780,7 @@ def api_live_buses():
     except Exception as e:
         print(f"Výpadek Inflow: {e}")
 
-    # 2. STÁHNEME ARRIVU (ZÁLOHA S SPZ - POST REQUEST GRAPHQL)
+    # 2. STÁHNEME ARRIVU (ZÁLOHA S SPZ)
     try:
         arriva_payload = {
             "operationName": "busesCurrentLocation",
@@ -808,8 +811,9 @@ def api_live_buses():
     except Exception as e:
         print(f"Výpadek Arriva: {e}")
 
-    # 3. MERGE - FÚZE DAT
+    # 3. MERGE - FÚZE DAT A TRACKOVÁNÍ POHYBU
     final_buses = []
+    current_bus_ids = set()
 
     if isinstance(data1, list):
         for bus1 in data1:
@@ -817,28 +821,46 @@ def api_live_buses():
             lat1 = bus1.get("lat", 0)
             lng1 = bus1.get("lng", 0)
             traction = str(bus1.get("traction", "BUS")).upper()
+            
             try:
                 bus_id = int(bus1.get("id", 0))
             except:
                 bus_id = 0
             
-            # Vlaky (Záporné ID nebo traction TRAIN/UNKNOWN)
+            # Je to vlak?
             is_train = bus_id < 0 or traction == "TRAIN" or traction == "UNKNOWN"
+
+            # LOGIKA PRO DUCHY (Zaseklé autobusy)
+            last_updated = now
+            if bus_id in bus_tracking_cache:
+                cached = bus_tracking_cache[bus_id]
+                # Pokud se autobus pohnul nebo změnil linku, zresetujeme časovač
+                if cached["lat"] != lat1 or cached["lng"] != lng1 or cached["line"] != line:
+                    bus_tracking_cache[bus_id] = {"lat": lat1, "lng": lng1, "line": line, "time": now}
+                else:
+                    # Stojí na místě, necháme starý čas
+                    last_updated = cached["time"]
+            else:
+                # Nový autobus
+                bus_tracking_cache[bus_id] = {"lat": lat1, "lng": lng1, "line": line, "time": now}
+                
+            current_bus_ids.add(bus_id)
+            
+            # Výpočet jak dlouho stojí (v minutách)
+            inactive_minutes = (now - last_updated).total_seconds() / 60.0
 
             spz = "Neznámá"
             
-            # Hledáme SPZ jen u autobusů
+            # Hledáme SPZ jen u autobusů z Arrivy
             if not is_train and isinstance(data2, list):
                 for bus2 in data2:
                     bus2_line = str(bus2.get("linkNumber", "")).strip()
                     bus2_alias = str(bus2.get("linkNumberAlias", "")).strip()
                     
-                    # Podmínka shody linky (buď přesné číslo nebo alias)
                     if bus2_line == line or bus2_alias == line:
                         lat2 = bus2.get("latitude", 0)
                         lng2 = bus2.get("longitude", 0)
                         
-                        # Kontrola vzdálenosti (cca rozptyl kvůli nepřesnostem mezi Inflow a Arrivou)
                         if abs(lat1 - lat2) < 0.03 and abs(lng1 - lng2) < 0.03:
                             raw_spz = bus2.get("spz", "Neznámá")
                             spz = str(raw_spz).strip() if raw_spz else "Neznámá"
@@ -852,8 +874,15 @@ def api_live_buses():
                 "delay": bus1.get("delay"),
                 "destination": bus1.get("finalStopName"),
                 "spz": spz,
-                "is_train": is_train
+                "is_train": is_train,
+                "inactive_minutes": inactive_minutes,
+                "last_updated": last_updated.strftime("%H:%M:%S")
             })
+
+        # Vyčistíme paměť od autobusů, co už Inflow vůbec neposílá
+        keys_to_remove = [k for k in bus_tracking_cache.keys() if k not in current_bus_ids]
+        for k in keys_to_remove:
+            del bus_tracking_cache[k]
 
     return _cors_jsonify({"status": "success", "buses": final_buses})
 # ==============================================================================
@@ -1370,7 +1399,7 @@ def api_app_login():
                 db.table("users").update({"hwid": req_hwid, "ip_address": client_ip}).eq("discord_id", discord_id).execute()
         else:
             if str(db_hwid) != req_hwid:
-                if db_ip and str(db_ip).strip() != "" and str(db_ip) == client_ip:
+                if db_ip and str(db_ip).strip() != "" and db_ip == client_ip:
                     db.table("users").update({"hwid": req_hwid}).eq("discord_id", discord_id).execute()
                     send_log("🔄 HWID Auto-oprava", f"Uživateli `{user.get('nick')}` se změnilo HWID, ale IP adresa souhlasila. HWID bylo automaticky aktualizováno.", 0x38bdf8)
                 else:
