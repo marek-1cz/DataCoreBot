@@ -113,7 +113,7 @@ def background_map_worker():
                         if b2_line == line or b2_alias == line:
                             lat2 = bus2.get("latitude", 0)
                             lng2 = bus2.get("longitude", 0)
-                            # Striktní GPS shoda (cca 500 metrů)
+                            # Striktní GPS shoda
                             dist = math.hypot(lat1 - lat2, lng1 - lng2)
                             if dist < 0.01: 
                                 raw_spz = bus2.get("spz", "").strip()
@@ -178,21 +178,23 @@ def api_timetable(bus_id):
         with urllib.request.urlopen(req, timeout=5) as r:
             html = r.read().decode('utf-8')
             
-            # Injekce Dark Mode CSS přímo do HTML od Inflow
+            # OPRAVENÉ CSS - Uzamčeno POUZE uvnitř #timetable-content
+            # Už ti to nebude černit zbytek mapy!
             dark_theme_css = """
             <style>
-                body, table, div, span, td, th { background-color: #0f172a !important; color: #e2e8f0 !important; font-family: sans-serif; }
-                th { color: #38bdf8 !important; border-bottom: 2px solid #334155 !important; }
-                td { border-bottom: 1px solid #1e293b !important; }
-                .table.is-striped tbody tr:nth-child(even) { background-color: #1e293b !important; }
-                .table.is-striped tbody tr:nth-child(odd) { background-color: #0f172a !important; }
-                .button { background-color: #38bdf8 !important; color: #0f172a !important; border: none !important; border-radius: 5px; font-weight: bold;}
-                .button:hover { background-color: #0284c7 !important; }
-                .level-item span { color: #38bdf8 !important; font-weight: bold; }
+                #timetable-content { background-color: #0f172a; color: #e2e8f0; font-family: sans-serif; }
+                #timetable-content table { background-color: transparent; width: 100%; color: #e2e8f0; }
+                #timetable-content th { color: #38bdf8; border-bottom: 2px solid #334155; text-align: left; padding: 8px; }
+                #timetable-content td { border-bottom: 1px solid #1e293b; padding: 8px; }
+                #timetable-content tbody tr:nth-child(even) td { background-color: #1e293b; }
+                #timetable-content tbody tr:nth-child(odd) td { background-color: #0f172a; }
+                #timetable-content .button { background-color: #38bdf8; color: #0f172a; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;}
+                #timetable-content .button:hover { background-color: #0284c7; }
+                #timetable-content .level-item span { color: #38bdf8; font-weight: bold; }
+                #timetable-content nav { margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
             </style>
             """
             
-            # Vložíme naše styly hned na začátek
             html = dark_theme_css + html
             return Response(html, mimetype='text/html')
     except Exception as e:
