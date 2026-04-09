@@ -41,9 +41,8 @@ def background_map_worker():
             }
             req2 = urllib.request.Request(url_arriva, data=json.dumps(arriva_payload).encode('utf-8'),
                 headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'User-Agent': 'Mozilla/5.0',
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json, text/plain, */*',
                     'Origin': 'https://www.arriva.cz',
                     'Referer': 'https://www.arriva.cz/'
                 }, method='POST')
@@ -60,7 +59,6 @@ def background_map_worker():
         new_live_data = []
 
         if isinstance(data_inflow, list):
-            # 1. Zabezpečení přidělených SPZ z minula
             for bus_id, cached in GLOBAL_BUS_CACHE.items():
                 if cached.get("spz") and cached.get("spz_locked"):
                     assigned_spzs.add(cached["spz"])
@@ -88,30 +86,70 @@ def background_map_worker():
                             "lat": lat1, "lng": lng1, "line": line, "spz": None,
                             "last_moved": None, "first_seen": now, "status": "N/A - Čeká na pohyb", 
                             "spz_locked": False, "color_class": "bg-gray", "destination": dest1_original, 
-                            "estimated": False, "finished_at": None
+                            "estimated": False, "finished_at": None,
+                            "first_departure": None, "is_waiting_for_departure": False
                         }
                     
                     cached = GLOBAL_BUS_CACHE[bus_id]
                     
-                    # DETEKCE POHYBU
                     dist_moved = math.hypot(lat1 - cached["lat"], lng1 - cached["lng"])
                     line_changed = cached["line"] != line
 
+                    # Pokud změnil linku, mažeme konečnou a jdeme HNED zjistit JŘ
                     if line_changed:
                         cached["line"] = line
                         cached["destination"] = dest1_original
-                        cached["finished_at"] = None # Rušíme konečnou při změně JŘ
+                        cached["finished_at"] = None 
+                        cached["first_departure"] = None
+                        cached["is_waiting_for_departure"] = False
+                        
+                        # --- TAJNÉ STAHOVÁNÍ JŘ PRO VÝPOČET ODPOČTU ---
+                        try:
+                            tt_url = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0"
+                            req_tt = urllib.request.Request(tt_url, headers={'User-Agent': 'Mozilla/5.0'})
+                            with urllib.request.urlopen(req_tt, timeout=2) as r_tt:
+                                tt_html = r_tt.read().decode('utf-8')
+                                times = re.findall(r'\b\d{2}:\d{2}\b', tt_html)
+                                if times:
+                                    cached["first_departure"] = times[0]
+                                    cached["is_waiting_for_departure"] = True
+                        except:
+                            pass
+
                         if dist_moved < 0.005: 
                             cached["estimated"] = True
                             cached["last_moved"] = now
-                    elif dist_moved > 0.0001:
+                            
+                    elif dist_moved > 0.0005: # Pohnul se znatelně - už asi jede
                         cached["last_moved"] = now
                         cached["lat"] = lat1
                         cached["lng"] = lng1
+                        if dist_moved > 0.002: # Ujel víc jak 200m z terminálu
+                            cached["is_waiting_for_departure"] = False
 
                     time_ref = cached["last_moved"] if cached["last_moved"] else cached["first_seen"]
                     inactive_mins = (now - time_ref).total_seconds() / 60.0
                     is_moving = dist_moved > 0.0001
+
+                    # --- PŘEPIS LŽIVÉHO ZPOŽDĚNÍ Z INFLOW ---
+                    if cached.get("is_waiting_for_departure") and cached.get("first_departure"):
+                        now_mins = now.hour * 60 + now.minute
+                        dep_h, dep_m = map(int, cached["first_departure"].split(':'))
+                        dep_mins = dep_h * 60 + dep_m
+                        
+                        # Přes půlnoc fix
+                        if dep_mins < now_mins and (now_mins - dep_mins) > 1000:
+                            dep_mins += 1440
+                            
+                        diff_mins = now_mins - dep_mins
+                        
+                        # Pokud je odjezd za méně než 4 hodiny (240 min) v budoucnosti
+                        if -240 <= diff_mins < 0:
+                            # INFLOW LŽE! Není to 0, odjezd je až za chvíli. Přepíšeme to do záporna.
+                            delay_val = diff_mins
+                        elif diff_mins >= 0:
+                            # Odjezd už minul, už jede na trase -> věříme Inflow
+                            cached["is_waiting_for_departure"] = False
 
                     # PÁROVÁNÍ SPZ
                     found_in_arriva = False
@@ -153,21 +191,43 @@ def background_map_worker():
                                 found_in_arriva = True
                                 break
 
-                    # --- EXTRÉMNĚ PŘESNÁ LOGIKA STATUSŮ A BAREV ---
-                    is_buggy_terminus = (delay_val <= -100000)
+                    # --- LOGIKA BAREV A STATUSŮ ---
+                    is_buggy_terminus = (delay_val <= -10000)
+                    is_waiting_departure = (-240 <= delay_val < 0)
+                    
+                    if is_waiting_departure:
+                        cached["finished_at"] = None
+
+                    is_missing_arriva_terminus = (not is_train and cached["spz"] and not found_in_arriva and delay_val < -2 and not is_waiting_departure)
+
+                    if is_buggy_terminus or is_missing_arriva_terminus:
+                        if cached["finished_at"] is None:
+                            cached["finished_at"] = now
+                    elif found_in_arriva and delay_val >= -2:
+                        cached["finished_at"] = None
 
                     if not cached["last_moved"]:
-                        # Ještě se vůbec nepohnul
                         cached["status"] = "N/A - Čeká na pohyb"
                         cached["color_class"] = "bg-gray"
                     else:
-                        # 1. Je to konečná (Fialová) - detekce Inflow bugu
-                        if is_buggy_terminus:
-                            if cached["finished_at"] is None:
-                                cached["finished_at"] = now
+                        if is_waiting_departure:
+                            if is_moving:
+                                cached["status"] = "Jízda (Náskok)"
+                                cached["color_class"] = "bg-darkblue"
+                            else:
+                                cached["status"] = "Začátek linky (Čeká)"
+                                cached["color_class"] = "bg-blue"
+                                
+                        elif inactive_mins > 10 and not is_waiting_departure:
+                            cached["status"] = "Odstaven"
+                            cached["color_class"] = "bg-gray"
+                            if cached["finished_at"]:
+                                if (now - cached["finished_at"]).total_seconds() / 60.0 > 60:
+                                    cached["spz_locked"] = False
                             
+                        elif cached["finished_at"] is not None:
                             finished_mins = (now - cached["finished_at"]).total_seconds() / 60.0
-                            if finished_mins > 20: # Přesáhl 20 min na konečné
+                            if finished_mins > 20: 
                                 if is_moving:
                                     cached["status"] = "Manipulační jízda"
                                     cached["color_class"] = "bg-yellow"
@@ -177,42 +237,17 @@ def background_map_worker():
                             else:
                                 cached["status"] = "Konečná zastávka"
                                 cached["color_class"] = "bg-purple"
-                        
-                        # 2. Běžné časy (nemá konečnou bug)
-                        else:
-                            cached["finished_at"] = None # Reset konečné
-
-                            if delay_val <= -240: # Odjezd za více než 4 hodiny (nebo manipulační)
-                                if is_moving:
-                                    cached["status"] = "Manipulační jízda"
-                                    cached["color_class"] = "bg-yellow"
-                                else:
-                                    cached["status"] = "Odstaven"
-                                    cached["color_class"] = "bg-gray"
-                                    if inactive_mins > 60: cached["spz_locked"] = False
-                                    
-                            elif delay_val <= -3: # Odjezd za 3 až 240 minut -> VŽDY Světle Modrá! I když popojíždí!
-                                cached["status"] = "Začátek linky (Čeká)"
-                                cached["color_class"] = "bg-blue"
                                 
-                            elif delay_val < 0: # -2 a -1 = Náskok na trase -> Tmavě modrá
-                                if is_moving:
-                                    cached["status"] = "Jízda (Náskok)"
-                                    cached["color_class"] = "bg-darkblue"
-                                else:
-                                    cached["status"] = "Začátek linky (Čeká)"
-                                    cached["color_class"] = "bg-blue"
-                                    
-                            else: # delay_val >= 0 (Na čas nebo Zpoždění)
-                                if inactive_mins > 10: # Spadl Inflow nebo chcípl motor
-                                    cached["status"] = "Odstaven"
-                                    cached["color_class"] = "bg-gray"
-                                else:
-                                    if is_moving:
-                                        cached["status"] = "Jízda"
-                                    else:
-                                        cached["status"] = "Stojí"
-                                    cached["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
+                        elif delay_val < -240 and not is_buggy_terminus:
+                            cached["status"] = "Čeká na spoj (>4h)"
+                            cached["color_class"] = "bg-gray"
+                            
+                        else:
+                            if is_moving:
+                                cached["status"] = "Jízda"
+                            else:
+                                cached["status"] = "Stojí"
+                            cached["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
 
                     last_up_str = cached["last_moved"].strftime("%H:%M:%S") if cached["last_moved"] else "N/A"
 
@@ -259,7 +294,8 @@ def api_bus_detail(bus_id):
         with urllib.request.urlopen(req2, timeout=5) as r2:
             tt_html = r2.read().decode('utf-8')
 
-        linkospoj, spoj_num = "N/A", "N/A"
+        linkospoj = "N/A"
+        spoj_num = "N/A"
 
         m_linka = re.search(r'<th>Linka</th>\s*<td>(.*?)</td>', info_html, re.IGNORECASE | re.DOTALL)
         if m_linka: linkospoj = m_linka.group(1).strip()
@@ -270,17 +306,18 @@ def api_bus_detail(bus_id):
         tables = re.findall(r'(<table[^>]*>.*?</table>)', tt_html, re.IGNORECASE | re.DOTALL)
         tt_table_only = "".join(tables) if tables else "<p style='color:#ef4444;text-align:center;padding:10px;'>Jízdní řád není momentálně k dispozici.</p>"
 
+        # Nový čistě šedý design tabulky (žádné modré pozadí u nadpisů atd.)
         custom_html = f"""
         <style>
-            .ois-detail {{ background: #0f172a; color: white; font-family: sans-serif; padding: 15px; border-radius: 8px; }}
-            .ois-header {{ color: #38bdf8; font-weight: bold; border-bottom: 1px solid #334155; margin-bottom: 15px; padding-bottom: 10px; font-size: 18px; }}
-            .ois-table-wrapper {{ margin-top: 10px; border: 1px solid #4b5563; border-radius: 5px; overflow-x: auto; background: #374151; }}
+            .ois-detail {{ background: #1a1a1a; color: white; font-family: sans-serif; padding: 15px; border-radius: 8px; }}
+            .ois-header {{ color: #38bdf8; font-weight: bold; border-bottom: 1px solid #444; margin-bottom: 15px; padding-bottom: 10px; font-size: 18px; }}
+            .ois-table-wrapper {{ margin-top: 10px; border: 1px solid #555; border-radius: 5px; overflow-x: auto; background: #2a2a2a; }}
             .ois-table-wrapper table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #f8fafc; margin-bottom: 0; }}
-            .ois-table-wrapper th {{ background: #1f2937; color: #38bdf8; text-align: left; padding: 10px; border-bottom: 2px solid #374151; white-space: nowrap; }}
-            .ois-table-wrapper td {{ padding: 10px; border-bottom: 1px solid #4b5563; white-space: nowrap; }}
-            .ois-table-wrapper tr:nth-child(even) td {{ background-color: #374151; }}
-            .ois-table-wrapper tr:nth-child(odd) td {{ background-color: #4b5563; }}
-            .ois-table-wrapper tr:hover td {{ background-color: #6b7280; transition: 0.2s; }}
+            .ois-table-wrapper th {{ background: #222; color: #38bdf8; text-align: left; padding: 10px; border-bottom: 2px solid #555; white-space: nowrap; }}
+            .ois-table-wrapper td {{ padding: 10px; border-bottom: 1px solid #444; white-space: nowrap; }}
+            .ois-table-wrapper tr:nth-child(even) td {{ background-color: #2a2a2a; }}
+            .ois-table-wrapper tr:nth-child(odd) td {{ background-color: #333333; }}
+            .ois-table-wrapper tr:hover td {{ background-color: #555555; transition: 0.2s; }}
         </style>
         <div class="ois-detail">
             <div class="ois-header"><i class="fas fa-bus"></i> Spoj: {linkospoj} / {spoj_num}</div>
@@ -291,4 +328,4 @@ def api_bus_detail(bus_id):
         """
         return Response(custom_html, mimetype='text/html')
     except Exception as e:
-        return f"<div style='color:#ef4444; padding:20px; background:#0f172a;'>Chyba při stahování JŘ z Inflow: {e}</div>"
+        return f"<div style='color:#ef4444; padding:20px; background:#1a1a1a;'>Chyba při stahování JŘ z Inflow: {e}</div>"
