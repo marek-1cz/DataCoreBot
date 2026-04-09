@@ -2149,8 +2149,8 @@ HTML_MAPA = """
     
     <div id="timetable-modal" class="modal" style="z-index: 9999;">
       <div class="modal-background" onclick="document.getElementById('timetable-modal').classList.remove('is-active')"></div>
-      <div class="modal-content" style="background: white; border-radius: 8px; padding: 20px; max-width: 600px; width: 90%;">
-        <div id="timetable-content" style="color: black; overflow-x: auto;">Načítám jízdní řád...</div>
+      <div class="modal-content" style="background: #0f172a; border-radius: 8px; padding: 20px; max-width: 600px; width: 90%; border: 1px solid #38bdf8;">
+        <div id="timetable-content" style="color: white; overflow-x: auto;">Načítám jízdní řád...</div>
       </div>
       <button class="modal-close is-large" aria-label="close" onclick="document.getElementById('timetable-modal').classList.remove('is-active')"></button>
     </div>
@@ -2160,55 +2160,32 @@ HTML_MAPA = """
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <style>
-        .bus-marker {
-            border-radius: 50%;
-            border: 2px solid white;
-            text-align: center;
-            color: white;
-            font-weight: bold;
-            font-size: 10px;
-            line-height: 20px;
-            box-shadow: 0 0 5px rgba(0,0,0,0.5);
-        }
-        .train-marker {
-            border-radius: 4px;
-            border: 2px solid white;
-            text-align: center;
-            color: white;
-            font-weight: bold;
-            font-size: 10px;
-            line-height: 20px;
-            box-shadow: 0 0 5px rgba(0,0,0,0.5);
-        }
-        .bg-green { background-color: #10b981; }
-        .bg-red { background-color: #ef4444; }
-        .bg-blue { background-color: #3b82f6; }
-        .bg-gray { background-color: #94a3b8; border-color: #64748b; color: white;}
+        .bus-marker { border-radius: 50%; border: 2px solid white; text-align: center; color: white; font-weight: bold; font-size: 10px; line-height: 20px; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+        .train-marker { border-radius: 4px; border: 2px solid white; text-align: center; color: white; font-weight: bold; font-size: 10px; line-height: 20px; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+        
+        .bg-green { background-color: #10b981; } /* Jede načas */
+        .bg-red { background-color: #ef4444; } /* Zpoždění > 4 min */
+        .bg-blue { background-color: #3b82f6; } /* Čeká před odjezdem */
+        .bg-gray { background-color: #94a3b8; border-color: #64748b; color: white;} /* Neodpovídá 10+ min */
+        .bg-purple { background-color: #a855f7; } /* Zmizel z Arrivy (Dojel) */
     </style>
 
     <script>
         var map = L.map('map').setView([49.7384, 13.3736], 12);
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
-
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
         var markersLayer = L.layerGroup().addTo(map);
 
         async function showTimetable(busId) {
             let modal = document.getElementById('timetable-modal');
             let content = document.getElementById('timetable-content');
-            
             modal.classList.add('is-active');
-            content.innerHTML = "<p>Načítám jízdní řád z Inflow...</p>";
+            content.innerHTML = "<div class='has-text-centered'><p style='color:#38bdf8;'>Stahuji JŘ a generuji data...</p></div>";
             
             try {
                 let response = await fetch('/api/timetable/' + busId);
-                let htmlText = await response.text();
-                content.innerHTML = htmlText;
+                content.innerHTML = await response.text();
             } catch(e) {
-                content.innerHTML = "<p style='color:red;'>Chyba při načítání.</p>";
+                content.innerHTML = "<p style='color:#ef4444;'>Chyba připojení k Inflow.</p>";
             }
         }
 
@@ -2225,9 +2202,8 @@ HTML_MAPA = """
                             let markerColor = "bg-green";
                             let delayText = "";
                             
-                            // Logika zpoždění a "náskoků"
+                            // Logika času / zpoždění
                             if (bus.delay <= -100000) {
-                                // Ochrana proti blbosti z Inflow (-2147483648 atd.)
                                 markerColor = "bg-blue";
                                 delayText = `<span style="color:#3b82f6;font-weight:bold;">Čeká na trase (JŘ neznámý)</span>`;
                             } else if (bus.delay < 0) {
@@ -2235,7 +2211,7 @@ HTML_MAPA = """
                                 let aheadMin = Math.round(Math.abs(bus.delay) / 60);
                                 let depDate = new Date(Date.now() + Math.abs(bus.delay) * 1000);
                                 let depTime = depDate.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
-                                delayText = `<span style="color:#3b82f6;font-weight:bold;">Náskok: ${aheadMin} min (Odj. dle JŘ: ${depTime})</span>`;
+                                delayText = `<span style="color:#3b82f6;font-weight:bold;">Náskok: ${aheadMin} min<br>Odj. dle JŘ: ${depTime}</span>`;
                             } else if (bus.delay >= 240) {
                                 markerColor = "bg-red";
                                 delayText = Math.round(bus.delay / 60) + " min";
@@ -2243,54 +2219,63 @@ HTML_MAPA = """
                                 delayText = Math.round(bus.delay / 60) + " min";
                             }
 
-                            // Zaseklé autobusy
+                            // Přepsání barvy podle stavu (Fialová / Šedá)
                             if (bus.inactive_minutes > 10) {
                                 markerColor = "bg-gray";
+                            } else if (bus.state === "finished") {
+                                markerColor = "bg-purple";
                             }
 
                             let shapeClass = bus.is_train ? 'train-marker' : 'bus-marker';
-                            let myIcon = L.divIcon({
-                                className: shapeClass + ' ' + markerColor,
-                                iconSize: [24, 24],
-                                html: ''
-                            });
-
+                            let myIcon = L.divIcon({ className: shapeClass + ' ' + markerColor, iconSize: [24, 24], html: '' });
                             let marker = L.marker([bus.lat, bus.lng], {icon: myIcon});
                             
-                            let spzHtml = bus.is_train ? '' : `<b>SPZ:</b> <span style="color:#f59e0b;font-weight:bold;">${bus.spz}</span><br>`;
-                            let typeName = bus.is_train ? 'Vlak' : 'Autobus';
+                            // Formátování SPZ a upozornění
+                            let spzHtml = "";
+                            if (!bus.is_train) {
+                                let spzDisplay = bus.spz;
+                                if (bus.estimated_spz) spzDisplay = `Odhadovaná (${bus.spz})`;
+                                spzHtml = `<b>SPZ:</b> <span style="color:#f59e0b;font-weight:bold;">${spzDisplay}</span><br>`;
+                            }
                             
+                            let typeName = bus.is_train ? 'Vlak' : 'Autobus';
+                            if (bus.state === "finished") typeName += " (Dojel linku)";
+
                             let statusHtml = "";
                             if (bus.inactive_minutes > 10) {
-                                statusHtml = `<span style="color:#ef4444;font-weight:bold;">Neodpovídá (Poslední pohyb: ${bus.last_updated})</span><br>`;
+                                statusHtml = `<span style="color:#ef4444;font-weight:bold;">Neodpovídá (Zaseknuto v čase ${bus.last_updated})</span><br>`;
                             } else {
                                 statusHtml = `<span style="color:#10b981;font-size:12px;">Aktivní (Aktualizováno: ${bus.last_updated})</span><br>`;
                             }
                             
                             let popupHTML = `
-                                <div style="font-family:sans-serif; font-size: 14px;">
+                                <div style="font-family:sans-serif; font-size: 14px; background: #1e293b; color: white; padding: 10px; border-radius: 8px;">
                                     <b>Typ:</b> ${typeName}<br>
-                                    <b>Linka:</b> ${bus.line}<br>
+                                    <b>Linka:</b> <span style="color:#38bdf8;">${bus.line}</span><br>
                                     <b>Cíl:</b> ${bus.destination || "Neznámý"}<br>
                                     <b>Zpoždění:</b> ${delayText}<br>
                                     ${spzHtml}
                                     ${statusHtml}
-                                    <hr style="margin: 8px 0;">
-                                    <button class="button is-small is-info" onclick="showTimetable(${bus.id})">
-                                        📅 Jízdní řád
+                                    <hr style="margin: 8px 0; border-color: #334155;">
+                                    <button class="button is-small is-info is-fullwidth" onclick="showTimetable('${bus.id}')">
+                                        📅 Zobrazit Jízdní Řád
                                     </button>
                                 </div>
                             `;
                             
-                            marker.bindPopup(popupHTML);
+                            // Leaflet styling fix for dark popup
+                            marker.bindPopup(popupHTML, {className: 'dark-popup'});
                             markersLayer.addLayer(marker);
                         }
                     });
                 }
-            } catch(e) {
-                console.error("Chyba mapy:", e);
-            }
+            } catch(e) { console.error("Chyba mapy:", e); }
         }
+
+        // CSS pro tmavý obal popupu
+        var style = document.createElement('style');
+        style.innerHTML = `.dark-popup .leaflet-popup-content-wrapper { background: #1e293b; color: white; } .dark-popup .leaflet-popup-tip { background: #1e293b; }`;
+        document.head.appendChild(style);
 
         fetchBuses();
         setInterval(fetchBuses, 10000);
