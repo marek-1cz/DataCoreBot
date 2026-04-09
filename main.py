@@ -29,7 +29,6 @@ try:
 except ImportError as e:
     print(f"KRITICKÁ CHYBA IMPORTU ŠABLON: {e}")
 
-# --- TVRDÁ OCHRANA ŠABLON (Už to NIKDY nespadne na NameError) ---
 _template_names = [
     'BASE_HTML', 'PUBLIC_LAYOUT', 'DASHBOARD_LAYOUT', 'HTML_HOME', 'HTML_DOWNLOADS_MAIN', 
     'HTML_TEAM', 'HTML_PUBLIC_STATS', 'HTML_CLAIM', 'HTML_STATS', 'HTML_APP_MANAGEMENT', 
@@ -39,17 +38,13 @@ _template_names = [
 ]
 for _name in _template_names:
     if _name not in globals():
-        # Pokud šablona chybí v html_templates.py, vloží se toto nouzové HTML místo pádu serveru
         globals()[_name] = f"<div style='background:#0f172a; color:#ef4444; padding:40px; text-align:center; font-family:sans-serif;'><h2>CHYBA ŠABLONY</h2><p>Šablona <b>{_name}</b> chybí v souboru <i>html_templates.py</i>! Prosím, zkontroluj si to a přidej ji.</p></div>"
 
-# Import live statusů z druhého souboru
 try:
     from status_dashboard import HTML_STATUS_SECTION
 except ImportError:
-    print("VAROVÁNÍ: Soubor status_dashboard.py nenalezen. Statusy nebudou fungovat.")
     HTML_STATUS_SECTION = ""
 
-# --- TVRDÝ HLÍDAČ ČASU (Vynucení UTC Praha pro celý server Koyebu) ---
 os.environ['TZ'] = 'Europe/Prague'
 try:
     time.tzset()
@@ -63,7 +58,6 @@ app.secret_key = "ois_idpk_super_tajny_klic"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-# REGISTRACE BLUEPRINTU PRO MAPU
 app.register_blueprint(mapa_bp)
 
 @app.after_request
@@ -107,18 +101,15 @@ def get_system_statuses():
     except: pass
     return {}
 
-# OPRAVA: Odstraněn timeout a přidány custom_id pro perzistentní View
 class AppAuthView(discord.ui.View):
     def __init__(self, token="", discord_id="", is_dm=True):
-        super().__init__(timeout=None) # Změněno z 300 na None
+        super().__init__(timeout=None)
         self.token = token
         self.discord_id = str(discord_id)
         self.is_dm = is_dm
 
     @discord.ui.button(label="Schválit přihlášení", style=discord.ButtonStyle.success, emoji="✅", custom_id="app_auth_approve")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Při permanentním view (z on_ready) možná nemáme self.discord_id naplněné z initu, 
-        # takže ověříme spíše podle kontextu nebo prostě schválíme toho, kdo klikl (protože je to DM)
         target_id = self.discord_id if self.discord_id else str(interaction.user.id)
         if str(interaction.user.id) != target_id:
             return await interaction.response.send_message("Toto ověření není pro tebe!", ephemeral=True)
@@ -137,10 +128,9 @@ class AppAuthView(discord.ui.View):
             db.table("users").update({"login_token": "rejected"}).eq("discord_id", target_id).execute()
             await interaction.response.edit_message(content="❌ **Přihlášení bylo zamítnuto.**", embed=None, view=None)
 
-# OPRAVA: Odstraněn timeout a přidány custom_id pro perzistentní View
 class DashboardAuthView(discord.ui.View):
     def __init__(self, token="", discord_id=""):
-        super().__init__(timeout=None) # Změněno z 300 na None
+        super().__init__(timeout=None)
         self.token = token
         self.discord_id = str(discord_id)
 
@@ -547,9 +537,10 @@ class DynamicDownloadView(discord.ui.View):
         if chk.data and chk.data[0].get('is_banned'):
             return await interaction.followup.send("**⛔ Přístup zamítnut:** Váš účet má udělený BAN a stahování bylo zablokováno.", ephemeral=True)
 
+        # OPRAVENO: timeout z None na 300, aby nevyžadoval custom_ids u sub-tlačítek a neshodil Koyeb
         class DynamicRulesView(discord.ui.View):
             def __init__(self):
-                super().__init__(timeout=None)
+                super().__init__(timeout=300)
                 
             @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, emoji="✅")
             async def agree(self, i2, b2):
@@ -615,10 +606,8 @@ class DynamicDownloadView(discord.ui.View):
                             super().__init__(placeholder="Vyber verzi k instalaci...", options=opts)
                             
                         async def callback(self, i3):
-                            try:
-                                await i3.response.defer(ephemeral=True)
-                            except:
-                                pass
+                            try: await i3.response.defer(ephemeral=True)
+                            except: pass
                             if self.values[0] == "none": return await i3.followup.send("Pro vaše role nejsou dostupné žádné verze.", ephemeral=True)
                             
                             t = str(uuid.uuid4())
@@ -634,10 +623,8 @@ class DynamicDownloadView(discord.ui.View):
                     
             @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, emoji="❌")
             async def disagree(self, i2, b2): 
-                try:
-                    await i2.response.defer(ephemeral=True)
-                except:
-                    pass
+                try: await i2.response.defer(ephemeral=True)
+                except: pass
                 await i2.followup.send(content="**Akce zrušena.**", ephemeral=True)
                 
         await interaction.followup.send("**PODMÍNKY UŽÍVÁNÍ:**\n1. Přísný zákaz šíření, kopírování nebo sdílení aplikace bez výslovného souhlasu autora.\n2. Systém využívá HWID ochranu a shromažďuje telemetrická data pro zajištění správného chodu a bezpečnosti aplikace.\n3. Každý pokus o modifikaci kódu nebo obcházení zabezpečení povede k okamžitému a trvalému zablokování.\n\nSouhlasíte s těmito podmínkami?", view=DynamicRulesView(), ephemeral=True)
@@ -769,7 +756,6 @@ def dashboard_app_management():
                 elif s['setting_key'] == 'downloads_enabled':
                     dl_enabled = str(s['setting_value']).lower() != 'false'
     except: pass
-    
     kombinovane_html = HTML_APP_MANAGEMENT + "\n" + HTML_STATUS_SECTION
     return render_dashboard(kombinovane_html, soft_enabled=soft_enabled, dl_enabled=dl_enabled, deploy_time=DEPLOY_TIME)
 
@@ -811,13 +797,11 @@ def update_statuses():
             for key, value in request.form.items():
                 if key.startswith('status_'):
                     statuses[key.replace('status_', '')] = value
-            
             check = db.table("settings").select("*").eq("setting_key", "system_statuses").execute().data
             if check:
                 db.table("settings").update({"setting_value": json.dumps(statuses)}).eq("setting_key", "system_statuses").execute()
             else:
                 db.table("settings").insert({"setting_key": "system_statuses", "setting_value": json.dumps(statuses)}).execute()
-                
             flash('Statusy byly úspěšně uloženy a zaktualizovány!', 'success')
             send_log("🟢 Aktualizace Statusů", "Administrátor právě upravil live statusy služeb v aplikaci.", 0x10b981)
         except Exception as e:
@@ -850,27 +834,19 @@ def public_stats():
     if not db:
         flash("Databáze není dostupná.", "error")
         return redirect(url_for('home'))
-    
     search_query = request.args.get('q', '').strip()
     searched_user = None
     all_users = db.table("users").select("*").execute().data or []
-    
     if search_query:
         for u in all_users:
             if str(u.get('discord_id')) == search_query or str(u.get('nick', '')).lower() == search_query.lower():
-                searched_user = u
-                break
-        if not searched_user:
-            flash(f"Hráč s ID nebo Nickem '{search_query}' nebyl nalezen.", "warning")
-            
+                searched_user = u; break
+        if not searched_user: flash(f"Hráč s ID '{search_query}' nebyl nalezen.", "warning")
     versions = db.table("software_versions").select("*").eq("is_active", True).order("id", desc=True).execute().data or []
     user_ver = next((v['version_name'] for v in versions if v['target_role'] == 'User'), "Žádná")
     bt_ver = next((v['version_name'] for v in versions if v['target_role'] == 'BT'), "Žádná")
-    
     activated_users = len([u for u in all_users if u.get('hwid') and str(u.get('hwid')) not in ['None', '']])
-    
-    total_time_mins = 0
-    total_launches = 0
+    total_time_mins = 0; total_launches = 0
     for u in all_users:
         try:
             t = u.get('total_time')
@@ -880,75 +856,44 @@ def public_stats():
             l = u.get('launch_count')
             if l: total_launches += int(l)
         except: pass
-        
     total_hours = total_time_mins // 60
-    
     today_str = get_prague_time().strftime("%d.%m.%Y")
     sessions_today = db.table("app_sessions").select("start_time, end_time").like("start_time", f"{today_str}%").execute().data or []
     today_mins = 0
     for s in sessions_today:
         try:
-            st_str = s.get('start_time')
-            et_str = s.get('end_time')
+            st_str = s.get('start_time'); et_str = s.get('end_time')
             if st_str and et_str:
                 fmt_st = "%d.%m.%Y %H:%M:%S" if st_str.count(':') == 2 else "%d.%m.%Y %H:%M"
                 fmt_et = "%d.%m.%Y %H:%M:%S" if et_str.count(':') == 2 else "%d.%m.%Y %H:%M"
-                st = datetime.strptime(st_str, fmt_st)
-                et = datetime.strptime(et_str, fmt_et)
+                st = datetime.strptime(st_str, fmt_st); et = datetime.strptime(et_str, fmt_et)
                 diff = int((et - st).total_seconds() / 60)
                 if diff > 0: today_mins += diff
         except: pass
-    today_hours = today_mins // 60
-    today_rem_mins = today_mins % 60
+    today_hours = today_mins // 60; today_rem_mins = today_mins % 60
     today_time_str = f"{today_hours}h {today_rem_mins}m" if today_hours > 0 else f"{today_rem_mins}m"
-    
     supporters_data = db.table("supporters").select("id").eq("status", "completed").execute().data or []
     total_supporters = len(supporters_data)
-    
     valid_time_users = [u for u in all_users if int(u.get('total_time') or 0) > 0]
     top_time_users = sorted(valid_time_users, key=lambda x: int(x.get('total_time') or 0), reverse=True)[:3]
-    
     valid_launch_users = [u for u in all_users if int(u.get('launch_count') or 0) > 0]
     top_launches = sorted(valid_launch_users, key=lambda x: int(x.get('launch_count') or 0), reverse=True)[:3]
-    
     try:
         top_lines = db.table("stats_lines").select("*").order("play_count", desc=True).limit(10).execute().data or []
         top_stops = db.table("stats_stops").select("*").order("announce_count", desc=True).limit(10).execute().data or []
         all_lines = db.table("stats_lines").select("*").order("play_count", desc=True).execute().data or []
         all_stops = db.table("stats_stops").select("*").order("announce_count", desc=True).execute().data or []
     except Exception as e:
-        print(f"Chyba při načítání globálních statistik: {e}")
         top_lines, top_stops, all_lines, all_stops = [], [], [], []
-    
-    all_searched_user_lines = []
-    all_searched_user_stops = []
-    searched_user_lines = []
-    searched_user_stops = []
+    all_searched_user_lines = []; all_searched_user_stops = []; searched_user_lines = []; searched_user_stops = []
     if searched_user:
         d_id = searched_user.get('discord_id')
         try:
             all_searched_user_lines = db.table("user_stats_lines").select("*").eq("discord_id", d_id).order("play_count", desc=True).execute().data or []
             all_searched_user_stops = db.table("user_stats_stops").select("*").eq("discord_id", d_id).order("announce_count", desc=True).execute().data or []
-            searched_user_lines = all_searched_user_lines[:5]
-            searched_user_stops = all_searched_user_stops[:5]
-        except Exception as e:
-            print(f"Chyba při načítání osobních statistik pro /stats: {e}")
-    
-    return render_public(HTML_PUBLIC_STATS, 
-                         user_ver=user_ver, bt_ver=bt_ver, 
-                         activated_users=activated_users, 
-                         total_supporters=total_supporters,
-                         today_time_str=today_time_str, 
-                         total_hours=total_hours,
-                         total_launches=total_launches,
-                         top_time=top_time_users, top_launches=top_launches,
-                         top_lines=top_lines, top_stops=top_stops,
-                         all_lines=all_lines, all_stops=all_stops,
-                         searched_user=searched_user,
-                         searched_user_lines=searched_user_lines,
-                         searched_user_stops=searched_user_stops,
-                         all_searched_user_lines=all_searched_user_lines,
-                         all_searched_user_stops=all_searched_user_stops)
+            searched_user_lines = all_searched_user_lines[:5]; searched_user_stops = all_searched_user_stops[:5]
+        except Exception as e: pass
+    return render_public(HTML_PUBLIC_STATS, user_ver=user_ver, bt_ver=bt_ver, activated_users=activated_users, total_supporters=total_supporters, today_time_str=today_time_str, total_hours=total_hours, total_launches=total_launches, top_time=top_time_users, top_launches=top_launches, top_lines=top_lines, top_stops=top_stops, all_lines=all_lines, all_stops=all_stops, searched_user=searched_user, searched_user_lines=searched_user_lines, searched_user_stops=searched_user_stops, all_searched_user_lines=all_searched_user_lines, all_searched_user_stops=all_searched_user_stops)
 
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'])
 def api_supporters():
@@ -959,8 +904,7 @@ def api_supporters():
         data = db.table("supporters").select("name, amount, message, created_at").eq("status", "completed").execute().data or []
         support_data = process_supporters(data)
         return _cors_jsonify({"supporters": support_data})
-    except Exception as e:
-        return _cors_jsonify({"error": str(e)}), 500
+    except Exception as e: return _cors_jsonify({"error": str(e)}), 500
 
 @app.route('/claim', methods=['GET', 'POST'])
 def claim_role():
