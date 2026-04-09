@@ -34,7 +34,6 @@ def background_map_worker():
         except Exception as e: print(f"[MAPA] Inflow Error: {e}")
 
         try:
-            # OPRAVA 400: Přesně ten původní, nezkrácený payload!
             arriva_payload = {
                 "operationName": "busesCurrentLocation",
                 "variables": {},
@@ -57,16 +56,16 @@ def background_map_worker():
         except Exception as e: print(f"[MAPA] Arriva Error: {e}")
 
         current_bus_ids = set()
-        assigned_spzs = set() # Registr zabraných SPZ pro zamezení duplikací
+        assigned_spzs = set() 
         new_live_data = []
 
         if isinstance(data_inflow, list):
-            # 1. PRŮCHOD: Registrace již zamknutých SPZ z minula
+            # 1. Registrace zabraných SPZ
             for bus_id, cached in GLOBAL_BUS_CACHE.items():
                 if cached.get("spz") and cached.get("spz_locked"):
                     assigned_spzs.add(cached["spz"])
 
-            # 2. PRŮCHOD: Zpracování a párování
+            # 2. Zpracování a párování
             for bus1 in data_inflow:
                 try:
                     bus_id = str(bus1.get("id", "0"))
@@ -74,7 +73,6 @@ def background_map_worker():
                     lat1 = bus1.get("lat", 0)
                     lng1 = bus1.get("lng", 0)
                     delay = bus1.get("delay", 0)
-                    # Přesné zachování velikosti písmen! Žádné .title()
                     dest1_original = str(bus1.get("finalStopName", "")).strip() 
                     dest1_lower = dest1_original.lower()
                     traction = str(bus1.get("traction", "BUS")).upper()
@@ -97,7 +95,7 @@ def background_map_worker():
                     line_changed = cached["line"] != line
 
                     if line_changed and dist_moved < 0.005: 
-                        # Změnil linku, ale nepohnul se -> Držíme ho
+                        # Změnil linku na konečné -> držíme SPZ a status
                         cached["line"] = line
                         cached["destination"] = dest1_original
                         cached["estimated"] = True
@@ -110,14 +108,14 @@ def background_map_worker():
                     time_ref = cached["last_moved"] if cached["last_moved"] else cached["first_seen"]
                     inactive_mins = (now - time_ref).total_seconds() / 60.0
 
-                    # PÁROVÁNÍ SPZ Z ARRIVY (PŘÍSNÁ KONTROLA DUPLICIT)
+                    # PÁROVÁNÍ SPZ Z ARRIVY (Ochrana duplicit)
                     found_in_arriva = False
                     if not is_train and not cached["spz_locked"]:
                         best_spz = None
                         for bus2 in data_arriva:
                             b2_spz = str(bus2.get("spz", "")).strip()
                             if not b2_spz or b2_spz == "Neznámá" or b2_spz in assigned_spzs:
-                                continue # Tuhle SPZ už někdo má
+                                continue 
                                 
                             b2_line = str(bus2.get("linkNumber", "")).strip()
                             b2_alias = str(bus2.get("linkNumberAlias", "")).strip()
@@ -128,12 +126,12 @@ def background_map_worker():
                                 dest2 = str(bus2.get("destinationName", "")).strip().lower()
                                 dist = math.hypot(lat1 - lat2, lng1 - lng2)
                                 
-                                if dist < 0.015: # Do cca 1.5 km
+                                if dist < 0.015: 
                                     if (dest1_lower in dest2) or (dest2 in dest1_lower) or dest1_lower == "" or dest2 == "":
                                         best_spz = b2_spz
                                         found_in_arriva = True
                                         break
-                                    elif dist < 0.001: # Extrémně blízko, ignorujeme cíl
+                                    elif dist < 0.001: 
                                         best_spz = b2_spz
                                         found_in_arriva = True
                                         break
@@ -142,44 +140,49 @@ def background_map_worker():
                             cached["spz"] = best_spz
                             cached["spz_locked"] = True
                             cached["estimated"] = False
-                            assigned_spzs.add(best_spz) # Zamknout ihned pro ostatní iterace
+                            assigned_spzs.add(best_spz) 
                     
-                    # Ověření pro fialovou (jestli zmizel z Arrivy)
                     if not is_train and cached["spz"]:
                         for b2 in data_arriva:
                             if b2.get("spz", "").strip() == cached["spz"]:
                                 found_in_arriva = True
                                 break
 
-                    # STATUSY A BARVY
-                    # Nejvyšší priorita: Čeká na odjezd (i když stojí >10min, ale odjezd je za <= 30 min)
-                    if delay <= -100000 or (-1800 <= delay < -60):
-                        cached["status"] = "Začátek linky (Čeká)"
-                        cached["color_class"] = "bg-blue"
-                    
-                    # Jinak kontrolujeme standardní věci
-                    elif cached["last_moved"]:
-                        if inactive_mins > 10:
-                            cached["status"] = "Odstaven"
-                            cached["color_class"] = "bg-gray"
-                            # SPZ ZŮSTÁVÁ!
-                            
-                        elif not is_train and cached["spz"] and not found_in_arriva and delay < -300:
-                            # Má naši SPZ, z Inflow hlásí masivní mínus, na Arrivě zmizel -> Konec
+                    # BARVY KROUŽKŮ A STATUSY TEXTU
+                    if cached["last_moved"]:
+                        # 1. Legendární Inflow Bug pro konečnou
+                        if delay <= -100000:
                             cached["status"] = "Konečná zastávka"
                             cached["color_class"] = "bg-purple"
-                            
+
+                        # 2. Vypadl z Arrivy a má podezřele velký náskok = konečná
+                        elif not is_train and cached["spz"] and not found_in_arriva and delay < -300:
+                            cached["status"] = "Konečná zastávka"
+                            cached["color_class"] = "bg-purple"
+
+                        # 3. Odstaven bez dat přes 10 minut
+                        elif inactive_mins > 10:
+                            cached["status"] = "Odstaven"
+                            cached["color_class"] = "bg-gray"
+                            # SPZ ZŮSTÁVÁ ZAMČENÁ Z MINULA
+
+                        # 4. Běžný provoz - čekání, náskok, zpoždění
                         else:
-                            if dist_moved > 0.0001: # V Jízdě
-                                if delay < -60: 
-                                    cached["status"] = "Jízda (Náskok)"
-                                    cached["color_class"] = "bg-darkblue"
-                                else:
+                            if delay < -60: # Má náskok
+                                if dist_moved > 0.0001: # A reálně jede
                                     cached["status"] = "Jízda"
-                                    cached["color_class"] = "bg-red" if delay >= 300 else "bg-green"
-                            else: # Stojí
-                                cached["status"] = "Stojí"
-                                cached["color_class"] = "bg-red"
+                                    cached["color_class"] = "bg-darkblue"
+                                else: # A stojí na místě (Začátek nebo vyčkává)
+                                    cached["status"] = "Začátek linky (Čeká)"
+                                    cached["color_class"] = "bg-blue"
+                            else: # Jede na čas nebo zpoždění
+                                if dist_moved > 0.0001: # A reálně jede
+                                    cached["status"] = "Jízda"
+                                else: # A reálně stojí
+                                    cached["status"] = "Stojí"
+                                
+                                # Barva kolečka se řídí čistě Jízdním Řádem
+                                cached["color_class"] = "bg-red" if delay >= 300 else "bg-green"
                     else:
                         cached["status"] = "N/A - Čeká na pohyb"
                         cached["color_class"] = "bg-gray"
@@ -240,7 +243,6 @@ def api_bus_detail(bus_id):
         tables = re.findall(r'(<table[^>]*>.*?</table>)', tt_html, re.IGNORECASE | re.DOTALL)
         tt_table_only = "".join(tables) if tables else "<p style='color:#ef4444;text-align:center;padding:10px;'>Jízdní řád není momentálně k dispozici.</p>"
 
-        # Odstraněny zbytečné N/A kolonky, zůstalo čisté JŘ
         custom_html = f"""
         <style>
             .ois-detail {{ background: #0f172a; color: white; font-family: sans-serif; padding: 15px; border-radius: 8px; }}
