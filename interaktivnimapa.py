@@ -34,16 +34,26 @@ def background_map_worker():
         except Exception as e: print(f"[MAPA] Inflow Error: {e}")
 
         try:
+            # OPRAVA 400: Přesně ten původní, nezkrácený payload!
             arriva_payload = {
                 "operationName": "busesCurrentLocation",
                 "variables": {},
-                "query": "query busesCurrentLocation { busesCurrentLocations { latitude longitude linkNumber spz type destinationName linkNumberAlias state } }"
+                "query": "query busesCurrentLocation {\n  busesCurrentLocations {\n    angle\n    delay\n    destinationName\n    lastStopName\n    latitude\n    longitude\n    linkNumber\n    state\n    type\n    mainType\n    spz\n    updated\n    linkNumberAlias\n    __typename\n  }\n}"
             }
             req2 = urllib.request.Request(url_arriva, data=json.dumps(arriva_payload).encode('utf-8'),
-                headers={'User-Agent': 'Mozilla/5.0','Content-Type': 'application/json','Origin': 'https://www.arriva.cz'}, method='POST')
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json, text/plain, */*',
+                    'Origin': 'https://www.arriva.cz',
+                    'Referer': 'https://www.arriva.cz/'
+                }, method='POST')
             with urllib.request.urlopen(req2, timeout=5) as r2:
                 resp2 = json.loads(r2.read().decode())
-                data_arriva = resp2.get("data", {}).get("busesCurrentLocations", [])
+                if isinstance(resp2, list) and len(resp2) > 0 and "data" in resp2[0]:
+                    data_arriva = resp2[0]["data"].get("busesCurrentLocations", [])
+                elif isinstance(resp2, dict) and "data" in resp2:
+                    data_arriva = resp2["data"].get("busesCurrentLocations", [])
         except Exception as e: print(f"[MAPA] Arriva Error: {e}")
 
         current_bus_ids = set()
@@ -64,7 +74,9 @@ def background_map_worker():
                     lat1 = bus1.get("lat", 0)
                     lng1 = bus1.get("lng", 0)
                     delay = bus1.get("delay", 0)
-                    dest1 = str(bus1.get("finalStopName", "")).strip().lower()
+                    # Přesné zachování velikosti písmen! Žádné .title()
+                    dest1_original = str(bus1.get("finalStopName", "")).strip() 
+                    dest1_lower = dest1_original.lower()
                     traction = str(bus1.get("traction", "BUS")).upper()
                     
                     is_train = int(bus_id) < 0 or traction in ["TRAIN", "UNKNOWN"]
@@ -74,8 +86,8 @@ def background_map_worker():
                     if bus_id not in GLOBAL_BUS_CACHE:
                         GLOBAL_BUS_CACHE[bus_id] = {
                             "lat": lat1, "lng": lng1, "line": line, "spz": None,
-                            "last_moved": None, "first_seen": now, "status": "N/A", 
-                            "spz_locked": False, "color_class": "bg-gray", "destination": dest1, "estimated": False
+                            "last_moved": None, "first_seen": now, "status": "N/A - Čeká na pohyb", 
+                            "spz_locked": False, "color_class": "bg-gray", "destination": dest1_original, "estimated": False
                         }
                     
                     cached = GLOBAL_BUS_CACHE[bus_id]
@@ -87,7 +99,7 @@ def background_map_worker():
                     if line_changed and dist_moved < 0.005: 
                         # Změnil linku, ale nepohnul se -> Držíme ho
                         cached["line"] = line
-                        cached["destination"] = dest1
+                        cached["destination"] = dest1_original
                         cached["estimated"] = True
                         cached["last_moved"] = now
                     elif dist_moved > 0.0001:
@@ -117,7 +129,7 @@ def background_map_worker():
                                 dist = math.hypot(lat1 - lat2, lng1 - lng2)
                                 
                                 if dist < 0.015: # Do cca 1.5 km
-                                    if (dest1 in dest2) or (dest2 in dest1) or dest1 == "" or dest2 == "":
+                                    if (dest1_lower in dest2) or (dest2 in dest1_lower) or dest1_lower == "" or dest2 == "":
                                         best_spz = b2_spz
                                         found_in_arriva = True
                                         break
@@ -140,18 +152,20 @@ def background_map_worker():
                                 break
 
                     # STATUSY A BARVY
-                    if cached["last_moved"]:
+                    # Nejvyšší priorita: Čeká na odjezd (i když stojí >10min, ale odjezd je za <= 30 min)
+                    if delay <= -100000 or (-1800 <= delay < -60):
+                        cached["status"] = "Začátek linky (Čeká)"
+                        cached["color_class"] = "bg-blue"
+                    
+                    # Jinak kontrolujeme standardní věci
+                    elif cached["last_moved"]:
                         if inactive_mins > 10:
                             cached["status"] = "Odstaven"
                             cached["color_class"] = "bg-gray"
-                            # SPZ ZŮSTÁVÁ! "nech SPZ kurva jo!"
-                            
-                        elif delay <= -100000:
-                            cached["status"] = "Začátek linky (Čeká)"
-                            cached["color_class"] = "bg-blue"
+                            # SPZ ZŮSTÁVÁ!
                             
                         elif not is_train and cached["spz"] and not found_in_arriva and delay < -300:
-                            # Má naši SPZ, z Inflow hlásí masivní mínus (bug), na Arrivě zmizel -> Konec
+                            # Má naši SPZ, z Inflow hlásí masivní mínus, na Arrivě zmizel -> Konec
                             cached["status"] = "Konečná zastávka"
                             cached["color_class"] = "bg-purple"
                             
@@ -164,12 +178,8 @@ def background_map_worker():
                                     cached["status"] = "Jízda"
                                     cached["color_class"] = "bg-red" if delay >= 300 else "bg-green"
                             else: # Stojí
-                                if delay < -180: 
-                                    cached["status"] = "Začátek linky (Čeká)"
-                                    cached["color_class"] = "bg-blue"
-                                else:
-                                    cached["status"] = "Stojí"
-                                    cached["color_class"] = "bg-red" if delay >= 300 else "bg-green"
+                                cached["status"] = "Stojí"
+                                cached["color_class"] = "bg-red"
                     else:
                         cached["status"] = "N/A - Čeká na pohyb"
                         cached["color_class"] = "bg-gray"
@@ -179,7 +189,7 @@ def background_map_worker():
                     new_live_data.append({
                         "id": bus_id, "lat": lat1, "lng": lng1, 
                         "line": line if line else ("Vlak" if is_train else "Neznámá"),
-                        "delay": delay, "destination": dest1.title(), 
+                        "delay": delay, "destination": dest1_original, 
                         "spz": cached["spz"] or "Neznámá", "is_train": is_train, 
                         "status": cached["status"], "color_class": cached["color_class"],
                         "inactive_minutes": inactive_mins, "last_updated": last_up_str,
@@ -230,18 +240,18 @@ def api_bus_detail(bus_id):
         tables = re.findall(r'(<table[^>]*>.*?</table>)', tt_html, re.IGNORECASE | re.DOTALL)
         tt_table_only = "".join(tables) if tables else "<p style='color:#ef4444;text-align:center;padding:10px;'>Jízdní řád není momentálně k dispozici.</p>"
 
-        # Nádherný, čistošedý design tabulky bez rušivých řádků
+        # Odstraněny zbytečné N/A kolonky, zůstalo čisté JŘ
         custom_html = f"""
         <style>
             .ois-detail {{ background: #0f172a; color: white; font-family: sans-serif; padding: 15px; border-radius: 8px; }}
             .ois-header {{ color: #38bdf8; font-weight: bold; border-bottom: 1px solid #334155; margin-bottom: 15px; padding-bottom: 10px; font-size: 18px; }}
-            .ois-table-wrapper {{ margin-top: 10px; border: 1px solid #334155; border-radius: 5px; overflow-x: auto; background: #1e293b; }}
+            .ois-table-wrapper {{ margin-top: 10px; border: 1px solid #4b5563; border-radius: 5px; overflow-x: auto; background: #374151; }}
             .ois-table-wrapper table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #f8fafc; margin-bottom: 0; }}
-            .ois-table-wrapper th {{ background: #334155; color: #38bdf8; text-align: left; padding: 10px; border-bottom: 2px solid #475569; white-space: nowrap; }}
-            .ois-table-wrapper td {{ padding: 10px; border-bottom: 1px solid #334155; white-space: nowrap; }}
-            .ois-table-wrapper tr:nth-child(even) td {{ background-color: #1e293b; }}
-            .ois-table-wrapper tr:nth-child(odd) td {{ background-color: #475569; }}
-            .ois-table-wrapper tr:hover td {{ background-color: #64748b; transition: 0.2s; }}
+            .ois-table-wrapper th {{ background: #1f2937; color: #38bdf8; text-align: left; padding: 10px; border-bottom: 2px solid #374151; white-space: nowrap; }}
+            .ois-table-wrapper td {{ padding: 10px; border-bottom: 1px solid #4b5563; white-space: nowrap; }}
+            .ois-table-wrapper tr:nth-child(even) td {{ background-color: #374151; }}
+            .ois-table-wrapper tr:nth-child(odd) td {{ background-color: #4b5563; }}
+            .ois-table-wrapper tr:hover td {{ background-color: #6b7280; transition: 0.2s; }}
         </style>
         <div class="ois-detail">
             <div class="ois-header"><i class="fas fa-bus"></i> Spoj: {linkospoj} / {spoj_num}</div>
