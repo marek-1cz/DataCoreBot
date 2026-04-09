@@ -58,6 +58,7 @@ app.secret_key = "ois_idpk_super_tajny_klic"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
+# REGISTRACE BLUEPRINTU PRO MAPU
 app.register_blueprint(mapa_bp)
 
 @app.after_request
@@ -537,7 +538,6 @@ class DynamicDownloadView(discord.ui.View):
         if chk.data and chk.data[0].get('is_banned'):
             return await interaction.followup.send("**⛔ Přístup zamítnut:** Váš účet má udělený BAN a stahování bylo zablokováno.", ephemeral=True)
 
-        # OPRAVENO: timeout z None na 300, aby nevyžadoval custom_ids u sub-tlačítek a neshodil Koyeb
         class DynamicRulesView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=300)
@@ -2075,8 +2075,11 @@ async def on_ready():
     try: bot.add_view(DynamicDownloadView())
     except: pass
     
-    bot.add_view(AppAuthView("", "", False))
-    bot.add_view(DashboardAuthView("", ""))
+    # PERZISTENTNÍ VIEWS BEZ CRASHŮ (Musí mít custom_id v dekorátoru, init jen s defaults)
+    try: bot.add_view(AppAuthView())
+    except: pass
+    try: bot.add_view(DashboardAuthView())
+    except: pass
 
     try:
         for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
