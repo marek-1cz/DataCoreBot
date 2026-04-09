@@ -58,7 +58,6 @@ app.secret_key = "ois_idpk_super_tajny_klic"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-# REGISTRACE BLUEPRINTU PRO MAPU
 app.register_blueprint(mapa_bp)
 
 @app.after_request
@@ -1218,7 +1217,7 @@ def api_app_login():
         async def send():
             try:
                 u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
-                if u: await u.send(embed=discord.Embed(title="🛡️ Ověření přihlášení", description=f"Byl zaznamenán pokus o spuštění softwaru.\n**Uživatel:** {user.get('nick')}\nPotvrďte přístup tlačítkem níže.", color=0x38bdf8), view=AppAuthView(token, discord_id, is_dm=True))
+                if u: await u.send(embed=discord.Embed(title="🛡️ Ověření přihlášení", description=f"Byl zaznamenán pokus o spuštění softwaru.\n**Uživatel:** {user.get('nick')}\nPotvrďte přístup tlačkem níže.", color=0x38bdf8), view=AppAuthView(token, discord_id, is_dm=True))
             except: pass
         if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
         return _cors_jsonify({"status": "waiting", "discord_id": discord_id})
@@ -2075,7 +2074,6 @@ async def on_ready():
     try: bot.add_view(DynamicDownloadView())
     except: pass
     
-    # PERZISTENTNÍ VIEWS BEZ CRASHŮ (Musí mít custom_id v dekorátoru, init jen s defaults)
     try: bot.add_view(AppAuthView())
     except: pass
     try: bot.add_view(DashboardAuthView())
