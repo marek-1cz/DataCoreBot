@@ -2217,16 +2217,21 @@ HTML_MAPA = """
                             let delayText = "";
                             let delayVal = parseInt(bus.delay);
 
-                            // Formátování zpoždění do tabulky
-                            if (bus.status.includes("N/A") || bus.status === "Odstaven") {
+                            // Formátování zpoždění a časů odjezdu
+                            if (bus.color_class === "bg-gray") {
                                 delayText = `<span style="color:#94a3b8;">N/A</span>`;
-                            } else if (delayVal <= -100000) {
-                                delayText = `<span style="color:#3b82f6;">Čeká na trase</span>`;
+                            } else if (bus.color_class === "bg-purple") {
+                                delayText = `<span style="color:#a855f7;">Konečná zastávka</span>`;
                             } else if (delayVal < 0) {
                                 let aheadMin = Math.abs(Math.round(delayVal / 60));
                                 let depDate = new Date(Date.now() + Math.abs(delayVal) * 1000); 
                                 let depTime = depDate.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
-                                delayText = `<span style="color:#3b82f6;">Náskok ${aheadMin} min<br><small style="color:#94a3b8;">Odj. dle JŘ: ${depTime}</small></span>`;
+                                
+                                if (bus.status.includes("Začátek") || bus.status.includes("Čeká")) {
+                                    delayText = `<span style="color:#3b82f6;">Odjezd za ${aheadMin} min (${depTime})</span>`;
+                                } else {
+                                    delayText = `<span style="color:#60a5fa;">Náskok ${aheadMin} min</span>`;
+                                }
                             } else if (delayVal >= 300) {
                                 delayText = `<span style="color:#ef4444;">Zpoždění ${Math.round(delayVal / 60)} min</span>`;
                             } else {
@@ -2237,7 +2242,7 @@ HTML_MAPA = """
                             let icon = L.divIcon({ className: shape + ' ' + markerColor, iconSize: [24, 24] });
                             let marker = L.marker([bus.lat, bus.lng], {icon: icon});
                             
-                            // Zobrazení SPZ
+                            // SPZ s odhadem
                             let spzHtml = "";
                             if (!bus.is_train) {
                                 let spzDisplay = bus.spz;
@@ -2247,9 +2252,9 @@ HTML_MAPA = """
                             
                             let typeName = bus.is_train ? 'Vlak' : 'Autobus';
                             
-                            // Text Color pro Status
-                            let statusColor = "#10b981"; // zelená
-                            if (bus.status.includes("Stojí") || bus.status.includes("Červená")) statusColor = "#ef4444"; // červená
+                            // Barvy Statusů
+                            let statusColor = "#10b981"; // zelená (Jízda)
+                            if (bus.status === "Stojí") statusColor = "#ef4444"; // červená
                             else if (bus.status.includes("Koneč")) statusColor = "#a855f7"; // fialová
                             else if (bus.status.includes("Začátek") || bus.status.includes("Čeká")) statusColor = "#3b82f6"; // modrá
                             else if (bus.status.includes("Odstaven") || bus.status.includes("N/A")) statusColor = "#94a3b8"; // šedá
@@ -2266,7 +2271,7 @@ HTML_MAPA = """
                                     ${spzHtml}
                                     ${statusHtml}
                                     ${updatedHtml}
-                                    <div class="popup-row" style="border:none; margin-top:5px;"><span class="popup-label">Zpoždění:</span><span class="popup-value">${delayText}</span></div>
+                                    <div class="popup-row" style="border:none; margin-top:5px;"><span class="popup-label">JŘ:</span><span class="popup-value">${delayText}</span></div>
                                     
                                     <button class="btn-timetable" onclick="showTimetable('${bus.id}')">
                                         <i class="fas fa-list-alt"></i> Zobrazit Jízdní řád
