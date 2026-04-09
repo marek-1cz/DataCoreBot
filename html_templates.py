@@ -2144,28 +2144,46 @@ HTML_LOGIN = """
 HTML_MAPA = """
 <div style="padding: 20px;">
     <h2 style="color: var(--blue-main); margin-bottom: 20px;"><i class="fas fa-map-marked-alt"></i> Interaktivní Mapa Spojů</h2>
+    
     <div id="map" style="width: 100%; height: 75vh; border-radius: 10px; border: 2px solid #334155; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1;"></div>
     
     <div id="timetable-modal" class="modal" style="z-index: 9999;">
       <div class="modal-background" onclick="document.getElementById('timetable-modal').classList.remove('is-active')"></div>
-      <div class="modal-content" style="background: #0f172a; border-radius: 8px; padding: 20px; max-width: 600px; width: 90%; border: 1px solid #38bdf8;">
+      <div class="modal-content" style="background: #0f172a; border-radius: 8px; padding: 20px; max-width: 700px; width: 95%; border: 1px solid #38bdf8;">
         <div id="timetable-content" style="color: white; overflow-x: auto;">Načítám detail spoje...</div>
       </div>
       <button class="modal-close is-large" aria-label="close" onclick="document.getElementById('timetable-modal').classList.remove('is-active')"></button>
     </div>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <style>
         .bus-marker { border-radius: 50%; border: 2px solid white; text-align: center; color: white; font-weight: bold; font-size: 10px; line-height: 20px; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
         .train-marker { border-radius: 4px; border: 2px solid white; text-align: center; color: white; font-weight: bold; font-size: 10px; line-height: 20px; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+        
         .bg-green { background-color: #10b981; } 
         .bg-red { background-color: #ef4444; }   
         .bg-blue { background-color: #3b82f6; }  
-        .bg-gray { background-color: #94a3b8; border-color: #64748b; color: white;} 
-        .dark-popup .leaflet-popup-content-wrapper { background: #1e293b; color: white; border: 1px solid #334155; }
-        .dark-popup .leaflet-popup-tip { background: #1e293b; }
+        .bg-gray { background-color: #64748b; border-color: #475569; color: #cbd5e1;} 
+        
+        /* Moderní Tmavý Popup */
+        .dark-popup .leaflet-popup-content-wrapper { background: #1e293b; color: white; border: 1px solid #334155; padding: 0; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); }
+        .dark-popup .leaflet-popup-tip { background: #1e293b; border-bottom: 1px solid #334155; border-right: 1px solid #334155; }
+        .dark-popup .leaflet-popup-content { margin: 0; width: 270px !important; }
+        
+        .popup-header { background: #0f172a; padding: 12px 15px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+        .popup-header-title { font-weight: bold; color: #38bdf8; font-size: 16px; margin: 0; }
+        .popup-body { padding: 15px; font-size: 13px; line-height: 1.6; }
+        .popup-row { display: flex; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px dashed #334155; padding-bottom: 4px; }
+        .popup-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .popup-label { color: #94a3b8; font-weight: 600; }
+        .popup-value { font-weight: bold; text-align: right; max-width: 60%; word-wrap: break-word; }
+        .badge-spz { background: #f59e0b; color: #0f172a; padding: 2px 6px; border-radius: 4px; font-size: 12px; border: 1px solid #d97706;}
+        .btn-timetable { background: #38bdf8; color: #0f172a; border: none; padding: 10px; width: 100%; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 10px; display: block; text-align: center; }
+        .btn-timetable:hover { background: #0284c7; color: white; }
     </style>
 
     <script>
@@ -2177,11 +2195,12 @@ HTML_MAPA = """
             let modal = document.getElementById('timetable-modal');
             let content = document.getElementById('timetable-content');
             modal.classList.add('is-active');
-            content.innerHTML = "<p style='color:#38bdf8;text-align:center;'>Stahuji data z dispečinku...</p>";
+            content.innerHTML = "<div class='has-text-centered' style='padding:40px;'><i class='fas fa-circle-notch fa-spin fa-2x' style='color:#38bdf8; margin-bottom: 15px;'></i><p style='color:#38bdf8; font-weight:bold;'>Stahuji Jízdní řád z Inflow...</p></div>";
+            
             try {
                 let response = await fetch('/api/bus_detail/' + busId);
                 content.innerHTML = await response.text();
-            } catch(e) { content.innerHTML = "<p style='color:#ef4444;'>Chyba spojení.</p>"; }
+            } catch(e) { content.innerHTML = "<p style='color:#ef4444;padding:20px;text-align:center;'>Chyba spojení.</p>"; }
         }
 
         async function fetchBuses() {
@@ -2193,34 +2212,68 @@ HTML_MAPA = """
                     data.buses.forEach(bus => {
                         if(bus.lat && bus.lng) {
                             let markerColor = "bg-green";
-                            let delayText = bus.delay + " min";
+                            let delayText = "";
                             let delayVal = parseInt(bus.delay);
 
-                            // Logika barev podle zpoždění
-                            if (bus.inactive_minutes > 10) {
+                            // Zjištění správné barvy a formátování zpoždění
+                            if (bus.status === "Odstaven") {
                                 markerColor = "bg-gray";
-                                delayText = "N/A";
+                                delayText = `<span style="color:#94a3b8;">N/A</span>`;
+                            } else if (delayVal <= -1000) {
+                                markerColor = "bg-blue";
+                                delayText = `<span style="color:#3b82f6;">Čeká na trase</span>`;
                             } else if (delayVal < 0) {
                                 markerColor = "bg-blue";
-                                delayText = "Náskok";
-                            } else if (delayVal >= 5) {
+                                let aheadMin = Math.abs(Math.round(delayVal / 60));
+                                let depDate = new Date(Date.now() + Math.abs(delayVal) * 1000); 
+                                let depTime = depDate.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
+                                delayText = `<span style="color:#3b82f6;">Náskok ${aheadMin} min<br><small style="color:#94a3b8;">Odj. dle JŘ: ${depTime}</small></span>`;
+                            } else if (delayVal >= 300) { // 5 a více minut
                                 markerColor = "bg-red";
+                                delayText = `<span style="color:#ef4444;">Zpoždění ${Math.round(delayVal / 60)} min</span>`;
+                            } else { // 0 - 4 minuty
+                                markerColor = "bg-green";
+                                delayText = `<span style="color:#10b981;">+${Math.round(delayVal / 60)} min</span>`;
                             }
 
                             let shape = bus.is_train ? 'train-marker' : 'bus-marker';
                             let icon = L.divIcon({ className: shape + ' ' + markerColor, iconSize: [24, 24] });
                             let marker = L.marker([bus.lat, bus.lng], {icon: icon});
                             
+                            // SPZ zobrazení (pouze pro autobusy)
+                            let spzHtml = "";
+                            if (!bus.is_train) {
+                                spzHtml = `<div class="popup-row"><span class="popup-label">SPZ:</span><span class="popup-value badge-spz">${bus.spz}</span></div>`;
+                            }
+                            
+                            let typeName = bus.is_train ? 'Vlak' : 'Autobus';
+                            
+                            // Barvičky pro Status
+                            let statusColor = "#10b981"; 
+                            if (bus.status === "Odstaven") statusColor = "#ef4444";
+                            else if (bus.status === "Stojí") statusColor = "#f59e0b";
+                            else if (bus.status.includes("Čeká")) statusColor = "#3b82f6";
+                            
+                            let statusHtml = `<div class="popup-row"><span class="popup-label">Status:</span><span class="popup-value" style="color:${statusColor};">${bus.status}</span></div>`;
+                            let updatedHtml = `<div class="popup-row"><span class="popup-label">Aktualizace:</span><span class="popup-value" style="color:#94a3b8;">${bus.last_updated}</span></div>`;
+                            
                             let popupHTML = `
-                                <div style="font-size: 13px; min-width: 180px;">
-                                    <b style="color:#38bdf8; font-size:15px;">Linka ${bus.line}</b><br>
-                                    <b>Cíl:</b> ${bus.destination}<br>
-                                    <b>SPZ:</b> <span style="color:#fbbf24;">${bus.spz}</span><br>
-                                    <b>Status:</b> ${bus.status}<br>
-                                    <b>Zpoždění:</b> ${delayText}<br>
-                                    <hr style="margin: 5px 0; border-color:#334155;">
-                                    <button class="button is-small is-info is-fullwidth" onclick="showTimetable('${bus.id}')">ℹ️ Více informací</button>
-                                </div>`;
+                                <div class="popup-header">
+                                    <h3 class="popup-header-title"><i class="${bus.is_train ? 'fas fa-train' : 'fas fa-bus'}"></i> Linka ${bus.line}</h3>
+                                </div>
+                                <div class="popup-body">
+                                    <div class="popup-row"><span class="popup-label">Cíl:</span><span class="popup-value" style="color:white;">${bus.destination || "Neznámý"}</span></div>
+                                    ${spzHtml}
+                                    ${statusHtml}
+                                    ${updatedHtml}
+                                    <div class="popup-row" style="border:none; margin-top:5px;"><span class="popup-label">JŘ:</span><span class="popup-value">${delayText}</span></div>
+                                    
+                                    <button class="btn-timetable" onclick="showTimetable('${bus.id}')">
+                                        <i class="fas fa-list-alt"></i> Zobrazit Jízdní řád
+                                    </button>
+                                </div>
+                            `;
+                            
                             marker.bindPopup(popupHTML, {className: 'dark-popup'});
                             markersLayer.addLayer(marker);
                         }
@@ -2228,6 +2281,7 @@ HTML_MAPA = """
                 }
             } catch(e) { console.error(e); }
         }
+        
         fetchBuses();
         setInterval(fetchBuses, 10000);
     </script>
