@@ -2217,8 +2217,8 @@ HTML_MAPA = """
                             let delayText = "";
                             let delayVal = parseInt(bus.delay);
 
-                            // Formátování zpoždění (čte ho PŘÍMO z backendu - color_class to rozhoduje primárně)
-                            if (bus.color_class === "bg-gray") {
+                            // Formátování zpoždění do tabulky
+                            if (bus.status.includes("N/A") || bus.status === "Odstaven") {
                                 delayText = `<span style="color:#94a3b8;">N/A</span>`;
                             } else if (delayVal <= -100000) {
                                 delayText = `<span style="color:#3b82f6;">Čeká na trase</span>`;
@@ -2237,7 +2237,7 @@ HTML_MAPA = """
                             let icon = L.divIcon({ className: shape + ' ' + markerColor, iconSize: [24, 24] });
                             let marker = L.marker([bus.lat, bus.lng], {icon: icon});
                             
-                            // SPZ zobrazení (pouze pro autobusy)
+                            // Zobrazení SPZ
                             let spzHtml = "";
                             if (!bus.is_train) {
                                 let spzDisplay = bus.spz;
@@ -2247,12 +2247,12 @@ HTML_MAPA = """
                             
                             let typeName = bus.is_train ? 'Vlak' : 'Autobus';
                             
-                            // Barvičky pro Status v tabulce - Vždy reagují přesně na to, co pošle Backend
-                            let statusColor = "#10b981"; 
-                            if (bus.color_class === "bg-gray") statusColor = "#94a3b8";
-                            else if (bus.color_class === "bg-purple") statusColor = "#a855f7";
-                            else if (bus.color_class === "bg-red") statusColor = "#ef4444";
-                            else if (bus.color_class === "bg-blue" || bus.color_class === "bg-darkblue") statusColor = "#3b82f6";
+                            // Text Color pro Status
+                            let statusColor = "#10b981"; // zelená
+                            if (bus.status.includes("Stojí") || bus.status.includes("Červená")) statusColor = "#ef4444"; // červená
+                            else if (bus.status.includes("Koneč")) statusColor = "#a855f7"; // fialová
+                            else if (bus.status.includes("Začátek") || bus.status.includes("Čeká")) statusColor = "#3b82f6"; // modrá
+                            else if (bus.status.includes("Odstaven") || bus.status.includes("N/A")) statusColor = "#94a3b8"; // šedá
                             
                             let statusHtml = `<div class="popup-row"><span class="popup-label">Status:</span><span class="popup-value" style="color:${statusColor};">${bus.status}</span></div>`;
                             let updatedHtml = `<div class="popup-row"><span class="popup-label">Aktualizace:</span><span class="popup-value" style="color:#94a3b8;">${bus.last_updated}</span></div>`;
@@ -2266,7 +2266,7 @@ HTML_MAPA = """
                                     ${spzHtml}
                                     ${statusHtml}
                                     ${updatedHtml}
-                                    <div class="popup-row" style="border:none; margin-top:5px;"><span class="popup-label">JŘ:</span><span class="popup-value">${delayText}</span></div>
+                                    <div class="popup-row" style="border:none; margin-top:5px;"><span class="popup-label">Zpoždění:</span><span class="popup-value">${delayText}</span></div>
                                     
                                     <button class="btn-timetable" onclick="showTimetable('${bus.id}')">
                                         <i class="fas fa-list-alt"></i> Zobrazit Jízdní řád
