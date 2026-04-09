@@ -20,13 +20,16 @@ import logging
 import io
 from werkzeug.exceptions import HTTPException
 
+# IMPORTOVAT NOVÝ SCRIPT PRO MAPU
+from interaktivnimapa import mapa_bp, start_map_background_task
+
 # BEZPEČNOSTNÍ IMPORT ŠABLON
 try:
     from html_templates import *
 except ImportError as e:
     print(f"KRITICKÁ CHYBA IMPORTU ŠABLON: {e}")
 
-# --- TVRDÁ OCHRANA ŠABLON ---
+# --- TVRDÁ OCHRANA ŠABLON (Už to NIKDY nespadne na NameError) ---
 _template_names = [
     'BASE_HTML', 'PUBLIC_LAYOUT', 'DASHBOARD_LAYOUT', 'HTML_HOME', 'HTML_DOWNLOADS_MAIN', 
     'HTML_TEAM', 'HTML_PUBLIC_STATS', 'HTML_CLAIM', 'HTML_STATS', 'HTML_APP_MANAGEMENT', 
@@ -45,6 +48,7 @@ except ImportError:
     print("VAROVÁNÍ: Soubor status_dashboard.py nenalezen. Statusy nebudou fungovat.")
     HTML_STATUS_SECTION = ""
 
+# --- TVRDÝ HLÍDAČ ČASU (Vynucení UTC Praha pro celý server Koyebu) ---
 os.environ['TZ'] = 'Europe/Prague'
 try:
     time.tzset()
@@ -58,7 +62,8 @@ app.secret_key = "ois_idpk_super_tajny_klic"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-bus_tracking_cache = {}
+# REGISTRACE BLUEPRINTU PRO MAPU
+app.register_blueprint(mapa_bp)
 
 @app.after_request
 def add_cors_headers(response):
@@ -160,9 +165,11 @@ bot.invites_cache = {}
 def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
     urls = [u.strip() for u in file_url_raw.split(',') if u.strip()]
     file_url = random.choice(urls) if urls else file_url_raw
+
     cj = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj), urllib.request.HTTPRedirectHandler())
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+    
     try:
         if "drive.google.com" in file_url and "/d/" in file_url:
             match = re.search(r'/d/([a-zA-Z0-9_-]+)', file_url)
@@ -171,6 +178,7 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
                 url = f"https://drive.google.com/uc?export=download&id={file_id}"
                 req = urllib.request.Request(url, headers=headers)
                 resp = opener.open(req, timeout=15)
+                
                 if 'text/html' in resp.headers.get('Content-Type', '').lower():
                     text = resp.read().decode('utf-8', errors='ignore')
                     token = None
@@ -183,6 +191,7 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
                         match2 = re.search(r'name="confirm" value="([^"]+)"', text)
                         if match1: token = match1.group(1)
                         elif match2: token = match2.group(1)
+                        
                     if token:
                         url = f"{url}&confirm={token}"
                         req = urllib.request.Request(url, headers=headers)
@@ -224,6 +233,7 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
             
         send_log("✅ Úspěšné stahování", f"Uživatel `{nick}` právě stahuje: **{version_name}**.", 0x10b981)
         return Response(stream_with_context(generate()), headers=resp_headers)
+        
     except Exception as e:
         send_log("❌ Selhání stahování", f"Kritická chyba Proxy pro hráče `{nick}`:\n`{e}`", 0xef4444)
         return "Došlo k interní chybě při stahování."
@@ -247,13 +257,17 @@ def save_setup_message(db, channel_id, message_id):
 def build_setup_embed(db):
     settings_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}]
     dl_enabled = str(settings_resp[0].get('setting_value', '')).lower() != 'false'
+    
     embed = discord.Embed(title="📥 Projekt OIS IDPK - Instalace", description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a stahování.\n**Při stahování se automaticky přihlásíte do databáze.**\n*(Stahování lze ve vašem prohlížeči kdykoliv pozastavit a obnovit)*", color=0x38bdf8)
+    
     if not dl_enabled:
         embed.color = 0xef4444
         embed.add_field(name="⛔ STAHOVÁNÍ JE NYNÍ VYPNUTO", value="Administrátor dočasně zakázal stahování. Zkuste to prosím později.", inline=False)
         return embed
+
     versions = db.table("software_versions").select("*").eq("is_active", True).order("id", desc=True).execute().data or []
     now = get_prague_time().replace(tzinfo=None)
+    
     def format_version(v):
         eol_str = v.get('eol_date', '').strip()
         if eol_str:
@@ -267,11 +281,14 @@ def build_setup_embed(db):
             except:
                 pass
         return f"• {v['version_name']}"
+
     user_v = [format_version(v) for v in versions if v['target_role'] == 'User']
     bt_v = [format_version(v) for v in versions if v['target_role'] == 'BT']
+    
     if user_v: embed.add_field(name="🌍 Dostupné pro všechny (User)", value="\n".join(user_v), inline=False)
     if bt_v: embed.add_field(name="🛠️ Dostupné pro Beta Testery (BT)", value="\n".join(bt_v), inline=False)
     if not user_v and not bt_v: embed.add_field(name="Zatím nejsou dostupné žádné veřejné verze.", value="-", inline=False)
+        
     embed.set_footer(text="Neveřejné verze jsou skryté. Pokud máte BAN, systém vás ke stahování nepustí.")
     return embed
 
@@ -281,8 +298,10 @@ async def update_setup_messages_async():
     if not db: return
     msgs = get_setup_messages(db)
     if not msgs: return
+    
     embed = build_setup_embed(db)
     valid_msgs = []
+    
     for m in msgs:
         try:
             channel = bot.get_channel(int(m['channel_id'])) or await bot.fetch_channel(int(m['channel_id']))
@@ -291,6 +310,7 @@ async def update_setup_messages_async():
                 await msg.edit(embed=embed)
                 valid_msgs.append(m)
         except Exception as e: pass
+        
     db.table("settings").update({"setting_value": json.dumps(valid_msgs)}).eq("setting_key", "setup_messages").execute()
 
 def trigger_setup_messages_update():
@@ -504,8 +524,10 @@ class DynamicDownloadView(discord.ui.View):
         
     @discord.ui.button(label="Zahájit instalaci softwaru", style=discord.ButtonStyle.primary, emoji="📥", custom_id="persistent_install_main_btn")
     async def dl_btn(self, interaction, button):
-        try: await interaction.response.defer(ephemeral=True)
-        except: pass
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except Exception as e:
+            pass
             
         db = get_db()
         settings_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}]
@@ -522,8 +544,10 @@ class DynamicDownloadView(discord.ui.View):
                 
             @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, emoji="✅")
             async def agree(self, i2, b2):
-                try: await i2.response.defer(ephemeral=True)
-                except: pass
+                try:
+                    await i2.response.defer(ephemeral=True)
+                except:
+                    pass
                 
                 try:
                     db = get_db()
@@ -680,6 +704,10 @@ def api_submit_stats():
     except Exception as e:
         return _cors_jsonify({"status": "error", "message": str(e)})
 
+@app.route('/mapa')
+def mapa_idpk():
+    return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', HTML_MAPA)), statuses=get_system_statuses())
+
 @app.route('/')
 def home(): 
     def log_visit(ip, cf_country):
@@ -711,158 +739,7 @@ def home():
     ip = request.headers.get('X-Forwarded-For', request.remote_addr)
     country = request.headers.get('CF-IPCountry', 'Neznámá')
     Thread(target=log_visit, args=(ip, country)).start()
-    return render_public(HTML_HOME)
-
-
-# ==============================================================================
-# NOVÁ ROUTA PRO INTERAKTIVNÍ MAPU AUTOBUSŮ A JÍZDNÍ RÁD
-# ==============================================================================
-@app.route('/mapa')
-def mapa_idpk():
-    return render_public(HTML_MAPA)
-
-@app.route('/api/timetable/<bus_id>')
-def api_timetable(bus_id):
-    url = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0"
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as r:
-            return Response(r.read().decode('utf-8'), mimetype='text/html')
-    except Exception as e:
-        return f"<div style='padding:20px;color:red;'>Nelze načíst jízdní řád. ({e})</div>"
-
-@app.route('/api/live_buses', methods=['GET', 'OPTIONS'], strict_slashes=False)
-def api_live_buses():
-    if request.method == 'OPTIONS': return _cors_jsonify({})
-    global bus_tracking_cache
-
-    url_inflow = "https://pvvd.idpk.cz/Ajax/GetPoints" 
-    url_arriva = "https://www.arriva.cz/api/graphql" 
-
-    data1 = []
-    data2 = []
-    now = get_prague_time().replace(tzinfo=None)
-
-    # 1. STÁHNEME INFLOW
-    try:
-        req1 = urllib.request.Request(url_inflow, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req1, timeout=5) as r1:
-            data1 = json.loads(r1.read().decode())
-    except Exception as e:
-        print(f"Výpadek Inflow: {e}")
-
-    # 2. STÁHNEME ARRIVU (ZÁLOHA S SPZ)
-    try:
-        arriva_payload = {
-            "operationName": "busesCurrentLocation",
-            "variables": {},
-            "query": "query busesCurrentLocation {\n  busesCurrentLocations {\n    angle\n    delay\n    destinationName\n    lastStopName\n    latitude\n    longitude\n    linkNumber\n    state\n    type\n    mainType\n    spz\n    updated\n    linkNumberAlias\n    __typename\n  }\n}"
-        }
-        
-        req2 = urllib.request.Request(
-            url_arriva, 
-            data=json.dumps(arriva_payload).encode('utf-8'),
-            headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-                'Content-Type': 'application/json',
-                'Accept': '*/*',
-                'Origin': 'https://www.arriva.cz',
-                'Referer': 'https://www.arriva.cz/'
-            },
-            method='POST'
-        )
-        with urllib.request.urlopen(req2, timeout=5) as r2:
-            resp2 = json.loads(r2.read().decode())
-            if isinstance(resp2, list) and len(resp2) > 0 and "data" in resp2[0]:
-                data2 = resp2[0]["data"].get("busesCurrentLocations", [])
-            elif isinstance(resp2, dict) and "data" in resp2:
-                data2 = resp2["data"].get("busesCurrentLocations", [])
-            else:
-                data2 = []
-    except Exception as e:
-        print(f"Výpadek Arriva: {e}")
-
-    # 3. MERGE - FÚZE DAT A TRACKOVÁNÍ POHYBU
-    final_buses = []
-    current_bus_ids = set()
-
-    if isinstance(data1, list):
-        for bus1 in data1:
-            line = str(bus1.get("text", "")).strip()
-            lat1 = bus1.get("lat", 0)
-            lng1 = bus1.get("lng", 0)
-            traction = str(bus1.get("traction", "BUS")).upper()
-            
-            try:
-                bus_id = int(bus1.get("id", 0))
-            except:
-                bus_id = 0
-            
-            is_train = bus_id < 0 or traction == "TRAIN" or traction == "UNKNOWN"
-
-            # LOGIKA PRO ZASEKLÉ SPOJE
-            last_updated_dt = now
-            last_updated_str = "N/A"
-            
-            if bus_id in bus_tracking_cache:
-                cached = bus_tracking_cache[bus_id]
-                if cached["lat"] != lat1 or cached["lng"] != lng1 or cached["line"] != line:
-                    # Pohnul se
-                    bus_tracking_cache[bus_id] = {
-                        "lat": lat1, "lng": lng1, "line": line, 
-                        "first_seen": cached["first_seen"], "last_moved": now
-                    }
-                    last_updated_dt = now
-                    last_updated_str = now.strftime("%H:%M:%S")
-                else:
-                    # Stojí na místě
-                    last_updated_dt = cached["last_moved"] if cached["last_moved"] else cached["first_seen"]
-                    last_updated_str = cached["last_moved"].strftime("%H:%M:%S") if cached["last_moved"] else "N/A"
-            else:
-                # Nový autobus (ještě se nepohnul)
-                bus_tracking_cache[bus_id] = {
-                    "lat": lat1, "lng": lng1, "line": line, 
-                    "first_seen": now, "last_moved": None
-                }
-                last_updated_dt = now
-                last_updated_str = "N/A"
-                
-            current_bus_ids.add(bus_id)
-            inactive_minutes = (now - last_updated_dt).total_seconds() / 60.0
-
-            spz = "Neznámá"
-            if not is_train and isinstance(data2, list):
-                for bus2 in data2:
-                    bus2_line = str(bus2.get("linkNumber", "")).strip()
-                    bus2_alias = str(bus2.get("linkNumberAlias", "")).strip()
-                    if bus2_line == line or bus2_alias == line:
-                        lat2 = bus2.get("latitude", 0)
-                        lng2 = bus2.get("longitude", 0)
-                        if abs(lat1 - lat2) < 0.03 and abs(lng1 - lng2) < 0.03:
-                            raw_spz = bus2.get("spz", "Neznámá")
-                            spz = str(raw_spz).strip() if raw_spz else "Neznámá"
-                            break
-
-            final_buses.append({
-                "id": bus_id,
-                "lat": lat1,
-                "lng": lng1,
-                "line": line if line else ("Vlak" if is_train else "Neznámá"),
-                "delay": bus1.get("delay"),
-                "destination": bus1.get("finalStopName"),
-                "spz": spz,
-                "is_train": is_train,
-                "inactive_minutes": inactive_minutes,
-                "last_updated": last_updated_str
-            })
-
-        # Vyčištění starých busů z paměti
-        keys_to_remove = [k for k in bus_tracking_cache.keys() if k not in current_bus_ids]
-        for k in keys_to_remove:
-            del bus_tracking_cache[k]
-
-    return _cors_jsonify({"status": "success", "buses": final_buses})
-# ==============================================================================
+    return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', HTML_HOME)), statuses=get_system_statuses())
 
 @app.route('/dashboard/app_management', methods=['GET'], strict_slashes=False)
 def dashboard_app_management():
@@ -879,7 +756,6 @@ def dashboard_app_management():
                 elif s['setting_key'] == 'downloads_enabled':
                     dl_enabled = str(s['setting_value']).lower() != 'false'
     except: pass
-    
     kombinovane_html = HTML_APP_MANAGEMENT + "\n" + HTML_STATUS_SECTION
     return render_dashboard(kombinovane_html, soft_enabled=soft_enabled, dl_enabled=dl_enabled, deploy_time=DEPLOY_TIME)
 
@@ -921,13 +797,11 @@ def update_statuses():
             for key, value in request.form.items():
                 if key.startswith('status_'):
                     statuses[key.replace('status_', '')] = value
-            
             check = db.table("settings").select("*").eq("setting_key", "system_statuses").execute().data
             if check:
                 db.table("settings").update({"setting_value": json.dumps(statuses)}).eq("setting_key", "system_statuses").execute()
             else:
                 db.table("settings").insert({"setting_key": "system_statuses", "setting_value": json.dumps(statuses)}).execute()
-                
             flash('Statusy byly úspěšně uloženy a zaktualizovány!', 'success')
             send_log("🟢 Aktualizace Statusů", "Administrátor právě upravil live statusy služeb v aplikaci.", 0x10b981)
         except Exception as e:
@@ -960,27 +834,19 @@ def public_stats():
     if not db:
         flash("Databáze není dostupná.", "error")
         return redirect(url_for('home'))
-    
     search_query = request.args.get('q', '').strip()
     searched_user = None
     all_users = db.table("users").select("*").execute().data or []
-    
     if search_query:
         for u in all_users:
             if str(u.get('discord_id')) == search_query or str(u.get('nick', '')).lower() == search_query.lower():
-                searched_user = u
-                break
-        if not searched_user:
-            flash(f"Hráč s ID nebo Nickem '{search_query}' nebyl nalezen.", "warning")
-            
+                searched_user = u; break
+        if not searched_user: flash(f"Hráč s ID '{search_query}' nebyl nalezen.", "warning")
     versions = db.table("software_versions").select("*").eq("is_active", True).order("id", desc=True).execute().data or []
     user_ver = next((v['version_name'] for v in versions if v['target_role'] == 'User'), "Žádná")
     bt_ver = next((v['version_name'] for v in versions if v['target_role'] == 'BT'), "Žádná")
-    
     activated_users = len([u for u in all_users if u.get('hwid') and str(u.get('hwid')) not in ['None', '']])
-    
-    total_time_mins = 0
-    total_launches = 0
+    total_time_mins = 0; total_launches = 0
     for u in all_users:
         try:
             t = u.get('total_time')
@@ -990,75 +856,44 @@ def public_stats():
             l = u.get('launch_count')
             if l: total_launches += int(l)
         except: pass
-        
     total_hours = total_time_mins // 60
-    
     today_str = get_prague_time().strftime("%d.%m.%Y")
     sessions_today = db.table("app_sessions").select("start_time, end_time").like("start_time", f"{today_str}%").execute().data or []
     today_mins = 0
     for s in sessions_today:
         try:
-            st_str = s.get('start_time')
-            et_str = s.get('end_time')
+            st_str = s.get('start_time'); et_str = s.get('end_time')
             if st_str and et_str:
                 fmt_st = "%d.%m.%Y %H:%M:%S" if st_str.count(':') == 2 else "%d.%m.%Y %H:%M"
                 fmt_et = "%d.%m.%Y %H:%M:%S" if et_str.count(':') == 2 else "%d.%m.%Y %H:%M"
-                st = datetime.strptime(st_str, fmt_st)
-                et = datetime.strptime(et_str, fmt_et)
+                st = datetime.strptime(st_str, fmt_st); et = datetime.strptime(et_str, fmt_et)
                 diff = int((et - st).total_seconds() / 60)
                 if diff > 0: today_mins += diff
         except: pass
-    today_hours = today_mins // 60
-    today_rem_mins = today_mins % 60
+    today_hours = today_mins // 60; today_rem_mins = today_mins % 60
     today_time_str = f"{today_hours}h {today_rem_mins}m" if today_hours > 0 else f"{today_rem_mins}m"
-    
     supporters_data = db.table("supporters").select("id").eq("status", "completed").execute().data or []
     total_supporters = len(supporters_data)
-    
     valid_time_users = [u for u in all_users if int(u.get('total_time') or 0) > 0]
     top_time_users = sorted(valid_time_users, key=lambda x: int(x.get('total_time') or 0), reverse=True)[:3]
-    
     valid_launch_users = [u for u in all_users if int(u.get('launch_count') or 0) > 0]
     top_launches = sorted(valid_launch_users, key=lambda x: int(x.get('launch_count') or 0), reverse=True)[:3]
-    
     try:
         top_lines = db.table("stats_lines").select("*").order("play_count", desc=True).limit(10).execute().data or []
         top_stops = db.table("stats_stops").select("*").order("announce_count", desc=True).limit(10).execute().data or []
         all_lines = db.table("stats_lines").select("*").order("play_count", desc=True).execute().data or []
         all_stops = db.table("stats_stops").select("*").order("announce_count", desc=True).execute().data or []
     except Exception as e:
-        print(f"Chyba při načítání globálních statistik: {e}")
         top_lines, top_stops, all_lines, all_stops = [], [], [], []
-    
-    all_searched_user_lines = []
-    all_searched_user_stops = []
-    searched_user_lines = []
-    searched_user_stops = []
+    all_searched_user_lines = []; all_searched_user_stops = []; searched_user_lines = []; searched_user_stops = []
     if searched_user:
         d_id = searched_user.get('discord_id')
         try:
             all_searched_user_lines = db.table("user_stats_lines").select("*").eq("discord_id", d_id).order("play_count", desc=True).execute().data or []
             all_searched_user_stops = db.table("user_stats_stops").select("*").eq("discord_id", d_id).order("announce_count", desc=True).execute().data or []
-            searched_user_lines = all_searched_user_lines[:5]
-            searched_user_stops = all_searched_user_stops[:5]
-        except Exception as e:
-            print(f"Chyba při načítání osobních statistik pro /stats: {e}")
-    
-    return render_public(HTML_PUBLIC_STATS, 
-                         user_ver=user_ver, bt_ver=bt_ver, 
-                         activated_users=activated_users, 
-                         total_supporters=total_supporters,
-                         today_time_str=today_time_str, 
-                         total_hours=total_hours,
-                         total_launches=total_launches,
-                         top_time=top_time_users, top_launches=top_launches,
-                         top_lines=top_lines, top_stops=top_stops,
-                         all_lines=all_lines, all_stops=all_stops,
-                         searched_user=searched_user,
-                         searched_user_lines=searched_user_lines,
-                         searched_user_stops=searched_user_stops,
-                         all_searched_user_lines=all_searched_user_lines,
-                         all_searched_user_stops=all_searched_user_stops)
+            searched_user_lines = all_searched_user_lines[:5]; searched_user_stops = all_searched_user_stops[:5]
+        except Exception as e: pass
+    return render_public(HTML_PUBLIC_STATS, user_ver=user_ver, bt_ver=bt_ver, activated_users=activated_users, total_supporters=total_supporters, today_time_str=today_time_str, total_hours=total_hours, total_launches=total_launches, top_time=top_time_users, top_launches=top_launches, top_lines=top_lines, top_stops=top_stops, all_lines=all_lines, all_stops=all_stops, searched_user=searched_user, searched_user_lines=searched_user_lines, searched_user_stops=searched_user_stops, all_searched_user_lines=all_searched_user_lines, all_searched_user_stops=all_searched_user_stops)
 
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'])
 def api_supporters():
@@ -1069,8 +904,7 @@ def api_supporters():
         data = db.table("supporters").select("name, amount, message, created_at").eq("status", "completed").execute().data or []
         support_data = process_supporters(data)
         return _cors_jsonify({"supporters": support_data})
-    except Exception as e:
-        return _cors_jsonify({"error": str(e)}), 500
+    except Exception as e: return _cors_jsonify({"error": str(e)}), 500
 
 @app.route('/claim', methods=['GET', 'POST'])
 def claim_role():
@@ -2544,6 +2378,9 @@ def run_web():
 
 if __name__ == "__main__":
     token = os.environ.get("DISCORD_TOKEN")
+    
+    start_map_background_task()
+    
     if token:
         Thread(target=run_discord_bot, args=(token,), daemon=True).start()
     else:
