@@ -6,6 +6,7 @@ from datetime import datetime
 from flask import Blueprint, jsonify, Response
 from zoneinfo import ZoneInfo
 import math
+import re
 
 mapa_bp = Blueprint('mapa_bp', __name__)
 
@@ -72,6 +73,7 @@ def background_map_worker():
                 lat1 = bus1.get("lat", 0)
                 lng1 = bus1.get("lng", 0)
                 traction = str(bus1.get("traction", "BUS")).upper()
+                dest1 = str(bus1.get("finalStopName", "")).strip().lower()
                 
                 try: bus_id = int(bus1.get("id", 0))
                 except: bus_id = 0
@@ -98,24 +100,24 @@ def background_map_worker():
                 last_updated_dt = cached["last_moved"] if cached["last_moved"] else cached["first_seen"]
                 inactive_minutes = (now - last_updated_dt).total_seconds() / 60.0
 
-                # HLEDÁNÍ SPZ V ARRIVĚ (Pouze autobusy)
+                # HLEDÁNÍ SPZ V ARRIVĚ
                 found_in_arriva = False
                 if not is_train and data_arriva:
                     for bus2 in data_arriva:
-                        # Filtr jen na Prahu, SČ a Express
-                        t_type = bus2.get("type", "")
-                        if t_type not in ["Praha a Střední Čechy", "Express"]:
-                            continue
-                            
+                        # Odstraněn filtr na region! Nyní hledá všude.
                         b2_line = str(bus2.get("linkNumber", "")).strip()
                         b2_alias = str(bus2.get("linkNumberAlias", "")).strip()
                         
                         if b2_line == line or b2_alias == line:
                             lat2 = bus2.get("latitude", 0)
                             lng2 = bus2.get("longitude", 0)
-                            # Striktní GPS shoda
+                            dest2 = str(bus2.get("destinationName", "")).strip().lower()
+                            
+                            # Vzdálenost v GPS (0.02 je zhruba 2 kilometry)
                             dist = math.hypot(lat1 - lat2, lng1 - lng2)
-                            if dist < 0.01: 
+                            
+                            # Pokud je bus extrémně blízko (< 1km) NEBO sedí cíl cesty (dest1 v dest2)
+                            if dist < 0.015 or (dist < 0.05 and (dest1 in dest2 or dest2 in dest1)):
                                 raw_spz = bus2.get("spz", "").strip()
                                 if raw_spz:
                                     cached["spz"] = raw_spz
@@ -124,15 +126,15 @@ def background_map_worker():
                                     found_in_arriva = True
                                     break
 
-                # LOGIKA PRO ZMIZENÍ Z ARRIVY (Dojetí linky / Změna)
+                # LOGIKA FIALOVÝCH DUCHŮ (Zmizení z Arrivy)
                 if not is_train and not found_in_arriva and cached["spz"]:
                     if cached["line"] != line:
-                        # Změnil linku na Inflow, ale z Arrivy zmizel -> Odhadovaná SPZ
+                        # Přejel na jinou linku na Inflow, z Arrivy zmizel -> Necháme SPZ, ale dáme "Odhadovaná"
                         cached["line"] = line
                         cached["estimated"] = True
                         cached["state"] = "normal"
                     else:
-                        # Stejná linka, ale zmizel z Arrivy -> Asi dojel, fialová barva
+                        # Je na stejné lince, ale zmizel z Arrivy (pravděpodobně dojel na konečnou) -> Fialová
                         cached["state"] = "finished"
 
                 new_live_data.append({
@@ -150,7 +152,7 @@ def background_map_worker():
                     "estimated_spz": cached["estimated"]
                 })
 
-        # Smazat z paměti autobusy, co zmizely úplně odevšad
+        # Odstranit smazané autobusy
         keys_to_remove = [k for k in GLOBAL_BUS_CACHE.keys() if k not in current_bus_ids]
         for k in keys_to_remove:
             del GLOBAL_BUS_CACHE[k]
@@ -158,7 +160,6 @@ def background_map_worker():
         global LIVE_BUSES_DATA
         LIVE_BUSES_DATA = new_live_data
         
-        # Mapa se aktualizuje každých 10 sekund
         time.sleep(10)
 
 def start_map_background_task():
@@ -170,32 +171,58 @@ def start_map_background_task():
 def api_live_buses():
     return jsonify({"status": "success", "buses": LIVE_BUSES_DATA})
 
-@mapa_bp.route('/api/timetable/<bus_id>')
-def api_timetable(bus_id):
-    url = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0"
+@mapa_bp.route('/api/bus_detail/<bus_id>')
+def api_bus_detail(bus_id):
+    # Tento endpoint stáhne a zkombinuje obě HTML data (Okno s infem i Tabulku s JŘ)
+    url_info = f"https://pvvd.idpk.cz/Ajax/OpenInfoWindow?id={bus_id}"
+    url_tt = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0"
+    
+    html_output = ""
+    
+    # 1. Stáhnout Základní Info (Spoj, Aktuální zastávka)
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as r:
-            html = r.read().decode('utf-8')
-            
-            # OPRAVENÉ CSS - Uzamčeno POUZE uvnitř #timetable-content
-            # Už ti to nebude černit zbytek mapy!
-            dark_theme_css = """
-            <style>
-                #timetable-content { background-color: #0f172a; color: #e2e8f0; font-family: sans-serif; }
-                #timetable-content table { background-color: transparent; width: 100%; color: #e2e8f0; }
-                #timetable-content th { color: #38bdf8; border-bottom: 2px solid #334155; text-align: left; padding: 8px; }
-                #timetable-content td { border-bottom: 1px solid #1e293b; padding: 8px; }
-                #timetable-content tbody tr:nth-child(even) td { background-color: #1e293b; }
-                #timetable-content tbody tr:nth-child(odd) td { background-color: #0f172a; }
-                #timetable-content .button { background-color: #38bdf8; color: #0f172a; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;}
-                #timetable-content .button:hover { background-color: #0284c7; }
-                #timetable-content .level-item span { color: #38bdf8; font-weight: bold; }
-                #timetable-content nav { margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
-            </style>
-            """
-            
-            html = dark_theme_css + html
-            return Response(html, mimetype='text/html')
+        req1 = urllib.request.Request(url_info, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req1, timeout=3) as r1:
+            info_raw = r1.read().decode('utf-8')
+            # Vyčistíme to od nepotřebného HTML balastu kolem (vezmeme jen tabulku)
+            match = re.search(r'(<table.*?>.*?</table>)', info_raw, re.DOTALL | re.IGNORECASE)
+            if match:
+                html_output += f"<div style='margin-bottom: 20px;'>{match.group(1)}</div>"
     except Exception as e:
-        return f"<div style='padding:20px;color:#ef4444;background:#0f172a;'>Nelze načíst jízdní řád. ({e})</div>"
+        pass
+        
+    # 2. Stáhnout Jízdní řád
+    try:
+        req2 = urllib.request.Request(url_tt, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req2, timeout=3) as r2:
+            tt_raw = r2.read().decode('utf-8')
+            html_output += tt_raw
+    except Exception as e:
+        html_output += f"<p style='color:#ef4444;'>Jízdní řád nelze načíst.</p>"
+
+    # 3. Zabalit do luxusního temného designu
+    dark_theme_css = """
+    <style>
+        /* Styl pro kontejner obsahu */
+        #timetable-content { background-color: #0f172a; color: #e2e8f0; font-family: sans-serif; }
+        
+        /* Styly pro všechny tabulky */
+        #timetable-content table { background-color: transparent !important; width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+        #timetable-content th { color: #38bdf8 !important; border-bottom: 2px solid #334155 !important; text-align: left; padding: 10px; }
+        #timetable-content td { border-bottom: 1px solid #1e293b !important; padding: 10px; color: #e2e8f0 !important; }
+        #timetable-content tbody tr:nth-child(even) td { background-color: #1e293b !important; }
+        #timetable-content tbody tr:nth-child(odd) td { background-color: #0f172a !important; }
+        
+        /* Tlačítka a navigace uvnitř infowindow */
+        #timetable-content .button { background-color: #38bdf8 !important; color: #0f172a !important; border: none !important; border-radius: 5px; font-weight: bold; cursor: pointer; margin-top: 5px;}
+        #timetable-content .button:hover { background-color: #0284c7 !important; }
+        #timetable-content .level-item span { color: #38bdf8 !important; font-weight: bold; }
+        #timetable-content nav { margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+        
+        /* Úprava první tabulky (Základní info) aby vypadala jako štítky */
+        #timetable-content div > table:first-child th { width: 40%; color: #94a3b8 !important; border: none !important; }
+        #timetable-content div > table:first-child td { font-weight: bold; border: none !important; }
+    </style>
+    """
+    
+    return Response(dark_theme_css + html_output, mimetype='text/html')
