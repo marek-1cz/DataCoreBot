@@ -2166,8 +2166,8 @@ HTML_MAPA = """
         
         .bg-green { background-color: #10b981; } 
         .bg-red { background-color: #ef4444; }   
-        .bg-blue { background-color: #3b82f6; } /* Čeká */
-        .bg-darkblue { background-color: #1e3a8a; } /* Náskok */
+        .bg-blue { background-color: #3b82f6; } 
+        .bg-darkblue { background-color: #1e3a8a; }
         .bg-gray { background-color: #64748b; border-color: #475569; color: #cbd5e1;} 
         .bg-purple { background-color: #a855f7; }
         
@@ -2213,15 +2213,14 @@ HTML_MAPA = """
                     markersLayer.clearLayers();
                     data.buses.forEach(bus => {
                         if(bus.lat && bus.lng) {
-                            // Použití barvy přesně podle serveru
                             let markerColor = bus.color_class; 
                             let delayText = "";
                             let delayVal = parseInt(bus.delay);
 
-                            // Formátování textu zpoždění do tabulky
-                            if (bus.status.includes("N/A") || bus.status === "Odstaven") {
+                            // Formátování zpoždění (čte ho PŘÍMO z backendu - color_class to rozhoduje primárně)
+                            if (bus.color_class === "bg-gray") {
                                 delayText = `<span style="color:#94a3b8;">N/A</span>`;
-                            } else if (delayVal <= -1000) {
+                            } else if (delayVal <= -100000) {
                                 delayText = `<span style="color:#3b82f6;">Čeká na trase</span>`;
                             } else if (delayVal < 0) {
                                 let aheadMin = Math.abs(Math.round(delayVal / 60));
@@ -2238,7 +2237,7 @@ HTML_MAPA = """
                             let icon = L.divIcon({ className: shape + ' ' + markerColor, iconSize: [24, 24] });
                             let marker = L.marker([bus.lat, bus.lng], {icon: icon});
                             
-                            // Zobrazení SPZ
+                            // SPZ zobrazení (pouze pro autobusy)
                             let spzHtml = "";
                             if (!bus.is_train) {
                                 let spzDisplay = bus.spz;
@@ -2248,7 +2247,7 @@ HTML_MAPA = """
                             
                             let typeName = bus.is_train ? 'Vlak' : 'Autobus';
                             
-                            // Barvičky pro Status v tabulce
+                            // Barvičky pro Status v tabulce - Vždy reagují přesně na to, co pošle Backend
                             let statusColor = "#10b981"; 
                             if (bus.color_class === "bg-gray") statusColor = "#94a3b8";
                             else if (bus.color_class === "bg-purple") statusColor = "#a855f7";
