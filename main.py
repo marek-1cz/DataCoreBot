@@ -39,6 +39,7 @@ _template_names = [
 ]
 for _name in _template_names:
     if _name not in globals():
+        # Pokud šablona chybí v html_templates.py, vloží se toto nouzové HTML místo pádu serveru
         globals()[_name] = f"<div style='background:#0f172a; color:#ef4444; padding:40px; text-align:center; font-family:sans-serif;'><h2>CHYBA ŠABLONY</h2><p>Šablona <b>{_name}</b> chybí v souboru <i>html_templates.py</i>! Prosím, zkontroluj si to a přidej ji.</p></div>"
 
 # Import live statusů z druhého souboru
@@ -62,7 +63,7 @@ app.secret_key = "ois_idpk_super_tajny_klic"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-# REGISTRACE BLUEPRINTU PRO MAPU
+# REGISTRACE MAPY
 app.register_blueprint(mapa_bp)
 
 @app.after_request
@@ -524,10 +525,8 @@ class DynamicDownloadView(discord.ui.View):
         
     @discord.ui.button(label="Zahájit instalaci softwaru", style=discord.ButtonStyle.primary, emoji="📥", custom_id="persistent_install_main_btn")
     async def dl_btn(self, interaction, button):
-        try:
-            await interaction.response.defer(ephemeral=True)
-        except Exception as e:
-            pass
+        try: await interaction.response.defer(ephemeral=True)
+        except: pass
             
         db = get_db()
         settings_resp = db.table("settings").select("setting_value").eq("setting_key", "downloads_enabled").execute().data or [{}]
@@ -544,10 +543,8 @@ class DynamicDownloadView(discord.ui.View):
                 
             @discord.ui.button(label="Souhlasím s pravidly", style=discord.ButtonStyle.success, emoji="✅")
             async def agree(self, i2, b2):
-                try:
-                    await i2.response.defer(ephemeral=True)
-                except:
-                    pass
+                try: await i2.response.defer(ephemeral=True)
+                except: pass
                 
                 try:
                     db = get_db()
@@ -704,10 +701,6 @@ def api_submit_stats():
     except Exception as e:
         return _cors_jsonify({"status": "error", "message": str(e)})
 
-@app.route('/mapa')
-def mapa_idpk():
-    return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', HTML_MAPA)), statuses=get_system_statuses())
-
 @app.route('/')
 def home(): 
     def log_visit(ip, cf_country):
@@ -740,6 +733,10 @@ def home():
     country = request.headers.get('CF-IPCountry', 'Neznámá')
     Thread(target=log_visit, args=(ip, country)).start()
     return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', HTML_HOME)), statuses=get_system_statuses())
+
+@app.route('/mapa')
+def mapa_idpk():
+    return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', HTML_MAPA)), statuses=get_system_statuses())
 
 @app.route('/dashboard/app_management', methods=['GET'], strict_slashes=False)
 def dashboard_app_management():
@@ -1047,13 +1044,6 @@ def secure_download(token):
                 <h3 style="color: var(--success); margin-top: 0;"><i class="fas fa-check"></i> Úspěšně zahájeno</h3>
                 <p style="color: var(--text-main); font-size: 14px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 3px solid var(--blue-main);">
                     Stahování běží. Po stažení souboru jej nezapomeňte rozbalit pomocí programů jako <b>7-ZIP</b> nebo <b>WinRAR</b>.
-                </p>
-            </div>
-            
-            <div id="error-area" style="display: none; margin-top: 20px;">
-                <h3 style="color: var(--danger); margin-top: 0;"><i class="fas fa-times-circle"></i> Stahování se nezdařilo</h3>
-                <p style="color: var(--text-main); font-size: 14px; background: rgba(239,68,68,0.1); padding: 15px; border-radius: 8px; border-left: 3px solid var(--danger);">
-                    Omlouváme se, stahování nebylo možné spustit.<br><b>Důvod:</b> <span id="error-msg"></span><br><br>Zkuste to prosím později, administrátor byl o chybě informován do logu.
                 </p>
             </div>
             
