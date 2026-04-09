@@ -2216,23 +2216,21 @@ HTML_MAPA = """
                         if(bus.lat && bus.lng) {
                             let markerColor = bus.color_class; 
                             let delayText = "";
-                            let delayVal = parseInt(bus.delay); // Tohle už přichází v minutách
+                            let delayVal = parseInt(bus.delay); 
 
-                            // Formátování podle barvy a stavu
+                            // Formátování podle barvy ze serveru
                             if (bus.color_class === "bg-gray") {
                                 delayText = `<span style="color:#94a3b8;">N/A</span>`;
                             } else if (bus.color_class === "bg-yellow") {
                                 delayText = `<span style="color:#eab308;">Mimo linku</span>`;
                             } else if (bus.color_class === "bg-purple") {
                                 delayText = `<span style="color:#a855f7;">Konečná zastávka</span>`;
-                            } else if (delayVal < 0 && delayVal >= -240) { 
-                                // Limit 4 hodiny (240 minut) do budoucna
+                            } else if (delayVal < 0) { 
                                 let aheadTotalMins = Math.abs(delayVal);
                                 let aheadH = Math.floor(aheadTotalMins / 60);
                                 let aheadM = aheadTotalMins % 60;
                                 let timeStr = aheadH > 0 ? `${aheadH}h ${aheadM}min` : `${aheadM} min`;
                                 
-                                // 60000 ms = 1 minuta
                                 let depDate = new Date(Date.now() + aheadTotalMins * 60000); 
                                 let depTime = depDate.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
                                 
@@ -2243,10 +2241,8 @@ HTML_MAPA = """
                                 }
                             } else if (delayVal >= 5) {
                                 delayText = `<span style="color:#ef4444;">Zpoždění ${delayVal} min</span>`;
-                            } else if (delayVal > 0) {
-                                delayText = `<span style="color:#10b981;">+${delayVal} min</span>`;
                             } else {
-                                delayText = `<span style="color:#10b981;">Na čas</span>`;
+                                delayText = `<span style="color:#10b981;">+${delayVal} min</span>`;
                             }
 
                             let shape = bus.is_train ? 'train-marker' : 'bus-marker';
@@ -2269,9 +2265,10 @@ HTML_MAPA = """
                             else if (bus.status.includes("Začátek") || bus.status.includes("Čeká")) statusColor = "#3b82f6"; // modrá
                             else if (bus.status.includes("Odstaven") || bus.status.includes("N/A")) statusColor = "#94a3b8"; // šedá
                             else if (bus.status.includes("Manipulační")) statusColor = "#eab308"; // žlutá
+                            else if (bus.status.includes("Náskok")) statusColor = "#60a5fa"; // světlejší modrá pro náskok
                             
                             let statusHtml = `<div class="popup-row"><span class="popup-label">Status:</span><span class="popup-value" style="color:${statusColor};">${bus.status}</span></div>`;
-                            let updatedHtml = `<div class="popup-row"><span class="popup-label">Poslední pohyb:</span><span class="popup-value" style="color:#94a3b8;">${bus.last_updated}</span></div>`;
+                            let updatedHtml = `<div class="popup-row"><span class="popup-label">Aktualizace:</span><span class="popup-value" style="color:#94a3b8;">${bus.last_updated}</span></div>`;
                             
                             let popupHTML = `
                                 <div class="popup-header">
