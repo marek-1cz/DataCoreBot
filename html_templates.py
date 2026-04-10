@@ -2172,6 +2172,7 @@ HTML_MAPA = """
         .bg-purple { background-color: #a855f7; }
         .bg-yellow { background-color: #eab308; color: #1e293b; }
         
+        /* Moderní Tmavý Popup */
         .dark-popup .leaflet-popup-content-wrapper { background: #1e293b; color: white; border: 1px solid #334155; padding: 0; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); }
         .dark-popup .leaflet-popup-tip { background: #1e293b; border-bottom: 1px solid #334155; border-right: 1px solid #334155; }
         .dark-popup .leaflet-popup-content { margin: 0; width: 270px !important; }
@@ -2217,6 +2218,7 @@ HTML_MAPA = """
                             let delayText = "";
                             let delayVal = parseInt(bus.delay); 
 
+                            // Formátování podle barvy vynucené serverem
                             if (markerColor === "bg-gray") {
                                 if (bus.status.includes(">4h")) {
                                     let aheadMin = Math.abs(delayVal);
@@ -2231,6 +2233,7 @@ HTML_MAPA = """
                             } else if (markerColor === "bg-purple") {
                                 delayText = `<span style="color:#a855f7;">Konečná zastávka</span>`;
                             } else if (markerColor === "bg-blue") {
+                                // Jistota: je před odjezdem do 4 hodin (Světle modrá)
                                 let aheadMin = Math.abs(delayVal);
                                 let aheadH = Math.floor(aheadMin / 60);
                                 let aheadM = aheadMin % 60;
@@ -2241,6 +2244,7 @@ HTML_MAPA = """
                                 
                                 delayText = `<span style="color:#3b82f6;">Odjezd za ${timeStr}<br><small style="color:#94a3b8;">(${depTime})</small></span>`;
                             } else if (markerColor === "bg-darkblue") {
+                                // Jistota: náskok na trase
                                 let aheadMin = Math.abs(delayVal);
                                 delayText = `<span style="color:#60a5fa;">Náskok ${aheadMin} min</span>`; 
                             } else if (delayVal >= 5) {
@@ -2262,8 +2266,9 @@ HTML_MAPA = """
                             
                             let typeName = bus.is_train ? 'Vlak' : 'Autobus';
                             
+                            // Text Color pro Status
                             let statusColor = "#10b981"; // zelená
-                            if (bus.status.includes("Stojí")) statusColor = "#ef4444"; // červená
+                            if (bus.status === "Stojí") statusColor = "#ef4444"; // červená
                             else if (bus.status.includes("Koneč")) statusColor = "#a855f7"; // fialová
                             else if (bus.status.includes("Začátek") || bus.status.includes("Čeká")) statusColor = "#3b82f6"; // modrá
                             else if (bus.status.includes("Odstaven") || bus.status.includes("N/A") || bus.status.includes("signál")) statusColor = "#94a3b8"; // šedá
