@@ -16,7 +16,7 @@ mapa_bp = Blueprint('mapa_bp', __name__)
 GLOBAL_BUS_CACHE = {}
 LIVE_BUSES_DATA = []
 
-# Globální CookieJar, aby si Inflow myslel, že jsme jeden stabilní prohlížeč
+# Globální CookieJar pro maskování (Stealth Mode proti 400 Error)
 cj = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
 
@@ -52,7 +52,6 @@ def fetch_tt_bg(bus_id, cached_dict):
             'Referer': 'https://pvvd.idpk.cz/'
         }
         req_tt = urllib.request.Request(tt_url, headers=headers)
-        # Používáme sdílený opener s Cookies
         with opener.open(req_tt, timeout=4) as r_tt:
             tt_html = r_tt.read().decode('utf-8')
             times = re.findall(r'\b\d{2}:\d{2}\b', tt_html)
@@ -64,7 +63,7 @@ def fetch_tt_bg(bus_id, cached_dict):
         cached_dict["tt_is_fetching"] = False
 
 def background_map_worker():
-    print("[MAPA] Inteligentní mozek s Cookie Spoofingem a JŘ prioritou startuje...", flush=True)
+    print("[MAPA] Inteligentní mozek se Stealth Mode a prioritou JŘ startuje...", flush=True)
     url_inflow = "https://pvvd.idpk.cz/Ajax/GetPoints" 
     url_arriva = "https://www.arriva.cz/api/graphql" 
     
@@ -94,7 +93,6 @@ def background_map_worker():
         except urllib.error.HTTPError as e:
             if e.code == 400:
                 try:
-                    # Inflow často mění ochranu, zkusíme to jako prázdný POST
                     req1_post = urllib.request.Request(url_inflow, data=b"{}", headers=inflow_headers, method='POST')
                     with opener.open(req1_post, timeout=5) as r1_post:
                         data_inflow = json.loads(r1_post.read().decode())
@@ -105,7 +103,6 @@ def background_map_worker():
         except Exception as e: 
             print(f"[MAPA] Inflow Error: {e}")
 
-        # STAŽENÍ ARRIVY
         try:
             arriva_payload = {
                 "operationName": "busesCurrentLocation",
@@ -114,7 +111,7 @@ def background_map_worker():
             }
             req2 = urllib.request.Request(url_arriva, data=json.dumps(arriva_payload).encode('utf-8'),
                 headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
                     'Content-Type': 'application/json',
                     'Accept': 'application/json, text/plain, */*',
                     'Origin': 'https://www.arriva.cz',
@@ -127,7 +124,6 @@ def background_map_worker():
 
         current_inflow_ids = set()
 
-        # 1. NAČTENÍ ČERSTVÝCH DAT Z INFLOW
         if isinstance(data_inflow, list):
             for bus1 in data_inflow:
                 try:
@@ -173,7 +169,6 @@ def background_map_worker():
                             c["last_moved"] = now
                             c["lat"] = lat1
                             c["lng"] = lng1
-
                 except: continue
 
         # 2. AUDIT EXISTUJÍCÍCH ZÁMKŮ SPZ
@@ -194,7 +189,6 @@ def background_map_worker():
             if cached.get("spz") and cached.get("spz_locked"):
                 assigned_spzs.add(cached["spz"])
 
-        # 4. HLAVNÍ ZPRACOVÁNÍ CELÉ NAŠÍ PAMĚTI
         new_live_data = []
         tt_fetches_this_tick = 0 
 
@@ -220,7 +214,6 @@ def background_map_worker():
                 
                 delay_val = cached["raw_delay"]
 
-                # PÁROVÁNÍ SPZ
                 found_in_arriva = False
                 if not is_train and not cached["spz_locked"]:
                     buses_on_line = [b for b in data_arriva if str(b.get("linkNumber","")).strip() == line or str(b.get("linkNumberAlias","")).strip() == line]
@@ -251,27 +244,24 @@ def background_map_worker():
                             found_in_arriva = True
                             break
 
-                # OCHRANA INFLOW - Stahuje se bezpečně 5 za tick
+                # BEZPEČNÝ MULTI-THREAD STAHUVAČ JÍZDNÍHO ŘÁDU
                 needs_tt = not is_train and not cached.get("first_dep_time") and not cached.get("is_offline")
                 if needs_tt and not cached.get("tt_is_fetching"):
                     if not cached.get("tt_last_fetch") or (now - cached["tt_last_fetch"]).total_seconds() > 300:
-                        if tt_fetches_this_tick < 5: 
+                        if tt_fetches_this_tick < 8: # Ochrana: Max 8 JŘ každých 10s
                             tt_fetches_this_tick += 1
                             cached["tt_last_fetch"] = now
                             cached["tt_is_fetching"] = True
                             threading.Thread(target=fetch_tt_bg, args=(bus_id, cached), daemon=True).start()
 
-                # --- TVRDÁ KONTROLA JŘ ---
                 is_before_departure = False
                 time_to_dep = 0
-                
                 if cached.get("first_dep_time"):
                     diff = calc_mins_to_departure(cached["first_dep_time"], now)
                     if diff is not None and diff > 0:
                         is_before_departure = True
                         time_to_dep = diff
 
-                # LOGIKA KONEČNÉ ZASTÁVKY
                 is_buggy_terminus = (delay_val <= -10000)
                 is_missing_arriva_terminus = (not is_train and cached["spz"] and not found_in_arriva and delay_val < -2 and not is_before_departure)
 
@@ -280,16 +270,13 @@ def background_map_worker():
                 elif found_in_arriva and delay_val >= -2:
                     cached["finished_at"] = None
 
-                # --- HLAVNÍ ROZHODOVACÍ STROM STATUSŮ A BAREV ---
-                
                 if is_before_departure:
                     cached["finished_at"] = None 
-                    
-                    if time_to_dep <= 240: # Odjezd do 4 hodin
+                    if time_to_dep <= 240:
                         cached["status"] = "Začátek linky (Čeká)"
                         cached["color_class"] = "bg-blue"
                         delay_val = -time_to_dep 
-                    else: # Nad 4 hodiny
+                    else:
                         if is_moving:
                             cached["status"] = "Manipulační jízda"
                             cached["color_class"] = "bg-yellow"
@@ -391,7 +378,8 @@ def api_bus_detail(bus_id):
         tables = re.findall(r'(<table[^>]*>.*?</table>)', tt_html, re.IGNORECASE | re.DOTALL)
         tt_table_only = "".join(tables) if tables else "<p style='color:#ef4444;text-align:center;padding:10px;'>Jízdní řád není momentálně k dispozici.</p>"
 
-     custom_html = f"""
+
+custom_html = f"""
         <style>
             .ois-detail {{ background: #0f172a; color: white; font-family: sans-serif; padding: 15px; border-radius: 8px; }}
             .ois-header {{ color: #38bdf8; font-weight: bold; border-bottom: 1px solid #444; margin-bottom: 15px; padding-bottom: 10px; font-size: 18px; }}
