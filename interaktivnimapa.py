@@ -1,18 +1,24 @@
 import time
 import json
 import urllib.request
+import urllib.error
 import threading
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, Response
 from zoneinfo import ZoneInfo
 import math
 import re
+import http.cookiejar
 
 mapa_bp = Blueprint('mapa_bp', __name__)
 
 # Globální paměť běžící 24/7 (pamatuje si busy až 12 hodin po odpojení)
 GLOBAL_BUS_CACHE = {}
 LIVE_BUSES_DATA = []
+
+# Globální CookieJar, aby si Inflow myslel, že jsme jeden stabilní prohlížeč
+cj = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
 
 def get_prague_time():
     return datetime.now(ZoneInfo('Europe/Prague')).replace(tzinfo=None)
@@ -35,7 +41,7 @@ def calc_mins_to_departure(dep_time_str, current_time):
     except:
         return None
 
-# --- NEZÁVISLÉ VLÁKNO PRO BLESKOVÉ STAŽENÍ JŘ (S MASKOVÁNÍM) ---
+# --- NEZÁVISLÉ VLÁKNO PRO BLESKOVÉ STAŽENÍ JŘ (S COOKIES A MASKOVÁNÍM) ---
 def fetch_tt_bg(bus_id, cached_dict):
     try:
         tt_url = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0"
@@ -46,7 +52,8 @@ def fetch_tt_bg(bus_id, cached_dict):
             'Referer': 'https://pvvd.idpk.cz/'
         }
         req_tt = urllib.request.Request(tt_url, headers=headers)
-        with urllib.request.urlopen(req_tt, timeout=4) as r_tt:
+        # Používáme sdílený opener s Cookies
+        with opener.open(req_tt, timeout=4) as r_tt:
             tt_html = r_tt.read().decode('utf-8')
             times = re.findall(r'\b\d{2}:\d{2}\b', tt_html)
             if times:
@@ -57,7 +64,7 @@ def fetch_tt_bg(bus_id, cached_dict):
         cached_dict["tt_is_fetching"] = False
 
 def background_map_worker():
-    print("[MAPA] Inteligentní mozek s re-evaluací SPZ, prioritou JŘ a Stealth maskováním startuje...", flush=True)
+    print("[MAPA] Inteligentní mozek s Cookie Spoofingem a JŘ prioritou startuje...", flush=True)
     url_inflow = "https://pvvd.idpk.cz/Ajax/GetPoints" 
     url_arriva = "https://www.arriva.cz/api/graphql" 
     
@@ -65,20 +72,40 @@ def background_map_worker():
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
         'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'https://pvvd.idpk.cz/'
+        'Referer': 'https://pvvd.idpk.cz/',
+        'Content-Type': 'application/json; charset=utf-8'
     }
+
+    # Inicializační dotaz pro zisk Cookies od Inflow
+    try:
+        opener.open(urllib.request.Request("https://pvvd.idpk.cz/", headers={'User-Agent': 'Mozilla/5.0'}))
+    except: pass
 
     while True:
         now = get_prague_time()
         data_inflow = []
         data_arriva = []
 
+        # BEZPEČNÉ STAŽENÍ INFLOW (Fallback GET -> POST)
         try:
-            req1 = urllib.request.Request(url_inflow, headers=inflow_headers)
-            with urllib.request.urlopen(req1, timeout=5) as r1:
+            req1 = urllib.request.Request(url_inflow, headers=inflow_headers, method='GET')
+            with opener.open(req1, timeout=5) as r1:
                 data_inflow = json.loads(r1.read().decode())
-        except Exception as e: print(f"[MAPA] Inflow Error: {e}")
+        except urllib.error.HTTPError as e:
+            if e.code == 400:
+                try:
+                    # Inflow často mění ochranu, zkusíme to jako prázdný POST
+                    req1_post = urllib.request.Request(url_inflow, data=b"{}", headers=inflow_headers, method='POST')
+                    with opener.open(req1_post, timeout=5) as r1_post:
+                        data_inflow = json.loads(r1_post.read().decode())
+                except Exception as ex:
+                    print(f"[MAPA] Inflow Fallback Error: {ex}")
+            else:
+                print(f"[MAPA] Inflow Error: {e}")
+        except Exception as e: 
+            print(f"[MAPA] Inflow Error: {e}")
 
+        # STAŽENÍ ARRIVY
         try:
             arriva_payload = {
                 "operationName": "busesCurrentLocation",
@@ -100,7 +127,7 @@ def background_map_worker():
 
         current_inflow_ids = set()
 
-        # 1. NAČTENÍ ČERSTVÝCH DAT Z INFLOW + AKTUALIZACE SOUŘADNIC
+        # 1. NAČTENÍ ČERSTVÝCH DAT Z INFLOW
         if isinstance(data_inflow, list):
             for bus1 in data_inflow:
                 try:
@@ -224,11 +251,10 @@ def background_map_worker():
                             found_in_arriva = True
                             break
 
-                # BEZPEČNÝ MULTI-THREAD STAHUVAČ JÍZDNÍHO ŘÁDU
+                # OCHRANA INFLOW - Stahuje se bezpečně 5 za tick
                 needs_tt = not is_train and not cached.get("first_dep_time") and not cached.get("is_offline")
                 if needs_tt and not cached.get("tt_is_fetching"):
                     if not cached.get("tt_last_fetch") or (now - cached["tt_last_fetch"]).total_seconds() > 300:
-                        # OCHRANA INFLOW: Pouze 5 requestů za tik (místo 25) aby nás nezabanovali!
                         if tt_fetches_this_tick < 5: 
                             tt_fetches_this_tick += 1
                             cached["tt_last_fetch"] = now
@@ -341,7 +367,7 @@ def api_bus_detail(bus_id):
     url_tt = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0"
     
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'X-Requested-With': 'XMLHttpRequest',
         'Referer': 'https://pvvd.idpk.cz/'
     }
@@ -349,11 +375,11 @@ def api_bus_detail(bus_id):
     try:
         info_html = ""
         req1 = urllib.request.Request(url_info, headers=headers)
-        with urllib.request.urlopen(req1, timeout=5) as r1: info_html = r1.read().decode('utf-8')
+        with opener.open(req1, timeout=5) as r1: info_html = r1.read().decode('utf-8')
             
         tt_html = ""
         req2 = urllib.request.Request(url_tt, headers=headers)
-        with urllib.request.urlopen(req2, timeout=5) as r2: tt_html = r2.read().decode('utf-8')
+        with opener.open(req2, timeout=5) as r2: tt_html = r2.read().decode('utf-8')
 
         linkospoj, spoj_num = "N/A", "N/A"
 
@@ -365,7 +391,7 @@ def api_bus_detail(bus_id):
         tables = re.findall(r'(<table[^>]*>.*?</table>)', tt_html, re.IGNORECASE | re.DOTALL)
         tt_table_only = "".join(tables) if tables else "<p style='color:#ef4444;text-align:center;padding:10px;'>Jízdní řád není momentálně k dispozici.</p>"
 
-        custom_html = f"""
+     custom_html = f"""
         <style>
             .ois-detail {{ background: #0f172a; color: white; font-family: sans-serif; padding: 15px; border-radius: 8px; }}
             .ois-header {{ color: #38bdf8; font-weight: bold; border-bottom: 1px solid #444; margin-bottom: 15px; padding-bottom: 10px; font-size: 18px; }}
@@ -387,4 +413,3 @@ def api_bus_detail(bus_id):
         return Response(custom_html, mimetype='text/html')
     except Exception as e:
         return f"<div style='color:#ef4444; padding:20px; background:#1a1a1a;'>Chyba při stahování JŘ z Inflow: {e}</div>"
-            
