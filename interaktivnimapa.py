@@ -24,7 +24,7 @@ def calc_mins_to_departure(dep_time_str, current_time):
         dep_total = dh * 60 + dm
         cur_total = ch * 60 + cm
         diff = dep_total - cur_total
-        if diff < -720: # Přes půlnoc (např. teď je 23:50, odjezd 00:10 -> diff = 10 - 1430 = -1420)
+        if diff < -720: # Přes půlnoc
             diff += 1440
         return diff
     except:
@@ -105,11 +105,14 @@ def background_map_worker():
                         c["is_train"] = is_train
                         
                         dist_moved = math.hypot(lat1 - c["lat"], lng1 - c["lng"])
-                        if c["line"] != line:
+                        
+                        # OPRAVA CÍLE: Kontrolujeme i změnu cíle (destination), nejen linky!
+                        if c["line"] != line or c["destination"] != dest1_original:
                             c["line"] = line
                             c["destination"] = dest1_original
                             c["finished_at"] = None
-                            c["first_dep_time"] = None # Změnil linku, musíme fetchovat nový JŘ
+                            c["first_dep_time"] = None 
+                            c["tt_last_fetch"] = None # Vynutí okamžité stažení nového JŘ!
                             if dist_moved < 0.005: 
                                 c["estimated"] = True
                                 c["last_moved"] = now
@@ -121,24 +124,21 @@ def background_map_worker():
 
                 except: continue
 
-        # 3. Zpracování celé naší paměti (i těch, co vypnuli kasu a z Inflow zmizeli)
+        # 3. Zpracování celé naší paměti
         new_live_data = []
-        tt_fetches_this_tick = 0 # Ochrana proti DDoS na Inflow
+        tt_fetches_this_tick = 0 
 
         for bus_id, cached in list(GLOBAL_BUS_CACHE.items()):
-            # A) Je autobus offline? (Zmizel z Inflow)
             if bus_id not in current_inflow_ids:
                 offline_mins = (now - cached["last_seen"]).total_seconds() / 60.0
-                if offline_mins > 720: # Paměť na 12 hodin! Poté ho konečně smažeme.
+                if offline_mins > 720: 
                     del GLOBAL_BUS_CACHE[bus_id]
                     continue
                 else:
                     cached["is_offline"] = True
                     cached["status"] = "Odstaven (Bez signálu)"
                     cached["color_class"] = "bg-gray"
-                    # Necháme mu zamčenou SPZ, ať ji neztratíme!
             else:
-                # B) Autobus je online. Uděláme veškerou logiku.
                 lat1, lng1 = cached["lat"], cached["lng"]
                 line, dest1_original = cached["line"], cached["destination"]
                 dest1_lower = dest1_original.lower()
@@ -146,33 +146,32 @@ def background_map_worker():
                 
                 time_ref = cached["last_moved"] if cached["last_moved"] else cached["first_seen"]
                 inactive_mins = (now - time_ref).total_seconds() / 60.0
-                is_moving = inactive_mins < 1 # Pohnul se v poslední minutě
+                is_moving = inactive_mins < 1 
                 
                 delay_val = cached["raw_delay"]
 
-                # PÁROVÁNÍ SPZ (Pouze pokud ještě nemá)
+                # CHYTRÉ PÁROVÁNÍ SPZ (Ignoruje překlepy Arrivy, pokud je bus na lince sám)
                 found_in_arriva = False
                 if not is_train and not cached["spz_locked"]:
+                    buses_on_line = [b for b in data_arriva if str(b.get("linkNumber","")).strip() == line or str(b.get("linkNumberAlias","")).strip() == line]
+                    close_buses = [b for b in buses_on_line if math.hypot(lat1 - b.get("latitude",0), lng1 - b.get("longitude",0)) < 0.015]
+                    
                     best_spz = None
-                    for bus2 in data_arriva:
-                        b2_spz = str(bus2.get("spz", "")).strip()
-                        if not b2_spz or b2_spz == "Neznámá" or b2_spz in assigned_spzs: continue 
-                            
-                        if str(bus2.get("linkNumber", "")).strip() == line or str(bus2.get("linkNumberAlias", "")).strip() == line:
-                            lat2, lng2 = bus2.get("latitude", 0), bus2.get("longitude", 0)
-                            dest2 = str(bus2.get("destinationName", "")).strip().lower()
-                            dist = math.hypot(lat1 - lat2, lng1 - lng2)
-                            
-                            if dist < 0.015: 
-                                if (dest1_lower in dest2) or (dest2 in dest1_lower) or dest1_lower == "" or dest2 == "":
-                                    best_spz = b2_spz
-                                    found_in_arriva = True
-                                    break
-                                elif dist < 0.001: 
-                                    best_spz = b2_spz
-                                    found_in_arriva = True
-                                    break
-                    if best_spz:
+                    if len(close_buses) == 1:
+                        # Je tu jen jeden bus této linky, bereme SPZ (žádné odhady kvůli čárkám v textu!)
+                        best_spz = close_buses[0].get("spz", "").strip()
+                        found_in_arriva = True
+                    elif len(close_buses) > 1:
+                        # Jsou tu dva a víc, musíme kontrolovat cíl. Vymažeme bordel z textu.
+                        d1_clean = re.sub(r'\W+', '', dest1_lower)
+                        for cb in close_buses:
+                            d2_clean = re.sub(r'\W+', '', str(cb.get("destinationName", "")).lower())
+                            if d1_clean in d2_clean or d2_clean in d1_clean or d1_clean == "" or d2_clean == "":
+                                best_spz = cb.get("spz", "").strip()
+                                found_in_arriva = True
+                                break
+
+                    if best_spz and best_spz != "Neznámá" and best_spz not in assigned_spzs:
                         cached["spz"] = best_spz
                         cached["spz_locked"] = True
                         cached["estimated"] = False
@@ -184,11 +183,10 @@ def background_map_worker():
                             found_in_arriva = True
                             break
 
-                # TAJNÝ STAHUVAČ JÍZDNÍHO ŘÁDU (Oprava Inflow lži "delay: 0")
-                if not is_train and delay_val == 0 and not is_moving and inactive_mins < 120:
-                    # Pokud Inflow lže a my nemáme JŘ stáhnutý v posledních 10 minutách, jdeme pro něj!
+                # TAJNÝ STAHUVAČ JÍZDNÍHO ŘÁDU (Už nekouká na to, jestli bus stojí!)
+                if not is_train and delay_val == 0 and inactive_mins < 120:
                     if not cached.get("tt_last_fetch") or (now - cached["tt_last_fetch"]).total_seconds() > 600:
-                        if tt_fetches_this_tick < 3: # Max 3 JŘ za každých 10 sekund (ochrana proti BANu)
+                        if tt_fetches_this_tick < 3: 
                             tt_fetches_this_tick += 1
                             cached["tt_last_fetch"] = now
                             try:
@@ -201,16 +199,17 @@ def background_map_worker():
                             except: pass
 
                 # PŘEPIS ZPOŽDĚNÍ POMOCÍ TAJNÉHO JŘ
-                if cached.get("first_dep_time") and not is_moving:
+                if cached.get("first_dep_time"):
                     diff = calc_mins_to_departure(cached["first_dep_time"], now)
                     if diff is not None and 0 < diff <= 240:
-                        delay_val = -diff # Násilně přepíšeme 0 na mínusové minuty!
+                        delay_val = -diff # Přepíše lživou nulu na záporné minuty (náskok/čeká)
 
                 # LOGIKA BAREV A STATUSŮ
                 is_buggy_terminus = (delay_val <= -10000)
                 is_waiting_departure = (-240 <= delay_val < 0)
 
-                if is_waiting_departure: cached["finished_at"] = None
+                if is_waiting_departure: 
+                    cached["finished_at"] = None # Pokud čeká na odjezd, není na konečné
 
                 is_missing_arriva_terminus = (not is_train and cached["spz"] and not found_in_arriva and delay_val < -2 and not is_waiting_departure)
 
@@ -257,10 +256,8 @@ def background_map_worker():
                         else: cached["status"] = "Stojí"
                         cached["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
 
-                # Posíláme upravený delay_val ven na frontend
                 cached["final_delay_display"] = delay_val
 
-            # ODESLÁNÍ DO FRONTENDU (Pro oba stavy - Online i Offline)
             last_up_str = cached["last_moved"].strftime("%H:%M:%S") if cached["last_moved"] else "N/A"
             new_live_data.append({
                 "id": bus_id, "lat": cached["lat"], "lng": cached["lng"], 
