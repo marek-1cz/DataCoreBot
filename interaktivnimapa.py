@@ -25,7 +25,7 @@ def calc_mins_to_departure(dep_time_str, current_time):
         cur_total = ch * 60 + cm
         diff = dep_total - cur_total
         
-        # Matematická korekce pro odjezdy přes půlnoc (např. teď je 23:50, odjezd 00:10)
+        # Matematická korekce pro odjezdy přes půlnoc
         if diff < -720: 
             diff += 1440
         elif diff > 720:
@@ -51,7 +51,7 @@ def fetch_tt_bg(bus_id, cached_dict):
         cached_dict["tt_is_fetching"] = False
 
 def background_map_worker():
-    print("[MAPA] Inteligentní mozek s rychlo-stahovačem JŘ startuje...", flush=True)
+    print("[MAPA] Inteligentní mozek s re-evaluací SPZ a prioritou JŘ startuje...", flush=True)
     url_inflow = "https://pvvd.idpk.cz/Ajax/GetPoints" 
     url_arriva = "https://www.arriva.cz/api/graphql" 
     
@@ -85,14 +85,8 @@ def background_map_worker():
         except Exception as e: print(f"[MAPA] Arriva Error: {e}")
 
         current_inflow_ids = set()
-        assigned_spzs = set()
-        
-        # 1. Zabezpečení přidělených SPZ z minula
-        for bus_id, cached in GLOBAL_BUS_CACHE.items():
-            if cached.get("spz") and cached.get("spz_locked"):
-                assigned_spzs.add(cached["spz"])
 
-        # 2. Načtení čerstvých dat z Inflow
+        # 1. NAČTENÍ ČERSTVÝCH DAT Z INFLOW + AKTUALIZACE SOUŘADNIC
         if isinstance(data_inflow, list):
             for bus1 in data_inflow:
                 try:
@@ -125,13 +119,11 @@ def background_map_worker():
                         c["is_train"] = is_train
                         
                         dist_moved = math.hypot(lat1 - c["lat"], lng1 - c["lng"])
-                        
-                        # Pokud změnil linku nebo cíl, okamžitě resetujeme JŘ a konečnou
                         if c["line"] != line or c["destination"] != dest1_original:
                             c["line"] = line
                             c["destination"] = dest1_original
                             c["finished_at"] = None
-                            c["first_dep_time"] = None 
+                            c["first_dep_time"] = None # Změnil linku/cíl, musíme fetchovat nový JŘ
                             if dist_moved < 0.005: 
                                 c["estimated"] = True
                                 c["last_moved"] = now
@@ -143,7 +135,28 @@ def background_map_worker():
 
                 except: continue
 
-        # 3. Zpracování celé naší paměti (i těch, co vypnuli kasu a z Inflow zmizeli)
+        # 2. AUDIT EXISTUJÍCÍCH ZÁMKŮ SPZ (Ochrana proti spojům do vozovny)
+        for bus_id, cached in list(GLOBAL_BUS_CACHE.items()):
+            if cached.get("spz") and cached.get("spz_locked") and not cached.get("is_train"):
+                # Pokusíme se najít náš zamknutý bus v čerstvých datech Arrivy
+                arriva_match = next((b for b in data_arriva if str(b.get("spz", "")).strip() == cached["spz"]), None)
+                if arriva_match:
+                    a_lat, a_lng = arriva_match.get("latitude", 0), arriva_match.get("longitude", 0)
+                    dist_check = math.hypot(cached["lat"] - a_lat, cached["lng"] - a_lng)
+                    
+                    # Pokud je Arriva s naší SPZkou najednou dál než 1.5 km, zámek je neplatný!
+                    if dist_check > 0.015:
+                        cached["spz"] = None
+                        cached["spz_locked"] = False
+                        cached["estimated"] = False
+
+        # 3. SESTAVENÍ SEZNAMU ZABRANÝCH SPZ (Po auditu)
+        assigned_spzs = set()
+        for bus_id, cached in GLOBAL_BUS_CACHE.items():
+            if cached.get("spz") and cached.get("spz_locked"):
+                assigned_spzs.add(cached["spz"])
+
+        # 4. HLAVNÍ ZPRACOVÁNÍ CELÉ NAŠÍ PAMĚTI
         new_live_data = []
         tt_fetches_this_tick = 0 
 
@@ -171,7 +184,7 @@ def background_map_worker():
                 
                 delay_val = cached["raw_delay"]
 
-                # PÁROVÁNÍ SPZ
+                # PÁROVÁNÍ SPZ (Pro ty, co SPZ nemají nebo jim byla právě sebrána v auditu)
                 found_in_arriva = False
                 if not is_train and not cached["spz_locked"]:
                     buses_on_line = [b for b in data_arriva if str(b.get("linkNumber","")).strip() == line or str(b.get("linkNumberAlias","")).strip() == line]
@@ -196,6 +209,7 @@ def background_map_worker():
                         cached["estimated"] = False
                         assigned_spzs.add(best_spz) 
                 
+                # Potvrzení, jestli Arriva aktuálně vidí naši zamčenou SPZ (pro detekci konečné)
                 if not is_train and cached["spz"]:
                     for b2 in data_arriva:
                         if b2.get("spz", "").strip() == cached["spz"]:
@@ -205,7 +219,6 @@ def background_map_worker():
                 # MULTI-THREAD STAHUVAČ JÍZDNÍHO ŘÁDU
                 needs_tt = not is_train and not cached.get("first_dep_time") and not cached.get("is_offline")
                 if needs_tt and not cached.get("tt_is_fetching"):
-                    # Stáhne až 25 JŘ naráz každých 10 sekund (Bleskový náběh po startu)
                     if not cached.get("tt_last_fetch") or (now - cached["tt_last_fetch"]).total_seconds() > 300:
                         if tt_fetches_this_tick < 25: 
                             tt_fetches_this_tick += 1
@@ -236,7 +249,7 @@ def background_map_worker():
                 
                 # 1. ABSOLUTNÍ PRIORITA: Má platný JŘ v budoucnu (IGNORUJEME POHYB)
                 if is_before_departure:
-                    cached["finished_at"] = None # Určitě není na konečné
+                    cached["finished_at"] = None 
                     
                     if time_to_dep <= 240: # Odjezd do 4 hodin (SVĚTLE MODRÁ VŽDY)
                         cached["status"] = "Začátek linky (Čeká)"
@@ -253,7 +266,7 @@ def background_map_worker():
                             delay_val = -time_to_dep
                             if inactive_mins > 60: cached["spz_locked"] = False
                             
-                # 2. ÚPLNÝ START SCRIPTU (Ještě nevíme nic a nestáhli jsme JŘ)
+                # 2. ÚPLNÝ START SCRIPTU (Ještě nevíme nic)
                 elif not cached["last_moved"]:
                     cached["status"] = "N/A - Čeká na data"
                     cached["color_class"] = "bg-gray"
@@ -344,7 +357,6 @@ def api_bus_detail(bus_id):
         tables = re.findall(r'(<table[^>]*>.*?</table>)', tt_html, re.IGNORECASE | re.DOTALL)
         tt_table_only = "".join(tables) if tables else "<p style='color:#ef4444;text-align:center;padding:10px;'>Jízdní řád není momentálně k dispozici.</p>"
 
-        # Čistě šedá tabulka
         custom_html = f"""
         <style>
             .ois-detail {{ background: #0f172a; color: white; font-family: sans-serif; padding: 15px; border-radius: 8px; }}
