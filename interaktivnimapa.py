@@ -24,14 +24,19 @@ def calc_mins_to_departure(dep_time_str, current_time):
         dep_total = dh * 60 + dm
         cur_total = ch * 60 + cm
         diff = dep_total - cur_total
-        if diff < -720: # Přes půlnoc (např. teď je 23:50, odjezd 00:10)
+        
+        # Oprava přes půlnoc
+        if diff < -720: 
             diff += 1440
+        elif diff > 720:
+            diff -= 1440
+            
         return diff
     except:
         return None
 
 def background_map_worker():
-    print("[MAPA] Inteligentní mozek s 12h pamětí a JŘ analyzátorem startuje...", flush=True)
+    print("[MAPA] Inteligentní mozek s 12h pamětí a prioritou JŘ startuje...", flush=True)
     url_inflow = "https://pvvd.idpk.cz/Ajax/GetPoints" 
     url_arriva = "https://www.arriva.cz/api/graphql" 
     
@@ -180,8 +185,9 @@ def background_map_worker():
                             found_in_arriva = True
                             break
 
-                # STAHUVAČ JÍZDNÍHO ŘÁDU (Stáhneme ho pro všechny, co právě začali novou linku)
-                if not is_train and not cached.get("first_dep_time") and inactive_mins < 120:
+                # STAHUVAČ JÍZDNÍHO ŘÁDU (Načte se ihned, jakmile chybí first_dep_time)
+                needs_tt = not is_train and not cached.get("first_dep_time") and inactive_mins < 120
+                if needs_tt:
                     if not cached.get("tt_last_fetch") or (now - cached["tt_last_fetch"]).total_seconds() > 600:
                         if tt_fetches_this_tick < 3: 
                             tt_fetches_this_tick += 1
@@ -195,42 +201,52 @@ def background_map_worker():
                                     if times: cached["first_dep_time"] = times[0]
                             except: pass
 
-                # TVRDÁ KONTROLA JŘ - Zjištění, zda autobus OPRAVDU ČEKÁ NA ODJEZD
-                is_waiting_at_start = False
+                # --- TVRDÁ KONTROLA JŘ --- (PŘED ODJEZDEM)
+                is_before_departure = False
                 time_to_dep = 0
+                
                 if cached.get("first_dep_time"):
                     diff = calc_mins_to_departure(cached["first_dep_time"], now)
-                    if diff is not None and 0 < diff <= 240: # Pokud je odjezd v budoucnosti (až 4 hodiny)
-                        is_waiting_at_start = True
+                    if diff is not None and diff > 0:
+                        is_before_departure = True
                         time_to_dep = diff
 
-                # LOGIKA KONEČNÉ A BAREV
+                # LOGIKA KONEČNÉ ZASTÁVKY
                 is_buggy_terminus = (delay_val <= -10000)
-                is_missing_arriva_terminus = (not is_train and cached["spz"] and not found_in_arriva and delay_val < -2 and not is_waiting_at_start)
+                is_missing_arriva_terminus = (not is_train and cached["spz"] and not found_in_arriva and delay_val < -2 and not is_before_departure)
 
-                # Reset konečné, pokud Inflow už nehlásí chybu nebo našel Arrivu (a neleží na startu)
                 if is_buggy_terminus or is_missing_arriva_terminus:
                     if cached["finished_at"] is None: cached["finished_at"] = now
                 elif found_in_arriva and delay_val >= -2:
                     cached["finished_at"] = None
 
+                # ROZHODOVACÍ STROM STATUSŮ A BAREV
                 if not cached["last_moved"]:
                     cached["status"] = "N/A - Čeká na pohyb"
                     cached["color_class"] = "bg-gray"
                 else:
-                    # 1. ABSOLUTNÍ PRIORITA: Pokud má platný JŘ v budoucnu, je SVĚTLE MODRÝ. Ignorujeme popojíždění!
-                    if is_waiting_at_start:
-                        cached["status"] = "Začátek linky (Čeká)"
-                        cached["color_class"] = "bg-blue"
-                        delay_val = -time_to_dep # Aby frontend věděl, kolik zbývá
-                        cached["finished_at"] = None
-                        
-                    # 2. Odstaven (nekomunikuje > 10 min a nemá brzký odjezd)
+                    # 1. ABSOLUTNÍ PRIORITA: JE PŘED ODJEZDEM (ZCELA IGNORUJEME ZDA SE HÝBE)
+                    if is_before_departure:
+                        cached["finished_at"] = None # Rušíme starou konečnou
+                        if time_to_dep <= 240: # Odjezd do 4 hodin
+                            cached["status"] = "Začátek linky (Čeká)"
+                            cached["color_class"] = "bg-blue"
+                            delay_val = -time_to_dep # Záporná hodnota pro frontend (odpočet)
+                        else: # Odjezd za více než 4 hodiny
+                            cached["status"] = "Čeká na spoj (>4h)"
+                            cached["color_class"] = "bg-gray"
+                            delay_val = -time_to_dep
+                            if inactive_mins > 60: cached["spz_locked"] = False
+                            
+                    # 2. ODSTAVEN (>10 MINUT BEZ POHYBU)
                     elif inactive_mins > 10:
                         cached["status"] = "Odstaven"
                         cached["color_class"] = "bg-gray"
-                        
-                    # 3. Konečná a Manipulační jízda
+                        if cached["finished_at"]:
+                            if (now - cached["finished_at"]).total_seconds() / 60.0 > 60:
+                                cached["spz_locked"] = False
+                                
+                    # 3. KONEČNÁ NEBO MANIPULAČNÍ JÍZDA
                     elif cached["finished_at"] is not None:
                         finished_mins = (now - cached["finished_at"]).total_seconds() / 60.0
                         if finished_mins > 20: 
@@ -244,18 +260,21 @@ def background_map_worker():
                             cached["status"] = "Konečná zastávka"
                             cached["color_class"] = "bg-purple"
                             
-                    # 4. Standardní provoz (V Jízdě)
+                    # 4. BĚŽNÝ PROVOZ NA LINCE (Po odjezdu první zastávky)
                     else:
-                        if delay_val < 0:
-                            # Tady jsme jen tehdy, když is_waiting_at_start je FALSE.
-                            # Znamená to, že odjezd už byl, bus je na lince a má reálný NÁSKOK.
-                            cached["status"] = "Jízda (Náskok)" if is_moving else "Stojí (Náskok)"
-                            cached["color_class"] = "bg-darkblue" 
-                        else:
-                            cached["status"] = "Jízda" if is_moving else "Stojí"
+                        if delay_val < -1: # Na lince, ale má NÁSKOK
+                            if is_moving:
+                                cached["status"] = "Jízda (Náskok)"
+                                cached["color_class"] = "bg-darkblue"
+                            else:
+                                cached["status"] = "Stojí (Vyčkává)"
+                                cached["color_class"] = "bg-darkblue"
+                        else: # Na lince - na čas nebo se zpožděním
+                            if is_moving: cached["status"] = "Jízda"
+                            else: cached["status"] = "Stojí"
                             cached["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
 
-                # Uložení zpoždění pro frontend
+                # Uložení finálního zpoždění pro frontend
                 cached["final_delay_display"] = delay_val
 
             # ODESLÁNÍ DO FRONTENDU
