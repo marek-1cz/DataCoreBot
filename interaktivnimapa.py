@@ -10,7 +10,7 @@ import re
 
 mapa_bp = Blueprint('mapa_bp', __name__)
 
-# Globální paměť běžící 24/7
+# Globální paměť běžící 24/7 (pamatuje si busy až 12 hodin po odpojení)
 GLOBAL_BUS_CACHE = {}
 LIVE_BUSES_DATA = []
 
@@ -35,14 +35,17 @@ def calc_mins_to_departure(dep_time_str, current_time):
     except:
         return None
 
-# --- NEZÁVISLÉ VLÁKNO PRO STAŽENÍ JŘ (S MASKOVÁNÍM) ---
+# --- NEZÁVISLÉ VLÁKNO PRO STAŽENÍ JŘ (S CACHE BUSTINGEM) ---
 def fetch_tt_bg(bus_id, cached_dict):
     try:
-        tt_url = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0"
+        # Přidáno časové razítko, aby Inflow a proxy servery nevracely cachovaná data
+        cb_time = int(time.time() * 1000)
+        tt_url = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb_time}"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'X-Requested-With': 'XMLHttpRequest',
-            'Referer': 'https://pvvd.idpk.cz/'
+            'Referer': 'https://pvvd.idpk.cz/',
+            'Cache-Control': 'no-cache'
         }
         req_tt = urllib.request.Request(tt_url, headers=headers)
         with urllib.request.urlopen(req_tt, timeout=4) as r_tt:
@@ -56,21 +59,26 @@ def fetch_tt_bg(bus_id, cached_dict):
         cached_dict["tt_is_fetching"] = False
 
 def background_map_worker():
-    print("[MAPA] Inteligentní mozek (Verze 98% + AntiBan Inflow) startuje...", flush=True)
-    url_inflow = "https://pvvd.idpk.cz/Ajax/GetPoints" 
+    print("[MAPA] Inteligentní mozek (Verze Cache-Buster + AntiBan) startuje...", flush=True)
+    url_inflow_base = "https://pvvd.idpk.cz/Ajax/GetPoints" 
     url_arriva = "https://www.arriva.cz/api/graphql" 
     
     inflow_headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
         'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'https://pvvd.idpk.cz/'
+        'Referer': 'https://pvvd.idpk.cz/',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
     }
 
     while True:
         now = get_prague_time()
         data_inflow = []
         data_arriva = []
+        
+        # Dynamická URL proti zamrznutí (Cache-Busting)
+        url_inflow = f"{url_inflow_base}?_={int(time.time() * 1000)}"
 
         # 1. BEZPEČNÉ STAŽENÍ INFLOW (S Fallbackem na POST proti banu)
         try:
@@ -79,6 +87,7 @@ def background_map_worker():
                 data_inflow = json.loads(r1.read().decode())
         except Exception as e: 
             try:
+                # Fallback POST request se taky nesmí cachovat
                 req1_post = urllib.request.Request(url_inflow, data=b"{}", headers=inflow_headers, method='POST')
                 with urllib.request.urlopen(req1_post, timeout=5) as r1_post:
                     data_inflow = json.loads(r1_post.read().decode())
@@ -97,7 +106,8 @@ def background_map_worker():
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
                     'Content-Type': 'application/json',
                     'Origin': 'https://www.arriva.cz',
-                    'Referer': 'https://www.arriva.cz/'
+                    'Referer': 'https://www.arriva.cz/',
+                    'Cache-Control': 'no-cache'
                 }, method='POST')
             with urllib.request.urlopen(req2, timeout=5) as r2:
                 resp2 = json.loads(r2.read().decode())
@@ -133,8 +143,8 @@ def background_map_worker():
                     if bus_id not in GLOBAL_BUS_CACHE:
                         GLOBAL_BUS_CACHE[bus_id] = {
                             "lat": lat1, "lng": lng1, "line": line, "spz": None,
-                            "last_moved": None, "first_seen": now,
-                            "status": "N/A - Čeká na pohyb", "spz_locked": False, 
+                            "last_moved": now, "first_seen": now, # OKAMŽITÝ START BAREV
+                            "status": "Načítání...", "spz_locked": False, 
                             "color_class": "bg-gray", "destination": dest1_original, 
                             "estimated": False, "finished_at": None, "is_train": is_train,
                             "raw_delay": delay, "first_dep_time": None, "tt_last_fetch": None,
@@ -183,7 +193,7 @@ def background_map_worker():
         tt_fetches_this_tick = 0 
 
         for bus_id, cached in list(GLOBAL_BUS_CACHE.items()):
-            # VYMAZAT BUSY CO ZMIZELY (Tohle vyřeší zamrznuté šedé busy)
+            # VYMAZAT BUSY CO ZMIZELY (Žádní šedí zamrzlí zombíci)
             if bus_id not in current_inflow_ids:
                 continue
 
@@ -229,7 +239,7 @@ def background_map_worker():
                         found_in_arriva = True
                         break
 
-            # STAHUVAČ JŘ - BEZPEČNÝ LIMIT 3 ZA TICK (ŽÁDNÝ SPAM)
+            # STAHUVAČ JŘ - Ochrana 3 per tick, aby Inflow nedal BAN
             needs_tt = not is_train and not cached.get("first_dep_time")
             if needs_tt and not cached.get("tt_is_fetching"):
                 if not cached.get("tt_last_fetch") or (now - cached["tt_last_fetch"]).total_seconds() > 300:
@@ -277,10 +287,6 @@ def background_map_worker():
                         cached["color_class"] = "bg-gray"
                         delay_val = -time_to_dep
                         if inactive_mins > 60: cached["spz_locked"] = False
-                        
-            elif not cached["last_moved"]:
-                cached["status"] = "N/A - Čeká na data"
-                cached["color_class"] = "bg-gray"
 
             elif inactive_mins > 10:
                 cached["status"] = "Odstaven"
@@ -345,13 +351,16 @@ def api_live_buses():
 
 @mapa_bp.route('/api/bus_detail/<bus_id>')
 def api_bus_detail(bus_id):
-    url_info = f"https://pvvd.idpk.cz/Ajax/OpenInfoWindow?id={bus_id}"
-    url_tt = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0"
+    # Cache buster na detaily JŘ
+    cb = int(time.time() * 1000)
+    url_info = f"https://pvvd.idpk.cz/Ajax/OpenInfoWindow?id={bus_id}&_={cb}"
+    url_tt = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb}"
     
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'https://pvvd.idpk.cz/'
+        'Referer': 'https://pvvd.idpk.cz/',
+        'Cache-Control': 'no-cache'
     }
     
     try:
@@ -395,4 +404,4 @@ def api_bus_detail(bus_id):
         return Response(custom_html, mimetype='text/html')
     except Exception as e:
         return f"<div style='color:#ef4444; padding:20px; background:#1a1a1a;'>Chyba při stahování JŘ z Inflow: {e}</div>"
-    
+                
