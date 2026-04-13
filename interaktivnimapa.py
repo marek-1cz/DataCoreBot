@@ -14,14 +14,14 @@ from supabase import create_client
 
 mapa_bp = Blueprint('mapa_bp', __name__)
 
-# --- HTML ŠABLONA PRO STRÁNKU HISTORIE ---
-HTML_HISTORIE = """
+# --- HTML ŠABLONA PRO HLAVNÍ STRÁNKU HISTORIE (SEZNAM BUSŮ) ---
+HTML_HISTORIE_INDEX = """
 <div style="padding: 20px; max-width: 1200px; margin: auto; font-family: sans-serif;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
-        <h2 style="color: #38bdf8; margin: 0; font-size: 24px;"><i class="fas fa-history"></i> Historie Spojů (Černá skříňka)</h2>
+        <h2 style="color: #38bdf8; margin: 0; font-size: 24px;"><i class="fas fa-bus"></i> Seznam sledovaných vozů</h2>
         <div class="field" style="margin-bottom: 0;">
           <p class="control has-icons-left">
-            <input class="input" id="historySearch" type="text" placeholder="Hledat SPZ nebo Linku..." style="background: #1e293b; color: white; border-color: #334155; min-width: 250px;">
+            <input class="input" id="historySearch" type="text" placeholder="Filtrovat linku (např. 490, 735) nebo SPZ..." style="background: #1e293b; color: white; border-color: #334155; min-width: 300px;">
             <span class="icon is-small is-left" style="color: #94a3b8;">
               <i class="fas fa-search"></i>
             </span>
@@ -33,74 +33,207 @@ HTML_HISTORIE = """
         <table class="table is-fullwidth is-hoverable" style="background: transparent; color: #cbd5e1; margin-bottom: 0; min-width: 800px;">
             <thead>
                 <tr style="background: #0f172a;">
-                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Čas záznamu</th>
                     <th style="color: #38bdf8; border-color: #334155; padding: 12px;">SPZ</th>
-                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Linka/Spoj</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Poslední známá Linka</th>
                     <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Poslední cíl</th>
-                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Status</th>
-                    <th style="color: #38bdf8; border-color: #334155; padding: 12px; text-align: center;">Poloha na mapě</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Naposledy viděn</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px; text-align: center;">Akce</th>
                 </tr>
             </thead>
             <tbody id="historyTableBody">
-                <tr><td colspan="6" style="text-align:center; padding: 30px; color: #38bdf8;"><i class="fas fa-spinner fa-spin"></i> Načítám data z databáze...</td></tr>
+                <tr><td colspan="5" style="text-align:center; padding: 30px; color: #38bdf8;"><i class="fas fa-spinner fa-spin"></i> Analyzuji databázi vozů...</td></tr>
             </tbody>
         </table>
     </div>
-    <p style="color: #94a3b8; font-size: 12px; margin-top: 10px;">* Zobrazuje posledních 200 záznamů. Data starší než 30 dní jsou automaticky promazána.</p>
 
     <script>
-        async function loadHistory() {
+        async function loadIndex() {
             try {
-                const response = await fetch('/api/history_data');
+                const response = await fetch('/api/history_latest');
                 const data = await response.json();
                 const tbody = document.getElementById('historyTableBody');
                 tbody.innerHTML = '';
 
                 if (data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px;">Žádné záznamy nebyly nalezeny (nebo chybí Supabase klíče v Koyebu).</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Žádná data v databázi.</td></tr>';
                     return;
                 }
 
+                // Vytáhneme pouze unikátní SPZ (data z DB jdou od nejnovějšího)
+                const uniqueBuses = {};
                 data.forEach(row => {
+                    if (!uniqueBuses[row.spz] && row.spz !== 'Neznámá') {
+                        uniqueBuses[row.spz] = row;
+                    }
+                });
+
+                Object.values(uniqueBuses).forEach(row => {
                     const date = new Date(row.created_at);
                     const timeStr = date.toLocaleDateString('cs-CZ') + ' ' + date.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
+                    const linkaClean = row.linka || '---';
                     
                     const tr = document.createElement('tr');
                     tr.style.borderColor = '#334155';
+                    tr.setAttribute('data-spz', row.spz);
+                    tr.setAttribute('data-linka', linkaClean);
+                    
                     tr.innerHTML = `
-                        <td style="border-color: #334155; padding: 12px; vertical-align: middle;">${timeStr}</td>
-                        <td style="border-color: #334155; padding: 12px; vertical-align: middle;"><span class="tag is-warning" style="background:#f59e0b; color:#0f172a; font-weight:bold;">${row.spz}</span></td>
-                        <td style="border-color: #334155; padding: 12px; vertical-align: middle; font-weight: bold;">${row.linka || '---'}</td>
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle;"><span class="tag is-warning" style="background:#f59e0b; color:#0f172a; font-weight:bold; font-size:14px;">${row.spz}</span></td>
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle; font-weight: bold; color: white;">${linkaClean}</td>
                         <td style="border-color: #334155; padding: 12px; vertical-align: middle;">${row.destination || '---'}</td>
-                        <td style="border-color: #334155; padding: 12px; vertical-align: middle; font-size: 13px;">${row.status}</td>
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle;">${timeStr}</td>
                         <td style="border-color: #334155; padding: 12px; vertical-align: middle; text-align: center;">
-                            <a href="http://maps.google.com/maps?q=${row.last_lat},${row.last_lng}" target="_blank" class="button is-small is-info is-outlined" style="background: transparent; color: #38bdf8; border-color: #38bdf8; text-decoration: none;">
-                                <i class="fas fa-map-marker-alt" style="margin-right: 5px;"></i> Mapa
+                            <a href="/historie/${row.spz}" class="button is-small is-primary">
+                                <i class="fas fa-list" style="margin-right: 5px;"></i> Detail a Historie
                             </a>
                         </td>
                     `;
                     tbody.appendChild(tr);
                 });
-                
-                // Znovu aplikovat filtr, pokud je něco napsané
-                triggerSearch();
             } catch(e) { 
-                document.getElementById('historyTableBody').innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px; color:#ef4444;">Chyba připojení k databázi.</td></tr>';
+                document.getElementById('historyTableBody').innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px; color:#ef4444;">Chyba připojení.</td></tr>';
             }
         }
 
-        function triggerSearch() {
-            const val = document.getElementById('historySearch').value.toLowerCase();
+        // Geniální filtrování (předpony, částečná shoda)
+        document.getElementById('historySearch').addEventListener('input', function(e) {
+            const val = e.target.value.toLowerCase().trim();
             const rows = document.querySelectorAll('#historyTableBody tr');
             rows.forEach(row => {
-                row.style.display = row.innerText.toLowerCase().includes(val) ? '' : 'none';
+                if(!row.hasAttribute('data-spz')) return;
+                const spz = row.getAttribute('data-spz').toLowerCase();
+                const linka = row.getAttribute('data-linka').toLowerCase();
+                
+                const matchSpz = spz.includes(val);
+                const matchLinka = linka.includes(val) || linka.startsWith(val);
+
+                row.style.display = (matchSpz || matchLinka) ? '' : 'none';
             });
+        });
+
+        loadIndex();
+    </script>
+</div>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+"""
+
+# --- HTML ŠABLONA PRO DETAIL KONKRÉTNÍHO AUTOBUSU ---
+HTML_HISTORIE_DETAIL = """
+<div style="padding: 20px; max-width: 1000px; margin: auto; font-family: sans-serif;">
+    <a href="/historie" class="button is-small is-dark" style="margin-bottom: 15px;"><i class="fas fa-arrow-left"></i> Zpět na seznam</a>
+    
+    <div style="background: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #38bdf8; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+        <h2 style="color: white; margin: 0 0 10px 0; font-size: 28px;">Autobus SPZ: <span style="color:#f59e0b;">{{SPZ}}</span></h2>
+        <p style="color: #94a3b8; font-size: 14px; margin-bottom: 15px;">Tato karta obsahuje seskupenou historii linek za posledních 30 dní.</p>
+        <div id="absoluteLastPos"></div>
+    </div>
+
+    <h3 style="color: #38bdf8; margin-bottom: 15px; font-size: 20px;"><i class="fas fa-route"></i> Historie odjetých spojů</h3>
+    <div style="background: #0f172a; border-radius: 10px; border: 1px solid #334155; overflow-x: auto;">
+        <table class="table is-fullwidth" style="background: transparent; color: #cbd5e1; margin-bottom: 0;">
+            <thead>
+                <tr style="background: #1e293b;">
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Den</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Linka / Spoj</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Začátek (První signál)</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Konec (Ztráta / Konečná)</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px; text-align: center;">Poslední Poloha Spoje</th>
+                </tr>
+            </thead>
+            <tbody id="detailTableBody">
+                <tr><td colspan="5" style="text-align:center; padding: 30px; color: #38bdf8;"><i class="fas fa-spinner fa-spin"></i> Stahuji data linky...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        async function loadDetail() {
+            try {
+                const response = await fetch('/api/history_spz/{{SPZ}}');
+                const data = await response.json();
+                const tbody = document.getElementById('detailTableBody');
+                const lastPosDiv = document.getElementById('absoluteLastPos');
+                tbody.innerHTML = '';
+
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Žádná historie nebyla nalezena.</td></tr>';
+                    lastPosDiv.innerHTML = '<span style="color:#ef4444;">Poloha neznámá</span>';
+                    return;
+                }
+
+                // Úplně poslední záznam pro top kartu
+                const newest = data[0];
+                const newestDate = new Date(newest.created_at);
+                lastPosDiv.innerHTML = `
+                    <div style="display:flex; align-items:center; gap: 15px;">
+                        <div style="flex-grow: 1;">
+                            <strong style="color: white;">Poslední známý stav:</strong> ${newest.status} (${newest.linka || 'Bez linky'})<br>
+                            <span style="color: #94a3b8; font-size: 13px;">Zaznamenáno: ${newestDate.toLocaleDateString('cs-CZ')} ${newestDate.toLocaleTimeString('cs-CZ')}</span>
+                        </div>
+                        <a href="http://maps.google.com/maps?q=$${newest.last_lat},${newest.last_lng}" target="_blank" class="button is-info">
+                            <i class="fas fa-map-marker-alt" style="margin-right: 5px;"></i> Aktuální Poloha
+                        </a>
+                    </div>
+                `;
+
+                // SESKUPOVÁNÍ DO TRAS (Od nejstaršího po nejnovější)
+                const chronoData = data.reverse();
+                const trips = [];
+                let currentTrip = null;
+
+                chronoData.forEach(row => {
+                    // Ignorujeme záznamy bez linky pro čistotu spojů
+                    if (!row.linka || row.linka === 'Neznámá') return;
+                    
+                    const rowDate = new Date(row.created_at);
+                    const dayString = rowDate.toLocaleDateString('cs-CZ');
+
+                    if (!currentTrip || currentTrip.linka !== row.linka || currentTrip.day !== dayString) {
+                        if (currentTrip) trips.push(currentTrip);
+                        currentTrip = {
+                            linka: row.linka,
+                            day: dayString,
+                            startTime: rowDate,
+                            endTime: rowDate,
+                            last_lat: row.last_lat,
+                            last_lng: row.last_lng
+                        };
+                    } else {
+                        // Aktualizujeme konec spoje
+                        currentTrip.endTime = rowDate;
+                        currentTrip.last_lat = row.last_lat;
+                        currentTrip.last_lng = row.last_lng;
+                    }
+                });
+                if (currentTrip) trips.push(currentTrip);
+
+                // Zpět od nejnovějšího dolů
+                trips.reverse();
+
+                trips.forEach(trip => {
+                    const startStr = trip.startTime.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
+                    const endStr = trip.endTime.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
+                    
+                    const tr = document.createElement('tr');
+                    tr.style.borderColor = '#334155';
+                    tr.innerHTML = `
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle;">${trip.day}</td>
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle; font-weight: bold; color: white;">${trip.linka}</td>
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle; color: #10b981;">${startStr}</td>
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle; color: #ef4444;">${endStr}</td>
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle; text-align: center;">
+                            <a href="http://maps.google.com/maps?q=$${trip.last_lat},${trip.last_lng}" target="_blank" class="button is-small is-outlined" style="background: transparent; color: #cbd5e1; border-color: #4b5563;">
+                                <i class="fas fa-map" style="margin-right: 5px;"></i> Konec spoje
+                            </a>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch(e) { console.error(e); }
         }
 
-        document.getElementById('historySearch').addEventListener('input', triggerSearch);
-
-        loadHistory();
-        setInterval(loadHistory, 30000); 
+        loadDetail();
     </script>
 </div>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
@@ -111,7 +244,6 @@ HTML_HISTORIE = """
 GLOBAL_BUS_CACHE = {}
 LIVE_BUSES_DATA = []
 
-# Globální CookieJar pro maskování (Stealth Mode proti 400 Error)
 cj = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
 
@@ -125,17 +257,12 @@ def calc_mins_to_departure(dep_time_str, current_time):
         dep_total = dh * 60 + dm
         cur_total = ch * 60 + cm
         diff = dep_total - cur_total
-        
-        if diff < -720: 
-            diff += 1440
-        elif diff > 720:
-            diff -= 1440
-            
+        if diff < -720: diff += 1440
+        elif diff > 720: diff -= 1440
         return diff
     except:
         return None
 
-# Pomocná funkce pro bezpečné získání DB klienta v daném vlákně
 def get_db_client():
     supa_url = os.environ.get("SUPABASE_URL")
     supa_key = os.environ.get("SUPABASE_KEY")
@@ -146,7 +273,6 @@ def get_db_client():
             return None
     return None
 
-# --- NEZÁVISLÉ VLÁKNO PRO BLESKOVÉ STAŽENÍ JŘ ---
 def fetch_tt_bg(bus_id, cached_dict):
     try:
         cb_time = int(time.time() * 1000)
@@ -168,10 +294,10 @@ def fetch_tt_bg(bus_id, cached_dict):
     finally:
         cached_dict["tt_is_fetching"] = False
 
-# --- FUNKCE PRO ZÁPIS DO HISTORIE (SUPABASE) ---
 def log_to_history(db, cached_dict, status_text):
-    if not db or not cached_dict.get("spz") or cached_dict["spz"] == "Neznámá":
-        return
+    # VLAKY DO HISTORIE NEUKLÁDÁME
+    if cached_dict.get("is_train"): return
+    if not db or not cached_dict.get("spz") or cached_dict["spz"] == "Neznámá": return
     
     try:
         now_prague = get_prague_time()
@@ -185,12 +311,12 @@ def log_to_history(db, cached_dict, status_text):
             "created_at": now_prague.isoformat()
         }
         db.table("bus_history").insert(data).execute()
-        print(f"[MAPA-DB] Uložena historie pro {cached_dict['spz']} ({status_text})")
+        print(f"[MAPA-DB] Zapsáno do DB: {cached_dict['spz']} ({status_text})")
     except Exception as e:
-        print(f"[MAPA-DB] Chyba ukládání historie: {e}")
+        pass
 
 def background_map_worker():
-    print("[MAPA] Inteligentní mozek (Stealth + DB Databáze) startuje...", flush=True)
+    print("[MAPA] Inteligentní mozek (Stealth + DB Analytics) startuje...", flush=True)
     url_inflow_base = "https://pvvd.idpk.cz/Ajax/GetPoints" 
     url_arriva = "https://www.arriva.cz/api/graphql" 
     
@@ -207,39 +333,34 @@ def background_map_worker():
         opener.open(urllib.request.Request("https://pvvd.idpk.cz/", headers={'User-Agent': 'Mozilla/5.0'}))
     except: pass
 
-    # Připojení k Supabase
     db_client = get_db_client()
     last_db_cleanup = get_prague_time()
 
     while True:
         now = get_prague_time()
         
-        # Samočistící rutina - 1x denně smaže data starší 30 dnů
+        # Automatické čištění po 30 dnech
         if db_client and (now - last_db_cleanup).total_seconds() > 86400:
             try:
                 thirty_days_ago = (now - timedelta(days=30)).isoformat()
                 db_client.table("bus_history").delete().lt("created_at", thirty_days_ago).execute()
-                print("[MAPA-DB] Automatické pročištění historie starší 30 dnů proběhlo.")
-            except Exception as e:
-                pass
+            except Exception: pass
             last_db_cleanup = now
 
         data_inflow = []
         data_arriva = []
-        
         url_inflow = f"{url_inflow_base}?_={int(time.time() * 1000)}"
 
         try:
             req1 = urllib.request.Request(url_inflow, headers=inflow_headers)
             with urllib.request.urlopen(req1, timeout=5) as r1:
                 data_inflow = json.loads(r1.read().decode())
-        except Exception as e: 
+        except Exception: 
             try:
                 req1_post = urllib.request.Request(url_inflow, data=b"{}", headers=inflow_headers, method='POST')
                 with urllib.request.urlopen(req1_post, timeout=5) as r1_post:
                     data_inflow = json.loads(r1_post.read().decode())
-            except Exception as ex:
-                pass
+            except Exception: pass
 
         try:
             arriva_payload = {
@@ -261,7 +382,7 @@ def background_map_worker():
                     data_arriva = resp2[0].get("data", {}).get("busesCurrentLocations", [])
                 elif isinstance(resp2, dict):
                     data_arriva = resp2.get("data", {}).get("busesCurrentLocations", [])
-        except Exception as e: pass
+        except Exception: pass
 
         current_inflow_ids = set()
 
@@ -274,16 +395,14 @@ def background_map_worker():
                     line = str(bus1.get("text", "")).strip()
                     lat1 = bus1.get("lat", 0)
                     lng1 = bus1.get("lng", 0)
-                    delay = int(bus1.get("delay", 0)) if bus1.get("delay") is not None else 0
+                    delay = int("delay", 0)) if bus1.get("delay") is not None else 0
                     dest1_original = str(bus1.get("finalStopName", "")).strip()
                     traction = str(bus1.get("traction", "BUS")).upper()
                     is_train = int(bus_id) < 0 or traction in ["TRAIN", "UNKNOWN"]
 
                     if bus_id not in GLOBAL_BUS_CACHE:
-                        # NOVÝ AUTOBUS! Zkusíme najít "Ducha" ze stejné GPS pozice
                         ghost_spz = None
                         ghost_locked = False
-                        
                         for gid, g_cached in list(GLOBAL_BUS_CACHE.items()):
                             if g_cached.get("is_offline") and g_cached.get("spz"):
                                 g_dist = math.hypot(lat1 - g_cached["lat"], lng1 - g_cached["lng"])
@@ -301,7 +420,7 @@ def background_map_worker():
                             "finished_at": None, "is_train": is_train,
                             "raw_delay": delay, "first_dep_time": None, "tt_last_fetch": None,
                             "tt_is_fetching": False, "is_offline": False,
-                            "db_trip_logged": False, "db_offline_logged": False
+                            "db_trip_logged": False, "db_offline_logged": False, "db_start_logged": False
                         }
                     else:
                         c = GLOBAL_BUS_CACHE[bus_id]
@@ -317,6 +436,7 @@ def background_map_worker():
                             c["finished_at"] = None
                             c["first_dep_time"] = None 
                             c["db_trip_logged"] = False 
+                            c["db_start_logged"] = False # Nový JŘ = nový zápis do DB při startu
                             if dist_moved < 0.005: 
                                 c["estimated"] = True
                                 c["last_moved"] = now
@@ -348,7 +468,6 @@ def background_map_worker():
         tt_fetches_this_tick = 0 
 
         for bus_id, cached in list(GLOBAL_BUS_CACHE.items()):
-            # A) OFFLINE BUSY (DUCHOVÉ)
             if bus_id not in current_inflow_ids:
                 offline_mins = (now - cached["last_seen"]).total_seconds() / 60.0
                 if offline_mins > 720: 
@@ -356,7 +475,6 @@ def background_map_worker():
                     continue
                 else:
                     cached["is_offline"] = True
-                    # Zápis do DB
                     if not cached.get("db_offline_logged"):
                         log_to_history(db_client, cached, "Ztráta signálu / Odstaven")
                         cached["db_offline_logged"] = True
@@ -369,7 +487,6 @@ def background_map_worker():
                         cached["color_class"] = "bg-gray"
                         if offline_mins > 60: cached["spz_locked"] = False
             else:
-                # B) ONLINE BUSY
                 lat1, lng1 = cached["lat"], cached["lng"]
                 line, dest1_original = cached["line"], cached["destination"]
                 dest1_lower = dest1_original.lower()
@@ -436,6 +553,11 @@ def background_map_worker():
                         is_before_departure = True
                         time_to_dep = diff
 
+                # ZÁPIS ZAČÁTKU TRASY DO DB
+                if not is_before_departure and is_moving and not cached.get("db_start_logged") and not is_train:
+                    log_to_history(db_client, cached, "Začátek trasy")
+                    cached["db_start_logged"] = True
+
                 is_buggy_terminus = (delay_val <= -10000)
                 is_missing_arriva_terminus = (not is_train and cached["spz"] and not found_in_arriva and delay_val < -2 and not is_before_departure)
 
@@ -445,7 +567,6 @@ def background_map_worker():
                 elif found_in_arriva and delay_val >= -2:
                     cached["finished_at"] = None
 
-                # ROZHODOVACÍ STROM
                 if is_before_departure:
                     cached["finished_at"] = None 
                     if time_to_dep <= 240:
@@ -477,7 +598,6 @@ def background_map_worker():
                 elif cached["finished_at"] is not None:
                     finished_mins = (now - cached["finished_at"]).total_seconds() / 60.0
                     
-                    # ZÁPIS DO DATABÁZE PŘI DOKONČENÍ LINKY
                     if finished_mins > 1 and not cached.get("db_trip_logged"):
                         log_to_history(db_client, cached, "Konečná zastávka (Dokončeno)")
                         cached["db_trip_logged"] = True
@@ -526,10 +646,10 @@ def background_map_worker():
 def start_map_background_task():
     threading.Thread(target=background_map_worker, daemon=True).start()
 
-# --- API ROUTY PRO KLIENTA ---
+# --- ROUTY PRO HISTORII ---
 
 @mapa_bp.route('/historie')
-def stranka_historie():
+def stranka_historie_index():
     return render_template_string(f"""
     <!DOCTYPE html>
     <html style="background: #0f172a;">
@@ -539,21 +659,47 @@ def stranka_historie():
         <meta name="viewport" content="width=device-width, initial-scale=1">
     </head>
     <body style="background: #0f172a; color: white;">
-        {HTML_HISTORIE}
+        {HTML_HISTORIE_INDEX}
     </body>
     </html>
     """)
 
-@mapa_bp.route('/api/history_data')
-def api_history_data():
+@mapa_bp.route('/historie/<spz>')
+def stranka_historie_detail(spz):
+    html_filled = HTML_HISTORIE_DETAIL.replace("{{SPZ}}", spz)
+    return render_template_string(f"""
+    <!DOCTYPE html>
+    <html style="background: #0f172a;">
+    <head>
+        <title>Detail Vozu {spz} | OIS IDPK</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+    </head>
+    <body style="background: #0f172a; color: white;">
+        {html_filled}
+    </body>
+    </html>
+    """)
+
+@mapa_bp.route('/api/history_latest')
+def api_history_latest():
     db = get_db_client()
-    if not db:
-        return jsonify([])
+    if not db: return jsonify([])
     try:
-        response = db.table("bus_history").select("*").order("created_at", desc=True).limit(200).execute()
-        return jsonify(response.data)
-    except:
-        return jsonify([])
+        res = db.table("bus_history").select("*").order("created_at", desc=True).limit(3000).execute()
+        return jsonify(res.data)
+    except: return jsonify([])
+
+@mapa_bp.route('/api/history_spz/<spz>')
+def api_history_spz(spz):
+    db = get_db_client()
+    if not db: return jsonify([])
+    try:
+        res = db.table("bus_history").select("*").eq("spz", spz).order("created_at", desc=True).limit(2000).execute()
+        return jsonify(res.data)
+    except: return jsonify([])
+
+# --- ROUTY PRO MAPU ---
 
 @mapa_bp.route('/api/live_buses', methods=['GET'])
 def api_live_buses():
