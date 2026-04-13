@@ -10,7 +10,14 @@ from zoneinfo import ZoneInfo
 import math
 import re
 import http.cookiejar
-from supabase import create_client
+
+# Neprůstřelný import Supabase - i kdyby chyběl modul, Koyeb už nespadne!
+try:
+    from supabase import create_client
+    HAS_SUPABASE = True
+except ImportError:
+    HAS_SUPABASE = False
+    print("[MAPA-WARN] Modul 'supabase' není dostupný! Mapa poběží, ale historie se neuloží.")
 
 mapa_bp = Blueprint('mapa_bp', __name__)
 
@@ -55,7 +62,7 @@ HTML_HISTORIE_INDEX = """
                 tbody.innerHTML = '';
 
                 if (data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Žádná data v databázi.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Žádná data v databázi. Zkontrolujte nastavení.</td></tr>';
                     return;
                 }
 
@@ -171,7 +178,7 @@ HTML_HISTORIE_DETAIL = """
                             <strong style="color: white;">Poslední známý stav:</strong> ${newest.status} (${newest.linka || 'Bez linky'})<br>
                             <span style="color: #94a3b8; font-size: 13px;">Zaznamenáno: ${newestDate.toLocaleDateString('cs-CZ')} ${newestDate.toLocaleTimeString('cs-CZ')}</span>
                         </div>
-                        <a href="http://maps.google.com/maps?q=$${newest.last_lat},${newest.last_lng}" target="_blank" class="button is-info">
+                        <a href="https://www.google.com/maps/search/?api=1&query=${newest.last_lat},${newest.last_lng}" target="_blank" class="button is-info">
                             <i class="fas fa-map-marker-alt" style="margin-right: 5px;"></i> Aktuální Poloha
                         </a>
                     </div>
@@ -183,7 +190,7 @@ HTML_HISTORIE_DETAIL = """
                 let currentTrip = null;
 
                 chronoData.forEach(row => {
-                    // Ignorujeme záznamy bez linky pro čistotu spojů
+                    // Ignorujeme záznamy bez linky
                     if (!row.linka || row.linka === 'Neznámá') return;
                     
                     const rowDate = new Date(row.created_at);
@@ -223,7 +230,7 @@ HTML_HISTORIE_DETAIL = """
                         <td style="border-color: #334155; padding: 12px; vertical-align: middle; color: #10b981;">${startStr}</td>
                         <td style="border-color: #334155; padding: 12px; vertical-align: middle; color: #ef4444;">${endStr}</td>
                         <td style="border-color: #334155; padding: 12px; vertical-align: middle; text-align: center;">
-                            <a href="http://maps.google.com/maps?q=$${trip.last_lat},${trip.last_lng}" target="_blank" class="button is-small is-outlined" style="background: transparent; color: #cbd5e1; border-color: #4b5563;">
+                            <a href="https://www.google.com/maps/search/?api=1&query=${trip.last_lat},${trip.last_lng}" target="_blank" class="button is-small is-outlined" style="background: transparent; color: #cbd5e1; border-color: #4b5563;">
                                 <i class="fas fa-map" style="margin-right: 5px;"></i> Konec spoje
                             </a>
                         </td>
@@ -240,7 +247,7 @@ HTML_HISTORIE_DETAIL = """
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
 """
 
-# Globální paměť běžící 24/7 (pamatuje si busy až 12 hodin po odpojení)
+# Globální paměť běžící 24/7
 GLOBAL_BUS_CACHE = {}
 LIVE_BUSES_DATA = []
 
@@ -264,6 +271,8 @@ def calc_mins_to_departure(dep_time_str, current_time):
         return None
 
 def get_db_client():
+    if not HAS_SUPABASE:
+        return None
     supa_url = os.environ.get("SUPABASE_URL")
     supa_key = os.environ.get("SUPABASE_KEY")
     if supa_url and supa_key:
@@ -278,7 +287,7 @@ def fetch_tt_bg(bus_id, cached_dict):
         cb_time = int(time.time() * 1000)
         tt_url = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb_time}"
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
             'X-Requested-With': 'XMLHttpRequest',
             'Referer': 'https://pvvd.idpk.cz/',
             'Cache-Control': 'no-cache'
@@ -295,7 +304,6 @@ def fetch_tt_bg(bus_id, cached_dict):
         cached_dict["tt_is_fetching"] = False
 
 def log_to_history(db, cached_dict, status_text):
-    # VLAKY DO HISTORIE NEUKLÁDÁME
     if cached_dict.get("is_train"): return
     if not db or not cached_dict.get("spz") or cached_dict["spz"] == "Neznámá": return
     
@@ -312,7 +320,7 @@ def log_to_history(db, cached_dict, status_text):
         }
         db.table("bus_history").insert(data).execute()
         print(f"[MAPA-DB] Zapsáno do DB: {cached_dict['spz']} ({status_text})")
-    except Exception as e:
+    except Exception:
         pass
 
 def background_map_worker():
@@ -321,7 +329,7 @@ def background_map_worker():
     url_arriva = "https://www.arriva.cz/api/graphql" 
     
     inflow_headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
         'X-Requested-With': 'XMLHttpRequest',
         'Referer': 'https://pvvd.idpk.cz/',
@@ -395,7 +403,7 @@ def background_map_worker():
                     line = str(bus1.get("text", "")).strip()
                     lat1 = bus1.get("lat", 0)
                     lng1 = bus1.get("lng", 0)
-                    delay = int("delay", 0)) if bus1.get("delay") is not None else 0
+                    delay = int(bus1.get("delay", 0)) if bus1.get("delay") is not None else 0
                     dest1_original = str(bus1.get("finalStopName", "")).strip()
                     traction = str(bus1.get("traction", "BUS")).upper()
                     is_train = int(bus_id) < 0 or traction in ["TRAIN", "UNKNOWN"]
@@ -436,7 +444,7 @@ def background_map_worker():
                             c["finished_at"] = None
                             c["first_dep_time"] = None 
                             c["db_trip_logged"] = False 
-                            c["db_start_logged"] = False # Nový JŘ = nový zápis do DB při startu
+                            c["db_start_logged"] = False 
                             if dist_moved < 0.005: 
                                 c["estimated"] = True
                                 c["last_moved"] = now
@@ -598,6 +606,7 @@ def background_map_worker():
                 elif cached["finished_at"] is not None:
                     finished_mins = (now - cached["finished_at"]).total_seconds() / 60.0
                     
+                    # ZÁPIS DO DATABÁZE PŘI DOKONČENÍ LINKY
                     if finished_mins > 1 and not cached.get("db_trip_logged"):
                         log_to_history(db_client, cached, "Konečná zastávka (Dokončeno)")
                         cached["db_trip_logged"] = True
@@ -712,7 +721,7 @@ def api_bus_detail(bus_id):
     url_tt = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb}"
     
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         'X-Requested-With': 'XMLHttpRequest',
         'Referer': 'https://pvvd.idpk.cz/',
         'Cache-Control': 'no-cache'
