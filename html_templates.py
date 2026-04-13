@@ -2308,3 +2308,84 @@ HTML_MAPA = """
     </script>
 </div>
 """
+
+
+HTML_HISTORIE = """
+<div style="padding: 20px; max-width: 1200px; margin: auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="color: var(--blue-main); margin: 0;"><i class="fas fa-history"></i> Historie Spojů (Černá skříňka)</h2>
+        <div class="field">
+          <p class="control has-icons-left">
+            <input class="input" id="historySearch" type="text" placeholder="Hledat SPZ nebo Linku..." style="background: #1e293b; color: white; border-color: #334155;">
+            <span class="icon is-small is-left">
+              <i class="fas fa-search"></i>
+            </span>
+          </p>
+        </div>
+    </div>
+
+    <div style="background: #1e293b; border-radius: 10px; border: 1px solid #334155; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+        <table class="table is-fullwidth is-hoverable" style="background: transparent; color: #cbd5e1; margin-bottom: 0;">
+            <thead>
+                <tr style="background: #0f172a;">
+                    <th style="color: #38bdf8; border-color: #334155;">Čas (IDPK)</th>
+                    <th style="color: #38bdf8; border-color: #334155;">SPZ</th>
+                    <th style="color: #38bdf8; border-color: #334155;">Linka/Spoj</th>
+                    <th style="color: #38bdf8; border-color: #334155;">Poslední cíl</th>
+                    <th style="color: #38bdf8; border-color: #334155;">Status</th>
+                    <th style="color: #38bdf8; border-color: #334155; text-align: center;">Poloha</th>
+                </tr>
+            </thead>
+            <tbody id="historyTableBody">
+                </tbody>
+        </table>
+    </div>
+    <p style="color: #94a3b8; font-size: 12px; margin-top: 10px;">* Zobrazuje posledních 200 záznamů. Data starší než 30 dní jsou automaticky mazána.</p>
+
+    <script>
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/history_data');
+                const data = await response.json();
+                const tbody = document.getElementById('historyTableBody');
+                tbody.innerHTML = '';
+
+                data.forEach(row => {
+                    const date = new Date(row.created_at);
+                    const timeStr = date.toLocaleDateString('cs-CZ') + ' ' + date.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
+                    
+                    const tr = document.createElement('tr');
+                    tr.style.borderColor = '#334155';
+                    tr.innerHTML = `
+                        <td style="border-color: #334155; font-weight: bold;">${timeStr}</td>
+                        <td style="border-color: #334155;"><span class="tag is-warning" style="background:#f59e0b; color:#0f172a; font-weight:bold;">${row.spz}</span></td>
+                        <td style="border-color: #334155;">${row.linka || '---'}</td>
+                        <td style="border-color: #334155;">${row.destination || '---'}</td>
+                        <td style="border-color: #334155; font-size: 13px;">${row.status}</td>
+                        <td style="border-color: #334155; text-align: center;">
+                            <a href="https://www.google.com/maps?q=${row.last_lat},${row.last_lng}" target="_blank" class="button is-small is-info is-outlined">
+                                <i class="fas fa-map-marker-alt"></i>&nbsp;Mapa
+                            </a>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch(e) { console.error('Chyba načítání historie:', e); }
+        }
+
+        // Filtrování v tabulce
+        document.getElementById('historySearch').addEventListener('input', function(e) {
+            const val = e.target.value.toLowerCase();
+            const rows = document.querySelectorAll('#historyTableBody tr');
+            rows.forEach(row => {
+                row.style.display = row.innerText.toLowerCase().includes(val) ? '' : 'none';
+            });
+        });
+
+        loadHistory();
+        setInterval(loadHistory, 30000); // Obnovit každých 30 sekund
+    </script>
+</div>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+"""
