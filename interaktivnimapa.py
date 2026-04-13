@@ -11,7 +11,6 @@ import math
 import re
 import http.cookiejar
 
-# Neprůstřelný import Supabase - i kdyby chyběl modul, Koyeb už nespadne!
 try:
     from supabase import create_client
     HAS_SUPABASE = True
@@ -21,7 +20,6 @@ except ImportError:
 
 mapa_bp = Blueprint('mapa_bp', __name__)
 
-# --- HTML ŠABLONA PRO HLAVNÍ STRÁNKU HISTORIE (SEZNAM BUSŮ) ---
 HTML_HISTORIE_INDEX = """
 <div style="padding: 20px; max-width: 1200px; margin: auto; font-family: sans-serif;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
@@ -62,11 +60,10 @@ HTML_HISTORIE_INDEX = """
                 tbody.innerHTML = '';
 
                 if (data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Žádná data v databázi. Zkontrolujte nastavení.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Žádná data v databázi. Zkontrolujte Supabase.</td></tr>';
                     return;
                 }
 
-                // Vytáhneme pouze unikátní SPZ (data z DB jdou od nejnovějšího)
                 const uniqueBuses = {};
                 data.forEach(row => {
                     if (!uniqueBuses[row.spz] && row.spz !== 'Neznámá') {
@@ -102,7 +99,6 @@ HTML_HISTORIE_INDEX = """
             }
         }
 
-        // Geniální filtrování (předpony, částečná shoda)
         document.getElementById('historySearch').addEventListener('input', function(e) {
             const val = e.target.value.toLowerCase().trim();
             const rows = document.querySelectorAll('#historyTableBody tr');
@@ -125,7 +121,6 @@ HTML_HISTORIE_INDEX = """
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
 """
 
-# --- HTML ŠABLONA PRO DETAIL KONKRÉTNÍHO AUTOBUSU ---
 HTML_HISTORIE_DETAIL = """
 <div style="padding: 20px; max-width: 1000px; margin: auto; font-family: sans-serif;">
     <a href="/historie" class="button is-small is-dark" style="margin-bottom: 15px;"><i class="fas fa-arrow-left"></i> Zpět na seznam</a>
@@ -145,7 +140,7 @@ HTML_HISTORIE_DETAIL = """
                     <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Linka / Spoj</th>
                     <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Začátek (První signál)</th>
                     <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Konec (Ztráta / Konečná)</th>
-                    <th style="color: #38bdf8; border-color: #334155; padding: 12px; text-align: center;">Poslední Poloha Spoje</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px; text-align: center;">Akce</th>
                 </tr>
             </thead>
             <tbody id="detailTableBody">
@@ -169,7 +164,6 @@ HTML_HISTORIE_DETAIL = """
                     return;
                 }
 
-                // Úplně poslední záznam pro top kartu
                 const newest = data[0];
                 const newestDate = new Date(newest.created_at);
                 lastPosDiv.innerHTML = `
@@ -178,19 +172,17 @@ HTML_HISTORIE_DETAIL = """
                             <strong style="color: white;">Poslední známý stav:</strong> ${newest.status} (${newest.linka || 'Bez linky'})<br>
                             <span style="color: #94a3b8; font-size: 13px;">Zaznamenáno: ${newestDate.toLocaleDateString('cs-CZ')} ${newestDate.toLocaleTimeString('cs-CZ')}</span>
                         </div>
-                        <a href="https://www.google.com/maps/search/?api=1&query=${newest.last_lat},${newest.last_lng}" target="_blank" class="button is-info">
+                        <a href="/mapa#${newest.last_lat},${newest.last_lng}" class="button is-info">
                             <i class="fas fa-map-marker-alt" style="margin-right: 5px;"></i> Aktuální Poloha
                         </a>
                     </div>
                 `;
 
-                // SESKUPOVÁNÍ DO TRAS (Od nejstaršího po nejnovější)
                 const chronoData = data.reverse();
                 const trips = [];
                 let currentTrip = null;
 
                 chronoData.forEach(row => {
-                    // Ignorujeme záznamy bez linky
                     if (!row.linka || row.linka === 'Neznámá') return;
                     
                     const rowDate = new Date(row.created_at);
@@ -204,23 +196,25 @@ HTML_HISTORIE_DETAIL = """
                             startTime: rowDate,
                             endTime: rowDate,
                             last_lat: row.last_lat,
-                            last_lng: row.last_lng
+                            last_lng: row.last_lng,
+                            last_status: row.status
                         };
                     } else {
-                        // Aktualizujeme konec spoje
                         currentTrip.endTime = rowDate;
                         currentTrip.last_lat = row.last_lat;
                         currentTrip.last_lng = row.last_lng;
+                        currentTrip.last_status = row.status;
                     }
                 });
                 if (currentTrip) trips.push(currentTrip);
 
-                // Zpět od nejnovějšího dolů
                 trips.reverse();
 
                 trips.forEach(trip => {
                     const startStr = trip.startTime.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
-                    const endStr = trip.endTime.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
+                    
+                    const isCompleted = trip.last_status.includes('Konečná') || trip.last_status.includes('Odstaven') || trip.last_status.includes('Ztráta');
+                    const endStr = isCompleted ? trip.endTime.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'}) : '<span style="color:#eab308; font-weight:bold;">Aktivní (Nedokončena)</span>';
                     
                     const tr = document.createElement('tr');
                     tr.style.borderColor = '#334155';
@@ -230,8 +224,8 @@ HTML_HISTORIE_DETAIL = """
                         <td style="border-color: #334155; padding: 12px; vertical-align: middle; color: #10b981;">${startStr}</td>
                         <td style="border-color: #334155; padding: 12px; vertical-align: middle; color: #ef4444;">${endStr}</td>
                         <td style="border-color: #334155; padding: 12px; vertical-align: middle; text-align: center;">
-                            <a href="https://www.google.com/maps/search/?api=1&query=${trip.last_lat},${trip.last_lng}" target="_blank" class="button is-small is-outlined" style="background: transparent; color: #cbd5e1; border-color: #4b5563;">
-                                <i class="fas fa-map" style="margin-right: 5px;"></i> Konec spoje
+                            <a href="/mapa#${trip.last_lat},${trip.last_lng}" class="button is-small is-outlined" style="background: transparent; color: #cbd5e1; border-color: #4b5563;">
+                                <i class="fas fa-crosshairs" style="margin-right: 5px;"></i> Mapa
                             </a>
                         </td>
                     `;
@@ -247,7 +241,182 @@ HTML_HISTORIE_DETAIL = """
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
 """
 
-# Globální paměť běžící 24/7
+HTML_MAPA = """
+<div style="padding: 20px;">
+    <h2 style="color: var(--blue-main); margin-bottom: 20px;"><i class="fas fa-map-marked-alt"></i> Interaktivní Mapa Spojů</h2>
+    <div id="map" style="width: 100%; height: 75vh; border-radius: 10px; border: 2px solid #334155; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1;"></div>
+    
+    <div id="timetable-modal" class="modal" style="z-index: 9999;">
+      <div class="modal-background" onclick="document.getElementById('timetable-modal').classList.remove('is-active')"></div>
+      <div class="modal-content" style="background: #0f172a; border-radius: 8px; padding: 20px; max-width: 700px; width: 95%; border: 1px solid #38bdf8;">
+        <div id="timetable-content" style="color: white; overflow-x: auto;">Načítám detail spoje...</div>
+      </div>
+      <button class="modal-close is-large" aria-label="close" onclick="document.getElementById('timetable-modal').classList.remove('is-active')"></button>
+    </div>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        .bus-marker { border-radius: 50%; border: 2px solid white; text-align: center; color: white; font-weight: bold; font-size: 10px; line-height: 20px; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+        .train-marker { border-radius: 4px; border: 2px solid white; text-align: center; color: white; font-weight: bold; font-size: 10px; line-height: 20px; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+        
+        .bg-green { background-color: #10b981; } 
+        .bg-red { background-color: #ef4444; }   
+        .bg-blue { background-color: #3b82f6; } 
+        .bg-darkblue { background-color: #1e3a8a; }
+        .bg-gray { background-color: #64748b; border-color: #475569; color: #cbd5e1;} 
+        .bg-purple { background-color: #a855f7; }
+        .bg-yellow { background-color: #eab308; color: #1e293b; }
+        
+        .dark-popup .leaflet-popup-content-wrapper { background: #1e293b; color: white; border: 1px solid #334155; padding: 0; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); }
+        .dark-popup .leaflet-popup-tip { background: #1e293b; border-bottom: 1px solid #334155; border-right: 1px solid #334155; }
+        .dark-popup .leaflet-popup-content { margin: 0; width: 270px !important; }
+        
+        .popup-header { background: #0f172a; padding: 12px 15px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+        .popup-header-title { font-weight: bold; color: #38bdf8; font-size: 16px; margin: 0; }
+        .popup-body { padding: 15px; font-size: 13px; line-height: 1.6; }
+        .popup-row { display: flex; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px dashed #334155; padding-bottom: 4px; }
+        .popup-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .popup-label { color: #94a3b8; font-weight: 600; }
+        .popup-value { font-weight: bold; text-align: right; max-width: 60%; word-wrap: break-word; }
+        .badge-spz { background: #f59e0b; color: #0f172a; padding: 2px 6px; border-radius: 4px; font-size: 12px; border: 1px solid #d97706;}
+        .btn-timetable { background: #38bdf8; color: #0f172a; border: none; padding: 10px; width: 100%; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 10px; display: block; text-align: center; }
+        .btn-timetable:hover { background: #0284c7; color: white; }
+    </style>
+
+    <script>
+        var defaultLat = 49.7384;
+        var defaultLng = 13.3736;
+        var defaultZoom = 12;
+
+        if(window.location.hash) {
+            var hashParts = window.location.hash.replace('#', '').split(',');
+            if(hashParts.length === 2) {
+                defaultLat = parseFloat(hashParts[0]);
+                defaultLng = parseFloat(hashParts[1]);
+                defaultZoom = 16;
+            }
+        }
+
+        var map = L.map('map').setView([defaultLat, defaultLng], defaultZoom);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+        var markersLayer = L.layerGroup().addTo(map);
+
+        if(window.location.hash && hashParts.length === 2) {
+            L.circleMarker([defaultLat, defaultLng], {radius: 30, color: '#38bdf8', weight: 3, opacity: 0.8, fillOpacity: 0.2}).addTo(map);
+        }
+
+        async function showTimetable(busId) {
+            let modal = document.getElementById('timetable-modal');
+            let content = document.getElementById('timetable-content');
+            modal.classList.add('is-active');
+            content.innerHTML = "<div class='has-text-centered' style='padding:40px;'><i class='fas fa-circle-notch fa-spin fa-2x' style='color:#38bdf8; margin-bottom: 15px;'></i><p style='color:#38bdf8; font-weight:bold;'>Stahuji Jízdní řád z Inflow...</p></div>";
+            
+            try {
+                let response = await fetch('/api/bus_detail/' + busId);
+                content.innerHTML = await response.text();
+            } catch(e) { content.innerHTML = "<p style='color:#ef4444;padding:20px;text-align:center;'>Chyba spojení.</p>"; }
+        }
+
+        async function fetchBuses() {
+            try {
+                let response = await fetch('/api/live_buses');
+                let data = await response.json();
+                if(data.status === "success") {
+                    markersLayer.clearLayers();
+                    data.buses.forEach(bus => {
+                        if(bus.lat && bus.lng) {
+                            let markerColor = bus.color_class; 
+                            let delayText = "";
+                            let delayVal = parseInt(bus.delay); 
+
+                            if (markerColor === "bg-gray") {
+                                if (bus.status.includes(">4h")) {
+                                    let aheadMin = Math.abs(delayVal);
+                                    let aheadH = Math.floor(aheadMin / 60);
+                                    let aheadM = aheadMin % 60;
+                                    delayText = `<span style="color:#94a3b8;">Odjezd za ${aheadH}h ${aheadM}m</span>`;
+                                } else {
+                                    delayText = `<span style="color:#94a3b8;">N/A</span>`;
+                                }
+                            } else if (markerColor === "bg-yellow") {
+                                delayText = `<span style="color:#eab308;">Mimo linku</span>`;
+                            } else if (markerColor === "bg-purple") {
+                                delayText = `<span style="color:#a855f7;">Konečná zastávka</span>`;
+                            } else if (markerColor === "bg-blue") {
+                                let aheadMin = Math.abs(delayVal);
+                                let aheadH = Math.floor(aheadMin / 60);
+                                let aheadM = aheadMin % 60;
+                                let timeStr = aheadH > 0 ? `${aheadH}h ${aheadM}min` : `${aheadM} min`;
+                                
+                                let depDate = new Date(Date.now() + aheadMin * 60000); 
+                                let depTime = depDate.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
+                                delayText = `<span style="color:#3b82f6;">Odjezd za ${timeStr}<br><small style="color:#94a3b8;">(${depTime})</small></span>`;
+                            } else if (markerColor === "bg-darkblue") {
+                                let aheadMin = Math.abs(delayVal);
+                                delayText = `<span style="color:#60a5fa;">Náskok ${aheadMin} min</span>`; 
+                            } else if (delayVal >= 5) {
+                                delayText = `<span style="color:#ef4444;">Zpoždění ${delayVal} min</span>`;
+                            } else {
+                                delayText = `<span style="color:#10b981;">+${delayVal} min</span>`;
+                            }
+
+                            let shape = bus.is_train ? 'train-marker' : 'bus-marker';
+                            let icon = L.divIcon({ className: shape + ' ' + markerColor, iconSize: [24, 24] });
+                            let marker = L.marker([bus.lat, bus.lng], {icon: icon});
+                            
+                            let spzHtml = "";
+                            if (!bus.is_train) {
+                                let spzDisplay = bus.spz;
+                                if (bus.estimated_spz && bus.spz !== "Neznámá") spzDisplay = `Odhad (${bus.spz})`;
+                                spzHtml = `<div class="popup-row"><span class="popup-label">SPZ:</span><span class="popup-value badge-spz">${spzDisplay}</span></div>`;
+                            }
+                            
+                            let statusColor = "#10b981"; 
+                            if (bus.status.includes("Stojí")) statusColor = "#ef4444"; 
+                            else if (bus.status.includes("Koneč")) statusColor = "#a855f7"; 
+                            else if (bus.status.includes("Začátek") || bus.status.includes("Čeká")) statusColor = "#3b82f6"; 
+                            else if (bus.status.includes("Odstaven") || bus.status.includes("N/A") || bus.status.includes("signál")) statusColor = "#94a3b8"; 
+                            else if (bus.status.includes("Manipulační")) statusColor = "#eab308"; 
+                            else if (bus.status.includes("Náskok") || bus.status.includes("Vyčkává")) statusColor = "#60a5fa"; 
+                            
+                            let statusHtml = `<div class="popup-row"><span class="popup-label">Status:</span><span class="popup-value" style="color:${statusColor};">${bus.status}</span></div>`;
+                            let updatedHtml = `<div class="popup-row"><span class="popup-label">Poslední pohyb:</span><span class="popup-value" style="color:#94a3b8;">${bus.last_updated}</span></div>`;
+                            
+                            let popupHTML = `
+                                <div class="popup-header">
+                                    <h3 class="popup-header-title"><i class="${bus.is_train ? 'fas fa-train' : 'fas fa-bus'}"></i> Linka ${bus.line}</h3>
+                                </div>
+                                <div class="popup-body">
+                                    <div class="popup-row"><span class="popup-label">Cíl:</span><span class="popup-value" style="color:white;">${bus.destination || "Neznámý"}</span></div>
+                                    ${spzHtml}
+                                    ${statusHtml}
+                                    ${updatedHtml}
+                                    <div class="popup-row" style="border:none; margin-top:5px;"><span class="popup-label">JŘ:</span><span class="popup-value">${delayText}</span></div>
+                                    
+                                    <button class="btn-timetable" onclick="showTimetable('${bus.id}')">
+                                        <i class="fas fa-list-alt"></i> Zobrazit Jízdní řád
+                                    </button>
+                                </div>
+                            `;
+                            
+                            marker.bindPopup(popupHTML, {className: 'dark-popup'});
+                            markersLayer.addLayer(marker);
+                        }
+                    });
+                }
+            } catch(e) { console.error(e); }
+        }
+        
+        fetchBuses();
+        setInterval(fetchBuses, 10000);
+    </script>
+</div>
+"""
+
 GLOBAL_BUS_CACHE = {}
 LIVE_BUSES_DATA = []
 
@@ -308,15 +477,13 @@ def log_to_history(db, cached_dict, status_text):
     if not db or not cached_dict.get("spz") or cached_dict["spz"] == "Neznámá": return
     
     try:
-        now_prague = get_prague_time()
         data = {
             "spz": cached_dict["spz"],
             "linka": cached_dict.get("line", "Neznámá"),
             "destination": cached_dict.get("destination", "Neznámý cíl"),
             "last_lat": cached_dict.get("lat"),
             "last_lng": cached_dict.get("lng"),
-            "status": status_text,
-            "created_at": now_prague.isoformat()
+            "status": status_text
         }
         db.table("bus_history").insert(data).execute()
         print(f"[MAPA-DB] Zapsáno do DB: {cached_dict['spz']} ({status_text})")
@@ -347,7 +514,6 @@ def background_map_worker():
     while True:
         now = get_prague_time()
         
-        # Automatické čištění po 30 dnech
         if db_client and (now - last_db_cleanup).total_seconds() > 86400:
             try:
                 thirty_days_ago = (now - timedelta(days=30)).isoformat()
@@ -414,7 +580,7 @@ def background_map_worker():
                         for gid, g_cached in list(GLOBAL_BUS_CACHE.items()):
                             if g_cached.get("is_offline") and g_cached.get("spz"):
                                 g_dist = math.hypot(lat1 - g_cached["lat"], lng1 - g_cached["lng"])
-                                if g_dist < 0.0005: 
+                                if g_dist < 0.001:  
                                     ghost_spz = g_cached["spz"]
                                     ghost_locked = True
                                     del GLOBAL_BUS_CACHE[gid] 
@@ -438,7 +604,8 @@ def background_map_worker():
                         c["is_train"] = is_train
                         
                         dist_moved = math.hypot(lat1 - c["lat"], lng1 - c["lng"])
-                        if c["line"] != line or c["destination"] != dest1_original:
+                        
+                        if c["line"] != line:
                             c["line"] = line
                             c["destination"] = dest1_original
                             c["finished_at"] = None
@@ -448,6 +615,8 @@ def background_map_worker():
                             if dist_moved < 0.005: 
                                 c["estimated"] = True
                                 c["last_moved"] = now
+                        elif c["destination"] != dest1_original:
+                            c["destination"] = dest1_original
                         
                         if dist_moved > 0.0001:
                             c["last_moved"] = now
@@ -524,8 +693,8 @@ def background_map_worker():
                                 found_in_arriva = True
                                 break
 
-                    if not best_spz and inactive_mins > 1:
-                        ultra_close = [b for b in data_arriva if math.hypot(lat1 - b.get("latitude",0), lng1 - b.get("longitude",0)) < 0.0005]
+                    if not best_spz:
+                        ultra_close = [b for b in data_arriva if math.hypot(lat1 - b.get("latitude",0), lng1 - b.get("longitude",0)) < 0.001]
                         valid_ultra = [b for b in ultra_close if b.get("spz", "").strip() not in assigned_spzs and b.get("spz", "").strip() != "Neznámá"]
                         if len(valid_ultra) == 1:
                             best_spz = valid_ultra[0].get("spz", "").strip()
@@ -561,7 +730,6 @@ def background_map_worker():
                         is_before_departure = True
                         time_to_dep = diff
 
-                # ZÁPIS ZAČÁTKU TRASY DO DB
                 if not is_before_departure and is_moving and not cached.get("db_start_logged") and not is_train:
                     log_to_history(db_client, cached, "Začátek trasy")
                     cached["db_start_logged"] = True
@@ -606,7 +774,6 @@ def background_map_worker():
                 elif cached["finished_at"] is not None:
                     finished_mins = (now - cached["finished_at"]).total_seconds() / 60.0
                     
-                    # ZÁPIS DO DATABÁZE PŘI DOKONČENÍ LINKY
                     if finished_mins > 1 and not cached.get("db_trip_logged"):
                         log_to_history(db_client, cached, "Konečná zastávka (Dokončeno)")
                         cached["db_trip_logged"] = True
@@ -655,7 +822,7 @@ def background_map_worker():
 def start_map_background_task():
     threading.Thread(target=background_map_worker, daemon=True).start()
 
-# --- ROUTY PRO HISTORII ---
+# --- ROUTY PRO HISTORII A MAPU ---
 
 @mapa_bp.route('/historie')
 def stranka_historie_index():
@@ -708,11 +875,25 @@ def api_history_spz(spz):
         return jsonify(res.data)
     except: return jsonify([])
 
-# --- ROUTY PRO MAPU ---
-
 @mapa_bp.route('/api/live_buses', methods=['GET'])
 def api_live_buses():
     return jsonify({"status": "success", "buses": LIVE_BUSES_DATA})
+
+@mapa_bp.route('/mapa')
+def mapa_stranka():
+    return render_template_string(f"""
+    <!DOCTYPE html>
+    <html style="background: #0f172a;">
+    <head>
+        <title>Mapa | OIS IDPK</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+    </head>
+    <body style="background: #0f172a; color: white;">
+        {HTML_MAPA}
+    </body>
+    </html>
+    """)
 
 @mapa_bp.route('/api/bus_detail/<bus_id>')
 def api_bus_detail(bus_id):
