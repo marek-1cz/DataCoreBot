@@ -2,9 +2,10 @@ import os
 import time
 import json
 import urllib.request
+import urllib.error
 import threading
 from datetime import datetime, timedelta
-from flask import Blueprint, jsonify, Response
+from flask import Blueprint, jsonify, Response, render_template_string
 from zoneinfo import ZoneInfo
 import math
 import re
@@ -12,6 +13,99 @@ import http.cookiejar
 from supabase import create_client
 
 mapa_bp = Blueprint('mapa_bp', __name__)
+
+# --- HTML ŠABLONA PRO STRÁNKU HISTORIE ---
+HTML_HISTORIE = """
+<div style="padding: 20px; max-width: 1200px; margin: auto; font-family: sans-serif;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+        <h2 style="color: #38bdf8; margin: 0; font-size: 24px;"><i class="fas fa-history"></i> Historie Spojů (Černá skříňka)</h2>
+        <div class="field" style="margin-bottom: 0;">
+          <p class="control has-icons-left">
+            <input class="input" id="historySearch" type="text" placeholder="Hledat SPZ nebo Linku..." style="background: #1e293b; color: white; border-color: #334155; min-width: 250px;">
+            <span class="icon is-small is-left" style="color: #94a3b8;">
+              <i class="fas fa-search"></i>
+            </span>
+          </p>
+        </div>
+    </div>
+
+    <div style="background: #1e293b; border-radius: 10px; border: 1px solid #334155; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+        <table class="table is-fullwidth is-hoverable" style="background: transparent; color: #cbd5e1; margin-bottom: 0; min-width: 800px;">
+            <thead>
+                <tr style="background: #0f172a;">
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Čas záznamu</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">SPZ</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Linka/Spoj</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Poslední cíl</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px;">Status</th>
+                    <th style="color: #38bdf8; border-color: #334155; padding: 12px; text-align: center;">Poloha na mapě</th>
+                </tr>
+            </thead>
+            <tbody id="historyTableBody">
+                <tr><td colspan="6" style="text-align:center; padding: 30px; color: #38bdf8;"><i class="fas fa-spinner fa-spin"></i> Načítám data z databáze...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p style="color: #94a3b8; font-size: 12px; margin-top: 10px;">* Zobrazuje posledních 200 záznamů. Data starší než 30 dní jsou automaticky promazána.</p>
+
+    <script>
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/history_data');
+                const data = await response.json();
+                const tbody = document.getElementById('historyTableBody');
+                tbody.innerHTML = '';
+
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px;">Žádné záznamy nebyly nalezeny (nebo chybí Supabase klíče v Koyebu).</td></tr>';
+                    return;
+                }
+
+                data.forEach(row => {
+                    const date = new Date(row.created_at);
+                    const timeStr = date.toLocaleDateString('cs-CZ') + ' ' + date.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
+                    
+                    const tr = document.createElement('tr');
+                    tr.style.borderColor = '#334155';
+                    tr.innerHTML = `
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle;">${timeStr}</td>
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle;"><span class="tag is-warning" style="background:#f59e0b; color:#0f172a; font-weight:bold;">${row.spz}</span></td>
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle; font-weight: bold;">${row.linka || '---'}</td>
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle;">${row.destination || '---'}</td>
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle; font-size: 13px;">${row.status}</td>
+                        <td style="border-color: #334155; padding: 12px; vertical-align: middle; text-align: center;">
+                            <a href="http://maps.google.com/maps?q=${row.last_lat},${row.last_lng}" target="_blank" class="button is-small is-info is-outlined" style="background: transparent; color: #38bdf8; border-color: #38bdf8; text-decoration: none;">
+                                <i class="fas fa-map-marker-alt" style="margin-right: 5px;"></i> Mapa
+                            </a>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                
+                // Znovu aplikovat filtr, pokud je něco napsané
+                triggerSearch();
+            } catch(e) { 
+                document.getElementById('historyTableBody').innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px; color:#ef4444;">Chyba připojení k databázi.</td></tr>';
+            }
+        }
+
+        function triggerSearch() {
+            const val = document.getElementById('historySearch').value.toLowerCase();
+            const rows = document.querySelectorAll('#historyTableBody tr');
+            rows.forEach(row => {
+                row.style.display = row.innerText.toLowerCase().includes(val) ? '' : 'none';
+            });
+        }
+
+        document.getElementById('historySearch').addEventListener('input', triggerSearch);
+
+        loadHistory();
+        setInterval(loadHistory, 30000); 
+    </script>
+</div>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+"""
 
 # Globální paměť běžící 24/7 (pamatuje si busy až 12 hodin po odpojení)
 GLOBAL_BUS_CACHE = {}
@@ -40,6 +134,17 @@ def calc_mins_to_departure(dep_time_str, current_time):
         return diff
     except:
         return None
+
+# Pomocná funkce pro bezpečné získání DB klienta v daném vlákně
+def get_db_client():
+    supa_url = os.environ.get("SUPABASE_URL")
+    supa_key = os.environ.get("SUPABASE_KEY")
+    if supa_url and supa_key:
+        try:
+            return create_client(supa_url, supa_key)
+        except:
+            return None
+    return None
 
 # --- NEZÁVISLÉ VLÁKNO PRO BLESKOVÉ STAŽENÍ JŘ ---
 def fetch_tt_bg(bus_id, cached_dict):
@@ -103,16 +208,7 @@ def background_map_worker():
     except: pass
 
     # Připojení k Supabase
-    supa_url = os.environ.get("SUPABASE_URL")
-    supa_key = os.environ.get("SUPABASE_KEY")
-    db_client = None
-    if supa_url and supa_key:
-        try:
-            db_client = create_client(supa_url, supa_key)
-            print("[MAPA-DB] Připojení k historii úspěšné!")
-        except Exception as e:
-            print(f"[MAPA-DB] Chyba připojení: {e}")
-
+    db_client = get_db_client()
     last_db_cleanup = get_prague_time()
 
     while True:
@@ -125,7 +221,7 @@ def background_map_worker():
                 db_client.table("bus_history").delete().lt("created_at", thirty_days_ago).execute()
                 print("[MAPA-DB] Automatické pročištění historie starší 30 dnů proběhlo.")
             except Exception as e:
-                print(f"[MAPA-DB] Chyba čištění: {e}")
+                pass
             last_db_cleanup = now
 
         data_inflow = []
@@ -143,7 +239,7 @@ def background_map_worker():
                 with urllib.request.urlopen(req1_post, timeout=5) as r1_post:
                     data_inflow = json.loads(r1_post.read().decode())
             except Exception as ex:
-                print(f"[MAPA] Inflow Error: {ex}")
+                pass
 
         try:
             arriva_payload = {
@@ -165,7 +261,7 @@ def background_map_worker():
                     data_arriva = resp2[0].get("data", {}).get("busesCurrentLocations", [])
                 elif isinstance(resp2, dict):
                     data_arriva = resp2.get("data", {}).get("busesCurrentLocations", [])
-        except Exception as e: print(f"[MAPA] Arriva Error: {e}")
+        except Exception as e: pass
 
         current_inflow_ids = set()
 
@@ -184,12 +280,25 @@ def background_map_worker():
                     is_train = int(bus_id) < 0 or traction in ["TRAIN", "UNKNOWN"]
 
                     if bus_id not in GLOBAL_BUS_CACHE:
+                        # NOVÝ AUTOBUS! Zkusíme najít "Ducha" ze stejné GPS pozice
+                        ghost_spz = None
+                        ghost_locked = False
+                        
+                        for gid, g_cached in list(GLOBAL_BUS_CACHE.items()):
+                            if g_cached.get("is_offline") and g_cached.get("spz"):
+                                g_dist = math.hypot(lat1 - g_cached["lat"], lng1 - g_cached["lng"])
+                                if g_dist < 0.0005: 
+                                    ghost_spz = g_cached["spz"]
+                                    ghost_locked = True
+                                    del GLOBAL_BUS_CACHE[gid] 
+                                    break
+
                         GLOBAL_BUS_CACHE[bus_id] = {
-                            "lat": lat1, "lng": lng1, "line": line, "spz": None,
+                            "lat": lat1, "lng": lng1, "line": line, 
+                            "spz": ghost_spz, "spz_locked": ghost_locked, "estimated": bool(ghost_spz),
                             "last_moved": now, "first_seen": now, "last_seen": now,
-                            "status": "Načítání...", "spz_locked": False, 
-                            "color_class": "bg-gray", "destination": dest1_original, 
-                            "estimated": False, "finished_at": None, "is_train": is_train,
+                            "status": "Načítání...", "color_class": "bg-gray", "destination": dest1_original, 
+                            "finished_at": None, "is_train": is_train,
                             "raw_delay": delay, "first_dep_time": None, "tt_last_fetch": None,
                             "tt_is_fetching": False, "is_offline": False,
                             "db_trip_logged": False, "db_offline_logged": False
@@ -239,6 +348,7 @@ def background_map_worker():
         tt_fetches_this_tick = 0 
 
         for bus_id, cached in list(GLOBAL_BUS_CACHE.items()):
+            # A) OFFLINE BUSY (DUCHOVÉ)
             if bus_id not in current_inflow_ids:
                 offline_mins = (now - cached["last_seen"]).total_seconds() / 60.0
                 if offline_mins > 720: 
@@ -246,6 +356,7 @@ def background_map_worker():
                     continue
                 else:
                     cached["is_offline"] = True
+                    # Zápis do DB
                     if not cached.get("db_offline_logged"):
                         log_to_history(db_client, cached, "Ztráta signálu / Odstaven")
                         cached["db_offline_logged"] = True
@@ -258,6 +369,7 @@ def background_map_worker():
                         cached["color_class"] = "bg-gray"
                         if offline_mins > 60: cached["spz_locked"] = False
             else:
+                # B) ONLINE BUSY
                 lat1, lng1 = cached["lat"], cached["lng"]
                 line, dest1_original = cached["line"], cached["destination"]
                 dest1_lower = dest1_original.lower()
@@ -333,6 +445,7 @@ def background_map_worker():
                 elif found_in_arriva and delay_val >= -2:
                     cached["finished_at"] = None
 
+                # ROZHODOVACÍ STROM
                 if is_before_departure:
                     cached["finished_at"] = None 
                     if time_to_dep <= 240:
@@ -364,6 +477,7 @@ def background_map_worker():
                 elif cached["finished_at"] is not None:
                     finished_mins = (now - cached["finished_at"]).total_seconds() / 60.0
                     
+                    # ZÁPIS DO DATABÁZE PŘI DOKONČENÍ LINKY
                     if finished_mins > 1 and not cached.get("db_trip_logged"):
                         log_to_history(db_client, cached, "Konečná zastávka (Dokončeno)")
                         cached["db_trip_logged"] = True
@@ -411,6 +525,35 @@ def background_map_worker():
 
 def start_map_background_task():
     threading.Thread(target=background_map_worker, daemon=True).start()
+
+# --- API ROUTY PRO KLIENTA ---
+
+@mapa_bp.route('/historie')
+def stranka_historie():
+    return render_template_string(f"""
+    <!DOCTYPE html>
+    <html style="background: #0f172a;">
+    <head>
+        <title>Historie Spojů | OIS IDPK</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+    </head>
+    <body style="background: #0f172a; color: white;">
+        {HTML_HISTORIE}
+    </body>
+    </html>
+    """)
+
+@mapa_bp.route('/api/history_data')
+def api_history_data():
+    db = get_db_client()
+    if not db:
+        return jsonify([])
+    try:
+        response = db.table("bus_history").select("*").order("created_at", desc=True).limit(200).execute()
+        return jsonify(response.data)
+    except:
+        return jsonify([])
 
 @mapa_bp.route('/api/live_buses', methods=['GET'])
 def api_live_buses():
