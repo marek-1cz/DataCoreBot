@@ -207,7 +207,7 @@ def background_map_worker():
                             c["destination"] = dest1_original
                             c["finished_at"] = None
                             c["first_dep_time"] = None 
-                            c["db_trip_logged"] = False # Nová linka, resetujeme logování do DB
+                            c["db_trip_logged"] = False 
                             if dist_moved < 0.005: 
                                 c["estimated"] = True
                                 c["last_moved"] = now
@@ -239,7 +239,6 @@ def background_map_worker():
         tt_fetches_this_tick = 0 
 
         for bus_id, cached in list(GLOBAL_BUS_CACHE.items()):
-            # A) OFFLINE BUSY (ZMIZELY Z INFLOW)
             if bus_id not in current_inflow_ids:
                 offline_mins = (now - cached["last_seen"]).total_seconds() / 60.0
                 if offline_mins > 720: 
@@ -247,7 +246,6 @@ def background_map_worker():
                     continue
                 else:
                     cached["is_offline"] = True
-                    # Zapsání ztráty signálu do Databáze
                     if not cached.get("db_offline_logged"):
                         log_to_history(db_client, cached, "Ztráta signálu / Odstaven")
                         cached["db_offline_logged"] = True
@@ -260,7 +258,6 @@ def background_map_worker():
                         cached["color_class"] = "bg-gray"
                         if offline_mins > 60: cached["spz_locked"] = False
             else:
-                # B) ONLINE BUSY
                 lat1, lng1 = cached["lat"], cached["lng"]
                 line, dest1_original = cached["line"], cached["destination"]
                 dest1_lower = dest1_original.lower()
@@ -290,7 +287,6 @@ def background_map_worker():
                                 found_in_arriva = True
                                 break
 
-                    # POKUD NEVYŠLO PÁROVÁNÍ, KOUKNEME SE EXTRÉMNĚ BLÍZKO (50 METRŮ) PRO "DUCHY"
                     if not best_spz and inactive_mins > 1:
                         ultra_close = [b for b in data_arriva if math.hypot(lat1 - b.get("latitude",0), lng1 - b.get("longitude",0)) < 0.0005]
                         valid_ultra = [b for b in ultra_close if b.get("spz", "").strip() not in assigned_spzs and b.get("spz", "").strip() != "Neznámá"]
@@ -337,7 +333,6 @@ def background_map_worker():
                 elif found_in_arriva and delay_val >= -2:
                     cached["finished_at"] = None
 
-                # ROZHODOVACÍ STROM
                 if is_before_departure:
                     cached["finished_at"] = None 
                     if time_to_dep <= 240:
@@ -369,7 +364,6 @@ def background_map_worker():
                 elif cached["finished_at"] is not None:
                     finished_mins = (now - cached["finished_at"]).total_seconds() / 60.0
                     
-                    # ZÁPIS DO DATABÁZE PŘI DOKONČENÍ LINKY
                     if finished_mins > 1 and not cached.get("db_trip_logged"):
                         log_to_history(db_client, cached, "Konečná zastávka (Dokončeno)")
                         cached["db_trip_logged"] = True
@@ -415,7 +409,7 @@ def background_map_worker():
         LIVE_BUSES_DATA = new_live_data
         time.sleep(10)
 
-def def start_map_background_task():
+def start_map_background_task():
     threading.Thread(target=background_map_worker, daemon=True).start()
 
 @mapa_bp.route('/api/live_buses', methods=['GET'])
@@ -438,11 +432,11 @@ def api_bus_detail(bus_id):
     try:
         info_html = ""
         req1 = urllib.request.Request(url_info, headers=headers)
-        with opener.open(req1, timeout=5) as r1: info_html = r1.read().decode('utf-8')
+        with urllib.request.urlopen(req1, timeout=5) as r1: info_html = r1.read().decode('utf-8')
             
         tt_html = ""
         req2 = urllib.request.Request(url_tt, headers=headers)
-        with opener.open(req2, timeout=5) as r2: tt_html = r2.read().decode('utf-8')
+        with urllib.request.urlopen(req2, timeout=5) as r2: tt_html = r2.read().decode('utf-8')
 
         linkospoj, spoj_num = "N/A", "N/A"
 
