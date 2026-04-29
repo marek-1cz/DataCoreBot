@@ -64,7 +64,7 @@ HTML_HISTORIE_INDEX = """
                 let newHtml = '';
 
                 if (data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px;">Zatím žádné záznamy pro 490/496.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px;">Zatím žádné záznamy pro sledované linky.</td></tr>';
                     return;
                 }
 
@@ -72,14 +72,7 @@ HTML_HISTORIE_INDEX = """
                     const createdDate = new Date(row.created_at);
                     const dayStr = createdDate.toLocaleDateString('cs-CZ');
                     
-                    let spzBadge = '';
-                    if (!row.spz || row.spz === 'Neznámá') {
-                        spzBadge = `<span class="tag is-light" style="background:#334155; color:#94a3b8;"><i class="fas fa-question-circle" style="margin-right:4px;"></i>Neznámá</span>`;
-                    } else if (row.status && row.status.includes('Falešný záznam')) {
-                        spzBadge = `<span class="tag is-danger" style="font-weight:bold;">${row.spz} <i class="fas fa-times-circle" style="color:white; margin-left:5px;" title="Neověřený / Falešný záznam"></i></span>`;
-                    } else {
-                        spzBadge = `<span class="tag is-warning" style="background:#f59e0b; color:#0f172a; font-weight:bold;">${row.spz} <i class="fas fa-check-circle" style="color:#0f172a; margin-left:5px;" title="Ověřeno"></i></span>`;
-                    }
+                    let spzBadge = `<span class="tag is-warning" style="background:#f59e0b; color:#0f172a; font-weight:bold;">${row.spz} <i class="fas fa-check-circle" style="color:#0f172a; margin-left:5px;" title="Ověřeno"></i></span>`;
 
                     let startStr = "---";
                     if (row.start_scheduled || row.start_actual) {
@@ -101,7 +94,6 @@ HTML_HISTORIE_INDEX = """
                     const linkaClean = row.linka || '---';
                     const spzSafe = row.spz || 'Neznámá';
                     
-                    // Aplikace filtru hned při generování, aby to neproblikávalo
                     const rowText = `${spzSafe} ${linkaClean} ${row.status}`.toLowerCase();
                     const isVisible = rowText.includes(searchVal) ? '' : 'display:none;';
 
@@ -109,17 +101,17 @@ HTML_HISTORIE_INDEX = """
                         <tr style="border-color: #334155; ${isVisible}" data-search="${rowText}">
                             <td style="border-color: #334155; padding: 12px; vertical-align: middle;">
                                 <strong>${dayStr}</strong><br>
-                                <span style="font-size:11px; color:#64748b;">ID: ${row.trip_id.substring(0,8)}...</span>
+                                <span style="font-size:11px; color:#64748b;">ID: ${row.trip_id.substring(0,8)}</span>
                             </td>
                             <td style="border-color: #334155; padding: 12px; vertical-align: middle;">
                                 <strong style="color:white;">${linkaClean}</strong>
-                                ${row.jr_link ? `<br><a href="${row.jr_link}" target="_blank" style="font-size:11px; color:#38bdf8;">Zdroj JŘ <i class="fas fa-external-link-alt"></i></a>` : ''}
+                                ${row.jr_link ? `<br><a href="${row.jr_link}" target="_blank" style="font-size:11px; color:#38bdf8;">Aktuální JŘ z webu <i class="fas fa-external-link-alt"></i></a>` : ''}
                             </td>
                             <td style="border-color: #334155; padding: 12px; vertical-align: middle;">${spzBadge}</td>
                             <td style="border-color: #334155; padding: 12px; vertical-align: middle;">${startStr}</td>
                             <td style="border-color: #334155; padding: 12px; vertical-align: middle;">${statusHtml}</td>
                             <td style="border-color: #334155; padding: 12px; vertical-align: middle; text-align: center;">
-                                ${spzSafe !== 'Neznámá' ? `<a href="/historie/${spzSafe}" class="button is-small is-primary"><i class="fas fa-list" style="margin-right: 5px;"></i> Detail vozu</a>` : `<span style="font-size:11px; color:#94a3b8;">Čeká na SPZ</span>`}
+                                <a href="/historie/${spzSafe}" class="button is-small is-primary"><i class="fas fa-list" style="margin-right: 5px;"></i> Detail vozu</a>
                             </td>
                         </tr>
                     `;
@@ -154,7 +146,7 @@ HTML_HISTORIE_DETAIL = """
     
     <div style="background: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #38bdf8; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
         <h2 style="color: white; margin: 0 0 10px 0; font-size: 28px;">Autobus SPZ: <span style="color:#f59e0b;">{{SPZ}}</span></h2>
-        <p style="color: #94a3b8; font-size: 14px; margin-bottom: 15px;">Historie odjetých linek (Sledováno od přidělení 490/496).</p>
+        <p style="color: #94a3b8; font-size: 14px; margin-bottom: 15px;">Historie odjetých linek.</p>
         <div id="absoluteLastPos"><span style="color:#38bdf8;"><i class="fas fa-spinner fa-spin"></i> Načítám polohu...</span></div>
     </div>
 
@@ -185,13 +177,13 @@ HTML_HISTORIE_DETAIL = """
                 
                 const liveRes = await fetch('/api/live_buses');
                 const liveData = await liveRes.json();
-                const liveBus = liveData.buses ? liveData.buses.find(b => b.spz === '{{SPZ}}') : null;
+                const liveBus = liveData.buses ? liveData.buses.find(b => b.spz === '{{SPZ}}' && b.spz_verified) : null;
 
                 const tbody = document.getElementById('detailTableBody');
                 const lastPosDiv = document.getElementById('absoluteLastPos');
                 
                 if (data.length === 0 && !liveBus) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Žádná historie.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Žádná historie nebyla nalezena.</td></tr>';
                     lastPosDiv.innerHTML = '<span style="color:#ef4444;">Poloha neznámá</span>';
                     return;
                 }
@@ -202,7 +194,7 @@ HTML_HISTORIE_DETAIL = """
                     currentLat = liveBus.lat; currentLng = liveBus.lng;
                     topStatus = `${liveBus.status} (${liveBus.line || 'Bez linky'})`;
                     topTime = "Nyní (Živá data z mapy)";
-                    liveIndicator = `<br><span style="color:#10b981; font-weight:bold; font-size:13px;"><i class="fas fa-satellite-dish"></i> Živě</span>`;
+                    liveIndicator = `<br><span style="color:#10b981; font-weight:bold; font-size:13px;"><i class="fas fa-satellite-dish"></i> Živě na mapě</span>`;
                 } else if (data.length > 0) {
                     const newest = data[0];
                     currentLat = newest.last_lat; currentLng = newest.last_lng;
@@ -245,7 +237,7 @@ HTML_HISTORIE_DETAIL = """
                             <td style="border-color: #334155; padding: 12px; vertical-align: middle; color:#cbd5e1;">${dayStr}<br><span style="font-size:10px; color:#64748b;">${trip.trip_id.substring(0,8)}...</span></td>
                             <td style="border-color: #334155; padding: 12px; vertical-align: middle; font-weight: bold; color: white;">
                                 ${trip.linka}
-                                ${trip.jr_link ? `<br><a href="${trip.jr_link}" target="_blank" style="font-size:11px; color:#38bdf8;">Jízdní řád <i class="fas fa-external-link-alt"></i></a>` : ''}
+                                ${trip.jr_link ? `<br><a href="${trip.jr_link}" target="_blank" style="font-size:11px; color:#38bdf8;">Aktuální JŘ <i class="fas fa-external-link-alt"></i></a>` : ''}
                             </td>
                             <td style="border-color: #334155; padding: 12px; vertical-align: middle; color: #10b981;">${startStr}</td>
                             <td style="border-color: #334155; padding: 12px; vertical-align: middle; color: #ef4444;">${endStr}</td>
@@ -392,25 +384,25 @@ HTML_MAPA = """
                             let spzHtml = "";
                             let historyBtn = "";
                             if (!bus.is_train) {
-                                let badgeIcon = bus.spz_verified ? '<i class="fas fa-check-circle" style="color:#0f172a;margin-left:3px;" title="Ověřeno"></i>' : '<i class="fas fa-times-circle" style="color:white;margin-left:3px;" title="Neověřeno"></i>';
-                                let spzClass = bus.spz_verified ? 'badge-spz' : 'badge-spz" style="background:#ef4444; color:white; border-color:#b91c1c;';
-                                spzHtml = `<div class="popup-row"><span class="popup-label">SPZ:</span><span class="popup-value ${spzClass}">${bus.spz || 'Neznámá'} ${bus.spz !== 'Neznámá' ? badgeIcon : ''}</span></div>`;
-                                
-                                if (bus.spz && bus.spz !== 'Neznámá') {
+                                if (bus.spz_verified) {
+                                    spzHtml = `<div class="popup-row"><span class="popup-label">SPZ:</span><span class="popup-value badge-spz">${bus.spz} <i class="fas fa-check-circle" style="color:#0f172a;margin-left:3px;" title="Ověřeno"></i></span></div>`;
                                     historyBtn = `<a href="/historie/${bus.spz}" target="_blank" class="btn-timetable" style="background:#f59e0b; margin-top:5px;"><i class="fas fa-history"></i> Historie vozu</a>`;
+                                } else if (bus.estimated_spz) {
+                                    spzHtml = `<div class="popup-row"><span class="popup-label">SPZ:</span><span class="popup-value badge-spz" style="background:#ef4444; color:white; border-color:#b91c1c;">Odhad (${bus.spz}) <i class="fas fa-question-circle" style="margin-left:3px;" title="Odhadnuto"></i></span></div>`;
+                                } else {
+                                    spzHtml = `<div class="popup-row"><span class="popup-label">SPZ:</span><span class="popup-value" style="color:#94a3b8;">Čeká na ověření...</span></div>`;
                                 }
                             }
                             
                             let statusColor = "#10b981"; 
-                            if (bus.status.includes("Stojí")) statusColor = "#ef4444"; 
+                            if (bus.status.includes("Stojí") || bus.status.includes("Odstaven")) statusColor = "#ef4444"; 
                             else if (bus.status.includes("Koneč")) statusColor = "#a855f7"; 
                             else if (bus.status.includes("Začátek") || bus.status.includes("Čeká")) statusColor = "#3b82f6"; 
-                            else if (bus.status.includes("Odstaven") || bus.status.includes("N/A") || bus.status.includes("signál") || bus.status.includes("Zmizel")) statusColor = "#94a3b8"; 
+                            else if (bus.status.includes("N/A") || bus.status.includes("signál") || bus.status.includes("Zmizel")) statusColor = "#94a3b8"; 
                             else if (bus.status.includes("Náskok") || bus.status.includes("Vyčkává")) statusColor = "#60a5fa"; 
-                            else if (bus.status.includes("Timeout") || bus.status.includes("Falešný")) statusColor = "#ef4444"; 
+                            else if (bus.status.includes("Timeout")) statusColor = "#ef4444"; 
                             
                             let statusHtml = `<div class="popup-row"><span class="popup-label">Status:</span><span class="popup-value" style="color:${statusColor};">${bus.status}</span></div>`;
-                            let idHtml = `<div class="popup-row"><span class="popup-label">Trip ID:</span><span class="popup-value" style="color:#94a3b8; font-size:11px;">${bus.trip_id}</span></div>`;
                             
                             let popupHTML = `
                                 <div class="popup-header">
@@ -420,7 +412,6 @@ HTML_MAPA = """
                                     <div class="popup-row"><span class="popup-label">Cíl:</span><span class="popup-value" style="color:white;">${bus.destination || "Neznámý"}</span></div>
                                     ${spzHtml}
                                     ${statusHtml}
-                                    ${idHtml}
                                     <div class="popup-row" style="border:none; margin-top:5px;"><span class="popup-label">JŘ:</span><span class="popup-value">${delayText}</span></div>
                                     
                                     <button class="btn-timetable" onclick="showTimetable('${bus.id}')">
@@ -516,14 +507,14 @@ def upsert_to_history(db, c):
     final_linka = c.get("real_linka_spoj") or c.get("line", "")
     spz = c.get("spz")
     
-    # KONTROLA: Zajímají nás primárně linky 490 a 496. Pokud ji bus jede, získá doživotní sledování.
+    # KONTROLA: Zajímají nás primárně linky 490 a 496. 
     clean_line = re.sub(r'\D', '', final_linka)
-    if spz and spz != "Neznámá":
+    if spz and spz != "Neznámá" and c.get("spz_verified"):
         if clean_line.startswith("490") or clean_line.startswith("496"):
             TRACKED_SPZS.add(spz)
             
-    # Pokud bus (SPZ) není ve sledovaných, do databáze ho necpeme vůbec.
-    if not spz or spz == "Neznámá" or spz not in TRACKED_SPZS:
+    # Zapisujeme jen pokud je SPZ 100% oveřená a patří do sledovaných
+    if not c.get("spz_verified") or not spz or spz == "Neznámá" or spz not in TRACKED_SPZS:
         return
     
     try:
@@ -532,7 +523,7 @@ def upsert_to_history(db, c):
         data = {
             "trip_id": c["trip_id"],
             "spz": spz,
-            "spz_verified": c.get("spz_verified", False),
+            "spz_verified": c["spz_verified"],
             "linka": final_linka,
             "jr_link": jr_l,
             "start_scheduled": c.get("first_dep_time"),
@@ -549,11 +540,10 @@ def upsert_to_history(db, c):
 
 def background_map_worker():
     global TRACKED_SPZS
-    print("[MAPA] Inteligentní mozek (Striktní JŘ, Trip ID, Filtr 490/496) startuje...", flush=True)
+    print("[MAPA] Inteligentní mozek (Striktní SPZ + Návrat šedé/fialové) startuje...", flush=True)
     
     db_client = get_db_client()
     
-    # Načtení už známých SPZ ze Supabase po restartu
     if db_client:
         try:
             res = db_client.table("bus_history").select("spz").execute()
@@ -660,7 +650,6 @@ def background_map_worker():
                                 "actual_start_time": None, "actual_end_time": None,
                                 "created_at": now
                             }
-                            upsert_to_history(db_client, GLOBAL_BUS_CACHE[bus_id])
                         else:
                             c = GLOBAL_BUS_CACHE[bus_id]
                             c["last_inflow_seen"] = now
@@ -670,11 +659,12 @@ def background_map_worker():
                             
                             dist_moved = math.hypot(lat1 - c["lat"], lng1 - c["lng"])
                             
+                            # Pokud změnil linku -> Úplně nový spoj, ukončíme starý
                             if c["line"] != line:
                                 if c["line"] != "Neznámá" and not c["actual_end_time"]:
                                     c["actual_end_time"] = now.strftime('%H:%M')
-                                    c["status"] = "Ukončeno začátkem druhé linky"
-                                    upsert_to_history(db_client, c)
+                                    c["status"] = "Ukončeno (Začátek nového spoje)"
+                                    if c.get("spz_verified"): upsert_to_history(db_client, c)
 
                                 TRIP_COUNTER += 1
                                 c["trip_id"] = f"TRIP-{TRIP_COUNTER}"
@@ -687,7 +677,7 @@ def background_map_worker():
                                 c["actual_end_time"] = None
                                 c["created_at"] = now
                                 c["status"] = "Načítání..."
-                                upsert_to_history(db_client, c)
+                                c["spz_locked"] = False # Nová linka = SPZ se musí znovu ověřit!
                                 
                                 if dist_moved < 0.005: 
                                     c["last_moved"] = now
@@ -701,15 +691,17 @@ def background_map_worker():
 
                     except: continue
 
+            # Zpracování offline a timeoutů
             for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
                 offline_mins = (now - c["last_inflow_seen"]).total_seconds() / 60.0
                 total_mins = (now - c["first_seen"]).total_seconds() / 60.0
                 
+                # Timeout pro visící spoje (déle než 5h)
                 if (c["created_at"].date() != now.date() or total_mins > 300) and not c["actual_end_time"]:
                     c["actual_end_time"] = now.strftime('%H:%M')
                     c["status"] = "Timeout (Příliš dlouho probíhá / Nový den)"
                     c["color_class"] = "bg-gray"
-                    upsert_to_history(db_client, c)
+                    if c.get("spz_verified"): upsert_to_history(db_client, c)
                     del GLOBAL_BUS_CACHE[bus_id]
                     continue
 
@@ -719,15 +711,20 @@ def background_map_worker():
                         continue
                     
                     c["is_offline"] = True
-                    if not c["actual_end_time"]:
-                        c["actual_end_time"] = now.strftime('%H:%M')
-                        c["status"] = "Konečná / Zmizel z mapy"
-                        c["color_class"] = "bg-purple"
-                        upsert_to_history(db_client, c)
-                    elif offline_mins > 20:
+                    
+                    # Návrat šedých a fialových teček!
+                    if offline_mins >= 20:
                         c["status"] = "Odstaven (Bez signálu)"
                         c["color_class"] = "bg-gray"
-                        upsert_to_history(db_client, c)
+                        c["raw_delay"] = 0 # Neaktualizuje zpoždění
+                        if c.get("spz_verified"): upsert_to_history(db_client, c)
+                    elif offline_mins > 2:
+                        if not c["actual_end_time"]:
+                            c["actual_end_time"] = now.strftime('%H:%M')
+                        c["status"] = "Konečná / Zmizel z mapy"
+                        c["color_class"] = "bg-purple"
+                        c["raw_delay"] = 0
+                        if c.get("spz_verified"): upsert_to_history(db_client, c)
 
             new_live_data = []
             tt_fetches_this_tick = 0 
@@ -744,40 +741,44 @@ def background_map_worker():
                 is_moving = inactive_mins < 1 
                 delay_val = c["raw_delay"]
 
-                # STRIKTNÍ SHODA LINKY PRO SPZ
-                if not is_train:
+                # PÁROVÁNÍ SPZ - Zcela přepsáno a nekompromisně striktní
+                if not is_train and not c["spz_locked"]:
                     i_clean = re.sub(r'\D', '', line)
-                    buses_on_line = []
+                    d1_clean = re.sub(r'\W+', '', dest1_original.lower())
+                    
+                    candidates = []
                     for b in data_arriva:
                         a_line = str(b.get("linkNumber", "")).strip()
                         a_clean = re.sub(r'\D', '', a_line)
-                        if i_clean and a_clean and (i_clean.endswith(a_clean) or a_clean.endswith(i_clean)):
-                            buses_on_line.append(b)
-
-                    close_buses = [b for b in buses_on_line if math.hypot(lat1 - b.get("latitude",0), lng1 - b.get("longitude",0)) < 0.015]
-                    
-                    best_spz = None
-                    if len(close_buses) > 0:
-                        closest_bus = min(close_buses, key=lambda b: math.hypot(lat1 - b.get("latitude",0), lng1 - b.get("longitude",0)))
-                        best_spz = closest_bus.get("spz", "").strip()
-
-                    if best_spz and best_spz != "Neznámá" and best_spz != c["spz"]:
-                        if c["spz"]: 
-                            try:
-                                if db_client:
-                                    db_client.table("bus_history").update({"status": "Falešný záznam (SPZ opravena)", "spz_verified": False}).eq("trip_id", c["trip_id"]).execute()
-                            except: pass
-                            TRIP_COUNTER += 1
-                            c["trip_id"] = f"TRIP-{TRIP_COUNTER}"
-                            
-                        c["spz"] = best_spz
-                        c["spz_verified"] = True
                         
-                        # Dynamické přidání do sledovaných
-                        clean_l = re.sub(r'\D', '', line)
-                        if clean_l.startswith("490") or clean_l.startswith("496"):
-                            TRACKED_SPZS.add(best_spz)
+                        # Musí se shodovat číslo linky na 100%
+                        if i_clean and a_clean and (i_clean.endswith(a_clean) or a_clean.endswith(i_clean)):
+                            dist = math.hypot(lat1 - b.get("latitude",0), lng1 - b.get("longitude",0))
+                            if dist < 0.015:
+                                a_dest = str(b.get("destinationName", "")).lower()
+                                d2_clean = re.sub(r'\W+', '', a_dest)
+                                dest_match = (d1_clean in d2_clean or d2_clean in d1_clean or not d1_clean or not d2_clean)
+                                candidates.append({"bus": b, "dist": dist, "dest_match": dest_match})
 
+                    if len(candidates) == 1:
+                        # 1 kandidát. Je 100% ověřený, pokud mu sedí i cíl. Jinak je to odhad.
+                        cand = candidates[0]
+                        c["spz"] = cand["bus"].get("spz", "").strip()
+                        if cand["dest_match"]:
+                            c["spz_verified"] = True
+                            c["spz_locked"] = True
+                            c["estimated"] = False
+                        else:
+                            c["spz_verified"] = False
+                            c["estimated"] = True
+                    elif len(candidates) > 1:
+                        # Více kandidátů (nádraží) = VŽDY odhad, nikdy nezamykat a neukládat!
+                        candidates.sort(key=lambda x: (not x["dest_match"], x["dist"]))
+                        c["spz"] = candidates[0]["bus"].get("spz", "").strip()
+                        c["spz_verified"] = False
+                        c["estimated"] = True
+                
+                # JŘ STAHUVAČ
                 if not is_train and not c["first_dep_time"]:
                     if not c["tt_last_fetch"] or (now - c["tt_last_fetch"]).total_seconds() > 300:
                         if tt_fetches_this_tick < 5: 
@@ -786,8 +787,10 @@ def background_map_worker():
                             c["tt_is_fetching"] = True
                             threading.Thread(target=fetch_tt_bg, args=(bus_id, c), daemon=True).start()
 
+                # VÝPOČTY Z JŘ
                 is_before_departure = False
                 time_to_dep = 0
+                mins_to_last = None
                 
                 if c["first_dep_time"]:
                     try:
@@ -802,9 +805,20 @@ def background_map_worker():
                             time_to_dep = diff
                     except: pass
 
+                if c["last_dep_time"]:
+                    try:
+                        dh, dm = map(int, c["last_dep_time"].split(':'))
+                        dep_total = dh * 60 + dm
+                        cur_total = now.hour * 60 + now.minute
+                        diff = dep_total - cur_total
+                        if diff < -720: diff += 1440
+                        elif diff > 720: diff -= 1440
+                        mins_to_last = diff
+                    except: pass
+
                 old_status = c["status"]
 
-                # --- HLAVNÍ LOGIKA ---
+                # --- NÁVRAT BAREVNÉ LOGIKY ---
                 if is_before_departure:
                     c["actual_end_time"] = None 
                     if time_to_dep <= 240:
@@ -812,28 +826,46 @@ def background_map_worker():
                         c["color_class"] = "bg-blue"
                         delay_val = -time_to_dep 
                     else: 
+                        # Šedá pokud čeká víc jak 4 hodiny!
                         c["status"] = "Čeká na spoj (>4h)"
                         c["color_class"] = "bg-gray"
                         delay_val = -time_to_dep
                 
                 else:
-                    if delay_val <= -10000:
-                        c["status"] = "Konečná zastávka"
-                        c["color_class"] = "bg-purple"
-                        if not c["actual_end_time"]: c["actual_end_time"] = now.strftime('%H:%M')
-                    elif delay_val < -1: 
-                        c["status"] = "Jízda (Náskok)" if is_moving else "Stojí (Vyčkává)"
-                        c["color_class"] = "bg-darkblue"
-                    else: 
-                        c["status"] = "Jízda" if is_moving else "Stojí"
-                        c["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
+                    is_ended_by_delay = (delay_val <= -10000)
+                    is_ended_by_jr = (mins_to_last is not None and mins_to_last <= -2)
+                    
+                    if is_ended_by_delay or is_ended_by_jr:
+                        # Linka skončila (podle JŘ nebo Inflow flagu). 
+                        if inactive_mins > 10:
+                            c["status"] = "Odstaven"
+                            c["color_class"] = "bg-gray"
+                            c["raw_delay"] = 0 
+                            if not c["actual_end_time"]: c["actual_end_time"] = now.strftime('%H:%M')
+                        elif inactive_mins > 0:
+                            c["status"] = "Konečná zastávka"
+                            c["color_class"] = "bg-purple"
+                            c["raw_delay"] = 0
+                            if not c["actual_end_time"]: c["actual_end_time"] = now.strftime('%H:%M')
+                        else:
+                            # Dojel, ale ještě se trochu hýbe po autobusáku
+                            c["status"] = "Konečná zastávka"
+                            c["color_class"] = "bg-purple"
+                    else:
+                        # Běžná jízda na lince
+                        if delay_val < -1: 
+                            c["status"] = "Jízda (Náskok)" if is_moving else "Stojí (Vyčkává)"
+                            c["color_class"] = "bg-darkblue"
+                        else: 
+                            c["status"] = "Jízda" if is_moving else "Stojí"
+                            c["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
                         
-                    if is_moving and not c["actual_start_time"] and not is_train:
-                        c["actual_start_time"] = now.strftime('%H:%M')
+                        if is_moving and not c["actual_start_time"] and not is_train:
+                            c["actual_start_time"] = now.strftime('%H:%M')
 
                 c["final_delay_display"] = delay_val
 
-                if old_status != c["status"] or is_moving or not c.get("db_first_upsert"):
+                if (old_status != c["status"] or is_moving or not c.get("db_first_upsert")) and c.get("spz_verified"):
                     upsert_to_history(db_client, c)
                     c["db_first_upsert"] = True
 
