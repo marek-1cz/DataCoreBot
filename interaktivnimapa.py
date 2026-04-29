@@ -24,6 +24,11 @@ mapa_bp = Blueprint('mapa_bp', __name__)
 
 HTML_HISTORIE_INDEX = """
 <div style="padding: 20px; max-width: 1400px; margin: auto; font-family: sans-serif;">
+    
+    <div style="background-color: #dc2626; color: white; padding: 15px; border-radius: 8px; font-weight: bold; text-align: center; margin-bottom: 20px; font-size: 18px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border: 2px solid #991b1b;">
+        <i class="fas fa-exclamation-triangle fa-fade"></i> !!! DATA NEMUSÍ SEDĚT - STRÁNKA JE VE VÝVOJI !!!
+    </div>
+
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
         <h2 style="color: #38bdf8; margin: 0; font-size: 24px;"><i class="fas fa-database"></i> Databáze Sledovaných Vozů</h2>
         <div class="field" style="margin-bottom: 0;">
@@ -151,6 +156,10 @@ HTML_HISTORIE_DETAIL = """
 <div style="padding: 20px; max-width: 1000px; margin: auto; font-family: sans-serif;">
     <a href="/historie" class="button is-small is-dark" style="margin-bottom: 15px;"><i class="fas fa-arrow-left"></i> Zpět na seznam</a>
     
+    <div style="background-color: #dc2626; color: white; padding: 15px; border-radius: 8px; font-weight: bold; text-align: center; margin-bottom: 20px; font-size: 18px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border: 2px solid #991b1b;">
+        <i class="fas fa-exclamation-triangle fa-fade"></i> !!! DATA NEMUSÍ SEDĚT - STRÁNKA JE VE VÝVOJI !!!
+    </div>
+
     <div style="background: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #38bdf8; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
         <h2 style="color: white; margin: 0 0 10px 0; font-size: 28px;">Autobus SPZ: <span style="color:#f59e0b;">{{SPZ}}</span></h2>
         <p style="color: #94a3b8; font-size: 14px; margin-bottom: 15px;">Historie odjetých linek (Sledováno od přidělení 490/496).</p>
@@ -269,11 +278,16 @@ HTML_HISTORIE_DETAIL = """
 """
 
 HTML_MAPA = """
-<div style="padding: 20px; position: relative;">
-    <h2 style="color: var(--blue-main); margin-bottom: 20px;"><i class="fas fa-map-marked-alt"></i> Interaktivní Mapa Spojů</h2>
-
-    <div style="position: absolute; top: 20px; right: 20px; z-index: 1000; background: rgba(15, 23, 42, 0.9); color: #38bdf8; padding: 10px 15px; border-radius: 8px; border: 1px solid #38bdf8; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 8px;">
-        <i class="far fa-clock"></i> <span id="systemTimeClock" style="font-size: 18px;">--:--:--</span>
+<div style="padding: 10px; max-width: 1600px; margin: auto;">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 15px; gap: 10px;">
+        <h2 style="color: var(--blue-main); margin: 0; display:flex; align-items:center; gap: 10px;">
+            <i class="fas fa-map-marked-alt"></i> Interaktivní Mapa Spojů
+            <span class="tag is-warning is-light" style="font-size:12px; font-weight:bold;">Neoficiální mapa (Není garantována 100% přesnost)</span>
+        </h2>
+        <div class="tag is-dark is-large" style="border: 1px solid #38bdf8; font-weight: bold; color: #38bdf8; box-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+            <i class="far fa-clock" style="margin-right:8px;"></i> <span id="systemTimeClock">--:--:--</span>
+        </div>
     </div>
 
     <div id="map" style="width: 100%; height: 75vh; border-radius: 10px; border: 2px solid #334155; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1;"></div>
@@ -329,6 +343,14 @@ HTML_MAPA = """
         var map = L.map('map').setView([defaultLat, defaultLng], defaultZoom);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
         var markersLayer = L.layerGroup().addTo(map);
+        
+        let lastDataArray = [];
+        let followedBusId = null;
+
+        // Vypnutí sledování při manuálním posunu mapy
+        map.on('dragstart', function() {
+            followedBusId = null;
+        });
 
         if(window.location.hash && hashParts.length === 2) {
             L.circleMarker([defaultLat, defaultLng], {radius: 35, color: '#ef4444', weight: 3, opacity: 0.8, fillOpacity: 0.2}).addTo(map);
@@ -346,6 +368,16 @@ HTML_MAPA = """
             } catch(e) { content.innerHTML = "<p style='color:#ef4444;padding:20px;text-align:center;'>Chyba spojení.</p>"; }
         }
 
+        window.toggleFollow = function(busId) {
+            if (followedBusId === busId) {
+                followedBusId = null; 
+            } else {
+                followedBusId = busId;
+                let bus = lastDataArray.find(b => b.id === busId);
+                if(bus) map.setView([bus.lat, bus.lng], 16);
+            }
+        }
+
         async function fetchBuses() {
             try {
                 let response = await fetch('/api/live_buses');
@@ -356,9 +388,16 @@ HTML_MAPA = """
                 }
 
                 if(data.status === "success") {
+                    lastDataArray = data.buses;
                     markersLayer.clearLayers();
                     data.buses.forEach(bus => {
                         if(bus.lat && bus.lng) {
+                            
+                            // Centrování kamery na sledovaný autobus
+                            if (followedBusId === bus.id) {
+                                map.setView([bus.lat, bus.lng]);
+                            }
+
                             let markerColor = bus.color_class; 
                             let delayText = ""; let delayVal = parseInt(bus.delay); 
 
@@ -418,6 +457,10 @@ HTML_MAPA = """
                             let statusHtml = `<div class="popup-row"><span class="popup-label">Status:</span><span class="popup-value" style="color:${statusColor};">${bus.status}</span></div>`;
                             let idHtml = `<div class="popup-row"><span class="popup-label">Trip ID:</span><span class="popup-value" style="color:#94a3b8; font-size:11px;">${bus.trip_id}</span></div>`;
                             
+                            let followText = (followedBusId === bus.id) ? '<i class="fas fa-stop-circle"></i> Zrušit sledování' : '<i class="fas fa-crosshairs"></i> Sledovat na mapě';
+                            let followClass = (followedBusId === bus.id) ? 'background:#ef4444; color:white;' : 'background:#3b82f6; color:white;';
+                            let followBtn = `<button onclick="toggleFollow('${bus.id}')" class="btn-timetable" style="${followClass} margin-top:5px;">${followText}</button>`;
+
                             let popupHTML = `
                                 <div class="popup-header">
                                     <h3 class="popup-header-title"><i class="${bus.is_train ? 'fas fa-train' : 'fas fa-bus'}"></i> Linka ${bus.line}</h3>
@@ -432,6 +475,7 @@ HTML_MAPA = """
                                     <button class="btn-timetable" onclick="showTimetable('${bus.id}')">
                                         <i class="fas fa-list-alt"></i> Zobrazit Jízdní řád
                                     </button>
+                                    ${followBtn}
                                     ${historyBtn}
                                 </div>
                             `;
@@ -560,7 +604,7 @@ def upsert_to_history(db, c):
 
 def background_map_worker():
     global TRACKED_SPZS
-    print("[MAPA] Inteligentní mozek (Oprava Duplicít a Návrat Šedé/Fialové) startuje...", flush=True)
+    print("[MAPA] Inteligentní mozek (Striktní barvy + SPZ Ghosting) startuje...", flush=True)
     
     db_client = get_db_client()
     if db_client:
@@ -649,20 +693,26 @@ def background_map_worker():
 
                         if bus_id not in GLOBAL_BUS_CACHE:
                             TRIP_COUNTER += 1
-                            # Nalezení staré SPZ při ghostingu (Vzdálenost + Linka)
+                            
+                            # GHOSTING SPZ: Hledání SPZ offline autobusu poblíž
                             ghost_spz = None
                             ghost_verified = False
+                            ghost_trip_id = f"TRIP-{TRIP_COUNTER}"
+                            
                             for gid, g_cached in list(GLOBAL_BUS_CACHE.items()):
                                 if g_cached.get("is_offline") and g_cached.get("spz") and g_cached["spz"] != "Neznámá":
                                     g_dist = math.hypot(lat1 - g_cached["lat"], lng1 - g_cached["lng"])
-                                    if g_dist < 0.005 or (g_dist < 0.03 and is_same_line(line, g_cached["line"])):
+                                    # Benevolentnější vzdálenost, pokud se linka přísně shoduje! (Až ~5km = 0.05)
+                                    if g_dist < 0.01 or (g_dist < 0.05 and is_same_line(line, g_cached["line"])):
                                         ghost_spz = g_cached["spz"]
                                         ghost_verified = g_cached.get("spz_verified", False)
+                                        if is_same_line(line, g_cached["line"]):
+                                            ghost_trip_id = g_cached["trip_id"] 
                                         del GLOBAL_BUS_CACHE[gid]
                                         break
-                                        
+
                             GLOBAL_BUS_CACHE[bus_id] = {
-                                "trip_id": f"TRIP-{TRIP_COUNTER}",
+                                "trip_id": ghost_trip_id,
                                 "inflow_id": bus_id, "lat": lat1, "lng": lng1, "line": line, "real_linka_spoj": None,
                                 "spz": ghost_spz, "spz_verified": ghost_verified, "spz_locked": False, "estimated": not ghost_verified,
                                 "last_moved": now, "first_seen": now, "last_inflow_seen": now,
@@ -736,7 +786,8 @@ def background_map_worker():
                     
                     c["is_offline"] = True
                     
-                    if offline_mins >= 20:
+                    # Návrat šedých a fialových teček + oprava SPZ ghostingu
+                    if offline_mins >= 15:
                         c["status"] = "Odstaven (Bez signálu)"
                         c["color_class"] = "bg-gray"
                         c["raw_delay"] = 0 
@@ -774,7 +825,7 @@ def background_map_worker():
             for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
                 inactive_mins = (now - c["last_moved"]).total_seconds() / 60.0
                 
-                # ODESLÁNÍ I OFFLINE BODŮ NA MAPU
+                # ABY OFFLINE BUSY SVÍTILY NA MAPĚ!
                 if c.get("is_offline"):
                     last_up_str = c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A"
                     final_line_display = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c["is_train"] else "Neznámá")
@@ -843,9 +894,10 @@ def background_map_worker():
                             c["tt_is_fetching"] = True
                             threading.Thread(target=fetch_tt_bg, args=(bus_id, c), daemon=True).start()
 
-                # VÝPOČTY Z JŘ A OPRAVA MODRÉ BARVY
+                # VÝPOČTY Z JŘ
                 is_before_departure = False
                 time_to_dep = 0
+                mins_to_last = None
                 
                 if c["first_dep_time"]:
                     try:
@@ -856,42 +908,61 @@ def background_map_worker():
                         if diff < -720: diff += 1440
                         elif diff > 720: diff -= 1440
                         
-                        # Čeká na spoj pokud: Do odjezdu zbývá čas OR čas sice uplynul (do 10min) ale bus ještě nevyjel z místa
+                        # Čeká, pokud je čas kladný OR čas trochu vypršel, ale bus ještě neodjel
                         if diff > 0 or (diff > -10 and not c.get("actual_start_time") and not is_moving):
                             is_before_departure = True
                             time_to_dep = diff if diff > 0 else 0
                     except: pass
 
+                if c["last_dep_time"]:
+                    try:
+                        dh, dm = map(int, c["last_dep_time"].split(':'))
+                        dep_total = dh * 60 + dm
+                        cur_total = now.hour * 60 + now.minute
+                        diff = dep_total - cur_total
+                        if diff < -720: diff += 1440
+                        elif diff > 720: diff -= 1440
+                        mins_to_last = diff
+                    except: pass
+
                 old_status = c["status"]
+
+                # --- HLAVNÍ LOGIKA BAREV ---
+                is_ended = (delay_val <= -10000) or (mins_to_last is not None and mins_to_last < 0)
 
                 if is_before_departure:
                     c["actual_end_time"] = None 
                     if time_to_dep <= 240:
-                        c["status"] = "Začátek linky (Čeká)"
+                        c["status"] = "Čeká na odjezd (Dle JŘ)"
                         c["color_class"] = "bg-blue"
                         delay_val = -time_to_dep 
                     else: 
                         c["status"] = "Čeká na spoj (>4h)"
                         c["color_class"] = "bg-gray"
                         delay_val = -time_to_dep
+                
+                elif is_ended:
+                    if inactive_mins > 15:
+                        c["status"] = "Odstaven"
+                        c["color_class"] = "bg-gray"
+                    else:
+                        c["status"] = "Konečná zastávka"
+                        c["color_class"] = "bg-purple"
+                    if not c["actual_end_time"]: c["actual_end_time"] = now.strftime('%H:%M')
                 else:
-                    if delay_val <= -10000:
-                        if inactive_mins > 10:
-                            c["status"] = "Odstaven"
-                            c["color_class"] = "bg-gray"
-                        else:
-                            c["status"] = "Konečná zastávka"
-                            c["color_class"] = "bg-purple"
-                        if not c["actual_end_time"]: c["actual_end_time"] = now.strftime('%H:%M')
-                    elif delay_val < -1: 
-                        c["status"] = "Jízda (Náskok)" if is_moving else "Stojí (Vyčkává)"
+                    if is_moving and not c["actual_start_time"] and not is_train:
+                        c["actual_start_time"] = now.strftime('%H:%M')
+
+                    # Tmavě modrá: AŽ když prokazatelně odjel (c["actual_start_time"] = True) a má náskok
+                    if delay_val < -1 and c.get("actual_start_time"): 
+                        c["status"] = "Jízda (Náskok)" if is_moving else "Stojí (Náskok)"
                         c["color_class"] = "bg-darkblue"
+                    elif delay_val < -1 and not c.get("actual_start_time"):
+                        c["status"] = "Čeká na odjezd (Dle JŘ)"
+                        c["color_class"] = "bg-blue"
                     else: 
                         c["status"] = "Jízda" if is_moving else "Stojí"
                         c["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
-                        
-                    if is_moving and not c["actual_start_time"] and not is_train:
-                        c["actual_start_time"] = now.strftime('%H:%M')
 
                 c["final_delay_display"] = delay_val
 
