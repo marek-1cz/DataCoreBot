@@ -391,7 +391,7 @@ HTML_MAPA = """
                             let spzHtml = "";
                             let historyBtn = "";
                             if (!bus.is_train) {
-                                let badgeIcon = bus.spz_verified ? '<i class="fas fa-check-circle" style="color:#0f172a;margin-left:3px;" title="Ověřeno"></i>' : '';
+                                let badgeIcon = bus.spz_verified ? '<i class="fas fa-check-circle" style="color:#0f172a;margin-left:3px;" title="Ověřeno"></i>' : '<i class="fas fa-times-circle" style="color:white;margin-left:3px;" title="Neověřeno"></i>';
                                 let spzClass = bus.spz_verified ? 'badge-spz' : 'badge-spz" style="background:#ef4444; color:white; border-color:#b91c1c;';
                                 
                                 if (bus.status.includes("Duplikace SPZ")) {
@@ -473,6 +473,14 @@ def calc_mins_to_departure(dep_time_str, current_time):
     except:
         return None
 
+def is_same_line(l1, l2):
+    # Ochrana proti duplikátům: 735 vs 490735
+    if not l1 or not l2 or l1 == "Neznámá" or l2 == "Neznámá": return False
+    cl1 = re.sub(r'\D', '', l1)
+    cl2 = re.sub(r'\D', '', l2)
+    if not cl1 or not cl2: return l1 == l2
+    return cl1.endswith(cl2) or cl2.endswith(cl1)
+
 def get_db_client():
     if not HAS_SUPABASE: return None
     supa_url = os.environ.get("SUPABASE_URL")
@@ -553,7 +561,7 @@ def upsert_to_history(db, c):
 
 def background_map_worker():
     global TRACKED_SPZS
-    print("[MAPA] Inteligentní mozek (Striktní SPZ, Anti-Duplikátor, JŘ 5min Refresh) startuje...", flush=True)
+    print("[MAPA] Inteligentní mozek (Oprava Duplicít a Návrat Šedé/Fialové) startuje...", flush=True)
     
     db_client = get_db_client()
     if db_client:
@@ -663,7 +671,9 @@ def background_map_worker():
                             
                             dist_moved = math.hypot(lat1 - c["lat"], lng1 - c["lng"])
                             
-                            if c["line"] != line:
+                            # Nový spoj, jen když NEJDE o stejnou linku 
+                            # Zabrání to duplicitě, když Inflow skáče "735" a "490735"
+                            if not is_same_line(c["line"], line):
                                 if c["line"] != "Neznámá" and not c["actual_end_time"]:
                                     c["actual_end_time"] = now.strftime('%H:%M')
                                     c["status"] = "Ukončeno (Začátek nového spoje)"
@@ -684,8 +694,12 @@ def background_map_worker():
                                 
                                 if dist_moved < 0.005: 
                                     c["last_moved"] = now
-                            elif c["destination"] != dest1_original:
-                                c["destination"] = dest1_original
+                            else:
+                                # Stejná linka, ale možná je nový text delší (přesnější)
+                                if len(line) > len(c["line"]):
+                                    c["line"] = line
+                                if c["destination"] != dest1_original:
+                                    c["destination"] = dest1_original
                             
                             if dist_moved > 0.0001:
                                 c["last_moved"] = now
@@ -701,7 +715,7 @@ def background_map_worker():
                 
                 if (c["created_at"].date() != now.date() or total_mins > 300) and not c["actual_end_time"]:
                     c["actual_end_time"] = now.strftime('%H:%M')
-                    c["status"] = "Timeout (Nový den / Zaseknuto)"
+                    c["status"] = "Timeout (Příliš dlouho probíhá / Nový den)"
                     c["color_class"] = "bg-gray"
                     if c.get("spz_verified"): upsert_to_history(db_client, c)
                     del GLOBAL_BUS_CACHE[bus_id]
@@ -714,13 +728,15 @@ def background_map_worker():
                     
                     c["is_offline"] = True
                     
+                    # Návrat šedých a fialových teček!
                     if offline_mins >= 20:
                         c["status"] = "Odstaven (Bez signálu)"
                         c["color_class"] = "bg-gray"
                         c["raw_delay"] = 0 
                         if c.get("spz_verified"): upsert_to_history(db_client, c)
                     elif offline_mins > 2:
-                        if not c["actual_end_time"]: c["actual_end_time"] = now.strftime('%H:%M')
+                        if not c["actual_end_time"]:
+                            c["actual_end_time"] = now.strftime('%H:%M')
                         c["status"] = "Konečná / Zmizel z mapy"
                         c["color_class"] = "bg-purple"
                         c["raw_delay"] = 0
@@ -760,7 +776,7 @@ def background_map_worker():
                 is_moving = inactive_mins < 1 
                 delay_val = c["raw_delay"]
 
-                # BEZPEČNÉ PÁROVÁNÍ SPZ (STRIKTNÍ SHODA LINKY + CÍLE)
+                # PÁROVÁNÍ SPZ (STRIKTNÍ SHODA LINKY + CÍLE)
                 if not is_train and not c["spz_locked"]:
                     i_clean = re.sub(r'\D', '', line)
                     d1_clean = re.sub(r'\W+', '', dest1_original.lower())
@@ -798,7 +814,7 @@ def background_map_worker():
                             
                         c["spz"] = best_spz
 
-                # STAHUVAČ JŘ (Refresh každých 5 minut i na lince)
+                # STAHUVAČ JŘ
                 if not is_train:
                     if not c.get("tt_last_fetch") or (now - c["tt_last_fetch"]).total_seconds() > 300:
                         if tt_fetches_this_tick < 5: 
@@ -807,8 +823,10 @@ def background_map_worker():
                             c["tt_is_fetching"] = True
                             threading.Thread(target=fetch_tt_bg, args=(bus_id, c), daemon=True).start()
 
+                # VÝPOČTY Z JŘ
                 is_before_departure = False
                 time_to_dep = 0
+                mins_to_last = None
                 
                 if c["first_dep_time"]:
                     try:
@@ -823,7 +841,21 @@ def background_map_worker():
                             time_to_dep = diff
                     except: pass
 
+                if c["last_dep_time"]:
+                    try:
+                        dh, dm = map(int, c["last_dep_time"].split(':'))
+                        dep_total = dh * 60 + dm
+                        cur_total = now.hour * 60 + now.minute
+                        diff = dep_total - cur_total
+                        if diff < -720: diff += 1440
+                        elif diff > 720: diff -= 1440
+                        mins_to_last = diff
+                    except: pass
+
                 old_status = c["status"]
+
+                # --- HLAVNÍ LOGIKA BAREV ---
+                is_ended = (delay_val <= -10000) or (mins_to_last is not None and mins_to_last < 0)
 
                 if is_before_departure:
                     c["actual_end_time"] = None 
@@ -835,16 +867,17 @@ def background_map_worker():
                         c["status"] = "Čeká na spoj (>4h)"
                         c["color_class"] = "bg-gray"
                         delay_val = -time_to_dep
+                
+                elif is_ended:
+                    if inactive_mins > 10:
+                        c["status"] = "Odstaven"
+                        c["color_class"] = "bg-gray"
+                    else:
+                        c["status"] = "Konečná zastávka"
+                        c["color_class"] = "bg-purple"
+                    if not c["actual_end_time"]: c["actual_end_time"] = now.strftime('%H:%M')
                 else:
-                    if delay_val <= -10000:
-                        if inactive_mins > 10:
-                            c["status"] = "Odstaven"
-                            c["color_class"] = "bg-gray"
-                        else:
-                            c["status"] = "Konečná zastávka"
-                            c["color_class"] = "bg-purple"
-                        if not c["actual_end_time"]: c["actual_end_time"] = now.strftime('%H:%M')
-                    elif delay_val < -1: 
+                    if delay_val < -1: 
                         c["status"] = "Jízda (Náskok)" if is_moving else "Stojí (Vyčkává)"
                         c["color_class"] = "bg-darkblue"
                     else: 
