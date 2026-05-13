@@ -235,236 +235,345 @@ HTML_HISTORIE_DETAIL = """
 """
 
 HTML_MAPA = """
-<div style="padding: 10px; max-width: 1600px; margin: auto;">
-  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 15px; gap: 10px;">
-    <h2 style="color: var(--blue-main, #38bdf8); margin: 0; display:flex; align-items:center; gap: 10px;">
-      <i class="fas fa-map-marked-alt"></i> Interaktivní Mapa Spojů
-      <span class="tag is-warning is-light" style="font-size:12px; font-weight:bold;">Neoficiální mapa (Není garantována 100% přesnost)</span>
-    </h2>
-    <div class="tag is-dark is-large" style="border: 1px solid #38bdf8; font-weight: bold; color: #38bdf8; box-shadow: 0 2px 4px rgba(0,0,0,0.5);">
-      <i class="far fa-clock" style="margin-right:8px;"></i> <span id="systemTimeClock">--:--:--</span>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
+#map-wrap{position:fixed;top:0;left:0;width:100vw;height:100vh;}
+#map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;}
+/* ─── TOP PANEL ─── */
+#panel-zone{position:fixed;top:0;left:0;right:0;height:40px;z-index:3000;pointer-events:auto;}
+#top-nav{
+  position:fixed;top:-72px;left:0;right:0;height:58px;
+  background:rgba(8,16,30,0.97);border-bottom:1px solid #334155;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  z-index:2999;transition:top 0.3s cubic-bezier(.4,0,.2,1);
+  display:flex;align-items:center;padding:0 14px;gap:10px;
+  box-shadow:0 4px 24px rgba(0,0,0,0.7);
+}
+#top-nav.vis{top:0;}
+.n-logo{display:flex;align-items:center;text-decoration:none;flex-shrink:0;}
+.n-logo img{height:34px;width:auto;filter:drop-shadow(0 0 7px rgba(56,189,248,.55));}
+.n-title{flex-shrink:0;line-height:1.2;}
+.n-title .a{color:#38bdf8;font-size:15px;font-weight:800;letter-spacing:.4px;}
+.n-title .b{color:#64748b;font-size:10px;}
+.n-warn{background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:bold;white-space:nowrap;flex-shrink:0;}
+.n-sp{flex:1;}
+.n-clock{color:#38bdf8;font-size:13px;font-weight:bold;background:rgba(56,189,248,.08);padding:5px 10px;border-radius:6px;border:1px solid #334155;white-space:nowrap;flex-shrink:0;}
+.n-btn{padding:6px 11px;border-radius:6px;font-weight:bold;text-decoration:none;font-size:12px;flex-shrink:0;white-space:nowrap;transition:.2s;}
+.n-home{background:#38bdf8;color:#0f172a;}
+.n-home:hover{background:#0284c7;color:#fff;}
+.n-provoz{background:#334155;color:#fff;}
+.n-provoz:hover{background:#475569;}
+/* ─── MARKERS ─── */
+.bus-marker,.train-marker{border:2px solid #fff;text-align:center;color:#fff;font-weight:bold;font-size:10px;line-height:20px;box-shadow:0 0 5px rgba(0,0,0,.5);}
+.bus-marker{border-radius:50%;}.train-marker{border-radius:4px;}
+.bg-green{background:#10b981;}.bg-red{background:#ef4444;}
+.bg-blue{background:#3b82f6;}.bg-darkblue{background:#1e3a8a;}
+.bg-gray{background:#64748b;border-color:#475569!important;color:#cbd5e1;}
+.bg-purple{background:#a855f7;}
+.bg-bug{background:#374151;border-color:#6b7280!important;border-style:dashed!important;color:#9ca3af;opacity:.65;}
+/* ─── POPUP ─── */
+.dark-popup .leaflet-popup-content-wrapper{background:#1e293b;color:#fff;border:1px solid #334155;padding:0;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.65);}
+.dark-popup .leaflet-popup-tip{background:#1e293b;}
+.dark-popup .leaflet-popup-content{margin:0;width:286px!important;}
+.ph{background:#0f172a;padding:10px 13px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center;}
+.ph-t{font-weight:bold;color:#38bdf8;font-size:15px;margin:0;}
+.pb{padding:11px 13px;font-size:13px;line-height:1.6;}
+.pr{display:flex;justify-content:space-between;margin-bottom:5px;border-bottom:1px dashed #334155;padding-bottom:3px;}
+.pr:last-child{border-bottom:none;}
+.pl{color:#94a3b8;font-weight:600;}.pv{font-weight:bold;text-align:right;max-width:60%;word-wrap:break-word;}
+.spz-b{background:#f59e0b;color:#0f172a;padding:2px 6px;border-radius:4px;font-size:12px;border:1px solid #d97706;}
+.pa{background:#38bdf8;color:#0f172a;border:none;padding:8px;width:100%;border-radius:5px;font-weight:bold;cursor:pointer;transition:.2s;margin-top:7px;display:block;text-align:center;font-size:12px;}
+.pa:hover{background:#0284c7;color:#fff;}
+.pa-d{background:#334155;color:#fff;}.pa-d:hover{background:#475569;}
+/* ─── FOLLOW HUD ─── */
+#hud{display:none;position:fixed;bottom:18px;right:18px;z-index:4000;font-family:'Segoe UI',sans-serif;}
+#hf{background:#1e293b;border:2px solid #38bdf8;border-radius:12px;padding:13px;width:248px;box-shadow:0 8px 28px rgba(0,0,0,.75);}
+#hm{display:none;background:#1e293b;border:2px solid #38bdf8;border-radius:50px;padding:6px 12px;align-items:center;gap:8px;box-shadow:0 4px 15px rgba(0,0,0,.5);}
+#hm button{background:none;border:none;cursor:pointer;font-size:18px;padding:2px 5px;border-radius:4px;transition:.2s;}
+.hh{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;}
+.hl{color:#38bdf8;font-size:10px;font-weight:bold;letter-spacing:.5px;}
+.ht{color:#94a3b8;font-size:11px;margin-bottom:1px;}
+.hd{color:#fff;font-size:16px;font-weight:bold;margin-bottom:6px;line-height:1.2;}
+.hr{display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:4px;}
+.hac{display:flex;gap:5px;margin-top:9px;}
+.hb{flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:bold;transition:.2s;}
+.hb-jr{background:#38bdf8;color:#0f172a;}.hb-jr:hover{background:#0284c7;color:#fff;}
+.hb-st{background:#ef4444;color:#fff;}.hb-st:hover{background:#dc2626;}
+.hb-mn{background:none;border:1px solid #334155;color:#94a3b8;padding:2px 7px;border-radius:4px;cursor:pointer;font-size:14px;transition:.2s;}
+.hb-mn:hover{border-color:#38bdf8;color:#38bdf8;}
+/* ─── STARTUP WARNING ─── */
+#sw{display:none;position:fixed;top:68px;left:50%;transform:translateX(-50%);
+  background:linear-gradient(135deg,#991b1b,#ef4444);color:#fff;
+  padding:11px 18px;border-radius:10px;font-weight:bold;z-index:5000;
+  text-align:center;max-width:92vw;width:410px;
+  box-shadow:0 4px 25px rgba(239,68,68,.55);border:1px solid rgba(255,255,255,.15);
+  animation:swPulse 2s ease-in-out infinite alternate;}
+@keyframes swPulse{0%{box-shadow:0 4px 20px rgba(239,68,68,.4);}100%{box-shadow:0 4px 45px rgba(239,68,68,.9);}}
+/* ─── JŘ MODAL ─── */
+#ttm{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.72);z-index:6000;align-items:center;justify-content:center;}
+#ttm.open{display:flex;}
+#ttb{background:#0f172a;border-radius:10px;padding:20px;max-width:700px;width:95%;border:1px solid #38bdf8;max-height:86vh;overflow-y:auto;position:relative;}
+#ttc-btn{position:absolute;top:10px;right:10px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px;font-weight:bold;}
+/* ─── MOBILE ─── */
+@media(max-width:600px){
+  #top-nav{gap:6px;padding:0 8px;height:52px;}
+  .n-title .a{font-size:13px;}.n-warn{font-size:9px;padding:2px 5px;display:none;}
+  .n-btn{font-size:11px;padding:5px 7px;}.n-clock{font-size:11px;padding:4px 7px;}
+  #hf{width:210px;}.dark-popup .leaflet-popup-content{width:252px!important;}
+}
+</style>
+
+<div id="map-wrap">
+  <div id="panel-zone"></div>
+
+  <nav id="top-nav">
+    <a href="https://datacorebot.koyeb.app/" class="n-logo">
+      <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png" alt="OIS IDPK">
+    </a>
+    <div class="n-title">
+      <div class="a"><i class="fas fa-map-marked-alt"></i> Interaktivní mapa</div>
+      <div class="b">Projekt OIS IDPK &nbsp;·&nbsp; Neoficiální</div>
+    </div>
+    <div class="n-warn">⚠ Není garantována 100% přesnost dat</div>
+    <div class="n-sp"></div>
+    <div class="n-clock">🕐 <span id="systemTimeClock">--:--:--</span></div>
+    <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠 Domů</a>
+    <a href="/provoz-idpk" class="n-btn n-provoz">🚌 Provoz IDPK</a>
+  </nav>
+
+  <div id="map"></div>
+
+  <!-- Startup warning -->
+  <div id="sw">
+    <div style="font-size:17px;margin-bottom:3px;">⚠️ Mapa se startuje</div>
+    <div style="font-size:12px;font-weight:normal;opacity:.9;">Probíhá načítání dat z Inflow a Arriva — vyčkejte prosím, data se brzy zobrazí.</div>
+    <div id="sw-cd" style="margin-top:5px;font-size:11px;opacity:.8;"></div>
+  </div>
+
+  <!-- JŘ Modal -->
+  <div id="ttm">
+    <div id="ttb">
+      <button id="ttc-btn" onclick="document.getElementById('ttm').classList.remove('open')">✕</button>
+      <div id="ttc" style="color:white;">Načítám...</div>
     </div>
   </div>
-  <div id="map" style="width: 100%; height: 75vh; border-radius: 10px; border: 2px solid #334155; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1;"></div>
-  <div id="timetable-modal" class="modal" style="z-index: 9999;">
-    <div class="modal-background" onclick="document.getElementById('timetable-modal').classList.remove('is-active')"></div>
-    <div class="modal-content" style="background: #0f172a; border-radius: 8px; padding: 20px; max-width: 700px; width: 95%; border: 1px solid #38bdf8;">
-      <div id="timetable-content" style="color: white; overflow-x: auto;">Načítám detail spoje...</div>
+
+  <!-- Follow HUD -->
+  <div id="hud">
+    <div id="hf">
+      <div class="hh">
+        <span class="hl">📡 SLEDOVÁNÍ SPOJE</span>
+        <button class="hb-mn" onclick="minHud()" title="Minimalizovat">−</button>
+      </div>
+      <div id="h-trip" class="ht">Spoj: —</div>
+      <div id="h-dest" class="hd">Načítám...</div>
+      <div class="hr"><span style="color:#94a3b8;">SPZ:</span><span id="h-spz">—</span></div>
+      <div class="hr"><span style="color:#94a3b8;">Zpoždění:</span><span id="h-delay">—</span></div>
+      <div class="hr"><span style="color:#94a3b8;">Status:</span><span id="h-status" style="color:#94a3b8;font-size:11px;">—</span></div>
+      <div class="hac">
+        <button class="hb hb-jr" id="h-jr">📋 JŘ</button>
+        <button class="hb hb-st" onclick="stopFollow()">✕ Konec</button>
+      </div>
     </div>
-    <button class="modal-close is-large" aria-label="close" onclick="document.getElementById('timetable-modal').classList.remove('is-active')"></button>
-  </div>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <style>
-    .bus-marker { border-radius: 50%; border: 2px solid white; text-align: center; color: white; font-weight: bold; font-size: 10px; line-height: 20px; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
-    .train-marker { border-radius: 4px; border: 2px solid white; text-align: center; color: white; font-weight: bold; font-size: 10px; line-height: 20px; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
-    .bg-green { background-color: #10b981; } .bg-red { background-color: #ef4444; } .bg-blue { background-color: #3b82f6; }
-    .bg-darkblue { background-color: #1e3a8a; } .bg-gray { background-color: #64748b; border-color: #475569; color: #cbd5e1; }
-    .bg-purple { background-color: #a855f7; }
-    .bg-bug { background-color: #374151; border-color: #6b7280 !important; border-style: dashed !important; color: #9ca3af; opacity: 0.65; }
-    .dark-popup .leaflet-popup-content-wrapper { background: #1e293b; color: white; border: 1px solid #334155; padding: 0; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); }
-    .dark-popup .leaflet-popup-tip { background: #1e293b; border-bottom: 1px solid #334155; border-right: 1px solid #334155; }
-    .dark-popup .leaflet-popup-content { margin: 0; width: 280px !important; }
-    .popup-header { background: #0f172a; padding: 12px 15px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
-    .popup-header-title { font-weight: bold; color: #38bdf8; font-size: 16px; margin: 0; }
-    .popup-body { padding: 15px; font-size: 13px; line-height: 1.6; }
-    .popup-row { display: flex; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px dashed #334155; padding-bottom: 4px; }
-    .popup-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-    .popup-label { color: #94a3b8; font-weight: 600; }
-    .popup-value { font-weight: bold; text-align: right; max-width: 60%; word-wrap: break-word; }
-    .badge-spz { background: #f59e0b; color: #0f172a; padding: 2px 6px; border-radius: 4px; font-size: 12px; border: 1px solid #d97706; }
-    .btn-timetable { background: #38bdf8; color: #0f172a; border: none; padding: 10px; width: 100%; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 10px; display: block; text-align: center; }
-    .btn-timetable:hover { background: #0284c7; color: white; }
-  </style>
-  <script>
-    var defaultLat = 49.7384, defaultLng = 13.3736, defaultZoom = 12;
-    var hashParts = [];
-    if (window.location.hash) {
-      hashParts = window.location.hash.replace('#', '').split(',');
-      if (hashParts.length === 2) { defaultLat = parseFloat(hashParts[0]); defaultLng = parseFloat(hashParts[1]); defaultZoom = 17; }
-    }
-    var map = L.map('map').setView([defaultLat, defaultLng], defaultZoom);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-    var markersLayer = L.layerGroup().addTo(map);
-    let lastDataArray = [];
-    let followedBusId = null;
-    // dragstart záměrně NERUŠÍ sledování – to zastaví jen tlačítko
-    if (hashParts.length === 2) {
-      L.circleMarker([defaultLat, defaultLng], {radius: 35, color: '#ef4444', weight: 3, opacity: 0.8, fillOpacity: 0.2}).addTo(map);
-      L.circleMarker([defaultLat, defaultLng], {radius: 5, color: '#ef4444', weight: 5, opacity: 1, fillOpacity: 1}).addTo(map);
-    }
-    async function showTimetable(busId) {
-      let modal = document.getElementById('timetable-modal');
-      let content = document.getElementById('timetable-content');
-      modal.classList.add('is-active');
-      content.innerHTML = "<div class='has-text-centered' style='padding:40px;'><i class='fas fa-circle-notch fa-spin fa-2x' style='color:#38bdf8; margin-bottom: 15px;'></i><p style='color:#38bdf8; font-weight:bold;'>Stahuji Jízdní řád z Inflow...</p></div>";
-      try {
-        let response = await fetch('/api/bus_detail/' + busId);
-        content.innerHTML = await response.text();
-      } catch(e) { content.innerHTML = "<p style='color:#ef4444;padding:20px;text-align:center;'>Chyba spojení.</p>"; }
-    }
-    function stopFollowing() {
-      followedBusId = null;
-      document.getElementById('follow-hud').style.display = 'none';
-    }
-    window.toggleFollow = function(busId) {
-      if (followedBusId === busId) {
-        stopFollowing();
-      } else {
-        followedBusId = busId;
-        let bus = lastDataArray.find(b => b.id === busId);
-        if (bus) map.setView([bus.lat, bus.lng], 16);
-        document.getElementById('follow-hud').style.display = 'block';
-        updateHud(bus);
-      }
-    }
-    function updateHud(bus) {
-      if (!bus) return;
-      document.getElementById('follow-hud-line').textContent = 'Linka ' + (bus.line || '?');
-      document.getElementById('follow-hud-dest').textContent = bus.destination || 'Neznámý cíl';
-      let spzHtml = '';
-      if (bus.spz && bus.spz !== 'Neznámá') {
-        let icon = bus.spz_verified ? '✔' : '⏳';
-        let bg   = bus.spz_verified ? '#f59e0b' : '#f97316';
-        spzHtml = `<span style="background:${bg}; color:#0f172a; padding:2px 8px; border-radius:4px; font-weight:bold; font-size:14px;">${bus.spz} ${icon}</span>`;
-      } else {
-        spzHtml = '<span style="color:#94a3b8; font-size:12px;">SPZ: Čeká na ověření...</span>';
-      }
-      document.getElementById('follow-hud-spz').innerHTML = spzHtml;
-      let delayVal = parseInt(bus.delay);
-      let delayStr = '';
-      if (!isNaN(delayVal)) {
-        if (delayVal >= 5)      delayStr = `<span style="color:#ef4444;">⚠ Zpoždění ${delayVal} min</span>`;
-        else if (delayVal < -1) delayStr = `<span style="color:#60a5fa;">↑ Náskok ${Math.abs(delayVal)} min</span>`;
-        else                    delayStr = `<span style="color:#10b981;">✓ V čase</span>`;
-      }
-      document.getElementById('follow-hud-delay').innerHTML = delayStr;
-      document.getElementById('follow-hud-status').innerHTML = `<span style="color:#94a3b8;">${bus.status}</span>`;
-    }
-    async function fetchBuses() {
-      try {
-        let response = await fetch('/api/live_buses');
-        let data = await response.json();
-        if (data.server_time) document.getElementById('systemTimeClock').innerText = data.server_time;
-        if (data.status === "success") {
-          lastDataArray = data.buses;
-          markersLayer.clearLayers();
-          // Aktualizace HUD sledovaného autobusu
-          if (followedBusId) {
-            let followed = data.buses.find(b => b.id === followedBusId);
-            if (followed) {
-              map.setView([followed.lat, followed.lng]);
-              updateHud(followed);
-            } else {
-              // Sledovaný bus zmizel
-              document.getElementById('follow-hud-status').innerHTML = '<span style="color:#a855f7;">⚠ Ztráta signálu</span>';
-            }
-          }
-          data.buses.forEach(bus => {
-            if (!bus.lat || !bus.lng) return;
-            let markerColor = bus.color_class;
-            let delayText = "";
-            let delayVal = parseInt(bus.delay);
-            if (markerColor === "bg-gray" || markerColor === "bg-bug") {
-              if (bus.status.includes(">4h")) {
-                let aheadMin = Math.abs(delayVal), aheadH = Math.floor(aheadMin / 60), aheadM = aheadMin % 60;
-                delayText = `<span style="color:#94a3b8;">Odjezd za ${aheadH}h ${aheadM}m</span>`;
-              } else delayText = `<span style="color:#94a3b8;">N/A</span>`;
-            } else if (markerColor === "bg-purple") {
-              delayText = `<span style="color:#a855f7;">Konečná zastávka</span>`;
-            } else if (markerColor === "bg-blue") {
-              let aheadMin = Math.abs(delayVal), aheadH = Math.floor(aheadMin / 60), aheadM = aheadMin % 60;
-              delayText = `<span style="color:#3b82f6;">Odjezd za ${aheadH > 0 ? aheadH + 'h ' : ''}${aheadM} min</span>`;
-            } else if (markerColor === "bg-darkblue") {
-              delayText = `<span style="color:#60a5fa;">Náskok ${Math.abs(delayVal)} min</span>`;
-            } else if (delayVal >= 5) {
-              delayText = `<span style="color:#ef4444;">Zpoždění ${delayVal} min</span>`;
-            } else {
-              delayText = `<span style="color:#10b981;">+${delayVal} min</span>`;
-            }
-            let shape = bus.is_train ? 'train-marker' : 'bus-marker';
-            let icon = L.divIcon({ className: shape + ' ' + markerColor, iconSize: [24, 24] });
-            let marker = L.marker([bus.lat, bus.lng], {icon: icon});
-            let spzHtml = "", historyBtn = "", investigateText = "";
-            if (!bus.is_train) {
-              if (bus.investigating) {
-                spzHtml = `<div class="popup-row"><span class="popup-label">SPZ:</span><span class="popup-value badge-spz" style="background:#ef4444; color:white; border-color:#b91c1c;"><i class="fas fa-search"></i> Výzkum duplikace</span></div>`;
-                investigateText = `<div style="color:#ef4444; font-size:11px; margin-top:5px; font-weight:bold;"><i class="fas fa-exclamation-circle"></i> Probíhá zjišťování správné SPZ (${bus.investigation_spz})</div>`;
-              } else if (bus.spz && bus.spz !== 'Neznámá') {
-                let badgeIcon = bus.spz_verified ? '<i class="fas fa-check-circle" style="color:#0f172a;margin-left:3px;" title="Ověřeno"></i>' : '<i class="fas fa-question-circle" style="color:white;margin-left:3px;" title="Odhad (drží se)"></i>';
-                let spzStyle = bus.spz_verified ? 'badge-spz' : 'badge-spz" style="background:#f97316; color:white; border-color:#c2410c;';
-                let spzDisplay = bus.spz_verified ? bus.spz : `${bus.spz} ⏳`;
-                spzHtml = `<div class="popup-row"><span class="popup-label">SPZ:</span><span class="popup-value ${spzStyle}">${spzDisplay} ${badgeIcon}</span></div>`;
-                if (bus.spz_verified) {
-                  historyBtn = `<a href="/historie/${bus.spz}" target="_blank" class="btn-timetable" style="background:#f59e0b; margin-top:5px;"><i class="fas fa-history"></i> Historie vozu</a>`;
-                }
-              } else {
-                spzHtml = `<div class="popup-row"><span class="popup-label">SPZ:</span><span class="popup-value" style="color:#94a3b8;">Čeká na ověření...</span></div>`;
-              }
-            }
-            let statusColor = "#10b981";
-            if (bus.color_class === "bg-bug") statusColor = "#6b7280";
-            else if (bus.status.includes("Stojí") || bus.status.includes("Odstaven")) statusColor = "#ef4444";
-            else if (bus.status.includes("Koneč") || bus.status.includes("Ztráta")) statusColor = "#a855f7";
-            else if (bus.status.includes("Začátek") || bus.status.includes("Čeká")) statusColor = "#3b82f6";
-            else if (bus.status.includes("N/A") || bus.status.includes("signál") || bus.status.includes("Zmizel") || bus.status.includes("Výzkum")) statusColor = "#94a3b8";
-            else if (bus.status.includes("Náskok") || bus.status.includes("Vyčkává")) statusColor = "#60a5fa";
-            else if (bus.status.includes("Timeout") || bus.status.includes("Falešný")) statusColor = "#ef4444";
-            let followText = (followedBusId === bus.id) ? '<i class="fas fa-stop-circle"></i> Přestat sledovat' : '<i class="fas fa-crosshairs"></i> Sledovat kamerou';
-            let followStyle = (followedBusId === bus.id) ? 'background:#ef4444; color:white;' : 'background:#3b82f6; color:white;';
-            let bugWarning = bus.color_class === 'bg-bug' ? `
-              <div style="background:#374151; border:1px dashed #6b7280; border-radius:6px; padding:10px; margin:8px 0; color:#9ca3af; font-size:12px; text-align:center;">
-                <i class="fas fa-exclamation-triangle" style="color:#f59e0b; margin-right:5px;"></i>
-                <strong style="color:#f59e0b;">BUG – NEAKTUÁLNÍ MÍSTO</strong><br>
-                Tento bod se nehýbe, ale SPZ <strong>${bus.spz}</strong> jede na jiném místě.<br>
-                Pravděpodobně autobus nezmizel z mapy správně.
-              </div>` : '';
-            let popupHTML = `
-              <div class="popup-header" style="${bus.color_class === 'bg-bug' ? 'background:#1f2937; border-bottom-color:#374151;' : ''}"><h3 class="popup-header-title" style="${bus.color_class === 'bg-bug' ? 'color:#9ca3af;' : ''}"><i class="${bus.is_train ? 'fas fa-train' : 'fas fa-bus'}"></i> Linka ${bus.line}</h3></div>
-              <div class="popup-body">
-                ${bugWarning}
-                <div class="popup-row"><span class="popup-label">Cíl:</span><span class="popup-value" style="color:white;">${bus.destination || "Neznámý"}</span></div>
-                ${spzHtml}${investigateText}
-                <div class="popup-row"><span class="popup-label">Status:</span><span class="popup-value" style="color:${statusColor};">${bus.status}</span></div>
-                <div class="popup-row"><span class="popup-label">Trip ID:</span><span class="popup-value" style="color:#94a3b8; font-size:11px;">${bus.trip_id}</span></div>
-                <div class="popup-row" style="border:none; margin-top:5px;"><span class="popup-label">JŘ:</span><span class="popup-value">${delayText}</span></div>
-                ${bus.color_class !== 'bg-bug' ? `<button class="btn-timetable" onclick="showTimetable('${bus.id}')"><i class="fas fa-list-alt"></i> Zobrazit Jízdní řád</button>` : ''}
-                <button onclick="toggleFollow('${bus.id}')" class="btn-timetable" style="${followStyle} margin-top:5px;">${followText}</button>
-                ${historyBtn}
-              </div>`;
-            marker.bindPopup(popupHTML, {className: 'dark-popup'});
-            markersLayer.addLayer(marker);
-          });
-        }
-      } catch(e) { console.error(e); }
-    }
-    fetchBuses();
-    setInterval(fetchBuses, 10000);
-  </script>
-  <!-- ── SLEDOVACÍ HUD ── -->
-  <div id="follow-hud" style="display:none; position:fixed; bottom:24px; right:24px; background:#1e293b; border:2px solid #38bdf8; border-radius:12px; padding:16px; z-index:9000; min-width:240px; max-width:280px; box-shadow:0 8px 24px rgba(0,0,0,0.7); font-family:sans-serif;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-      <span style="color:#38bdf8; font-weight:bold; font-size:13px;"><i class="fas fa-crosshairs"></i>&nbsp; Sledování autobusu</span>
-      <button onclick="stopFollowing()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:18px; line-height:1; padding:0;" title="Zavřít">&#x2715;</button>
+    <div id="hm">
+      <span style="color:#38bdf8;font-size:12px;font-weight:bold;">📡</span>
+      <span id="hm-line" style="color:#fff;font-size:12px;font-weight:bold;"></span>
+      <button onclick="maxHud()" style="color:#10b981;" title="Rozbalit">＋</button>
+      <button onclick="stopFollow()" style="color:#ef4444;" title="Zastavit">✕</button>
     </div>
-    <div id="follow-hud-line"  style="font-size:22px; font-weight:bold; color:white; margin-bottom:3px;"></div>
-    <div id="follow-hud-dest"  style="font-size:13px; color:#94a3b8; margin-bottom:8px;"></div>
-    <div id="follow-hud-spz"   style="margin-bottom:5px;"></div>
-    <div id="follow-hud-delay" style="font-size:13px; margin-bottom:4px;"></div>
-    <div id="follow-hud-status" style="font-size:12px; margin-bottom:12px;"></div>
-    <button onclick="stopFollowing()" style="background:#ef4444; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; width:100%; font-weight:bold; font-size:13px;">
-      <i class="fas fa-stop-circle"></i>&nbsp; Přestat sledovat
-    </button>
   </div>
 </div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ─── PANEL ────────────────────────────────────────────────────────────────────
+const nav = document.getElementById('top-nav');
+const pz  = document.getElementById('panel-zone');
+let hideT = null;
+function showNav(){ clearTimeout(hideT); nav.classList.add('vis'); }
+function hideNav(){ hideT = setTimeout(()=>nav.classList.remove('vis'), 450); }
+pz.addEventListener('mouseenter', showNav);
+nav.addEventListener('mouseenter', showNav);
+nav.addEventListener('mouseleave', hideNav);
+document.addEventListener('touchstart', e=>{
+  if(e.touches[0].clientY < 38){ showNav(); clearTimeout(hideT); hideT=setTimeout(()=>nav.classList.remove('vis'),4500); }
+  else if(!nav.contains(e.target)) hideNav();
+},{passive:true});
+
+// ─── MAP ──────────────────────────────────────────────────────────────────────
+var dLat=49.7384, dLng=13.3736, dZoom=12;
+var hp = window.location.hash.replace('#','').split(',');
+if(hp.length===2){ dLat=parseFloat(hp[0]); dLng=parseFloat(hp[1]); dZoom=17; }
+var map = L.map('map',{zoomControl:false}).setView([dLat,dLng],dZoom);
+L.control.zoom({position:'bottomleft'}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+var ml = L.layerGroup().addTo(map);
+if(hp.length===2) L.circleMarker([dLat,dLng],{radius:28,color:'#ef4444',weight:2,opacity:.8,fillOpacity:.12}).addTo(map);
+
+// ─── HUD ──────────────────────────────────────────────────────────────────────
+let lastArr=[], followId=null, hudMin=false, followInflowId=null;
+
+function stopFollow(){
+  followId=null; followInflowId=null; hudMin=false;
+  document.getElementById('hud').style.display='none';
+  document.getElementById('hf').style.display='block';
+  document.getElementById('hm').style.display='none';
+}
+function minHud(){
+  hudMin=true;
+  document.getElementById('hf').style.display='none';
+  document.getElementById('hm').style.display='flex';
+}
+function maxHud(){
+  hudMin=false;
+  document.getElementById('hf').style.display='block';
+  document.getElementById('hm').style.display='none';
+}
+window.toggleFollow = function(busId, inflowId){
+  if(followId===busId){ stopFollow(); return; }
+  followId=busId; followInflowId=inflowId||busId;
+  let b=lastArr.find(x=>x.id===busId);
+  if(b&&b.lat) map.setView([b.lat,b.lng],16);
+  document.getElementById('hud').style.display='block';
+  updateHud(b);
+  if(hudMin){ document.getElementById('hf').style.display='none'; document.getElementById('hm').style.display='flex'; }
+}
+function updateHud(b){
+  if(!b) return;
+  let trip = (b.line||'?') + (b.trip_id ? ' · '+b.trip_id.replace('TRIP-','').substring(0,8) : '');
+  document.getElementById('h-trip').textContent = 'Spoj: '+trip;
+  document.getElementById('h-dest').innerHTML = '→&nbsp;'+(b.destination||'Neznámý cíl');
+  let se=document.getElementById('h-spz');
+  if(b.spz&&b.spz!=='Neznámá'){
+    let icon=b.spz_verified?'✔':'⏳', bg=b.spz_verified?'#f59e0b':'#f97316';
+    se.innerHTML=`<span style="background:${bg};color:#0f172a;padding:1px 6px;border-radius:4px;font-weight:bold;">${b.spz} ${icon}</span>`;
+  } else { se.innerHTML='<span style="color:#64748b;">Čeká...</span>'; }
+  let de=document.getElementById('h-delay'), dv=parseInt(b.delay);
+  if(b.color_class==='bg-blue'){
+    let dm=Math.abs(dv),dh=Math.floor(dm/60),dmin=dm%60;
+    de.innerHTML=`<span style="color:#3b82f6;">Odjezd za ${dh>0?dh+'h ':''} ${dmin}min</span>`;
+  } else if(b.color_class==='bg-darkblue'){
+    de.innerHTML=`<span style="color:#60a5fa;">Náskok ${Math.abs(dv)} min</span>`;
+  } else if(dv>=5){
+    de.innerHTML=`<span style="color:#ef4444;">+${dv} min</span>`;
+  } else if(dv<-1){
+    de.innerHTML=`<span style="color:#60a5fa;">−${Math.abs(dv)} min</span>`;
+  } else { de.innerHTML='<span style="color:#10b981;">V čase</span>'; }
+  document.getElementById('h-status').textContent=b.status||'—';
+  document.getElementById('hm-line').textContent='L'+(b.line||'?');
+  let jrBtn=document.getElementById('h-jr');
+  let iid=followInflowId||b.id;
+  jrBtn.onclick=()=>showTT(iid);
+}
+
+// ─── TIMETABLE MODAL ──────────────────────────────────────────────────────────
+async function showTT(busId){
+  document.getElementById('ttm').classList.add('open');
+  document.getElementById('ttc').innerHTML="<div style='text-align:center;padding:40px;color:#38bdf8;'><i class='fas fa-circle-notch fa-spin fa-2x'></i><p style='margin-top:14px;font-weight:bold;'>Načítám JŘ z PVVD...</p></div>";
+  try{
+    let r=await fetch('/api/bus_detail/'+busId);
+    document.getElementById('ttc').innerHTML=await r.text();
+  }catch(e){document.getElementById('ttc').innerHTML="<p style='color:#ef4444;padding:20px;text-align:center;'>Chyba při načítání JŘ.</p>";}
+}
+
+// ─── STARTUP WARNING ──────────────────────────────────────────────────────────
+let swShown=false, pageLoad=Date.now();
+function checkSW(uptimeSec){
+  let sw=document.getElementById('sw');
+  if(uptimeSec<600&&(Date.now()-pageLoad)<660000){
+    if(!swShown){ swShown=true; sw.style.display='block'; }
+    let rem=Math.max(0,Math.round(600-uptimeSec));
+    document.getElementById('sw-cd').textContent=rem>0?'Přibližně '+rem+'s do plného načtení':'Dokončuji...';
+  } else { sw.style.display='none'; swShown=false; }
+}
+
+// ─── MAIN FETCH ───────────────────────────────────────────────────────────────
+async function fetchBuses(){
+  try{
+    let r=await fetch('/api/live_buses'), data=await r.json();
+    if(data.server_time) document.getElementById('systemTimeClock').innerText=data.server_time;
+    if(typeof data.worker_uptime_seconds==='number') checkSW(data.worker_uptime_seconds);
+    if(data.status!=='success') return;
+    lastArr=data.buses;
+    if(followId){
+      let fb=data.buses.find(b=>b.id===followId);
+      if(fb&&fb.lat){ map.setView([fb.lat,fb.lng]); if(!hudMin) updateHud(fb); else document.getElementById('hm-line').textContent='L'+(fb.line||'?'); }
+      else document.getElementById('h-status').textContent='⚠ Ztráta signálu';
+    }
+    ml.clearLayers();
+    data.buses.forEach(bus=>{
+      if(!bus.lat||!bus.lng) return;
+      let mc=bus.color_class, dv=parseInt(bus.delay), dTxt='';
+      if(mc==='bg-gray'||mc==='bg-bug') dTxt='<span style="color:#94a3b8;">N/A</span>';
+      else if(mc==='bg-purple') dTxt='<span style="color:#a855f7;">Konečná</span>';
+      else if(mc==='bg-blue'){
+        let dm=Math.abs(dv),dh=Math.floor(dm/60),dmn=dm%60,ts=dh>0?dh+'h '+dmn+'m':dmn+' min';
+        dTxt=`<span style="color:#3b82f6;">Za ${ts}</span>`;
+      } else if(mc==='bg-darkblue'){
+        dTxt=`<span style="color:#60a5fa;">Náskok ${Math.abs(dv)} min</span>`;
+      } else if(dv>=5){
+        dTxt=`<span style="color:#ef4444;">Zpoždění ${dv} min</span>`;
+      } else { dTxt=`<span style="color:#10b981;">+${dv} min</span>`; }
+
+      let shape=bus.is_train?'train-marker':'bus-marker';
+      let icon=L.divIcon({className:shape+' '+mc,iconSize:[24,24]});
+      let marker=L.marker([bus.lat,bus.lng],{icon});
+
+      let spzH='', invTxt='', histBtn='';
+      if(!bus.is_train){
+        if(bus.investigating){
+          spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;"><i class="fas fa-search"></i> Výzkum</span></div>`;
+          invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">⚠ Zjišťuji SPZ (${bus.investigation_spz})</div>`;
+        } else if(bus.spz&&bus.spz!=='Neznámá'){
+          let vi=bus.spz_verified?'✔':'⏳', vs=bus.spz_verified?'spz-b':'spz-b" style="background:#f97316;color:#fff;border-color:#c2410c;';
+          spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv ${vs}">${bus.spz} ${vi}</span></div>`;
+          if(bus.spz_verified) histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;"><i class="fas fa-history"></i> Historie vozu</a>`;
+        } else { spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Čeká na ověření</span></div>`; }
+      }
+      let bugW='';
+      if(mc==='bg-bug') bugW=`<div style="background:#374151;border:1px dashed #6b7280;border-radius:5px;padding:7px;margin:5px 0;color:#9ca3af;font-size:10px;text-align:center;"><i class="fas fa-exclamation-triangle" style="color:#f59e0b;"></i> <b style="color:#f59e0b;">BUG – NEAKTUÁLNÍ MÍSTO</b><br>SPZ ${bus.spz} jede na jiném místě.</div>`;
+      let sc='#10b981';
+      if(mc==='bg-bug'||bus.status.includes('příliš')) sc='#6b7280';
+      else if(bus.status.includes('Stojí')) sc='#ef4444';
+      else if(bus.status.includes('Konečná')||bus.status.includes('Ztráta')) sc='#a855f7';
+      else if(bus.status.includes('Čeká')||bus.status.includes('Začátek')) sc='#3b82f6';
+      else if(bus.status.includes('Odstaven')||bus.status.includes('signál')) sc='#94a3b8';
+      else if(bus.status.includes('Náskok')) sc='#60a5fa';
+      let fTxt=(followId===bus.id)?'✕ Zrušit sledování':'📡 Sledovat';
+      let fSt=(followId===bus.id)?'background:#ef4444;color:#fff;':'background:#3b82f6;color:#fff;';
+      let popH=`
+        <div class="ph" style="${mc==='bg-bug'?'background:#1f2937;':''}">
+          <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}"><i class="${bus.is_train?'fas fa-train':'fas fa-bus'}"></i> Linka ${bus.line}</h3>
+        </div>
+        <div class="pb">
+          ${bugW}
+          <div class="pr"><span class="pl">Cíl:</span><span class="pv">${bus.destination||'Neznámý'}</span></div>
+          ${spzH}${invTxt}
+          <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
+          <div class="pr" style="border:none;"><span class="pl">JŘ:</span><span class="pv">${dTxt}</span></div>
+          <button class="pa" onclick="showTT('${bus.id}')"><i class="fas fa-list-alt"></i> Zobrazit Jízdní řád</button>
+          <button class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
+          ${histBtn}
+        </div>`;
+      marker.bindPopup(popH,{className:'dark-popup'});
+      ml.addLayer(marker);
+    });
+  }catch(e){console.error(e);}
+}
+fetchBuses();
+setInterval(fetchBuses,10000);
+</script>
 """
 
+
 # --- GLOBÁLNÍ STAV ---
-GLOBAL_BUS_CACHE = {}   # bus_id -> dict s daty autobusu
-LIVE_BUSES_DATA  = []   # Seznam pro frontend
+GLOBAL_BUS_CACHE = {}
+LIVE_BUSES_DATA  = []
 TRACKED_SPZS     = set()
+WORKER_START_TIME = None   # nastavuje se při startu workeru
 
 cj     = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
@@ -633,8 +742,9 @@ def upsert_to_history(db, c):
 # --- HLAVNÍ SMYČKA NA POZADÍ ---
 
 def background_map_worker():
-    global TRACKED_SPZS
+    global TRACKED_SPZS, WORKER_START_TIME
     print("[MAPA] Worker startuje (vylepšená SPZ logika v2)...", flush=True)
+    WORKER_START_TIME = get_prague_time()
 
     db_client = get_db_client()
     if db_client:
@@ -1127,6 +1237,15 @@ def background_map_worker():
                         c["status"]      = "Jízda" if is_moving else "Stojí"
                         c["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
 
+                    # ── Šedá pro autobusy stojící příliš dlouho ──────────────
+                    # (jen pokud already started, není konečná/BUG/gray)
+                    if (not is_moving
+                            and inactive_mins > 30
+                            and c.get("actual_start_time")
+                            and c["color_class"] not in ("bg-purple", "bg-gray", "bg-bug", "bg-blue")):
+                        c["status"]      = f"Stojí příliš dlouho ({int(inactive_mins)} min)"
+                        c["color_class"] = "bg-gray"
+
                 if is_moving and not c["actual_start_time"] and not is_train:
                     c["actual_start_time"] = now.strftime('%H:%M')
 
@@ -1181,17 +1300,18 @@ def start_map_background_task():
 
 # ─── FLASK ROUTES ─────────────────────────────────────────────────────────────
 
-def _full_page(title, body_html):
+def _full_page(title, body_html, is_map=False):
     """Obalí HTML do kompletní stránky."""
+    extra = 'overflow:hidden;' if is_map else ''
     return Response(
         f"""<!DOCTYPE html>
-<html style="background:#0f172a;">
+<html style="background:#0f172a;{extra}">
 <head>
   <title>{title} | OIS IDPK</title>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 </head>
-<body style="background:#0f172a; color:white;">
+<body style="background:#0f172a;color:white;{extra}margin:0;padding:0;">
 {body_html}
 </body>
 </html>""",
@@ -1201,7 +1321,7 @@ def _full_page(title, body_html):
 
 @mapa_bp.route('/mapa')
 def stranka_mapa():
-    return _full_page("Mapa", HTML_MAPA)
+    return _full_page("Mapa", HTML_MAPA, is_map=True)
 
 
 @mapa_bp.route('/historie')
@@ -1219,10 +1339,12 @@ def stranka_historie_detail(spz):
 @mapa_bp.route('/api/live_buses')
 def api_live_buses():
     now = get_prague_time()
+    uptime = (now - WORKER_START_TIME).total_seconds() if WORKER_START_TIME else 9999
     return jsonify({
-        "status":      "success",
-        "server_time": now.strftime('%H:%M:%S'),
-        "buses":       LIVE_BUSES_DATA,
+        "status":               "success",
+        "server_time":          now.strftime('%H:%M:%S'),
+        "worker_uptime_seconds": round(uptime),
+        "buses":                LIVE_BUSES_DATA,
     })
 
 
