@@ -263,6 +263,7 @@ HTML_MAPA = """
     .bg-green { background-color: #10b981; } .bg-red { background-color: #ef4444; } .bg-blue { background-color: #3b82f6; }
     .bg-darkblue { background-color: #1e3a8a; } .bg-gray { background-color: #64748b; border-color: #475569; color: #cbd5e1; }
     .bg-purple { background-color: #a855f7; }
+    .bg-bug { background-color: #374151; border-color: #6b7280 !important; border-style: dashed !important; color: #9ca3af; opacity: 0.65; }
     .dark-popup .leaflet-popup-content-wrapper { background: #1e293b; color: white; border: 1px solid #334155; padding: 0; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); }
     .dark-popup .leaflet-popup-tip { background: #1e293b; border-bottom: 1px solid #334155; border-right: 1px solid #334155; }
     .dark-popup .leaflet-popup-content { margin: 0; width: 280px !important; }
@@ -289,7 +290,7 @@ HTML_MAPA = """
     var markersLayer = L.layerGroup().addTo(map);
     let lastDataArray = [];
     let followedBusId = null;
-    map.on('dragstart', function() { followedBusId = null; });
+    // dragstart záměrně NERUŠÍ sledování – to zastaví jen tlačítko
     if (hashParts.length === 2) {
       L.circleMarker([defaultLat, defaultLng], {radius: 35, color: '#ef4444', weight: 3, opacity: 0.8, fillOpacity: 0.2}).addTo(map);
       L.circleMarker([defaultLat, defaultLng], {radius: 5, color: '#ef4444', weight: 5, opacity: 1, fillOpacity: 1}).addTo(map);
@@ -304,13 +305,43 @@ HTML_MAPA = """
         content.innerHTML = await response.text();
       } catch(e) { content.innerHTML = "<p style='color:#ef4444;padding:20px;text-align:center;'>Chyba spojení.</p>"; }
     }
+    function stopFollowing() {
+      followedBusId = null;
+      document.getElementById('follow-hud').style.display = 'none';
+    }
     window.toggleFollow = function(busId) {
-      if (followedBusId === busId) { followedBusId = null; }
-      else {
+      if (followedBusId === busId) {
+        stopFollowing();
+      } else {
         followedBusId = busId;
         let bus = lastDataArray.find(b => b.id === busId);
         if (bus) map.setView([bus.lat, bus.lng], 16);
+        document.getElementById('follow-hud').style.display = 'block';
+        updateHud(bus);
       }
+    }
+    function updateHud(bus) {
+      if (!bus) return;
+      document.getElementById('follow-hud-line').textContent = 'Linka ' + (bus.line || '?');
+      document.getElementById('follow-hud-dest').textContent = bus.destination || 'Neznámý cíl';
+      let spzHtml = '';
+      if (bus.spz && bus.spz !== 'Neznámá') {
+        let icon = bus.spz_verified ? '✔' : '⏳';
+        let bg   = bus.spz_verified ? '#f59e0b' : '#f97316';
+        spzHtml = `<span style="background:${bg}; color:#0f172a; padding:2px 8px; border-radius:4px; font-weight:bold; font-size:14px;">${bus.spz} ${icon}</span>`;
+      } else {
+        spzHtml = '<span style="color:#94a3b8; font-size:12px;">SPZ: Čeká na ověření...</span>';
+      }
+      document.getElementById('follow-hud-spz').innerHTML = spzHtml;
+      let delayVal = parseInt(bus.delay);
+      let delayStr = '';
+      if (!isNaN(delayVal)) {
+        if (delayVal >= 5)      delayStr = `<span style="color:#ef4444;">⚠ Zpoždění ${delayVal} min</span>`;
+        else if (delayVal < -1) delayStr = `<span style="color:#60a5fa;">↑ Náskok ${Math.abs(delayVal)} min</span>`;
+        else                    delayStr = `<span style="color:#10b981;">✓ V čase</span>`;
+      }
+      document.getElementById('follow-hud-delay').innerHTML = delayStr;
+      document.getElementById('follow-hud-status').innerHTML = `<span style="color:#94a3b8;">${bus.status}</span>`;
     }
     async function fetchBuses() {
       try {
@@ -320,13 +351,23 @@ HTML_MAPA = """
         if (data.status === "success") {
           lastDataArray = data.buses;
           markersLayer.clearLayers();
+          // Aktualizace HUD sledovaného autobusu
+          if (followedBusId) {
+            let followed = data.buses.find(b => b.id === followedBusId);
+            if (followed) {
+              map.setView([followed.lat, followed.lng]);
+              updateHud(followed);
+            } else {
+              // Sledovaný bus zmizel
+              document.getElementById('follow-hud-status').innerHTML = '<span style="color:#a855f7;">⚠ Ztráta signálu</span>';
+            }
+          }
           data.buses.forEach(bus => {
             if (!bus.lat || !bus.lng) return;
-            if (followedBusId === bus.id) map.setView([bus.lat, bus.lng]);
             let markerColor = bus.color_class;
             let delayText = "";
             let delayVal = parseInt(bus.delay);
-            if (markerColor === "bg-gray") {
+            if (markerColor === "bg-gray" || markerColor === "bg-bug") {
               if (bus.status.includes(">4h")) {
                 let aheadMin = Math.abs(delayVal), aheadH = Math.floor(aheadMin / 60), aheadM = aheadMin % 60;
                 delayText = `<span style="color:#94a3b8;">Odjezd za ${aheadH}h ${aheadM}m</span>`;
@@ -364,23 +405,32 @@ HTML_MAPA = """
               }
             }
             let statusColor = "#10b981";
-            if (bus.status.includes("Stojí") || bus.status.includes("Odstaven")) statusColor = "#ef4444";
+            if (bus.color_class === "bg-bug") statusColor = "#6b7280";
+            else if (bus.status.includes("Stojí") || bus.status.includes("Odstaven")) statusColor = "#ef4444";
             else if (bus.status.includes("Koneč") || bus.status.includes("Ztráta")) statusColor = "#a855f7";
             else if (bus.status.includes("Začátek") || bus.status.includes("Čeká")) statusColor = "#3b82f6";
             else if (bus.status.includes("N/A") || bus.status.includes("signál") || bus.status.includes("Zmizel") || bus.status.includes("Výzkum")) statusColor = "#94a3b8";
             else if (bus.status.includes("Náskok") || bus.status.includes("Vyčkává")) statusColor = "#60a5fa";
             else if (bus.status.includes("Timeout") || bus.status.includes("Falešný")) statusColor = "#ef4444";
-            let followText = (followedBusId === bus.id) ? '<i class="fas fa-stop-circle"></i> Zrušit sledování' : '<i class="fas fa-crosshairs"></i> Sledovat kamerou';
+            let followText = (followedBusId === bus.id) ? '<i class="fas fa-stop-circle"></i> Přestat sledovat' : '<i class="fas fa-crosshairs"></i> Sledovat kamerou';
             let followStyle = (followedBusId === bus.id) ? 'background:#ef4444; color:white;' : 'background:#3b82f6; color:white;';
+            let bugWarning = bus.color_class === 'bg-bug' ? `
+              <div style="background:#374151; border:1px dashed #6b7280; border-radius:6px; padding:10px; margin:8px 0; color:#9ca3af; font-size:12px; text-align:center;">
+                <i class="fas fa-exclamation-triangle" style="color:#f59e0b; margin-right:5px;"></i>
+                <strong style="color:#f59e0b;">BUG – NEAKTUÁLNÍ MÍSTO</strong><br>
+                Tento bod se nehýbe, ale SPZ <strong>${bus.spz}</strong> jede na jiném místě.<br>
+                Pravděpodobně autobus nezmizel z mapy správně.
+              </div>` : '';
             let popupHTML = `
-              <div class="popup-header"><h3 class="popup-header-title"><i class="${bus.is_train ? 'fas fa-train' : 'fas fa-bus'}"></i> Linka ${bus.line}</h3></div>
+              <div class="popup-header" style="${bus.color_class === 'bg-bug' ? 'background:#1f2937; border-bottom-color:#374151;' : ''}"><h3 class="popup-header-title" style="${bus.color_class === 'bg-bug' ? 'color:#9ca3af;' : ''}"><i class="${bus.is_train ? 'fas fa-train' : 'fas fa-bus'}"></i> Linka ${bus.line}</h3></div>
               <div class="popup-body">
+                ${bugWarning}
                 <div class="popup-row"><span class="popup-label">Cíl:</span><span class="popup-value" style="color:white;">${bus.destination || "Neznámý"}</span></div>
                 ${spzHtml}${investigateText}
                 <div class="popup-row"><span class="popup-label">Status:</span><span class="popup-value" style="color:${statusColor};">${bus.status}</span></div>
                 <div class="popup-row"><span class="popup-label">Trip ID:</span><span class="popup-value" style="color:#94a3b8; font-size:11px;">${bus.trip_id}</span></div>
                 <div class="popup-row" style="border:none; margin-top:5px;"><span class="popup-label">JŘ:</span><span class="popup-value">${delayText}</span></div>
-                <button class="btn-timetable" onclick="showTimetable('${bus.id}')"><i class="fas fa-list-alt"></i> Zobrazit Jízdní řád</button>
+                ${bus.color_class !== 'bg-bug' ? `<button class="btn-timetable" onclick="showTimetable('${bus.id}')"><i class="fas fa-list-alt"></i> Zobrazit Jízdní řád</button>` : ''}
                 <button onclick="toggleFollow('${bus.id}')" class="btn-timetable" style="${followStyle} margin-top:5px;">${followText}</button>
                 ${historyBtn}
               </div>`;
@@ -393,6 +443,21 @@ HTML_MAPA = """
     fetchBuses();
     setInterval(fetchBuses, 10000);
   </script>
+  <!-- ── SLEDOVACÍ HUD ── -->
+  <div id="follow-hud" style="display:none; position:fixed; bottom:24px; right:24px; background:#1e293b; border:2px solid #38bdf8; border-radius:12px; padding:16px; z-index:9000; min-width:240px; max-width:280px; box-shadow:0 8px 24px rgba(0,0,0,0.7); font-family:sans-serif;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <span style="color:#38bdf8; font-weight:bold; font-size:13px;"><i class="fas fa-crosshairs"></i>&nbsp; Sledování autobusu</span>
+      <button onclick="stopFollowing()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:18px; line-height:1; padding:0;" title="Zavřít">&#x2715;</button>
+    </div>
+    <div id="follow-hud-line"  style="font-size:22px; font-weight:bold; color:white; margin-bottom:3px;"></div>
+    <div id="follow-hud-dest"  style="font-size:13px; color:#94a3b8; margin-bottom:8px;"></div>
+    <div id="follow-hud-spz"   style="margin-bottom:5px;"></div>
+    <div id="follow-hud-delay" style="font-size:13px; margin-bottom:4px;"></div>
+    <div id="follow-hud-status" style="font-size:12px; margin-bottom:12px;"></div>
+    <button onclick="stopFollowing()" style="background:#ef4444; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; width:100%; font-weight:bold; font-size:13px;">
+      <i class="fas fa-stop-circle"></i>&nbsp; Přestat sledovat
+    </button>
+  </div>
 </div>
 """
 
@@ -774,7 +839,7 @@ def background_map_worker():
                         continue
 
             # ═══════════════════════════════════════════════════════
-            # SEKCE 3: Detekce duplikátních SPZ s grace periodou
+            # SEKCE 3: Detekce duplikátních SPZ s grace periodou + BUG detekce
             # ═══════════════════════════════════════════════════════
             spz_tracker = {}
             for bid, bc in GLOBAL_BUS_CACHE.items():
@@ -784,40 +849,59 @@ def background_map_worker():
 
             for spz_val, bus_ids in spz_tracker.items():
                 if len(bus_ids) <= 1:
-                    # Jen 1 bus – výzkum zrušen
-                    GLOBAL_BUS_CACHE[bus_ids[0]]["investigating"]     = False
+                    GLOBAL_BUS_CACHE[bus_ids[0]]["investigating"]      = False
                     GLOBAL_BUS_CACHE[bus_ids[0]]["investigation_start"] = None
+                    if GLOBAL_BUS_CACHE[bus_ids[0]].get("color_class") == "bg-bug":
+                        # BUG tag se zrušil – bus je sám se svou SPZ
+                        GLOBAL_BUS_CACHE[bus_ids[0]]["color_class"] = "bg-gray"
+                        GLOBAL_BUS_CACHE[bus_ids[0]]["status"]      = "Stojí"
                     continue
 
-                # Více busů se stejnou SPZ – najdeme "vítěze"
-                # Kritéria: nejvíce stable_ticks, pak nejnovější spz_last_verified
+                # ── Detekce BUG: jeden se hýbe, druhý stojí se stejnou SPZ ──
+                moving_bids     = [bid for bid in bus_ids
+                                   if (now - GLOBAL_BUS_CACHE[bid]["last_moved"]).total_seconds() < 60]
+                stationary_bids = [bid for bid in bus_ids
+                                   if (now - GLOBAL_BUS_CACHE[bid]["last_moved"]).total_seconds() > 180]
+
+                if moving_bids and stationary_bids:
+                    # Jasný případ: jede nový bus, starý nezmizel = MAP BUG
+                    for bid in stationary_bids:
+                        bc = GLOBAL_BUS_CACHE[bid]
+                        bc["status"]             = "BUG - NEAKTUÁLNÍ MÍSTO"
+                        bc["color_class"]        = "bg-bug"
+                        bc["investigating"]      = False
+                        bc["investigation_start"] = None
+                    for bid in moving_bids:
+                        bc = GLOBAL_BUS_CACHE[bid]
+                        bc["investigating"]      = False
+                        bc["investigation_start"] = None
+                    continue  # Přeskočíme standardní duplikát logiku
+
+                # ── Standardní duplikát – výběr vítěze skórem ──
                 def score_candidate(bid):
                     bc = GLOBAL_BUS_CACHE[bid]
-                    ticks   = bc.get("spz_stable_ticks", 0)
-                    last_v  = bc.get("spz_last_verified") or datetime.min
-                    return (ticks, last_v)
+                    return (bc.get("spz_stable_ticks", 0),
+                            bc.get("spz_last_verified") or datetime.min)
 
                 best_bid = max(bus_ids, key=score_candidate)
 
                 for bid in bus_ids:
                     bc = GLOBAL_BUS_CACHE[bid]
                     if bid == best_bid:
-                        # Vítěz – zrušíme výzkum
-                        bc["investigating"]      = False
+                        bc["investigating"]       = False
                         bc["investigation_start"] = None
                     else:
-                        # Poražený – grace perioda, pak smazání SPZ
-                        bc["spz_verified"]   = False
-                        bc["spz_locked"]     = False
-                        bc["investigating"]  = True
+                        bc["spz_verified"]      = False
+                        bc["spz_locked"]        = False
+                        bc["investigating"]     = True
                         bc["investigation_spz"] = spz_val
                         if bc.get("investigation_start") is None:
                             bc["investigation_start"] = now
                         elif (now - bc["investigation_start"]).total_seconds() > DUPLICATE_GRACE_SEC:
                             bc["spz"]                 = None
-                            bc["investigating"]        = False
-                            bc["investigation_start"]  = None
-                            bc["spz_stable_ticks"]     = 0
+                            bc["investigating"]       = False
+                            bc["investigation_start"] = None
+                            bc["spz_stable_ticks"]    = 0
 
             # ═══════════════════════════════════════════════════════
             # SEKCE 4: Offline busy a timeouty
@@ -986,39 +1070,44 @@ def background_map_worker():
                         ).start()
 
                 # ── BAREVNÁ LOGIKA A STATUS ────────────────────────────────
-                is_before_departure = False
-                time_to_dep         = 0
-
-                if c["first_dep_time"]:
-                    try:
-                        dh, dm    = map(int, c["first_dep_time"].split(':'))
-                        dep_total = dh * 60 + dm
-                        cur_total = now.hour * 60 + now.minute
-                        diff      = dep_total - cur_total
-                        if diff < -720: diff += 1440
-                        elif diff > 720: diff -= 1440
-                        if diff > 0 or (diff > -10 and not c.get("actual_start_time")
-                                        and not is_moving and delay_val > -100):
-                            is_before_departure = True
-                            time_to_dep = max(diff, 0)
-                    except Exception:
-                        pass
-
-                old_status = c["status"]
-
-                if is_before_departure:
-                    c["actual_end_time"] = None
-                    if time_to_dep <= 240:
-                        c["status"]      = "Začátek linky (Čeká)"
-                        c["color_class"] = "bg-blue"
-                        delay_val        = -time_to_dep
-                    else:
-                        c["status"]      = "Čeká na spoj (>4h)"
-                        c["color_class"] = "bg-gray"
-                        delay_val        = -time_to_dep
+                # BUG marker se nemění
+                if c.get("color_class") == "bg-bug":
+                    pass  # Zachováme BUG status dokud se bus nerozjede
 
                 else:
-                    if delay_val <= -10000:
+                    is_before_departure = False
+                    time_to_dep         = 0
+
+                    if c["first_dep_time"]:
+                        try:
+                            dh, dm    = map(int, c["first_dep_time"].split(':'))
+                            dep_total = dh * 60 + dm
+                            cur_total = now.hour * 60 + now.minute
+                            diff      = dep_total - cur_total
+                            if diff < -720: diff += 1440
+                            elif diff > 720: diff -= 1440
+                            # Světle modrá: víc než 1 minuta do odjezdu (i při pohybu)
+                            if diff > 1 and not c.get("actual_start_time"):
+                                is_before_departure = True
+                                time_to_dep = int(diff)
+                        except Exception:
+                            pass
+
+                    old_status = c["status"]
+
+                    if is_before_departure:
+                        # ── Světle modrá: čeká na odjezd (> 1 min, i v pohybu) ──
+                        c["actual_end_time"] = None
+                        if time_to_dep <= 240:
+                            c["status"]      = f"Čeká na odjezd ({time_to_dep} min)"
+                            c["color_class"] = "bg-blue"
+                        else:
+                            c["status"]      = "Čeká na spoj (>4h)"
+                            c["color_class"] = "bg-gray"
+                        delay_val = -time_to_dep
+
+                    elif delay_val <= -10000:
+                        # ── Konečná zastávka nebo odstaven ──
                         if inactive_mins > 10:
                             c["status"]      = "Odstaven"
                             c["color_class"] = "bg-gray"
@@ -1027,17 +1116,16 @@ def background_map_worker():
                             c["color_class"] = "bg-purple"
                             if not c["actual_end_time"]:
                                 c["actual_end_time"] = now.strftime('%H:%M')
+
+                    elif delay_val < -1 and c.get("actual_start_time"):
+                        # ── Tmavě modrá: uprostřed linky, jede před časem ──
+                        c["status"]      = "Jízda (Náskok)" if is_moving else "Stojí (Náskok)"
+                        c["color_class"] = "bg-darkblue"
+
                     else:
-                        if delay_val < -1:
-                            if c.get("actual_start_time"):
-                                c["status"]      = "Jízda (Náskok)" if is_moving else "Stojí (Náskok)"
-                                c["color_class"] = "bg-darkblue"
-                            else:
-                                c["status"]      = "Začátek linky (Čeká)"
-                                c["color_class"] = "bg-blue"
-                        else:
-                            c["status"]      = "Jízda" if is_moving else "Stojí"
-                            c["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
+                        # ── Normální jízda ──
+                        c["status"]      = "Jízda" if is_moving else "Stojí"
+                        c["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
 
                 if is_moving and not c["actual_start_time"] and not is_train:
                     c["actual_start_time"] = now.strftime('%H:%M')
@@ -1045,9 +1133,11 @@ def background_map_worker():
                 c["final_delay_display"] = delay_val
 
                 # ── DB UPSERT (jen ověřené SPZ) ───────────────────────────
+                old_status = c.get("_last_db_status")
                 if c.get("spz_verified") and (old_status != c["status"] or is_moving or not c.get("db_first_upsert")):
                     upsert_to_history(db_client, c)
-                    c["db_first_upsert"] = True
+                    c["db_first_upsert"]    = True
+                    c["_last_db_status"]    = c["status"]
 
                 # ── Přidáme do live dat ────────────────────────────────────
                 last_up = c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A"
