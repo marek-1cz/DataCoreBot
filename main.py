@@ -710,13 +710,18 @@ def provoz_idpk():
 
 @app.route('/led-panel')
 def led_panel_landing():
-    from led_panel_page import HTML_LED_PANEL_LANDING
-    return HTML_LED_PANEL_LANDING
+    from led_panel_html import HTML_LED_PANEL
+    return HTML_LED_PANEL
 
 @app.route('/led-panel/app')
 def led_panel_app():
     from led_panel_html import HTML_LED_PANEL
     return HTML_LED_PANEL
+
+@app.route('/led-panel/view')
+def led_panel_view():
+    from led_panel_view import HTML_LED_PANEL_VIEW
+    return HTML_LED_PANEL_VIEW
         
 # /mapa je zpracovávána blueprintem z interaktivnimapa.py (mapa_bp)
 # Duplicitní definice zde záměrně odstraněna.
