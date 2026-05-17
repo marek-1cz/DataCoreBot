@@ -710,11 +710,8 @@ def provoz_idpk():
 
 @app.route('/led-panel')
 def led_panel_simulator():
-    """LED Panel Simulátor"""
-    import os
-    path = os.path.join(os.path.dirname(__file__), 'static', 'led-panel.html')
-    with open(path, 'r', encoding='utf-8') as f:
-        return f.read()
+    from led_panel_html import HTML_LED_PANEL
+    return HTML_LED_PANEL
         
 # /mapa je zpracovávána blueprintem z interaktivnimapa.py (mapa_bp)
 # Duplicitní definice zde záměrně odstraněna.
