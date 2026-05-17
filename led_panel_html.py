@@ -111,7 +111,7 @@ textarea.out{background:#050505;border:1px solid #1a1a1a;color:#3a9;
     <canvas id="cv"></canvas>
   </div></div>
   <div class="ctrl">
-    <h3>LED PANEL SIMULÁTOR</h3>
+    <h3>LED Panel Simulátor</h3>
     <div class="row">
       <label>Panel</label>
       <button id="btnF" class="on" onclick="setPM('front')">⬛ Přední</button>
@@ -148,6 +148,8 @@ textarea.out{background:#050505;border:1px solid #1a1a1a;color:#3a9;
     <div class="row">
       <label>Pokr.</label>
       <button id="btnAdv" onclick="toggleAdv()">OFF</button>
+      <span class="sep">|</span>
+      <button onclick="openPanelView()" style="border-color:#4ade80;color:#4ade80" title="Otevře nové okno jen s panelem — živě se aktualizuje">📺 Náhled panelu</button>
       <span class="sep">|</span>
       <label style="min-width:auto">Scroll</label>
       <input type="range" id="spdR" min="1" max="20" value="10"
@@ -687,7 +689,17 @@ function gCell(e,cv2){
 }
 function etog(e){var p=gCell(e,gc),c=p.c,r=p.r;
   if(r<0||r>=EH||c<0||c>=EW)return;
-  if(epx[r][c]!==edv){epx[r][c]=edv;drawG();}}
+  if(epx[r][c]!==edv){epx[r][c]=edv;drawG();autoSaveGlyph();}}
+
+function autoSaveGlyph(){
+  // Save current glyph to FONT and persist — called on every pixel change
+  FONT[curCh]=epx.map(function(r){return r.join('');});
+  try{
+    var data={};Object.keys(FONT).forEach(function(k){data[k]=FONT[k];});
+    localStorage.setItem('buse_custom_font',JSON.stringify(data));
+  }catch(e){}
+  WC={};applyPanel();drawEP();
+}
 gc.addEventListener('mousedown',function(e){edrawing=true;var p=gCell(e,gc);
   if(p.r>=0&&p.r<EH&&p.c>=0&&p.c<EW)edv=1-epx[p.r][p.c];etog(e);});
 gc.addEventListener('mousemove',function(e){if(edrawing)etog(e);});
