@@ -709,7 +709,12 @@ def provoz_idpk():
     return render_public(HTML_PROVOZ_IDPK)
 
 @app.route('/led-panel')
-def led_panel_simulator():
+def led_panel_landing():
+    from led_panel_page import HTML_LED_PANEL_LANDING
+    return HTML_LED_PANEL_LANDING
+
+@app.route('/led-panel/app')
+def led_panel_app():
     from led_panel_html import HTML_LED_PANEL
     return HTML_LED_PANEL
         
