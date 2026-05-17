@@ -708,10 +708,12 @@ def provoz_idpk():
     """Rozcestník Provoz IDPK — Interaktivní mapa & Databáze autobusů"""
     return render_public(HTML_PROVOZ_IDPK)
 
-@app.route('/bs310-simulator')
-def bs310_simulator():
-    """BUSE BS-310 LED Panel Simulátor"""
-    with open('static/buse-combined.html', 'r', encoding='utf-8') as f:
+@app.route('/led-panel')
+def led_panel_simulator():
+    """LED Panel Simulátor"""
+    import os
+    path = os.path.join(os.path.dirname(__file__), 'static', 'led-panel.html')
+    with open(path, 'r', encoding='utf-8') as f:
         return f.read()
         
 # /mapa je zpracovávána blueprintem z interaktivnimapa.py (mapa_bp)
