@@ -149,7 +149,7 @@ textarea.out{background:#050505;border:1px solid #1a1a1a;color:#3a9;
       <label>Pokr.</label>
       <button id="btnAdv" onclick="toggleAdv()">OFF</button>
       <span class="sep">|</span>
-      <button onclick="openPanelView()" style="border-color:#4ade80;color:#4ade80" title="Otevře nové okno jen s panelem — živě se aktualizuje">📺 Náhled panelu</button>
+      <a href="/led-panel/view" target="_blank" style="display:inline-block;padding:4px 8px;border:1px solid #4ade80;border-radius:2px;color:#4ade80;font-family:monospace;font-size:11px;text-decoration:none;cursor:pointer" title="Otevře nové okno jen s panelem">📺 Náhled panelu</a>
       <span class="sep">|</span>
       <label style="min-width:auto">Scroll</label>
       <input type="range" id="spdR" min="1" max="20" value="10"
@@ -234,8 +234,9 @@ textarea.out{background:#050505;border:1px solid #1a1a1a;color:#3a9;
       <div class="einfo" style="margin-bottom:3px">Export FONT.js (pošli mi):</div>
       <textarea class="out" id="eExp" rows="4" readonly></textarea>
       <div class="etools" style="margin-top:3px">
-        <button class="t exp" onclick="doExp()">📤 Export</button>
-        <button class="t" onclick="cpExp()">📋 Kopírovat</button>
+        <button class="t exp" onclick="downloadFont()" style="border-color:#225588;color:#4488cc">💾 Stáhnout font</button>
+        <label class="t" style="border-color:#225588;color:#4488cc;cursor:pointer">📂 Nahrát font<input type="file" accept=".json" style="display:none" onchange="uploadFont(this)"></label>
+        <button class="t" onclick="resetFont()" style="border-color:#883322;color:#cc5533">🔄 Reset</button>
       </div>
     </div>
     <div class="einfo" style="line-height:1.6">
@@ -323,12 +324,14 @@ var LY={};
 function computeLayout(){
   var adv=S.adv&&S.splitIdx>0;
   if(S.pm==='front'){
-    LY=adv?{numH:H1,row1Y:0,row1H:H1,midY:H1+GAP,midH:H2,row2Y:-1,row2H:0,totalH:H1+GAP+H2}
-          :{numH:H1,row1Y:0,row1H:H1,midY:-1,midH:0,row2Y:-1,row2H:0,totalH:H1};
+    var FH=16; // front number height — matches text visually
+    LY=adv?{numH:FH,row1Y:0,row1H:H1,midY:H1+GAP,midH:H2,row2Y:-1,row2H:0,totalH:H1+GAP+H2}
+          :{numH:FH,row1Y:0,row1H:H1,midY:-1,midH:0,row2Y:-1,row2H:0,totalH:H1};
   } else {
-    var numH=H1+GAP+H2;
-    LY=adv?{numH:H1+GAP+H2+GAP+H2,row1Y:0,row1H:H1,midY:H1+GAP,midH:H2,row2Y:H1+GAP+H2+GAP,row2H:H2,totalH:H1+GAP+H2+GAP+H2}
-          :{numH:numH,row1Y:0,row1H:H1,midY:-1,midH:0,row2Y:H1+GAP,row2H:H2,totalH:numH};
+    var SH=16; // side row1 height — balanced with row2(13) + equal padding
+    var numH=SH+GAP+H2;
+    LY=adv?{numH:SH+GAP+H2+GAP+H2,row1Y:0,row1H:SH,midY:SH+GAP,midH:H2,row2Y:SH+GAP+H2+GAP,row2H:H2,totalH:SH+GAP+H2+GAP+H2}
+          :{numH:numH,row1Y:0,row1H:SH,midY:-1,midH:0,row2Y:SH+GAP,row2H:H2,totalH:numH};
   }
 }
 
@@ -692,12 +695,12 @@ function etog(e){var p=gCell(e,gc),c=p.c,r=p.r;
   if(epx[r][c]!==edv){epx[r][c]=edv;drawG();autoSaveGlyph();}}
 
 function autoSaveGlyph(){
-  // Save current glyph to FONT and persist — called on every pixel change
   FONT[curCh]=epx.map(function(r){return r.join('');});
   try{
     var data={};Object.keys(FONT).forEach(function(k){data[k]=FONT[k];});
     localStorage.setItem('buse_custom_font',JSON.stringify(data));
   }catch(e){}
+  markFontModified();
   WC={};applyPanel();drawEP();
 }
 gc.addEventListener('mousedown',function(e){edrawing=true;var p=gCell(e,gc);
@@ -842,6 +845,14 @@ function resetFont(){
 
 buildELists();
 loadCh(SKEYS[0]);
+
+window.addEventListener('beforeunload',function(e){
+  if(!fontModified)return;
+  if((Date.now()-fontSavedAt)<180000)return;
+  e.preventDefault();
+  e.returnValue='Máte neuložené změny fontu — stáhněte si ho tlačítkem Stáhnout font.';
+  return e.returnValue;
+});
 
 // Load saved state
 (function(){
