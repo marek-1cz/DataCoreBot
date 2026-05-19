@@ -179,9 +179,8 @@ textarea.out{background:#050505;border:1px solid #1a1a1a;color:#3a9;
              ═══════════════════════════════════════════════════ -->
         <button onclick="demo('front','735','KONEČNÁ','NENASTUPOVAT')">735 Konečná</button>
         <button onclick="demo('front','722','TACHOV, AUT. NÁDR.','')">722 Tachov</button>
-        <button onclick="demo('side','723','TACHOV, U RYBENY','via','Stříbro','Olbramov','Přimda','Tachov')">723 VIA</button>
-        <button onclick="demo('front','706','Olomouc, aut. nádr.','')">706 Olomouc</button>
-        <button onclick="demo('side','7482','Bauska-Emburga-Riga','')">7482 Riga</button>
+        <button onclick="demo('side','723','TACHOV, U RYBENY','via','Chodová Planá, u kostela','Planá aut.st.','Tachov, aut. nadr.')">723 VIA</button>
+        <button onclick="demo('front','739','Kostelec','via','','Kostelec. ostrov. prům. zona I','Kladruby,Zadní')">739 VIA</button>
         <button onclick="demo('front','400','Praha, Střížkov','')">400 Praha</button>
       </div>
     </div>
