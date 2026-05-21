@@ -77,6 +77,29 @@ HTML_HISTORIE_INDEX = """
   </div>
   <p style="color:#64748b; font-size:11px; margin-top:8px;">* Záznamy posledních 30 dní. Aktualizace každých 10s.</p>
 
+  <!-- Info o omezeních systému -->
+  <details style="margin-top:14px; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px 16px;">
+    <summary style="color:#94a3b8; font-size:12px; cursor:pointer; font-weight:bold;">
+      <i class="fas fa-info-circle" style="color:#38bdf8; margin-right:5px;"></i>
+      Proč systém občas vynechá záznamy? (klikni pro více info)
+    </summary>
+    <div style="color:#64748b; font-size:12px; line-height:1.8; margin-top:10px; padding-top:10px; border-top:1px solid #1e293b;">
+      <p style="margin:0 0 6px 0;"><strong style="color:#94a3b8;">Zaznamenaná SPZ může být:</strong></p>
+      <ul style="margin:0 0 10px 0; padding-left:20px;">
+        <li><span style="color:#f59e0b;">✓ Ověřená</span> – Arriva i Inflow souhlasily 2× po sobě (destinace + poloha). Vysoce spolehlivé.</li>
+        <li><span style="color:#94a3b8;">~ Odhad</span> – SPZ přiřazena z ghost matchingu (vozovna, ranní výjezd). Může se lišit.</li>
+      </ul>
+      <p style="margin:0 0 6px 0;"><strong style="color:#94a3b8;">Proč chybí záznamy:</strong></p>
+      <ul style="margin:0; padding-left:20px;">
+        <li>Arriva API je pomalá nebo nevrátila bus v danou chvíli → SPZ se nepáruje</li>
+        <li>Bus jel celou trasu bez zastavení → systém nestihl ověřit (10s cyklus)</li>
+        <li>Mapa byla restartována uprostřed spoje → ztráta kontextu, nový trip_id</li>
+        <li>Ranní výjezd z vozovny před spuštěním mapy → první spoj chybí</li>
+        <li>Jsou zaznamenávány <strong>pouze linky 490xxx a 496xxx</strong> – ostatní vynechány záměrně</li>
+      </ul>
+    </div>
+  </details>
+
   <script>
   let allData = [];
 
@@ -781,6 +804,9 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "color_class":        "bg-gray",
         "is_offline":         False,
         "db_first_upsert":    False,
+        "_last_db_status":    None,
+        "_end_written":       False,
+        "_was_long_stationary": False,
         "final_delay_display": 0,
     }
 
@@ -824,58 +850,85 @@ def fetch_tt_bg(bus_id, cached_dict):
 
 # --- ZÁPIS DO DATABÁZE ---
 
+def close_previous_trips(db, spz, current_trip_id, end_time_str):
+    """Uzavře všechny otevřené záznamy pro tuto SPZ kromě aktuálního tripu."""
+    if not db or not spz or spz == "Neznámá":
+        return
+    try:
+        open_resp = db.table("bus_history").select("trip_id")\
+                      .eq("spz", spz)\
+                      .is_("end_actual", None)\
+                      .neq("trip_id", current_trip_id)\
+                      .execute()
+        for row in (open_resp.data or []):
+            try:
+                db.table("bus_history").update({
+                    "end_actual":  end_time_str,
+                    "status":      "Ukončeno (Nový spoj zahájen)",
+                    "updated_at":  get_prague_time().isoformat(),
+                }).eq("trip_id", row["trip_id"]).execute()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def _is_tracked_line(linka_str):
+    """Vrátí True pokud linka patří do série 490 nebo 496."""
+    # Vezme jen číselnou část před lomítkem (490722/26 → 490722)
+    base = re.sub(r'/.*', '', linka_str).strip()
+    num  = re.sub(r'\D', '', base)
+    return num.startswith("490") or num.startswith("496")
+
+
 def upsert_to_history(db, c):
     """Zapíše / aktualizuje záznam spoje do Supabase.
-    Zapisuje POUZE ověřené záznamy se stabilní SPZ."""
+
+    Záměrně nízká laťka – zapisuje i bez plného ověření SPZ,
+    protože Arriva API bývá pomalá nebo nesedí destinace.
+    Podmínky:
+      • SPZ je nastavená (nemusí být verified)
+      • Linka začíná 490 nebo 496
+      • Spoj má actual_start_time NEBO actual_end_time
+    """
     global TRACKED_SPZS
-    if c.get("is_train"):
-        return
-    if not db:
-        return
-    if not c.get("spz_verified"):
-        return
-    if c.get("spz_stable_ticks", 0) < SPZ_STABLE_TICKS:
-        return  # Příliš brzy – SPZ ještě není stabilní
-    # Nepište dokud nemáme ani start ani pohyb (nic zajímavého)
-    if not c.get("actual_start_time") and not c.get("actual_end_time"):
+    if c.get("is_train") or not db:
         return
 
     spz = c.get("spz")
     if not spz or spz == "Neznámá":
         return
 
-    # Pokud real_linka_spoj ještě není (fetch_tt_bg nedokončen), použij raw line
+    # Linka (prefer full real_linka_spoj, fallback na raw line)
     final_linka = c.get("real_linka_spoj") or c.get("line", "")
-    clean_line  = re.sub(r'\D', '', final_linka)
+    if not _is_tracked_line(final_linka):
+        return  # Není 490/496 série → přeskočit
 
-    # Sledujeme linky 490 a 496
-    if clean_line.startswith("490") or clean_line.startswith("496"):
-        TRACKED_SPZS.add(spz)
-
-    if spz not in TRACKED_SPZS:
+    # Musíme mít aspoň start nebo konec (žádný "prázdný" záznam)
+    if not c.get("actual_start_time") and not c.get("actual_end_time"):
         return
 
+    TRACKED_SPZS.add(spz)
+
+    spz_verified = c.get("spz_verified", False)
+    jr_l = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={c['inflow_id']}&currentStopId=0"
+
+    # Počítadlo jízd
+    run_count = 0
     try:
-        jr_l = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={c['inflow_id']}&currentStopId=0"
+        line_base = re.sub(r'/.*', '', final_linka).strip()
+        cnt_resp  = db.table("bus_history").select("trip_id").eq("spz", spz)\
+                      .ilike("linka", f"{line_base}%").execute()
+        existing  = {r["trip_id"] for r in (cnt_resp.data or [])}
+        run_count = len(existing) + (0 if c["trip_id"] in existing else 1)
+    except Exception:
+        pass
 
-        # Počítadlo jízd: kolikrát tato SPZ jela tuto linku
-        run_count = 0
-        try:
-            line_base = re.sub(r'/.*', '', final_linka).strip()  # "490" z "490/123"
-            cnt_resp = db.table("bus_history").select("trip_id").eq("spz", spz)\
-                         .ilike("linka", f"{line_base}%").execute()
-            existing_trips = {r["trip_id"] for r in (cnt_resp.data or [])}
-            # Počítáme unique trip_id (každý trip = jedna jízda), +1 pro tuto
-            run_count = len(existing_trips)
-            if c["trip_id"] not in existing_trips:
-                run_count += 1
-        except Exception:
-            pass
-
+    try:
         data = {
             "trip_id":         c["trip_id"],
             "spz":             spz,
-            "spz_verified":    True,
+            "spz_verified":    spz_verified,
             "linka":           final_linka,
             "jr_link":         jr_l,
             "start_scheduled": c.get("first_dep_time"),
@@ -1072,6 +1125,9 @@ def background_map_worker():
                                     ghost_spz = best_gc["spz"]
                                     ghost_trip_id = best_gc["trip_id"]
                                     del GLOBAL_BUS_CACHE[best_gid]
+                                    # Uzavřít starý DB záznam (byl „Stojí v depu")
+                                    if db_client and ghost_spz and ghost_spz != "Neznámá":
+                                        close_previous_trips(db_client, ghost_spz, ghost_trip_id, now.strftime('%H:%M'))
                                     print(f"[MAPA-NOČNÍHOST] Bus {bus_id} ({line}) přes noc → SPZ {ghost_spz}")
 
                             GLOBAL_BUS_CACHE[bus_id] = new_cache_entry(
@@ -1094,10 +1150,14 @@ def background_map_worker():
                                 if not c["actual_end_time"]:
                                     c["actual_end_time"] = now.strftime('%H:%M')
                                     c["status"] = "Ukončeno (Začátek nového spoje)"
-                                    if c.get("spz_verified"):
-                                        upsert_to_history(db_client, c)
+                                    # Uzavřít i bez spz_verified (jen 490/496)
+                                    upsert_to_history(db_client, c)
                                 TRIP_COUNTER += 1
-                                c["trip_id"]          = f"TRIP-{TRIP_COUNTER}"
+                                new_trip_id               = f"TRIP-{TRIP_COUNTER}"
+                                # Uzavřít případné předchozí otevřené záznamy v DB pro tuto SPZ
+                                if c.get("spz") and c["spz"] != "Neznámá" and db_client:
+                                    close_previous_trips(db_client, c["spz"], new_trip_id, now.strftime('%H:%M'))
+                                c["trip_id"]          = new_trip_id
                                 c["line"]             = line
                                 c["real_linka_spoj"]  = None
                                 c["destination"]      = dest1
@@ -1111,6 +1171,8 @@ def background_map_worker():
                                 c["spz_verified"]     = False
                                 c["spz_stable_ticks"] = 0
                                 c["investigating"]    = False
+                                c["db_first_upsert"]  = False   # ← KLÍČOVÁ OPRAVA
+                                c["_last_db_status"]  = None
                             else:
                                 # Destinace: vždy aktualizuj z Inflow (ne jen pokud je delší)
                                 if dest1:
@@ -1425,6 +1487,7 @@ def background_map_worker():
                             c["color_class"] = "bg-purple"
                             if not c["actual_end_time"]:
                                 c["actual_end_time"] = now.strftime('%H:%M')
+                                c["_end_written"]    = False  # Vynutit upsert
 
                     elif delay_val < -1 and c.get("actual_start_time"):
                         # ── Tmavě modrá: uprostřed linky, jede před časem ──
@@ -1455,15 +1518,35 @@ def background_map_worker():
 
                 if is_moving and not c["actual_start_time"] and not is_train:
                     c["actual_start_time"] = now.strftime('%H:%M')
+                    # První pohyb = první smysluplný záznam → ihned zapsat
+                    if c.get("spz") and c["spz"] != "Neznámá" and _is_tracked_line(c.get("real_linka_spoj") or c.get("line", "")):
+                        upsert_to_history(db_client, c)
+                        c["db_first_upsert"] = True
+                        c["_last_db_status"] = c.get("status")
 
                 c["final_delay_display"] = delay_val
 
-                # ── DB UPSERT (jen ověřené SPZ) ───────────────────────────
-                old_status = c.get("_last_db_status")
-                if c.get("spz_verified") and (old_status != c["status"] or is_moving or not c.get("db_first_upsert")):
-                    upsert_to_history(db_client, c)
-                    c["db_first_upsert"]    = True
-                    c["_last_db_status"]    = c["status"]
+                # ── DB UPSERT ─────────────────────────────────────────────
+                # Nižší laťka: SPZ nastavená (ne nutně verified) + 490/496 linka
+                has_spz      = c.get("spz") and c["spz"] != "Neznámá"
+                tracked_line = _is_tracked_line(c.get("real_linka_spoj") or c.get("line", ""))
+                old_status   = c.get("_last_db_status")
+                status_changed = (old_status != c["status"])
+                just_ended   = (c.get("actual_end_time") and not c.get("_end_written"))
+
+                if has_spz and tracked_line:
+                    # Zapsat při: prvním výskytu, změně statusu, pohybu, nebo ukončení
+                    if (not c.get("db_first_upsert")
+                            or status_changed
+                            or (is_moving and c.get("actual_start_time"))
+                            or just_ended):
+                        upsert_to_history(db_client, c)
+                        c["db_first_upsert"] = True
+                        c["_last_db_status"] = c["status"]
+                        if just_ended:
+                            c["_end_written"] = True
+                            # Uzavři případné starší „Probíhá" záznamy pro tuto SPZ
+                            close_previous_trips(db_client, c["spz"], c["trip_id"], c["actual_end_time"])
 
                 # ── Přidáme do live dat ────────────────────────────────────
                 last_up = c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A"
