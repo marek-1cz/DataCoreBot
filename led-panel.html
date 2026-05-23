@@ -1,3 +1,4 @@
+HTML_LED_PANEL = """
 <!DOCTYPE html>
 <html lang="cs">
 <head>
@@ -110,7 +111,7 @@ textarea.out{background:#050505;border:1px solid #1a1a1a;color:#3a9;
     <canvas id="cv"></canvas>
   </div></div>
   <div class="ctrl">
-    <h3>LED PANEL SIMULÁTOR</h3>
+    <h3>LED Panel Simulátor</h3>
     <div class="row">
       <label>Panel</label>
       <button id="btnF" class="on" onclick="setPM('front')">⬛ Přední</button>
@@ -147,6 +148,8 @@ textarea.out{background:#050505;border:1px solid #1a1a1a;color:#3a9;
     <div class="row">
       <label>Pokr.</label>
       <button id="btnAdv" onclick="toggleAdv()">OFF</button>
+      <span class="sep">|</span>
+      <button onclick="openView()" style="border-color:#4ade80;color:#4ade80" title="Otevře nové okno s panelem (celá šířka)">📺 Náhled panelu</button>
       <span class="sep">|</span>
       <label style="min-width:auto">Scroll</label>
       <input type="range" id="spdR" min="1" max="20" value="10"
@@ -231,8 +234,9 @@ textarea.out{background:#050505;border:1px solid #1a1a1a;color:#3a9;
       <div class="einfo" style="margin-bottom:3px">Export FONT.js (pošli mi):</div>
       <textarea class="out" id="eExp" rows="4" readonly></textarea>
       <div class="etools" style="margin-top:3px">
-        <button class="t exp" onclick="doExp()">📤 Export</button>
-        <button class="t" onclick="cpExp()">📋 Kopírovat</button>
+        <button class="t exp" onclick="downloadFont()" style="border-color:#225588;color:#4488cc">💾 Stáhnout font</button>
+        <label class="t" style="border-color:#225588;color:#4488cc;cursor:pointer">📂 Nahrát font<input type="file" accept=".json" style="display:none" onchange="uploadFont(this)"></label>
+        <button class="t" onclick="resetFont()" style="border-color:#883322;color:#cc5533">🔄 Reset</button>
       </div>
     </div>
     <div class="einfo" style="line-height:1.6">
@@ -323,9 +327,10 @@ function computeLayout(){
     LY=adv?{numH:H1,row1Y:0,row1H:H1,midY:H1+GAP,midH:H2,row2Y:-1,row2H:0,totalH:H1+GAP+H2}
           :{numH:H1,row1Y:0,row1H:H1,midY:-1,midH:0,row2Y:-1,row2H:0,totalH:H1};
   } else {
-    var numH=H1+GAP+H2;
-    LY=adv?{numH:H1+GAP+H2+GAP+H2,row1Y:0,row1H:H1,midY:H1+GAP,midH:H2,row2Y:H1+GAP+H2+GAP,row2H:H2,totalH:H1+GAP+H2+GAP+H2}
-          :{numH:numH,row1Y:0,row1H:H1,midY:-1,midH:0,row2Y:H1+GAP,row2H:H2,totalH:numH};
+    var SH=16; // side row1 height — balanced with row2(13) + equal padding
+    var numH=SH+GAP+H2;
+    LY=adv?{numH:SH+GAP+H2+GAP+H2,row1Y:0,row1H:SH,midY:SH+GAP,midH:H2,row2Y:SH+GAP+H2+GAP,row2H:H2,totalH:SH+GAP+H2+GAP+H2}
+          :{numH:numH,row1Y:0,row1H:SH,midY:-1,midH:0,row2Y:SH+GAP,row2H:H2,totalH:numH};
   }
 }
 
@@ -372,8 +377,9 @@ function drawLineNumber(str,isBus){
   for(var i=0;i<str.length;i++){
     var c=str[i],g=FONT[c];if(!g){x+=Math.round(4*sc)+1;continue;}
     var nw=g[0].length,sw=Math.max(1,Math.round(nw*sc)),sh=Math.max(1,Math.round(nh*sc));
-    var yo=LY.numH-sh;
+    var textMid=LY.numH-6.5;var yo=Math.max(0,Math.round(textMid-sh/2));
     for(var dy=0;dy<sh;dy++){
+      if(yo+dy>=LY.numH)break;
       var srcY=Math.min(g.length-1,Math.floor((dy+.5)/sc)),srcRow=g[srcY]||'';
       for(var dx=0;dx<sw;dx++){
         var srcX=Math.min(nw-1,Math.floor((dx+.5)/sc));
@@ -504,7 +510,7 @@ function tickVIA(ts){
 
 function getSplit(){
   if(!S.adv||S.splitIdx<=0)return[S.row1,''];
-  var w=S.row1.trim().split(/\s+/);var si=Math.min(S.splitIdx,w.length);
+  var w=S.row1.trim().split(/\\\\s+/);var si=Math.min(S.splitIdx,w.length);
   return[w.slice(0,si).join(' '),w.slice(si).join(' ')];
 }
 
@@ -546,7 +552,7 @@ function toggleAdv(){S.adv=!S.adv;if(!S.adv)S.splitIdx=0;
 function onSpd(v){S.scrollSpeedRaw=parseInt(v);document.getElementById('spdV').textContent='×'+(parseInt(v)/10).toFixed(1);}
 function updateSplitUI(){
   if(!S.adv)return;
-  var words=(S.row1||'').trim().split(/\s+/).filter(function(w){return w;});
+  var words=(S.row1||'').trim().split(/\\\\s+/).filter(function(w){return w;});
   var sl=document.getElementById('splitR');sl.max=words.length;sl.value=Math.min(S.splitIdx,words.length);
   var sp=getSplit();document.getElementById('splitPv').textContent=(sp[0]||'—')+' │ '+(sp[1]||'—');
 }
@@ -686,7 +692,17 @@ function gCell(e,cv2){
 }
 function etog(e){var p=gCell(e,gc),c=p.c,r=p.r;
   if(r<0||r>=EH||c<0||c>=EW)return;
-  if(epx[r][c]!==edv){epx[r][c]=edv;drawG();}}
+  if(epx[r][c]!==edv){epx[r][c]=edv;drawG();autoSaveGlyph();}}
+
+function autoSaveGlyph(){
+  FONT[curCh]=epx.map(function(r){return r.join('');});
+  try{
+    var data={};Object.keys(FONT).forEach(function(k){data[k]=FONT[k];});
+    localStorage.setItem('buse_custom_font',JSON.stringify(data));
+  }catch(e){}
+  markFontModified();
+  WC={};applyPanel();drawEP();
+}
 gc.addEventListener('mousedown',function(e){edrawing=true;var p=gCell(e,gc);
   if(p.r>=0&&p.r<EH&&p.c>=0&&p.c<EW)edv=1-epx[p.r][p.c];etog(e);});
 gc.addEventListener('mousemove',function(e){if(edrawing)etog(e);});
@@ -761,7 +777,7 @@ document.getElementById('ePm').addEventListener('change',drawEP);
 function doExp(){
   var lines=Object.keys(FONT).map(function(c){
     return JSON.stringify(c)+':['+FONT[c].map(function(r){return'"'+r+'"';}).join(',')+']';});
-  document.getElementById('eExp').value='const FONT={'+lines.join(',\n')+'};';
+  document.getElementById('eExp').value='const FONT={'+lines.join(',\\\\n')+'};';
 }
 function cpExp(){
   var ta=document.getElementById('eExp');if(!ta.value)doExp();ta.select();document.execCommand('copy');ta.blur();
@@ -794,7 +810,15 @@ function importFont(input){
         if(Array.isArray(data[k])){FONT[k]=data[k];count++;}
       });
       WC={};buildELists();loadCh(curCh);applyPanel();drawEP();
-      document.getElementById('syncStatus').textContent='Font importován: '+count+' znaků';
+      if(count>0){
+        var ds=document.getElementById('syncStatus');
+        ds.textContent='✓ Font nahrán: '+count+' znaků';ds.style.color='#4f9';
+        setTimeout(function(){ds.textContent='';ds.style.color='';},3000);
+        markFontSaved();
+      } else {
+        alert('Nepodařilo se načíst font — zkontrolujte formát .json souboru.');
+      }
+      document.getElementById('syncStatus').textContent=document.getElementById('syncStatus').textContent||'';
       document.getElementById('syncStatus').style.color='#4f9';
       saveFontToStorage();
       setTimeout(function(){document.getElementById('syncStatus').style.color='';},2500);
@@ -830,6 +854,14 @@ function resetFont(){
 buildELists();
 loadCh(SKEYS[0]);
 
+window.addEventListener('beforeunload',function(e){
+  if(!fontModified)return undefined;
+  if((Date.now()-fontSavedAt)<180000)return undefined;
+  var msg='Máte neuložené změny fontu! Stáhněte si font tlačítkem 💾 Stáhnout font.';
+  e.returnValue=msg;
+  return msg;
+});
+
 // Load saved state
 (function(){
   S.viaStops=Array(10).fill('');S.customDemos=[];
@@ -851,3 +883,4 @@ loadCh(SKEYS[0]);
 </script>
 </body>
 </html>
+"""
