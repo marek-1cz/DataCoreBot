@@ -324,8 +324,9 @@ var LY={};
 function computeLayout(){
   var adv=S.adv&&S.splitIdx>0;
   if(S.pm==='front'){
-    LY=adv?{numH:H1,row1Y:0,row1H:H1,midY:H1+GAP,midH:H2,row2Y:-1,row2H:0,totalH:H1+GAP+H2}
-          :{numH:H1,row1Y:0,row1H:H1,midY:-1,midH:0,row2Y:-1,row2H:0,totalH:H1};
+    // numH=H1 (zone), numRenderH=13 so number matches text visual height
+    LY=adv?{numH:H1,numRenderH:13,row1Y:0,row1H:H1,midY:H1+GAP,midH:H2,row2Y:-1,row2H:0,totalH:H1+GAP+H2}
+          :{numH:H1,numRenderH:13,row1Y:0,row1H:H1,midY:-1,midH:0,row2Y:-1,row2H:0,totalH:H1};
   } else {
     var SH=16; // side row1 height — balanced with row2(13) + equal padding
     var numH=SH+GAP+H2;
@@ -373,7 +374,9 @@ function drawLineNumber(str,isBus){
   if(isBus){drawBusX();return;}
   if(!str||!str.trim()){lineEndCol=0;return;}
   if(S.pm==='side'){var tmp='';for(var i=0;i<str.length;i++){var c=str[i];tmp+=SMAP[c]||c;}str=tmp;}
-  var nh=mH2(str),tw=mW(str),sc=Math.min(LY.numH/nh,MNW/Math.max(1,tw)),x=1;
+  var nh=mH2(str),tw=mW(str);
+  var renderH=LY.numRenderH||LY.numH; // front=13, side=full
+  var sc=Math.min(renderH/nh,MNW/Math.max(1,tw)),x=1;
   for(var i=0;i<str.length;i++){
     var c=str[i],g=FONT[c];if(!g){x+=Math.round(4*sc)+1;continue;}
     var nw=g[0].length,sw=Math.max(1,Math.round(nw*sc)),sh=Math.max(1,Math.round(nh*sc));
@@ -509,7 +512,7 @@ function tickVIA(ts){
 
 function getSplit(){
   if(!S.adv||S.splitIdx<=0)return[S.row1,''];
-  var w=S.row1.trim().split(/\\\\\\\\\\\\\\\\s+/);var si=Math.min(S.splitIdx,w.length);
+  var w=S.row1.trim().split(/\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s+/);var si=Math.min(S.splitIdx,w.length);
   return[w.slice(0,si).join(' '),w.slice(si).join(' ')];
 }
 
@@ -551,7 +554,7 @@ function toggleAdv(){S.adv=!S.adv;if(!S.adv)S.splitIdx=0;
 function onSpd(v){S.scrollSpeedRaw=parseInt(v);document.getElementById('spdV').textContent='×'+(parseInt(v)/10).toFixed(1);}
 function updateSplitUI(){
   if(!S.adv)return;
-  var words=(S.row1||'').trim().split(/\\\\\\\\\\\\\\\\s+/).filter(function(w){return w;});
+  var words=(S.row1||'').trim().split(/\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s+/).filter(function(w){return w;});
   var sl=document.getElementById('splitR');sl.max=words.length;sl.value=Math.min(S.splitIdx,words.length);
   var sp=getSplit();document.getElementById('splitPv').textContent=(sp[0]||'—')+' │ '+(sp[1]||'—');
 }
@@ -776,7 +779,7 @@ document.getElementById('ePm').addEventListener('change',drawEP);
 function doExp(){
   var lines=Object.keys(FONT).map(function(c){
     return JSON.stringify(c)+':['+FONT[c].map(function(r){return'"'+r+'"';}).join(',')+']';});
-  document.getElementById('eExp').value='const FONT={'+lines.join(',\\\\\\\\\\\\\\\\n')+'};';
+  document.getElementById('eExp').value='const FONT={'+lines.join(',\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n')+'};';
 }
 function cpExp(){
   var ta=document.getElementById('eExp');if(!ta.value)doExp();ta.select();document.execCommand('copy');ta.blur();
