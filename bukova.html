@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BUKOVÁ: L Aura Zapadákov</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Comic+Neue:ital,wght@0,700;1,700&family=Impact&display=swap');
+
+        body {
+            font-family: 'Comic Neue', cursive;
+            background-color: #050505;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(255, 0, 0, 0.1), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(100, 0, 0, 0.2), transparent 25%);
+            overflow: hidden;
+            color: #fff;
+        }
+
+        /* RGB GLOW ANIMATIONS */
+        @keyframes rgb-text {
+            0% { color: #ff0000; text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000; }
+            33% { color: #ff5500; text-shadow: 0 0 10px #ff5500, 0 0 20px #ff5500; }
+            66% { color: #aa0000; text-shadow: 0 0 10px #aa0000, 0 0 20px #aa0000; }
+            100% { color: #ff0000; text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000; }
+        }
+
+        @keyframes rgb-border {
+            0% { border-color: #ff0000; box-shadow: 0 0 20px #ff0000, inset 0 0 20px #ff0000; }
+            50% { border-color: #aa0000; box-shadow: 0 0 20px #aa0000, inset 0 0 20px #aa0000; }
+            100% { border-color: #ff0000; box-shadow: 0 0 20px #ff0000, inset 0 0 20px #ff0000; }
+        }
+
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+
+        .rgb-text { animation: rgb-text 2s infinite linear; font-family: 'Impact', sans-serif; }
+        .rgb-box { animation: rgb-border 2s infinite linear; border-width: 4px; border-style: solid; background: rgba(0,0,0,0.8); }
+        .shake-hover:hover { animation: shake 0.5s; animation-iteration-count: infinite; }
+        .shake-active { animation: shake 0.2s infinite; }
+        
+        .slide {
+            display: none;
+            opacity: 0;
+            transform: scale(0.9);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .slide.active {
+            display: flex;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* Scanlines */
+        body::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 0, 0, 0.02), rgba(255, 0, 0, 0.06));
+            z-index: 2;
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+        }
+
+        .img-container {
+            display: inline-block;
+            font-size: 2rem;
+            color: #ffaa00;
+            background: #220000;
+            padding: 10px;
+            border: 2px dashed #ff0000;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center relative">
+
+    <!-- AURA TRACKER -->
+    <div id="aura-container" class="fixed top-4 right-4 z-50 bg-black/80 border-4 border-red-600 p-4 rounded-2xl text-center shadow-[0_0_20px_red]">
+        <div class="text-sm text-gray-400 font-bold uppercase">Tvoje Aura</div>
+        <div id="aura-display" class="text-4xl font-black text-red-500">-10000</div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toast-container" class="fixed top-1/4 left-1/2 transform -translate-x-1/2 z-50 flex flex-col gap-4 pointer-events-none"></div>
+
+    <!-- SLIDES -->
+    <div class="relative z-10 w-full max-w-5xl p-4 flex-1 flex items-center justify-center">
+
+        <!-- Slide 1: Title -->
+        <div class="slide active flex-col items-center text-center w-full">
+            <h1 class="text-7xl sm:text-9xl rgb-text uppercase tracking-tighter mb-4 shake-hover cursor-pointer" onclick="dropAura(500, 'Křičíš na Bukovou, ale nikdo tě neslyší!')">
+                BUKOVÁ
+            </h1>
+            <h2 class="text-3xl sm:text-4xl font-bold mb-8 text-red-500 drop-shadow-[0_0_15px_rgba(255,0,0,0.8)]">
+                -10000000000 AURA ZAPADÁKOV 💀📉
+            </h2>
+            <div class="rgb-box p-6 rounded-3xl w-full max-w-2xl transform -rotate-2">
+                <p class="text-2xl text-white">
+                    Mezholezy u Horšovského Týna, Okres Domažlice
+                </p>
+                <p class="text-xl text-gray-400 mt-2 font-mono">
+                    > Press [D] to escape <br>
+                    > Doslova nic tu není, bro 🏚️
+                </p>
+            </div>
+            
+            <div class="mt-8 flex gap-8 justify-center items-center">
+                <div class="cursor-pointer hover:scale-125 transition-transform" onclick="dropAura(6767, 'AKTIVOVÁN 6-7 MEME! TOTÁLNÍ BRAINROT!')">
+                    <span class="img-container animate-pulse shadow-[0_0_30px_#ff00ff] border-fuchsia-500 text-fuchsia-300 font-black text-4xl">
+                        
+                    </span>
+                </div>
+                <div class="cursor-pointer hover:scale-125 transition-transform shake-hover" onclick="dropAura(100, 'ITALIAN RIZZ SELHAL!')">
+                    <span class="img-container text-yellow-300 border-yellow-500">
+                        
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 2: Kde to je? -->
+        <div class="slide flex-col items-center w-full">
+            <div class="rgb-box p-8 rounded-3xl w-full text-center shake-hover">
+                <div class="text-6xl mb-4">🗺️📉😭</div>
+                <h2 class="text-5xl rgb-text mb-6">NEJHORŠÍ OHIO NA SVĚTĚ</h2>
+                <ul class="text-2xl text-left space-y-4 font-bold text-red-300">
+                    <li class="flex items-center gap-4">
+                        <span>🚜</span> <strong>Lokace:</strong> Zapadákov Buková
+                    </li>
+                    <li class="flex items-center gap-4">
+                        <span>💀</span> <strong>Aura:</strong> Absolutní nula (-10000000000)
+                    </li>
+                    <li class="flex items-center gap-4">
+                        <span>🧟‍♂️</span> <strong>Vibe:</strong> Totální NPC hnízdo. Kdo sem vkročí, dostane instantní L.
+                    </li>
+                </ul>
+                <div class="mt-8 text-3xl text-gray-500 font-black italic">
+                    "Tady i Google Maps ztrácí signál a brečí."
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 3: Buková HQ -->
+        <div class="slide flex-col items-center w-full">
+            <h2 class="text-6xl rgb-text mb-8 transform rotate-1">LOKÁLNÍ HROZBY 🏚️</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
+                <div class="rgb-box p-6 rounded-xl flex flex-col justify-center items-center text-center bg-red-900/40 cursor-crosshair hover:bg-red-800 transition" onclick="dropAura(2222, 'NPC SPAWNER NA ČÍSLE 22 VYPĚSTOVAL DALŠÍHO DOWNA!')">
+                    <div class="text-7xl mb-4 animate-ping">🏠2️⃣2️⃣</div>
+                    <h3 class="text-3xl text-red-400 font-bold">NPC SPAWNER</h3>
+                    <p class="text-xl mt-4">V domě číslo 22 je doslova NPC spawner. Každou minutu z něj vyleze další down co má -aura. KLIKEJ NA VLASTNÍ NEBEZPEČÍ!</p>
+                </div>
+                <div class="rgb-box p-6 rounded-xl flex flex-col justify-center items-center text-center">
+                    <div class="text-7xl mb-4">🕳️📡</div>
+                    <h3 class="text-3xl text-gray-400 font-bold">NIC TU NENÍ</h3>
+                    <p class="text-xl mt-4">Žádný obchod, žádný rizz, žádný fanum tax. Jenom bláto a zoufalství.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 4: Fauna a Flora -->
+        <div class="slide flex-col items-center w-full">
+            <div class="rgb-box p-8 rounded-[3rem] w-full text-center border-8">
+                <h2 class="text-4xl rgb-text mb-6">MÍSTNÍ BIZÁR A MEMES 💀</h2>
+                <div class="grid grid-cols-2 gap-8 mb-6 text-xl">
+                    
+                    <!-- Tung tung sahura -->
+                    <div class="bg-black/50 p-6 rounded-xl border-4 border-red-900 flex flex-col items-center cursor-pointer hover:bg-red-900/50 transition-colors shake-hover" onclick="dropAura(999, 'TUNG TUNG TUNG! MOZEK TI VYTEKL UŠIMA!')">
+                        <div class="text-4xl mb-2">🎶</div>
+                        <div class="my-2 text-2xl font-black text-yellow-400">
+                            
+                        </div>
+                        <p class="mt-2 text-gray-400">Klikni pro sound damage. Tohle tu hraje z rozhlasu 24/7</p>
+                    </div>
+
+                    <!-- Capuccino balerino -->
+                    <div class="bg-black/50 p-6 rounded-xl border-4 border-blue-900 flex flex-col items-center cursor-pointer hover:bg-blue-900/50 transition-colors shake-hover" onclick="dropAura(555, 'BALERÍNA TI UKRADLA PIZZU! L RIZZ!')">
+                        <div class="text-4xl mb-2">☕🩰</div>
+                        <div class="my-2 text-2xl font-black text-cyan-400">
+                            
+                        </div>
+                        <p class="mt-2 text-gray-400">Jediná zábava místních NPC. Nesahat!</p>
+                    </div>
+
+                </div>
+                <div class="text-2xl text-purple-300 font-bold italic">
+                    "Tady ztratíš víc aury než když tě učitelka vyvolá k tabuli."
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Proč sem jet? -->
+        <div class="slide flex-col items-center w-full">
+            <h2 class="text-6xl rgb-text mb-10">PROČ SE TOMU VYHNOUT?</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+                <div class="rgb-box p-4 rounded-xl text-center hover:scale-110 transition-transform cursor-crosshair">
+                    <div class="text-5xl mb-2">🧟‍♂️🧟‍♂️</div>
+                    <h3 class="text-2xl font-bold text-red-500">NPC OVERLOAD</h3>
+                    <p class="text-lg">Dům 22 to chrlí jak na běžícím pásu.</p>
+                </div>
+                <div class="rgb-box p-4 rounded-xl text-center hover:scale-110 transition-transform cursor-crosshair">
+                    <div class="text-5xl mb-2">📉💀</div>
+                    <h3 class="text-2xl font-bold text-gray-500">AURA DEBUFF</h3>
+                    <p class="text-lg">Vstoupíš a jsi navždy beta.</p>
+                </div>
+                <div class="rgb-box p-4 rounded-xl text-center hover:scale-110 transition-transform cursor-crosshair">
+                    <div class="text-5xl mb-2">🛑🚫</div>
+                    <h3 class="text-2xl font-bold text-yellow-500">L RIZZ</h3>
+                    <p class="text-lg">Zapadákov lvl nekonečno.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: AI Brainrot Terminál -->
+        <div class="slide flex-col items-center w-full">
+            <h2 class="text-5xl sm:text-6xl rgb-text mb-6 uppercase">✨ AI Brainrot Terminál ✨</h2>
+            <p class="text-xl mb-6 text-yellow-300 italic">Powered by Gemini AI 🧠🤌</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+                <!-- AI Lore Generator -->
+                <div class="rgb-box p-6 rounded-2xl text-center flex flex-col justify-between hover:scale-105 transition-transform">
+                    <h3 class="text-2xl font-bold text-yellow-400 mb-4">Místní Skibidi Lore 🏚️</h3>
+                    <button id="btn-generate-lore" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-6 rounded-xl mb-4 transition border-2 border-red-400 shadow-[0_0_15px_rgba(255,0,0,0.5)]">
+                        ✨ Cookovat L Lore ✨
+                    </button>
+                    <div id="lore-output" class="text-lg text-red-300 min-h-[100px] flex items-center justify-center font-bold bg-black/60 p-4 rounded-lg border border-red-500/50">
+                        Klikni pro absolutní NPC moudrost z Bukové...
+                    </div>
+                </div>
+                <!-- AI Translator -->
+                <div class="rgb-box p-6 rounded-2xl text-center flex flex-col justify-between hover:scale-105 transition-transform">
+                    <h3 class="text-2xl font-bold text-green-400 mb-4">NPC -> Sigma Překladač 🗿</h3>
+                    <textarea id="translator-input" class="w-full bg-black/80 border-2 border-gray-600 focus:border-green-500 outline-none rounded-lg p-2 text-white mb-4 placeholder-gray-500" rows="2" placeholder="Napiš sem nudný text... Teď už to slide nepřepne!"></textarea>
+                    <button id="btn-translate" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-6 rounded-xl mb-4 transition border-2 border-green-400 shadow-[0_0_15px_rgba(0,255,0,0.5)]">
+                        ✨ Skibidifikuj to ✨
+                    </button>
+                    <div id="translator-output" class="text-lg text-cyan-300 min-h-[80px] flex items-center justify-center font-bold bg-black/60 p-4 rounded-lg border border-cyan-500/50">
+                        Čekám na input, bro...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Konec -->
+        <div class="slide flex-col items-center text-center w-full">
+            <div class="text-9xl mb-6 shake-hover">🏃💨🚪</div>
+            <h1 class="text-6xl sm:text-8xl rgb-text uppercase mb-6">
+                UTÍKEJ, BRO!
+            </h1>
+            <div class="rgb-box p-6 rounded-3xl w-full max-w-2xl bg-black">
+                <p class="text-3xl text-red-500 font-bold mb-4">
+                    FINAL RATING: -1000000/10 L AURA
+                </p>
+                <p class="text-xl text-gray-300 mb-6">
+                    Děkuji za pozornost. Vyhněte se domu 22, nebo na vás vyběhne capučíno baleríno. 💀📉
+                </p>
+                
+                <div class="flex gap-4 justify-center items-center cursor-pointer" onclick="dropAura(99999, 'ZEMŘEL JSI V BUKOVÉ!')">
+                     <span class="img-container">
+                        
+                     </span>
+                     <span class="img-container border-blue-500">
+                        
+                     </span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Kontrolky dole -->
+    <div class="relative z-20 w-full p-6 flex justify-between items-center max-w-5xl bg-black/50 backdrop-blur-md rounded-t-3xl border-t-4 border-fuchsia-600">
+        <button id="prevBtn" class="rgb-box px-8 py-4 text-2xl font-black text-white hover:bg-gray-800 transition rounded-xl">
+            ⬅️ L
+        </button>
+        <div class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-yellow-500 rgb-text">
+            SLIDE <span id="slideCounter">1</span>/7
+        </div>
+        <button id="nextBtn" class="rgb-box px-8 py-4 text-2xl font-black text-white hover:bg-gray-800 transition rounded-xl">
+            W ➡️
+        </button>
+    </div>
+
+    <!-- Skriptováníčka -->
+    <script>
+        const apiKey = ""; // Gemini API klíč je automaticky injektován
+        
+        // Aura systém
+        let aura = -10000;
+        const auraDisplay = document.getElementById('aura-display');
+        const auraContainer = document.getElementById('aura-container');
+        const toastContainer = document.getElementById('toast-container');
+
+        function dropAura(amount, message) {
+            aura -= amount;
+            auraDisplay.innerText = aura;
+            
+            // Efekt zatřesení
+            auraContainer.classList.add('shake-active');
+            setTimeout(() => auraContainer.classList.remove('shake-active'), 300);
+
+            // Zobrazení toastu (custom alert)
+            const toast = document.createElement('div');
+            toast.className = 'bg-red-700 text-white font-black text-2xl px-8 py-4 rounded-2xl border-4 border-yellow-400 shadow-[0_0_30px_rgba(255,0,0,1)] text-center transform scale-150 transition-all';
+            toast.innerHTML = `<div class="mb-2 text-4xl">💀📉</div> ${message} <br> <span class="text-yellow-300">-${amount} AURA</span>`;
+            
+            toastContainer.appendChild(toast);
+            
+            // Zmizení toastu po 2 vteřinách
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 2000);
+        }
+
+
+        // Gemini API Logika s exponenciálním backoffem
+        async function fetchWithRetry(url, options, maxRetries = 5) {
+            let retries = 0;
+            let delay = 1000;
+            while (retries < maxRetries) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        throw new Error(`HTTP chyba! status: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    retries++;
+                    if (retries >= maxRetries) throw error;
+                    await new Promise(res => setTimeout(res, delay));
+                    delay *= 2;
+                }
+            }
+        }
+
+        async function callGeminiAPI(prompt, systemPrompt) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] }
+            };
+            
+            try {
+                const data = await fetchWithRetry(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || "Bro, the AI fell off (chyba generování).";
+            } catch (err) {
+                console.error(err);
+                return "Mewing selhal, server je v Ohiu. Zkus to znovu.";
+            }
+        }
+
+        // Event Listenery pro AI Tlačítka
+        document.getElementById('btn-generate-lore').addEventListener('click', async () => {
+            const outputEl = document.getElementById('lore-output');
+            outputEl.innerHTML = "<span class='animate-pulse text-red-400'>Cookuju zapadákov lore... 💀</span>";
+            
+            const prompt = "Vymysli jeden šílený, absurdní a krátký (max 2 věty) fakt o vesničce Buková u Mezholez, kde je v domě číslo 22 NPC spawner a všichni tam mají -10000000 aura.";
+            const systemPrompt = "Jsi naprostý Gen Z/Alpha brainrot mistr. Mluvíš česky, Buková je nejhorší zapadákov v Ohiu a všichni jsou tam NPCs. Používej slang jako skibidi, L, -aura, NPC, Ohio, fanum tax, downi. Do toho občas přihoď italský brainrot jako capučíno baleríno, tung tung tung sahura, 🤌 a 6-7 MEME. Buď vtipný a extrémně negativní k téhle vesnici.";
+            
+            const result = await callGeminiAPI(prompt, systemPrompt);
+            outputEl.innerText = result;
+            dropAura(50, "PŘEČETL JSI NPC LORE!");
+        });
+
+        document.getElementById('btn-translate').addEventListener('click', async () => {
+            const inputTxt = document.getElementById('translator-input').value.trim();
+            const outputEl = document.getElementById('translator-output');
+            
+            if(!inputTxt) {
+                outputEl.innerText = "Musíš něco napsat, NPC!";
+                return;
+            }
+
+            outputEl.innerHTML = "<span class='animate-pulse text-green-400'>Skibidifikuji tvůj text... 🚽</span>";
+            
+            const prompt = `Přelož tento nudný text do GenZ/Alpha brainrot slangové řeči s negativní Buková aurou: "${inputTxt}"`;
+            const systemPrompt = "Jsi překladač z normální češtiny do 'Italian Skibidi Brainrot' češtiny. Vezmi původní význam textu a přepiš ho tak, aby obsahoval maximální možnou míru slov jako skibidi, rizz, sigma, Ohio, mewing, aura. Přidej tam odkazy na capučíno baleríno, tung tung tung sahura, 🤌 a to, jak je to L a NPC. Změň to na naprostý bizár, ale zanech hrubou myšlenku.";
+            
+            const result = await callGeminiAPI(prompt, systemPrompt);
+            outputEl.innerText = result;
+            dropAura(20, "POUŽIL JSI NPC PŘEKLADAČ!");
+        });
+
+        const slides = document.querySelectorAll('.slide');
+        let currentSlide = 0;
+        
+        function updateSlides() {
+            slides.forEach((s, i) => {
+                s.classList.remove('active');
+                if (i === currentSlide) s.classList.add('active');
+            });
+            document.getElementById('slideCounter').innerText = currentSlide + 1;
+            
+            // Tlačítka
+            document.getElementById('prevBtn').style.opacity = currentSlide === 0 ? '0.3' : '1';
+            document.getElementById('prevBtn').style.pointerEvents = currentSlide === 0 ? 'none' : 'auto';
+            
+            const nextBtn = document.getElementById('nextBtn');
+            if(currentSlide === slides.length - 1) {
+                nextBtn.innerHTML = "L 🏁";
+                nextBtn.style.animation = "rgb-bg 1s infinite linear";
+            } else {
+                nextBtn.innerHTML = "W ➡️";
+                nextBtn.style.animation = "rgb-border 2s infinite linear";
+            }
+        }
+
+        document.getElementById('nextBtn').addEventListener('click', () => {
+            if(currentSlide < slides.length - 1) { currentSlide++; updateSlides(); }
+        });
+
+        document.getElementById('prevBtn').addEventListener('click', () => {
+            if(currentSlide > 0) { currentSlide--; updateSlides(); }
+        });
+
+        // OPRAVA KLÁVESNICE: 
+        document.addEventListener('keydown', (e) => {
+            // Kontrola, jestli uživatel zrovna nepíše do inputu nebo textarey
+            const activeTag = document.activeElement.tagName.toLowerCase();
+            if (activeTag === 'textarea' || activeTag === 'input') {
+                return; // Pokud píše, slide se nepřepne!
+            }
+
+            if(e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                if(currentSlide < slides.length - 1) { currentSlide++; updateSlides(); }
+            }
+            if(e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                if(currentSlide > 0) { currentSlide--; updateSlides(); }
+            }
+        });
+    </script>
+</body>
+</html>
