@@ -723,11 +723,6 @@ def led_panel_view():
     from led_panel_view import HTML_LED_PANEL_VIEW
     return HTML_LED_PANEL_VIEW
 
-@app.route('/led-panel/view')
-def led_panel_view():
-    from led_panel_view import HTML_LED_PANEL_VIEW
-    return HTML_LED_PANEL_VIEW
-
 @app.route('/bukova')
 def bukova_page():
     try:
@@ -737,7 +732,7 @@ def bukova_page():
         return f"<h1>CHYBA: Nenalezen soubor bukova.html</h1><p>{e}</p>"
 
 # /mapa je zpracovávána blueprintem z interaktivnimapa.py (mapa_bp)
-        
+
 @app.route('/download')
 def download_home(): return render_public(HTML_DOWNLOADS_MAIN)
 
