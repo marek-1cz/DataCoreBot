@@ -722,7 +722,24 @@ def led_panel_app():
 def led_panel_view():
     from led_panel_view import HTML_LED_PANEL_VIEW
     return HTML_LED_PANEL_VIEW
-        
+
+    @app.route('/led-panel/view')
+def led_panel_view():
+    from led_panel_view import HTML_LED_PANEL_VIEW
+    return HTML_LED_PANEL_VIEW
+
+# ---- PŘIDEJ TENTO BLOK PRO BUKOVOU ----
+@app.route('/bukova')
+def bukova_page():
+    # Otevře tvůj html soubor a pošle ho do prohlížeče
+    try:
+        with open("bukova.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"<h1>CHYBA: Nenalezen soubor bukova.html</h1><p>{e}</p>"
+# ---------------------------------------
+
+# /mapa je zpracovávána blueprintem z interaktivnimapa.py (mapa_bp)
 # /mapa je zpracovávána blueprintem z interaktivnimapa.py (mapa_bp)
 # Duplicitní definice zde záměrně odstraněna.
 
