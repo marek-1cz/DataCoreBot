@@ -149,7 +149,7 @@ textarea.out{background:#050505;border:1px solid #1a1a1a;color:#3a9;
       <label>Pokr.</label>
       <button id="btnAdv" onclick="toggleAdv()">OFF</button>
       <span class="sep">|</span>
-      <a href="/led-panel/view" target="_blank" style="display:inline-block;padding:4px 8px;border:1px solid #4ade80;border-radius:2px;color:#4ade80;font-family:monospace;font-size:11px;text-decoration:none;cursor:pointer" title="Otevře nové okno jen s panelem">📺 Náhled panelu</a>
+      <button onclick="openView()" style="border-color:#4ade80;color:#4ade80" title="Otevře nové okno s panelem (celá šířka)">📺 Náhled panelu</button>
       <span class="sep">|</span>
       <label style="min-width:auto">Scroll</label>
       <input type="range" id="spdR" min="1" max="20" value="10"
@@ -179,8 +179,9 @@ textarea.out{background:#050505;border:1px solid #1a1a1a;color:#3a9;
              ═══════════════════════════════════════════════════ -->
         <button onclick="demo('front','735','KONEČNÁ','NENASTUPOVAT')">735 Konečná</button>
         <button onclick="demo('front','722','TACHOV, AUT. NÁDR.','')">722 Tachov</button>
-        <button onclick="demo('side','723','TACHOV, U RYBENY','via','Chodová Planá, u kostela','Planá aut.st.','Tachov, aut. nadr.')">723 VIA</button>
-        <button onclick="demo('front','739','Kostelec','via','','Kostelec. ostrov. prům. zona I','Kladruby,Zadní')">739 VIA</button>
+        <button onclick="demo('side','723','TACHOV, U RYBENY','via','Stříbro','Olbramov','Přimda','Tachov')">723 VIA</button>
+        <button onclick="demo('front','706','Olomouc, aut. nádr.','')">706 Olomouc</button>
+        <button onclick="demo('side','7482','Bauska-Emburga-Riga','')">7482 Riga</button>
         <button onclick="demo('front','400','Praha, Střížkov','')">400 Praha</button>
       </div>
     </div>
@@ -323,9 +324,9 @@ var LY={};
 function computeLayout(){
   var adv=S.adv&&S.splitIdx>0;
   if(S.pm==='front'){
-    var FH=16; // front number height — matches text visually
-    LY=adv?{numH:FH,row1Y:0,row1H:H1,midY:H1+GAP,midH:H2,row2Y:-1,row2H:0,totalH:H1+GAP+H2}
-          :{numH:FH,row1Y:0,row1H:H1,midY:-1,midH:0,row2Y:-1,row2H:0,totalH:H1};
+    var FH=13; // front panel fixed at 13px — number and text perfectly aligned
+    LY=adv?{numH:FH,numRenderH:FH,row1Y:0,row1H:FH,midY:FH+GAP,midH:H2,row2Y:-1,row2H:0,totalH:FH+GAP+H2}
+          :{numH:FH,numRenderH:FH,row1Y:0,row1H:FH,midY:-1,midH:0,row2Y:-1,row2H:0,totalH:FH};
   } else {
     var SH=16; // side row1 height — balanced with row2(13) + equal padding
     var numH=SH+GAP+H2;
@@ -373,12 +374,14 @@ function drawLineNumber(str,isBus){
   if(isBus){drawBusX();return;}
   if(!str||!str.trim()){lineEndCol=0;return;}
   if(S.pm==='side'){var tmp='';for(var i=0;i<str.length;i++){var c=str[i];tmp+=SMAP[c]||c;}str=tmp;}
-  var nh=mH2(str),tw=mW(str),sc=Math.min(LY.numH/nh,MNW/Math.max(1,tw)),x=1;
+  var nh=mH2(str),tw=mW(str);
+  var renderH=LY.numRenderH||LY.numH; // front=13, side=full
+  var sc=Math.min(renderH/nh,MNW/Math.max(1,tw)),x=1;
   for(var i=0;i<str.length;i++){
     var c=str[i],g=FONT[c];if(!g){x+=Math.round(4*sc)+1;continue;}
     var nw=g[0].length,sw=Math.max(1,Math.round(nw*sc)),sh=Math.max(1,Math.round(nh*sc));
     var yo=LY.numH-sh;
-    for(var dy=0;dy<sh;dy++){
+    for(var dy=0;dy<sh;dy++){  // bottom-aligned like text
       var srcY=Math.min(g.length-1,Math.floor((dy+.5)/sc)),srcRow=g[srcY]||'';
       for(var dx=0;dx<sw;dx++){
         var srcX=Math.min(nw-1,Math.floor((dx+.5)/sc));
@@ -395,7 +398,7 @@ function drawBusX(){
   var MNW=S.pm==='side'?MAX_NUM_W_SIDE:MAX_NUM_W_FRONT;
   var gw=g[0].length,gh=g.length,sc=Math.min(LY.numH/gh,MNW/gw);
   var sw=Math.max(1,Math.round(gw*sc)),sh=Math.max(1,Math.round(gh*sc));
-  var yo=S.pm==='side'?0:Math.max(0,Math.floor((LY.numH-sh)/2));
+  var yo=LY.numH-sh; // bottom-align always
   for(var dy=0;dy<sh&&yo+dy<LY.numH;dy++){
     var sy0=dy/sc,sy1=(dy+1)/sc;
     for(var dx=0;dx<sw;dx++)setpx(1+dx,yo+dy,sampleArea(g,dx/sc,(dx+1)/sc,sy0,sy1));
@@ -509,7 +512,7 @@ function tickVIA(ts){
 
 function getSplit(){
   if(!S.adv||S.splitIdx<=0)return[S.row1,''];
-  var w=S.row1.trim().split(/\\s+/);var si=Math.min(S.splitIdx,w.length);
+  var w=S.row1.trim().split(/\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s+/);var si=Math.min(S.splitIdx,w.length);
   return[w.slice(0,si).join(' '),w.slice(si).join(' ')];
 }
 
@@ -551,7 +554,7 @@ function toggleAdv(){S.adv=!S.adv;if(!S.adv)S.splitIdx=0;
 function onSpd(v){S.scrollSpeedRaw=parseInt(v);document.getElementById('spdV').textContent='×'+(parseInt(v)/10).toFixed(1);}
 function updateSplitUI(){
   if(!S.adv)return;
-  var words=(S.row1||'').trim().split(/\\s+/).filter(function(w){return w;});
+  var words=(S.row1||'').trim().split(/\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s+/).filter(function(w){return w;});
   var sl=document.getElementById('splitR');sl.max=words.length;sl.value=Math.min(S.splitIdx,words.length);
   var sp=getSplit();document.getElementById('splitPv').textContent=(sp[0]||'—')+' │ '+(sp[1]||'—');
 }
@@ -776,7 +779,7 @@ document.getElementById('ePm').addEventListener('change',drawEP);
 function doExp(){
   var lines=Object.keys(FONT).map(function(c){
     return JSON.stringify(c)+':['+FONT[c].map(function(r){return'"'+r+'"';}).join(',')+']';});
-  document.getElementById('eExp').value='const FONT={'+lines.join(',\\n')+'};';
+  document.getElementById('eExp').value='const FONT={'+lines.join(',\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n')+'};';
 }
 function cpExp(){
   var ta=document.getElementById('eExp');if(!ta.value)doExp();ta.select();document.execCommand('copy');ta.blur();
@@ -809,7 +812,15 @@ function importFont(input){
         if(Array.isArray(data[k])){FONT[k]=data[k];count++;}
       });
       WC={};buildELists();loadCh(curCh);applyPanel();drawEP();
-      document.getElementById('syncStatus').textContent='Font importován: '+count+' znaků';
+      if(count>0){
+        var ds=document.getElementById('syncStatus');
+        ds.textContent='✓ Font nahrán: '+count+' znaků';ds.style.color='#4f9';
+        setTimeout(function(){ds.textContent='';ds.style.color='';},3000);
+        markFontSaved();
+      } else {
+        alert('Nepodařilo se načíst font — zkontrolujte formát .json souboru.');
+      }
+      document.getElementById('syncStatus').textContent=document.getElementById('syncStatus').textContent||'';
       document.getElementById('syncStatus').style.color='#4f9';
       saveFontToStorage();
       setTimeout(function(){document.getElementById('syncStatus').style.color='';},2500);
@@ -846,11 +857,11 @@ buildELists();
 loadCh(SKEYS[0]);
 
 window.addEventListener('beforeunload',function(e){
-  if(!fontModified)return;
-  if((Date.now()-fontSavedAt)<180000)return;
-  e.preventDefault();
-  e.returnValue='Máte neuložené změny fontu — stáhněte si ho tlačítkem Stáhnout font.';
-  return e.returnValue;
+  if(!fontModified)return undefined;
+  if((Date.now()-fontSavedAt)<180000)return undefined;
+  var msg='Máte neuložené změny fontu! Stáhněte si font tlačítkem 💾 Stáhnout font.';
+  e.returnValue=msg;
+  return msg;
 });
 
 // Load saved state
