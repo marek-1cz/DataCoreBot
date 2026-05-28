@@ -26,7 +26,7 @@ function loadFont(){
 
 function loadS(){try{return JSON.parse(localStorage.getItem('buse_data')||'{}');}catch(e){return {};}}
 
-var COLS=160,CELL=10,H1=19,H2=13,GAP=1,SH=16;
+var COLS=160,CELL=10,H1=19,FH=13,H2=13,GAP=1,SH=16;
 var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),fb;
 
 function sp(x,y,v,tot){if(x>=0&&x<COLS&&y>=0&&y<tot)fb[y*COLS+x]=v;}
@@ -37,7 +37,7 @@ function norm(t){var o='';for(var i=0;i<t.length;i++){var c=t[i];if(FONT[c]!==un
 function drawNum(str,pm,tot,MNW){
   if(!str||!str.trim())return 0;
   if(pm==='side'){var tmp='';for(var i=0;i<str.length;i++){var c=str[i];tmp+=SMAP[c]||c;}str=tmp;}
-  var nh=mH(str),tw=mW(str),sc=Math.min(tot/nh,MNW/Math.max(1,tw)),x=1;
+  var vrH=(pm==='front'?FH:tot);var nh=mH(str),tw=mW(str),sc=Math.min(vrH/nh,MNW/Math.max(1,tw)),x=1;
   for(var i=0;i<str.length;i++){
     var c=str[i],g=FONT[c];if(!g){x+=Math.round(4*sc)+1;continue;}
     var nw=g[0].length,sw=Math.max(1,Math.round(nw*sc)),sh=Math.max(1,Math.round(nh*sc));
@@ -132,7 +132,7 @@ function fullRender(ts){
   var S=loadS();
   var pm=S.pm||'front';
   var via=S.via&&pm==='side';
-  var tot=pm==='side'?SH+GAP+H2:H1;
+  var tot=pm==='side'?SH+GAP+H2:FH;
   var key=JSON.stringify({pm,ln:S.lineNum,r1:S.row1,r2:S.row2,via,stops:S.viaStops});
 
   if(key!==lastKey){
