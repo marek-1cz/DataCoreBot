@@ -37,7 +37,6 @@ HTML_HISTORIE_INDEX = """
     <i class="fas fa-exclamation-triangle fa-fade"></i> !!! DATA NEMUSÍ SEDĚT - STRÁNKA JE VE VÝVOJI !!!
   </div>
 
-  <!-- Statistiky nahoře -->
   <div id="statsBar" style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:18px;"></div>
 
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
@@ -387,14 +386,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 .n-ad{background:#f59e0b;color:#0f172a;}
 .n-ad:hover{background:#d97706;color:#fff;}
 /* ─── MARKERS ─── */
-.bus-marker,.train-marker{border:2px solid #fff;text-align:center;color:#fff;font-weight:bold;font-size:10px;line-height:20px;box-shadow:0 0 5px rgba(0,0,0,.5);position:relative;}
+.bus-marker,.train-marker{border:2px solid #fff;text-align:center;color:#fff;font-weight:bold;font-size:10px;line-height:20px;box-shadow:0 0 5px rgba(0,0,0,.5);position:relative; z-index:10;}
 .bus-marker{border-radius:50%;}.train-marker{border-radius:4px;}
-.bg-green{background:#10b981;}.bg-red{background:#ef4444;}
-.bg-blue{background:#3b82f6;}.bg-darkblue{background:#1e3a8a;}
-.bg-gray{background:#64748b;border-color:#475569!important;color:#cbd5e1;}
-.bg-purple{background:#a855f7;}
-.bg-orange{background:#f59e0b;border-color:#d97706!important;color:#0f172a;}
-.bg-bug{background:#374151;border-color:#6b7280!important;border-style:dashed!important;color:#9ca3af;opacity:.65;}
+.bg-green{background-color:#10b981;}.bg-red{background-color:#ef4444;}.bg-blue{background-color:#3b82f6;}
+.bg-darkblue{background-color:#1e3a8a;}.bg-gray{background-color:#64748b;border-color:#475569!important;color:#cbd5e1;}
+.bg-purple{background-color:#a855f7;}
+.bg-orange{background-color:#f59e0b;border-color:#d97706!important;color:#0f172a;}
+.bg-bug{background-color:#374151;border-color:#6b7280!important;border-style:dashed!important;color:#9ca3af;opacity:.65;}
 /* ─── NAV HANDLE ─── */
 #nav-handle{position:fixed;top:0;left:50%;transform:translateX(-50%);
   width:90px;height:7px;background:rgba(56,189,248,.55);border-radius:0 0 8px 8px;
@@ -467,25 +465,26 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     </div>
     <div class="n-warn">⚠ Není garantována 100% přesnost dat</div>
     <div class="n-sp"></div>
-    <div class="n-clock">🕐 <span id="systemTimeClock">--:--:--</span></div>
+    
+    <div style="display:flex; gap:8px;">
+        <div class="n-clock">🕐 <span id="systemTimeClock">--:--:--</span></div>
+        <a href="/mapa_admin" class="n-btn n-ad"><i class="fas fa-lock"></i> AD</a>
+    </div>
+    
     <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠 Domů</a>
     <a href="/provoz-idpk" class="n-btn n-provoz">🚌 Provoz IDPK</a>
-    <a href="/mapa_admin" class="n-btn n-ad"><i class="fas fa-lock"></i> AD</a>
   </nav>
 
-  <!-- PROSTOR PRO ADMIN BANNER (vyplní python) -->
   __ADMIN_BANNER__
 
   <div id="map"></div>
 
-  <!-- Startup warning -->
   <div id="sw">
     <div style="font-size:17px;margin-bottom:3px;">⚠️ Mapa se startuje</div>
     <div style="font-size:12px;font-weight:normal;opacity:.9;">Probíhá načítání dat z Inflow a Arriva — vyčkejte prosím, data se brzy zobrazí.</div>
     <div id="sw-cd" style="margin-top:5px;font-size:11px;opacity:.8;"></div>
   </div>
 
-  <!-- JŘ Modal -->
   <div id="ttm">
     <div id="ttb">
       <button id="ttc-btn" onclick="document.getElementById('ttm').classList.remove('open')">✕</button>
@@ -493,7 +492,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     </div>
   </div>
 
-  <!-- Follow HUD -->
   <div id="hud">
     <div id="hf">
       <div class="hh">
@@ -523,7 +521,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// ─── ADMIN ACTIONS ────────────────────────────────────────────────────────────
+// Globální proměnné, ať to Leaflet nepřemaže
+if(typeof window.markersDict === 'undefined') window.markersDict = {};
+
 const IS_ADMIN = __IS_ADMIN__;
 
 async function adminAction(action, busId, extraData = {}) {
@@ -536,7 +536,8 @@ async function adminAction(action, busId, extraData = {}) {
         });
         let data = await res.json();
         if(data.status === 'success') {
-            fetchBuses(); // okamžitý refresh
+            // Zavolá okamžitý refresh
+            fetchBuses();
         } else {
             alert('Chyba: ' + data.message);
         }
@@ -548,23 +549,23 @@ async function adminAction(action, busId, extraData = {}) {
 window.adminDelete = (id) => { 
     if(confirm('Opravdu smazat tečku z mapy?')) {
         adminAction('delete', id);
-        if(markersDict[id]) markersDict[id].closePopup();
+        if(window.markersDict[id]) window.markersDict[id].closePopup();
     }
 };
 window.adminRecheck = (id) => {
     adminAction('recheck_spz', id);
-    if(markersDict[id]) markersDict[id].closePopup();
+    if(window.markersDict[id]) window.markersDict[id].closePopup();
 };
 window.adminSetSPZ = (id) => {
     let spz = document.getElementById('adm_spz_' + id).value;
     adminAction('edit_spz', id, {spz: spz});
-    if(markersDict[id]) markersDict[id].closePopup();
+    if(window.markersDict[id]) window.markersDict[id].closePopup();
 };
 window.adminSetStatus = (id) => {
     let st = document.getElementById('adm_st_' + id).value;
     let col = document.getElementById('adm_col_' + id).value;
     adminAction('edit_status', id, {status: st, color_class: col});
-    if(markersDict[id]) markersDict[id].closePopup();
+    if(window.markersDict[id]) window.markersDict[id].closePopup();
 };
 
 // ─── PANEL ────────────────────────────────────────────────────────────────────
@@ -603,7 +604,13 @@ if(hp.length===2) L.circleMarker([dLat,dLng],{radius:28,color:'#ef4444',weight:2
 
 // ─── HUD A SLEDOVÁNÍ ──────────────────────────────────────────────────────────
 let lastArr=[], followId=null, hudMin=false, followInflowId=null;
-let markersDict = {};
+
+map.on('dragstart', function() {
+    followId = null;
+    followInflowId = null;
+    hudMin = false;
+    document.getElementById('hud').style.display='none';
+});
 
 function stopFollow(){
   followId=null; followInflowId=null; hudMin=false;
@@ -692,10 +699,10 @@ async function fetchBuses(){
     lastArr = data.buses;
     let currentIds = new Set(data.buses.filter(b=>b.lat&&b.lng).map(b => b.id));
 
-    for(let id in markersDict) {
+    for(let id in window.markersDict) {
         if(!currentIds.has(id)) {
-            ml.removeLayer(markersDict[id]);
-            delete markersDict[id];
+            ml.removeLayer(window.markersDict[id]);
+            delete window.markersDict[id];
         }
     }
 
@@ -733,7 +740,7 @@ async function fetchBuses(){
       let arrowHtml = '';
       if(bus.bearing !== null && mc !== 'bg-gray' && mc !== 'bg-purple' && mc !== 'bg-bug') {
           arrowHtml = `<div style="position:absolute; top:0; left:0; width:44px; height:44px; transform: rotate(${bus.bearing}deg); transform-origin: 22px 22px;">
-                          <div style="width:0; height:0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 14px solid ${arrColor}; position:absolute; top: -4px; left: 14px;"></div>
+                          <div style="width:0; height:0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 14px solid ${arrColor}; position:absolute; top: -4px; left: 14px; filter: drop-shadow(0px -1px 2px rgba(0,0,0,0.5));"></div>
                        </div>`;
       }
 
@@ -781,6 +788,7 @@ async function fetchBuses(){
         <div class="pb">
             <div class="pr"><span class="pl">Cíl:</span><span class="pv" style="color:white;">${bus.destination||'Neznámý'}</span></div>
             ${spzH}
+            ${invTxt}
             ${statusHtml}
             ${idHtml}
             <div class="pr" style="border:none; margin-top:5px;"><span class="pl">JŘ:</span><span class="pv">${dTxt}</span></div>
@@ -796,11 +804,11 @@ async function fetchBuses(){
               <strong style="color:#ef4444; font-size:12px;">Admin Panel</strong>
               <div style="display:flex; gap:5px; margin-top:5px;">
                   <input type="text" id="adm_spz_${bus.id}" value="${bus.spz==='Neznámá'?'':bus.spz}" style="width:50%; font-size:11px; padding:4px; background:#0f172a; color:white; border:1px solid #334155; border-radius:4px;">
-                  <button onclick="adminSetSPZ('${bus.id}')" style="width:50%; background:#10b981; color:white; border:none; border-radius:4px; font-size:11px; cursor:pointer; font-weight:bold;">Uložit SPZ</button>
+                  <button onclick="event.stopPropagation(); adminSetSPZ('${bus.id}')" style="width:50%; background:#10b981; color:white; border:none; border-radius:4px; font-size:11px; cursor:pointer; font-weight:bold;">Uložit SPZ</button>
               </div>
               <div style="display:flex; gap:5px; margin-top:5px;">
-                  <button onclick="adminRecheck('${bus.id}')" style="width:50%; background:#f59e0b; color:black; border:none; border-radius:4px; font-size:11px; cursor:pointer; font-weight:bold;">Hledat novou</button>
-                  <button onclick="adminDelete('${bus.id}')" style="width:50%; background:#ef4444; color:white; border:none; border-radius:4px; font-size:11px; cursor:pointer; font-weight:bold;">Smazat tečku</button>
+                  <button onclick="event.stopPropagation(); adminRecheck('${bus.id}')" style="width:50%; background:#f59e0b; color:black; border:none; border-radius:4px; font-size:11px; cursor:pointer; font-weight:bold;">Hledat novou</button>
+                  <button onclick="event.stopPropagation(); adminDelete('${bus.id}')" style="width:50%; background:#ef4444; color:white; border:none; border-radius:4px; font-size:11px; cursor:pointer; font-weight:bold;">Smazat tečku</button>
               </div>
               <div style="display:flex; gap:5px; margin-top:5px;">
                   <input type="text" id="adm_st_${bus.id}" value="${bus.status}" style="width:50%; font-size:11px; padding:4px; background:#0f172a; color:white; border:1px solid #334155; border-radius:4px;">
@@ -814,17 +822,30 @@ async function fetchBuses(){
                       <option value="bg-purple">Fialová</option>
                       <option value="bg-bug">Bug</option>
                   </select>
-                  <button onclick="adminSetStatus('${bus.id}')" style="width:20%; background:#38bdf8; color:black; border:none; border-radius:4px; font-size:11px; cursor:pointer; font-weight:bold;">Uložit</button>
+                  <button onclick="event.stopPropagation(); adminSetStatus('${bus.id}')" style="width:20%; background:#38bdf8; color:black; border:none; border-radius:4px; font-size:11px; cursor:pointer; font-weight:bold;">Uložit</button>
               </div>
           </div>`;
       }
       
-      if(markersDict[bus.id]) {
-          let m = markersDict[bus.id];
+      if(window.markersDict[bus.id]) {
+          let m = window.markersDict[bus.id];
+          let wasOpen = m.isPopupOpen();
+          
           m.setLatLng([bus.lat, bus.lng]);
           m.setIcon(icon);
           
-          if(m.isPopupOpen()) {
+          if(wasOpen) {
+              // Nezavíráme popup! Zkontrolujeme jen, jestli se v něm píše
+              let isFocused = false;
+              let activeEl = document.activeElement;
+              if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT')) {
+                  isFocused = true;
+              }
+              
+              if (!isFocused) {
+                  m.setPopupContent(popupHTML);
+              }
+              
               let bounds = map.getBounds();
               if (!bounds.contains([bus.lat, bus.lng])) {
                   map.panTo([bus.lat, bus.lng], {animate: true});
@@ -836,7 +857,7 @@ async function fetchBuses(){
           let m = L.marker([bus.lat, bus.lng], {icon: icon});
           m.bindPopup(popupHTML, {className: 'dark-popup'});
           ml.addLayer(m);
-          markersDict[bus.id] = m;
+          window.markersDict[bus.id] = m;
       }
     });
   }catch(e){console.error(e);}
@@ -1364,6 +1385,10 @@ def background_map_worker():
                         if is_moving and not c["actual_start_time"] and not is_train:
                             c["actual_start_time"] = now.strftime('%H:%M')
 
+                # Zámek při chybě
+                if c["color_class"] == "bg-bug":
+                    c["spz_locked"] = True
+
                 c["final_delay_display"] = delay_val
 
                 if (old_status != c["status"] or is_moving or not c.get("db_first_upsert")):
@@ -1421,7 +1446,7 @@ def stranka_mapa():
 def stranka_mapa_admin():
     if not session.get('logged_in'):
         return redirect('/dashboard')
-    admin_banner = '<div style="background:rgba(56, 189, 248, 0.15); color:#38bdf8; padding:4px 12px; text-align:center; font-weight:bold; font-size:11px; z-index:9999; position:absolute; top:70px; left:50%; transform:translateX(-50%); border-radius:12px; border:1px solid rgba(56, 189, 248, 0.4); pointer-events:none; backdrop-filter:blur(4px);">🛡️ ADMIN MÓD ZAPNUTÝ</div>'
+    admin_banner = '<div style="background-color: #e0f2fe; color: #0284c7; padding: 6px 16px; text-align: center; font-weight: bold; font-size: 13px; z-index: 9999; position: absolute; top: 15px; left: 50%; transform: translateX(-50%); border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); border: 1px solid #7dd3fc; pointer-events: none;">🛡️ ADMIN MODERATION ZAPNUTÉ</div>'
     html_filled = HTML_MAPA.replace('__ADMIN_BANNER__', admin_banner).replace('__IS_ADMIN__', 'true')
     return _full_page("Admin Mapa", html_filled, is_map=True)
 
@@ -1497,6 +1522,10 @@ def api_live_buses():
         "worker_uptime_seconds": round(uptime),
         "buses":                LIVE_BUSES_DATA,
     })
+
+@mapa_bp.route('/mapa')
+def mapa_stranka():
+    return render_template_string(f"""<!DOCTYPE html><html style="background:#0f172a;"><head><title>Mapa | OIS IDPK</title><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="background:#0f172a; color:white;">{HTML_MAPA}</body></html>""")
 
 @mapa_bp.route('/api/bus_detail/<bus_id>')
 def api_bus_detail(bus_id):
