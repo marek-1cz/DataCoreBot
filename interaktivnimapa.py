@@ -37,6 +37,7 @@ HTML_HISTORIE_INDEX = """
     <i class="fas fa-exclamation-triangle fa-fade"></i> !!! DATA NEMUSÍ SEDĚT - STRÁNKA JE VE VÝVOJI !!!
   </div>
 
+  <!-- Statistiky nahoře -->
   <div id="statsBar" style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:18px;"></div>
 
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
@@ -388,11 +389,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 /* ─── MARKERS ─── */
 .bus-marker,.train-marker{border:2px solid #fff;text-align:center;color:#fff;font-weight:bold;font-size:10px;line-height:20px;box-shadow:0 0 5px rgba(0,0,0,.5);position:relative; z-index:10;}
 .bus-marker{border-radius:50%;}.train-marker{border-radius:4px;}
-.bg-green{background-color:#10b981;}.bg-red{background-color:#ef4444;}.bg-blue{background-color:#3b82f6;}
-.bg-darkblue{background-color:#1e3a8a;}.bg-gray{background-color:#64748b;border-color:#475569!important;color:#cbd5e1;}
+.bg-green{background-color:#10b981;}
+.bg-red{background-color:#ef4444;}
+.bg-blue{background-color:#3b82f6;}
+.bg-darkblue{background-color:#1e3a8a;}
+.bg-gray{background-color:#64748b; border-color:#475569!important; color:#cbd5e1;}
 .bg-purple{background-color:#a855f7;}
-.bg-orange{background-color:#f59e0b;border-color:#d97706!important;color:#0f172a;}
-.bg-bug{background-color:#374151;border-color:#6b7280!important;border-style:dashed!important;color:#9ca3af;opacity:.65;}
+.bg-orange{background-color:#f59e0b; border-color:#d97706!important; color:#0f172a;}
+.bg-bug{background-color:#374151; border-color:#6b7280!important; border-style:dashed!important; color:#9ca3af; opacity:.65;}
 /* ─── NAV HANDLE ─── */
 #nav-handle{position:fixed;top:0;left:50%;transform:translateX(-50%);
   width:90px;height:7px;background:rgba(56,189,248,.55);border-radius:0 0 8px 8px;
@@ -475,16 +479,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     <a href="/provoz-idpk" class="n-btn n-provoz">🚌 Provoz IDPK</a>
   </nav>
 
+  <!-- PROSTOR PRO ADMIN BANNER (vyplní python) -->
   __ADMIN_BANNER__
 
   <div id="map"></div>
 
+  <!-- Startup warning -->
   <div id="sw">
     <div style="font-size:17px;margin-bottom:3px;">⚠️ Mapa se startuje</div>
     <div style="font-size:12px;font-weight:normal;opacity:.9;">Probíhá načítání dat z Inflow a Arriva — vyčkejte prosím, data se brzy zobrazí.</div>
     <div id="sw-cd" style="margin-top:5px;font-size:11px;opacity:.8;"></div>
   </div>
 
+  <!-- JŘ Modal -->
   <div id="ttm">
     <div id="ttb">
       <button id="ttc-btn" onclick="document.getElementById('ttm').classList.remove('open')">✕</button>
@@ -492,6 +499,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     </div>
   </div>
 
+  <!-- Follow HUD -->
   <div id="hud">
     <div id="hf">
       <div class="hh">
@@ -835,7 +843,6 @@ async function fetchBuses(){
           m.setIcon(icon);
           
           if(wasOpen) {
-              // Nezavíráme popup! Zkontrolujeme jen, jestli se v něm píše
               let isFocused = false;
               let activeEl = document.activeElement;
               if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT')) {
@@ -979,8 +986,9 @@ def upsert_to_history(db, c):
     except Exception: pass
 
 def background_map_worker():
-    global TRACKED_SPZS
-    print("[MAPA] Inteligentní mozek (Striktní Zámky, Ochrana Popupů a Šipky venku) startuje...", flush=True)
+    global TRACKED_SPZS, WORKER_START_TIME
+    print("[MAPA] Inteligentní mozek (Striktní Zámky, Plynulé popupy a Velké šipky) startuje...", flush=True)
+    WORKER_START_TIME = get_prague_time()
     
     db_client = get_db_client()
     if db_client:
@@ -1522,10 +1530,6 @@ def api_live_buses():
         "worker_uptime_seconds": round(uptime),
         "buses":                LIVE_BUSES_DATA,
     })
-
-@mapa_bp.route('/mapa')
-def mapa_stranka():
-    return render_template_string(f"""<!DOCTYPE html><html style="background:#0f172a;"><head><title>Mapa | OIS IDPK</title><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="background:#0f172a; color:white;">{HTML_MAPA}</body></html>""")
 
 @mapa_bp.route('/api/bus_detail/<bus_id>')
 def api_bus_detail(bus_id):
