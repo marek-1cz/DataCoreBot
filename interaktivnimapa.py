@@ -23,10 +23,10 @@ mapa_bp = Blueprint('mapa_bp', __name__)
 # ─── KONFIGURACE SPZ LOGIKY ──────────────────────────────────────────────────
 SPZ_HOLD_MINUTES       = 8     # Jak dlouho držet SPZ bez nového potvrzení z Arrivy
 SPZ_STABLE_TICKS       = 2     # Kolik po sobě jdoucích shod = ověřená SPZ
-GHOST_MAX_OFFLINE_MIN  = 20    # Jak starý (minuty) ghost kandidát se ještě vezme v potaz
+GHOST_MAX_OFFLINE_MIN  = 20    # Jak starý (minuty) ghost kandidát se ještě vezme v potaz (volné)
 GHOST_DIST_STRICT      = 0.010 # ~1 km – vzdálenost pro ghost bez shody linky
 GHOST_DIST_LOOSE       = 0.030 # ~3 km – vzdálenost pro ghost se shodou linky
-ARRIVA_MATCH_DIST      = 0.008 # ~800 m – radius hledání v Arriva API (bylo 0.015!)
+ARRIVA_MATCH_DIST      = 0.008 # ~800 m – radius hledání v Arriva API
 DUPLICATE_GRACE_SEC    = 120   # Sekundy grace periody před smazáním duplicitní SPZ
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -77,7 +77,6 @@ HTML_HISTORIE_INDEX = """
   </div>
   <p style="color:#64748b; font-size:11px; margin-top:8px;">* Záznamy posledních 30 dní. Aktualizace každých 10s.</p>
 
-  <!-- Info o omezeních systému -->
   <details style="margin-top:14px; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px 16px;">
     <summary style="color:#94a3b8; font-size:12px; cursor:pointer; font-weight:bold;">
       <i class="fas fa-info-circle" style="color:#38bdf8; margin-right:5px;"></i>
@@ -104,12 +103,11 @@ HTML_HISTORIE_INDEX = """
   let allData = [];
 
   function buildFreqMap(data) {
-    // Počet jízd každé SPZ na každé lince (dle začátku čísla linky)
     const freq = {};
     data.forEach(row => {
       const spz = row.spz || 'Neznámá';
       if (spz === 'Neznámá') return;
-      const lineBase = (row.linka || '').replace(/\\/.*/, '').trim().replace(/\\D/g, '');
+      const lineBase = (row.linka || '').replace(/\/.*/, '').trim().replace(/\D/g, '');
       const key = spz + '_' + lineBase;
       freq[key] = (freq[key] || 0) + 1;
     });
@@ -178,11 +176,10 @@ HTML_HISTORIE_INDEX = """
         const dayStr = d.toLocaleDateString('cs-CZ');
         const spz    = row.spz || 'Neznámá';
         const linka  = row.linka || '---';
-        const lineBase = linka.replace(/\\/.*/, '').trim().replace(/\\D/g, '');
+        const lineBase = linka.replace(/\/.*/, '').trim().replace(/\D/g, '');
         const freqKey  = spz + '_' + lineBase;
-        const runCnt   = row.run_count || freq[freqKey] || 0;
+        const runCnt   = freq[freqKey] || 0;
 
-        // SPZ badge
         let spzBadge = '';
         if (spz === 'Neznámá') {
           spzBadge = `<span style="background:#334155;color:#94a3b8;padding:3px 8px;border-radius:4px;font-size:12px;"><i class="fas fa-question-circle" style="margin-right:4px;"></i>Neznámá</span>`;
@@ -192,7 +189,6 @@ HTML_HISTORIE_INDEX = """
           spzBadge = `<span style="background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:bold;">${spz} ✓</span>`;
         }
 
-        // Frequency badge
         let freqBadge = '';
         if (runCnt >= 10) {
           freqBadge = `<br><span style="background:#7c3aed;color:white;padding:1px 6px;border-radius:10px;font-size:10px;margin-top:3px;display:inline-block;"><i class="fas fa-star"></i> Stálý vůz (${runCnt}×)</span>`;
@@ -202,16 +198,14 @@ HTML_HISTORIE_INDEX = """
           freqBadge = `<br><span style="background:#334155;color:#94a3b8;padding:1px 6px;border-radius:10px;font-size:10px;margin-top:3px;display:inline-block;">${runCnt}× na této lince</span>`;
         }
 
-        // Start
         let startStr = '<span style="color:#64748b;">---</span>';
         if (row.start_scheduled || row.start_actual) {
           startStr = `<span style="color:#64748b;">${row.start_scheduled || '?'}</span> → <strong style="color:#10b981;">${row.start_actual || 'Čeká'}</strong>`;
         }
 
-        // Status / End
         const inDepot = row.status?.includes('depu') || row.status?.includes('Vozovn') || row.status?.includes('Nočn');
         const isEnd   = row.end_actual || row.status?.includes('Timeout') || row.status?.includes('Ukončen');
-        let statusColor = '#eab308'; // probíhá
+        let statusColor = '#eab308'; 
         let endLabel    = '<i class="fas fa-spinner fa-pulse" style="margin-right:4px;"></i>Probíhá';
         if (inDepot) {
           statusColor = '#64748b';
@@ -682,7 +676,6 @@ async function fetchBuses(){
       }
       let bugW='';
       if(mc==='bg-bug'){
-        // SPZ: zobraz jen pokud je ověřená, jinak "Neznámá SPZ"
         let bugSpz = (bus.spz_verified && bus.spz && bus.spz!=='Neznámá') ? bus.spz : 'Neznámá SPZ';
         bugW=`<div style="background:#374151;border:1px dashed #6b7280;border-radius:5px;padding:7px;margin:5px 0;color:#9ca3af;font-size:10px;text-align:center;"><i class="fas fa-exclamation-triangle" style="color:#f59e0b;"></i> <b style="color:#f59e0b;">BUG – NEAKTUÁLNÍ MÍSTO</b><br>SPZ <b>${bugSpz}</b> jede na jiném místě.</div>`;
       }
@@ -730,7 +723,7 @@ setInterval(fetchBuses,10000);
 GLOBAL_BUS_CACHE = {}
 LIVE_BUSES_DATA  = []
 TRACKED_SPZS     = set()
-WORKER_START_TIME = None   # nastavuje se při startu workeru
+WORKER_START_TIME = None
 
 cj     = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
@@ -743,13 +736,16 @@ def get_prague_time():
 
 
 def is_same_line(l1, l2):
-    """Porovnání čísel linek - číselná část musí souhlasit."""
+    """Porovnání čísel linek (zabezpečené proti 735 vs 735/3 duplicitě)."""
     if not l1 or not l2 or l1 == "Neznámá" or l2 == "Neznámá":
         return False
-    cl1 = re.sub(r'\D', '', l1)
-    cl2 = re.sub(r'\D', '', l2)
+    # Pro srovnání zahoď vše za lomítkem (735/3 -> 735)
+    b1 = str(l1).split('/')[0]
+    b2 = str(l2).split('/')[0]
+    cl1 = re.sub(r'\D', '', b1)
+    cl2 = re.sub(r'\D', '', b2)
     if not cl1 or not cl2:
-        return l1 == l2
+        return b1 == b2
     return cl1.endswith(cl2) or cl2.endswith(cl1)
 
 
@@ -766,7 +762,7 @@ def get_db_client():
     return None
 
 
-def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now, ghost_spz=None):
+def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now, ghost_spz=None, ghost_verified=False):
     """Vytvoří nový prázdný záznam do cache."""
     return {
         "trip_id":            trip_id,
@@ -780,7 +776,7 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "raw_delay":          delay,
         # SPZ
         "spz":                ghost_spz,
-        "spz_verified":       False,
+        "spz_verified":       ghost_verified,
         "spz_locked":         False,
         "spz_stable_ticks":   0,
         "spz_last_verified":  None,
@@ -805,6 +801,7 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "is_offline":         False,
         "db_first_upsert":    False,
         "_last_db_status":    None,
+        "_last_db_linka":     None,
         "_end_written":       False,
         "_was_long_stationary": False,
         "final_delay_display": 0,
@@ -814,7 +811,6 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
 # --- STAHOVÁNÍ JÍZDNÍHO ŘÁDU (vlákno na pozadí) ---
 
 def fetch_tt_bg(bus_id, cached_dict):
-    """Stáhne jízdní řád z Inflow a uloží časy do cache."""
     try:
         cb_time = int(time.time() * 1000)
         headers = {
@@ -851,7 +847,6 @@ def fetch_tt_bg(bus_id, cached_dict):
 # --- ZÁPIS DO DATABÁZE ---
 
 def close_previous_trips(db, spz, current_trip_id, end_time_str):
-    """Uzavře všechny otevřené záznamy pro tuto SPZ kromě aktuálního tripu."""
     if not db or not spz or spz == "Neznámá":
         return
     try:
@@ -874,23 +869,12 @@ def close_previous_trips(db, spz, current_trip_id, end_time_str):
 
 
 def _is_tracked_line(linka_str):
-    """Vrátí True pokud linka patří do série 490 nebo 496."""
-    # Vezme jen číselnou část před lomítkem (490722/26 → 490722)
-    base = re.sub(r'/.*', '', linka_str).strip()
+    base = re.sub(r'/.*', '', str(linka_str)).strip()
     num  = re.sub(r'\D', '', base)
     return num.startswith("490") or num.startswith("496")
 
 
 def upsert_to_history(db, c):
-    """Zapíše / aktualizuje záznam spoje do Supabase.
-
-    Záměrně nízká laťka – zapisuje i bez plného ověření SPZ,
-    protože Arriva API bývá pomalá nebo nesedí destinace.
-    Podmínky:
-      • SPZ je nastavená (nemusí být verified)
-      • Linka začíná 490 nebo 496
-      • Spoj má actual_start_time NEBO actual_end_time
-    """
     global TRACKED_SPZS
     if c.get("is_train") or not db:
         return
@@ -899,12 +883,10 @@ def upsert_to_history(db, c):
     if not spz or spz == "Neznámá":
         return
 
-    # Linka (prefer full real_linka_spoj, fallback na raw line)
     final_linka = c.get("real_linka_spoj") or c.get("line", "")
     if not _is_tracked_line(final_linka):
-        return  # Není 490/496 série → přeskočit
+        return
 
-    # Musíme mít aspoň start nebo konec (žádný "prázdný" záznam)
     if not c.get("actual_start_time") and not c.get("actual_end_time"):
         return
 
@@ -912,17 +894,6 @@ def upsert_to_history(db, c):
 
     spz_verified = c.get("spz_verified", False)
     jr_l = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={c['inflow_id']}&currentStopId=0"
-
-    # Počítadlo jízd
-    run_count = 0
-    try:
-        line_base = re.sub(r'/.*', '', final_linka).strip()
-        cnt_resp  = db.table("bus_history").select("trip_id").eq("spz", spz)\
-                      .ilike("linka", f"{line_base}%").execute()
-        existing  = {r["trip_id"] for r in (cnt_resp.data or [])}
-        run_count = len(existing) + (0 if c["trip_id"] in existing else 1)
-    except Exception:
-        pass
 
     try:
         data = {
@@ -937,20 +908,20 @@ def upsert_to_history(db, c):
             "last_lat":        c.get("lat"),
             "last_lng":        c.get("lng"),
             "status":          c.get("status"),
-            "run_count":       run_count,
             "created_at":      c["created_at"].isoformat(),
             "updated_at":      get_prague_time().isoformat(),
         }
+        # Úmyslně chybí run_count, protože ho DB tabulka neobsahuje (zabraňuje pádu logování!)
         db.table("bus_history").upsert(data).execute()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[MAPA-DB CHYBA] Nelze ulozit historii pro {spz}: {e}")
 
 
 # --- HLAVNÍ SMYČKA NA POZADÍ ---
 
 def background_map_worker():
     global TRACKED_SPZS, WORKER_START_TIME
-    print("[MAPA] Worker startuje (vylepšená SPZ logika v2)...", flush=True)
+    print("[MAPA] Worker startuje (Oprava Duplicít a Zámku SPZ)...", flush=True)
     WORKER_START_TIME = get_prague_time()
 
     db_client = get_db_client()
@@ -1070,69 +1041,45 @@ def background_map_worker():
                             # ─── NOVÝ BUS: ghost matching ───────────────────
                             TRIP_COUNTER += 1
                             ghost_spz      = None
+                            ghost_verified = False
                             ghost_trip_id  = f"TRIP-{TRIP_COUNTER}"
                             ghost_candidates = []
 
                             for gid, gc in list(GLOBAL_BUS_CACHE.items()):
-                                # Kandidát musí být offline a mít SPZ
                                 if not (gc.get("is_offline") and gc.get("spz") and gc["spz"] != "Neznámá"):
                                     continue
-                                # Kandidát nesmí být příliš starý
-                                offline_age_min = (now - gc["last_inflow_seen"]).total_seconds() / 60.0
-                                if offline_age_min > GHOST_MAX_OFFLINE_MIN:
+                                oa_min = (now - gc["last_inflow_seen"]).total_seconds() / 60.0
+                                if oa_min > 1080:  # 18 hodin
                                     continue
-
+                                
                                 g_dist     = math.hypot(lat1 - gc["lat"], lng1 - gc["lng"])
                                 line_match = is_same_line(line, gc["line"])
 
-                                # Přísná vzdálenost NEBO volná vzdálenost se shodou linky
-                                if g_dist < GHOST_DIST_STRICT or (g_dist < GHOST_DIST_LOOSE and line_match):
-                                    # Nižší skóre = lepší kandidát
-                                    score = g_dist \
-                                          - (0.005 if line_match else 0) \
-                                          + (offline_age_min * 0.0005)
+                                # Sjednocená logika pro noční i denní ghost matching
+                                if line_match and g_dist < 0.08:
+                                    score = g_dist + (oa_min * 0.0001) - 0.05
+                                    ghost_candidates.append((gid, gc, g_dist, score))
+                                elif g_dist < GHOST_DIST_STRICT and oa_min <= GHOST_MAX_OFFLINE_MIN:
+                                    score = g_dist + (oa_min * 0.0005)
                                     ghost_candidates.append((gid, gc, g_dist, score))
 
                             if ghost_candidates:
                                 ghost_candidates.sort(key=lambda x: x[3])
                                 best_gid, best_gc, _, _ = ghost_candidates[0]
                                 ghost_spz = best_gc["spz"]
-                                # Zdědíme trip_id pokud se shoduje linka (pokračování spoje)
+                                
                                 if is_same_line(line, best_gc["line"]):
                                     ghost_trip_id = best_gc["trip_id"]
+                                    # Převezmeme z DB verifikaci přes noc, aby nebyl odhad pokud nemusí
+                                    ghost_verified = best_gc.get("spz_verified", False)
+                                
                                 del GLOBAL_BUS_CACHE[best_gid]
-                                print(f"[MAPA-GHOST] Bus {bus_id} ({line}) zdědil SPZ {ghost_spz} od {best_gid}")
-
-                            # ── Level 2: Noční ghost (vozovna / přes noc 2h–18h) ──
-                            if not ghost_spz:
-                                overnight_candidates = []
-                                for gid, gc in list(GLOBAL_BUS_CACHE.items()):
-                                    if not (gc.get("is_offline") and gc.get("spz")
-                                            and gc["spz"] != "Neznámá"
-                                            and gc.get("spz_verified")):
-                                        continue
-                                    oa_min = (now - gc["last_inflow_seen"]).total_seconds() / 60.0
-                                    if not (90 <= oa_min <= 1080):  # 1.5h–18h
-                                        continue
-                                    g_dist = math.hypot(lat1 - gc["lat"], lng1 - gc["lng"])
-                                    # Vozovna: potřebujeme shodu linky + vzdálenost do 8km
-                                    if is_same_line(line, gc["line"]) and g_dist < 0.08:
-                                        score = g_dist + (oa_min * 0.00005)
-                                        overnight_candidates.append((gid, gc, g_dist, score))
-                                if overnight_candidates:
-                                    overnight_candidates.sort(key=lambda x: x[3])
-                                    best_gid, best_gc, _, _ = overnight_candidates[0]
-                                    ghost_spz = best_gc["spz"]
-                                    ghost_trip_id = best_gc["trip_id"]
-                                    del GLOBAL_BUS_CACHE[best_gid]
-                                    # Uzavřít starý DB záznam (byl „Stojí v depu")
-                                    if db_client and ghost_spz and ghost_spz != "Neznámá":
-                                        close_previous_trips(db_client, ghost_spz, ghost_trip_id, now.strftime('%H:%M'))
-                                    print(f"[MAPA-NOČNÍHOST] Bus {bus_id} ({line}) přes noc → SPZ {ghost_spz}")
+                                if db_client and ghost_spz and ghost_spz != "Neznámá":
+                                    close_previous_trips(db_client, ghost_spz, ghost_trip_id, now.strftime('%H:%M'))
 
                             GLOBAL_BUS_CACHE[bus_id] = new_cache_entry(
                                 bus_id, ghost_trip_id, lat1, lng1,
-                                line, dest1, is_train, delay, now, ghost_spz
+                                line, dest1, is_train, delay, now, ghost_spz, ghost_verified
                             )
 
                         else:
@@ -1145,18 +1092,18 @@ def background_map_worker():
 
                             dist_moved = math.hypot(lat1 - c["lat"], lng1 - c["lng"])
 
-                            # Detekce změny linky (nový spoj stejného vozidla)
+                            # Změna linky = Nový spoj (používá is_same_line s uříznutím /)
                             if not is_same_line(c["line"], line) and line and c["line"] != "Neznámá":
                                 if not c["actual_end_time"]:
                                     c["actual_end_time"] = now.strftime('%H:%M')
                                     c["status"] = "Ukončeno (Začátek nového spoje)"
-                                    # Uzavřít i bez spz_verified (jen 490/496)
                                     upsert_to_history(db_client, c)
+                                
                                 TRIP_COUNTER += 1
                                 new_trip_id               = f"TRIP-{TRIP_COUNTER}"
-                                # Uzavřít případné předchozí otevřené záznamy v DB pro tuto SPZ
                                 if c.get("spz") and c["spz"] != "Neznámá" and db_client:
                                     close_previous_trips(db_client, c["spz"], new_trip_id, now.strftime('%H:%M'))
+                                
                                 c["trip_id"]          = new_trip_id
                                 c["line"]             = line
                                 c["real_linka_spoj"]  = None
@@ -1171,10 +1118,10 @@ def background_map_worker():
                                 c["spz_verified"]     = False
                                 c["spz_stable_ticks"] = 0
                                 c["investigating"]    = False
-                                c["db_first_upsert"]  = False   # ← KLÍČOVÁ OPRAVA
+                                c["db_first_upsert"]  = False
                                 c["_last_db_status"]  = None
+                                c["_last_db_linka"]   = None
                             else:
-                                # Destinace: vždy aktualizuj z Inflow (ne jen pokud je delší)
                                 if dest1:
                                     c["destination"] = dest1
                                 if line and len(line) > len(c.get("line", "")):
@@ -1202,24 +1149,20 @@ def background_map_worker():
                     GLOBAL_BUS_CACHE[bus_ids[0]]["investigating"]      = False
                     GLOBAL_BUS_CACHE[bus_ids[0]]["investigation_start"] = None
                     if GLOBAL_BUS_CACHE[bus_ids[0]].get("color_class") == "bg-bug":
-                        # BUG tag se zrušil – bus je sám se svou SPZ
                         GLOBAL_BUS_CACHE[bus_ids[0]]["color_class"] = "bg-gray"
                         GLOBAL_BUS_CACHE[bus_ids[0]]["status"]      = "Stojí"
                     continue
 
-                # ── Detekce BUG: jeden se hýbe, druhý stojí se stejnou SPZ ──
                 moving_bids     = [bid for bid in bus_ids
                                    if (now - GLOBAL_BUS_CACHE[bid]["last_moved"]).total_seconds() < 60]
                 stationary_bids = [bid for bid in bus_ids
                                    if (now - GLOBAL_BUS_CACHE[bid]["last_moved"]).total_seconds() > 180]
 
                 if moving_bids and stationary_bids:
-                    # Jasný případ: jede nový bus, starý nezmizel = MAP BUG
                     for bid in stationary_bids:
                         bc = GLOBAL_BUS_CACHE[bid]
                         stat_inactive = (now - bc["last_moved"]).total_seconds() / 60.0
                         if stat_inactive < 2:
-                            # Pohnul se nedávno — výzkum místo bug
                             bc["color_class"]         = "bg-orange"
                             bc["status"]              = "Výzkum – Duplicitní SPZ, bus se hýbe"
                         else:
@@ -1231,9 +1174,8 @@ def background_map_worker():
                         bc = GLOBAL_BUS_CACHE[bid]
                         bc["investigating"]           = False
                         bc["investigation_start"]     = None
-                    continue  # Přeskočíme standardní duplikát logiku
+                    continue  
 
-                # ── Standardní duplikát – výběr vítěze skórem ──
                 def score_candidate(bid):
                     bc = GLOBAL_BUS_CACHE[bid]
                     return (bc.get("spz_stable_ticks", 0),
@@ -1266,36 +1208,31 @@ def background_map_worker():
                 offline_mins = (now - c["last_inflow_seen"]).total_seconds() / 60.0
                 total_mins   = (now - c["first_seen"]).total_seconds()       / 60.0
 
-                # Timeout: jen extrémně dlouhý aktivní spoj (20h+), přes noc povolujeme
                 if total_mins > 1200 and not c["actual_end_time"] and not c.get("is_offline"):
                     c["actual_end_time"] = now.strftime('%H:%M')
                     c["status"]          = "Timeout (Příliš dlouhý spoj)"
                     c["color_class"]     = "bg-gray"
-                    if c.get("spz_verified"):
-                        upsert_to_history(db_client, c)
+                    upsert_to_history(db_client, c)
                     del GLOBAL_BUS_CACHE[bus_id]
                     continue
 
                 if bus_id not in current_inflow_ids:
-                    # Smaž až po 18 hodinách bez signálu (umožní overnight tracking)
                     if offline_mins > 1080:
-                        if c.get("spz_verified"):
-                            upsert_to_history(db_client, c)
+                        upsert_to_history(db_client, c)
                         del GLOBAL_BUS_CACHE[bus_id]
                         continue
                     c["is_offline"] = True
                     if offline_mins >= 120:
-                        # Bus stojí v depu / vozovně přes noc
                         c["status"]      = "Stojí v depu / Vozovně"
                         c["color_class"] = "bg-gray"
                         c["raw_delay"]   = 0
-                        if c.get("spz_verified") and offline_mins < 125:  # upsert jen jednou
+                        if offline_mins < 125:  
                             upsert_to_history(db_client, c)
                     elif offline_mins >= 15:
                         c["status"]      = "Odstaven (Bez signálu)"
                         c["color_class"] = "bg-gray"
                         c["raw_delay"]   = 0
-                        if c.get("spz_verified") and offline_mins < 20:   # upsert jen jednou
+                        if offline_mins < 20:   
                             upsert_to_history(db_client, c)
                     elif offline_mins > 2:
                         if not c["actual_end_time"]:
@@ -1303,7 +1240,7 @@ def background_map_worker():
                         c["status"]      = "Ztráta polohy (Konečná)"
                         c["color_class"] = "bg-purple"
                         c["raw_delay"]   = 0
-                        if c.get("spz_verified") and offline_mins < 4:    # upsert jen jednou
+                        if offline_mins < 4:    
                             upsert_to_history(db_client, c)
 
             # ═══════════════════════════════════════════════════════
@@ -1315,7 +1252,6 @@ def background_map_worker():
             for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
                 inactive_mins = (now - c["last_moved"]).total_seconds() / 60.0
 
-                # ── Offline busy: jen zobrazíme, neparujeme SPZ ────────────
                 if c.get("is_offline"):
                     last_up = c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A"
                     final_line_disp = (
@@ -1373,14 +1309,11 @@ def background_map_worker():
 
                     if best_spz and best_spz != "Neznámá":
                         current_spz = c.get("spz")
-
                         if best_spz == current_spz:
-                            # ✓ Potvrzení stejné SPZ
                             c["spz_stable_ticks"] = c.get("spz_stable_ticks", 0) + 1
                             if best_match_dest:
                                 c["spz_last_verified"] = now
                         else:
-                            # ≠ Jiná SPZ nalezena
                             last_v = c.get("spz_last_verified")
                             recently_verified = (
                                 last_v is not None
@@ -1388,10 +1321,8 @@ def background_map_worker():
                                 and c.get("spz_verified")
                             )
                             if recently_verified:
-                                # Nedávno ověřená SPZ – nedáme se přepsat, jen sledujeme
                                 pass
                             else:
-                                # Přepíšeme SPZ
                                 if c.get("spz_verified") and current_spz and db_client:
                                     try:
                                         db_client.table("bus_history").update({
@@ -1409,20 +1340,21 @@ def background_map_worker():
                                 if best_match_dest:
                                     c["spz_last_verified"] = now
 
-                        # Verifikace po dosažení stability (pohyb NENÍ podmínkou)
+                        # Zamykání SPZ (Freeze)
+                        is_finished_state = c.get("actual_end_time") or c.get("status", "").startswith("Stojí příliš") or c.get("status", "").startswith("Odstaven") or c.get("status", "").startswith("Konečná") or c.get("status", "").startswith("Ztráta")
+                        
                         if c.get("spz_stable_ticks", 0) >= SPZ_STABLE_TICKS and best_match_dest:
-                            c["spz_verified"]    = True
-                            c["spz_locked"]      = True   # ← zamkne i při stání
+                            c["spz_verified"]  = True
+                            c["spz_locked"]    = True
                             c["spz_last_verified"] = now
-
-                    else:
-                        # Arriva nic nevrátila – držíme SPZ podle stáří posledního ověření
-                        last_v = c.get("spz_last_verified")
-                        if last_v is None or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60:
-                            # Příliš staré – zrušíme verifikaci, ale SPZ zobrazíme dál jako "odhad"
-                            c["spz_verified"] = False
-                            c["spz_locked"]   = False
-                        # else: SPZ je čerstvá, nic neděláme
+                        elif is_finished_state and c.get("spz_verified"):
+                            c["spz_last_verified"] = now
+                            c["spz_locked"] = True
+                        else:
+                            last_v = c.get("spz_last_verified")
+                            if last_v is None or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60:
+                                c["spz_verified"] = False
+                                c["spz_locked"]   = False
 
                 # ── STAHOVÁNÍ JÍZDNÍHO ŘÁDU ───────────────────────────────
                 if not is_train:
@@ -1436,14 +1368,10 @@ def background_map_worker():
                         ).start()
 
                 # ── BAREVNÁ LOGIKA A STATUS ────────────────────────────────
-                # BUG marker – zkontroluj jestli se teď hýbe (reaktivace)
                 if c.get("color_class") == "bg-bug":
                     if is_moving:
-                        # Bus se znovu rozjel – přechod do vyšetřování
                         c["color_class"] = "bg-orange"
                         c["status"]      = "Výzkum – Reaktivace (byl zaseknutý)"
-                    # else: zachováme BUG status
-
                 else:
                     is_before_departure = False
                     time_to_dep         = 0
@@ -1456,8 +1384,6 @@ def background_map_worker():
                             diff      = dep_total - cur_total
                             if diff < -720: diff += 1440
                             elif diff > 720: diff -= 1440
-                            # Světle modrá: víc než 1 minuta do odjezdu
-                            # POZOR: bez podmínky actual_start_time → drží se i po pohybu
                             if diff > 1:
                                 is_before_departure = True
                                 time_to_dep = int(diff)
@@ -1467,7 +1393,6 @@ def background_map_worker():
                     old_status = c["status"]
 
                     if is_before_departure:
-                        # ── Světle modrá: čeká na odjezd (> 1 min, i v pohybu) ──
                         c["actual_end_time"] = None
                         if time_to_dep <= 240:
                             c["status"]      = f"Čeká na odjezd ({time_to_dep} min)"
@@ -1478,7 +1403,6 @@ def background_map_worker():
                         delay_val = -time_to_dep
 
                     elif delay_val <= -10000:
-                        # ── Konečná zastávka nebo odstaven ──
                         if inactive_mins > 10:
                             c["status"]      = "Odstaven"
                             c["color_class"] = "bg-gray"
@@ -1487,28 +1411,24 @@ def background_map_worker():
                             c["color_class"] = "bg-purple"
                             if not c["actual_end_time"]:
                                 c["actual_end_time"] = now.strftime('%H:%M')
-                                c["_end_written"]    = False  # Vynutit upsert
+                                c["_end_written"]    = False  
 
                     elif delay_val < -1 and c.get("actual_start_time"):
-                        # ── Tmavě modrá: uprostřed linky, jede před časem ──
                         c["status"]      = "Jízda (Náskok)" if is_moving else "Stojí (Náskok)"
                         c["color_class"] = "bg-darkblue"
 
                     else:
-                        # ── Normální jízda ──
                         c["status"]      = "Jízda" if is_moving else "Stojí"
                         c["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
 
-                    # ── Šedá pro autobusy stojící příliš dlouho ──────────────
                     if (not is_moving
-                            and inactive_mins > 30
+                            and inactive_mins > 10
                             and c.get("actual_start_time")
                             and c["color_class"] not in ("bg-purple", "bg-gray", "bg-bug", "bg-blue", "bg-orange")):
                         c["status"]             = f"Stojí příliš dlouho ({int(inactive_mins)} min)"
                         c["color_class"]        = "bg-gray"
                         c["_was_long_stationary"] = True
 
-                    # ── Pokud šedý (zaseknutý) se znovu rozjel → vyšetřování ──
                     elif (is_moving
                           and c.get("_was_long_stationary")
                           and c["color_class"] not in ("bg-bug", "bg-blue")):
@@ -1518,37 +1438,28 @@ def background_map_worker():
 
                 if is_moving and not c["actual_start_time"] and not is_train:
                     c["actual_start_time"] = now.strftime('%H:%M')
-                    # První pohyb = první smysluplný záznam → ihned zapsat
-                    if c.get("spz") and c["spz"] != "Neznámá" and _is_tracked_line(c.get("real_linka_spoj") or c.get("line", "")):
-                        upsert_to_history(db_client, c)
-                        c["db_first_upsert"] = True
-                        c["_last_db_status"] = c.get("status")
+                    c["_end_written"] = False
 
                 c["final_delay_display"] = delay_val
 
                 # ── DB UPSERT ─────────────────────────────────────────────
-                # Nižší laťka: SPZ nastavená (ne nutně verified) + 490/496 linka
-                has_spz      = c.get("spz") and c["spz"] != "Neznámá"
-                tracked_line = _is_tracked_line(c.get("real_linka_spoj") or c.get("line", ""))
-                old_status   = c.get("_last_db_status")
                 status_changed = (old_status != c["status"])
-                just_ended   = (c.get("actual_end_time") and not c.get("_end_written"))
+                linka_changed  = (c.get("_last_db_linka") != (c.get("real_linka_spoj") or c.get("line")))
+                just_ended     = (c.get("actual_end_time") and not c.get("_end_written"))
 
-                if has_spz and tracked_line:
-                    # Zapsat při: prvním výskytu, změně statusu, pohybu, nebo ukončení
-                    if (not c.get("db_first_upsert")
-                            or status_changed
-                            or (is_moving and c.get("actual_start_time"))
-                            or just_ended):
-                        upsert_to_history(db_client, c)
-                        c["db_first_upsert"] = True
-                        c["_last_db_status"] = c["status"]
-                        if just_ended:
-                            c["_end_written"] = True
-                            # Uzavři případné starší „Probíhá" záznamy pro tuto SPZ
-                            close_previous_trips(db_client, c["spz"], c["trip_id"], c["actual_end_time"])
+                if (not c.get("db_first_upsert")
+                        or status_changed
+                        or linka_changed
+                        or (is_moving and c.get("actual_start_time") and int(time.time()) % 30 < 10)
+                        or just_ended):
+                    upsert_to_history(db_client, c)
+                    c["db_first_upsert"] = True
+                    c["_last_db_status"] = c["status"]
+                    c["_last_db_linka"]  = c.get("real_linka_spoj") or c.get("line")
+                    if just_ended:
+                        c["_end_written"] = True
+                        close_previous_trips(db_client, c.get("spz"), c["trip_id"], c["actual_end_time"])
 
-                # ── Přidáme do live dat ────────────────────────────────────
                 last_up = c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A"
                 final_line_disp = (
                     c.get("real_linka_spoj") or c["line"]
@@ -1575,7 +1486,6 @@ def background_map_worker():
 
             global LIVE_BUSES_DATA
             LIVE_BUSES_DATA = new_live_data
-
             time.sleep(10)
 
         except Exception as crash_error:
@@ -1591,7 +1501,6 @@ def start_map_background_task():
 # ─── FLASK ROUTES ─────────────────────────────────────────────────────────────
 
 def _full_page(title, body_html, is_map=False):
-    """Obalí HTML do kompletní stránky."""
     extra = 'overflow:hidden;' if is_map else ''
     return Response(
         f"""<!DOCTYPE html>
@@ -1621,7 +1530,6 @@ def stranka_historie_index():
 
 @mapa_bp.route('/historie/<spz>')
 def stranka_historie_detail(spz):
-    # Bezpečné nahrazení placeholderu (bez Jinja2 konfliktů)
     html = HTML_HISTORIE_DETAIL.replace('__SPZ__', spz)
     return _full_page(f"Vůz {spz}", html)
 
@@ -1640,7 +1548,6 @@ def api_live_buses():
 
 @mapa_bp.route('/api/bus_detail/<bus_id>')
 def api_bus_detail(bus_id):
-    """Vrátí HTML jízdního řádu pro popup."""
     try:
         cb_time = int(time.time() * 1000)
         headers = {
@@ -1648,7 +1555,6 @@ def api_bus_detail(bus_id):
             'X-Requested-With': 'XMLHttpRequest',
             'Referer':          'https://pvvd.idpk.cz/',
         }
-        # Info okno (linka, spoj)
         info_html = ""
         try:
             req_info = urllib.request.Request(
@@ -1660,7 +1566,6 @@ def api_bus_detail(bus_id):
         except Exception:
             pass
 
-        # Jízdní řád
         tt_html = ""
         try:
             req_tt = urllib.request.Request(
