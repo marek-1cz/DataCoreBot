@@ -37,7 +37,6 @@ HTML_HISTORIE_INDEX = """
     <i class="fas fa-exclamation-triangle fa-fade"></i> !!! DATA NEMUSÍ SEDĚT - STRÁNKA JE VE VÝVOJI !!!
   </div>
 
-  <!-- Statistiky nahoře -->
   <div id="statsBar" style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:18px;"></div>
 
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
@@ -114,6 +113,7 @@ HTML_HISTORIE_INDEX = """
     return freq;
   }
 
+  template_data = [];
   function renderStats(data) {
     const spzSet = new Set(data.filter(r=>r.spz&&r.spz!=='Neznámá').map(r=>r.spz));
     const total  = data.length;
@@ -389,14 +389,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 /* ─── MARKERS ─── */
 .bus-marker,.train-marker{border:2px solid #fff;text-align:center;color:#fff;font-weight:bold;font-size:10px;line-height:20px;box-shadow:0 0 5px rgba(0,0,0,.5);position:relative; z-index:10;}
 .bus-marker{border-radius:50%;}.train-marker{border-radius:4px;}
-.bg-green{background-color:#10b981;}
-.bg-red{background-color:#ef4444;}
-.bg-blue{background-color:#3b82f6;}
-.bg-darkblue{background-color:#1e3a8a;}
-.bg-gray{background-color:#64748b; border-color:#475569!important; color:#cbd5e1;}
+.bg-green{background-color:#10b981;}.bg-red{background-color:#ef4444;}.bg-blue{background-color:#3b82f6;}
+.bg-darkblue{background-color:#1e3a8a;}.bg-gray{background-color:#64748b;border-color:#475569!important;color:#cbd5e1;}
 .bg-purple{background-color:#a855f7;}
-.bg-orange{background-color:#f59e0b; border-color:#d97706!important; color:#0f172a;}
-.bg-bug{background-color:#374151; border-color:#6b7280!important; border-style:dashed!important; color:#9ca3af; opacity:.65;}
+.bg-orange{background-color:#f59e0b;border-color:#d97706!important;color:#0f172a;}
+.bg-bug{background-color:#374151;border-color:#6b7280!important;border-style:dashed!important;color:#9ca3af;opacity:.65;}
 /* ─── NAV HANDLE ─── */
 #nav-handle{position:fixed;top:0;left:50%;transform:translateX(-50%);
   width:90px;height:7px;background:rgba(56,189,248,.55);border-radius:0 0 8px 8px;
@@ -479,19 +476,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     <a href="/provoz-idpk" class="n-btn n-provoz">🚌 Provoz IDPK</a>
   </nav>
 
-  <!-- PROSTOR PRO ADMIN BANNER (vyplní python) -->
   __ADMIN_BANNER__
 
   <div id="map"></div>
 
-  <!-- Startup warning -->
   <div id="sw">
     <div style="font-size:17px;margin-bottom:3px;">⚠️ Mapa se startuje</div>
     <div style="font-size:12px;font-weight:normal;opacity:.9;">Probíhá načítání dat z Inflow a Arriva — vyčkejte prosím, data se brzy zobrazí.</div>
     <div id="sw-cd" style="margin-top:5px;font-size:11px;opacity:.8;"></div>
   </div>
 
-  <!-- JŘ Modal -->
   <div id="ttm">
     <div id="ttb">
       <button id="ttc-btn" onclick="document.getElementById('ttm').classList.remove('open')">✕</button>
@@ -499,7 +493,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     </div>
   </div>
 
-  <!-- Follow HUD -->
   <div id="hud">
     <div id="hf">
       <div class="hh">
@@ -748,7 +741,7 @@ async function fetchBuses(){
       let arrowHtml = '';
       if(bus.bearing !== null && mc !== 'bg-gray' && mc !== 'bg-purple' && mc !== 'bg-bug') {
           arrowHtml = `<div style="position:absolute; top:0; left:0; width:44px; height:44px; transform: rotate(${bus.bearing}deg); transform-origin: 22px 22px;">
-                          <div style="width:0; height:0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 14px solid ${arrColor}; position:absolute; top: -4px; left: 14px; filter: drop-shadow(0px -1px 2px rgba(0,0,0,0.5));"></div>
+                          <div style="width:0; height:0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 14px solid ${arrColor}; position:absolute; top: -4px; left: 16px; filter: drop-shadow(0px -1px 2px rgba(0,0,0,0.5));"></div>
                        </div>`;
       }
 
@@ -1219,7 +1212,7 @@ def background_map_worker():
                             bc["spz_verified"]      = False
                             bc["spz_locked"]        = False
                         bc["investigating"]     = True
-                        bc["investigation_spz"] = spz
+                        bc["investigation_spz"] = spz_val
                         if bc.get("investigation_start") is None:
                             bc["investigation_start"] = now
                         elif (now - bc["investigation_start"]).total_seconds() > DUPLICATE_GRACE_SEC and not bc.get("manual_spz"):
@@ -1507,10 +1500,6 @@ def api_history_full():
         return jsonify({"data": res.data})
     except: return jsonify({"data": []})
 
-@mapa_bp.route('/api/history_latest')
-def api_history_latest():
-    return api_history_full()
-
 @mapa_bp.route('/api/history_spz/<spz>')
 def api_history_spz(spz):
     db = get_db_client()
@@ -1519,50 +1508,3 @@ def api_history_spz(spz):
         res = db.table("bus_history").select("*").eq("spz", spz).order("created_at", desc=True).limit(500).execute()
         return jsonify({"data": res.data})
     except: return jsonify({"data": []})
-
-@mapa_bp.route('/api/live_buses', methods=['GET'])
-def api_live_buses():
-    now = get_prague_time()
-    uptime = (now - WORKER_START_TIME).total_seconds() if WORKER_START_TIME else 9999
-    return jsonify({
-        "status":               "success",
-        "server_time":          now.strftime('%H:%M:%S'),
-        "worker_uptime_seconds": round(uptime),
-        "buses":                LIVE_BUSES_DATA,
-    })
-
-@mapa_bp.route('/api/bus_detail/<bus_id>')
-def api_bus_detail(bus_id):
-    try:
-        cb_time = int(time.time() * 1000)
-        headers = {'User-Agent': 'Mozilla/5.0', 'X-Requested-With': 'XMLHttpRequest', 'Referer': 'https://pvvd.idpk.cz/'}
-        info_html = ""
-        try:
-            req_info = urllib.request.Request(f"https://pvvd.idpk.cz/Ajax/OpenInfoWindow?id={bus_id}&_={cb_time}", headers=headers)
-            with opener.open(req_info, timeout=4) as r: info_html = r.read().decode('utf-8')
-        except: pass
-
-        tt_html = ""
-        try:
-            req_tt = urllib.request.Request(f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb_time}", headers=headers)
-            with opener.open(req_tt, timeout=4) as r: tt_html = r.read().decode('utf-8')
-        except:
-            tt_html = "<p style='color:#94a3b8;'>Jízdní řád není dostupný.</p>"
-
-        html_out = f"""
-        <div style="background:#0f172a; color:white; font-family:sans-serif;">
-          <div style="background:#1e293b; padding:12px; border-radius:6px; margin-bottom:12px;">{info_html}</div>
-          <div style="overflow-x:auto;">
-            <style>
-              table {{ border-collapse: collapse; width: 100%; }}
-              th, td {{ border: 1px solid #334155; padding: 6px 10px; text-align: left; }}
-              th {{ background: #0f172a; color: #38bdf8; }}
-              tr:hover td {{ background: #1e293b; }}
-              .current {{ background: #166534 !important; font-weight: bold; }}
-            </style>
-            {tt_html}
-          </div>
-        </div>"""
-        return html_out
-    except Exception as e:
-        return f"<p style='color:#ef4444; padding:20px;'>Chyba při načítání JŘ: {e}</p>"
