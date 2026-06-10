@@ -37,7 +37,6 @@ HTML_HISTORIE_INDEX = """
     <i class="fas fa-exclamation-triangle fa-fade"></i> !!! DATA NEMUSÍ SEDĚT - STRÁNKA JE VE VÝVOJI !!!
   </div>
 
-  <!-- Statistiky nahoře -->
   <div id="statsBar" style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:18px;"></div>
 
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
@@ -479,19 +478,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     <a href="/provoz-idpk" class="n-btn n-provoz">🚌 Provoz IDPK</a>
   </nav>
 
-  <!-- PROSTOR PRO ADMIN BANNER (vyplní python) -->
   __ADMIN_BANNER__
 
   <div id="map"></div>
 
-  <!-- Startup warning -->
   <div id="sw">
     <div style="font-size:17px;margin-bottom:3px;">⚠️ Mapa se startuje</div>
     <div style="font-size:12px;font-weight:normal;opacity:.9;">Probíhá načítání dat z Inflow a Arriva — vyčkejte prosím, data se brzy zobrazí.</div>
     <div id="sw-cd" style="margin-top:5px;font-size:11px;opacity:.8;"></div>
   </div>
 
-  <!-- JŘ Modal -->
   <div id="ttm">
     <div id="ttb">
       <button id="ttc-btn" onclick="document.getElementById('ttm').classList.remove('open')">✕</button>
@@ -499,7 +495,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     </div>
   </div>
 
-  <!-- Follow HUD -->
   <div id="hud">
     <div id="hf">
       <div class="hh">
@@ -544,6 +539,7 @@ async function adminAction(action, busId, extraData = {}) {
         });
         let data = await res.json();
         if(data.status === 'success') {
+            // Zavolá okamžitý refresh mapy, ale popup nezavře!
             fetchBuses(); 
         } else {
             alert('Chyba: ' + data.message);
@@ -556,23 +552,19 @@ async function adminAction(action, busId, extraData = {}) {
 window.adminDelete = (id) => { 
     if(confirm('Opravdu smazat tečku z mapy?')) {
         adminAction('delete', id);
-        if(window.markersDict[id]) window.markersDict[id].closePopup();
     }
 };
 window.adminRecheck = (id) => {
     adminAction('recheck_spz', id);
-    if(window.markersDict[id]) window.markersDict[id].closePopup();
 };
 window.adminSetSPZ = (id) => {
     let spz = document.getElementById('adm_spz_' + id).value;
     adminAction('edit_spz', id, {spz: spz});
-    if(window.markersDict[id]) window.markersDict[id].closePopup();
 };
 window.adminSetStatus = (id) => {
     let st = document.getElementById('adm_st_' + id).value;
     let col = document.getElementById('adm_col_' + id).value;
     adminAction('edit_status', id, {status: st, color_class: col});
-    if(window.markersDict[id]) window.markersDict[id].closePopup();
 };
 
 // ─── PANEL ────────────────────────────────────────────────────────────────────
@@ -695,7 +687,7 @@ function checkSW(uptimeSec){
   } else { sw.style.display='none'; swShown=false; }
 }
 
-// ─── MAIN FETCH S FIXEM PŘEPISOVÁNÍ TABULEK ──────────────────────────────────
+// ─── MAIN FETCH S FIXEM PŘEPISOVÁNÍ TABULEK A ŠIPEK ──────────────────────────
 async function fetchBuses(){
   try{
     let r=await fetch('/api/live_buses'), data=await r.json();
@@ -706,6 +698,7 @@ async function fetchBuses(){
     lastArr = data.buses;
     let currentIds = new Set(data.buses.filter(b=>b.lat&&b.lng).map(b => b.id));
 
+    // Vyčištění zmizelých markerů
     for(let id in window.markersDict) {
         if(!currentIds.has(id)) {
             ml.removeLayer(window.markersDict[id]);
@@ -744,10 +737,11 @@ async function fetchBuses(){
       else if(mc==='bg-orange') arrColor='#f59e0b';
       else if(mc==='bg-bug') arrColor='#374151';
 
+      // Směrová šipka! VNĚ kolečka a VĚTŠÍ
       let arrowHtml = '';
       if(bus.bearing !== null && mc !== 'bg-gray' && mc !== 'bg-purple' && mc !== 'bg-bug') {
           arrowHtml = `<div style="position:absolute; top:0; left:0; width:44px; height:44px; transform: rotate(${bus.bearing}deg); transform-origin: 22px 22px;">
-                          <div style="width:0; height:0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 14px solid ${arrColor}; position:absolute; top: -4px; left: 14px; filter: drop-shadow(0px -1px 2px rgba(0,0,0,0.5));"></div>
+                          <div style="width:0; height:0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 16px solid ${arrColor}; position:absolute; top: -6px; left: 12px; filter: drop-shadow(0px -1px 2px rgba(0,0,0,0.5));"></div>
                        </div>`;
       }
 
@@ -770,7 +764,7 @@ async function fetchBuses(){
           if (bus.spz_verified) {
               histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;"><i class="fas fa-history"></i> Historie vozu</a>`;
           }
-        } else { spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Čeká na ověření...</span></div>`; }
+        } else { spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#94a3b8;">Čeká na ověření...</span></div>`; }
       }
       
       let statusColor = "#10b981"; 
@@ -986,7 +980,7 @@ def upsert_to_history(db, c):
 
 def background_map_worker():
     global TRACKED_SPZS, WORKER_START_TIME
-    print("[MAPA] Inteligentní mozek (Striktní Zámky, Plynulé popupy a Velké šipky) startuje...", flush=True)
+    print("[MAPA] Inteligentní mozek (Striktní Zámky, Ochrana Popupů a Šipky venku) startuje...", flush=True)
     WORKER_START_TIME = get_prague_time()
     
     db_client = get_db_client()
