@@ -545,16 +545,26 @@ async function adminAction(action, busId, extraData = {}) {
     }
 }
 
-window.adminDelete = (id) => { if(confirm('Opravdu smazat tečku z mapy?')) adminAction('delete', id); };
-window.adminRecheck = (id) => adminAction('recheck_spz', id);
+window.adminDelete = (id) => { 
+    if(confirm('Opravdu smazat tečku z mapy?')) {
+        adminAction('delete', id);
+        if(markersDict[id]) markersDict[id].closePopup();
+    }
+};
+window.adminRecheck = (id) => {
+    adminAction('recheck_spz', id);
+    if(markersDict[id]) markersDict[id].closePopup();
+};
 window.adminSetSPZ = (id) => {
     let spz = document.getElementById('adm_spz_' + id).value;
     adminAction('edit_spz', id, {spz: spz});
+    if(markersDict[id]) markersDict[id].closePopup();
 };
 window.adminSetStatus = (id) => {
     let st = document.getElementById('adm_st_' + id).value;
     let col = document.getElementById('adm_col_' + id).value;
     adminAction('edit_status', id, {status: st, color_class: col});
+    if(markersDict[id]) markersDict[id].closePopup();
 };
 
 // ─── PANEL ────────────────────────────────────────────────────────────────────
@@ -593,9 +603,7 @@ if(hp.length===2) L.circleMarker([dLat,dLng],{radius:28,color:'#ef4444',weight:2
 
 // ─── HUD A SLEDOVÁNÍ ──────────────────────────────────────────────────────────
 let lastArr=[], followId=null, hudMin=false, followInflowId=null;
-
-// Globální slovník pro fixní tabulky a nepřerušované psaní v Admin menu
-if(typeof window.markersDict === 'undefined') window.markersDict = {};
+let markersDict = {};
 
 function stopFollow(){
   followId=null; followInflowId=null; hudMin=false;
@@ -684,11 +692,10 @@ async function fetchBuses(){
     lastArr = data.buses;
     let currentIds = new Set(data.buses.filter(b=>b.lat&&b.lng).map(b => b.id));
 
-    // Odstranění starých markerů, co už neexistují
-    for(let id in window.markersDict) {
+    for(let id in markersDict) {
         if(!currentIds.has(id)) {
-            ml.removeLayer(window.markersDict[id]);
-            delete window.markersDict[id];
+            ml.removeLayer(markersDict[id]);
+            delete markersDict[id];
         }
     }
 
@@ -714,8 +721,7 @@ async function fetchBuses(){
         dTxt=`<span style="color:#ef4444;">Zpoždění ${dv} min</span>`;
       } else { dTxt=`<span style="color:#10b981;">+${dv} min</span>`; }
 
-      // Arrow color mapping
-      let arrColor = '#10b981'; // default green
+      let arrColor = '#10b981';
       if(mc==='bg-red') arrColor='#ef4444';
       else if(mc==='bg-blue') arrColor='#3b82f6';
       else if(mc==='bg-darkblue') arrColor='#1e3a8a';
@@ -724,19 +730,18 @@ async function fetchBuses(){
       else if(mc==='bg-orange') arrColor='#f59e0b';
       else if(mc==='bg-bug') arrColor='#374151';
 
-      // Směrová šipka (větší a vně kruhu)
       let arrowHtml = '';
       if(bus.bearing !== null && mc !== 'bg-gray' && mc !== 'bg-purple' && mc !== 'bg-bug') {
-          arrowHtml = `<div style="position:absolute; top:0; left:0; width:40px; height:40px; transform: rotate(${bus.bearing}deg); transform-origin: 20px 20px;">
-                          <div style="width:0; height:0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 12px solid ${arrColor}; position:absolute; top: -1px; left: 13px;"></div>
+          arrowHtml = `<div style="position:absolute; top:0; left:0; width:44px; height:44px; transform: rotate(${bus.bearing}deg); transform-origin: 22px 22px;">
+                          <div style="width:0; height:0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 14px solid ${arrColor}; position:absolute; top: -4px; left: 14px;"></div>
                        </div>`;
       }
 
       let shape=bus.is_train?'train-marker':'bus-marker';
-      let innerCircle = `<div class="${shape} ${mc}" style="position:absolute; top:8px; left:8px; width:24px; height:24px; line-height:20px; box-sizing:border-box;"></div>`;
-      let iconHtml = `<div style="position:relative; width:40px; height:40px;">${arrowHtml}${innerCircle}</div>`;
+      let innerCircle = `<div class="${shape} ${mc}" style="position:absolute; top:10px; left:10px; width:24px; height:24px; line-height:20px; box-sizing:border-box;"></div>`;
+      let iconHtml = `<div style="position:relative; width:44px; height:44px;">${arrowHtml}${innerCircle}</div>`;
       
-      let icon = L.divIcon({ className: '', html: iconHtml, iconSize: [40, 40], iconAnchor: [20, 20], popupAnchor: [0, -20] });
+      let icon = L.divIcon({ className: '', html: iconHtml, iconSize: [44, 44], iconAnchor: [22, 22], popupAnchor: [0, -22] });
 
       let spzH='', invTxt='', histBtn='';
       if(!bus.is_train){
@@ -776,7 +781,6 @@ async function fetchBuses(){
         <div class="pb">
             <div class="pr"><span class="pl">Cíl:</span><span class="pv" style="color:white;">${bus.destination||'Neznámý'}</span></div>
             ${spzH}
-            ${invTxt}
             ${statusHtml}
             ${idHtml}
             <div class="pr" style="border:none; margin-top:5px;"><span class="pl">JŘ:</span><span class="pv">${dTxt}</span></div>
@@ -815,15 +819,12 @@ async function fetchBuses(){
           </div>`;
       }
       
-      if(window.markersDict[bus.id]) {
-          let m = window.markersDict[bus.id];
-          let wasOpen = m.isPopupOpen();
-          
+      if(markersDict[bus.id]) {
+          let m = markersDict[bus.id];
           m.setLatLng([bus.lat, bus.lng]);
           m.setIcon(icon);
           
-          if(wasOpen) {
-              m.getPopup().update();
+          if(m.isPopupOpen()) {
               let bounds = map.getBounds();
               if (!bounds.contains([bus.lat, bus.lng])) {
                   map.panTo([bus.lat, bus.lng], {animate: true});
@@ -835,7 +836,7 @@ async function fetchBuses(){
           let m = L.marker([bus.lat, bus.lng], {icon: icon});
           m.bindPopup(popupHTML, {className: 'dark-popup'});
           ml.addLayer(m);
-          window.markersDict[bus.id] = m;
+          markersDict[bus.id] = m;
       }
     });
   }catch(e){console.error(e);}
@@ -1420,7 +1421,7 @@ def stranka_mapa():
 def stranka_mapa_admin():
     if not session.get('logged_in'):
         return redirect('/dashboard')
-    admin_banner = '<div style="background:#38bdf8; color:#0f172a; padding:6px 15px; text-align:center; font-weight:bold; font-size:12px; z-index:9999; position:absolute; top:70px; left:50%; transform:translateX(-50%); border-radius:20px; box-shadow:0 4px 10px rgba(0,0,0,0.3); border:2px solid #0284c7;">🛡️ ADMIN MODERATION ZAPNUTÉ</div>'
+    admin_banner = '<div style="background:rgba(56, 189, 248, 0.15); color:#38bdf8; padding:4px 12px; text-align:center; font-weight:bold; font-size:11px; z-index:9999; position:absolute; top:70px; left:50%; transform:translateX(-50%); border-radius:12px; border:1px solid rgba(56, 189, 248, 0.4); pointer-events:none; backdrop-filter:blur(4px);">🛡️ ADMIN MÓD ZAPNUTÝ</div>'
     html_filled = HTML_MAPA.replace('__ADMIN_BANNER__', admin_banner).replace('__IS_ADMIN__', 'true')
     return _full_page("Admin Mapa", html_filled, is_map=True)
 
