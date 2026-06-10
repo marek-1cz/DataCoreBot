@@ -1,3 +1,4 @@
+%%writefile /content/DataCoreBot/interaktivnimapa.py
 import os
 import time
 import json
