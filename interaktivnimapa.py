@@ -102,7 +102,7 @@ HTML_HISTORIE_INDEX = """
     data.forEach(row => {
       const spz = row.spz || 'Neznámá';
       if (spz === 'Neznámá') return;
-      const lineBase = (row.linka || '').replace(/\/.*/, '').trim().replace(/\\D/g, '');
+      const lineBase = (row.linka || '').replace(/[/].*/g, '').trim().replace(/\\D/g, '');
       const key = spz + '_' + lineBase;
       freq[key] = (freq[key] || 0) + 1;
     });
@@ -374,11 +374,22 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 #ttm.open{display:flex;}
 #ttb{background:#0f172a;border-radius:10px;padding:20px;max-width:700px;width:95%;border:1px solid #38bdf8;max-height:86vh;overflow-y:auto;position:relative;}
 #ttc-btn{position:absolute;top:10px;right:10px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px;font-weight:bold;}
-@media(max-width:600px){
-  #top-nav{gap:6px;padding:0 8px;height:52px;}
-  .n-title .a{font-size:13px;}.n-warn{font-size:9px;padding:2px 5px;display:none;}
-  .n-btn{font-size:11px;padding:5px 7px;}.n-clock{font-size:11px;padding:4px 7px;}
-  #hf{width:210px;}.dark-popup .leaflet-popup-content{width:252px!important;}
+#spz-results .sr-item{padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #334155;display:flex;align-items:center;gap:8px;}
+#spz-results .sr-item:hover{background:#334155;}
+#spz-results .sr-item:last-child{border-bottom:none;}
+@media(max-width:768px){
+  #top-nav{gap:5px;padding:0 6px;height:auto;min-height:52px;flex-wrap:wrap;padding-bottom:5px;padding-top:5px;}
+  .n-title{display:none;}
+  .n-warn{display:none;}
+  .n-clock{font-size:10px;padding:4px 6px;}
+  .n-btn{font-size:10px;padding:4px 6px;}
+  #spz-search-inp{width:100px;font-size:11px;}
+  #hf{width:210px;}
+  .dark-popup .leaflet-popup-content{width:252px!important;}
+}
+@media(max-width:420px){
+  .n-provoz{display:none;}
+  #spz-search-inp{width:85px;}
 }
 </style>
 
@@ -398,8 +409,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     <div class="n-sp"></div>
     <div class="n-clock">🕐 <span id="systemTimeClock">--:--:--</span></div>
     <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠 Domů</a>
-    <a href="/provoz-idpk" class="n-btn n-provoz">🚌 Provoz IDPK</a>
+    <a href="/provoz-idpk" class="n-btn n-provoz">🚌 IDPK</a>
     __AD_BTN__
+    <!-- SPZ Hledání -->
+    <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
+      <input id="spz-search-inp" type="text" placeholder="🔍 Hledat SPZ…"
+        style="background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;padding:5px 10px;font-size:12px;width:130px;outline:none;"
+        oninput="spzSearch(this.value)" onblur="setTimeout(()=>document.getElementById('spz-results').innerHTML='',200)">
+      <div id="spz-results" style="position:absolute;top:34px;right:0;background:#1e293b;border:1px solid #334155;border-radius:8px;min-width:230px;z-index:4000;box-shadow:0 8px 20px rgba(0,0,0,.7);max-height:220px;overflow-y:auto;"></div>
+    </div>
   </nav>
 
   __ADMIN_BANNER__
@@ -449,6 +467,8 @@ const IS_ADMIN = __IS_ADMIN__;
 
 // ─── ADMIN ACTIONS ────────────────────────────────────────────────────────────
 async function adminAction(action, busId, extraData = {}) {
+    saveAdminInputs();  // Ulož hodnoty inputů před odesláním
+    showAdminToast('⏳ Odesílám…', true);
     try {
         let res = await fetch('/api/admin/map_action', {
             method: 'POST',
@@ -457,12 +477,18 @@ async function adminAction(action, busId, extraData = {}) {
         });
         let data = await res.json();
         if (data.status === 'success') {
-            // Nerefrešuj mapu – admin nastavení je v backendu, jen aktualizuj popup po 1s
-            setTimeout(fetchBuses, 500);
+            showAdminToast('✅ Uloženo — systém zpracovává', true);
+            setTimeout(() => {
+                // Smaž cache pro tento bus po aplikaci
+                if (action === 'reset_admin' || action === 'recheck_spz') {
+                    Object.keys(adminInputCache).forEach(k => { if(k.endsWith('_'+busId)) delete adminInputCache[k]; });
+                }
+                fetchBuses();
+            }, 800);
         } else {
-            alert('Chyba: ' + data.message);
+            showAdminToast('❌ Chyba: ' + (data.message || 'neznámá'), false);
         }
-    } catch(e) { alert('Chyba spojení s admin API.'); }
+    } catch(e) { showAdminToast('❌ Chyba spojení', false); }
 }
 window.adminDelete   = (id) => { if(confirm('Smazat tečku z mapy? Znovu se zobrazí až při novém spoji.')) { adminAction('delete', id); openPopupBusId = null; } };
 window.adminRecheck  = (id) => adminAction('recheck_spz', id);
@@ -570,8 +596,9 @@ function buildMarkerSvg(mc, bearing, lineText, isTrain) {
   const textFill = (mc === 'bg-orange') ? '#0f172a' : '#ffffff';
 
   // Číslo linky: číselná část, max 4 znaky
-  let lineNum = (lineText || '').replace(/\D/g, '');
-  let lineDisplay = lineNum.substring(0, 4);
+  let lineNum = (lineText || '').replace(/[^0-9]/g, '');
+  // Poslední 3 číslice (490735 → 735, 722 → 722)
+  let lineDisplay = lineNum.length >= 4 ? lineNum.slice(-3) : lineNum;
 
   const cx = 18, cy = 18, r = isTrain ? 10 : 12;
   let svgInner = '';
@@ -627,6 +654,75 @@ function buildMarkerSvg(mc, bearing, lineText, isTrain) {
   return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${svgInner}</svg>`;
 }
 
+// ─── ADMIN INPUT CACHE ───────────────────────────────────────────────────────
+// Zachová hodnoty admin inputů přes 10s refresh
+let adminInputCache = {};
+function saveAdminInputs() {
+  if (!IS_ADMIN) return;
+  document.querySelectorAll('[id^="adm_spz_"]').forEach(el => {
+    if (el.value !== el.getAttribute('data-orig')) adminInputCache['spz_' + el.id.replace('adm_spz_','')] = el.value;
+  });
+  document.querySelectorAll('[id^="adm_st_"]').forEach(el => {
+    if (el.value !== el.getAttribute('data-orig')) adminInputCache['st_' + el.id.replace('adm_st_','')] = el.value;
+  });
+}
+function restoreAdminInput(busId, fieldType) {
+  let key = fieldType + '_' + busId;
+  return adminInputCache[key] || null;
+}
+
+// ─── ADMIN TOAST ──────────────────────────────────────────────────────────────
+let _toastTimer = null;
+function showAdminToast(msg, ok = true) {
+  let t = document.getElementById('admin-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'admin-toast';
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;padding:9px 20px;font-size:12px;font-weight:bold;z-index:9999;border-radius:20px;white-space:nowrap;transition:opacity .4s;pointer-events:none;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.color = ok ? '#10b981' : '#ef4444';
+  t.style.borderColor = ok ? '#10b981' : '#ef4444';
+  t.style.border = '1px solid ' + (ok ? '#10b981' : '#ef4444');
+  t.style.opacity = '1';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { t.style.opacity = '0'; }, 3500);
+}
+
+// ─── SPZ SEARCH ──────────────────────────────────────────────────────────────
+function spzSearch(val) {
+  let box = document.getElementById('spz-results');
+  val = val.trim().toUpperCase();
+  if (val.length < 2) { box.innerHTML = ''; return; }
+  let matches = lastArr.filter(b => b.spz && b.spz !== 'Neznámá' && b.spz.toUpperCase().includes(val));
+  if (matches.length === 0) {
+    box.innerHTML = '<div style="padding:10px;color:#64748b;font-size:12px;text-align:center;">Žádné výsledky</div>';
+    return;
+  }
+  const colorMap = {'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-bug':'#374151'};
+  box.innerHTML = matches.slice(0,8).map(b => {
+    let clr = colorMap[b.color_class] || '#64748b';
+    return `<div class="sr-item" onclick="zoomToSpz(${b.lat},${b.lng},'${b.id}')">
+      <div style="width:10px;height:10px;border-radius:50%;background:${clr};flex-shrink:0;"></div>
+      <div>
+        <strong style="color:#f59e0b;">${b.spz}</strong>
+        <span style="color:#94a3b8;margin-left:5px;">L${b.line||'?'}</span>
+        <br><span style="color:#64748b;font-size:10px;">${b.status||''}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+function zoomToSpz(lat, lng, busId) {
+  document.getElementById('spz-results').innerHTML = '';
+  document.getElementById('spz-search-inp').value = '';
+  map.setView([lat, lng], 16);
+  // Otevři popup tohoto busu
+  setTimeout(() => {
+    ml.eachLayer(layer => { if (layer._busId === busId) layer.openPopup(); });
+  }, 200);
+}
+
 // ─── MAIN FETCH ───────────────────────────────────────────────────────────────
 async function fetchBuses(){
   try{
@@ -643,7 +739,8 @@ async function fetchBuses(){
       else document.getElementById('h-status').textContent='⚠ Ztráta signálu';
     }
 
-    // Ulož bus_id otevřeného popupu před clearLayers
+    // Ulož admin inputs + bus_id otevřeného popupu před clearLayers
+    saveAdminInputs();
     let savedOpenId = openPopupBusId;
     ml.clearLayers();
 
@@ -715,11 +812,15 @@ async function fetchBuses(){
 
       // ── Admin overlay ─────────────────────────────────────────────────────
       if(IS_ADMIN){
+        let _origSpz = bus.spz === 'Neznámá' ? '' : bus.spz;
+        let _origSt  = bus.status;
+        let _cachedSpz = restoreAdminInput(bus.id, 'spz') ?? _origSpz;
+        let _cachedSt  = restoreAdminInput(bus.id, 'st')  ?? _origSt;
         popH += `
           <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;">
             <strong style="color:#38bdf8;font-size:11px;letter-spacing:.5px;">⚙ ADMIN PANEL</strong>
             <div style="display:flex;gap:5px;margin-top:6px;">
-              <input type="text" id="adm_spz_${bus.id}" value="${bus.spz==='Neznámá'?'':bus.spz}" placeholder="SPZ" style="width:55%;font-size:11px;padding:4px 6px;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;">
+              <input type="text" id="adm_spz_${bus.id}" value="${_cachedSpz}" data-orig="${_origSpz}" placeholder="SPZ" style="width:55%;font-size:11px;padding:4px 6px;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;">
               <button onclick="adminSetSPZ('${bus.id}')" style="width:45%;background:#10b981;color:white;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:bold;padding:4px;">💾 Uložit SPZ</button>
             </div>
             <div style="display:flex;gap:5px;margin-top:5px;">
@@ -727,7 +828,7 @@ async function fetchBuses(){
               <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:bold;padding:5px;">🗑 Smazat</button>
             </div>
             <div style="display:flex;gap:4px;margin-top:5px;">
-              <input type="text" id="adm_st_${bus.id}" value="${bus.status}" style="flex:2;font-size:10px;padding:3px 5px;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;">
+              <input type="text" id="adm_st_${bus.id}" value="${_cachedSt}" data-orig="${_origSt}" style="flex:2;font-size:10px;padding:3px 5px;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;">
               <select id="adm_col_${bus.id}" style="flex:1.2;font-size:10px;padding:3px;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;">
                 <option value="${bus.color_class}">──</option>
                 <option value="bg-gray">Šedá</option>
@@ -739,8 +840,9 @@ async function fetchBuses(){
                 <option value="bg-orange">Oranžová</option>
                 <option value="bg-bug">Bug</option>
               </select>
-              <button onclick="adminSetStatus('${bus.id}')" style="flex:.8;background:#38bdf8;color:#0f172a;border:none;border-radius:4px;font-size:10px;cursor:pointer;font-weight:bold;padding:3px;">OK</button>
+              <button onclick="adminSetStatus('${bus.id}')" style="flex:.8;background:#38bdf8;color:#0f172a;border:none;border-radius:4px;font-size:10px;cursor:pointer;font-weight:bold;padding:3px;">✔</button>
             </div>
+            <button onclick="adminAction('reset_admin','${bus.id}')" style="width:100%;margin-top:5px;background:transparent;color:#64748b;border:1px solid #334155;border-radius:4px;font-size:10px;cursor:pointer;padding:3px;">↺ Obnovit výchozí nastavení</button>
           </div>`;
       }
 
@@ -1210,8 +1312,8 @@ def background_map_worker():
                         if bc.get("investigation_start") is None:
                             bc["investigation_start"] = now
                         elif (now - bc["investigation_start"]).total_seconds() > DUPLICATE_GRACE_SEC and not bc.get("manual_spz"):
-                            bc["spz"] = None; bc["investigating"] = False
-                            bc["investigation_start"] = None; bc["spz_stable_ticks"] = 0
+                            bc["spz_verified"] = False; bc["spz_locked"] = False
+                            bc["investigating"] = False; bc["investigation_start"] = None; bc["spz_stable_ticks"] = 0
 
             # ═══ SEKCE 4: Offline + timeouty ═════════════════════════════════
             for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
@@ -1444,10 +1546,12 @@ def stranka_mapa_admin():
     if not session.get('logged_in'):
         return redirect('/dashboard')
     admin_banner = (
-        '<div style="background:rgba(56,189,248,0.08);color:#38bdf8;padding:5px 14px;'
-        'text-align:center;font-weight:bold;font-size:12px;z-index:9999;position:relative;'
-        'margin-top:58px;border-bottom:1px solid rgba(56,189,248,0.25);letter-spacing:.5px;">'
-        '⚙️ ADMIN MAPA &nbsp;·&nbsp; Moderace zapnutá</div>'
+        '<div style="position:relative;margin-top:58px;padding:4px;text-align:center;">'
+        '<span style="display:inline-block;background:rgba(56,189,248,0.1);color:#38bdf8;'
+        'padding:3px 14px;border-radius:20px;font-size:11px;font-weight:bold;'
+        'border:1px solid rgba(56,189,248,0.3);letter-spacing:.3px;">'
+        '⚙️ Admin mapa — moderace zapnutá'
+        '</span></div>'
     )
     html = HTML_MAPA.replace('__ADMIN_BANNER__', admin_banner).replace('__IS_ADMIN__', 'true').replace('__AD_BTN__', _AD_BTN_ADMIN)
     return _full_page("Admin Mapa", html, is_map=True)
@@ -1492,8 +1596,21 @@ def api_admin_map_action():
         c["spz_stable_ticks"] = 0
 
     elif action == "edit_status":
-        c["status"]      = str(data.get("status",      c["status"]))
-        c["color_class"] = str(data.get("color_class", c["color_class"]))
+        new_st  = str(data.get("status",      "")).strip()
+        new_col = str(data.get("color_class", "")).strip()
+        if new_st:  c["status"]      = new_st
+        if new_col and new_col != c["color_class"]: c["color_class"] = new_col
+
+    elif action == "reset_admin":
+        # Obnoví výchozí stav – smaže manuální nastavení
+        c["manual_spz"]       = False
+        c["spz_locked"]       = False
+        c["spz_verified"]     = False
+        c["spz_stable_ticks"] = 0
+        c["investigating"]    = False
+        # Barvu a status nechej přepočítat v příštím ticku
+        c["color_class"]      = "bg-gray"
+        c["status"]           = "Načítání..."
 
     return jsonify({"status": "success"})
 
