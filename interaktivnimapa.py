@@ -495,8 +495,11 @@ window.adminDelete   = (id) => { if(confirm('Smazat tečku z mapy? Znovu se zobr
 window.adminRecheck  = (id) => adminAction('recheck_spz', id);
 window.adminSetSPZ   = (id) => { let spz = document.getElementById('adm_spz_' + id)?.value; if(spz) adminAction('edit_spz', id, {spz}); };
 window.adminSetStatus = (id) => {
-    let st  = document.getElementById('adm_st_' + id)?.value;
-    let col = document.getElementById('adm_col_' + id)?.value;
+    let stEl  = document.getElementById('adm_st_'  + id);
+    let colEl = document.getElementById('adm_col_' + id);
+    let st  = stEl?.value?.trim()  || '';
+    let col = colEl?.value?.trim() || '';
+    if (!st && !col) { showAdminToast('⚠ Zadej status nebo vyber barvu', false); return; }
     adminAction('edit_status', id, {status: st, color_class: col});
 };
 
@@ -752,7 +755,7 @@ async function toggleRoute(busId) {
 
     if (btn) { btn.textContent = '🛤 Skrýt trasu'; btn.style.background = '#1e40af'; }
     // Fit map to route
-    if (coords.length > 0) map.fitBounds(L.latLngBounds(coords).pad(0.1));
+    if (btn) { btn.textContent = '🛤 Skrýt trasu (' + data.stops.filter(s=>s.lat).length + ' zast.)'; btn.style.background = '#1e40af'; }
   } catch(e) {
     if (btn) { btn.textContent = '⚠ Chyba načítání'; btn.style.background = '#7f1d1d'; }
     console.error('Route error:', e);
@@ -832,7 +835,11 @@ async function fetchBuses(){
       // Sledování otevřeného popupu
       marker._busId = bus.id;
       marker.on('popupopen',  () => { openPopupBusId = bus.id; });
-      marker.on('popupclose', () => { if(openPopupBusId===bus.id) openPopupBusId=null; });
+      marker.on('popupclose', () => {
+        if(openPopupBusId===bus.id) openPopupBusId=null;
+        // Skryj trasu při zavření popupu tohoto busu
+        if(activeRouteId===bus.id){ routeLayer.clearLayers(); activeRouteId=null; }
+      });
 
       // ── Popup obsah ──────────────────────────────────────────────────────
       let spzH='', invTxt='', histBtn='';
@@ -902,14 +909,14 @@ async function fetchBuses(){
               <input type="text" id="adm_st_${bus.id}" value="${_cachedSt}" data-orig="${_origSt}" style="flex:2;font-size:10px;padding:3px 5px;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;">
               <select id="adm_col_${bus.id}" style="flex:1.2;font-size:10px;padding:3px;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;">
                 <option value="">── barva ──</option>
-                <option value="bg-gray">Šedá</option>
-                <option value="bg-blue">Sv.Modrá</option>
-                <option value="bg-darkblue">Tm.Modrá</option>
-                <option value="bg-green">Zelená</option>
-                <option value="bg-red">Červená</option>
-                <option value="bg-purple">Fialová</option>
-                <option value="bg-orange">Oranžová</option>
-                <option value="bg-bug">Bug</option>
+                <option value="bg-gray" ${bus.color_class==='bg-gray'?'selected':''}>Šedá</option>
+                <option value="bg-blue" ${bus.color_class==='bg-blue'?'selected':''}>Sv.Modrá</option>
+                <option value="bg-darkblue" ${bus.color_class==='bg-darkblue'?'selected':''}>Tm.Modrá</option>
+                <option value="bg-green" ${bus.color_class==='bg-green'?'selected':''}>Zelená</option>
+                <option value="bg-red" ${bus.color_class==='bg-red'?'selected':''}>Červená</option>
+                <option value="bg-purple" ${bus.color_class==='bg-purple'?'selected':''}>Fialová</option>
+                <option value="bg-orange" ${bus.color_class==='bg-orange'?'selected':''}>Oranžová</option>
+                <option value="bg-bug" ${bus.color_class==='bg-bug'?'selected':''}>Bug</option>
               </select>
               <button onclick="adminSetStatus('${bus.id}')" style="flex:.8;background:#38bdf8;color:#0f172a;border:none;border-radius:4px;font-size:10px;cursor:pointer;font-weight:bold;padding:3px;">✔</button>
             </div>
@@ -1026,6 +1033,8 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "admin_color_override": None,
         "admin_status_override": None,
         "admin_flag": False,
+        "bug_locked": False,
+        "admin_lock_display": False,
     }
 
 
@@ -1309,9 +1318,16 @@ def background_map_worker():
                                 c["created_at"]       = now
                                 c["status"]           = "Načítání..."
                                 c["bearing"]          = None
+                                # manual_spz: drz SPZ pres cely zivot kolecka na mape
                                 if not c.get("manual_spz"):
                                     c["spz_locked"]       = False
                                     c["spz_verified"]     = False
+                                    c["spz"]              = c.get("spz")  # zachova ale unverified
+                                # admin_lock_display: barva/status se resetuji pri novem spoji
+                                # (uzivatele to netrapi, novy spoj = nove auto-vypocty)
+                                c["admin_lock_display"]   = False
+                                c["admin_color_override"] = None
+                                c["admin_status_override"]= None
                                 c["spz_stable_ticks"] = 0
                                 c["investigating"]    = False
                                 c["db_first_upsert"]  = False
@@ -1369,6 +1385,7 @@ def background_map_worker():
                             bc["status"]      = "BUG - NEAKTUÁLNÍ MÍSTO"
                             bc["color_class"] = "bg-bug"
                             bc["spz_locked"]  = True
+                            bc["bug_locked"]   = True   # Permanentni lock – nikdy neodemykat
                         bc["investigating"]       = False
                         bc["investigation_start"] = None
                     for bid in moving_bids:
@@ -1450,7 +1467,7 @@ def background_map_worker():
                 is_moving = inactive_mins < 1; delay_val = c["raw_delay"]
 
                 # ── SPZ párování ──────────────────────────────────────────────
-                if not is_train and not c.get("investigating") and not c.get("spz_locked"):
+                if not is_train and not c.get("investigating") and not c.get("spz_locked") and not c.get("bug_locked"):
                     i_clean = re.sub(r'\D','', line); d1_clean = re.sub(r'\W+','', dest1.lower())
                     best_spz = None; best_match_dest = False; best_dist = 999.0
                     for b in data_arriva:
@@ -1486,7 +1503,7 @@ def background_map_worker():
                     else:
                         last_v = c.get("spz_last_verified")
                         if not last_v or (now-last_v).total_seconds() >= SPZ_HOLD_MINUTES*60:
-                            if not c.get("manual_spz"):
+                            if not c.get("manual_spz") and not c.get("bug_locked"):
                                 c["spz_verified"] = False; c["spz_locked"] = False
 
                 # ── JŘ fetch ──────────────────────────────────────────────────
@@ -1499,7 +1516,15 @@ def background_map_worker():
                 # ── Barvy + status ────────────────────────────────────────────
                 old_status = c.get("status", "")  # PŘED if/else – oprava scope bugu
 
-                if c.get("color_class") == "bg-bug":
+                # Pokud admin zamknul zobrazení, přeskoč automatiku
+                if c.get("admin_lock_display"):
+                    # Jen aplikuj override a přeskoč přepočet barev
+                    if c.get("admin_color_override"):
+                        c["color_class"] = c["admin_color_override"]
+                    if c.get("admin_status_override"):
+                        c["status"]      = c["admin_status_override"]
+
+                elif c.get("color_class") == "bg-bug":
                     if is_moving:
                         c["color_class"] = "bg-orange"; c["status"] = "Výzkum – Reaktivace (byl zaseknutý)"
                 else:
@@ -1687,11 +1712,13 @@ def api_admin_map_action():
         new_st  = str(data.get("status",      "")).strip()
         new_col = str(data.get("color_class", "")).strip()
         if new_st:
-            c["status"]               = new_st
+            c["status"]                = new_st
             c["admin_status_override"] = new_st
-        if new_col and new_col != "──":
-            c["color_class"]          = new_col
+            c["admin_lock_display"]    = True
+        if new_col and new_col not in ("", "──"):
+            c["color_class"]           = new_col
             c["admin_color_override"]  = new_col
+            c["admin_lock_display"]    = True
 
     elif action == "set_admin_flag":
         c["admin_flag"] = bool(data.get("flag", False))
@@ -1705,6 +1732,8 @@ def api_admin_map_action():
         c["admin_color_override"] = None
         c["admin_status_override"]= None
         c["admin_flag"]           = False
+        c["bug_locked"]           = False
+        c["admin_lock_display"]   = False
         c["color_class"]          = "bg-gray"
         c["status"]               = "Načítání..."
 
@@ -1788,13 +1817,19 @@ def _geocode_stop(stop_name):
     if key in _stop_geo_cache:
         return _stop_geo_cache[key]
     try:
-        q   = _uparse.quote(stop_name + ", Plzensky kraj, Cesko")
-        url = "https://nominatim.openstreetmap.org/search?q=" + q + "&format=json&limit=1&countrycodes=cz"
-        req = urllib.request.Request(url, headers={"User-Agent": "OIS-IDPK/1.0"})
+        # Bounding box pro Plzensky kraj + okolni regiony (rychlejsi a presnejsi)
+        bbox = "viewbox=11.8%2C50.5%2C14.1%2C49.1&bounded=1"
+        q    = _uparse.quote(stop_name)
+        url  = f"https://nominatim.openstreetmap.org/search?q={q}&format=json&limit=2&countrycodes=cz&{bbox}"
+        req  = urllib.request.Request(url, headers={"User-Agent": "OIS-IDPK/1.0 (mapa.idpk.cz)"})
         with urllib.request.urlopen(req, timeout=3) as r:
             res = json.loads(r.read().decode())
         if res:
-            coords = (float(res[0]["lat"]), float(res[0]["lon"]))
+            # Vyber nejblizsi k centru Plzne (49.74, 13.37)
+            def dist_plzen(r):
+                return abs(float(r["lat"]) - 49.74) + abs(float(r["lon"]) - 13.37)
+            best = min(res, key=dist_plzen)
+            coords = (float(best["lat"]), float(best["lon"]))
             _stop_geo_cache[key] = coords
             return coords
     except Exception:
