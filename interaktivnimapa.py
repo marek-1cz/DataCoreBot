@@ -407,6 +407,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     </div>
     <div class="n-warn">⚠ Není garantována 100% přesnost dat</div>
     <div class="n-sp"></div>
+    <div id="admin-mode-badge" style="display:none;background:rgba(56,189,248,0.15);color:#38bdf8;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:bold;border:1px solid rgba(56,189,248,0.35);white-space:nowrap;flex-shrink:0;">⚙ Admin</div>
     <div class="n-clock">🕐 <span id="systemTimeClock">--:--:--</span></div>
     <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠 Domů</a>
     <a href="/provoz-idpk" class="n-btn n-provoz">🚌 IDPK</a>
@@ -514,6 +515,10 @@ document.addEventListener('touchstart', e=>{
   else if(!nav.contains(e.target)){ clearTimeout(hideT); hideT=setTimeout(hideNav,400); }
 },{passive:true});
 showNav(4000);
+if (IS_ADMIN) {
+  let ab = document.getElementById('admin-mode-badge');
+  if (ab) ab.style.display = 'block';
+}
 
 // ─── MAP ──────────────────────────────────────────────────────────────────────
 var dLat=49.7384, dLng=13.3736, dZoom=12;
@@ -596,8 +601,9 @@ function buildMarkerSvg(mc, bearing, lineText, isTrain) {
   const textFill = (mc === 'bg-orange') ? '#0f172a' : '#ffffff';
 
   // Číslo linky: číselná část, max 4 znaky
-  let lineNum = (lineText || '').replace(/[^0-9]/g, '');
-  // Poslední 3 číslice (490735 → 735, 722 → 722)
+  // Vezmi část před '/', pak poslední 3 číslice (490735/15 → 490735 → 735)
+  let lineClean = (lineText || '').split('/')[0].trim();
+  let lineNum = lineClean.replace(/[^0-9]/g, '');
   let lineDisplay = lineNum.length >= 4 ? lineNum.slice(-3) : lineNum;
 
   const cx = 18, cy = 18, r = isTrain ? 10 : 12;
@@ -688,6 +694,69 @@ function showAdminToast(msg, ok = true) {
   t.style.opacity = '1';
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => { t.style.opacity = '0'; }, 3500);
+}
+
+// ─── ROUTE DISPLAY ───────────────────────────────────────────────────────────
+var routeLayer = L.layerGroup().addTo(map);
+let activeRouteId = null;
+
+async function toggleRoute(busId) {
+  if (activeRouteId === busId) {
+    routeLayer.clearLayers();
+    activeRouteId = null;
+    let btn = document.getElementById('route-btn-' + busId);
+    if (btn) { btn.textContent = '🛤 Zobrazit trasu'; btn.style.background = '#334155'; }
+    return;
+  }
+  routeLayer.clearLayers();
+  activeRouteId = busId;
+  let btn = document.getElementById('route-btn-' + busId);
+  if (btn) { btn.textContent = '⏳ Načítám trasu…'; btn.style.background = '#1e3a8a'; }
+  try {
+    let r = await fetch('/api/bus_route/' + busId);
+    let data = await r.json();
+    if (!data.stops || data.stops.length < 2) {
+      if (btn) { btn.textContent = '⚠ Trasa nedostupná'; btn.style.background = '#7f1d1d'; }
+      return;
+    }
+    const colorMap = {'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-bug':'#374151'};
+    let bus = lastArr.find(b => b.id === busId);
+    let lineColor = bus ? (colorMap[bus.color_class] || '#38bdf8') : '#38bdf8';
+
+    // Zastávky jako markery
+    data.stops.forEach((stop, i) => {
+      if (!stop.lat || !stop.lng) return;
+      let isPassed = stop.passed;
+      let dotColor = isPassed ? '#475569' : lineColor;
+      let stopIcon = L.divIcon({
+        className: '',
+        html: `<div style="width:8px;height:8px;border-radius:50%;background:${dotColor};border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.5);"></div>`,
+        iconSize: [8,8], iconAnchor: [4,4]
+      });
+      let marker = L.marker([stop.lat, stop.lng], {icon: stopIcon, zIndexOffset: -100});
+      marker.bindTooltip(`<b>${stop.name}</b>${stop.time ? ' · ' + stop.time : ''}`, {direction:'top', className:'dark-popup'});
+      routeLayer.addLayer(marker);
+    });
+
+    // Linie mezi zastávkami
+    let coords = data.stops.filter(s => s.lat && s.lng).map(s => [s.lat, s.lng]);
+    if (coords.length >= 2) {
+      let polyline = L.polyline(coords, {color: lineColor, weight: 3, opacity: 0.75, dashArray: '6,4'});
+      routeLayer.addLayer(polyline);
+      // Zvýrazni absolvovanou část
+      let passedCoords = data.stops.filter(s => s.lat && s.lng && s.passed).map(s => [s.lat, s.lng]);
+      if (passedCoords.length >= 2) {
+        L.polyline(passedCoords, {color: '#475569', weight: 3, opacity: 0.5}).addTo(routeLayer);
+      }
+    }
+
+    if (btn) { btn.textContent = '🛤 Skrýt trasu'; btn.style.background = '#1e40af'; }
+    // Fit map to route
+    if (coords.length > 0) map.fitBounds(L.latLngBounds(coords).pad(0.1));
+  } catch(e) {
+    if (btn) { btn.textContent = '⚠ Chyba načítání'; btn.style.background = '#7f1d1d'; }
+    console.error('Route error:', e);
+  }
 }
 
 // ─── SPZ SEARCH ──────────────────────────────────────────────────────────────
@@ -795,9 +864,10 @@ async function fetchBuses(){
       let fTxt=(followId===bus.id)?'✕ Zrušit sledování':'📡 Sledovat';
       let fSt=(followId===bus.id)?'background:#ef4444;color:#fff;':'background:#3b82f6;color:#fff;';
 
+      let adminFlagHtml = bus.admin_flag ? '<span style="background:#1e40af;color:#93c5fd;padding:2px 7px;border-radius:10px;font-size:10px;margin-left:6px;font-weight:bold;"><i class="fas fa-shield-alt"></i> Admin úprava</span>' : '';
       let popH=`
         <div class="ph" style="${mc==='bg-bug'?'background:#1f2937;':''}${mc==='bg-orange'?'background:#1c1400;':''}">
-          <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}${mc==='bg-orange'?'color:#f59e0b;':''}"><i class="${bus.is_train?'fas fa-train':'fas fa-bus'}"></i> Linka ${bus.line}</h3>
+          <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}${mc==='bg-orange'?'color:#f59e0b;':''}"><i class="${bus.is_train?'fas fa-train':'fas fa-bus'}"></i> Linka ${bus.line}${adminFlagHtml}</h3>
         </div>
         <div class="pb">
           ${bugW}${orangeW}
@@ -808,6 +878,7 @@ async function fetchBuses(){
           <button class="pa" onclick="showTT('${bus.id}')"><i class="fas fa-list-alt"></i> Zobrazit Jízdní řád</button>
           <button class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
           ${histBtn}
+          <button id="route-btn-${bus.id}" class="pa pa-d" style="margin-top:5px;background:#334155;" onclick="toggleRoute('${bus.id}')">🛤 Zobrazit trasu (exp.)</button>
         </div>`;
 
       // ── Admin overlay ─────────────────────────────────────────────────────
@@ -830,7 +901,7 @@ async function fetchBuses(){
             <div style="display:flex;gap:4px;margin-top:5px;">
               <input type="text" id="adm_st_${bus.id}" value="${_cachedSt}" data-orig="${_origSt}" style="flex:2;font-size:10px;padding:3px 5px;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;">
               <select id="adm_col_${bus.id}" style="flex:1.2;font-size:10px;padding:3px;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;">
-                <option value="${bus.color_class}">──</option>
+                <option value="">── barva ──</option>
                 <option value="bg-gray">Šedá</option>
                 <option value="bg-blue">Sv.Modrá</option>
                 <option value="bg-darkblue">Tm.Modrá</option>
@@ -842,7 +913,13 @@ async function fetchBuses(){
               </select>
               <button onclick="adminSetStatus('${bus.id}')" style="flex:.8;background:#38bdf8;color:#0f172a;border:none;border-radius:4px;font-size:10px;cursor:pointer;font-weight:bold;padding:3px;">✔</button>
             </div>
-            <button onclick="adminAction('reset_admin','${bus.id}')" style="width:100%;margin-top:5px;background:transparent;color:#64748b;border:1px solid #334155;border-radius:4px;font-size:10px;cursor:pointer;padding:3px;">↺ Obnovit výchozí nastavení</button>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:6px;padding:5px 0;border-top:1px solid #1e293b;">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#93c5fd;flex:1;">
+                <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:auto;cursor:pointer;">
+                <i class="fas fa-shield-alt"></i> Admin úprava
+              </label>
+              <button onclick="adminAction('reset_admin','${bus.id}')" style="background:transparent;color:#64748b;border:1px solid #334155;border-radius:4px;font-size:10px;cursor:pointer;padding:3px 8px;">↺ Reset</button>
+            </div>
           </div>`;
       }
 
@@ -946,6 +1023,9 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "_end_written":       False,
         "_was_long_stationary": False,
         "final_delay_display": 0,
+        "admin_color_override": None,
+        "admin_status_override": None,
+        "admin_flag": False,
     }
 
 
@@ -1361,6 +1441,7 @@ def background_map_worker():
                         "is_train":c["is_train"],"status":c["status"],"color_class":c["color_class"],
                         "inactive_minutes":inactive_mins,"last_updated":c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A",
                         "investigating":False,"investigation_spz":"",
+                        "admin_flag": c.get("admin_flag", False),
                     })
                     continue
 
@@ -1468,6 +1549,12 @@ def background_map_worker():
 
                 c["final_delay_display"] = delay_val
 
+                # ── Admin overrides (přepíší výsledek automatické logiky) ─────
+                if c.get("admin_color_override"):
+                    c["color_class"] = c["admin_color_override"]
+                if c.get("admin_status_override"):
+                    c["status"]      = c["admin_status_override"]
+
                 # ── DB upsert ─────────────────────────────────────────────────
                 has_spz      = c.get("spz") and c["spz"] != "Neznámá"
                 tracked_line = _is_tracked_line(c.get("real_linka_spoj") or c.get("line",""))
@@ -1504,6 +1591,7 @@ def background_map_worker():
                     "last_updated":     c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A",
                     "investigating":    c.get("investigating", False),
                     "investigation_spz": c.get("investigation_spz", ""),
+                    "admin_flag":        c.get("admin_flag", False),
                 })
 
             global LIVE_BUSES_DATA
@@ -1598,19 +1686,27 @@ def api_admin_map_action():
     elif action == "edit_status":
         new_st  = str(data.get("status",      "")).strip()
         new_col = str(data.get("color_class", "")).strip()
-        if new_st:  c["status"]      = new_st
-        if new_col and new_col != c["color_class"]: c["color_class"] = new_col
+        if new_st:
+            c["status"]               = new_st
+            c["admin_status_override"] = new_st
+        if new_col and new_col != "──":
+            c["color_class"]          = new_col
+            c["admin_color_override"]  = new_col
+
+    elif action == "set_admin_flag":
+        c["admin_flag"] = bool(data.get("flag", False))
 
     elif action == "reset_admin":
-        # Obnoví výchozí stav – smaže manuální nastavení
-        c["manual_spz"]       = False
-        c["spz_locked"]       = False
-        c["spz_verified"]     = False
-        c["spz_stable_ticks"] = 0
-        c["investigating"]    = False
-        # Barvu a status nechej přepočítat v příštím ticku
-        c["color_class"]      = "bg-gray"
-        c["status"]           = "Načítání..."
+        c["manual_spz"]           = False
+        c["spz_locked"]           = False
+        c["spz_verified"]         = False
+        c["spz_stable_ticks"]     = 0
+        c["investigating"]        = False
+        c["admin_color_override"] = None
+        c["admin_status_override"]= None
+        c["admin_flag"]           = False
+        c["color_class"]          = "bg-gray"
+        c["status"]               = "Načítání..."
 
     return jsonify({"status": "success"})
 
@@ -1680,3 +1776,74 @@ def api_history_spz(spz):
         return jsonify({"data": res.data})
     except Exception as e:
         return jsonify({"data":[],"error":str(e)})
+
+
+# --- EXPERIMENTALNI: Trasa busu ---
+import urllib.parse as _uparse
+
+_stop_geo_cache = {}
+
+def _geocode_stop(stop_name):
+    key = stop_name.strip().lower()
+    if key in _stop_geo_cache:
+        return _stop_geo_cache[key]
+    try:
+        q   = _uparse.quote(stop_name + ", Plzensky kraj, Cesko")
+        url = "https://nominatim.openstreetmap.org/search?q=" + q + "&format=json&limit=1&countrycodes=cz"
+        req = urllib.request.Request(url, headers={"User-Agent": "OIS-IDPK/1.0"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            res = json.loads(r.read().decode())
+        if res:
+            coords = (float(res[0]["lat"]), float(res[0]["lon"]))
+            _stop_geo_cache[key] = coords
+            return coords
+    except Exception:
+        pass
+    _stop_geo_cache[key] = None
+    return None
+
+
+@mapa_bp.route('/api/bus_route/<bus_id>')
+def api_bus_route(bus_id):
+    c = GLOBAL_BUS_CACHE.get(bus_id)
+    if not c:
+        return jsonify({"stops": [], "error": "Bus nenalezen"})
+    stop_names = []
+    stop_times  = []
+    current_idx = 0
+    try:
+        cb  = int(time.time() * 1000)
+        hdrs = {"User-Agent": "Mozilla/5.0", "X-Requested-With": "XMLHttpRequest", "Referer": "https://pvvd.idpk.cz/"}
+        url  = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb}"
+        req  = urllib.request.Request(url, headers=hdrs)
+        with opener.open(req, timeout=5) as r:
+            tt = r.read().decode("utf-8")
+        rows = re.findall(r'<tr[^>]*>(.*?)</tr>', tt, re.DOTALL | re.IGNORECASE)
+        for row in rows:
+            cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL | re.IGNORECASE)
+            cells = [re.sub(r'<[^>]+>', '', x).strip() for x in cells]
+            if len(cells) >= 1 and cells[0] and len(cells[0]) > 1:
+                stop_names.append(cells[0])
+                stop_times.append(cells[1] if len(cells) > 1 else "")
+        cur_m = re.findall(r'class=["\']current["\'][^>]*>.*?<td[^>]*>(.*?)</td>', tt, re.DOTALL | re.IGNORECASE)
+        if cur_m:
+            cur = re.sub(r'<[^>]+>', '', cur_m[0]).strip()
+            for i, s in enumerate(stop_names):
+                if s.lower() == cur.lower():
+                    current_idx = i
+                    break
+    except Exception as e:
+        print(f"[ROUTE] JR chyba: {e}")
+    if not stop_names:
+        return jsonify({"stops": [], "error": "Zastávky nenalezeny v JR"})
+    result = []
+    for i, (name, t) in enumerate(zip(stop_names[:20], stop_times[:20])):
+        coords = _geocode_stop(name)
+        result.append({
+            "name":   name,
+            "time":   t,
+            "lat":    coords[0] if coords else None,
+            "lng":    coords[1] if coords else None,
+            "passed": i < current_idx,
+        })
+    return jsonify({"stops": result, "bus_id": bus_id})
