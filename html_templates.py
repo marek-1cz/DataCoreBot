@@ -318,11 +318,32 @@ HTML_PUBLIC_STATS = """
     <a href="/stats" class="btn btn-dark" style="margin-top: 20px; font-size: 12px;"><i class="fas fa-times"></i> Zavřít profil</a>
 </div>
 {% endif %}
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 40px;">
-    <div style="background: var(--bg-panel); padding: 25px; border-radius: 10px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3);"><i class="fas fa-users" style="font-size: 40px; color: var(--success); margin-bottom: 15px;"></i><div style="font-size: 36px; font-weight: 900; color: var(--text-main);">{{ activated_users }}</div><div style="color: var(--text-muted); font-size: 14px; text-transform: uppercase;">Aktivních uživatelů</div></div>
-    <div style="background: var(--bg-panel); padding: 25px; border-radius: 10px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3);"><i class="fas fa-heart" style="font-size: 40px; color: #ef4444; margin-bottom: 15px;"></i><div style="font-size: 36px; font-weight: 900; color: var(--text-main);">{{ total_supporters }}</div><div style="color: var(--text-muted); font-size: 14px; text-transform: uppercase;">Podporovatelů</div></div>
-    <div style="background: var(--bg-panel); padding: 25px; border-radius: 10px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3);"><i class="fas fa-clock" style="font-size: 40px; color: var(--warning); margin-bottom: 15px;"></i><div style="font-size: 36px; font-weight: 900; color: var(--text-main);">{{ total_hours }}h</div><div style="color: var(--text-muted); font-size: 14px; text-transform: uppercase;">Celkově nahráno</div><div style="color: var(--warning); font-size: 12px; font-weight: bold; margin-top: 5px;">Dnes: {{ today_time_str }}</div></div>
-    <div style="background: var(--bg-panel); padding: 25px; border-radius: 10px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3);"><i class="fas fa-rocket" style="font-size: 40px; color: var(--blue-main); margin-bottom: 15px;"></i><div style="font-size: 36px; font-weight: 900; color: var(--text-main);">{{ total_launches }}x</div><div style="color: var(--text-muted); font-size: 14px; text-transform: uppercase;">Celkově spuštěno</div></div>
+<style>
+.stat-card-hover { transition: all 0.3s ease; position: relative; overflow: hidden; background: linear-gradient(145deg, var(--bg-panel), #141e30); padding: 25px; border-radius: 15px; text-align: center; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+.stat-card-hover:hover { transform: translateY(-8px); box-shadow: 0 20px 40px rgba(0,0,0,0.6); border-color: var(--blue-main); }
+.stat-card-hover::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 3px; background: linear-gradient(90deg, transparent, var(--blue-main), transparent); transition: left 0.6s ease; }
+.stat-card-hover:hover::before { left: 100%; }
+.stat-card-icon { font-size: 42px; margin-bottom: 15px; transition: transform 0.3s ease; }
+.stat-card-hover:hover .stat-card-icon { transform: scale(1.15); }
+.stat-card-val { font-size: 38px; font-weight: 900; color: var(--text-main); line-height: 1.2; text-shadow: 0 0 10px rgba(255,255,255,0.1); }
+.stat-card-label { color: var(--text-muted); font-size: 13px; text-transform: uppercase; font-weight: 600; letter-spacing: 1px; margin-top: 5px; }
+.stat-card-badge { font-size: 11px; font-weight: bold; background: rgba(0,0,0,0.4); padding: 4px 10px; border-radius: 20px; display: inline-block; margin-top: 10px; border: 1px solid #334155; }
+</style>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 25px; margin-bottom: 40px;">
+    <div class="stat-card-hover"><i class="fas fa-users stat-card-icon" style="color: var(--success); filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.4));"></i><div class="stat-card-val">{{ activated_users }}</div><div class="stat-card-label">Aktivních uživatelů</div></div>
+    <div class="stat-card-hover"><i class="fas fa-heart stat-card-icon" style="color: #ef4444; filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.5));"></i><div class="stat-card-val">{{ total_supporters }}</div><div class="stat-card-label">Podporovatelů</div></div>
+    <div class="stat-card-hover"><i class="fas fa-clock stat-card-icon" style="color: var(--warning); filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.4));"></i><div class="stat-card-val">{{ total_hours }}h</div><div class="stat-card-label">Celkově nahráno</div><div class="stat-card-badge" style="color: var(--warning); border-color: rgba(245, 158, 11, 0.3);">Dnes: {{ today_time_str }} | Měsíc: {{ month_time_str }}</div></div>
+    <div class="stat-card-hover"><i class="fas fa-rocket stat-card-icon" style="color: var(--blue-main); filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.4));"></i><div class="stat-card-val">{{ total_launches }}x</div><div class="stat-card-label">Celkově spuštěno</div></div>
+    <div class="stat-card-hover"><i class="fas fa-route stat-card-icon" style="color: #10b981; filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.4));"></i><div class="stat-card-val">{{ total_lines_driven }}x</div><div class="stat-card-label">Odjetých linek</div></div>
+    <div class="stat-card-hover"><i class="fas fa-map-marker-alt stat-card-icon" style="color: #a855f7; filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.4));"></i><div class="stat-card-val">{{ total_stops_announced }}x</div><div class="stat-card-label">Vyhlášených zastávek</div></div>
+</div>
+<div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #d97706; padding: 30px; border-radius: 15px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin-bottom: 40px; position: relative; overflow: hidden; transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.02)';" onmouseout="this.style.transform='scale(1)';">
+    <div style="position: absolute; top: -50px; left: -50px; width: 100px; height: 100px; background: rgba(245, 158, 11, 0.2); filter: blur(50px); border-radius: 50%;"></div>
+    <div style="position: absolute; bottom: -50px; right: -50px; width: 100px; height: 100px; background: rgba(245, 158, 11, 0.2); filter: blur(50px); border-radius: 50%;"></div>
+    <i class="fas fa-trophy" style="font-size: 60px; color: #fcd34d; filter: drop-shadow(0 0 20px rgba(252, 211, 77, 0.8)); margin-bottom: 15px; animation: pulseShiny 3s infinite alternate;"></i>
+    <div style="color: #fcd34d; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">Hráč s nejvíce odjetými linkami</div>
+    <div style="font-size: 48px; font-weight: 900; color: var(--text-main); margin: 10px 0; text-shadow: 0 0 15px rgba(255,255,255,0.2);">{{ top_player_nick }}</div>
+    <div style="color: var(--text-muted); font-size: 20px;">Celkem odjel <span style="color: #fcd34d; font-weight: 900; font-size: 24px;">{{ top_player_lines }}</span> linek</div>
 </div>
 <script>function filterLines(){let i=document.getElementById("lines-search").value.toUpperCase();document.querySelectorAll(".line-row").forEach(r=>{r.style.display=r.innerText.toUpperCase().indexOf(i)>-1?"":"none";});}function filterStops(){let i=document.getElementById("stops-search").value.toUpperCase();document.querySelectorAll(".stop-row").forEach(r=>{r.style.display=r.innerText.toUpperCase().indexOf(i)>-1?"":"none";});}</script>
 """
