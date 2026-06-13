@@ -495,12 +495,19 @@ window.adminDelete   = (id) => { if(confirm('Smazat tečku z mapy? Znovu se zobr
 window.adminRecheck  = (id) => adminAction('recheck_spz', id);
 window.adminSetSPZ   = (id) => { let spz = document.getElementById('adm_spz_' + id)?.value; if(spz) adminAction('edit_spz', id, {spz}); };
 window.adminSetStatus = (id) => {
-    let stEl  = document.getElementById('adm_st_'  + id);
-    let colEl = document.getElementById('adm_col_' + id);
-    let st  = stEl?.value?.trim()  || '';
-    let col = colEl?.value?.trim() || '';
+    let st  = document.getElementById('adm_st_'  + id)?.value?.trim() || '';
+    let col = document.getElementById('adm_col_' + id)?.value?.trim() || '';
     if (!st && !col) { showAdminToast('⚠ Zadej status nebo vyber barvu', false); return; }
     adminAction('edit_status', id, {status: st, color_class: col});
+};
+window.adminSaveAll = (id, permanent) => {
+    let st   = document.getElementById('adm_st_'   + id)?.value?.trim() || '';
+    let col  = document.getElementById('adm_col_'  + id)?.value?.trim() || '';
+    let note = document.getElementById('adm_note_' + id)?.value?.trim() || '';
+    if (!st && !col && !note) { showAdminToast('⚠ Nic k uložení', false); return; }
+    let typ = permanent ? 'trvalá 🔒' : 'dočasná ⏵';
+    adminAction('edit_all', id, {status: st, color_class: col, note: note, permanent: permanent});
+    showAdminToast('⏳ Ukládám (' + typ + ')…');
 };
 
 // ─── PANEL ────────────────────────────────────────────────────────────────────
@@ -674,10 +681,14 @@ function saveAdminInputs() {
   document.querySelectorAll('[id^="adm_st_"]').forEach(el => {
     if (el.value !== el.getAttribute('data-orig')) adminInputCache['st_' + el.id.replace('adm_st_','')] = el.value;
   });
+  document.querySelectorAll('[id^="adm_note_"]').forEach(el => {
+    adminInputCache['note_' + el.id.replace('adm_note_','')] = el.value;
+  });
 }
 function restoreAdminInput(busId, fieldType) {
   let key = fieldType + '_' + busId;
-  return adminInputCache[key] || null;
+  let v = adminInputCache[key];
+  return (v !== undefined && v !== null) ? v : null;
 }
 
 // ─── ADMIN TOAST ──────────────────────────────────────────────────────────────
@@ -814,6 +825,7 @@ async function fetchBuses(){
     // Ulož admin inputs + bus_id otevřeného popupu před clearLayers
     saveAdminInputs();
     let savedOpenId = openPopupBusId;
+    let isRefreshing = true;
     ml.clearLayers();
 
     data.buses.forEach(bus=>{
@@ -835,11 +847,11 @@ async function fetchBuses(){
       // Sledování otevřeného popupu
       marker._busId = bus.id;
       marker.on('popupopen',  () => { openPopupBusId = bus.id; });
+      marker.on('popupopen',  () => { openPopupBusId = bus.id; });
       marker.on('popupclose', () => {
         if(openPopupBusId===bus.id) openPopupBusId=null;
-        // Skryj trasu při zavření popupu tohoto busu
-        if(activeRouteId===bus.id){ routeLayer.clearLayers(); activeRouteId=null; }
-      });
+        // Skryj trasu jen kdyz NENI zpusobeno 10s refreshem
+        if(!isRefreshing && activeRouteId===bus.id){ routeLayer.clearLayers(); activeRouteId=null; }
 
       // ── Popup obsah ──────────────────────────────────────────────────────
       let spzH='', invTxt='', histBtn='';
@@ -878,6 +890,7 @@ async function fetchBuses(){
         </div>
         <div class="pb">
           ${bugW}${orangeW}
+          ${bus.admin_note ? `<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;"><i class='fas fa-sticky-note' style='margin-right:4px;'></i>${bus.admin_note}</div>` : ''}
           <div class="pr"><span class="pl">Cíl:</span><span class="pv">${bus.destination||'Neznámý'}</span></div>
           ${spzH}${invTxt}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
@@ -885,47 +898,61 @@ async function fetchBuses(){
           <button class="pa" onclick="showTT('${bus.id}')"><i class="fas fa-list-alt"></i> Zobrazit Jízdní řád</button>
           <button class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
           ${histBtn}
-          <button id="route-btn-${bus.id}" class="pa pa-d" style="margin-top:5px;background:#334155;" onclick="toggleRoute('${bus.id}')">🛤 Zobrazit trasu (exp.)</button>
+          <button id="route-btn-${bus.id}" class="pa pa-d" style="margin-top:5px;${activeRouteId===bus.id?'background:#1e40af;':'background:#334155;'}" onclick="toggleRoute('${bus.id}')">${activeRouteId===bus.id?'🛤 Skrýt trasu':'🛤 Zobrazit trasu (exp.)'}</button>
         </div>`;
 
       // ── Admin overlay ─────────────────────────────────────────────────────
       if(IS_ADMIN){
-        let _origSpz = bus.spz === 'Neznámá' ? '' : bus.spz;
-        let _origSt  = bus.status;
+        let _origSpz  = bus.spz === 'Neznámá' ? '' : bus.spz;
         let _cachedSpz = restoreAdminInput(bus.id, 'spz') ?? _origSpz;
-        let _cachedSt  = restoreAdminInput(bus.id, 'st')  ?? _origSt;
-        popH += `
+        let _cachedSt  = restoreAdminInput(bus.id, 'st')  ?? bus.status;
+        let _cachedNote= restoreAdminInput(bus.id, 'note') ?? (bus.admin_note || '');
+        let inputSt = `<style>
+          .adm-inp{width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:5px;padding:7px 8px;font-size:12px;margin-top:4px;}
+          .adm-inp:focus{outline:none;border-color:#38bdf8;}
+          .adm-btn{width:100%;padding:11px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;touch-action:manipulation;}
+        </style>`;
+        popH += inputSt + `
           <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;">
             <strong style="color:#38bdf8;font-size:11px;letter-spacing:.5px;">⚙ ADMIN PANEL</strong>
-            <div style="display:flex;gap:5px;margin-top:6px;">
-              <input type="text" id="adm_spz_${bus.id}" value="${_cachedSpz}" data-orig="${_origSpz}" placeholder="SPZ" style="width:55%;font-size:11px;padding:4px 6px;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;">
-              <button onclick="adminSetSPZ('${bus.id}')" style="width:45%;background:#10b981;color:white;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:bold;padding:4px;">💾 Uložit SPZ</button>
+            <!-- SPZ řádek -->
+            <div style="display:flex;gap:5px;margin-top:8px;">
+              <input type="text" id="adm_spz_${bus.id}" value="${_cachedSpz}" data-orig="${_origSpz}" placeholder="SPZ" class="adm-inp" style="width:55%;margin-top:0;">
+              <button onclick="adminSetSPZ('${bus.id}')" style="width:45%;background:#10b981;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">💾 Uložit</button>
             </div>
             <div style="display:flex;gap:5px;margin-top:5px;">
-              <button onclick="adminRecheck('${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:bold;padding:5px;">🔍 Hledat SPZ</button>
-              <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:bold;padding:5px;">🗑 Smazat</button>
+              <button onclick="adminRecheck('${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">🔍 Hledat SPZ</button>
+              <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">🗑 Smazat</button>
             </div>
-            <div style="display:flex;gap:4px;margin-top:5px;">
-              <input type="text" id="adm_st_${bus.id}" value="${_cachedSt}" data-orig="${_origSt}" style="flex:2;font-size:10px;padding:3px 5px;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;">
-              <select id="adm_col_${bus.id}" style="flex:1.2;font-size:10px;padding:3px;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;">
+            <!-- Status + barva -->
+            <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
+              <input type="text" id="adm_st_${bus.id}" value="${_cachedSt}" data-orig="${bus.status}" placeholder="Status text…" class="adm-inp">
+              <select id="adm_col_${bus.id}" class="adm-inp" style="margin-top:4px;">
                 <option value="">── barva ──</option>
-                <option value="bg-gray" ${bus.color_class==='bg-gray'?'selected':''}>Šedá</option>
-                <option value="bg-blue" ${bus.color_class==='bg-blue'?'selected':''}>Sv.Modrá</option>
-                <option value="bg-darkblue" ${bus.color_class==='bg-darkblue'?'selected':''}>Tm.Modrá</option>
-                <option value="bg-green" ${bus.color_class==='bg-green'?'selected':''}>Zelená</option>
-                <option value="bg-red" ${bus.color_class==='bg-red'?'selected':''}>Červená</option>
-                <option value="bg-purple" ${bus.color_class==='bg-purple'?'selected':''}>Fialová</option>
-                <option value="bg-orange" ${bus.color_class==='bg-orange'?'selected':''}>Oranžová</option>
-                <option value="bg-bug" ${bus.color_class==='bg-bug'?'selected':''}>Bug</option>
+                <option value="bg-gray"     ${bus.color_class==='bg-gray'?'selected':''}>Šedá</option>
+                <option value="bg-blue"     ${bus.color_class==='bg-blue'?'selected':''}>Světle modrá</option>
+                <option value="bg-darkblue" ${bus.color_class==='bg-darkblue'?'selected':''}>Tmavě modrá</option>
+                <option value="bg-green"    ${bus.color_class==='bg-green'?'selected':''}>Zelená</option>
+                <option value="bg-red"      ${bus.color_class==='bg-red'?'selected':''}>Červená</option>
+                <option value="bg-purple"   ${bus.color_class==='bg-purple'?'selected':''}>Fialová</option>
+                <option value="bg-orange"   ${bus.color_class==='bg-orange'?'selected':''}>Oranžová</option>
+                <option value="bg-bug"      ${bus.color_class==='bg-bug'?'selected':''}>Bug</option>
               </select>
-              <button onclick="adminSetStatus('${bus.id}')" style="flex:.8;background:#38bdf8;color:#0f172a;border:none;border-radius:4px;font-size:10px;cursor:pointer;font-weight:bold;padding:3px;">✔</button>
+              <!-- Poznámka -->
+              <input type="text" id="adm_note_${bus.id}" value="${_cachedNote}" data-orig="${bus.admin_note||''}" placeholder="📝 Poznámka (volitelně)…" class="adm-inp" style="margin-top:4px;">
+              <!-- Tlačítka uložení -->
+              <div style="display:flex;gap:5px;margin-top:6px;">
+                <button onclick="adminSaveAll('${bus.id}',true)"  class="adm-btn" style="flex:1;background:#1e40af;color:white;">🔒 Trvalá</button>
+                <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏵ Dočasná</button>
+              </div>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:6px;padding:5px 0;border-top:1px solid #1e293b;">
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#93c5fd;flex:1;">
-                <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:auto;cursor:pointer;">
+            <!-- Admin flag + reset -->
+            <div style="display:flex;align-items:center;gap:8px;margin-top:7px;padding-top:6px;border-top:1px solid #1e293b;">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#93c5fd;flex:1;touch-action:manipulation;">
+                <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:16px;height:16px;cursor:pointer;">
                 <i class="fas fa-shield-alt"></i> Admin úprava
               </label>
-              <button onclick="adminAction('reset_admin','${bus.id}')" style="background:transparent;color:#64748b;border:1px solid #334155;border-radius:4px;font-size:10px;cursor:pointer;padding:3px 8px;">↺ Reset</button>
+              <button onclick="adminAction('reset_admin','${bus.id}')" style="background:transparent;color:#64748b;border:1px solid #334155;border-radius:5px;font-size:11px;cursor:pointer;padding:5px 10px;touch-action:manipulation;">↺ Reset</button>
             </div>
           </div>`;
       }
@@ -938,10 +965,10 @@ async function fetchBuses(){
     if(savedOpenId){
       ml.eachLayer(layer => {
         if(layer._busId === savedOpenId){
-          setTimeout(() => layer.openPopup(), 30);
+          setTimeout(() => { layer.openPopup(); isRefreshing = false; }, 30);
         }
       });
-    }
+    } else { isRefreshing = false; }
   }catch(e){console.error(e);}
 }
 fetchBuses();
@@ -1035,6 +1062,8 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "admin_flag": False,
         "bug_locked": False,
         "admin_lock_display": False,
+        "admin_lock_permanent": False,
+        "admin_note": "",
     }
 
 
@@ -1325,10 +1354,12 @@ def background_map_worker():
                                     c["spz"]              = c.get("spz")  # zachova ale unverified
                                 # admin_lock_display: barva/status se resetuji pri novem spoji
                                 # (uzivatele to netrapi, novy spoj = nove auto-vypocty)
-                                c["admin_lock_display"]   = False
-                                c["admin_color_override"] = None
-                                c["admin_status_override"]= None
-                                c["spz_stable_ticks"] = 0
+                                if not c.get("admin_lock_permanent"):
+                                    c["admin_lock_display"]   = False
+                                    c["admin_color_override"] = None
+                                    c["admin_status_override"]= None
+                                    c["admin_lock_permanent"] = False
+                                    c["admin_note"]           = ""
                                 c["investigating"]    = False
                                 c["db_first_upsert"]  = False
                                 c["_last_db_status"]  = None
@@ -1459,6 +1490,7 @@ def background_map_worker():
                         "inactive_minutes":inactive_mins,"last_updated":c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A",
                         "investigating":False,"investigation_spz":"",
                         "admin_flag": c.get("admin_flag", False),
+                        "admin_note": c.get("admin_note", ""),
                     })
                     continue
 
@@ -1498,7 +1530,8 @@ def background_map_worker():
                                     TRIP_COUNTER += 1; c["trip_id"] = f"TRIP-{TRIP_COUNTER}"
                                 c["spz"] = best_spz; c["spz_stable_ticks"] = 1; c["spz_verified"] = False; c["spz_locked"] = False
                                 if best_match_dest: c["spz_last_verified"] = now
-                        if c.get("spz_stable_ticks",0) >= SPZ_STABLE_TICKS and best_match_dest:
+                        # Lock po 2 shodách polohy – bez požadavku na shodu cíle
+                        if c.get("spz_stable_ticks",0) >= SPZ_STABLE_TICKS:
                             c["spz_verified"] = True; c["spz_locked"] = True; c["spz_last_verified"] = now
                     else:
                         last_v = c.get("spz_last_verified")
@@ -1554,6 +1587,11 @@ def background_map_worker():
                             c["status"] = "Konečná zastávka"; c["color_class"] = "bg-purple"; c["spz_locked"] = True
                             if not c["actual_end_time"]:
                                 c["actual_end_time"] = now.strftime('%H:%M'); c["_end_written"] = False
+                            # Dočasný admin override reset při konečné
+                            if c.get("admin_lock_display") and not c.get("admin_lock_permanent"):
+                                c["admin_lock_display"] = False
+                                c["admin_color_override"] = None
+                                c["admin_status_override"] = None
 
                     elif delay_val < -1 and c.get("actual_start_time"):
                         c["status"] = "Jízda (Náskok)" if is_moving else "Stojí (Náskok)"; c["color_class"] = "bg-darkblue"
@@ -1617,6 +1655,7 @@ def background_map_worker():
                     "investigating":    c.get("investigating", False),
                     "investigation_spz": c.get("investigation_spz", ""),
                     "admin_flag":        c.get("admin_flag", False),
+                    "admin_note":        c.get("admin_note", ""),
                 })
 
             global LIVE_BUSES_DATA
@@ -1723,6 +1762,23 @@ def api_admin_map_action():
     elif action == "set_admin_flag":
         c["admin_flag"] = bool(data.get("flag", False))
 
+    elif action == "edit_all":
+        new_st   = str(data.get("status",      "")).strip()
+        new_col  = str(data.get("color_class", "")).strip()
+        new_note = str(data.get("note",        "")).strip()
+        permanent = bool(data.get("permanent", False))
+        if new_st:
+            c["status"]                = new_st
+            c["admin_status_override"] = new_st
+            c["admin_lock_display"]    = True
+        if new_col and new_col not in ("", "──"):
+            c["color_class"]           = new_col
+            c["admin_color_override"]  = new_col
+            c["admin_lock_display"]    = True
+        if new_note is not None:
+            c["admin_note"] = new_note
+        c["admin_lock_permanent"] = permanent
+
     elif action == "reset_admin":
         c["manual_spz"]           = False
         c["spz_locked"]           = False
@@ -1734,6 +1790,8 @@ def api_admin_map_action():
         c["admin_flag"]           = False
         c["bug_locked"]           = False
         c["admin_lock_display"]   = False
+        c["admin_lock_permanent"] = False
+        c["admin_note"]           = ""
         c["color_class"]          = "bg-gray"
         c["status"]               = "Načítání..."
 
