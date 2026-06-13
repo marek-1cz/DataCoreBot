@@ -315,6 +315,38 @@ HTML_PUBLIC_STATS = """
         <div style="background: var(--bg-dark); padding: 15px; border-radius: 8px; border: 1px solid #334155;"><div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase;">Role</div><div style="color: var(--text-main); font-size: 18px; font-weight: bold;">{{ searched_user.get('role', 'User') }}</div></div>
         <div style="background: var(--bg-dark); padding: 15px; border-radius: 8px; border: 1px solid #334155;"><div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase;">Naposledy hráno</div><div style="color: var(--blue-main); font-size: 18px; font-weight: bold;">{% if searched_user.get('is_online') %}<span style="color: var(--success);">Nyní hraje</span>{% else %}{{ searched_user.get('last_active', 'Nikdy') }}{% endif %}</div></div>
     </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 30px;">
+        <div style="background: var(--bg-dark); border-radius: 10px; border: 1px solid #334155; padding: 20px;">
+            <h3 style="color: var(--blue-main); margin-top: 0; font-size: 18px;"><i class="fas fa-route"></i> Odjeté linky</h3>
+            <div style="max-height: 250px; overflow-y: auto; padding-right: 10px;">
+                {% if all_searched_user_lines %}
+                    {% for l in all_searched_user_lines %}
+                    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #1e293b;">
+                        <span style="color: var(--text-main); font-weight: bold;">{{ l.line_name }}</span>
+                        <span style="color: #10b981; font-weight: bold; background: rgba(16, 185, 129, 0.1); padding: 2px 8px; border-radius: 10px;">{{ l.play_count }}x</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div style="color: var(--text-muted); font-size: 14px;">Zatím neodjel žádnou linku.</div>
+                {% endif %}
+            </div>
+        </div>
+        <div style="background: var(--bg-dark); border-radius: 10px; border: 1px solid #334155; padding: 20px;">
+            <h3 style="color: var(--warning); margin-top: 0; font-size: 18px;"><i class="fas fa-map-marker-alt"></i> Vyhlášené zastávky</h3>
+            <div style="max-height: 250px; overflow-y: auto; padding-right: 10px;">
+                {% if all_searched_user_stops %}
+                    {% for s in all_searched_user_stops %}
+                    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #1e293b;">
+                        <span style="color: var(--text-main); font-weight: bold;">{{ s.stop_name }}</span>
+                        <span style="color: #f59e0b; font-weight: bold; background: rgba(245, 158, 11, 0.1); padding: 2px 8px; border-radius: 10px;">{{ s.announce_count }}x</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div style="color: var(--text-muted); font-size: 14px;">Zatím nevyhlásil žádnou zastávku.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
     <a href="/stats" class="btn btn-dark" style="margin-top: 20px; font-size: 12px;"><i class="fas fa-times"></i> Zavřít profil</a>
 </div>
 {% endif %}
@@ -328,6 +360,9 @@ HTML_PUBLIC_STATS = """
 .stat-card-val { font-size: 38px; font-weight: 900; color: var(--text-main); line-height: 1.2; text-shadow: 0 0 10px rgba(255,255,255,0.1); }
 .stat-card-label { color: var(--text-muted); font-size: 13px; text-transform: uppercase; font-weight: 600; letter-spacing: 1px; margin-top: 5px; }
 .stat-card-badge { font-size: 11px; font-weight: bold; background: rgba(0,0,0,0.4); padding: 4px 10px; border-radius: 20px; display: inline-block; margin-top: 10px; border: 1px solid #334155; }
+.carousel-container { position: relative; width: 100%; height: 350px; overflow: hidden; margin-bottom: 40px; border-radius: 15px; }
+.carousel-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.8s ease-in-out; pointer-events: none; }
+.carousel-slide.active { opacity: 1; pointer-events: auto; }
 </style>
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 25px; margin-bottom: 40px;">
     <div class="stat-card-hover"><i class="fas fa-users stat-card-icon" style="color: var(--success); filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.4));"></i><div class="stat-card-val">{{ activated_users }}</div><div class="stat-card-label">Aktivních uživatelů</div></div>
@@ -337,15 +372,112 @@ HTML_PUBLIC_STATS = """
     <div class="stat-card-hover"><i class="fas fa-route stat-card-icon" style="color: #10b981; filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.4));"></i><div class="stat-card-val">{{ total_lines_driven }}x</div><div class="stat-card-label">Odjetých linek</div></div>
     <div class="stat-card-hover"><i class="fas fa-map-marker-alt stat-card-icon" style="color: #a855f7; filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.4));"></i><div class="stat-card-val">{{ total_stops_announced }}x</div><div class="stat-card-label">Vyhlášených zastávek</div></div>
 </div>
-<div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #d97706; padding: 30px; border-radius: 15px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin-bottom: 40px; position: relative; overflow: hidden; transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.02)';" onmouseout="this.style.transform='scale(1)';">
-    <div style="position: absolute; top: -50px; left: -50px; width: 100px; height: 100px; background: rgba(245, 158, 11, 0.2); filter: blur(50px); border-radius: 50%;"></div>
-    <div style="position: absolute; bottom: -50px; right: -50px; width: 100px; height: 100px; background: rgba(245, 158, 11, 0.2); filter: blur(50px); border-radius: 50%;"></div>
-    <i class="fas fa-trophy" style="font-size: 60px; color: #fcd34d; filter: drop-shadow(0 0 20px rgba(252, 211, 77, 0.8)); margin-bottom: 15px; animation: pulseShiny 3s infinite alternate;"></i>
-    <div style="color: #fcd34d; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">Hráč s nejvíce odjetými linkami</div>
-    <div style="font-size: 48px; font-weight: 900; color: var(--text-main); margin: 10px 0; text-shadow: 0 0 15px rgba(255,255,255,0.2);">{{ top_player_nick }}</div>
-    <div style="color: var(--text-muted); font-size: 20px;">Celkem odjel <span style="color: #fcd34d; font-weight: 900; font-size: 24px;">{{ top_player_lines }}</span> linek</div>
+
+<div class="carousel-container">
+    <div class="carousel-slide active" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #d97706; padding: 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <i class="fas fa-sun" style="font-size: 60px; color: #fcd34d; filter: drop-shadow(0 0 20px rgba(252, 211, 77, 0.8)); margin-bottom: 15px; animation: pulseShiny 3s infinite alternate;"></i>
+        <div style="color: #fcd34d; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">Dnešní Hvězdy</div>
+        <div style="display: flex; justify-content: space-around; margin-top: 30px; flex-wrap: wrap; gap: 20px;">
+            <div style="background: rgba(0,0,0,0.4); padding: 20px; border-radius: 12px; border: 1px solid #334155; min-width: 250px;">
+                <div style="color: var(--text-muted); font-size: 16px; text-transform: uppercase; margin-bottom: 10px;">Nejdéle hrál</div>
+                <div style="font-size: 32px; font-weight: 900; color: var(--text-main);">{{ top_today_time_nick }}</div>
+                <div style="color: #fcd34d; font-weight: 900; font-size: 20px; margin-top: 5px;">{{ top_today_time_val }} min</div>
+            </div>
+            <div style="background: rgba(0,0,0,0.4); padding: 20px; border-radius: 12px; border: 1px solid #334155; min-width: 250px;">
+                <div style="color: var(--text-muted); font-size: 16px; text-transform: uppercase; margin-bottom: 10px;">Nejvíce spuštění</div>
+                <div style="font-size: 32px; font-weight: 900; color: var(--text-main);">{{ top_today_launch_nick }}</div>
+                <div style="color: #10b981; font-weight: 900; font-size: 20px; margin-top: 5px;">{{ top_today_launch_val }}x</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="carousel-slide" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #10b981; padding: 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <i class="fas fa-route" style="font-size: 50px; color: #10b981; margin-bottom: 15px;"></i>
+        <div style="color: #10b981; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">TOP 5 - Odjeté Linky</div>
+        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
+            {% for u in top_5_lines_users %}
+            <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; padding: 15px; border-radius: 10px; width: 140px;">
+                <div style="color: var(--text-main); font-weight: bold; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ u.nick }}</div>
+                <div style="color: #10b981; font-weight: 900; font-size: 22px; margin-top: 5px;">{{ u.count }}x</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="carousel-slide" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #a855f7; padding: 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <i class="fas fa-map-marker-alt" style="font-size: 50px; color: #a855f7; margin-bottom: 15px;"></i>
+        <div style="color: #a855f7; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">TOP 5 - Vyhlášené Zastávky</div>
+        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
+            {% for u in top_5_stops_users %}
+            <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; padding: 15px; border-radius: 10px; width: 140px;">
+                <div style="color: var(--text-main); font-weight: bold; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ u.nick }}</div>
+                <div style="color: #a855f7; font-weight: 900; font-size: 22px; margin-top: 5px;">{{ u.count }}x</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="carousel-slide" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #38bdf8; padding: 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <i class="fas fa-clock" style="font-size: 50px; color: #38bdf8; margin-bottom: 15px;"></i>
+        <div style="color: #38bdf8; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">TOP 5 - Nahraný čas</div>
+        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
+            {% for u in top_time %}
+            <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; padding: 15px; border-radius: 10px; width: 140px;">
+                <div style="color: var(--text-main); font-weight: bold; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ u.get('nick', 'Neznámý') }}</div>
+                <div style="color: #38bdf8; font-weight: 900; font-size: 18px; margin-top: 5px;">{{ (u.get('total_time') or 0) // 60 }}h</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
 </div>
-<script>function filterLines(){let i=document.getElementById("lines-search").value.toUpperCase();document.querySelectorAll(".line-row").forEach(r=>{r.style.display=r.innerText.toUpperCase().indexOf(i)>-1?"":"none";});}function filterStops(){let i=document.getElementById("stops-search").value.toUpperCase();document.querySelectorAll(".stop-row").forEach(r=>{r.style.display=r.innerText.toUpperCase().indexOf(i)>-1?"":"none";});}</script>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; margin-bottom: 40px;">
+    <div style="background: var(--bg-panel); border-radius: 15px; border: 1px solid #334155; padding: 25px;">
+        <h3 style="color: var(--text-main); margin-top: 0; display: flex; justify-content: space-between; align-items: center;">
+            <span><i class="fas fa-route" style="color: #10b981;"></i> Seznam Linek</span>
+            <span style="background: rgba(16, 185, 129, 0.2); color: #10b981; padding: 3px 10px; border-radius: 20px; font-size: 12px;">{{ all_lines|length }}</span>
+        </h3>
+        <input type="text" id="lines-search" onkeyup="filterLines()" placeholder="Hledat linku..." style="width: 100%; padding: 10px 15px; margin-bottom: 20px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: white; box-sizing: border-box;">
+        <div style="max-height: 400px; overflow-y: auto; padding-right: 10px;">
+            {% for l in all_lines %}
+            <div class="line-row" style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #1e293b;">
+                <span style="color: var(--text-main); font-weight: bold; font-size: 16px;">{{ l.line_name }}</span>
+                <span style="color: #10b981; font-weight: bold; background: rgba(16, 185, 129, 0.1); padding: 2px 10px; border-radius: 12px;">{{ l.play_count }}x odjeto</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div style="background: var(--bg-panel); border-radius: 15px; border: 1px solid #334155; padding: 25px;">
+        <h3 style="color: var(--text-main); margin-top: 0; display: flex; justify-content: space-between; align-items: center;">
+            <span><i class="fas fa-map-marker-alt" style="color: #a855f7;"></i> Seznam Zastávek</span>
+            <span style="background: rgba(168, 85, 247, 0.2); color: #a855f7; padding: 3px 10px; border-radius: 20px; font-size: 12px;">{{ all_stops|length }}</span>
+        </h3>
+        <input type="text" id="stops-search" onkeyup="filterStops()" placeholder="Hledat zastávku..." style="width: 100%; padding: 10px 15px; margin-bottom: 20px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: white; box-sizing: border-box;">
+        <div style="max-height: 400px; overflow-y: auto; padding-right: 10px;">
+            {% for s in all_stops %}
+            <div class="stop-row" style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #1e293b;">
+                <span style="color: var(--text-main); font-weight: bold; font-size: 16px;">{{ s.stop_name }}</span>
+                <span style="color: #a855f7; font-weight: bold; background: rgba(168, 85, 247, 0.1); padding: 2px 10px; border-radius: 12px;">{{ s.announce_count }}x vyhlášena</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+<script>
+function filterLines(){let i=document.getElementById("lines-search").value.toUpperCase();document.querySelectorAll(".line-row").forEach(r=>{r.style.display=r.innerText.toUpperCase().indexOf(i)>-1?"flex":"none";});}
+function filterStops(){let i=document.getElementById("stops-search").value.toUpperCase();document.querySelectorAll(".stop-row").forEach(r=>{r.style.display=r.innerText.toUpperCase().indexOf(i)>-1?"flex":"none";});}
+document.addEventListener("DOMContentLoaded", function() {
+    const slides = document.querySelectorAll('.carousel-slide');
+    if(slides.length === 0) return;
+    let currentSlide = 0;
+    setInterval(() => {
+        slides[currentSlide].classList.remove('active');
+        currentSlide = (currentSlide + 1) % slides.length;
+        slides[currentSlide].classList.add('active');
+    }, 6000);
+});
+</script>
 """
 
 HTML_SUPPORTERS = """

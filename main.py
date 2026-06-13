@@ -783,21 +783,43 @@ def public_stats():
         except: pass
     total_hours = total_time_mins // 60
     today_str = get_prague_time().strftime("%d.%m.%Y")
-    sessions_today = db.table("app_sessions").select("start_time, end_time").like("start_time", f"{today_str}%").execute().data or []
+    sessions_today = db.table("app_sessions").select("discord_id, start_time, end_time").like("start_time", f"{today_str}%").execute().data or []
+    today_user_mins = {}
+    today_user_launches = {}
     today_mins = 0
     for s in sessions_today:
         try:
             st_str = s.get('start_time'); et_str = s.get('end_time')
+            did = s.get('discord_id')
+            if did and did != 'None':
+                today_user_launches[did] = today_user_launches.get(did, 0) + 1
             if st_str and et_str:
                 fmt_st = "%d.%m.%Y %H:%M:%S" if st_str.count(':') == 2 else "%d.%m.%Y %H:%M"
                 fmt_et = "%d.%m.%Y %H:%M:%S" if et_str.count(':') == 2 else "%d.%m.%Y %H:%M"
                 st = datetime.strptime(st_str, fmt_st); et = datetime.strptime(et_str, fmt_et)
                 diff = int((et - st).total_seconds() / 60)
-                if diff > 0: today_mins += diff
+                if diff > 0: 
+                    today_mins += diff
+                    if did and did != 'None':
+                        today_user_mins[did] = today_user_mins.get(did, 0) + diff
         except: pass
     today_hours = today_mins // 60; today_rem_mins = today_mins % 60
     today_time_str = f"{today_hours}h {today_rem_mins}m" if today_hours > 0 else f"{today_rem_mins}m"
     
+    top_today_time_id = max(today_user_mins, key=today_user_mins.get) if today_user_mins else None
+    top_today_time_nick = "Neznámý"
+    top_today_time_val = today_user_mins.get(top_today_time_id, 0) if top_today_time_id else 0
+    if top_today_time_id:
+        for u in all_users:
+            if str(u.get('discord_id')) == str(top_today_time_id): top_today_time_nick = u.get('nick', 'Neznámý'); break
+            
+    top_today_launch_id = max(today_user_launches, key=today_user_launches.get) if today_user_launches else None
+    top_today_launch_nick = "Neznámý"
+    top_today_launch_val = today_user_launches.get(top_today_launch_id, 0) if top_today_launch_id else 0
+    if top_today_launch_id:
+        for u in all_users:
+            if str(u.get('discord_id')) == str(top_today_launch_id): top_today_launch_nick = u.get('nick', 'Neznámý'); break
+
     month_str = get_prague_time().strftime(".%m.%Y")
     sessions_month = db.table("app_sessions").select("start_time, end_time").like("start_time", f"%{month_str}%").execute().data or []
     month_mins = 0
@@ -817,9 +839,9 @@ def public_stats():
     supporters_data = db.table("supporters").select("id").eq("status", "completed").execute().data or []
     total_supporters = len(supporters_data)
     valid_time_users = [u for u in all_users if int(u.get('total_time') or 0) > 0]
-    top_time_users = sorted(valid_time_users, key=lambda x: int(x.get('total_time') or 0), reverse=True)[:3]
+    top_time_users = sorted(valid_time_users, key=lambda x: int(x.get('total_time') or 0), reverse=True)[:5]
     valid_launch_users = [u for u in all_users if int(u.get('launch_count') or 0) > 0]
-    top_launches = sorted(valid_launch_users, key=lambda x: int(x.get('launch_count') or 0), reverse=True)[:3]
+    top_launches = sorted(valid_launch_users, key=lambda x: int(x.get('launch_count') or 0), reverse=True)[:5]
     try:
         top_lines = db.table("stats_lines").select("*").order("play_count", desc=True).limit(10).execute().data or []
         top_stops = db.table("stats_stops").select("*").order("announce_count", desc=True).limit(10).execute().data or []
@@ -836,18 +858,30 @@ def public_stats():
             if did and did != 'None':
                 player_line_counts[did] = player_line_counts.get(did, 0) + int(ul.get('play_count') or 0)
         
+        user_stops_data = db.table("user_stats_stops").select("discord_id, announce_count").execute().data or []
+        player_stop_counts = {}
+        for us in user_stops_data:
+            did = us.get('discord_id')
+            if did and did != 'None':
+                player_stop_counts[did] = player_stop_counts.get(did, 0) + int(us.get('announce_count') or 0)
+                
+        def get_nick(did):
+            for u in all_users:
+                if str(u.get('discord_id')) == str(did): return u.get('nick', 'Neznámý')
+            return "Neznámý"
+
+        top_5_lines_users = [{"nick": get_nick(did), "count": count} for did, count in sorted(player_line_counts.items(), key=lambda x: x[1], reverse=True)[:5]]
+        top_5_stops_users = [{"nick": get_nick(did), "count": count} for did, count in sorted(player_stop_counts.items(), key=lambda x: x[1], reverse=True)[:5]]
+        
         top_player_id = max(player_line_counts, key=player_line_counts.get) if player_line_counts else None
         top_player_lines = player_line_counts.get(top_player_id, 0) if top_player_id else 0
-        top_player_nick = "Neznámý"
-        if top_player_id:
-            for u in all_users:
-                if str(u.get('discord_id')) == str(top_player_id):
-                    top_player_nick = u.get('nick', 'Neznámý')
-                    break
+        top_player_nick = get_nick(top_player_id) if top_player_id else "Neznámý"
     except:
         top_lines = top_stops = all_lines = all_stops = []
         total_lines_driven = 0
         total_stops_announced = 0
+        top_5_lines_users = []
+        top_5_stops_users = []
         top_player_nick = "Neznámý"
         top_player_lines = 0
         
@@ -859,7 +893,7 @@ def public_stats():
             all_searched_user_stops = db.table("user_stats_stops").select("*").eq("discord_id", d_id).order("announce_count", desc=True).execute().data or []
             searched_user_lines = all_searched_user_lines[:5]; searched_user_stops = all_searched_user_stops[:5]
         except: pass
-    return render_public(HTML_PUBLIC_STATS, user_ver=user_ver, bt_ver=bt_ver, activated_users=activated_users, total_supporters=total_supporters, today_time_str=today_time_str, total_hours=total_hours, total_launches=total_launches, top_time=top_time_users, top_launches=top_launches, top_lines=top_lines, top_stops=top_stops, all_lines=all_lines, all_stops=all_stops, searched_user=searched_user, searched_user_lines=searched_user_lines, searched_user_stops=searched_user_stops, all_searched_user_lines=all_searched_user_lines, all_searched_user_stops=all_searched_user_stops, month_time_str=month_time_str, total_lines_driven=total_lines_driven, total_stops_announced=total_stops_announced, top_player_nick=top_player_nick, top_player_lines=top_player_lines)
+    return render_public(HTML_PUBLIC_STATS, user_ver=user_ver, bt_ver=bt_ver, activated_users=activated_users, total_supporters=total_supporters, today_time_str=today_time_str, total_hours=total_hours, total_launches=total_launches, top_time=top_time_users, top_launches=top_launches, top_lines=top_lines, top_stops=top_stops, all_lines=all_lines, all_stops=all_stops, searched_user=searched_user, searched_user_lines=searched_user_lines, searched_user_stops=searched_user_stops, all_searched_user_lines=all_searched_user_lines, all_searched_user_stops=all_searched_user_stops, month_time_str=month_time_str, total_lines_driven=total_lines_driven, total_stops_announced=total_stops_announced, top_player_nick=top_player_nick, top_player_lines=top_player_lines, top_5_lines_users=top_5_lines_users, top_5_stops_users=top_5_stops_users, top_today_time_nick=top_today_time_nick, top_today_time_val=top_today_time_val, top_today_launch_nick=top_today_launch_nick, top_today_launch_val=top_today_launch_val)
 
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'])
 def api_supporters():
