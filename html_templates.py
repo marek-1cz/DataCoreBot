@@ -351,82 +351,101 @@ HTML_PUBLIC_STATS = """
 </div>
 {% endif %}
 <style>
-.stat-card-hover { transition: all 0.3s ease; position: relative; overflow: hidden; background: linear-gradient(145deg, var(--bg-panel), #141e30); padding: 25px; border-radius: 15px; text-align: center; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
-.stat-card-hover:hover { transform: translateY(-8px); box-shadow: 0 20px 40px rgba(0,0,0,0.6); border-color: var(--blue-main); }
+.stat-card-hover { transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; background: linear-gradient(145deg, var(--bg-panel), #141e30); padding: 25px; border-radius: 15px; text-align: center; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.3); flex: 1 1 230px; max-width: 320px; }
+.stat-card-hover:hover, .stat-card-hover.highlight-active { transform: translateY(-10px) scale(1.05); box-shadow: 0 20px 40px rgba(0,0,0,0.6); border-color: var(--blue-main); z-index: 10; }
+.stat-card-hover.highlight-active { border-color: #fcd34d; box-shadow: 0 0 30px rgba(252, 211, 77, 0.4); }
 .stat-card-hover::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 3px; background: linear-gradient(90deg, transparent, var(--blue-main), transparent); transition: left 0.6s ease; }
-.stat-card-hover:hover::before { left: 100%; }
-.stat-card-icon { font-size: 42px; margin-bottom: 15px; transition: transform 0.3s ease; }
-.stat-card-hover:hover .stat-card-icon { transform: scale(1.15); }
+.stat-card-hover:hover::before, .stat-card-hover.highlight-active::before { left: 100%; }
+.stat-card-icon { font-size: 42px; margin-bottom: 15px; transition: transform 0.5s ease; }
+.stat-card-hover:hover .stat-card-icon, .stat-card-hover.highlight-active .stat-card-icon { transform: scale(1.2); }
 .stat-card-val { font-size: 38px; font-weight: 900; color: var(--text-main); line-height: 1.2; text-shadow: 0 0 10px rgba(255,255,255,0.1); }
 .stat-card-label { color: var(--text-muted); font-size: 13px; text-transform: uppercase; font-weight: 600; letter-spacing: 1px; margin-top: 5px; }
 .stat-card-badge { font-size: 11px; font-weight: bold; background: rgba(0,0,0,0.4); padding: 4px 10px; border-radius: 20px; display: inline-block; margin-top: 10px; border: 1px solid #334155; }
 .carousel-container { position: relative; width: 100%; height: 350px; overflow: hidden; margin-bottom: 40px; border-radius: 15px; }
-.carousel-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.8s ease-in-out; pointer-events: none; }
+.carousel-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.8s ease-in-out; pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .carousel-slide.active { opacity: 1; pointer-events: auto; }
+.glow-blob-1 { position: absolute; top: -50px; left: -50px; width: 150px; height: 150px; filter: blur(60px); border-radius: 50%; z-index: 0; opacity: 0.6; }
+.glow-blob-2 { position: absolute; bottom: -50px; right: -50px; width: 150px; height: 150px; filter: blur(60px); border-radius: 50%; z-index: 0; opacity: 0.6; }
 </style>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 25px; margin-bottom: 40px;">
-    <div class="stat-card-hover"><i class="fas fa-users stat-card-icon" style="color: var(--success); filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.4));"></i><div class="stat-card-val">{{ activated_users }}</div><div class="stat-card-label">Aktivních uživatelů</div></div>
-    <div class="stat-card-hover"><i class="fas fa-heart stat-card-icon" style="color: #ef4444; filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.5));"></i><div class="stat-card-val">{{ total_supporters }}</div><div class="stat-card-label">Podporovatelů</div></div>
-    <div class="stat-card-hover"><i class="fas fa-clock stat-card-icon" style="color: var(--warning); filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.4));"></i><div class="stat-card-val">{{ total_hours }}h</div><div class="stat-card-label">Celkově nahráno</div><div class="stat-card-badge" style="color: var(--warning); border-color: rgba(245, 158, 11, 0.3);">Dnes: {{ today_time_str }} | Měsíc: {{ month_time_str }}</div></div>
-    <div class="stat-card-hover"><i class="fas fa-rocket stat-card-icon" style="color: var(--blue-main); filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.4));"></i><div class="stat-card-val">{{ total_launches }}x</div><div class="stat-card-label">Celkově spuštěno</div></div>
-    <div class="stat-card-hover"><i class="fas fa-route stat-card-icon" style="color: #10b981; filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.4));"></i><div class="stat-card-val">{{ total_lines_driven }}x</div><div class="stat-card-label">Odjetých linek</div></div>
-    <div class="stat-card-hover"><i class="fas fa-map-marker-alt stat-card-icon" style="color: #a855f7; filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.4));"></i><div class="stat-card-val">{{ total_stops_announced }}x</div><div class="stat-card-label">Vyhlášených zastávek</div></div>
+<div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 25px; margin-bottom: 40px;">
+    <div class="stat-card-hover global-stat-card"><i class="fas fa-users stat-card-icon" style="color: var(--success); text-shadow: 0 0 15px rgba(16, 185, 129, 0.6);"></i><div class="stat-card-val">{{ activated_users }}</div><div class="stat-card-label">Aktivních uživatelů</div></div>
+    <div class="stat-card-hover global-stat-card"><i class="fas fa-heart stat-card-icon" style="color: #ef4444; text-shadow: 0 0 15px rgba(239, 68, 68, 0.6);"></i><div class="stat-card-val">{{ total_supporters }}</div><div class="stat-card-label">Podporovatelů</div></div>
+    <div class="stat-card-hover global-stat-card"><i class="fas fa-clock stat-card-icon" style="color: var(--warning); text-shadow: 0 0 15px rgba(245, 158, 11, 0.6);"></i><div class="stat-card-val">{{ total_hours }}h</div><div class="stat-card-label">Celkově nahráno</div><div class="stat-card-badge" style="color: var(--warning); border-color: rgba(245, 158, 11, 0.3);">Dnes: {{ today_time_str }} | Měsíc: {{ month_time_str }}</div></div>
+    <div class="stat-card-hover global-stat-card"><i class="fas fa-rocket stat-card-icon" style="color: var(--blue-main); text-shadow: 0 0 15px rgba(56, 189, 248, 0.6);"></i><div class="stat-card-val">{{ total_launches }}x</div><div class="stat-card-label">Celkově spuštěno</div></div>
+    <div class="stat-card-hover global-stat-card"><i class="fas fa-route stat-card-icon" style="color: #10b981; text-shadow: 0 0 15px rgba(16, 185, 129, 0.6);"></i><div class="stat-card-val">{{ total_lines_driven }}x</div><div class="stat-card-label">Odjetých linek</div></div>
+    <div class="stat-card-hover global-stat-card"><i class="fas fa-map-marker-alt stat-card-icon" style="color: #a855f7; text-shadow: 0 0 15px rgba(168, 85, 247, 0.6);"></i><div class="stat-card-val">{{ total_stops_announced }}x</div><div class="stat-card-label">Vyhlášených zastávek</div></div>
 </div>
 
 <div class="carousel-container">
-    <div class="carousel-slide active" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #d97706; padding: 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-        <i class="fas fa-sun" style="font-size: 60px; color: #fcd34d; filter: drop-shadow(0 0 20px rgba(252, 211, 77, 0.8)); margin-bottom: 15px; animation: pulseShiny 3s infinite alternate;"></i>
-        <div style="color: #fcd34d; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">Dnešní Hvězdy</div>
-        <div style="display: flex; justify-content: space-around; margin-top: 30px; flex-wrap: wrap; gap: 20px;">
-            <div style="background: rgba(0,0,0,0.4); padding: 20px; border-radius: 12px; border: 1px solid #334155; min-width: 250px;">
-                <div style="color: var(--text-muted); font-size: 16px; text-transform: uppercase; margin-bottom: 10px;">Nejdéle hrál</div>
-                <div style="font-size: 32px; font-weight: 900; color: var(--text-main);">{{ top_today_time_nick }}</div>
-                <div style="color: #fcd34d; font-weight: 900; font-size: 20px; margin-top: 5px;">{{ top_today_time_val }} min</div>
-            </div>
-            <div style="background: rgba(0,0,0,0.4); padding: 20px; border-radius: 12px; border: 1px solid #334155; min-width: 250px;">
-                <div style="color: var(--text-muted); font-size: 16px; text-transform: uppercase; margin-bottom: 10px;">Nejvíce spuštění</div>
-                <div style="font-size: 32px; font-weight: 900; color: var(--text-main);">{{ top_today_launch_nick }}</div>
-                <div style="color: #10b981; font-weight: 900; font-size: 20px; margin-top: 5px;">{{ top_today_launch_val }}x</div>
+    <div class="carousel-slide active" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #d97706; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <div class="glow-blob-1" style="background: rgba(245, 158, 11, 0.3);"></div>
+        <div class="glow-blob-2" style="background: rgba(245, 158, 11, 0.3);"></div>
+        <div style="z-index: 1; display: flex; flex-direction: column; align-items: center; width: 100%;">
+            <i class="fas fa-sun" style="font-size: 60px; color: #fcd34d; text-shadow: 0 0 25px rgba(252, 211, 77, 1); margin-bottom: 15px; animation: pulseShiny 3s infinite alternate;"></i>
+            <div style="color: #fcd34d; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">Dnešní Hvězdy</div>
+            <div style="display: flex; justify-content: center; gap: 40px; margin-top: 30px; flex-wrap: wrap; width: 100%;">
+                <div style="background: rgba(0,0,0,0.5); padding: 20px; border-radius: 12px; border: 1px solid #334155; min-width: 250px; z-index: 2;">
+                    <div style="color: var(--text-muted); font-size: 16px; text-transform: uppercase; margin-bottom: 10px;">Nejdéle hrál</div>
+                    <div style="font-size: 32px; font-weight: 900; color: var(--text-main);">{{ top_today_time_nick }}</div>
+                    <div style="color: #fcd34d; font-weight: 900; font-size: 20px; margin-top: 5px;">{{ top_today_time_val }} min</div>
+                </div>
+                <div style="background: rgba(0,0,0,0.5); padding: 20px; border-radius: 12px; border: 1px solid #334155; min-width: 250px; z-index: 2;">
+                    <div style="color: var(--text-muted); font-size: 16px; text-transform: uppercase; margin-bottom: 10px;">Nejvíce spuštění</div>
+                    <div style="font-size: 32px; font-weight: 900; color: var(--text-main);">{{ top_today_launch_nick }}</div>
+                    <div style="color: #10b981; font-weight: 900; font-size: 20px; margin-top: 5px;">{{ top_today_launch_val }}x</div>
+                </div>
             </div>
         </div>
     </div>
     
-    <div class="carousel-slide" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #10b981; padding: 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-        <i class="fas fa-route" style="font-size: 50px; color: #10b981; margin-bottom: 15px;"></i>
-        <div style="color: #10b981; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">TOP 5 - Odjeté Linky</div>
-        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
-            {% for u in top_5_lines_users %}
-            <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; padding: 15px; border-radius: 10px; width: 140px;">
-                <div style="color: var(--text-main); font-weight: bold; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ u.nick }}</div>
-                <div style="color: #10b981; font-weight: 900; font-size: 22px; margin-top: 5px;">{{ u.count }}x</div>
+    <div class="carousel-slide" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #10b981; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <div class="glow-blob-1" style="background: rgba(16, 185, 129, 0.3);"></div>
+        <div class="glow-blob-2" style="background: rgba(16, 185, 129, 0.3);"></div>
+        <div style="z-index: 1; display: flex; flex-direction: column; align-items: center; width: 100%;">
+            <i class="fas fa-route" style="font-size: 50px; color: #10b981; text-shadow: 0 0 25px rgba(16, 185, 129, 1); margin-bottom: 15px;"></i>
+            <div style="color: #10b981; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">TOP 5 - Odjeté Linky</div>
+            <div style="display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
+                {% for u in top_5_lines_users %}
+                <div style="background: rgba(0,0,0,0.5); border: 1px solid #334155; padding: 15px; border-radius: 10px; width: 140px; z-index: 2;">
+                    <div style="color: var(--text-main); font-weight: bold; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ u.nick }}</div>
+                    <div style="color: #10b981; font-weight: 900; font-size: 22px; margin-top: 5px;">{{ u.count }}x</div>
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
     </div>
     
-    <div class="carousel-slide" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #a855f7; padding: 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-        <i class="fas fa-map-marker-alt" style="font-size: 50px; color: #a855f7; margin-bottom: 15px;"></i>
-        <div style="color: #a855f7; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">TOP 5 - Vyhlášené Zastávky</div>
-        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
-            {% for u in top_5_stops_users %}
-            <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; padding: 15px; border-radius: 10px; width: 140px;">
-                <div style="color: var(--text-main); font-weight: bold; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ u.nick }}</div>
-                <div style="color: #a855f7; font-weight: 900; font-size: 22px; margin-top: 5px;">{{ u.count }}x</div>
+    <div class="carousel-slide" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #a855f7; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <div class="glow-blob-1" style="background: rgba(168, 85, 247, 0.3);"></div>
+        <div class="glow-blob-2" style="background: rgba(168, 85, 247, 0.3);"></div>
+        <div style="z-index: 1; display: flex; flex-direction: column; align-items: center; width: 100%;">
+            <i class="fas fa-map-marker-alt" style="font-size: 50px; color: #a855f7; text-shadow: 0 0 25px rgba(168, 85, 247, 1); margin-bottom: 15px;"></i>
+            <div style="color: #a855f7; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">TOP 5 - Vyhlášené Zastávky</div>
+            <div style="display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
+                {% for u in top_5_stops_users %}
+                <div style="background: rgba(0,0,0,0.5); border: 1px solid #334155; padding: 15px; border-radius: 10px; width: 140px; z-index: 2;">
+                    <div style="color: var(--text-main); font-weight: bold; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ u.nick }}</div>
+                    <div style="color: #a855f7; font-weight: 900; font-size: 22px; margin-top: 5px;">{{ u.count }}x</div>
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
     </div>
     
-    <div class="carousel-slide" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #38bdf8; padding: 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-        <i class="fas fa-clock" style="font-size: 50px; color: #38bdf8; margin-bottom: 15px;"></i>
-        <div style="color: #38bdf8; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">TOP 5 - Nahraný čas</div>
-        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
-            {% for u in top_time %}
-            <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; padding: 15px; border-radius: 10px; width: 140px;">
-                <div style="color: var(--text-main); font-weight: bold; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ u.get('nick', 'Neznámý') }}</div>
-                <div style="color: #38bdf8; font-weight: 900; font-size: 18px; margin-top: 5px;">{{ (u.get('total_time') or 0) // 60 }}h</div>
+    <div class="carousel-slide" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #38bdf8; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <div class="glow-blob-1" style="background: rgba(56, 189, 248, 0.3);"></div>
+        <div class="glow-blob-2" style="background: rgba(56, 189, 248, 0.3);"></div>
+        <div style="z-index: 1; display: flex; flex-direction: column; align-items: center; width: 100%;">
+            <i class="fas fa-clock" style="font-size: 50px; color: #38bdf8; text-shadow: 0 0 25px rgba(56, 189, 248, 1); margin-bottom: 15px;"></i>
+            <div style="color: #38bdf8; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">TOP 5 - Nahraný čas</div>
+            <div style="display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
+                {% for u in top_time %}
+                <div style="background: rgba(0,0,0,0.5); border: 1px solid #334155; padding: 15px; border-radius: 10px; width: 140px; z-index: 2;">
+                    <div style="color: var(--text-main); font-weight: bold; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ u.get('nick', 'Neznámý') }}</div>
+                    <div style="color: #38bdf8; font-weight: 900; font-size: 18px; margin-top: 5px;">{{ (u.get('total_time') or 0) // 60 }}h</div>
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
     </div>
 </div>
@@ -469,13 +488,25 @@ function filterLines(){let i=document.getElementById("lines-search").value.toUpp
 function filterStops(){let i=document.getElementById("stops-search").value.toUpperCase();document.querySelectorAll(".stop-row").forEach(r=>{r.style.display=r.innerText.toUpperCase().indexOf(i)>-1?"flex":"none";});}
 document.addEventListener("DOMContentLoaded", function() {
     const slides = document.querySelectorAll('.carousel-slide');
-    if(slides.length === 0) return;
-    let currentSlide = 0;
-    setInterval(() => {
-        slides[currentSlide].classList.remove('active');
-        currentSlide = (currentSlide + 1) % slides.length;
-        slides[currentSlide].classList.add('active');
-    }, 6000);
+    if(slides.length > 0) {
+        let currentSlide = 0;
+        setInterval(() => {
+            slides[currentSlide].classList.remove('active');
+            currentSlide = (currentSlide + 1) % slides.length;
+            slides[currentSlide].classList.add('active');
+        }, 6000);
+    }
+    
+    // Rotating Highlight logic
+    const globalCards = document.querySelectorAll('.global-stat-card');
+    if(globalCards.length > 0) {
+        let highlightIndex = 0;
+        setInterval(() => {
+            globalCards.forEach(c => c.classList.remove('highlight-active'));
+            globalCards[highlightIndex].classList.add('highlight-active');
+            highlightIndex = (highlightIndex + 1) % globalCards.length;
+        }, 3000); // changes every 3 seconds
+    }
 });
 </script>
 """
