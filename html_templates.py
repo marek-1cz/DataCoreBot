@@ -528,10 +528,10 @@ HTML_SUPPORTERS = """
 @keyframes premiumShine { 0% { left: -100%; } 20% { left: 200%; } 100% { left: 200%; } }
 
 /* Grid Layout */
-.supporters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 30px; max-width: 1200px; margin: 0 auto; padding: 0 20px 60px 20px; }
+.supporters-grid { display: flex; flex-direction: column; align-items: center; gap: 40px; max-width: 1000px; margin: 0 auto; padding: 0 20px 60px 20px; }
 
 /* Glassmorphism Cards */
-.supp-card { position: relative; border-radius: 20px; padding: 40px; min-height: 350px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); transition: all 0.4s ease; box-sizing: border-box; }
+.supp-card { position: relative; border-radius: 20px; padding: 50px; min-height: 350px; width: 100%; display: flex; flex-direction: column; justify-content: space-between; align-items: center; text-align: center; overflow: hidden; backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); transition: all 0.4s ease; box-sizing: border-box; }
 .supp-card:hover { transform: translateY(-10px); z-index: 10; }
 
 /* Tiers */
@@ -551,15 +551,15 @@ HTML_SUPPORTERS = """
 .tier-1 .supp-name { color: #bae6fd; font-size: 36px; margin-bottom: 20px; }
 
 /* Elements */
-.supp-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 25px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 25px; flex-wrap: nowrap; }
+.supp-header { display: flex; flex-direction: column; justify-content: center; align-items: center; margin-bottom: 30px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 30px; width: 100%; }
 .supp-badge { display: inline-flex; align-items: center; gap: 10px; padding: 8px 18px; border-radius: 30px; font-size: 15px; font-weight: 900; letter-spacing: 1px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
-.supp-name { margin: 20px 0 0 0; font-weight: 900; text-transform: uppercase; line-height: 1.1; }
-.supp-amount { font-size: 36px; font-weight: 900; background: rgba(0,0,0,0.4); padding: 15px 25px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.1); color: #fcd34d; display: inline-block; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 0 15px rgba(252, 211, 77, 0.3); white-space: nowrap; animation: pulseAmount 2s infinite alternate; flex-shrink: 0; margin-left: 20px; }
-@keyframes pulseAmount { from { text-shadow: 0 0 5px rgba(252, 211, 77, 0.3); box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 0 10px rgba(252, 211, 77, 0.2); } to { text-shadow: 0 0 15px rgba(252, 211, 77, 0.8); box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 0 25px rgba(252, 211, 77, 0.6); border-color: rgba(252, 211, 77, 0.4); } }
-.supp-msg { position: relative; font-size: 18px; color: #cbd5e1; font-style: italic; background: rgba(0,0,0,0.3); padding: 25px 25px 25px 60px; border-radius: 15px; margin-bottom: 25px; border: 1px solid rgba(255,255,255,0.05); line-height: 1.5; }
-.supp-msg::before { content: '\\f10d'; font-family: 'Font Awesome 5 Free'; font-weight: 900; position: absolute; left: 20px; top: 20px; font-size: 24px; color: rgba(255,255,255,0.2); }
-.supp-footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; }
-.supp-date { color: #64748b; font-size: 15px; font-weight: bold; display: flex; align-items: center; gap: 5px; }
+.supp-name { margin: 25px 0 25px 0; font-weight: 900; text-transform: uppercase; line-height: 1.1; }
+.supp-amount { font-size: 40px; font-weight: 900; background: rgba(0,0,0,0.4); padding: 20px 40px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.1); color: #fcd34d; display: inline-block; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 0 20px rgba(252, 211, 77, 0.3); white-space: nowrap; animation: pulseAmount 2s infinite alternate; }
+@keyframes pulseAmount { from { text-shadow: 0 0 5px rgba(252, 211, 77, 0.3); box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 0 10px rgba(252, 211, 77, 0.2); } to { text-shadow: 0 0 15px rgba(252, 211, 77, 0.8); box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 0 30px rgba(252, 211, 77, 0.6); border-color: rgba(252, 211, 77, 0.4); } }
+.supp-msg { position: relative; font-size: 20px; color: #cbd5e1; font-style: italic; background: rgba(0,0,0,0.3); padding: 30px; border-radius: 15px; margin-bottom: 30px; border: 1px solid rgba(255,255,255,0.05); line-height: 1.6; max-width: 800px; }
+.supp-msg::before { content: '\\f10d'; font-family: 'Font Awesome 5 Free'; font-weight: 900; font-size: 28px; color: rgba(255,255,255,0.2); display: block; margin-bottom: 15px; }
+.supp-footer { display: flex; justify-content: center; align-items: center; margin-top: auto; width: 100%; }
+.supp-date { color: #64748b; font-size: 16px; font-weight: bold; display: flex; align-items: center; gap: 8px; }
 
 .tier-3-glow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; height: 100%; background: radial-gradient(circle, rgba(239, 68, 68, 0.15) 0%, transparent 70%); pointer-events: none; }
 </style>
@@ -582,12 +582,10 @@ HTML_SUPPORTERS = """
         
         <div class="supp-card {{ tier_class }}">
             {% if s.tier == 3 %}<div class="tier-3-glow"></div>{% endif %}
-            <div style="position: relative; z-index: 2; display: flex; flex-direction: column; height: 100%;">
+            <div style="position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; width: 100%;">
                 <div class="supp-header">
-                    <div>
-                        <div class="supp-badge"><i class="fas {{ icon }}"></i> {{ badge_text }}</div>
-                        <h3 class="supp-name">{{ s.get('name', 'Anonym') }}</h3>
-                    </div>
+                    <div class="supp-badge"><i class="fas {{ icon }}"></i> {{ badge_text }}</div>
+                    <h3 class="supp-name">{{ s.get('name', 'Anonym') }}</h3>
                     <div class="supp-amount">{{ s.get('amount', '') }}</div>
                 </div>
                 
