@@ -460,8 +460,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
   </div>
 </div>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const IS_ADMIN = __IS_ADMIN__;
@@ -536,7 +534,8 @@ var hp = window.location.hash.replace('#','').split(',');
 if(hp.length===2){ dLat=parseFloat(hp[0]); dLng=parseFloat(hp[1]); dZoom=17; }
 var map = L.map('map',{zoomControl:false}).setView([dLat,dLng],dZoom);
 L.control.zoom({position:'bottomleft'}).addTo(map);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+setTimeout(()=>map.invalidateSize(),300); // Oprava případného tmavého ekranu
 var ml = L.layerGroup().addTo(map);
 if(hp.length===2) L.circleMarker([dLat,dLng],{radius:28,color:'#ef4444',weight:2,opacity:.8,fillOpacity:.12}).addTo(map);
 
@@ -1675,10 +1674,18 @@ def start_map_background_task():
 
 def _full_page(title, body_html, is_map=False):
     extra = 'overflow:hidden;' if is_map else ''
+    # Leaflet CSS musí být v <head> - jinak mapa zobrazí jen tmavou obrazovku
+    map_head = (
+        '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>'
+        '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>'
+    ) if is_map else ''
     return Response(
         f"""<!DOCTYPE html><html style="background:#0f172a;{extra}">
-<head><title>{title} | OIS IDPK</title><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<head>
+<title>{title} | OIS IDPK</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{map_head}
 </head>
 <body style="background:#0f172a;color:white;{extra}margin:0;padding:0;">{body_html}</body></html>""",
         mimetype='text/html'
