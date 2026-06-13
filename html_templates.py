@@ -513,28 +513,99 @@ document.addEventListener("DOMContentLoaded", function() {
 """
 
 HTML_SUPPORTERS = """
-<div style="text-align: center; margin-bottom: 50px;">
-    <h1 style="color: var(--warning); font-size: 42px; font-weight: 900; text-transform: uppercase; text-shadow: 0 0 20px rgba(245, 158, 11, 0.6);"><i class="fas fa-crown"></i> Podporovatelé Projektu</h1>
-    <p style="color: var(--text-muted); font-size: 18px; max-width: 800px; margin: 0 auto 30px auto; line-height: 1.6;">Tenhle projekt tvořím ve svém volném čase a je kompletně zdarma pro všechny. Podpora je čistě dobrovolná a pomáhá mi projekt dál rozvíjet a vylepšovat.</p>
-    <div style="padding: 20px;"><a href="https://buymeacoffee.com/marekk_czz" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 20px 50px; font-size: 24px; font-weight: 900; border-radius: 50px; text-decoration: none; text-transform: uppercase; animation: pulseShiny 3s ease-in-out infinite alternate; border: 2px solid #fff; box-shadow: 0 0 20px rgba(245, 158, 11, 0.6);"><i class="fas fa-coffee"></i> Podpořit projekt</a></div>
+<style>
+/* Hero Section */
+.supporters-hero { position: relative; text-align: center; padding: 60px 20px; overflow: hidden; margin-bottom: 50px; border-radius: 20px; background: radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.15), transparent 60%); }
+.hero-glow-1 { position: absolute; top: -50px; left: 10%; width: 200px; height: 200px; background: rgba(245, 158, 11, 0.4); filter: blur(80px); z-index: 0; }
+.hero-glow-2 { position: absolute; bottom: -50px; right: 10%; width: 200px; height: 200px; background: rgba(239, 68, 68, 0.4); filter: blur(80px); z-index: 0; }
+.hero-title { position: relative; z-index: 1; color: var(--warning); font-size: 52px; font-weight: 900; text-transform: uppercase; text-shadow: 0 0 30px rgba(245, 158, 11, 0.8); margin-bottom: 20px; line-height: 1.1; }
+.hero-desc { position: relative; z-index: 1; color: #cbd5e1; font-size: 20px; max-width: 800px; margin: 0 auto 40px auto; line-height: 1.6; }
+
+/* Premium Button */
+.btn-premium { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 15px; background: linear-gradient(135deg, #f59e0b, #ea580c); color: white; padding: 20px 60px; font-size: 26px; font-weight: 900; border-radius: 50px; text-decoration: none; text-transform: uppercase; border: 2px solid rgba(255,255,255,0.4); box-shadow: 0 10px 40px rgba(234, 88, 12, 0.5), inset 0 2px 10px rgba(255,255,255,0.4); overflow: hidden; transition: all 0.4s ease; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+.btn-premium:hover { transform: translateY(-5px) scale(1.05); box-shadow: 0 20px 50px rgba(234, 88, 12, 0.8), inset 0 2px 10px rgba(255,255,255,0.6); }
+.btn-premium::after { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(to right, transparent, rgba(255,255,255,0.4), transparent); transform: skewX(-25deg); animation: premiumShine 4s infinite; }
+@keyframes premiumShine { 0% { left: -100%; } 20% { left: 200%; } 100% { left: 200%; } }
+
+/* Grid Layout */
+.supporters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 30px; max-width: 1200px; margin: 0 auto; padding: 0 20px 60px 20px; }
+
+/* Glassmorphism Cards */
+.supp-card { position: relative; border-radius: 20px; padding: 30px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); transition: all 0.4s ease; box-sizing: border-box; }
+.supp-card:hover { transform: translateY(-10px); z-index: 10; }
+
+/* Tiers */
+.tier-3 { grid-column: 1 / -1; background: linear-gradient(135deg, rgba(127, 29, 29, 0.4), rgba(15, 23, 42, 0.8)); border: 1px solid rgba(239, 68, 68, 0.3); box-shadow: 0 15px 35px rgba(220, 38, 38, 0.15), inset 0 0 40px rgba(220, 38, 38, 0.05); }
+.tier-3:hover { box-shadow: 0 25px 50px rgba(220, 38, 38, 0.4), inset 0 0 60px rgba(220, 38, 38, 0.1); border-color: rgba(239, 68, 68, 0.8); }
+.tier-3 .supp-badge { background: linear-gradient(135deg, #ef4444, #991b1b); color: white; border: 1px solid #fca5a5; text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+.tier-3 .supp-name { color: #fca5a5; font-size: 42px; text-shadow: 0 0 20px rgba(252, 165, 165, 0.6); }
+
+.tier-2 { background: linear-gradient(135deg, rgba(180, 83, 9, 0.4), rgba(15, 23, 42, 0.8)); border: 1px solid rgba(245, 158, 11, 0.3); box-shadow: 0 10px 25px rgba(245, 158, 11, 0.1), inset 0 0 30px rgba(245, 158, 11, 0.05); }
+.tier-2:hover { box-shadow: 0 20px 40px rgba(245, 158, 11, 0.3), inset 0 0 40px rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.8); }
+.tier-2 .supp-badge { background: linear-gradient(135deg, #f59e0b, #b45309); color: white; border: 1px solid #fde68a; }
+.tier-2 .supp-name { color: #fde68a; font-size: 32px; text-shadow: 0 0 15px rgba(253, 230, 138, 0.4); }
+
+.tier-1 { background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(15, 23, 42, 0.8)); border: 1px solid rgba(56, 189, 248, 0.2); box-shadow: 0 10px 25px rgba(56, 189, 248, 0.05); }
+.tier-1:hover { box-shadow: 0 20px 40px rgba(56, 189, 248, 0.2); border-color: rgba(56, 189, 248, 0.6); }
+.tier-1 .supp-badge { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: white; border: 1px solid #bae6fd; }
+.tier-1 .supp-name { color: #bae6fd; font-size: 28px; }
+
+/* Elements */
+.supp-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 20px; }
+.supp-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 30px; font-size: 13px; font-weight: 900; letter-spacing: 1px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+.supp-name { margin: 15px 0 0 0; font-weight: 900; text-transform: uppercase; line-height: 1.1; }
+.supp-amount { font-size: 28px; font-weight: 900; background: rgba(0,0,0,0.4); padding: 10px 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); color: white; display: inline-block; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5); }
+.supp-msg { position: relative; font-size: 16px; color: #cbd5e1; font-style: italic; background: rgba(0,0,0,0.3); padding: 20px 20px 20px 50px; border-radius: 15px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.05); }
+.supp-msg::before { content: '\\f10d'; font-family: 'Font Awesome 5 Free'; font-weight: 900; position: absolute; left: 15px; top: 15px; font-size: 20px; color: rgba(255,255,255,0.2); }
+.supp-footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; }
+.supp-date { color: #64748b; font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 5px; }
+
+.tier-3-glow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; height: 100%; background: radial-gradient(circle, rgba(239, 68, 68, 0.15) 0%, transparent 70%); pointer-events: none; }
+</style>
+
+<div class="supporters-hero">
+    <div class="hero-glow-1"></div>
+    <div class="hero-glow-2"></div>
+    <h1 class="hero-title"><i class="fas fa-crown"></i> Síň Slávy</h1>
+    <p class="hero-desc">Tenhle projekt tvořím ve svém volném čase a je kompletně zdarma pro všechny. Podpora je čistě dobrovolná a nesmírně mi pomáhá hradit náklady na servery a tvořit pro vás neustále nové skvělé aktualizace.</p>
+    <a href="https://buymeacoffee.com/marekk_czz" target="_blank" class="btn-premium">
+        <i class="fas fa-coffee" style="text-shadow: 0 0 10px rgba(255,255,255,0.5);"></i> Stát se VIP Podporovatelem
+    </a>
 </div>
-<div style="display: flex; flex-direction: column; gap: 35px; max-width: 1000px; margin: 0 auto; padding: 20px;">
+
+<div class="supporters-grid">
     {% for s in supporters %}
-    {% set anim_class = 'glowMega' if s.tier == 3 else ('glowVelky' if s.tier == 2 else 'glowNormal') %}
-    {% set border_color = '#ff3333' if s.tier == 3 else ('#f59e0b' if s.tier == 2 else '#38bdf8') %}
-    {% set title_color = '#ff3333' if s.tier == 3 else ('#fcd34d' if s.tier == 2 else '#e0f2fe') %}
-    {% set badge_text = 'MEGA PODPOROVATEL' if s.tier == 3 else ('VELKÝ PODPOROVATEL' if s.tier == 2 else 'PODPOROVATEL') %}
-    <div style="background-color: var(--bg-panel); border-radius: 12px; width: 100%; padding: 30px; display: flex; justify-content: space-between; align-items: center; border-left: 8px solid {{ border_color }}; animation: {{ anim_class }} 4s ease-in-out infinite alternate; box-sizing: border-box; position: relative;">
-        <div style="text-align: left; flex: 1;">
-            <div style="color: {{ border_color }}; font-size: 14px; font-weight: 900; letter-spacing: 3px; margin-bottom: 8px;">{{ badge_text }}</div>
-            <h3 style="color: {{ title_color }}; margin: 0 0 10px 0; font-size: 32px; text-transform: uppercase;">{{ s.get('name', 'Anonym') }}</h3>
-            {% if s.get('message') %}<div style="color: var(--text-main); font-size: 16px; font-style: italic; background: rgba(0,0,0,0.4); padding: 15px; border-radius: 8px; border-left: 3px solid {{ border_color }}; margin-bottom: 10px; margin-top: 15px;">"{{ s.get('message') }}"</div>{% endif %}
-            <div style="color: var(--text-muted); font-size: 13px; margin-top: 15px; font-weight: bold;"><i class="fas fa-clock"></i> {{ s.get('created_at', '') }}</div>
+        {% set tier_class = 'tier-3' if s.tier == 3 else ('tier-2' if s.tier == 2 else 'tier-1') %}
+        {% set icon = 'fa-gem' if s.tier == 3 else ('fa-star' if s.tier == 2 else 'fa-medal') %}
+        {% set badge_text = 'MEGA PODPOROVATEL' if s.tier == 3 else ('VELKÝ PODPOROVATEL' if s.tier == 2 else 'PODPOROVATEL') %}
+        
+        <div class="supp-card {{ tier_class }}">
+            {% if s.tier == 3 %}<div class="tier-3-glow"></div>{% endif %}
+            <div style="position: relative; z-index: 2; display: flex; flex-direction: column; height: 100%;">
+                <div class="supp-header">
+                    <div>
+                        <div class="supp-badge"><i class="fas {{ icon }}"></i> {{ badge_text }}</div>
+                        <h3 class="supp-name">{{ s.get('name', 'Anonym') }}</h3>
+                    </div>
+                    <div class="supp-amount">{{ s.get('amount', '') }}</div>
+                </div>
+                
+                {% if s.get('message') %}
+                <div class="supp-msg">
+                    {{ s.get('message') }}
+                </div>
+                {% endif %}
+                
+                <div class="supp-footer">
+                    <div class="supp-date"><i class="fas fa-clock"></i> Přidáno: {{ s.get('created_at', '') }}</div>
+                </div>
+            </div>
         </div>
-        <div style="margin-left: 30px; text-align: right;"><div style="background: rgba(0,0,0,0.6); color: {{ border_color }}; padding: 20px 30px; border-radius: 12px; font-weight: 900; font-size: 28px; border: 2px solid {{ border_color }}; white-space: nowrap;">{{ s.get('amount', '') }}</div></div>
-    </div>
     {% else %}
-    <div style="color: var(--text-muted); width: 100%; text-align: center; padding: 50px; font-size: 18px;">Zatím zde nejsou žádní podporovatelé. Buďte první!</div>
+        <div style="grid-column: 1 / -1; text-align: center; padding: 60px; background: var(--bg-panel); border-radius: 20px; border: 1px dashed #334155; color: #64748b; font-size: 20px;">
+            <i class="fas fa-sad-tear" style="font-size: 50px; margin-bottom: 20px; opacity: 0.5;"></i><br>
+            Zatím zde nejsou žádní podporovatelé. Buďte ten první, kdo vstoupí do Síně slávy!
+        </div>
     {% endfor %}
 </div>
 """
