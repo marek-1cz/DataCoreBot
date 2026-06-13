@@ -515,9 +515,9 @@ document.addEventListener("DOMContentLoaded", function() {
 HTML_SUPPORTERS = """
 <style>
 /* Hero Section */
-.supporters-hero { position: relative; text-align: center; padding: 60px 20px; overflow: hidden; margin-bottom: 50px; border-radius: 20px; background: radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.15), transparent 60%); }
-.hero-glow-1 { position: absolute; top: -50px; left: 10%; width: 200px; height: 200px; background: rgba(245, 158, 11, 0.4); filter: blur(80px); z-index: 0; }
-.hero-glow-2 { position: absolute; bottom: -50px; right: 10%; width: 200px; height: 200px; background: rgba(239, 68, 68, 0.4); filter: blur(80px); z-index: 0; }
+.supporters-hero { position: relative; text-align: center; padding: 60px 20px; margin-bottom: 50px; border-radius: 20px; background: radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.15), transparent 60%); }
+.hero-glow-1 { position: absolute; top: -50px; left: 10%; width: 300px; height: 300px; background: rgba(245, 158, 11, 0.3); filter: blur(120px); z-index: -1; }
+.hero-glow-2 { position: absolute; bottom: -50px; right: 10%; width: 300px; height: 300px; background: rgba(239, 68, 68, 0.3); filter: blur(120px); z-index: -1; }
 .hero-title { position: relative; z-index: 1; color: var(--warning); font-size: 52px; font-weight: 900; text-transform: uppercase; text-shadow: 0 0 30px rgba(245, 158, 11, 0.8); margin-bottom: 20px; line-height: 1.1; }
 .hero-desc { position: relative; z-index: 1; color: #cbd5e1; font-size: 20px; max-width: 800px; margin: 0 auto 40px auto; line-height: 1.6; }
 
@@ -551,10 +551,11 @@ HTML_SUPPORTERS = """
 .tier-1 .supp-name { color: #bae6fd; font-size: 28px; }
 
 /* Elements */
-.supp-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 20px; }
+.supp-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 20px; flex-wrap: nowrap; }
 .supp-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 30px; font-size: 13px; font-weight: 900; letter-spacing: 1px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
 .supp-name { margin: 15px 0 0 0; font-weight: 900; text-transform: uppercase; line-height: 1.1; }
-.supp-amount { font-size: 28px; font-weight: 900; background: rgba(0,0,0,0.4); padding: 10px 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); color: white; display: inline-block; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5); }
+.supp-amount { font-size: 28px; font-weight: 900; background: rgba(0,0,0,0.4); padding: 10px 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); color: #fcd34d; display: inline-block; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 0 15px rgba(252, 211, 77, 0.3); white-space: nowrap; animation: pulseAmount 2s infinite alternate; flex-shrink: 0; margin-left: 15px; }
+@keyframes pulseAmount { from { text-shadow: 0 0 5px rgba(252, 211, 77, 0.3); box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 0 10px rgba(252, 211, 77, 0.2); } to { text-shadow: 0 0 15px rgba(252, 211, 77, 0.8); box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 0 25px rgba(252, 211, 77, 0.6); border-color: rgba(252, 211, 77, 0.4); } }
 .supp-msg { position: relative; font-size: 16px; color: #cbd5e1; font-style: italic; background: rgba(0,0,0,0.3); padding: 20px 20px 20px 50px; border-radius: 15px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.05); }
 .supp-msg::before { content: '\\f10d'; font-family: 'Font Awesome 5 Free'; font-weight: 900; position: absolute; left: 15px; top: 15px; font-size: 20px; color: rgba(255,255,255,0.2); }
 .supp-footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; }
@@ -566,7 +567,7 @@ HTML_SUPPORTERS = """
 <div class="supporters-hero">
     <div class="hero-glow-1"></div>
     <div class="hero-glow-2"></div>
-    <h1 class="hero-title"><i class="fas fa-crown"></i> Síň Slávy</h1>
+    <h1 class="hero-title"><i class="fas fa-crown"></i> Podporovatelé Projektu</h1>
     <p class="hero-desc">Tenhle projekt tvořím ve svém volném čase a je kompletně zdarma pro všechny. Podpora je čistě dobrovolná a nesmírně mi pomáhá hradit náklady na servery a tvořit pro vás neustále nové skvělé aktualizace.</p>
     <a href="https://buymeacoffee.com/marekk_czz" target="_blank" class="btn-premium">
         <i class="fas fa-coffee" style="text-shadow: 0 0 10px rgba(255,255,255,0.5);"></i> Stát se VIP Podporovatelem
