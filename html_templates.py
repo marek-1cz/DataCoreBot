@@ -361,8 +361,8 @@ HTML_PUBLIC_STATS = """
 .stat-card-val { font-size: 38px; font-weight: 900; color: var(--text-main); line-height: 1.2; text-shadow: 0 0 10px rgba(255,255,255,0.1); }
 .stat-card-label { color: var(--text-muted); font-size: 13px; text-transform: uppercase; font-weight: 600; letter-spacing: 1px; margin-top: 5px; }
 .stat-card-badge { font-size: 11px; font-weight: bold; background: rgba(0,0,0,0.4); padding: 4px 10px; border-radius: 20px; display: inline-block; margin-top: 10px; border: 1px solid #334155; }
-.carousel-container { position: relative; width: 100%; height: 350px; overflow: hidden; margin-bottom: 40px; border-radius: 15px; }
-.carousel-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.8s ease-in-out; pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.carousel-container { position: relative; width: 100%; height: 350px; overflow: hidden; margin-bottom: 40px; border-radius: 15px; box-sizing: border-box; }
+.carousel-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.8s ease-in-out; pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; }
 .carousel-slide.active { opacity: 1; pointer-events: auto; }
 .glow-blob-1 { position: absolute; top: -50px; left: -50px; width: 150px; height: 150px; filter: blur(60px); border-radius: 50%; z-index: 0; opacity: 0.6; }
 .glow-blob-2 { position: absolute; bottom: -50px; right: -50px; width: 150px; height: 150px; filter: blur(60px); border-radius: 50%; z-index: 0; opacity: 0.6; }
@@ -380,9 +380,10 @@ HTML_PUBLIC_STATS = """
     <div class="carousel-slide active" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid #d97706; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
         <div class="glow-blob-1" style="background: rgba(245, 158, 11, 0.3);"></div>
         <div class="glow-blob-2" style="background: rgba(245, 158, 11, 0.3);"></div>
+        <div style="position: absolute; top: 20%; left: 50%; transform: translateX(-50%); width: 120px; height: 120px; background: rgba(252, 211, 77, 0.4); filter: blur(40px); border-radius: 50%; z-index: 0; animation: pulseShiny 3s infinite alternate;"></div>
         <div style="z-index: 1; display: flex; flex-direction: column; align-items: center; width: 100%;">
-            <i class="fas fa-sun" style="font-size: 60px; color: #fcd34d; text-shadow: 0 0 25px rgba(252, 211, 77, 1); margin-bottom: 15px; animation: pulseShiny 3s infinite alternate;"></i>
-            <div style="color: #fcd34d; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">Dnešní Hvězdy</div>
+            <i class="fas fa-sun" style="font-size: 60px; color: #fcd34d; margin-bottom: 15px; position: relative; z-index: 2; text-shadow: none;"></i>
+            <div style="color: #fcd34d; font-size: 16px; text-transform: uppercase; font-weight: 900; letter-spacing: 3px;">Dnešní Statistiky</div>
             <div style="display: flex; justify-content: center; gap: 40px; margin-top: 30px; flex-wrap: wrap; width: 100%;">
                 <div style="background: rgba(0,0,0,0.5); padding: 20px; border-radius: 12px; border: 1px solid #334155; min-width: 250px; z-index: 2;">
                     <div style="color: var(--text-muted); font-size: 16px; text-transform: uppercase; margin-bottom: 10px;">Nejdéle hrál</div>
