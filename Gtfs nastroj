@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""
+gtfs_nastroj.py – Stahuje a zpracovává GTFS data pro OIS IDPK mapu
+====================================================================
+
+Jak použít:
+  1. Stáhni GTFS zip ručně z jednoho z odkazů níže
+     nebo spusť script bez argumentů (pokusí se stáhnout automaticky)
+
+  2. python gtfs_nastroj.py                        # auto-download
+     python gtfs_nastroj.py data.zip               # lokální soubor
+     python gtfs_nastroj.py data.zip gtfs.db       # vlastní název DB
+
+Výstup: gtfs_stops.db (SQLite) – umísti do složky vedle interaktivnimapa.py
+
+Zdroje GTFS dat (zkus v tomto pořadí):
+  - https://opendata.isd.cz/files/gtfs_cr.zip      (CIS JŘ – celá ČR)
+  - https://www.chaps.cz/static/gtfs/full.zip
+  - https://idos.idnes.cz/files/gtfs/full.zip
+
+Povoleně oblasti (bounding box):
+  Plzeňský kraj + sousední kraje + ČR/DE přesah
+  lat 48.2–51.1 / lon 10.8–16.5
+"""
+
+import csv
+import io
+import json
+import os
+import sqlite3
+import sys
+import time
+import urllib.request
+import zipfile
+
+# ─── Konfigurace ──────────────────────────────────────────────────────────────
+GTFS_SOURCES = [
+    "https://opendata.isd.cz/files/gtfs_cr.zip",
+    "https://www.chaps.cz/static/gtfs/full.zip",
+]
+
+OUTPUT_DB   = "gtfs_stops.db"
+# Bbox: zahrnuje PK, KVK, ZK, JCK, STK, PLK, ULK + přesah do DE
+ALLOWED_LAT = (48.2, 51.1)
+ALLOWED_LON = (10.8, 16.5)
+# Linky vedoucí do DE – výjimky bez bounding box filtru
+DE_ROUTE_KEYWORDS = ["flixbus", "eurolines", "regiojet", "студент"]
+
+# ─── Stahování ────────────────────────────────────────────────────────────────
+def download_zip(url: str) -> bytes:
+    print(f"⬇ Stahuji: {url}")
+    headers = {"User-Agent": "OIS-IDPK-GTFS/1.0 (mapa.idpk.cz)"}
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=180) as r:
+        total = int(r.headers.get("Content-Length", 0))
+        data = b""
+        while True:
+            chunk = r.read(1024 * 256)
+            if not chunk:
+                break
+            data += chunk
+            if total:
+                pct = len(data) * 100 // total
+                print(f"\r  {pct}% ({len(data)//1024//1024} MB / {total//1024//1024} MB)", end="", flush=True)
+    print(f"\r✅ Staženo {len(data)//1024//1024} MB             ")
+    return data
+
+# ─── Pomocné ─────────────────────────────────────────────────────────────────
+def in_bbox(lat, lon):
+    return ALLOWED_LAT[0] <= lat <= ALLOWED_LAT[1] and ALLOWED_LON[0] <= lon <= ALLOWED_LON[1]
+
+def open_txt(zf: zipfile.ZipFile, name: str):
+    """Otevři soubor z ZIPu – zkusí různé cesty."""
+    names = zf.namelist()
+    for candidate in [name, name.lower(), f"gtfs/{name}", f"GTFS/{name}"]:
+        if candidate in names:
+            return io.TextIOWrapper(zf.open(candidate), encoding="utf-8-sig", errors="replace")
+    # Hledej suffix
+    for n in names:
+        if n.endswith("/" + name) or n == name:
+            return io.TextIOWrapper(zf.open(n), encoding="utf-8-sig", errors="replace")
+    return None
+
+# ─── Zpracování ZIP → SQLite ──────────────────────────────────────────────────
+def process(zip_bytes: bytes, db_path: str):
+    print(f"\n📦 Zpracovávám ZIP ({len(zip_bytes)//1024//1024} MB)…")
+
+    conn = sqlite3.connect(db_path)
+    cur  = conn.cursor()
+    cur.executescript("""
+        DROP TABLE IF EXISTS stops;
+        DROP TABLE IF EXISTS routes;
+        DROP TABLE IF EXISTS trips;
+        DROP TABLE IF EXISTS stop_times;
+        DROP TABLE IF EXISTS shapes;
+
+        CREATE TABLE stops (
+            stop_id   TEXT PRIMARY KEY,
+            stop_name TEXT,
+            stop_lat  REAL,
+            stop_lon  REAL
+        );
+        CREATE TABLE routes (
+            route_id         TEXT PRIMARY KEY,
+            route_short_name TEXT,
+            route_long_name  TEXT,
+            is_de_route      INTEGER DEFAULT 0
+        );
+        CREATE TABLE trips (
+            trip_id  TEXT PRIMARY KEY,
+            route_id TEXT,
+            shape_id TEXT
+        );
+        CREATE TABLE stop_times (
+            trip_id        TEXT,
+            stop_sequence  INTEGER,
+            stop_id        TEXT,
+            arrival_time   TEXT,
+            departure_time TEXT
+        );
+        CREATE TABLE shapes (
+            shape_id           TEXT,
+            shape_pt_sequence  INTEGER,
+            shape_pt_lat       REAL,
+            shape_pt_lon       REAL
+        );
+    """)
+    conn.commit()
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        avail = set(zf.namelist())
+        print(f"  Soubory v ZIP: {len(avail)}")
+
+        # ── stops.txt ──────────────────────────────────────────────────────
+        f = open_txt(zf, "stops.txt")
+        if f:
+            reader = csv.DictReader(f)
+            batch, kept, total = [], 0, 0
+            for row in reader:
+                total += 1
+                try:
+                    lat = float(row.get("stop_lat", 0) or 0)
+                    lon = float(row.get("stop_lon", 0) or 0)
+                except ValueError:
+                    continue
+                if in_bbox(lat, lon):
+                    batch.append((row["stop_id"], row.get("stop_name",""), lat, lon))
+                    kept += 1
+                if len(batch) >= 5000:
+                    cur.executemany("INSERT OR REPLACE INTO stops VALUES(?,?,?,?)", batch)
+                    batch = []
+            if batch:
+                cur.executemany("INSERT OR REPLACE INTO stops VALUES(?,?,?,?)", batch)
+            conn.commit()
+            print(f"  Zastávky: {kept}/{total} v oblasti")
+        else:
+            print("  ⚠ stops.txt nenalezen!")
+
+        # ── routes.txt ─────────────────────────────────────────────────────
+        f = open_txt(zf, "routes.txt")
+        if f:
+            reader = csv.DictReader(f)
+            batch = []
+            for row in reader:
+                short = row.get("route_short_name","")
+                long_ = row.get("route_long_name","")
+                is_de = int(any(k in (short+long_).lower() for k in DE_ROUTE_KEYWORDS))
+                batch.append((row["route_id"], short, long_, is_de))
+            cur.executemany("INSERT OR REPLACE INTO routes VALUES(?,?,?,?)", batch)
+            conn.commit()
+            print(f"  Linky: {len(batch)}")
+
+        # ── trips.txt ──────────────────────────────────────────────────────
+        f = open_txt(zf, "trips.txt")
+        if f:
+            reader = csv.DictReader(f)
+            batch, count = [], 0
+            for row in reader:
+                batch.append((row["trip_id"], row.get("route_id",""), row.get("shape_id","")))
+                count += 1
+                if len(batch) >= 10000:
+                    cur.executemany("INSERT OR REPLACE INTO trips VALUES(?,?,?)", batch)
+                    batch = []
+            if batch:
+                cur.executemany("INSERT OR REPLACE INTO trips VALUES(?,?,?)", batch)
+            conn.commit()
+            print(f"  Spoje: {count}")
+
+        # ── stop_times.txt ─────────────────────────────────────────────────
+        f = open_txt(zf, "stop_times.txt")
+        if f:
+            reader = csv.DictReader(f)
+            batch, count = [], 0
+            t0 = time.time()
+            for row in reader:
+                batch.append((
+                    row["trip_id"],
+                    int(row.get("stop_sequence", 0) or 0),
+                    row.get("stop_id",""),
+                    row.get("arrival_time",""),
+                    row.get("departure_time",""),
+                ))
+                count += 1
+                if len(batch) >= 20000:
+                    cur.executemany("INSERT INTO stop_times VALUES(?,?,?,?,?)", batch)
+                    batch = []
+                    if count % 200000 == 0:
+                        conn.commit()
+                        elapsed = time.time() - t0
+                        print(f"    stop_times: {count//1000}k řádků ({elapsed:.0f}s)…")
+            if batch:
+                cur.executemany("INSERT INTO stop_times VALUES(?,?,?,?,?)", batch)
+            conn.commit()
+            print(f"  Stop times: {count}")
+
+        # ── shapes.txt ─────────────────────────────────────────────────────
+        f = open_txt(zf, "shapes.txt")
+        if f:
+            reader = csv.DictReader(f)
+            batch, kept, total = [], 0, 0
+            for row in reader:
+                total += 1
+                try:
+                    lat = float(row.get("shape_pt_lat", 0) or 0)
+                    lon = float(row.get("shape_pt_lon", 0) or 0)
+                except ValueError:
+                    continue
+                if in_bbox(lat, lon):
+                    batch.append((
+                        row.get("shape_id",""),
+                        int(row.get("shape_pt_sequence", 0) or 0),
+                        lat, lon
+                    ))
+                    kept += 1
+                if len(batch) >= 20000:
+                    cur.executemany("INSERT INTO shapes VALUES(?,?,?,?)", batch)
+                    batch = []
+            if batch:
+                cur.executemany("INSERT INTO shapes VALUES(?,?,?,?)", batch)
+            conn.commit()
+            print(f"  Shape body: {kept}/{total} v oblasti")
+
+    # ── Indexy pro rychlé hledání ───────────────────────────────────────────
+    print("  Vytvářím indexy…")
+    cur.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_stops_name   ON stops(stop_name);
+        CREATE INDEX IF NOT EXISTS idx_st_trip      ON stop_times(trip_id, stop_sequence);
+        CREATE INDEX IF NOT EXISTS idx_st_stop      ON stop_times(stop_id);
+        CREATE INDEX IF NOT EXISTS idx_trips_route  ON trips(route_id);
+        CREATE INDEX IF NOT EXISTS idx_shapes_id    ON shapes(shape_id, shape_pt_sequence);
+    """)
+    conn.commit()
+    conn.close()
+
+    size_mb = os.path.getsize(db_path) / 1024 / 1024
+    print(f"\n✅ Hotovo! Databáze: {db_path} ({size_mb:.1f} MB)")
+    print("   → Zkopíruj do složky projektu vedle interaktivnimapa.py")
+
+# ─── Hlavní vstup ─────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    zip_path = sys.argv[1] if len(sys.argv) > 1 else None
+    db_path  = sys.argv[2] if len(sys.argv) > 2 else OUTPUT_DB
+
+    if zip_path:
+        if not os.path.exists(zip_path):
+            print(f"❌ Soubor nenalezen: {zip_path}"); sys.exit(1)
+        print(f"📁 Používám lokální soubor: {zip_path}")
+        with open(zip_path, "rb") as f:
+            zip_bytes = f.read()
+    else:
+        zip_bytes = None
+        for url in GTFS_SOURCES:
+            try:
+                zip_bytes = download_zip(url)
+                break
+            except Exception as e:
+                print(f"  ⚠ Chyba: {e}")
+
+        if not zip_bytes:
+            print("\n❌ Nepodařilo se stáhnout GTFS data automaticky.")
+            print("   Stáhni ZIP ručně z jednoho z těchto zdrojů:")
+            for s in GTFS_SOURCES:
+                print(f"   - {s}")
+            print(f"\n   Pak spusť: python gtfs_nastroj.py stazeny_soubor.zip")
+            sys.exit(1)
+
+    process(zip_bytes, db_path)
