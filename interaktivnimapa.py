@@ -93,7 +93,7 @@ HTML_HISTORIE_INDEX = """
       </tbody>
     </table>
   </div>
-  <p style="color:#64748b; font-size:11px; margin-top:8px;">* Záznamy posledních 30 dní. Aktualizace každých 10s.</p>
+  <p style="color:#64748b; font-size:11px; margin-top:8px;">* Neomezená historie záznamů. Aktualizace každých 10s.</p>
 
   <script>
   let allData = [];
@@ -412,7 +412,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠 Domů</a>
     <a href="/provoz-idpk" class="n-btn n-provoz">🚌 IDPK</a>
     __AD_BTN__
-    <!-- SPZ Hledání -->
     <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
       <input id="spz-search-inp" type="text" placeholder="🔍 Hledat SPZ…"
         style="background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;padding:5px 10px;font-size:12px;width:130px;outline:none;"
@@ -531,13 +530,13 @@ if (IS_ADMIN) {
 // ─── MAP ──────────────────────────────────────────────────────────────────────
 var dLat=49.7384, dLng=13.3736, dZoom=12;
 var hp = window.location.hash.replace('#','').split(',');
-if(hp.length===2){ dLat=parseFloat(hp[0]); dLng=parseFloat(hp[1]); dZoom=17; }
+if(hp.length===2 && !isNaN(hp[0]) && !isNaN(hp[1]) && hp[0] !== "" && hp[1] !== ""){ dLat=parseFloat(hp[0]); dLng=parseFloat(hp[1]); dZoom=17; }
 var map = L.map('map',{zoomControl:false}).setView([dLat,dLng],dZoom);
 L.control.zoom({position:'bottomleft'}).addTo(map);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
 setTimeout(()=>map.invalidateSize(),300); // Oprava případného tmavého ekranu
 var ml = L.layerGroup().addTo(map);
-if(hp.length===2) L.circleMarker([dLat,dLng],{radius:28,color:'#ef4444',weight:2,opacity:.8,fillOpacity:.12}).addTo(map);
+if(hp.length===2 && !isNaN(hp[0]) && !isNaN(hp[1]) && hp[0] !== "" && hp[1] !== "") L.circleMarker([dLat,dLng],{radius:28,color:'#ef4444',weight:2,opacity:.8,fillOpacity:.12}).addTo(map);
 
 // ─── HUD + FOLLOW ─────────────────────────────────────────────────────────────
 let lastArr=[], followId=null, hudMin=false, followInflowId=null;
@@ -846,11 +845,11 @@ async function fetchBuses(){
       // Sledování otevřeného popupu
       marker._busId = bus.id;
       marker.on('popupopen',  () => { openPopupBusId = bus.id; });
-      marker.on('popupopen',  () => { openPopupBusId = bus.id; });
       marker.on('popupclose', () => {
         if(openPopupBusId===bus.id) openPopupBusId=null;
         // Skryj trasu jen kdyz NENI zpusobeno 10s refreshem
         if(!isRefreshing && activeRouteId===bus.id){ routeLayer.clearLayers(); activeRouteId=null; }
+      }); // Opravená závorka pro popupclose
 
       // ── Popup obsah ──────────────────────────────────────────────────────
       let spzH='', invTxt='', histBtn='';
@@ -914,7 +913,6 @@ async function fetchBuses(){
         popH += inputSt + `
           <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;">
             <strong style="color:#38bdf8;font-size:11px;letter-spacing:.5px;">⚙ ADMIN PANEL</strong>
-            <!-- SPZ řádek -->
             <div style="display:flex;gap:5px;margin-top:8px;">
               <input type="text" id="adm_spz_${bus.id}" value="${_cachedSpz}" data-orig="${_origSpz}" placeholder="SPZ" class="adm-inp" style="width:55%;margin-top:0;">
               <button onclick="adminSetSPZ('${bus.id}')" style="width:45%;background:#10b981;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">💾 Uložit</button>
@@ -923,7 +921,6 @@ async function fetchBuses(){
               <button onclick="adminRecheck('${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">🔍 Hledat SPZ</button>
               <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">🗑 Smazat</button>
             </div>
-            <!-- Status + barva -->
             <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
               <input type="text" id="adm_st_${bus.id}" value="${_cachedSt}" data-orig="${bus.status}" placeholder="Status text…" class="adm-inp">
               <select id="adm_col_${bus.id}" class="adm-inp" style="margin-top:4px;">
@@ -937,15 +934,12 @@ async function fetchBuses(){
                 <option value="bg-orange"   ${bus.color_class==='bg-orange'?'selected':''}>Oranžová</option>
                 <option value="bg-bug"      ${bus.color_class==='bg-bug'?'selected':''}>Bug</option>
               </select>
-              <!-- Poznámka -->
               <input type="text" id="adm_note_${bus.id}" value="${_cachedNote}" data-orig="${bus.admin_note||''}" placeholder="📝 Poznámka (volitelně)…" class="adm-inp" style="margin-top:4px;">
-              <!-- Tlačítka uložení -->
               <div style="display:flex;gap:5px;margin-top:6px;">
                 <button onclick="adminSaveAll('${bus.id}',true)"  class="adm-btn" style="flex:1;background:#1e40af;color:white;">🔒 Trvalá</button>
                 <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏵ Dočasná</button>
               </div>
             </div>
-            <!-- Admin flag + reset -->
             <div style="display:flex;align-items:center;gap:8px;margin-top:7px;padding-top:6px;border-top:1px solid #1e293b;">
               <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#93c5fd;flex:1;touch-action:manipulation;">
                 <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:16px;height:16px;cursor:pointer;">
@@ -1140,16 +1134,7 @@ def upsert_to_history(db, c):
     TRACKED_SPZS.add(spz)
     spz_verified = c.get("spz_verified", False)
     jr_l = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={c['inflow_id']}&currentStopId=0"
-    # Počítadlo jízd
-    run_count = 0
-    try:
-        line_base = re.sub(r'/.*', '', final_linka).strip()
-        cnt_resp  = db.table("bus_history").select("trip_id").eq("spz", spz)\
-                      .ilike("linka", f"{line_base}%").execute()
-        existing  = {r["trip_id"] for r in (cnt_resp.data or [])}
-        run_count = len(existing) + (0 if c["trip_id"] in existing else 1)
-    except Exception:
-        pass
+    
     try:
         data = {
             "trip_id":         c["trip_id"],
@@ -1163,7 +1148,6 @@ def upsert_to_history(db, c):
             "last_lat":        c.get("lat"),
             "last_lng":        c.get("lng"),
             "status":          c.get("status"),
-            "run_count":       run_count,
             "created_at":      c["created_at"].isoformat(),
             "updated_at":      get_prague_time().isoformat(),
         }
@@ -1237,7 +1221,9 @@ def background_map_worker():
             if db_client and (now - last_db_cleanup).total_seconds() > 86400:
                 try:
                     thirty_days_ago = (now - timedelta(days=30)).isoformat()
-                    db_client.table("bus_history").delete().lt("created_at", thirty_days_ago).execute()
+                    # ZAKOMENTOVÁNO: aby se staré záznamy nemazaly
+                    # db_client.table("bus_history").delete().lt("created_at", thirty_days_ago).execute()
+                    pass
                 except Exception:
                     pass
                 last_db_cleanup = now
@@ -1550,7 +1536,7 @@ def background_map_worker():
                                     try:
                                         db_client.table("bus_history").update({"status":"Falešný záznam (SPZ opravena)","spz_verified":False}).eq("trip_id",c["trip_id"]).execute()
                                     except Exception: pass
-                                    TRIP_COUNTER += 1; c["trip_id"] = f"TRIP-{TRIP_COUNTER}"
+                                TRIP_COUNTER += 1; c["trip_id"] = f"TRIP-{TRIP_COUNTER}"
                                 c["spz"] = best_spz; c["spz_stable_ticks"] = 1; c["spz_verified"] = False; c["spz_locked"] = False
                                 if best_match_dest: c["spz_last_verified"] = now
                         # Lock po 2 shodách polohy – bez požadavku na shodu cíle
@@ -1938,59 +1924,41 @@ def _geocode_stop(stop_name):
     return None
 
 
-
-
 def _fetch_tt_stops(bus_id):
-    """Nacte sekvenci zastavek z JR PVVD."""
     stop_names, stop_times, current_idx = [], [], 0
     try:
         cb   = int(time.time() * 1000)
-        hdrs = {
-            "User-Agent":       "Mozilla/5.0",
-            "X-Requested-With": "XMLHttpRequest",
-            "Referer":          "https://pvvd.idpk.cz/",
-        }
-        url = "https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={}&currentStopId=0&_={}".format(bus_id, cb)
+        hdrs = {"User-Agent": "Mozilla/5.0", "X-Requested-With": "XMLHttpRequest", "Referer": "https://pvvd.idpk.cz/"}
+        url  = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb}"
         with opener.open(urllib.request.Request(url, headers=hdrs), timeout=5) as r:
             tt = r.read().decode("utf-8")
-
-        import html as _html
-        for row_m in re.finditer(r'<tr[^>]*>(.*?)</tr>', tt, re.DOTALL | re.IGNORECASE):
-            cells = [re.sub(r'<[^>]+>', '', c_).strip()
-                     for c_ in re.findall(r'<td[^>]*>(.*?)</td>',
-                                          row_m.group(1), re.DOTALL | re.IGNORECASE)]
-            if cells and cells[0] and len(cells[0]) > 1:
-                stop_names.append(_html.unescape(cells[0]))
+        for row in re.findall(r'<tr[^>]*>(.*?)</tr>', tt, re.DOTALL | re.IGNORECASE):
+            cells = [re.sub(r'<[^>]+>', '', x).strip()
+                     for x in re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL | re.IGNORECASE)]
+            if len(cells) >= 1 and cells[0] and len(cells[0]) > 1:
+                stop_names.append(cells[0])
                 stop_times.append(cells[1] if len(cells) > 1 else "")
-
-        # Najdi aktualni zastavku (oznacena trida "current")
-        for cur_m in re.finditer(r'class=["\']current[^"\']*["\'][^>]*>(.*?)</tr>',
-                                  tt, re.DOTALL | re.IGNORECASE):
-            tds = re.findall(r'<td[^>]*>(.*?)</td>', cur_m.group(1), re.DOTALL | re.IGNORECASE)
-            if tds:
-                cur_name = re.sub(r'<[^>]+>', '', tds[0]).strip()
-                for i, s in enumerate(stop_names):
-                    if s.lower() == cur_name.lower():
-                        current_idx = i
-                        break
-            break
+        cur_m = re.findall(r"""class=["']current["'][^>]*>.*?<td[^>]*>(.*?)</td>""", tt, re.DOTALL | re.IGNORECASE)
+        if cur_m:
+            cur = re.sub(r'<[^>]+>', '', cur_m[0]).strip()
+            for i, s in enumerate(stop_names):
+                if s.lower() == cur.lower():
+                    current_idx = i; break
     except Exception as e:
-        print("[ROUTE] JR fetch chyba: {}".format(e))
+        print(f"[ROUTE] JR fetch chyba: {e}")
     return stop_names, stop_times, current_idx
 
 
 @mapa_bp.route('/api/bus_route/<bus_id>')
 def api_bus_route(bus_id):
-    """Experimentalni: vraci zastávky s GPS pro vykresleni trasy."""
     c = GLOBAL_BUS_CACHE.get(bus_id)
     if not c:
-        return jsonify({"stops": [], "error": "Bus nenalezen v cache"})
+        return jsonify({"stops": [], "error": "Bus nenalezen"})
 
     stop_names, stop_times, current_idx = _fetch_tt_stops(bus_id)
     if not stop_names:
-        return jsonify({"stops": [], "error": "Zastavky nenalezeny v JR PVVD"})
+        return jsonify({"stops": [], "error": "Zastávky nenalezeny v JR"})
 
-    # --- GTFS SQLite (presne GPS polohy) ---
     if os.path.exists(GTFS_DB_PATH):
         try:
             import sqlite3 as _sq
@@ -1998,73 +1966,39 @@ def api_bus_route(bus_id):
             conn.row_factory = _sq.Row
             cur  = conn.cursor()
             result = []
-            seen   = {}    # nazev -> posledni lat/lng (pro duplicity)
-
+            seen   = set()
             for i, (name, t) in enumerate(zip(stop_names, stop_times)):
                 name_c = name.strip()
-
-                # Duplicitni nazev – posun o drobek aby se zobrazil
                 if name_c in seen:
-                    prev_lat, prev_lng = seen[name_c]
-                    result.append({
-                        "name":   name_c,
-                        "time":   t,
-                        "lat":    prev_lat + 0.00001 * (i % 5 + 1) if prev_lat else None,
-                        "lng":    prev_lng,
-                        "passed": i < current_idx,
-                    })
+                    prev = result[-1] if result else None
+                    if prev and prev["lat"]:
+                        result.append({"name": name_c, "time": t,
+                                       "lat": prev["lat"] + 0.00001,
+                                       "lng": prev["lng"],
+                                       "passed": i < current_idx})
                     continue
-
-                # Presna shoda
-                cur.execute(
-                    "SELECT stop_lat, stop_lon FROM stops WHERE stop_name = ? LIMIT 1",
-                    (name_c,)
-                )
+                seen.add(name_c)
+                cur.execute("SELECT stop_lat, stop_lon FROM stops WHERE stop_name = ? LIMIT 1", (name_c,))
                 row = cur.fetchone()
-
-                # Castecna shoda (prvni slovo)
-                if not row and name_c:
-                    word = name_c.split()[0]
-                    if len(word) > 3:
-                        cur.execute(
-                            "SELECT stop_lat, stop_lon FROM stops WHERE stop_name LIKE ? LIMIT 1",
-                            (word + "%",)
-                        )
-                        row = cur.fetchone()
-
-                lat = row["stop_lat"] if row else None
-                lng = row["stop_lon"] if row else None
-                seen[name_c] = (lat, lng)
-                result.append({
-                    "name":   name_c,
-                    "time":   t,
-                    "lat":    lat,
-                    "lng":    lng,
-                    "passed": i < current_idx,
-                })
-
+                if not row:
+                    word = name_c.split()[0] if name_c else name_c
+                    cur.execute("SELECT stop_lat, stop_lon FROM stops WHERE stop_name LIKE ? LIMIT 1", (f"{word}%",))
+                    row = cur.fetchone()
+                result.append({"name": name_c, "time": t,
+                               "lat":  row["stop_lat"] if row else None,
+                               "lng":  row["stop_lon"] if row else None,
+                               "passed": i < current_idx})
             conn.close()
-            found = sum(1 for s in result if s["lat"])
-            print("[ROUTE] GTFS: {}/{} zastavek nalezeno".format(found, len(result)))
-            return jsonify({
-                "stops":  result,
-                "bus_id": bus_id,
-                "source": "gtfs",
-                "found":  found,
-                "total":  len(result),
-            })
+            return jsonify({"stops": result, "bus_id": bus_id, "source": "gtfs",
+                            "found": sum(1 for s in result if s["lat"]), "total": len(result)})
         except Exception as e:
-            print("[ROUTE] GTFS chyba: {}".format(e))
+            print(f"[ROUTE] GTFS chyba: {e}")
 
-    # --- Fallback: Nominatim geocoding ---
     result = []
     for i, (name, t) in enumerate(zip(stop_names[:20], stop_times[:20])):
         coords = _geocode_stop(name)
-        result.append({
-            "name":   name,
-            "time":   t,
-            "lat":    coords[0] if coords else None,
-            "lng":    coords[1] if coords else None,
-            "passed": i < current_idx,
-        })
+        result.append({"name": name, "time": t,
+                       "lat":  coords[0] if coords else None,
+                       "lng":  coords[1] if coords else None,
+                       "passed": i < current_idx})
     return jsonify({"stops": result, "bus_id": bus_id, "source": "nominatim"})
