@@ -1177,6 +1177,30 @@ def background_map_worker():
     print("[MAPA] Worker startuje...", flush=True)
     WORKER_START_TIME = get_prague_time()
 
+    # ── Auto-download GTFS DB z GitHub releases (pokud chybí) ────────────────
+    if not os.path.exists(GTFS_DB_PATH):
+        try:
+            print(f"[GTFS] DB nenalezena, stahuji z {GTFS_RELEASE_URL} ...", flush=True)
+            tmp = GTFS_DB_PATH + ".tmp"
+            headers = {"User-Agent": "OIS-IDPK/1.0"}
+            req = urllib.request.Request(GTFS_RELEASE_URL, headers=headers)
+            with urllib.request.urlopen(req, timeout=120) as r, open(tmp, "wb") as f:
+                downloaded = 0
+                while True:
+                    chunk = r.read(1024 * 256)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+            os.rename(tmp, GTFS_DB_PATH)
+            print(f"[GTFS] Stazeno: {os.path.getsize(GTFS_DB_PATH)//1024//1024} MB", flush=True)
+        except Exception as e:
+            print(f"[GTFS] Chyba stazování: {e}", flush=True)
+            if os.path.exists(GTFS_DB_PATH + ".tmp"):
+                os.remove(GTFS_DB_PATH + ".tmp")
+    else:
+        print(f"[GTFS] DB nalezena: {os.path.getsize(GTFS_DB_PATH)//1024//1024} MB", flush=True)
+
     db_client = get_db_client()
     if db_client:
         try:
@@ -1672,22 +1696,33 @@ def start_map_background_task():
 
 # ─── FLASK ROUTES ─────────────────────────────────────────────────────────────
 
+GTFS_DB_PATH     = "gtfs_stops.db"
+GTFS_RELEASE_URL = "https://github.com/marek-1cz/DataCoreBot/releases/download/V.2/gtfs_stops.db"
+
 def _full_page(title, body_html, is_map=False):
     extra = 'overflow:hidden;' if is_map else ''
-    # Leaflet CSS musí být v <head> - jinak mapa zobrazí jen tmavou obrazovku
-    map_head = (
-        '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>'
-        '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>'
-    ) if is_map else ''
+    map_head = ""
+    if is_map:
+        map_head = """
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;color:white;}
+    #map-wrap{position:fixed;top:0;left:0;width:100vw;height:100vh;}
+    #map{position:absolute;top:0;left:0;width:100%;height:100% !important;min-height:100vh;z-index:1;}
+  </style>"""
     return Response(
-        f"""<!DOCTYPE html><html style="background:#0f172a;{extra}">
+        f"""<!DOCTYPE html>
+<html style="background:#0f172a;">
 <head>
 <title>{title} | OIS IDPK</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {map_head}
 </head>
-<body style="background:#0f172a;color:white;{extra}margin:0;padding:0;">{body_html}</body></html>""",
+<body style="background:#0f172a;color:white;{extra}margin:0;padding:0;">{body_html}</body>
+</html>""",
         mimetype='text/html'
     )
 
@@ -1903,47 +1938,81 @@ def _geocode_stop(stop_name):
     return None
 
 
+def _fetch_tt_stops(bus_id):
+    stop_names, stop_times, current_idx = [], [], 0
+    try:
+        cb   = int(time.time() * 1000)
+        hdrs = {"User-Agent": "Mozilla/5.0", "X-Requested-With": "XMLHttpRequest", "Referer": "https://pvvd.idpk.cz/"}
+        url  = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb}"
+        with opener.open(urllib.request.Request(url, headers=hdrs), timeout=5) as r:
+            tt = r.read().decode("utf-8")
+        for row in re.findall(r'<tr[^>]*>(.*?)</tr>', tt, re.DOTALL | re.IGNORECASE):
+            cells = [re.sub(r'<[^>]+>', '', x).strip()
+                     for x in re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL | re.IGNORECASE)]
+            if len(cells) >= 1 and cells[0] and len(cells[0]) > 1:
+                stop_names.append(cells[0])
+                stop_times.append(cells[1] if len(cells) > 1 else "")
+        cur_m = re.findall(r'class=["\''current["\''][^>]*>.*?<td[^>]*>(.*?)</td>', tt, re.DOTALL | re.IGNORECASE)
+        if cur_m:
+            cur = re.sub(r'<[^>]+>', '', cur_m[0]).strip()
+            for i, s in enumerate(stop_names):
+                if s.lower() == cur.lower():
+                    current_idx = i; break
+    except Exception as e:
+        print(f"[ROUTE] JR fetch chyba: {e}")
+    return stop_names, stop_times, current_idx
+
+
 @mapa_bp.route('/api/bus_route/<bus_id>')
 def api_bus_route(bus_id):
     c = GLOBAL_BUS_CACHE.get(bus_id)
     if not c:
         return jsonify({"stops": [], "error": "Bus nenalezen"})
-    stop_names = []
-    stop_times  = []
-    current_idx = 0
-    try:
-        cb  = int(time.time() * 1000)
-        hdrs = {"User-Agent": "Mozilla/5.0", "X-Requested-With": "XMLHttpRequest", "Referer": "https://pvvd.idpk.cz/"}
-        url  = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb}"
-        req  = urllib.request.Request(url, headers=hdrs)
-        with opener.open(req, timeout=5) as r:
-            tt = r.read().decode("utf-8")
-        rows = re.findall(r'<tr[^>]*>(.*?)</tr>', tt, re.DOTALL | re.IGNORECASE)
-        for row in rows:
-            cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL | re.IGNORECASE)
-            cells = [re.sub(r'<[^>]+>', '', x).strip() for x in cells]
-            if len(cells) >= 1 and cells[0] and len(cells[0]) > 1:
-                stop_names.append(cells[0])
-                stop_times.append(cells[1] if len(cells) > 1 else "")
-        cur_m = re.findall(r'class=["\']current["\'][^>]*>.*?<td[^>]*>(.*?)</td>', tt, re.DOTALL | re.IGNORECASE)
-        if cur_m:
-            cur = re.sub(r'<[^>]+>', '', cur_m[0]).strip()
-            for i, s in enumerate(stop_names):
-                if s.lower() == cur.lower():
-                    current_idx = i
-                    break
-    except Exception as e:
-        print(f"[ROUTE] JR chyba: {e}")
+
+    stop_names, stop_times, current_idx = _fetch_tt_stops(bus_id)
     if not stop_names:
         return jsonify({"stops": [], "error": "Zastávky nenalezeny v JR"})
+
+    if os.path.exists(GTFS_DB_PATH):
+        try:
+            import sqlite3 as _sq
+            conn = _sq.connect(GTFS_DB_PATH)
+            conn.row_factory = _sq.Row
+            cur  = conn.cursor()
+            result = []
+            seen   = set()
+            for i, (name, t) in enumerate(zip(stop_names, stop_times)):
+                name_c = name.strip()
+                if name_c in seen:
+                    prev = result[-1] if result else None
+                    if prev and prev["lat"]:
+                        result.append({"name": name_c, "time": t,
+                                       "lat": prev["lat"] + 0.00001,
+                                       "lng": prev["lng"],
+                                       "passed": i < current_idx})
+                    continue
+                seen.add(name_c)
+                cur.execute("SELECT stop_lat, stop_lon FROM stops WHERE stop_name = ? LIMIT 1", (name_c,))
+                row = cur.fetchone()
+                if not row:
+                    word = name_c.split()[0] if name_c else name_c
+                    cur.execute("SELECT stop_lat, stop_lon FROM stops WHERE stop_name LIKE ? LIMIT 1", (f"{word}%",))
+                    row = cur.fetchone()
+                result.append({"name": name_c, "time": t,
+                               "lat":  row["stop_lat"] if row else None,
+                               "lng":  row["stop_lon"] if row else None,
+                               "passed": i < current_idx})
+            conn.close()
+            return jsonify({"stops": result, "bus_id": bus_id, "source": "gtfs",
+                            "found": sum(1 for s in result if s["lat"]), "total": len(result)})
+        except Exception as e:
+            print(f"[ROUTE] GTFS chyba: {e}")
+
     result = []
     for i, (name, t) in enumerate(zip(stop_names[:20], stop_times[:20])):
         coords = _geocode_stop(name)
-        result.append({
-            "name":   name,
-            "time":   t,
-            "lat":    coords[0] if coords else None,
-            "lng":    coords[1] if coords else None,
-            "passed": i < current_idx,
-        })
-    return jsonify({"stops": result, "bus_id": bus_id})
+        result.append({"name": name, "time": t,
+                       "lat":  coords[0] if coords else None,
+                       "lng":  coords[1] if coords else None,
+                       "passed": i < current_idx})
+    return jsonify({"stops": result, "bus_id": bus_id, "source": "nominatim"})
