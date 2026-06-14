@@ -1938,7 +1938,7 @@ def _fetch_tt_stops(bus_id):
             if len(cells) >= 1 and cells[0] and len(cells[0]) > 1:
                 stop_names.append(cells[0])
                 stop_times.append(cells[1] if len(cells) > 1 else "")
-        cur_m = re.findall(r'class=["\''current["\''][^>]*>.*?<td[^>]*>(.*?)</td>', tt, re.DOTALL | re.IGNORECASE)
+        cur_m = re.findall(r"""class=["']current["'][^>]*>.*?<td[^>]*>(.*?)</td>""", tt, re.DOTALL | re.IGNORECASE)
         if cur_m:
             cur = re.sub(r'<[^>]+>', '', cur_m[0]).strip()
             for i, s in enumerate(stop_names):
