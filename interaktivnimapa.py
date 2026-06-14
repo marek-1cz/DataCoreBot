@@ -93,7 +93,7 @@ HTML_HISTORIE_INDEX = """
       </tbody>
     </table>
   </div>
-  <p style="color:#64748b; font-size:11px; margin-top:8px;">* Záznamy posledních 30 dní. Aktualizace každých 10s.</p>
+  <p style="color:#64748b; font-size:11px; margin-top:8px;">* Neomezená historie záznamů. Aktualizace každých 10s.</p>
 
   <script>
   let allData = [];
@@ -849,7 +849,7 @@ async function fetchBuses(){
         if(openPopupBusId===bus.id) openPopupBusId=null;
         // Skryj trasu jen kdyz NENI zpusobeno 10s refreshem
         if(!isRefreshing && activeRouteId===bus.id){ routeLayer.clearLayers(); activeRouteId=null; }
-      }); // ZDE CHYBĚLO UZAVŘENÍ ZÁVOREK!!!
+      }); // Opravená závorka pro popupclose
 
       // ── Popup obsah ──────────────────────────────────────────────────────
       let spzH='', invTxt='', histBtn='';
@@ -1134,16 +1134,7 @@ def upsert_to_history(db, c):
     TRACKED_SPZS.add(spz)
     spz_verified = c.get("spz_verified", False)
     jr_l = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={c['inflow_id']}&currentStopId=0"
-    # Počítadlo jízd
-    run_count = 0
-    try:
-        line_base = re.sub(r'/.*', '', final_linka).strip()
-        cnt_resp  = db.table("bus_history").select("trip_id").eq("spz", spz)\
-                      .ilike("linka", f"{line_base}%").execute()
-        existing  = {r["trip_id"] for r in (cnt_resp.data or [])}
-        run_count = len(existing) + (0 if c["trip_id"] in existing else 1)
-    except Exception:
-        pass
+    
     try:
         data = {
             "trip_id":         c["trip_id"],
@@ -1157,7 +1148,6 @@ def upsert_to_history(db, c):
             "last_lat":        c.get("lat"),
             "last_lng":        c.get("lng"),
             "status":          c.get("status"),
-            "run_count":       run_count,
             "created_at":      c["created_at"].isoformat(),
             "updated_at":      get_prague_time().isoformat(),
         }
@@ -1231,7 +1221,9 @@ def background_map_worker():
             if db_client and (now - last_db_cleanup).total_seconds() > 86400:
                 try:
                     thirty_days_ago = (now - timedelta(days=30)).isoformat()
-                    db_client.table("bus_history").delete().lt("created_at", thirty_days_ago).execute()
+                    # ZAKOMENTOVÁNO: aby se staré záznamy nemazaly
+                    # db_client.table("bus_history").delete().lt("created_at", thirty_days_ago).execute()
+                    pass
                 except Exception:
                     pass
                 last_db_cleanup = now
