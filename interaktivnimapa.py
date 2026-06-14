@@ -412,7 +412,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠 Domů</a>
     <a href="/provoz-idpk" class="n-btn n-provoz">🚌 IDPK</a>
     __AD_BTN__
-    <!-- SPZ Hledání -->
     <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
       <input id="spz-search-inp" type="text" placeholder="🔍 Hledat SPZ…"
         style="background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;padding:5px 10px;font-size:12px;width:130px;outline:none;"
@@ -531,13 +530,13 @@ if (IS_ADMIN) {
 // ─── MAP ──────────────────────────────────────────────────────────────────────
 var dLat=49.7384, dLng=13.3736, dZoom=12;
 var hp = window.location.hash.replace('#','').split(',');
-if(hp.length===2){ dLat=parseFloat(hp[0]); dLng=parseFloat(hp[1]); dZoom=17; }
+if(hp.length===2 && !isNaN(hp[0]) && !isNaN(hp[1]) && hp[0] !== "" && hp[1] !== ""){ dLat=parseFloat(hp[0]); dLng=parseFloat(hp[1]); dZoom=17; }
 var map = L.map('map',{zoomControl:false}).setView([dLat,dLng],dZoom);
 L.control.zoom({position:'bottomleft'}).addTo(map);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
 setTimeout(()=>map.invalidateSize(),300); // Oprava případného tmavého ekranu
 var ml = L.layerGroup().addTo(map);
-if(hp.length===2) L.circleMarker([dLat,dLng],{radius:28,color:'#ef4444',weight:2,opacity:.8,fillOpacity:.12}).addTo(map);
+if(hp.length===2 && !isNaN(hp[0]) && !isNaN(hp[1]) && hp[0] !== "" && hp[1] !== "") L.circleMarker([dLat,dLng],{radius:28,color:'#ef4444',weight:2,opacity:.8,fillOpacity:.12}).addTo(map);
 
 // ─── HUD + FOLLOW ─────────────────────────────────────────────────────────────
 let lastArr=[], followId=null, hudMin=false, followInflowId=null;
@@ -846,11 +845,11 @@ async function fetchBuses(){
       // Sledování otevřeného popupu
       marker._busId = bus.id;
       marker.on('popupopen',  () => { openPopupBusId = bus.id; });
-      marker.on('popupopen',  () => { openPopupBusId = bus.id; });
       marker.on('popupclose', () => {
         if(openPopupBusId===bus.id) openPopupBusId=null;
         // Skryj trasu jen kdyz NENI zpusobeno 10s refreshem
         if(!isRefreshing && activeRouteId===bus.id){ routeLayer.clearLayers(); activeRouteId=null; }
+      }); // ZDE CHYBĚLO UZAVŘENÍ ZÁVOREK!!!
 
       // ── Popup obsah ──────────────────────────────────────────────────────
       let spzH='', invTxt='', histBtn='';
@@ -914,7 +913,6 @@ async function fetchBuses(){
         popH += inputSt + `
           <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;">
             <strong style="color:#38bdf8;font-size:11px;letter-spacing:.5px;">⚙ ADMIN PANEL</strong>
-            <!-- SPZ řádek -->
             <div style="display:flex;gap:5px;margin-top:8px;">
               <input type="text" id="adm_spz_${bus.id}" value="${_cachedSpz}" data-orig="${_origSpz}" placeholder="SPZ" class="adm-inp" style="width:55%;margin-top:0;">
               <button onclick="adminSetSPZ('${bus.id}')" style="width:45%;background:#10b981;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">💾 Uložit</button>
@@ -923,7 +921,6 @@ async function fetchBuses(){
               <button onclick="adminRecheck('${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">🔍 Hledat SPZ</button>
               <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">🗑 Smazat</button>
             </div>
-            <!-- Status + barva -->
             <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
               <input type="text" id="adm_st_${bus.id}" value="${_cachedSt}" data-orig="${bus.status}" placeholder="Status text…" class="adm-inp">
               <select id="adm_col_${bus.id}" class="adm-inp" style="margin-top:4px;">
@@ -937,15 +934,12 @@ async function fetchBuses(){
                 <option value="bg-orange"   ${bus.color_class==='bg-orange'?'selected':''}>Oranžová</option>
                 <option value="bg-bug"      ${bus.color_class==='bg-bug'?'selected':''}>Bug</option>
               </select>
-              <!-- Poznámka -->
               <input type="text" id="adm_note_${bus.id}" value="${_cachedNote}" data-orig="${bus.admin_note||''}" placeholder="📝 Poznámka (volitelně)…" class="adm-inp" style="margin-top:4px;">
-              <!-- Tlačítka uložení -->
               <div style="display:flex;gap:5px;margin-top:6px;">
                 <button onclick="adminSaveAll('${bus.id}',true)"  class="adm-btn" style="flex:1;background:#1e40af;color:white;">🔒 Trvalá</button>
                 <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏵ Dočasná</button>
               </div>
             </div>
-            <!-- Admin flag + reset -->
             <div style="display:flex;align-items:center;gap:8px;margin-top:7px;padding-top:6px;border-top:1px solid #1e293b;">
               <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#93c5fd;flex:1;touch-action:manipulation;">
                 <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:16px;height:16px;cursor:pointer;">
@@ -1550,7 +1544,7 @@ def background_map_worker():
                                     try:
                                         db_client.table("bus_history").update({"status":"Falešný záznam (SPZ opravena)","spz_verified":False}).eq("trip_id",c["trip_id"]).execute()
                                     except Exception: pass
-                                    TRIP_COUNTER += 1; c["trip_id"] = f"TRIP-{TRIP_COUNTER}"
+                                TRIP_COUNTER += 1; c["trip_id"] = f"TRIP-{TRIP_COUNTER}"
                                 c["spz"] = best_spz; c["spz_stable_ticks"] = 1; c["spz_verified"] = False; c["spz_locked"] = False
                                 if best_match_dest: c["spz_last_verified"] = now
                         # Lock po 2 shodách polohy – bez požadavku na shodu cíle
