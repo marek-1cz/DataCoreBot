@@ -55,7 +55,7 @@ HTML_HISTORIE_INDEX = """
 </details>
 <div id="statsBar" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px;"></div>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-  <h2 style="color:#38bdf8;margin:0;font-size:22px;"><i class="fas fa-database"></i> Databaze Sledovanych Vozu</h2>
+  <h2 style="color:#38bdf8;margin:0;font-size:22px;"><i class="fas fa-database"></i> 🗄️ Databaze Sledovanych Vozu</h2>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
     <select id="filterLine" style="background:#1e293b;color:white;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;">
       <option value="">Vsechny linky</option><option value="490">Linka 490</option><option value="496">Linka 496</option>
@@ -63,7 +63,7 @@ HTML_HISTORIE_INDEX = """
     <select id="filterStatus" style="background:#1e293b;color:white;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;">
       <option value="">Vsechny stavy</option><option value="Probiha">Probiha</option><option value="depo">V depu</option><option value="Ukonceno">Ukonceno</option>
     </select>
-    <input id="historySearch" type="text" placeholder="Hledat SPZ, linku..." style="background:#1e293b;color:white;border:1px solid #334155;border-radius:6px;padding:7px 12px;font-size:13px;min-width:200px;">
+    <input id="historySearch" type="text" placeholder="🔍 Hledat SPZ, linku..." style="background:#1e293b;color:white;border:1px solid #334155;border-radius:6px;padding:7px 12px;font-size:13px;min-width:200px;">
   </div>
 </div>
 <div style="background:#1e293b;border-radius:10px;border:1px solid #334155;overflow-x:auto;">
@@ -87,10 +87,10 @@ function renderStats(data){
   const ss=new Set(data.filter(r=>r.spz&&r.spz!=='Neznama').map(r=>r.spz));
   const total=data.length,active=data.filter(r=>!r.end_actual&&!r.status?.includes('Timeout')&&!r.status?.includes('depu')).length,depot=data.filter(r=>r.status?.includes('depu')||r.status?.includes('Vozovn')).length;
   document.getElementById('statsBar').innerHTML=`
-    <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#38bdf8;font-size:22px;font-weight:900;">${total}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">Zaznamu</div></div>
-    <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#f59e0b;font-size:22px;font-weight:900;">${ss.size}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">Unikatnich SPZ</div></div>
-    <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#10b981;font-size:22px;font-weight:900;">${active}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">Probiha</div></div>
-    <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#64748b;font-size:22px;font-weight:900;">${depot}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">V depu</div></div>`;
+    <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#38bdf8;font-size:22px;font-weight:900;">${total}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">📋 Zaznamu</div></div>
+    <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#f59e0b;font-size:22px;font-weight:900;">${ss.size}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">🚌 Unikatnich SPZ</div></div>
+    <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#10b981;font-size:22px;font-weight:900;">${active}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">📡 Probiha</div></div>
+    <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#64748b;font-size:22px;font-weight:900;">${depot}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">🏢 V depu</div></div>`;
 }
 function applyFilters(){
   const s=document.getElementById('historySearch').value.toLowerCase().trim();
@@ -155,13 +155,13 @@ loadIndex();setInterval(loadIndex,10000);
 
 HTML_HISTORIE_DETAIL = """
 <div style="padding:20px;max-width:1000px;margin:auto;font-family:sans-serif;">
-<a href="/historie" style="display:inline-block;margin-bottom:15px;padding:6px 14px;background:#334155;color:white;border-radius:6px;text-decoration:none;font-size:13px;">- Zpet</a>
+<a href="/historie" style="display:inline-block;margin-bottom:15px;padding:6px 14px;background:#334155;color:white;border-radius:6px;text-decoration:none;font-size:13px;">⬅️ Zpet</a>
 <div style="background:#dc2626;color:white;padding:15px;border-radius:8px;font-weight:bold;text-align:center;margin-bottom:20px;font-size:18px;border:2px solid #991b1b;">!!! DATA NEMUSI SEDET - STRANKA JE VE VYVOJI !!!</div>
 <div style="background:#1e293b;padding:20px;border-radius:10px;border:1px solid #38bdf8;margin-bottom:25px;">
-  <h2 style="color:white;margin:0 0 10px 0;font-size:28px;">Autobus SPZ: <span style="color:#f59e0b;">__SPZ__</span></h2>
+  <h2 style="color:white;margin:0 0 10px 0;font-size:28px;">🚌 Autobus SPZ: <span style="color:#f59e0b;">__SPZ__</span></h2>
   <div id="absoluteLastPos"><span style="color:#38bdf8;"><i class="fas fa-spinner fa-spin"></i> Nacitam...</span></div>
 </div>
-<h3 style="color:#38bdf8;margin-bottom:15px;"><i class="fas fa-route"></i> Odjete spoje</h3>
+<h3 style="color:#38bdf8;margin-bottom:15px;"><i class="fas fa-route"></i> 🚌 Odjete spoje</h3>
 <div style="background:#0f172a;border-radius:10px;border:1px solid #334155;overflow-x:auto;">
   <table style="width:100%;border-collapse:collapse;color:#cbd5e1;">
     <thead><tr style="background:#1e293b;">
@@ -278,16 +278,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     <a href="https://datacorebot.koyeb.app/" class="n-logo">
       <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png" alt="OIS IDPK">
     </a>
-    <div class="n-title"><div class="a"><i class="fas fa-map-marked-alt"></i> Interaktivni mapa</div><div class="b">Projekt OIS IDPK &nbsp;.&nbsp; Neoficialni</div></div>
+    <div class="n-title"><div class="a"><i class="fas fa-map-marked-alt"></i> 🗺️ Interaktivni mapa</div><div class="b">Projekt OIS IDPK &nbsp;.&nbsp; Neoficialni</div></div>
     <div class="n-warn">! Neni garantovana 100% presnost dat</div>
     <div class="n-sp"></div>
     <div id="admin-mode-badge" style="display:none;background:rgba(56,189,248,0.15);color:#38bdf8;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:bold;border:1px solid rgba(56,189,248,0.35);white-space:nowrap;flex-shrink:0;">Admin</div>
     <div class="n-clock"><span id="systemTimeClock">--:--:--</span></div>
-    <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">Domu</a>
-    <a href="/provoz-idpk" class="n-btn n-provoz">IDPK</a>
+    <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠 Domu</a>
+    <a href="/provoz-idpk" class="n-btn n-provoz">🚏 IDPK</a>
     __AD_BTN__
     <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
-      <input id="spz-search-inp" type="text" placeholder="Hledat SPZ..."
+      <input id="spz-search-inp" type="text" placeholder="🔍 Hledat SPZ..."
         style="background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;padding:5px 10px;font-size:12px;width:130px;outline:none;"
         oninput="spzSearch(this.value)" onblur="setTimeout(()=>document.getElementById('spz-results').innerHTML='',200)">
       <div id="spz-results" style="position:absolute;top:34px;right:0;background:#1e293b;border:1px solid #334155;border-radius:8px;min-width:230px;z-index:4000;box-shadow:0 8px 20px rgba(0,0,0,.7);max-height:220px;overflow-y:auto;"></div>
@@ -296,7 +296,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
   __ADMIN_BANNER__
   <div id="map"></div>
   <div id="sw">
-    <div style="font-size:17px;margin-bottom:3px;">Mapa se startuje</div>
+    <div style="font-size:17px;margin-bottom:3px;">🚍 Mapa se startuje</div>
     <div style="font-size:12px;font-weight:normal;opacity:.9;">Probiha nacitani dat - vyckejte prosim.</div>
     <div id="sw-cd" style="margin-top:5px;font-size:11px;opacity:.8;"></div>
   </div>
@@ -306,13 +306,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
   </div></div>
   <div id="hud">
     <div id="hf">
-      <div class="hh"><span class="hl">SLEDOVANI SPOJE</span><button class="hb-mn" onclick="minHud()">-</button></div>
+      <div class="hh"><span class="hl">📡 SLEDOVANI SPOJE</span><button class="hb-mn" onclick="minHud()">-</button></div>
       <div id="h-trip" class="ht">Spoj: -</div>
       <div id="h-dest" class="hd">Nacitam...</div>
       <div class="hr"><span style="color:#94a3b8;">SPZ:</span><span id="h-spz">-</span></div>
       <div class="hr"><span style="color:#94a3b8;">Zpozdeni:</span><span id="h-delay">-</span></div>
       <div class="hr"><span style="color:#94a3b8;">Status:</span><span id="h-status" style="color:#94a3b8;font-size:11px;">-</span></div>
-      <div class="hac"><button class="hb hb-jr" id="h-jr">JR</button><button class="hb hb-st" onclick="stopFollow()">Konec</button></div>
+      <div class="hac"><button class="hb hb-jr" id="h-jr">📋 JR</button><button class="hb hb-st" onclick="stopFollow()">✖️ Konec</button></div>
     </div>
     <div id="hm">
       <span style="color:#38bdf8;font-size:12px;font-weight:bold;">●</span>
@@ -433,7 +433,7 @@ function updateHud(b){
 // === JR MODAL ===
 async function showTT(busId){
   document.getElementById('ttm').classList.add('open');
-  document.getElementById('ttc').innerHTML="<div style='text-align:center;padding:40px;color:#38bdf8;'><i class='fas fa-circle-notch fa-spin fa-2x'></i><p style='margin-top:14px;font-weight:bold;'>Nacitam JR z PVVD...</p></div>";
+  document.getElementById('ttc').innerHTML="<div style='text-align:center;padding:40px;color:#38bdf8;'><i class='fas fa-circle-notch fa-spin fa-2x'></i><p style='margin-top:14px;font-weight:bold;'>📋 Nacitam JR z PVVD...</p></div>";
   try{let r=await fetch('/api/bus_detail/'+busId);document.getElementById('ttc').innerHTML=await r.text();}
   catch(e){document.getElementById('ttc').innerHTML="<p style='color:#ef4444;padding:20px;text-align:center;'>Chyba pri nacitani JR.</p>";}
 }
@@ -481,7 +481,7 @@ async function toggleRoute(busId){
   if(activeRouteId===busId){
     routeLayer.clearLayers();activeRouteId=null;
     let btn=document.getElementById('route-btn-'+busId);
-    if(btn){btn.textContent='Zobrazit trasu';btn.style.background='#334155';}
+    if(btn){btn.textContent='🗺️ Zobrazit trasu';btn.style.background='#334155';}
     return;
   }
   routeLayer.clearLayers();activeRouteId=busId;
@@ -497,7 +497,7 @@ async function toggleRoute(busId){
       let dC=stop.passed?'#475569':lC;
       let si=L.divIcon({className:'',html:`<div style="width:8px;height:8px;border-radius:50%;background:${dC};border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.5);"></div>`,iconSize:[8,8],iconAnchor:[4,4]});
       let m=L.marker([stop.lat,stop.lng],{icon:si,zIndexOffset:-100});
-      m.bindTooltip(`<b>${stop.name}</b>${stop.time?' / '+stop.time:''}`,{direction:'top',className:'dark-popup'});
+      m.bindTooltip(`<b>🚏 ${stop.name}</b>${stop.time?' / '+stop.time:''}`,{direction:'top',className:'dark-popup'});
       routeLayer.addLayer(m);
     });
     let coords=data.stops.filter(s=>s.lat&&s.lng).map(s=>[s.lat,s.lng]);
@@ -507,7 +507,7 @@ async function toggleRoute(busId){
       if(passed.length>=2)routeLayer.addLayer(L.polyline(passed,{color:'#475569',weight:3,opacity:0.5}));
     }
     let found=data.stops.filter(s=>s.lat).length;
-    if(btn){btn.textContent=`Skryt trasu (${found}/${data.stops.length} zast.)`;btn.style.background='#1e40af';}
+    if(btn){btn.textContent=`🗺️ Skryt trasu (${found}/${data.stops.length} zast.)`;btn.style.background='#1e40af';}
   }catch(e){if(btn){btn.textContent='Chyba nacitani';btn.style.background='#7f1d1d';}console.error('Route:',e);}
 }
 
@@ -567,15 +567,15 @@ async function fetchBuses(){
       if(!bus.is_train){
         if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
         else if(bus.spz&&bus.spz!=='Neznama'){
-          if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">Historie vozu</a>`;}
+          if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;}
           else{spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#f97316;color:#fff;border-color:#c2410c;">${bus.spz} <i class="fas fa-clock"></i></span></div>`;}
         }
         else spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Ceka na overeni</span></div>`;
       }
       let bugW='';
-      if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#374151;border:1px dashed #6b7280;border-radius:5px;padding:7px;margin:5px 0;color:#9ca3af;font-size:10px;text-align:center;"><b style="color:#f59e0b;">BUG - NEAKTUALNI MISTO</b><br>SPZ <b>${bS}</b> zamknuta (posledni znama pred zaseknutim), jede na jinem miste.</div>`;}
+      if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#374151;border:1px dashed #6b7280;border-radius:5px;padding:7px;margin:5px 0;color:#9ca3af;font-size:10px;text-align:center;"><b style="color:#f59e0b;">🐛 BUG - NEAKTUALNI MISTO</b><br>SPZ <b>${bS}</b> zamknuta (posledni znama pred zaseknutim), jede na jinem miste.</div>`;}
       let orangeW='';
-      if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>Vyzkum - bus byl zasekly, nyni jede</b></div>`;
+      if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>🔍 Vyzkum - bus byl zasekly, nyni jede</b></div>`;
       let sc='#10b981';
       if(mc==='bg-bug')sc='#6b7280';else if(mc==='bg-orange')sc='#f59e0b';
       else if(bus.status.includes('prilis'))sc='#94a3b8';else if(bus.status.includes('Stoji'))sc='#ef4444';
@@ -583,7 +583,7 @@ async function fetchBuses(){
       else if(bus.status.includes('Ceka')||bus.status.includes('Zacatek'))sc='#3b82f6';
       else if(bus.status.includes('Odstaven')||bus.status.includes('signal'))sc='#94a3b8';
       else if(bus.status.includes('Naskok'))sc='#60a5fa';
-      let fTxt=(followId===bus.id)?'Zrusit sledovani':'Sledovat';
+      let fTxt=(followId===bus.id)?'✖️ Zrusit sledovani':'📡 Sledovat';
       let fSt=(followId===bus.id)?'background:#ef4444;color:#fff;':'background:#3b82f6;color:#fff;';
       let afH=bus.admin_flag?'<span style="background:#1e40af;color:#93c5fd;padding:2px 7px;border-radius:10px;font-size:10px;margin-left:6px;font-weight:bold;">Admin uprava</span>':'';
       let rA=(activeRouteId===bus.id);
@@ -599,10 +599,10 @@ async function fetchBuses(){
           ${spzH}${invTxt}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
           <div class="pr" style="border:none;"><span class="pl">JR:</span><span class="pv">${dTxt}</span></div>
-          <button class="pa" onclick="showTT('${bus.id}')">Zobrazit Jizdni rad</button>
+          <button class="pa" onclick="showTT('${bus.id}')">📋 Zobrazit Jizdni rad</button>
           <button class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
           ${histBtn}
-          <button id="route-btn-${bus.id}" class="pa pa-d" style="margin-top:5px;${rA?'background:#1e40af;':''}" onclick="toggleRoute('${bus.id}')">${rA?'Skryt trasu':'Zobrazit trasu'}</button>
+          <button id="route-btn-${bus.id}" class="pa pa-d" style="margin-top:5px;${rA?'background:#1e40af;':''}" onclick="toggleRoute('${bus.id}')">${rA?'🗺️ Skryt trasu':'🗺️ Zobrazit trasu'}</button>
         </div>`;
 
       if(IS_ADMIN){
@@ -612,14 +612,14 @@ async function fetchBuses(){
         let cNote=restoreAdminInput(bus.id,'note')??(bus.admin_note||'');
         popH+=`<style>.adm-inp{width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:5px;padding:7px 8px;font-size:12px;margin-top:4px;}.adm-inp:focus{outline:none;border-color:#38bdf8;}.adm-btn{width:100%;padding:11px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;touch-action:manipulation;}</style>
           <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;">
-            <strong style="color:#38bdf8;font-size:11px;letter-spacing:.5px;">ADMIN PANEL</strong>
+            <strong style="color:#38bdf8;font-size:11px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
             <div style="display:flex;gap:5px;margin-top:8px;">
               <input type="text" id="adm_spz_${bus.id}" value="${cSpz}" data-orig="${oSpz}" placeholder="SPZ" class="adm-inp" style="width:55%;margin-top:0;">
-              <button onclick="adminSetSPZ('${bus.id}')" style="width:45%;background:#10b981;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">Ulozit</button>
+              <button onclick="adminSetSPZ('${bus.id}')" style="width:45%;background:#10b981;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">💾 Ulozit</button>
             </div>
             <div style="display:flex;gap:5px;margin-top:5px;">
-              <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">Hledat SPZ</button>
-              <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">Smazat</button>
+              <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">🔍 Hledat SPZ</button>
+              <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">🗑️ Smazat</button>
             </div>
             <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
               <input type="text" id="adm_st_${bus.id}" value="${cSt}" data-orig="${bus.status}" placeholder="Status text..." class="adm-inp">
@@ -636,8 +636,8 @@ async function fetchBuses(){
               </select>
               <input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznamka..." class="adm-inp" style="margin-top:4px;">
               <div style="display:flex;gap:5px;margin-top:6px;">
-                <button onclick="adminSaveAll('${bus.id}',true)" class="adm-btn" style="flex:1;background:#1e40af;color:white;">Trvala</button>
-                <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">Docasna</button>
+                <button onclick="adminSaveAll('${bus.id}',true)" class="adm-btn" style="flex:1;background:#1e40af;color:white;">📌 Trvala</button>
+                <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏱️ Docasna</button>
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:8px;margin-top:7px;padding-top:6px;border-top:1px solid #1e293b;">
@@ -645,7 +645,7 @@ async function fetchBuses(){
                 <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:16px;height:16px;cursor:pointer;">
                 Admin uprava
               </label>
-              <button onclick="adminAction('reset_admin','${bus.id}')" style="background:transparent;color:#64748b;border:1px solid #334155;border-radius:5px;font-size:11px;cursor:pointer;padding:5px 10px;touch-action:manipulation;">Reset</button>
+              <button onclick="adminAction('reset_admin','${bus.id}')" style="background:transparent;color:#64748b;border:1px solid #334155;border-radius:5px;font-size:11px;cursor:pointer;padding:5px 10px;touch-action:manipulation;">🔄 Reset</button>
             </div>
           </div>`;
       }
@@ -809,22 +809,58 @@ def _nearest_stop_name(lat, lon, max_m=400):
     return best_name if (best_d is not None and best_d <= max_m) else None
 
 
-def _lookup_stop_coords(name):
-    """GPS souradnice zastavky podle nazvu z GTFS. Nejdriv presna shoda, pak cast. shoda."""
+def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=40000):
+    """GPS souradnice zastavky podle nazvu z GTFS.
+
+    DULEZITE: stejny nazev zastavky ('Nova Ves', 'Chrastany', ...) existuje
+    v GTFS databazi desitky-kratkrat napric celou CR (databaze pokryva
+    cely bounding box, ne jen Plzensky kraj). Bez geograficke kotvy by se
+    vzdy vybrala jen prvni shoda v databazi - prakticky nahodne mesto.
+
+    `anchor` = (lat, lon) referencni bod (napr. aktualni poloha busu nebo
+    posledni uz vyresena zastavka na trase) - z VSECH kandidatu se stejnym
+    nazvem se vybere ten geograficky nejblizsi anchoru. Pokud i ten
+    nejblizsi kandidat je dal nez `max_anchor_dist_m`, povazuje se shoda za
+    nedukazpodobnou a vrati se None (radsi chybejici tecka nez spatne
+    umistena).
+    """
     if not GTFS_STOPS:
         return None
     key = _norm_txt(name)
     if not key:
         return None
+
+    def pick_best(idxs):
+        if not idxs:
+            return None
+        if not anchor or len(idxs) == 1:
+            _, la, lo = GTFS_STOPS[idxs[0]]
+            if anchor:
+                d = haversine_m(anchor[0], anchor[1], la, lo)
+                if d > max_anchor_dist_m:
+                    return None
+            return (la, lo)
+        best_coords, best_d = None, None
+        for idx in idxs:
+            _, la, lo = GTFS_STOPS[idx]
+            d = haversine_m(anchor[0], anchor[1], la, lo)
+            if best_d is None or d < best_d:
+                best_d, best_coords = d, (la, lo)
+        if best_d is not None and best_d > max_anchor_dist_m:
+            return None
+        return best_coords
+
     idxs = GTFS_NAME_IDX.get(key)
     if idxs:
-        _, la, lo = GTFS_STOPS[idxs[0]]
-        return (la, lo)
+        result = pick_best(idxs)
+        if result:
+            return result
+
     if len(key) > 3:
-        for n, la, lo in GTFS_STOPS:
-            nk = _norm_txt(n)
-            if nk and (key in nk or nk in key):
-                return (la, lo)
+        candidates = [idx for idx, (n, _, _) in enumerate(GTFS_STOPS)
+                      if (lambda nk: nk and (key in nk or nk in key))(_norm_txt(n))]
+        if candidates:
+            return pick_best(candidates)
     return None
 
 def get_db_client():
@@ -1511,8 +1547,8 @@ def _full_page(title, body_html, is_map=False):
 </html>""", mimetype='text/html')
 
 
-_AD_BTN_NORMAL = '<a href="/mapa_admin" class="n-btn n-ad">AD</a>'
-_AD_BTN_ADMIN  = '<a href="/mapa" class="n-btn n-back">Zp\u011bt</a>'
+_AD_BTN_NORMAL = '<a href="/mapa_admin" class="n-btn n-ad">🔧 AD</a>'
+_AD_BTN_ADMIN  = '<a href="/mapa" class="n-btn n-back">⬅️ Zp\u011bt</a>'
 
 
 @mapa_bp.route('/mapa')
@@ -1709,20 +1745,23 @@ def api_history_spz(spz):
 
 # === ROUTE BACKEND (GTFS in-memory + Nominatim fallback per zastavku) ===
 
-def _geocode_stop(stop_name):
-    """Nominatim geocoding - fallback pro zastavky ktere GTFS nema."""
-    key = stop_name.strip().lower()
+def _geocode_stop(stop_name, anchor=None):
+    """Nominatim geocoding - fallback pro zastavky ktere GTFS nema.
+    `anchor` (lat, lon) - pokud zadan, preferuje vysledek nejblizsi anchoru
+    misto pevneho stredu Plzne (presnejsi pro trasy mimo Plzensky kraj)."""
+    key = (stop_name.strip().lower(), anchor)
     if key in _stop_geo_cache:
         return _stop_geo_cache[key]
+    ref_lat, ref_lon = anchor if anchor else (49.74, 13.37)
     try:
         bbox = "viewbox=11.8%2C50.5%2C14.1%2C49.1&bounded=1"
         q = _uparse.quote(stop_name)
-        url = f"https://nominatim.openstreetmap.org/search?q={q}&format=json&limit=2&countrycodes=cz&{bbox}"
+        url = f"https://nominatim.openstreetmap.org/search?q={q}&format=json&limit=3&countrycodes=cz&{bbox}"
         req = urllib.request.Request(url, headers={"User-Agent": "OIS-IDPK/1.0"})
         with urllib.request.urlopen(req, timeout=3) as r:
             res = json.loads(r.read().decode())
         if res:
-            best = min(res, key=lambda x: abs(float(x["lat"]) - 49.74) + abs(float(x["lon"]) - 13.37))
+            best = min(res, key=lambda x: haversine_m(ref_lat, ref_lon, float(x["lat"]), float(x["lon"])))
             coords = (float(best["lat"]), float(best["lon"]))
             _stop_geo_cache[key] = coords
             return coords
@@ -1762,9 +1801,17 @@ def _fetch_tt_stops(bus_id):
 @mapa_bp.route('/api/bus_route/<bus_id>')
 def api_bus_route(bus_id):
     """Vrati seznam zastavek s GPS pro vykresleni trasy na mape.
-    
-    Opravena verze: pouziva GTFS in-memory index (nacten pri startu) pro kazdu zastavku,
-    s fallbackem na Nominatim pouze pro zastavky ktere GTFS nema (ne all-or-nothing).
+
+    Opravena verze: pouziva GTFS in-memory index (nacten pri startu) pro kazdou
+    zastavku, s fallbackem na Nominatim jen pro zastavky ktere GTFS nema.
+
+    DULEZITA OPRAVA presnosti: stejny nazev zastavky existuje v GTFS databazi
+    casto vicekrat napric celou CR (napr. "Nova Ves" 24x v ruznych mestech).
+    Aby se vzdy vybrala ta spravna (na trase tohoto busu, ne nahodne nekde
+    jinde v republice), se pouziva geograficka "kotva" (anchor), ktera se
+    postupne posouva podel trasy: zacina na aktualni poloze busu a po kazde
+    uspesne najdene zastavce se presune na jeji souradnice. Diky tomu zustava
+    vyber zastavek geograficky souvisly misto skakani po cele CR.
     """
     c = GLOBAL_BUS_CACHE.get(bus_id)
     if not c:
@@ -1778,6 +1825,7 @@ def api_bus_route(bus_id):
     gtfs_hits = 0
     nominatim_hits = 0
     seen = {}
+    anchor = (c.get("lat"), c.get("lng")) if c.get("lat") and c.get("lng") else None
 
     for i, (name, t) in enumerate(zip(stop_names, stop_times)):
         name_c = name.strip()
@@ -1796,27 +1844,32 @@ def api_bus_route(bus_id):
             continue
 
         coords = None
+        source = "unknown"
 
-        # 1) Zkus GTFS in-memory (rychle, bez sitoveho pozadavku)
+        # 1) Zkus GTFS in-memory (rychle, bez sitoveho pozadavku) - s geo kotvou
         if GTFS_LOADED:
-            coords = _lookup_stop_coords(name_c)
+            coords = _lookup_stop_coords(name_c, anchor=anchor)
             if coords:
                 gtfs_hits += 1
+                source = "gtfs"
 
-        # 2) Fallback: Nominatim jen pro tuto konkretni zastavku
+        # 2) Fallback: Nominatim jen pro tuto konkretni zastavku - take s kotvou
         if not coords:
-            coords = _geocode_stop(name_c)
+            coords = _geocode_stop(name_c, anchor=anchor)
             if coords:
                 nominatim_hits += 1
+                source = "nominatim"
 
         lat = coords[0] if coords else None
         lng = coords[1] if coords else None
         seen[name_c] = (lat, lng)
+        if coords:
+            anchor = coords  # posun kotvu na posledni uspesne nalezenou zastavku
         result.append({
             "name": name_c, "time": t,
             "lat": lat, "lng": lng,
             "passed": i < current_idx,
-            "source": "gtfs" if (coords and gtfs_hits and not nominatim_hits) else ("nominatim" if (coords and nominatim_hits) else "unknown"),
+            "source": source,
         })
 
     found = sum(1 for s in result if s["lat"])
