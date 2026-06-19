@@ -11,6 +11,8 @@ from zoneinfo import ZoneInfo
 import math
 import re
 import http.cookiejar
+import sqlite3
+import unicodedata
 
 try:
     from supabase import create_client
@@ -25,10 +27,14 @@ SPZ_HOLD_MINUTES      = 8
 SPZ_STABLE_TICKS      = 2
 GHOST_MAX_OFFLINE_MIN = 20
 GHOST_DIST_STRICT     = 0.010
-ARRIVA_MATCH_DIST     = 0.008
 DUPLICATE_GRACE_SEC   = 120
-GTFS_DB_PATH          = "gtfs_stops.db"
-GTFS_RELEASE_URL      = "https://github.com/marek-1cz/DataCoreBot/releases/download/V.2/gtfs_stops.db"
+
+# Cesta k GTFS db relativne k tomuto souboru (spolehlivejsi nez working dir)
+GTFS_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gtfs_stops.db")
+
+# Tolerance pro parovani SPZ v metrech (presnejsi nez stupne)
+ARRIVA_MATCH_DIST_M = 750   # max vzdalenost PVVD pozice od Arriva pozice same SPZ
+ARRIVA_STOP_MATCH_M = 400   # max vzdalenost k nejblizsi GTFS zastavce pro krizovou kontrolu
 
 # === HTML SABLONY ===
 
@@ -407,7 +413,10 @@ function updateHud(b){
   document.getElementById('h-trip').textContent='Spoj: '+(b.line||'?')+(b.trip_id?' / '+b.trip_id.replace('TRIP-','').substring(0,8):'');
   document.getElementById('h-dest').innerHTML='-> '+(b.destination||'Neznamy cil');
   let se=document.getElementById('h-spz');
-  if(b.spz&&b.spz!=='Neznama'){let i=b.spz_verified?'OK':'...',bg=b.spz_verified?'#f59e0b':'#f97316';se.innerHTML=`<span style="background:${bg};color:#0f172a;padding:1px 6px;border-radius:4px;font-weight:bold;">${b.spz} ${i}</span>`;}
+  if(b.spz&&b.spz!=='Neznama'){
+    if(b.spz_verified){se.innerHTML=`<span style="background:#f59e0b;color:#0f172a;padding:1px 7px;border-radius:4px;font-weight:bold;">${b.spz} <i class="fas fa-check"></i></span>`;}
+    else{se.innerHTML=`<span style="background:#f97316;color:#fff;padding:1px 7px;border-radius:4px;font-weight:bold;">${b.spz} <i class="fas fa-clock"></i></span>`;}
+  }
   else{se.innerHTML='<span style="color:#64748b;">Ceka...</span>';}
   let de=document.getElementById('h-delay'),dv=parseInt(b.delay);
   if(b.color_class==='bg-blue'){let dm=Math.abs(dv),dh=Math.floor(dm/60),dmin=dm%60;de.innerHTML=`<span style="color:#3b82f6;">Odjezd za ${dh>0?dh+'h ':''} ${dmin}min</span>`;}
@@ -480,7 +489,7 @@ async function toggleRoute(busId){
   if(btn){btn.textContent='Nacitam...';btn.style.background='#1e3a8a';}
   try{
     let r=await fetch('/api/bus_route/'+busId);let data=await r.json();
-    if(!data.stops||data.stops.length<2){if(btn){btn.textContent='Trasa nedostupna';btn.style.background='#7f1d1d';}return;}
+    if(!data.stops||data.stops.length<2){if(btn){btn.textContent=(data.error?'Trasa nedostupna ('+data.error+')':'Trasa nedostupna');btn.style.background='#7f1d1d';}return;}
     const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-bug':'#374151'};
     let bus=lastArr.find(b=>b.id===busId);let lC=bus?(cM[bus.color_class]||'#38bdf8'):'#38bdf8';
     data.stops.forEach(stop=>{
@@ -498,7 +507,7 @@ async function toggleRoute(busId){
       if(passed.length>=2)routeLayer.addLayer(L.polyline(passed,{color:'#475569',weight:3,opacity:0.5}));
     }
     let found=data.stops.filter(s=>s.lat).length;
-    if(btn){btn.textContent=`Skryt trasu (${found} zast.)`;btn.style.background='#1e40af';}
+    if(btn){btn.textContent=`Skryt trasu (${found}/${data.stops.length} zast.)`;btn.style.background='#1e40af';}
   }catch(e){if(btn){btn.textContent='Chyba nacitani';btn.style.background='#7f1d1d';}console.error('Route:',e);}
 }
 
@@ -556,12 +565,15 @@ async function fetchBuses(){
 
       let spzH='',invTxt='',histBtn='';
       if(!bus.is_train){
-        if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum</span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
-        else if(bus.spz&&bus.spz!=='Neznama'){let vi=bus.spz_verified?'OK':'...',vs=bus.spz_verified?'spz-b':'spz-b" style="background:#f97316;color:#fff;border-color:#c2410c;';spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv ${vs}">${bus.spz} ${vi}</span></div>`;if(bus.spz_verified)histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">Historie vozu</a>`;}
+        if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
+        else if(bus.spz&&bus.spz!=='Neznama'){
+          if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">Historie vozu</a>`;}
+          else{spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#f97316;color:#fff;border-color:#c2410c;">${bus.spz} <i class="fas fa-clock"></i></span></div>`;}
+        }
         else spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Ceka na overeni</span></div>`;
       }
       let bugW='';
-      if(mc==='bg-bug'){let bS=(bus.spz_verified&&bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#374151;border:1px dashed #6b7280;border-radius:5px;padding:7px;margin:5px 0;color:#9ca3af;font-size:10px;text-align:center;"><b style="color:#f59e0b;">BUG - NEAKTUALNI MISTO</b><br>SPZ <b>${bS}</b> jede na jinem miste.</div>`;}
+      if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#374151;border:1px dashed #6b7280;border-radius:5px;padding:7px;margin:5px 0;color:#9ca3af;font-size:10px;text-align:center;"><b style="color:#f59e0b;">BUG - NEAKTUALNI MISTO</b><br>SPZ <b>${bS}</b> zamknuta (posledni znama pred zaseknutim), jede na jinem miste.</div>`;}
       let orangeW='';
       if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>Vyzkum - bus byl zasekly, nyni jede</b></div>`;
       let sc='#10b981';
@@ -665,6 +677,14 @@ WORKER_START_TIME   = None
 ADMIN_DELETED_BUSES = {}
 _stop_geo_cache     = {}
 
+# ── GTFS zastavky v pameti ───────────────────────────────────────────────────
+GTFS_LOADED    = False
+GTFS_STOPS     = []          # list of (name, lat, lon)
+GTFS_NAME_IDX  = {}          # norm_name -> [indexy]
+GTFS_GRID      = {}          # (lat_bucket, lon_bucket) -> [indexy]
+GTFS_GRID_SZ   = 0.01        # ~1.1km dlazdice
+GTFS_STOP_CNT  = 0
+
 cj     = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
 
@@ -674,7 +694,7 @@ def get_prague_time():
 
 
 def is_same_line(l1, l2):
-    if not l1 or not l2 or l1 == "Neznámá" or l2 == "Neznámá":
+    if not l1 or not l2 or l1 == "Nezn\u00e1m\u00e1" or l2 == "Nezn\u00e1m\u00e1":
         return False
     b1 = str(l1).split('/')[0]
     b2 = str(l2).split('/')[0]
@@ -684,6 +704,128 @@ def is_same_line(l1, l2):
         return b1 == b2
     return cl1.endswith(cl2) or cl2.endswith(cl1)
 
+
+def _arriva_line_matches(local_line, b):
+    """Porovna linku z PVVD s linkNumberAlias i linkNumber z Arrivy."""
+    if is_same_line(local_line, b.get("linkNumber")):
+        return True
+    alias = b.get("linkNumberAlias")
+    if alias and is_same_line(local_line, str(alias)):
+        return True
+    return False
+
+
+def haversine_m(lat1, lon1, lat2, lon2):
+    """Vzdalenost mezi dvema GPS body v metrech."""
+    try:
+        lat1, lon1, lat2, lon2 = float(lat1), float(lon1), float(lat2), float(lon2)
+    except (TypeError, ValueError):
+        return float("inf")
+    R = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+    return 2 * R * math.asin(min(1.0, math.sqrt(a)))
+
+
+def _norm_txt(s):
+    """Normalizace textu pro porovnani (diakritika, mezery, velikost pismen)."""
+    if not s:
+        return ""
+    s = str(s).lower()
+    s = unicodedata.normalize('NFKD', s)
+    s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+    return re.sub(r'[^a-z0-9]+', '', s)
+
+
+def _gtfs_grid_key(lat, lon):
+    return (round(lat / GTFS_GRID_SZ), round(lon / GTFS_GRID_SZ))
+
+
+def _load_gtfs():
+    """Nacte gtfs_stops.db do pameti. Vola se jednou pri startu workeru."""
+    global GTFS_LOADED, GTFS_STOPS, GTFS_NAME_IDX, GTFS_GRID, GTFS_STOP_CNT
+    if not os.path.exists(GTFS_DB_PATH):
+        print(f"[GTFS] Soubor nenalezen: {GTFS_DB_PATH}", flush=True)
+        return False
+    try:
+        conn = sqlite3.connect(GTFS_DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        # Auto-detekce schema (stop_name/name, stop_lat/lat, stop_lon/lon)
+        cur.execute("PRAGMA table_info(stops)")
+        cols = [r[1] for r in cur.fetchall()]
+        def pick(cands):
+            for c in cands:
+                if c in cols: return c
+            return None
+        nc = pick(["stop_name","name"])
+        lac = pick(["stop_lat","lat","latitude"])
+        loc = pick(["stop_lon","stop_lng","lon","lng","longitude"])
+        if not (nc and lac and loc):
+            raise RuntimeError(f"Nerozpoznane schema: {cols}")
+        cur.execute(f"SELECT {nc} AS n, {lac} AS la, {loc} AS lo FROM stops")
+        stops, name_idx, grid = [], {}, {}
+        for row in cur.fetchall():
+            name = (row["n"] or "").strip()
+            try:
+                la, lo = float(row["la"]), float(row["lo"])
+            except (TypeError, ValueError):
+                continue
+            if not name or (la == 0 and lo == 0):
+                continue
+            idx = len(stops)
+            stops.append((name, la, lo))
+            nk = _norm_txt(name)
+            name_idx.setdefault(nk, []).append(idx)
+            grid.setdefault(_gtfs_grid_key(la, lo), []).append(idx)
+        conn.close()
+        GTFS_STOPS, GTFS_NAME_IDX, GTFS_GRID = stops, name_idx, grid
+        GTFS_STOP_CNT = len(stops)
+        GTFS_LOADED = True
+        print(f"[GTFS] Nacteno {len(stops)} zastavek z {GTFS_DB_PATH}", flush=True)
+        return True
+    except Exception as e:
+        print(f"[GTFS] Chyba nacitani: {e}", flush=True)
+        return False
+
+
+def _nearest_stop_name(lat, lon, max_m=400):
+    """Nejblizsi GTFS zastavka k dane pozici (pro krizovou kontrolu lastStopName z Arrivy)."""
+    if not GTFS_STOPS:
+        return None
+    bk = _gtfs_grid_key(lat, lon)
+    candidates = []
+    for dlat in (-1, 0, 1):
+        for dlon in (-1, 0, 1):
+            candidates.extend(GTFS_GRID.get((bk[0]+dlat, bk[1]+dlon), []))
+    best_name, best_d = None, None
+    for idx in candidates:
+        name, la, lo = GTFS_STOPS[idx]
+        d = haversine_m(lat, lon, la, lo)
+        if best_d is None or d < best_d:
+            best_d, best_name = d, name
+    return best_name if (best_d is not None and best_d <= max_m) else None
+
+
+def _lookup_stop_coords(name):
+    """GPS souradnice zastavky podle nazvu z GTFS. Nejdriv presna shoda, pak cast. shoda."""
+    if not GTFS_STOPS:
+        return None
+    key = _norm_txt(name)
+    if not key:
+        return None
+    idxs = GTFS_NAME_IDX.get(key)
+    if idxs:
+        _, la, lo = GTFS_STOPS[idxs[0]]
+        return (la, lo)
+    if len(key) > 3:
+        for n, la, lo in GTFS_STOPS:
+            nk = _norm_txt(n)
+            if nk and (key in nk or nk in key):
+                return (la, lo)
+    return None
 
 def get_db_client():
     if not HAS_SUPABASE:
@@ -800,35 +942,17 @@ def background_map_worker():
     print("[MAPA] Worker startuje...", flush=True)
     WORKER_START_TIME = get_prague_time()
 
-    # Auto-download GTFS DB z GitHub releases
-    if not os.path.exists(GTFS_DB_PATH):
-        try:
-            print(f"[GTFS] Stahuji z {GTFS_RELEASE_URL} ...", flush=True)
-            tmp = GTFS_DB_PATH + ".tmp"
-            req = urllib.request.Request(GTFS_RELEASE_URL, headers={"User-Agent": "OIS-IDPK/1.0"})
-            with urllib.request.urlopen(req, timeout=180) as r, open(tmp, "wb") as f:
-                while True:
-                    chunk = r.read(1024 * 256)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-            os.rename(tmp, GTFS_DB_PATH)
-            print(f"[GTFS] Staženo: {os.path.getsize(GTFS_DB_PATH)//1024//1024} MB", flush=True)
-        except Exception as e:
-            print(f"[GTFS] Chyba: {e}", flush=True)
-            if os.path.exists(GTFS_DB_PATH + ".tmp"):
-                os.remove(GTFS_DB_PATH + ".tmp")
-    else:
-        print(f"[GTFS] DB nalezena ({os.path.getsize(GTFS_DB_PATH)//1024//1024} MB)", flush=True)
+    # Nacti GTFS zastavky do pameti (soubor je soucasti repa, neni potreba stahovat)
+    _load_gtfs()
 
     db_client = get_db_client()
     if db_client:
         try:
             res = db_client.table("bus_history").select("spz").execute()
             for r in res.data:
-                if r.get("spz") and r["spz"] != "Neznámá":
+                if r.get("spz") and r["spz"] != "Nezn\u00e1m\u00e1":
                     TRACKED_SPZS.add(r["spz"])
-            print(f"[MAPA] Načteno {len(TRACKED_SPZS)} sledovaných SPZ.")
+            print(f"[MAPA] Na\u010dteno {len(TRACKED_SPZS)} sledovan\u00fdch SPZ.")
         except Exception:
             pass
 
@@ -915,7 +1039,7 @@ def background_map_worker():
                             ghost_trip_id = f"TRIP-{TRIP_COUNTER}"
                             gc_list = []
                             for gid, gc in list(GLOBAL_BUS_CACHE.items()):
-                                if not (gc.get("is_offline") and gc.get("spz") and gc["spz"] != "Neznámá"):
+                                if not (gc.get("is_offline") and gc.get("spz") and gc["spz"] != "Nezn\u00e1m\u00e1"):
                                     continue
                                 oa_min = (now - gc["last_inflow_seen"]).total_seconds() / 60.0
                                 if oa_min > 1080:
@@ -934,7 +1058,7 @@ def background_map_worker():
                                     ghost_trip_id = best_gc["trip_id"]
                                     ghost_verified = best_gc.get("spz_verified", False)
                                 del GLOBAL_BUS_CACHE[best_gid]
-                                if db_client and ghost_spz and ghost_spz != "Neznámá":
+                                if db_client and ghost_spz and ghost_spz != "Nezn\u00e1m\u00e1":
                                     close_previous_trips(db_client, ghost_spz, ghost_trip_id, now.strftime('%H:%M'))
                             GLOBAL_BUS_CACHE[bus_id] = new_cache_entry(
                                 bus_id, ghost_trip_id, lat1, lng1, line, dest1, is_train, delay, now,
@@ -948,14 +1072,14 @@ def background_map_worker():
                             c["is_train"] = is_train
                             dm = math.hypot(lat1 - c["lat"], lng1 - c["lng"])
 
-                            if not is_same_line(c["line"], line) and line and c["line"] != "Neznámá":
+                            if not is_same_line(c["line"], line) and line and c["line"] != "Nezn\u00e1m\u00e1":
                                 if not c["actual_end_time"]:
                                     c["actual_end_time"] = now.strftime('%H:%M')
-                                    c["status"] = "Ukončeno (Začátek nového spoje)"
+                                    c["status"] = "Ukon\u010deno (Za\u010d\u00e1tek nov\u00e9ho spoje)"
                                     upsert_to_history(db_client, c)
                                 TRIP_COUNTER += 1
                                 nti = f"TRIP-{TRIP_COUNTER}"
-                                if c.get("spz") and c["spz"] != "Neznámá" and db_client:
+                                if c.get("spz") and c["spz"] != "Nezn\u00e1m\u00e1" and db_client:
                                     close_previous_trips(db_client, c["spz"], nti, now.strftime('%H:%M'))
                                 c["trip_id"] = nti
                                 c["line"] = line
@@ -966,13 +1090,12 @@ def background_map_worker():
                                 c["actual_start_time"] = None
                                 c["actual_end_time"] = None
                                 c["created_at"] = now
-                                c["status"] = "Načítání..."
+                                c["status"] = "Na\u010d\u00edt\u00e1n\u00ed..."
                                 c["bearing"] = None
-                                # manual_spz: drz SPZ pres cely zivot kolecka na mape
-                                if not c.get("manual_spz"):
+                                # BUG-zamknute SPZ se NIKDY automaticky neresetuje (ani pri zmene linky)
+                                if not c.get("manual_spz") and not c.get("bug_locked"):
                                     c["spz_locked"] = False
                                     c["spz_verified"] = False
-                                # admin_lock_display se resetuje pri novem spoji, pokud neni permanent
                                 if not c.get("admin_lock_permanent"):
                                     c["admin_lock_display"] = False
                                     c["admin_color_override"] = None
@@ -1001,11 +1124,11 @@ def background_map_worker():
                     except Exception:
                         continue
 
-            # Duplikáty
+            # ── Duplikaty (bug-locked vozy vynechej – jejich SPZ je navzdy zamknuta) ─────
             spz_tracker = {}
             for bid, bc in GLOBAL_BUS_CACHE.items():
                 sv = bc.get("spz")
-                if sv and sv != "Neznámá" and not bc.get("is_offline"):
+                if sv and sv != "Nezn\u00e1m\u00e1" and not bc.get("is_offline") and not bc.get("bug_locked"):
                     spz_tracker.setdefault(sv, []).append(bid)
             for sv, bus_ids in spz_tracker.items():
                 if len(bus_ids) <= 1:
@@ -1014,7 +1137,7 @@ def background_map_worker():
                     bc0["investigation_start"] = None
                     if bc0.get("color_class") == "bg-bug":
                         bc0["color_class"] = "bg-gray"
-                        bc0["status"] = "Stojí"
+                        bc0["status"] = "Stoj\u00ed"
                     continue
                 mb = [bid for bid in bus_ids if (now - GLOBAL_BUS_CACHE[bid]["last_moved"]).total_seconds() < 60]
                 sb = [bid for bid in bus_ids if (now - GLOBAL_BUS_CACHE[bid]["last_moved"]).total_seconds() > 180]
@@ -1023,9 +1146,10 @@ def background_map_worker():
                         bc = GLOBAL_BUS_CACHE[bid]
                         if (now - bc["last_moved"]).total_seconds() / 60.0 < 2:
                             bc["color_class"] = "bg-orange"
-                            bc["status"] = "Výzkum – Duplicitní SPZ"
+                            bc["status"] = "V\u00fdzkum – Duplitn\u00ed SPZ"
                         else:
-                            bc["status"] = "BUG - NEAKTUÁLNÍ MÍSTO"
+                            # Tecka se zasekla, SPZ jede jinde -> BUG lock NAVZDY
+                            bc["status"] = "BUG - NEAKTU\u00c1LN\u00cd M\u00cdSTO"
                             bc["color_class"] = "bg-bug"
                             bc["spz_locked"] = True
                             bc["bug_locked"] = True
@@ -1046,21 +1170,21 @@ def background_map_worker():
                         bc["investigating"] = False
                         bc["investigation_start"] = None
                     else:
-                        if not bc.get("manual_spz"):
+                        if not bc.get("manual_spz") and not bc.get("bug_locked"):
                             bc["spz_verified"] = False
                             bc["spz_locked"] = False
                         bc["investigating"] = True
                         bc["investigation_spz"] = sv
                         if bc.get("investigation_start") is None:
                             bc["investigation_start"] = now
-                        elif (now - bc["investigation_start"]).total_seconds() > DUPLICATE_GRACE_SEC and not bc.get("manual_spz"):
+                        elif (now - bc["investigation_start"]).total_seconds() > DUPLICATE_GRACE_SEC and not bc.get("manual_spz") and not bc.get("bug_locked"):
                             bc["spz_verified"] = False
                             bc["spz_locked"] = False
                             bc["investigating"] = False
                             bc["investigation_start"] = None
                             bc["spz_stable_ticks"] = 0
 
-            # Offline + timeouty
+            # ── Offline + timeouty ────────────────────────────────────────────────────────
             for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
                 om = (now - c["last_inflow_seen"]).total_seconds() / 60.0
                 tm = (now - c["first_seen"]).total_seconds() / 60.0
@@ -1078,36 +1202,36 @@ def background_map_worker():
                         continue
                     c["is_offline"] = True
                     if om >= 120:
-                        c["status"] = "Stojí v depu / Vozovně"
+                        c["status"] = "Stoj\u00ed v depu / Vozovn\u011b"
                         c["color_class"] = "bg-gray"
                         c["raw_delay"] = 0
                         c["spz_locked"] = True
                     elif om >= 15:
-                        c["status"] = "Odstaven (Bez signálu)"
+                        c["status"] = "Odstaven (Bez sign\u00e1lu)"
                         c["color_class"] = "bg-gray"
                         c["raw_delay"] = 0
                         c["spz_locked"] = True
                     elif om > 2:
                         if not c["actual_end_time"]:
                             c["actual_end_time"] = now.strftime('%H:%M')
-                        c["status"] = "Ztráta polohy (Konečná)"
+                        c["status"] = "Ztr\u00e1ta polohy (Kone\u010dn\u00e1)"
                         c["color_class"] = "bg-purple"
                         c["raw_delay"] = 0
                         c["spz_locked"] = True
                         if om < 4:
                             upsert_to_history(db_client, c)
 
-            # Statusy, barvy, SPZ párování
+            # ── Statusy, barvy, SPZ parovani ─────────────────────────────────────────────
             new_live_data = []
             tt_ftick = 0
             for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
                 inact = (now - c["last_moved"]).total_seconds() / 60.0
                 if c.get("is_offline"):
-                    fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c["is_train"] else "Neznámá")
+                    fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c["is_train"] else "Nezn\u00e1m\u00e1")
                     new_live_data.append({
                         "id": bus_id, "trip_id": c["trip_id"], "lat": c["lat"], "lng": c["lng"],
                         "bearing": c.get("bearing"), "line": fld, "delay": 0,
-                        "destination": c["destination"], "spz": c["spz"] or "Neznámá",
+                        "destination": c["destination"], "spz": c["spz"] or "Nezn\u00e1m\u00e1",
                         "spz_verified": c.get("spz_verified", False), "is_train": c["is_train"],
                         "status": c["status"], "color_class": c["color_class"],
                         "inactive_minutes": inact,
@@ -1122,39 +1246,86 @@ def background_map_worker():
                 is_moving = inact < 1
                 delay_val = c["raw_delay"]
 
-                # ── SPZ párování ──────────────────────────────────────────
-                if not is_train and not c.get("investigating") and not c.get("spz_locked") and not c.get("bug_locked"):
-                    i_clean = re.sub(r'\D', '', line)
-                    d1_clean = re.sub(r'\W+', '', dest1.lower())
-                    best_spz = None
-                    best_match_dest = False
-                    best_dist = 999.0
-                    for b in data_arriva:
-                        a_clean = re.sub(r'\D', '', str(b.get("linkNumber", "")).strip())
-                        if not (i_clean and a_clean and (i_clean.endswith(a_clean) or a_clean.endswith(i_clean))):
-                            continue
-                        dist = math.hypot(lat1 - b.get("latitude", 0), lng1 - b.get("longitude", 0))
-                        if dist < ARRIVA_MATCH_DIST and dist < best_dist:
-                            best_dist = dist
-                            a_dest = str(b.get("destinationName", "")).lower()
-                            d2_clean = re.sub(r'\W+', '', a_dest)
-                            best_match_dest = bool(d1_clean in d2_clean or d2_clean in d1_clean or not d1_clean or not d2_clean)
-                            best_spz = b.get("spz", "").strip() or None
+                # ══════════════════════════════════════════════════════════════════
+                # SPZ PAROVANI – kontinualni, samoopravne
+                # ──────────────────────────────────────────────────────────────────
+                # Klicove opravy oproti puvodni verzi:
+                # 1) Blok bezi VZDY (ne jen kdyz spz_locked==False) -> i zamknuta SPZ
+                #    se kazdy tik overi, ze stale sedi. Pokud nesedi, uvolni se a hleda znovu.
+                # 2) best_match_dest se ted pouziva jako TVRDA PODMINKA (kandidat s nesedici
+                #    destinaci se rovnou zahodí, misto toho aby jen nezaktualizoval timestamp).
+                # 3) lastStopName z Arrivy se pouziva jako dalsi krizova kontrola (pokud GTFS data dostupna).
+                # ══════════════════════════════════════════════════════════════════
+                if not is_train and not c.get("investigating") and not c.get("manual_spz") and not c.get("bug_locked"):
+                    d1_norm = _norm_txt(dest1)
+                    near_stop = _nearest_stop_name(lat1, lng1, ARRIVA_STOP_MATCH_M) if GTFS_LOADED else None
+                    near_stop_norm = _norm_txt(near_stop) if near_stop else ""
 
-                    if best_spz and best_spz != "Neznámá":
-                        current_spz = c.get("spz")
-                        if best_spz == current_spz:
-                            c["spz_stable_ticks"] = c.get("spz_stable_ticks", 0) + 1
-                            if best_match_dest:
-                                c["spz_last_verified"] = now
+                    # Sestav gate_pass: SPZ -> nejlepsi vzdalenost vsech kandidatu,
+                    # kteri projdou VSEMI tvrdymi branami (linka, pozice, cil, zastavka)
+                    gate_pass = {}
+                    for b in data_arriva:
+                        if not _arriva_line_matches(line, b):
+                            continue
+                        b_spz = (b.get("spz") or "").strip()
+                        if not b_spz or b_spz == "Nezn\u00e1m\u00e1":
+                            continue
+                        dist_m = haversine_m(lat1, lng1, b.get("latitude") or 0, b.get("longitude") or 0)
+                        if dist_m > ARRIVA_MATCH_DIST_M:
+                            continue
+                        # Tvrda brána: cíl musi sedet (pokud oba znamy)
+                        a_dest_norm = _norm_txt(b.get("destinationName", ""))
+                        if d1_norm and a_dest_norm:
+                            if d1_norm not in a_dest_norm and a_dest_norm not in d1_norm:
+                                continue  # cil nesedi -> zahodit kandidata
+                        # Tvrda brana: lastStopName musi sedet (pokud GTFS a Arriva oba znamy)
+                        if near_stop_norm:
+                            a_stop_norm = _norm_txt(b.get("lastStopName", ""))
+                            if a_stop_norm and near_stop_norm not in a_stop_norm and a_stop_norm not in near_stop_norm:
+                                continue  # zastavka nesedi -> zahodit kandidata
+                        if b_spz not in gate_pass or dist_m < gate_pass[b_spz]:
+                            gate_pass[b_spz] = dist_m
+
+                    current_spz = c.get("spz")
+                    was_locked = bool(c.get("spz_locked"))
+
+                    # ── 1) Re-audit: i uz zamknuta SPZ se kontroluje kazdy tik ──
+                    if was_locked and current_spz and current_spz != "Nezn\u00e1m\u00e1":
+                        if current_spz in gate_pass:
+                            c["spz_last_verified"] = now  # stale sedi -> refresh
                         else:
+                            still_listed = any((b.get("spz") or "").strip() == current_spz for b in data_arriva)
                             last_v = c.get("spz_last_verified")
-                            recently = last_v and (now - last_v).total_seconds() < SPZ_HOLD_MINUTES * 60 and c.get("spz_verified")
-                            if not recently:
+                            stale = (not last_v) or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60
+                            if still_listed or stale:
+                                # SPZ uz nesedi (jede jinym smerem/jinym cilem) nebo dlouho nepotvrzena
+                                # -> uvolni zamek, system hleda spravnou SPZ znovu
+                                print(f"[SPZ] Uvolnuji spatnou SPZ {current_spz} u busu {bus_id}", flush=True)
+                                if c.get("spz_verified") and db_client:
+                                    try:
+                                        db_client.table("bus_history").update({
+                                            "status": "Fale\u0161n\u00fd z\u00e1znam (SPZ opravena)",
+                                            "spz_verified": False
+                                        }).eq("trip_id", c["trip_id"]).execute()
+                                    except Exception:
+                                        pass
+                                c["spz_verified"] = False
+                                c["spz_locked"] = False
+                                c["spz_stable_ticks"] = 0
+                                was_locked = False
+
+                    # ── 2) Hledani (noveho) kandidata (jen kdyz neni platny zamek) ──
+                    if not was_locked:
+                        best_spz = min(gate_pass, key=gate_pass.get) if gate_pass else None
+                        if best_spz:
+                            if best_spz == current_spz:
+                                c["spz_stable_ticks"] = c.get("spz_stable_ticks", 0) + 1
+                            else:
                                 if c.get("spz_verified") and current_spz and db_client:
                                     try:
                                         db_client.table("bus_history").update({
-                                            "status": "Falešný záznam (SPZ opravena)", "spz_verified": False
+                                            "status": "Fale\u0161n\u00fd z\u00e1znam (SPZ opravena)",
+                                            "spz_verified": False
                                         }).eq("trip_id", c["trip_id"]).execute()
                                     except Exception:
                                         pass
@@ -1164,21 +1335,18 @@ def background_map_worker():
                                 c["spz_stable_ticks"] = 1
                                 c["spz_verified"] = False
                                 c["spz_locked"] = False
-                                if best_match_dest:
-                                    c["spz_last_verified"] = now
-                        # OPRAVA: Lock po 2 shodách polohy – bez požadavku na shodu cíle
-                        if c.get("spz_stable_ticks", 0) >= SPZ_STABLE_TICKS:
-                            c["spz_verified"] = True
-                            c["spz_locked"] = True
                             c["spz_last_verified"] = now
-                    else:
-                        last_v = c.get("spz_last_verified")
-                        if not last_v or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60:
-                            if not c.get("manual_spz") and not c.get("bug_locked"):
+                            if c.get("spz_stable_ticks", 0) >= SPZ_STABLE_TICKS:
+                                c["spz_verified"] = True
+                                c["spz_locked"] = True
+                        else:
+                            # Zadny kandidat nesplnil vsechny podminky
+                            last_v = c.get("spz_last_verified")
+                            if not last_v or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60:
                                 c["spz_verified"] = False
                                 c["spz_locked"] = False
 
-                # ── JŘ fetch ─────────────────────────────────────────────
+                # ── JR fetch ──────────────────────────────────────────────────────────────
                 if not is_train:
                     tt_age = (now - c["tt_last_fetch"]).total_seconds() if c.get("tt_last_fetch") else 9999
                     if tt_age > 300 and not c.get("tt_is_fetching") and tt_ftick < 5:
@@ -1187,7 +1355,7 @@ def background_map_worker():
                         c["tt_is_fetching"] = True
                         threading.Thread(target=fetch_tt_bg, args=(bus_id, c), daemon=True).start()
 
-                # ── Barvy + status ──────────────────────────────────────
+                # ── Barvy + status ────────────────────────────────────────────────────────
                 old_status = c.get("status", "")
 
                 if c.get("admin_lock_display"):
@@ -1199,7 +1367,7 @@ def background_map_worker():
                 elif c.get("color_class") == "bg-bug":
                     if is_moving:
                         c["color_class"] = "bg-orange"
-                        c["status"] = "Výzkum – Reaktivace (byl zaseknutý)"
+                        c["status"] = "V\u00fdzkum \u2013 Reaktivace (byl zaseknut\u00fd)"
                 else:
                     is_before_departure = False
                     time_to_dep = 0
@@ -1209,10 +1377,8 @@ def background_map_worker():
                             dep_total = dh * 60 + dm_
                             cur_total = now.hour * 60 + now.minute
                             diff = dep_total - cur_total
-                            if diff < -720:
-                                diff += 1440
-                            elif diff > 720:
-                                diff -= 1440
+                            if diff < -720: diff += 1440
+                            elif diff > 720: diff -= 1440
                             if diff > 1:
                                 is_before_departure = True
                                 time_to_dep = int(diff)
@@ -1222,10 +1388,10 @@ def background_map_worker():
                     if is_before_departure:
                         c["actual_end_time"] = None
                         if time_to_dep <= 240:
-                            c["status"] = f"Čeká na odjezd ({time_to_dep} min)"
+                            c["status"] = f"\u010cek\u00e1 na odjezd ({time_to_dep} min)"
                             c["color_class"] = "bg-blue"
                         else:
-                            c["status"] = "Čeká na spoj (>4h)"
+                            c["status"] = "\u010cek\u00e1 na spoj (>4h)"
                             c["color_class"] = "bg-gray"
                         delay_val = -time_to_dep
 
@@ -1235,7 +1401,7 @@ def background_map_worker():
                             c["color_class"] = "bg-gray"
                             c["spz_locked"] = True
                         else:
-                            c["status"] = "Konečná zastávka"
+                            c["status"] = "Kone\u010dn\u00e1 zast\u00e1vka"
                             c["color_class"] = "bg-purple"
                             c["spz_locked"] = True
                             if not c["actual_end_time"]:
@@ -1247,22 +1413,22 @@ def background_map_worker():
                                 c["admin_status_override"] = None
 
                     elif delay_val < -1 and c.get("actual_start_time"):
-                        c["status"] = "Jízda (Náskok)" if is_moving else "Stojí (Náskok)"
+                        c["status"] = "J\u00edzda (N\u00e1skok)" if is_moving else "Stoj\u00ed (N\u00e1skok)"
                         c["color_class"] = "bg-darkblue"
 
                     else:
-                        c["status"] = "Jízda" if is_moving else "Stojí"
+                        c["status"] = "J\u00edzda" if is_moving else "Stoj\u00ed"
                         c["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
 
                     if (not is_moving and inact > 10 and c.get("actual_start_time")
                             and c["color_class"] not in ("bg-purple", "bg-gray", "bg-bug", "bg-blue", "bg-orange")):
-                        c["status"] = f"Stojí příliš dlouho ({int(inact)} min)"
+                        c["status"] = f"Stoj\u00ed p\u0159\u00edli\u0161 dlouho ({int(inact)} min)"
                         c["color_class"] = "bg-gray"
                         c["_was_long_stationary"] = True
                         c["spz_locked"] = True
                     elif is_moving and c.get("_was_long_stationary") and c["color_class"] not in ("bg-bug", "bg-blue"):
                         c["color_class"] = "bg-orange"
-                        c["status"] = "Výzkum – Reaktivace po dlouhém stání"
+                        c["status"] = "V\u00fdzkum \u2013 Reaktivace po dlouh\u00e9m st\u00e1n\u00ed"
                         c["_was_long_stationary"] = False
 
                 if is_moving and not c["actual_start_time"] and not is_train:
@@ -1276,8 +1442,8 @@ def background_map_worker():
                 if c.get("admin_status_override"):
                     c["status"] = c["admin_status_override"]
 
-                # ── DB upsert ────────────────────────────────────────────
-                has_spz = c.get("spz") and c["spz"] != "Neznámá"
+                # ── DB upsert ─────────────────────────────────────────────────────────────
+                has_spz = c.get("spz") and c["spz"] != "Nezn\u00e1m\u00e1"
                 tracked_line = _is_tracked_line(c.get("real_linka_spoj") or c.get("line", ""))
                 just_ended = c.get("actual_end_time") and not c.get("_end_written")
 
@@ -1292,11 +1458,11 @@ def background_map_worker():
                             c["_end_written"] = True
                             close_previous_trips(db_client, c.get("spz"), c["trip_id"], c["actual_end_time"])
 
-                fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c["is_train"] else "Neznámá")
+                fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c["is_train"] else "Nezn\u00e1m\u00e1")
                 new_live_data.append({
                     "id": bus_id, "trip_id": c["trip_id"], "lat": c["lat"], "lng": c["lng"],
                     "bearing": c.get("bearing"), "line": fld, "delay": c.get("final_delay_display", 0),
-                    "destination": c["destination"], "spz": c["spz"] or "Neznámá",
+                    "destination": c["destination"], "spz": c["spz"] or "Nezn\u00e1m\u00e1",
                     "spz_verified": c.get("spz_verified", False), "is_train": c["is_train"],
                     "status": c["status"], "color_class": c["color_class"], "inactive_minutes": inact,
                     "last_updated": c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A",
@@ -1316,7 +1482,6 @@ def background_map_worker():
 
 def start_map_background_task():
     threading.Thread(target=background_map_worker, daemon=True).start()
-
 
 # === FLASK ROUTES ===
 
@@ -1347,7 +1512,7 @@ def _full_page(title, body_html, is_map=False):
 
 
 _AD_BTN_NORMAL = '<a href="/mapa_admin" class="n-btn n-ad">AD</a>'
-_AD_BTN_ADMIN  = '<a href="/mapa" class="n-btn n-back">Zpět</a>'
+_AD_BTN_ADMIN  = '<a href="/mapa" class="n-btn n-back">Zp\u011bt</a>'
 
 
 @mapa_bp.route('/mapa')
@@ -1364,7 +1529,7 @@ def stranka_mapa_admin():
         '<div style="position:relative;margin-top:58px;padding:4px;text-align:center;">'
         '<span style="display:inline-block;background:rgba(56,189,248,0.1);color:#38bdf8;'
         'padding:3px 14px;border-radius:20px;font-size:11px;font-weight:bold;'
-        'border:1px solid rgba(56,189,248,0.3);">Admin mapa — moderace zapnutá</span></div>'
+        'border:1px solid rgba(56,189,248,0.3);">Admin mapa \u2014 moderace zapnut\u00e1</span></div>'
     )
     html = HTML_MAPA.replace('__ADMIN_BANNER__', admin_banner).replace('__IS_ADMIN__', 'true').replace('__AD_BTN__', _AD_BTN_ADMIN)
     return _full_page("Admin Mapa", html, is_map=True)
@@ -1373,7 +1538,7 @@ def stranka_mapa_admin():
 @mapa_bp.route('/api/admin/map_action', methods=['POST'])
 def api_admin_map_action():
     if not session.get('logged_in'):
-        return jsonify({"status": "error", "message": "Neautorizováno"}), 401
+        return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
     data = request.get_json(silent=True) or {}
     action = data.get("action")
     bus_id = str(data.get("bus_id", ""))
@@ -1403,6 +1568,7 @@ def api_admin_map_action():
         c["spz_verified"] = False
         c["spz"] = None
         c["manual_spz"] = False
+        c["bug_locked"] = False   # Admin explicitne odemkl BUG-zamek
         c["investigating"] = False
         c["spz_stable_ticks"] = 0
 
@@ -1413,7 +1579,7 @@ def api_admin_map_action():
             c["status"] = new_st
             c["admin_status_override"] = new_st
             c["admin_lock_display"] = True
-        if new_col and new_col not in ("", "──"):
+        if new_col and new_col not in ("", "\u2500\u2500"):
             c["color_class"] = new_col
             c["admin_color_override"] = new_col
             c["admin_lock_display"] = True
@@ -1430,7 +1596,7 @@ def api_admin_map_action():
             c["status"] = new_st
             c["admin_status_override"] = new_st
             c["admin_lock_display"] = True
-        if new_col and new_col not in ("", "──"):
+        if new_col and new_col not in ("", "\u2500\u2500"):
             c["color_class"] = new_col
             c["admin_color_override"] = new_col
             c["admin_lock_display"] = True
@@ -1452,7 +1618,7 @@ def api_admin_map_action():
         c["admin_lock_permanent"] = False
         c["admin_note"] = ""
         c["color_class"] = "bg-gray"
-        c["status"] = "Načítání..."
+        c["status"] = "Na\u010d\u00edt\u00e1n\u00ed..."
 
     return jsonify({"status": "success"})
 
@@ -1464,7 +1630,7 @@ def stranka_historie_index():
 
 @mapa_bp.route('/historie/<spz>')
 def stranka_historie_detail(spz):
-    return _full_page(f"Vůz {spz}", HTML_HISTORIE_DETAIL.replace('__SPZ__', spz))
+    return _full_page(f"V\u016fz {spz}", HTML_HISTORIE_DETAIL.replace('__SPZ__', spz))
 
 
 @mapa_bp.route('/api/live_buses')
@@ -1474,6 +1640,20 @@ def api_live_buses():
     return jsonify({
         "status": "success", "server_time": now.strftime('%H:%M:%S'),
         "worker_uptime_seconds": round(uptime), "buses": LIVE_BUSES_DATA,
+    })
+
+
+@mapa_bp.route('/api/debug/gtfs')
+def api_debug_gtfs():
+    """Diagnosticky endpoint – zkontroluj po deployi ze GTFS funguje."""
+    db_exists = os.path.exists(GTFS_DB_PATH)
+    db_size = os.path.getsize(GTFS_DB_PATH) if db_exists else 0
+    return jsonify({
+        "gtfs_loaded": GTFS_LOADED,
+        "stop_count": GTFS_STOP_CNT,
+        "db_path": GTFS_DB_PATH,
+        "db_exists": db_exists,
+        "db_size_mb": round(db_size / 1024 / 1024, 2),
     })
 
 
@@ -1496,7 +1676,7 @@ def api_bus_detail(bus_id):
                     headers=hdr), timeout=4) as r:
                 tt_html = r.read().decode('utf-8')
         except Exception:
-            tt_html = "<p style='color:#94a3b8;'>JŘ není dostupný.</p>"
+            tt_html = "<p style='color:#94a3b8;'>J\u0158 nen\u00ed dostupn\u00fd.</p>"
         return f"""<div style="background:#0f172a;color:white;font-family:sans-serif;">
 <div style="background:#1e293b;padding:12px;border-radius:6px;margin-bottom:12px;">{info_html}</div>
 <div style="overflow-x:auto;"><style>table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #334155;padding:6px 10px;text-align:left}}th{{background:#0f172a;color:#38bdf8}}tr:hover td{{background:#1e293b}}.current{{background:#166534!important;font-weight:bold}}</style>{tt_html}</div></div>"""
@@ -1508,7 +1688,7 @@ def api_bus_detail(bus_id):
 def api_history_full():
     db = get_db_client()
     if not db:
-        return jsonify({"data": [], "error": "DB nedostupná"})
+        return jsonify({"data": [], "error": "DB nedostupn\u00e1"})
     try:
         res = db.table("bus_history").select("*").order("created_at", desc=True).limit(200).execute()
         return jsonify({"data": res.data})
@@ -1520,17 +1700,17 @@ def api_history_full():
 def api_history_spz(spz):
     db = get_db_client()
     if not db:
-        return jsonify({"data": [], "error": "DB nedostupná"})
+        return jsonify({"data": [], "error": "DB nedostupn\u00e1"})
     try:
         res = db.table("bus_history").select("*").eq("spz", spz).order("created_at", desc=True).limit(100).execute()
         return jsonify({"data": res.data})
     except Exception as e:
         return jsonify({"data": [], "error": str(e)})
 
-
-# === ROUTE BACKEND (GTFS + Nominatim fallback) ===
+# === ROUTE BACKEND (GTFS in-memory + Nominatim fallback per zastavku) ===
 
 def _geocode_stop(stop_name):
+    """Nominatim geocoding - fallback pro zastavky ktere GTFS nema."""
     key = stop_name.strip().lower()
     if key in _stop_geo_cache:
         return _stop_geo_cache[key]
@@ -1567,7 +1747,7 @@ def _fetch_tt_stops(bus_id):
             if cells and cells[0] and len(cells[0]) > 1:
                 stop_names.append(_html.unescape(cells[0]))
                 stop_times.append(cells[1] if len(cells) > 1 else "")
-        cur_matches = re.findall(r"""class=["']current["'][^>]*>.*?<td[^>]*>(.*?)</td>""", tt, re.DOTALL | re.IGNORECASE)
+        cur_matches = re.findall(r"""class=["'"]current["'"][^>]*>.*?<td[^>]*>(.*?)</td>""", tt, re.DOTALL | re.IGNORECASE)
         if cur_matches:
             cur = re.sub(r'<[^>]+>', '', cur_matches[0]).strip()
             for i, s in enumerate(stop_names):
@@ -1581,64 +1761,71 @@ def _fetch_tt_stops(bus_id):
 
 @mapa_bp.route('/api/bus_route/<bus_id>')
 def api_bus_route(bus_id):
-    """Vrátí seznam zastávek s GPS pro vykreslení trasy na mapě."""
+    """Vrati seznam zastavek s GPS pro vykresleni trasy na mape.
+    
+    Opravena verze: pouziva GTFS in-memory index (nacten pri startu) pro kazdu zastavku,
+    s fallbackem na Nominatim pouze pro zastavky ktere GTFS nema (ne all-or-nothing).
+    """
     c = GLOBAL_BUS_CACHE.get(bus_id)
     if not c:
         return jsonify({"stops": [], "error": "Bus nenalezen"})
 
     stop_names, stop_times, current_idx = _fetch_tt_stops(bus_id)
     if not stop_names:
-        return jsonify({"stops": [], "error": "Zastávky nenalezeny v JR PVVD"})
+        return jsonify({"stops": [], "error": "Zastavky nenalezeny v JR PVVD"})
 
-    # ── Pokus o GTFS SQLite DB (přesné GPS polohy zastávek) ────────────────
-    if os.path.exists(GTFS_DB_PATH):
-        try:
-            import sqlite3 as _sq
-            conn = _sq.connect(GTFS_DB_PATH)
-            conn.row_factory = _sq.Row
-            cur = conn.cursor()
-            result = []
-            seen = {}
-            for i, (name, t) in enumerate(zip(stop_names, stop_times)):
-                name_c = name.strip()
-                if name_c in seen:
-                    pl, pg = seen[name_c]
-                    if pl:
-                        result.append({
-                            "name": name_c, "time": t,
-                            "lat": pl + 0.00001 * (i % 5 + 1), "lng": pg,
-                            "passed": i < current_idx,
-                        })
-                    continue
-                cur.execute("SELECT stop_lat, stop_lon FROM stops WHERE stop_name = ? LIMIT 1", (name_c,))
-                row = cur.fetchone()
-                if not row and name_c:
-                    word = name_c.split()[0]
-                    if len(word) > 3:
-                        cur.execute("SELECT stop_lat, stop_lon FROM stops WHERE stop_name LIKE ? LIMIT 1", (word + "%",))
-                        row = cur.fetchone()
-                lat = row["stop_lat"] if row else None
-                lng = row["stop_lon"] if row else None
-                seen[name_c] = (lat, lng)
-                result.append({"name": name_c, "time": t, "lat": lat, "lng": lng, "passed": i < current_idx})
-            conn.close()
-            found = sum(1 for s in result if s["lat"])
-            print(f"[ROUTE] GTFS: {found}/{len(result)} zastavek nalezeno pro bus {bus_id}")
-            return jsonify({
-                "stops": result, "bus_id": bus_id, "source": "gtfs",
-                "found": found, "total": len(result),
-            })
-        except Exception as e:
-            print(f"[ROUTE] GTFS chyba: {e}")
-
-    # ── Fallback: Nominatim geocoding ───────────────────────────────────────
     result = []
-    for i, (name, t) in enumerate(zip(stop_names[:20], stop_times[:20])):
-        coords = _geocode_stop(name)
+    gtfs_hits = 0
+    nominatim_hits = 0
+    seen = {}
+
+    for i, (name, t) in enumerate(zip(stop_names, stop_times)):
+        name_c = name.strip()
+
+        # Duplikatni zastavky (smyckova linka) - male offsety aby se body neprekryvaly
+        if name_c in seen:
+            prev_lat, prev_lng = seen[name_c]
+            if prev_lat:
+                result.append({
+                    "name": name_c, "time": t,
+                    "lat": prev_lat + 0.00002 * (i % 4 + 1),
+                    "lng": prev_lng,
+                    "passed": i < current_idx,
+                    "source": "dup",
+                })
+            continue
+
+        coords = None
+
+        # 1) Zkus GTFS in-memory (rychle, bez sitoveho pozadavku)
+        if GTFS_LOADED:
+            coords = _lookup_stop_coords(name_c)
+            if coords:
+                gtfs_hits += 1
+
+        # 2) Fallback: Nominatim jen pro tuto konkretni zastavku
+        if not coords:
+            coords = _geocode_stop(name_c)
+            if coords:
+                nominatim_hits += 1
+
+        lat = coords[0] if coords else None
+        lng = coords[1] if coords else None
+        seen[name_c] = (lat, lng)
         result.append({
-            "name": name, "time": t,
-            "lat": coords[0] if coords else None,
-            "lng": coords[1] if coords else None,
+            "name": name_c, "time": t,
+            "lat": lat, "lng": lng,
             "passed": i < current_idx,
+            "source": "gtfs" if (coords and gtfs_hits and not nominatim_hits) else ("nominatim" if (coords and nominatim_hits) else "unknown"),
         })
-    return jsonify({"stops": result, "bus_id": bus_id, "source": "nominatim"})
+
+    found = sum(1 for s in result if s["lat"])
+    print(f"[ROUTE] Bus {bus_id}: {found}/{len(result)} zastavek (GTFS:{gtfs_hits} Nominatim:{nominatim_hits})", flush=True)
+    return jsonify({
+        "stops": result,
+        "bus_id": bus_id,
+        "found": found,
+        "total": len(result),
+        "gtfs_hits": gtfs_hits,
+        "nominatim_hits": nominatim_hits,
+    })
