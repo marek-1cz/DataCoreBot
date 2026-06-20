@@ -13,6 +13,7 @@ import re
 import http.cookiejar
 import sqlite3
 import unicodedata
+import concurrent.futures
 
 try:
     from supabase import create_client
@@ -25,6 +26,7 @@ mapa_bp = Blueprint('mapa_bp', __name__)
 
 SPZ_HOLD_MINUTES      = 8
 SPZ_STABLE_TICKS      = 2
+SPZ_HIGH_CONFIDENCE_DIST_M = 300  # jednoznacny + blizky zasah = zamek hned, bez cekani na 2. tik
 GHOST_MAX_OFFLINE_MIN = 20
 GHOST_DIST_STRICT     = 0.010
 DUPLICATE_GRACE_SEC   = 120
@@ -261,6 +263,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 #ttc-btn{position:absolute;top:10px;right:10px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px;font-weight:bold;}
 #spz-results .sr-item{padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #334155;display:flex;align-items:center;gap:8px;}
 #spz-results .sr-item:hover{background:#334155;}
+.route-line-future{stroke-dasharray:14 10;animation:routeFlow 0.9s linear infinite;stroke-linecap:round;}
+@keyframes routeFlow{to{stroke-dashoffset:-24;}}
+.route-line-past{stroke-linecap:round;}
 @media(max-width:768px){
   #top-nav{gap:5px;padding:0 6px;height:auto;min-height:52px;flex-wrap:wrap;padding-bottom:5px;padding-top:5px;}
   .n-title,.n-warn{display:none;}
@@ -486,28 +491,41 @@ async function toggleRoute(busId){
   }
   routeLayer.clearLayers();activeRouteId=busId;
   let btn=document.getElementById('route-btn-'+busId);
-  if(btn){btn.textContent='Nacitam...';btn.style.background='#1e3a8a';}
+  if(btn){btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Hledam trasu...';btn.style.background='#1e3a8a';}
+  showAdminToast('🗺️ Hledani trasy muze chvili trvat - mapu mezitim muzes dal pouzivat',true);
   try{
     let r=await fetch('/api/bus_route/'+busId);let data=await r.json();
+    if(activeRouteId!==busId)return; // mezitim uzivatel prepnul na jiny bus / zavrel trasu
     if(!data.stops||data.stops.length<2){if(btn){btn.textContent=(data.error?'Trasa nedostupna ('+data.error+')':'Trasa nedostupna');btn.style.background='#7f1d1d';}return;}
     const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-bug':'#374151'};
     let bus=lastArr.find(b=>b.id===busId);let lC=bus?(cM[bus.color_class]||'#38bdf8'):'#38bdf8';
     data.stops.forEach(stop=>{
       if(!stop.lat||!stop.lng)return;
       let dC=stop.passed?'#475569':lC;
-      let si=L.divIcon({className:'',html:`<div style="width:8px;height:8px;border-radius:50%;background:${dC};border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.5);"></div>`,iconSize:[8,8],iconAnchor:[4,4]});
+      let lowConf=(stop.confidence==='fuzzy'||stop.confidence==='geocoded');
+      let border=lowConf?'border:2px dashed #f59e0b;':'border:2px solid white;';
+      let si=L.divIcon({className:'',html:`<div style="width:8px;height:8px;border-radius:50%;background:${dC};${border}box-shadow:0 1px 3px rgba(0,0,0,.5);${lowConf?'opacity:0.8;':''}"></div>`,iconSize:[8,8],iconAnchor:[4,4]});
       let m=L.marker([stop.lat,stop.lng],{icon:si,zIndexOffset:-100});
-      m.bindTooltip(`<b>🚏 ${stop.name}</b>${stop.time?' / '+stop.time:''}`,{direction:'top',className:'dark-popup'});
+      let warn=lowConf?' <span style="color:#f59e0b;">⚠️ pribl. poloha</span>':'';
+      m.bindTooltip(`<b>🚏 ${stop.name}</b>${stop.time?' / '+stop.time:''}${warn}`,{direction:'top',className:'dark-popup'});
       routeLayer.addLayer(m);
     });
-    let coords=data.stops.filter(s=>s.lat&&s.lng).map(s=>[s.lat,s.lng]);
-    if(coords.length>=2){
-      routeLayer.addLayer(L.polyline(coords,{color:lC,weight:3,opacity:0.75,dashArray:'6,4'}));
-      let passed=data.stops.filter(s=>s.lat&&s.lng&&s.passed).map(s=>[s.lat,s.lng]);
-      if(passed.length>=2)routeLayer.addLayer(L.polyline(passed,{color:'#475569',weight:3,opacity:0.5}));
+    // Trasa rozdelena na dva useky: jiz ujety (klidna seda staticka cara) a
+    // zbyvajici (animovana, "tece" dopredu ve smeru jizdy) - hranicni bod je
+    // v obou, aby na sebe useky vizualne navazovaly bez mezery.
+    let pts=data.stops.filter(s=>s.lat&&s.lng);
+    if(pts.length>=2){
+      let splitIdx=pts.findIndex(s=>!s.passed);
+      if(splitIdx===-1)splitIdx=pts.length;
+      let pastCoords=pts.slice(0,splitIdx+1).map(s=>[s.lat,s.lng]);
+      let futureCoords=pts.slice(splitIdx).map(s=>[s.lat,s.lng]);
+      if(pastCoords.length>=2)routeLayer.addLayer(L.polyline(pastCoords,{color:'#64748b',weight:4,opacity:0.55,className:'route-line-past'}));
+      if(futureCoords.length>=2)routeLayer.addLayer(L.polyline(futureCoords,{color:lC,weight:4,opacity:0.9,className:'route-line-future'}));
     }
     let found=data.stops.filter(s=>s.lat).length;
-    if(btn){btn.textContent=`🗺️ Skryt trasu (${found}/${data.stops.length} zast.)`;btn.style.background='#1e40af';}
+    let uncertain=data.stops.filter(s=>s.lat&&(s.confidence==='fuzzy'||s.confidence==='geocoded')).length;
+    let label=`🗺️ Skryt trasu (${found}/${data.stops.length} zast.)`+(uncertain>0?` ⚠️${uncertain}`:'');
+    if(btn){btn.textContent=label;btn.style.background='#1e40af';}
   }catch(e){if(btn){btn.textContent='Chyba nacitani';btn.style.background='#7f1d1d';}console.error('Route:',e);}
 }
 
@@ -684,6 +702,8 @@ GTFS_NAME_IDX  = {}          # norm_name -> [indexy]
 GTFS_GRID      = {}          # (lat_bucket, lon_bucket) -> [indexy]
 GTFS_GRID_SZ   = 0.01        # ~1.1km dlazdice
 GTFS_STOP_CNT  = 0
+GTFS_TOKENS    = []           # parallel list k GTFS_STOPS: frozenset slov v nazvu
+GTFS_TOKEN_IDX = {}           # slovo -> [indexy do GTFS_STOPS] (invertovany index pro rychly fuzzy hledani)
 
 cj     = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
@@ -739,6 +759,21 @@ def _norm_txt(s):
     return re.sub(r'[^a-z0-9]+', '', s)
 
 
+def _tokenize(s):
+    """Rozdeli nazev na normalizovana 'slova' (bez diakritiky, min. 3 znaky).
+    Pouziva se pro presnejsi fuzzy parovani nazvu zastavek - misto naivniho
+    'je jeden retezec podretezcem druheho' se pocita prekryv SLOV. Diky tomu
+    se napr. 'Bor, Nova Hospoda' uz neplete s 'Novy Bor, Janov, restaurace'
+    jen kvuli nahodne spolecnemu slovu."""
+    if not s:
+        return frozenset()
+    s = str(s).lower()
+    s = unicodedata.normalize('NFKD', s)
+    s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+    raw = re.split(r'[^a-z0-9]+', s)
+    return frozenset(t for t in raw if len(t) >= 3)
+
+
 def _gtfs_grid_key(lat, lon):
     return (round(lat / GTFS_GRID_SZ), round(lon / GTFS_GRID_SZ))
 
@@ -746,6 +781,7 @@ def _gtfs_grid_key(lat, lon):
 def _load_gtfs():
     """Nacte gtfs_stops.db do pameti. Vola se jednou pri startu workeru."""
     global GTFS_LOADED, GTFS_STOPS, GTFS_NAME_IDX, GTFS_GRID, GTFS_STOP_CNT
+    global GTFS_TOKENS, GTFS_TOKEN_IDX
     if not os.path.exists(GTFS_DB_PATH):
         print(f"[GTFS] Soubor nenalezen: {GTFS_DB_PATH}", flush=True)
         return False
@@ -767,6 +803,7 @@ def _load_gtfs():
             raise RuntimeError(f"Nerozpoznane schema: {cols}")
         cur.execute(f"SELECT {nc} AS n, {lac} AS la, {loc} AS lo FROM stops")
         stops, name_idx, grid = [], {}, {}
+        tokens_list, token_idx = [], {}
         for row in cur.fetchall():
             name = (row["n"] or "").strip()
             try:
@@ -780,8 +817,13 @@ def _load_gtfs():
             nk = _norm_txt(name)
             name_idx.setdefault(nk, []).append(idx)
             grid.setdefault(_gtfs_grid_key(la, lo), []).append(idx)
+            tk = _tokenize(name)
+            tokens_list.append(tk)
+            for t in tk:
+                token_idx.setdefault(t, []).append(idx)
         conn.close()
         GTFS_STOPS, GTFS_NAME_IDX, GTFS_GRID = stops, name_idx, grid
+        GTFS_TOKENS, GTFS_TOKEN_IDX = tokens_list, token_idx
         GTFS_STOP_CNT = len(stops)
         GTFS_LOADED = True
         print(f"[GTFS] Nacteno {len(stops)} zastavek z {GTFS_DB_PATH}", flush=True)
@@ -810,7 +852,8 @@ def _nearest_stop_name(lat, lon, max_m=400):
 
 
 def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=40000):
-    """GPS souradnice zastavky podle nazvu z GTFS.
+    """GPS souradnice zastavky podle nazvu z GTFS. Vraci (coords, confidence)
+    kde confidence je "exact" / "fuzzy" / None (kdyz se nic nenajde).
 
     DULEZITE: stejny nazev zastavky ('Nova Ves', 'Chrastany', ...) existuje
     v GTFS databazi desitky-kratkrat napric celou CR (databaze pokryva
@@ -823,12 +866,19 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=40000):
     nejblizsi kandidat je dal nez `max_anchor_dist_m`, povazuje se shoda za
     nedukazpodobnou a vrati se None (radsi chybejici tecka nez spatne
     umistena).
+
+    Fuzzy fallback (kdyz presny nazev nesedi) NEPOUZIVA naivni "jeden retezec
+    je podretezcem druheho" - to umelo plest napr. 'Bor, Nova Hospoda' s
+    uplne jinou zastavkou 'Novy Bor, Janov, restaurace' jen kvuli nahodne
+    spolecnemu slovu. Misto toho se pocita PREKRYV SLOV (min. 70 % kratsiho
+    nazvu) pres rychly invertovany index (jen kandidati sdileji aspon jedno
+    slovo - ne sken vsech 67k zastavek).
     """
     if not GTFS_STOPS:
-        return None
+        return None, None
     key = _norm_txt(name)
     if not key:
-        return None
+        return None, None
 
     def pick_best(idxs):
         if not idxs:
@@ -850,18 +900,33 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=40000):
             return None
         return best_coords
 
+    # 1) Presna shoda normalizovaneho nazvu
     idxs = GTFS_NAME_IDX.get(key)
     if idxs:
         result = pick_best(idxs)
         if result:
-            return result
+            return result, "exact"
 
-    if len(key) > 3:
-        candidates = [idx for idx, (n, _, _) in enumerate(GTFS_STOPS)
-                      if (lambda nk: nk and (key in nk or nk in key))(_norm_txt(n))]
-        if candidates:
-            return pick_best(candidates)
-    return None
+    # 2) Fuzzy: prekryv slov >= 70 %, hledano jen mezi kandidaty z invertovaneho indexu
+    search_tokens = _tokenize(name)
+    if search_tokens and GTFS_TOKEN_IDX:
+        candidate_idxs = set()
+        for tok in search_tokens:
+            candidate_idxs.update(GTFS_TOKEN_IDX.get(tok, ()))
+        matches = []
+        for idx in candidate_idxs:
+            cand_tokens = GTFS_TOKENS[idx]
+            if not cand_tokens:
+                continue
+            overlap = len(search_tokens & cand_tokens) / min(len(search_tokens), len(cand_tokens))
+            if overlap >= 0.7:
+                matches.append(idx)
+        if matches:
+            result = pick_best(matches)
+            if result:
+                return result, "fuzzy"
+
+    return None, None
 
 def get_db_client():
     if not HAS_SUPABASE:
@@ -1354,6 +1419,12 @@ def background_map_worker():
                     if not was_locked:
                         best_spz = min(gate_pass, key=gate_pass.get) if gate_pass else None
                         if best_spz:
+                            # Jednoznacny + blizky zasah (jediny kandidat presel vsemi branami
+                            # A je opravdu blizko) = okamzity zamek hned napoprve - rychlejsi.
+                            # Vicero kandidatu nebo jen hranicni vzdalenost = pojistka 2 tiky
+                            # (SPZ_STABLE_TICKS), aby se nezamykalo nahodou spatne.
+                            ambiguous = len(gate_pass) > 1
+                            high_confidence = (not ambiguous) and gate_pass[best_spz] <= SPZ_HIGH_CONFIDENCE_DIST_M
                             if best_spz == current_spz:
                                 c["spz_stable_ticks"] = c.get("spz_stable_ticks", 0) + 1
                             else:
@@ -1372,7 +1443,7 @@ def background_map_worker():
                                 c["spz_verified"] = False
                                 c["spz_locked"] = False
                             c["spz_last_verified"] = now
-                            if c.get("spz_stable_ticks", 0) >= SPZ_STABLE_TICKS:
+                            if high_confidence or c.get("spz_stable_ticks", 0) >= SPZ_STABLE_TICKS:
                                 c["spz_verified"] = True
                                 c["spz_locked"] = True
                         else:
@@ -1745,10 +1816,13 @@ def api_history_spz(spz):
 
 # === ROUTE BACKEND (GTFS in-memory + Nominatim fallback per zastavku) ===
 
-def _geocode_stop(stop_name, anchor=None):
+def _geocode_stop(stop_name, anchor=None, max_anchor_dist_m=20000):
     """Nominatim geocoding - fallback pro zastavky ktere GTFS nema.
     `anchor` (lat, lon) - pokud zadan, preferuje vysledek nejblizsi anchoru
-    misto pevneho stredu Plzne (presnejsi pro trasy mimo Plzensky kraj)."""
+    misto pevneho stredu Plzne (presnejsi pro trasy mimo Plzensky kraj).
+    Pokud i nejblizsi vysledek je dal nez `max_anchor_dist_m`, povazuje se
+    za nedukazpodobnou shodu a vrati se None - radsi chybejici tecka nez
+    spatne umistena (napr. uplne jine mesto se shodnym nazvem ulice/objektu)."""
     key = (stop_name.strip().lower(), anchor)
     if key in _stop_geo_cache:
         return _stop_geo_cache[key]
@@ -1758,10 +1832,14 @@ def _geocode_stop(stop_name, anchor=None):
         q = _uparse.quote(stop_name)
         url = f"https://nominatim.openstreetmap.org/search?q={q}&format=json&limit=3&countrycodes=cz&{bbox}"
         req = urllib.request.Request(url, headers={"User-Agent": "OIS-IDPK/1.0"})
-        with urllib.request.urlopen(req, timeout=3) as r:
+        with urllib.request.urlopen(req, timeout=2.5) as r:
             res = json.loads(r.read().decode())
         if res:
             best = min(res, key=lambda x: haversine_m(ref_lat, ref_lon, float(x["lat"]), float(x["lon"])))
+            d = haversine_m(ref_lat, ref_lon, float(best["lat"]), float(best["lon"]))
+            if d > max_anchor_dist_m:
+                _stop_geo_cache[key] = None
+                return None
             coords = (float(best["lat"]), float(best["lon"]))
             _stop_geo_cache[key] = coords
             return coords
@@ -1812,6 +1890,20 @@ def api_bus_route(bus_id):
     postupne posouva podel trasy: zacina na aktualni poloze busu a po kazde
     uspesne najdene zastavce se presune na jeji souradnice. Diky tomu zustava
     vyber zastavek geograficky souvisly misto skakani po cele CR.
+
+    DVOUFAZOVE RESENI KVULI RYCHLOSTI:
+    1) Sekvencni GTFS pruchod (rychly, bez site) - drzi spravne navazujici
+       anchor retezeni pro presnost.
+    2) Zastavky, ktere GTFS nenasel, se hledaji pres Nominatim VSECHNY
+       NAJEDNOU paralelne (thread pool) - misto jedna po druhe. Tohle byl
+       hlavni duvod proc hledani trasy trvalo dlouho (kazdy Nominatim dotaz
+       az 2.5s, sekvencne se to scitalo).
+
+    Kazda zastavka v odpovedi nese "confidence": "exact" (presna shoda nazvu),
+    "fuzzy" (shoda podle prekryvu slov - o neco mene jista), "geocoded"
+    (dohledano pres Nominatim - nejmene presne) nebo "none" (nenalezeno).
+    Frontend muze "fuzzy"/"geocoded" zvyraznit jinak, at je videt, ktere body
+    trasy jsou jistejsi a ktere je radno brat s rezervou.
     """
     c = GLOBAL_BUS_CACHE.get(bus_id)
     if not c:
@@ -1821,64 +1913,69 @@ def api_bus_route(bus_id):
     if not stop_names:
         return jsonify({"stops": [], "error": "Zastavky nenalezeny v JR PVVD"})
 
-    result = []
-    gtfs_hits = 0
-    nominatim_hits = 0
+    result = [None] * len(stop_names)
     seen = {}
+    pending = []  # (index, name_c, anchor_v_danou_chvili) - pro Nominatim fallback
     anchor = (c.get("lat"), c.get("lng")) if c.get("lat") and c.get("lng") else None
 
+    # ── PASS 1: sekvencni GTFS pruchod s anchor retezenim ───────────────────
     for i, (name, t) in enumerate(zip(stop_names, stop_times)):
         name_c = name.strip()
 
-        # Duplikatni zastavky (smyckova linka) - male offsety aby se body neprekryvaly
         if name_c in seen:
             prev_lat, prev_lng = seen[name_c]
-            if prev_lat:
-                result.append({
-                    "name": name_c, "time": t,
-                    "lat": prev_lat + 0.00002 * (i % 4 + 1),
-                    "lng": prev_lng,
-                    "passed": i < current_idx,
-                    "source": "dup",
-                })
+            result[i] = {
+                "name": name_c, "time": t,
+                "lat": (prev_lat + 0.00002 * (i % 4 + 1)) if prev_lat else None,
+                "lng": prev_lng,
+                "passed": i < current_idx,
+                "confidence": "dup",
+            }
             continue
 
-        coords = None
-        source = "unknown"
-
-        # 1) Zkus GTFS in-memory (rychle, bez sitoveho pozadavku) - s geo kotvou
+        coords, conf = (None, None)
         if GTFS_LOADED:
-            coords = _lookup_stop_coords(name_c, anchor=anchor)
-            if coords:
-                gtfs_hits += 1
-                source = "gtfs"
+            coords, conf = _lookup_stop_coords(name_c, anchor=anchor)
 
-        # 2) Fallback: Nominatim jen pro tuto konkretni zastavku - take s kotvou
-        if not coords:
-            coords = _geocode_stop(name_c, anchor=anchor)
-            if coords:
-                nominatim_hits += 1
-                source = "nominatim"
-
-        lat = coords[0] if coords else None
-        lng = coords[1] if coords else None
-        seen[name_c] = (lat, lng)
         if coords:
-            anchor = coords  # posun kotvu na posledni uspesne nalezenou zastavku
-        result.append({
-            "name": name_c, "time": t,
-            "lat": lat, "lng": lng,
-            "passed": i < current_idx,
-            "source": source,
-        })
+            seen[name_c] = coords
+            anchor = coords
+            result[i] = {"name": name_c, "time": t, "lat": coords[0], "lng": coords[1],
+                         "passed": i < current_idx, "confidence": conf}
+        else:
+            pending.append((i, name_c, anchor, t))
 
+    # ── PASS 2: zbyle zastavky pres Nominatim - VSECHNY NAJEDNOU paralelne ──
+    if pending:
+        def resolve(item):
+            idx, name_c, anch, t = item
+            coords = _geocode_stop(name_c, anchor=anch)
+            return idx, name_c, t, coords
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+            for idx, name_c, t, coords in pool.map(resolve, pending):
+                if coords:
+                    seen[name_c] = coords
+                result[idx] = {
+                    "name": name_c, "time": t,
+                    "lat": coords[0] if coords else None,
+                    "lng": coords[1] if coords else None,
+                    "passed": idx < current_idx,
+                    "confidence": "geocoded" if coords else "none",
+                }
+
+    gtfs_hits = sum(1 for s in result if s["confidence"] == "exact")
+    fuzzy_hits = sum(1 for s in result if s["confidence"] == "fuzzy")
+    nominatim_hits = sum(1 for s in result if s["confidence"] == "geocoded")
     found = sum(1 for s in result if s["lat"])
-    print(f"[ROUTE] Bus {bus_id}: {found}/{len(result)} zastavek (GTFS:{gtfs_hits} Nominatim:{nominatim_hits})", flush=True)
+    print(f"[ROUTE] Bus {bus_id}: {found}/{len(result)} zastavek "
+          f"(presne:{gtfs_hits} fuzzy:{fuzzy_hits} nominatim:{nominatim_hits})", flush=True)
     return jsonify({
         "stops": result,
         "bus_id": bus_id,
         "found": found,
         "total": len(result),
         "gtfs_hits": gtfs_hits,
+        "fuzzy_hits": fuzzy_hits,
         "nominatim_hits": nominatim_hits,
     })
