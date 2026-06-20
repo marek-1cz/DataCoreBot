@@ -290,6 +290,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     <div class="n-clock"><span id="systemTimeClock">--:--:--</span></div>
     <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠 Domu</a>
     <a href="/provoz-idpk" class="n-btn n-provoz">🚏 IDPK</a>
+    <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:6px 11px;border-radius:6px;font-weight:bold;font-size:12px;flex-shrink:0;white-space:nowrap;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
     __AD_BTN__
     <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
       <input id="spz-search-inp" type="text" placeholder="🔍 Hledat SPZ..."
@@ -378,7 +379,7 @@ nav.addEventListener('mouseenter',()=>clearTimeout(hideT));
 nav.addEventListener('mouseleave',()=>{hideT=setTimeout(hideNav,600);});
 document.addEventListener('touchstart',e=>{if(e.touches[0].clientY<35){showNav(4500);}else if(!nav.contains(e.target)){clearTimeout(hideT);hideT=setTimeout(hideNav,400);}},{passive:true});
 showNav(4000);
-if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';}
+if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';}
 
 // === MAP ===
 var dLat=49.7384,dLng=13.3736,dZoom=12;
@@ -390,6 +391,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,att
 setTimeout(()=>map.invalidateSize(),300);
 var ml=L.layerGroup().addTo(map);
 var routeLayer=L.layerGroup().addTo(map);
+var ntLayer=L.layerGroup().addTo(map);
 if(hp.length===2&&!isNaN(hp[0])&&hp[0]!=="")L.circleMarker([dLat,dLng],{radius:28,color:'#ef4444',weight:2,opacity:.8,fillOpacity:.12}).addTo(map);
 
 // === STATE (MODULE LEVEL) ===
@@ -528,6 +530,62 @@ async function toggleRoute(busId){
     if(btn){btn.textContent=label;btn.style.background='#1e40af';}
   }catch(e){if(btn){btn.textContent='Chyba nacitani';btn.style.background='#7f1d1d';}console.error('Route:',e);}
 }
+
+// === NT (Nastaveni tras) - rucni kalibrace poloh zastavek ===
+let ntMode=false;
+let ntMoveTimer=null;
+function toggleNT(){
+  ntMode=!ntMode;
+  let btn=document.getElementById('nt-toggle-btn');
+  if(ntMode){
+    btn.style.background='#f59e0b';btn.style.color='#0f172a';
+    showAdminToast('🛠️ Rezim uprav zapnut - tahni body mysi, uklada se hned',true);
+    loadNTStops();
+  }else{
+    btn.style.background='transparent';btn.style.color='#f59e0b';
+    ntLayer.clearLayers();
+  }
+}
+async function loadNTStops(){
+  if(!ntMode)return;
+  let b=map.getBounds();
+  let url=`/api/admin/route_stops?south=${b.getSouth()}&west=${b.getWest()}&north=${b.getNorth()}&east=${b.getEast()}`;
+  try{
+    let r=await fetch(url);let data=await r.json();
+    if(!ntMode)return; // mezitim vypnuto
+    ntLayer.clearLayers();
+    if(data.status!=='success'){showAdminToast(data.message||'Chyba nacitani zastavek',false);return;}
+    data.stops.forEach(s=>{
+      let cls=s.manual?'nt-dot-manual':(s.flagged?'nt-dot-flagged':'nt-dot-normal');
+      let icon=L.divIcon({className:'',html:`<div class="nt-dot ${cls}"></div>`,iconSize:[14,14],iconAnchor:[7,7]});
+      let m=L.marker([s.lat,s.lng],{icon,draggable:true,zIndexOffset:500});
+      let label=s.manual?'✅ rucne opraveno':(s.flagged?'⚠️ nejiste - zkontroluj':'');
+      m.bindTooltip(`<b>🚏 ${s.name}</b>${label?'<br>'+label:''}`,{direction:'top',className:'dark-popup'});
+      m.on('dragend',async()=>{
+        let pos=m.getLatLng();
+        m.setIcon(L.divIcon({className:'',html:`<div class="nt-dot nt-dot-saving"></div>`,iconSize:[14,14],iconAnchor:[7,7]}));
+        try{
+          let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng})});
+          let rd=await res.json();
+          if(rd.status==='success'){
+            m.setIcon(L.divIcon({className:'',html:`<div class="nt-dot nt-dot-manual"></div>`,iconSize:[14,14],iconAnchor:[7,7]}));
+            m.setTooltipContent(`<b>🚏 ${s.name}</b><br>✅ rucne opraveno`);
+            showAdminToast(`💾 Ulozeno: ${s.name}`,true);
+          }else{
+            showAdminToast('Chyba ukladani: '+(rd.message||'?'),false);
+          }
+        }catch(e){showAdminToast('Chyba spojeni pri ukladani',false);}
+      });
+      ntLayer.addLayer(m);
+    });
+  }catch(e){console.error('NT load:',e);}
+}
+map.on('moveend',()=>{
+  if(!ntMode)return;
+  clearTimeout(ntMoveTimer);
+  ntMoveTimer=setTimeout(loadNTStops,400);
+});
 
 // === SPZ SEARCH ===
 function spzSearch(val){
@@ -705,6 +763,18 @@ GTFS_STOP_CNT  = 0
 GTFS_TOKENS    = []           # parallel list k GTFS_STOPS: frozenset slov v nazvu
 GTFS_TOKEN_IDX = {}           # slovo -> [indexy do GTFS_STOPS] (invertovany index pro rychly fuzzy hledani)
 
+# ── Rezim "Nastaveni tras" (NT) - rucni opravy poloh zastavek ────────────────
+# STOP_OVERRIDES ma VZDY prednost pred GTFS - kdyz admin v NT rezimu rucne
+# presune bod a ulozi, system uz tu zastavku nikdy znovu nehleda v GTFS/
+# Nominatim, jen pouzije ulozenou polohu. Persistuje se do Supabase tabulky
+# 'stop_overrides', aby to preziv restart workeru.
+STOP_OVERRIDES = {}           # norm_name -> {"lat":, "lng":, "name": puvodni zobrazovany nazev}
+# CONFIDENCE_LOG si pamatuje, s jakou jistotou se naposled kazda zastavka
+# nasla (exact/fuzzy/geocoded/none/manual) - pri pruchodu trasy v
+# api_bus_route. NT rezim podle toho zvyrazni "podezrele" body, at je admin
+# vidi rovnou, bez nutnosti proklikavat kazdou trasu zvlast.
+CONFIDENCE_LOG = {}           # norm_name -> {"confidence":, "name":}
+
 cj     = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
 
@@ -749,28 +819,53 @@ def haversine_m(lat1, lon1, lat2, lon2):
     return 2 * R * math.asin(min(1.0, math.sqrt(a)))
 
 
-def _norm_txt(s):
-    """Normalizace textu pro porovnani (diakritika, mezery, velikost pismen)."""
+# Bezne ceske zkratky pouzivane v nazvech zastavek (PVVD casto zkracuje, GTFS
+# obvykle ne) - rozepsano PRED odstranenim teckovani/mezer, aby \b funguje
+# spravne a aby se napr. "aut. st." a "zel. st." nepletly (obe obsahuji "st.",
+# ale kazda znamena neco jineho - autobusove stanoviste vs zeleznicni stanice).
+_ABBREV_PATTERNS = [
+    (re.compile(r'\bzel\.?\s*st\.?\b'), 'zeleznicni stanice'),
+    (re.compile(r'\bzel\.?\s*zast\.?\b'), 'zeleznicni zastavka'),
+    (re.compile(r'\baut\.?\s*st\.?\b'), 'autobusove stanoviste'),
+    (re.compile(r'\bnadr\.?\b'), 'nadrazi'),
+    (re.compile(r'\bnam\.?\b'), 'namesti'),
+    (re.compile(r'\bzast\.?\b'), 'zastavka'),
+    (re.compile(r'\brozc\.?\b'), 'rozcesti'),
+    (re.compile(r'\bkriz\.?\b'), 'krizovatka'),
+    (re.compile(r'\bul\.?\b'), 'ulice'),
+]
+
+
+def _pre_normalize(s):
+    """Lowercase + odstraneni diakritiky + rozepsani znamych zkratek.
+    Mezery/teckovani se NEodstranuji - to az nasledne v _norm_txt/_tokenize."""
     if not s:
         return ""
     s = str(s).lower()
     s = unicodedata.normalize('NFKD', s)
     s = ''.join(ch for ch in s if not unicodedata.combining(ch))
-    return re.sub(r'[^a-z0-9]+', '', s)
+    for pattern, repl in _ABBREV_PATTERNS:
+        s = pattern.sub(repl, s)
+    return s
+
+
+def _norm_txt(s):
+    """Normalizace textu pro porovnani (diakritika, zkratky, mezery, velikost pismen)."""
+    if not s:
+        return ""
+    return re.sub(r'[^a-z0-9]+', '', _pre_normalize(s))
 
 
 def _tokenize(s):
-    """Rozdeli nazev na normalizovana 'slova' (bez diakritiky, min. 3 znaky).
-    Pouziva se pro presnejsi fuzzy parovani nazvu zastavek - misto naivniho
-    'je jeden retezec podretezcem druheho' se pocita prekryv SLOV. Diky tomu
-    se napr. 'Bor, Nova Hospoda' uz neplete s 'Novy Bor, Janov, restaurace'
-    jen kvuli nahodne spolecnemu slovu."""
+    """Rozdeli nazev na normalizovana 'slova' (bez diakritiky, zkratky rozepsany,
+    min. 3 znaky). Pouziva se pro presnejsi fuzzy parovani nazvu zastavek - misto
+    naivniho 'je jeden retezec podretezcem druheho' se pocita prekryv SLOV. Diky
+    tomu se napr. 'Bor, Nova Hospoda' uz neplete s 'Novy Bor, Janov, restaurace'
+    jen kvuli nahodne spolecnemu slovu, a 'aut. st.' se spravne rozepise na
+    'autobusove stanoviste' misto kolize se 'zel. st.' (zelezni stanice)."""
     if not s:
         return frozenset()
-    s = str(s).lower()
-    s = unicodedata.normalize('NFKD', s)
-    s = ''.join(ch for ch in s if not unicodedata.combining(ch))
-    raw = re.split(r'[^a-z0-9]+', s)
+    raw = re.split(r'[^a-z0-9]+', _pre_normalize(s))
     return frozenset(t for t in raw if len(t) >= 3)
 
 
@@ -833,6 +928,28 @@ def _load_gtfs():
         return False
 
 
+def _load_stop_overrides(db):
+    """Nacte rucni opravy poloh zastavek (NT rezim) ze Supabase do pameti.
+    Vola se jednou pri startu workeru. Tabulka 'stop_overrides' nemusi
+    existovat (napr. pred prvnim pouzitim NT rezimu) - v tom pripade se
+    proste pokracuje s prazdnym STOP_OVERRIDES, nic se nerozbije."""
+    global STOP_OVERRIDES
+    if not db:
+        return
+    try:
+        res = db.table("stop_overrides").select("*").execute()
+        loaded = {}
+        for row in (res.data or []):
+            nm = row.get("stop_name")
+            if not nm:
+                continue
+            loaded[_norm_txt(nm)] = {"lat": row["lat"], "lng": row["lng"], "name": nm}
+        STOP_OVERRIDES = loaded
+        print(f"[NT] Nacteno {len(loaded)} rucnich oprav poloh zastavek.", flush=True)
+    except Exception as e:
+        print(f"[NT] Tabulka stop_overrides nedostupna (OK pokud NT jeste nebyl pouzit): {e}", flush=True)
+
+
 def _nearest_stop_name(lat, lon, max_m=400):
     """Nejblizsi GTFS zastavka k dane pozici (pro krizovou kontrolu lastStopName z Arrivy)."""
     if not GTFS_STOPS:
@@ -851,7 +968,7 @@ def _nearest_stop_name(lat, lon, max_m=400):
     return best_name if (best_d is not None and best_d <= max_m) else None
 
 
-def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=40000):
+def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000):
     """GPS souradnice zastavky podle nazvu z GTFS. Vraci (coords, confidence)
     kde confidence je "exact" / "fuzzy" / None (kdyz se nic nenajde).
 
@@ -874,10 +991,19 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=40000):
     nazvu) pres rychly invertovany index (jen kandidati sdileji aspon jedno
     slovo - ne sken vsech 67k zastavek).
     """
-    if not GTFS_STOPS:
+    if not GTFS_STOPS and not STOP_OVERRIDES:
         return None, None
     key = _norm_txt(name)
     if not key:
+        return None, None
+
+    # 0) Rucni oprava z NT rezimu ma VZDY prednost - admin uz to jednou
+    # rucne overil a ulozil, takze se uz znovu nehleda v GTFS/Nominatim.
+    ov = STOP_OVERRIDES.get(key)
+    if ov:
+        return (ov["lat"], ov["lng"]), "manual"
+
+    if not GTFS_STOPS:
         return None, None
 
     def pick_best(idxs):
@@ -907,19 +1033,33 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=40000):
         if result:
             return result, "exact"
 
-    # 2) Fuzzy: prekryv slov >= 70 %, hledano jen mezi kandidaty z invertovaneho indexu
+    # 2) Fuzzy: Jaccard prekryv slov (prunik/sjednoceni, ne jen prunik/min)
+    # >= 70 %, hledano jen mezi kandidaty z invertovaneho indexu (sdileji
+    # aspon jedno slovo - ne sken vsech 67k zastavek).
+    #
+    # DULEZITE proc zrovna Jaccard a ne "prunik / kratsi z obou": kdyby se
+    # delilo jen kratsi mnozinou, kratsi nazev jako "Kladruby, Vrbice" by
+    # VZDY vysel jako 100% shoda s delsim "Kladruby, Vrbice, rozcesti" -
+    # i kdyz jde o dve ruzna, nekolik km vzdalena mista. Jaccard navic
+    # penalizuje chybejici/navic slovo (delitel je SJEDNOCENI, ne min),
+    # takze "...rozcesti" uz nevyjde stejne jako bez nej.
     search_tokens = _tokenize(name)
     if search_tokens and GTFS_TOKEN_IDX:
         candidate_idxs = set()
         for tok in search_tokens:
             candidate_idxs.update(GTFS_TOKEN_IDX.get(tok, ()))
+        best_score = 0.0
         matches = []
         for idx in candidate_idxs:
             cand_tokens = GTFS_TOKENS[idx]
             if not cand_tokens:
                 continue
-            overlap = len(search_tokens & cand_tokens) / min(len(search_tokens), len(cand_tokens))
-            if overlap >= 0.7:
+            score = len(search_tokens & cand_tokens) / len(search_tokens | cand_tokens)
+            if score < 0.7:
+                continue
+            if score > best_score:
+                best_score, matches = score, [idx]
+            elif score == best_score:
                 matches.append(idx)
         if matches:
             result = pick_best(matches)
@@ -1056,6 +1196,7 @@ def background_map_worker():
             print(f"[MAPA] Na\u010dteno {len(TRACKED_SPZS)} sledovan\u00fdch SPZ.")
         except Exception:
             pass
+        _load_stop_overrides(db_client)
 
     url_inflow_base = "https://pvvd.idpk.cz/Ajax/GetPoints"
     url_arriva = "https://www.arriva.cz/api/graphql"
@@ -1356,8 +1497,15 @@ def background_map_worker():
                 # 2) best_match_dest se ted pouziva jako TVRDA PODMINKA (kandidat s nesedici
                 #    destinaci se rovnou zahodí, misto toho aby jen nezaktualizoval timestamp).
                 # 3) lastStopName z Arrivy se pouziva jako dalsi krizova kontrola (pokud GTFS data dostupna).
+                # 4) Kdyz bus dlouho nestoji v pohybu (inact > 10 min - stejny prah jako
+                #    "Stoji prilis dlouho" status nize), SPZ se NEPARUJE ANI NEKONTROLUJE.
+                #    Stojici bus (depo, zaseknuty, cekajici dlouho) ma nespolehlivou polohu
+                #    vuci zive Arriva mape - hledani/re-audit SPZ za techto podminek casteji
+                #    vede ke spatnemu prirazeni nez k uzitku. SPZ zustava zamrazena na
+                #    poslednim znamem stavu, dokud se bus znovu nerozjede.
                 # ══════════════════════════════════════════════════════════════════
-                if not is_train and not c.get("investigating") and not c.get("manual_spz") and not c.get("bug_locked"):
+                if (not is_train and not c.get("investigating") and not c.get("manual_spz")
+                        and not c.get("bug_locked") and inact <= 10):
                     d1_norm = _norm_txt(dest1)
                     near_stop = _nearest_stop_name(lat1, lng1, ARRIVA_STOP_MATCH_M) if GTFS_LOADED else None
                     near_stop_norm = _norm_txt(near_stop) if near_stop else ""
@@ -1761,7 +1909,120 @@ def api_debug_gtfs():
         "db_path": GTFS_DB_PATH,
         "db_exists": db_exists,
         "db_size_mb": round(db_size / 1024 / 1024, 2),
+        "manual_overrides": len(STOP_OVERRIDES),
+        "flagged_stops": len(CONFIDENCE_LOG),
     })
+
+
+@mapa_bp.route('/api/admin/route_stops')
+def api_admin_route_stops():
+    """NT rezim (Nastaveni tras): vrati zastavky v aktualnim vyrezu mapy
+    (bbox), kazdou s efektivni polohou (rucni oprava ma prednost pred GTFS),
+    priznakem "manual" (uz rucne opraveno) a "flagged" (system si pri
+    posledni trase nebyl jisty - fuzzy/geocoded/none shoda)."""
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
+    try:
+        south = float(request.args.get('south'))
+        west = float(request.args.get('west'))
+        north = float(request.args.get('north'))
+        east = float(request.args.get('east'))
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "Chyb\u00ed/\u0161patn\u00e9 sou\u0159adnice v\u00fdezu"}), 400
+
+    if not GTFS_STOPS:
+        return jsonify({"status": "error", "message": "GTFS data nejsou na\u010dtena"})
+
+    lat_b0, lat_b1 = round(south / GTFS_GRID_SZ), round(north / GTFS_GRID_SZ)
+    lon_b0, lon_b1 = round(west / GTFS_GRID_SZ), round(east / GTFS_GRID_SZ)
+    if (lat_b1 - lat_b0 + 1) * (lon_b1 - lon_b0 + 1) > 20000:
+        return jsonify({"status": "error", "message": "V\u00fdb\u011br na map\u011b je moc velk\u00fd - p\u0159ibli\u017e si konkr\u00e9tn\u011bj\u0161\u00ed oblast"})
+
+    idxs = set()
+    for la_b in range(lat_b0, lat_b1 + 1):
+        for lo_b in range(lon_b0, lon_b1 + 1):
+            idxs.update(GTFS_GRID.get((la_b, lo_b), ()))
+
+    # Dedup podle nazvu - vicero stop_id na stejnem fyzickem miste (ruzna
+    # nastupiste) se v editacnim rezimu zobrazi jako jeden bod, protoze
+    # rucni oprava stejne pusobi na cely nazev, ne na jednotlive stop_id.
+    by_name = {}
+    for idx in idxs:
+        name, la, lo = GTFS_STOPS[idx]
+        if not (south <= la <= north and west <= lo <= east):
+            continue
+        key = _norm_txt(name)
+        if key not in by_name:
+            by_name[key] = (name, la, lo)
+
+    if len(by_name) > 1500:
+        return jsonify({"status": "error", "message": f"P\u0159\u00edli\u0161 mnoho zast\u00e1vek ve v\u00fdezu ({len(by_name)}) - p\u0159ibli\u017e si v\u00edc"})
+
+    stops_out = []
+    for key, (name, la, lo) in by_name.items():
+        ov = STOP_OVERRIDES.get(key)
+        eff_lat, eff_lng = (ov["lat"], ov["lng"]) if ov else (la, lo)
+        flag = CONFIDENCE_LOG.get(key)
+        flagged = bool(flag and flag.get("confidence") in ("fuzzy", "geocoded", "none"))
+        stops_out.append({
+            "name": name, "lat": eff_lat, "lng": eff_lng,
+            "manual": bool(ov), "flagged": flagged,
+        })
+
+    return jsonify({"status": "success", "stops": stops_out, "count": len(stops_out)})
+
+
+@mapa_bp.route('/api/admin/save_stop_override', methods=['POST'])
+def api_admin_save_stop_override():
+    """NT rezim: ulozi rucne opravenou polohu zastavky - natrvalo (do
+    Supabase) i okamzite do pameti, takze se projevi uz v dalsi trase."""
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name", "")).strip()
+    try:
+        lat = float(data.get("lat"))
+        lng = float(data.get("lng"))
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "\u0160patn\u00e9 sou\u0159adnice"}), 400
+    if not name:
+        return jsonify({"status": "error", "message": "Chyb\u00ed n\u00e1zev zast\u00e1vky"}), 400
+
+    key = _norm_txt(name)
+    STOP_OVERRIDES[key] = {"lat": lat, "lng": lng, "name": name}
+    CONFIDENCE_LOG.pop(key, None)  # admin to prave rucne potvrdil - uz neni "podezrele"
+
+    db = get_db_client()
+    if db:
+        try:
+            db.table("stop_overrides").upsert({
+                "stop_name": name, "lat": lat, "lng": lng,
+                "updated_at": get_prague_time().isoformat(),
+            }, on_conflict="stop_name").execute()
+        except Exception as e:
+            print(f"[NT] Chyba ukl\u00e1d\u00e1n\u00ed do DB (v pam\u011bti ulo\u017eeno, ale neprezije restart): {e}", flush=True)
+
+    return jsonify({"status": "success"})
+
+
+@mapa_bp.route('/api/admin/delete_stop_override', methods=['POST'])
+def api_admin_delete_stop_override():
+    """NT rezim: vrati zastavku zpet na automaticky urcenou polohu (GTFS/Nominatim)."""
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name", "")).strip()
+    if not name:
+        return jsonify({"status": "error", "message": "Chyb\u00ed n\u00e1zev zast\u00e1vky"}), 400
+    key = _norm_txt(name)
+    STOP_OVERRIDES.pop(key, None)
+    db = get_db_client()
+    if db:
+        try:
+            db.table("stop_overrides").delete().eq("stop_name", name).execute()
+        except Exception as e:
+            print(f"[NT] Chyba maz\u00e1n\u00ed z DB: {e}", flush=True)
+    return jsonify({"status": "success"})
 
 
 @mapa_bp.route('/api/bus_detail/<bus_id>')
@@ -1899,11 +2160,12 @@ def api_bus_route(bus_id):
        hlavni duvod proc hledani trasy trvalo dlouho (kazdy Nominatim dotaz
        az 2.5s, sekvencne se to scitalo).
 
-    Kazda zastavka v odpovedi nese "confidence": "exact" (presna shoda nazvu),
-    "fuzzy" (shoda podle prekryvu slov - o neco mene jista), "geocoded"
-    (dohledano pres Nominatim - nejmene presne) nebo "none" (nenalezeno).
-    Frontend muze "fuzzy"/"geocoded" zvyraznit jinak, at je videt, ktere body
-    trasy jsou jistejsi a ktere je radno brat s rezervou.
+    Kazda zastavka v odpovedi nese "confidence": "manual" (rucne opraveno v NT
+    rezimu - nejjistejsi), "exact" (presna shoda nazvu), "fuzzy" (shoda podle
+    prekryvu slov - o neco mene jista), "geocoded" (dohledano pres Nominatim -
+    nejmene presne) nebo "none" (nenalezeno). Frontend muze "fuzzy"/"geocoded"
+    zvyraznit jinak, at je videt, ktere body trasy jsou jistejsi a ktere je
+    radno brat s rezervou.
     """
     c = GLOBAL_BUS_CACHE.get(bus_id)
     if not c:
@@ -1934,7 +2196,7 @@ def api_bus_route(bus_id):
             continue
 
         coords, conf = (None, None)
-        if GTFS_LOADED:
+        if GTFS_LOADED or STOP_OVERRIDES:
             coords, conf = _lookup_stop_coords(name_c, anchor=anchor)
 
         if coords:
@@ -1963,6 +2225,13 @@ def api_bus_route(bus_id):
                     "passed": idx < current_idx,
                     "confidence": "geocoded" if coords else "none",
                 }
+
+    # Zaznamenej jistotu kazde zastavky - NT rezim podle tohoto zvyrazni
+    # "podezrele" body (fuzzy/geocoded/none), at je admin nemusi hledat
+    # proklikavanim kazde trasy zvlast.
+    for s in result:
+        if s and s.get("name") and s.get("confidence") not in (None, "dup"):
+            CONFIDENCE_LOG[_norm_txt(s["name"])] = {"confidence": s["confidence"], "name": s["name"]}
 
     gtfs_hits = sum(1 for s in result if s["confidence"] == "exact")
     fuzzy_hits = sum(1 for s in result if s["confidence"] == "fuzzy")
