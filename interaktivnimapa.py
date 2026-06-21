@@ -27,6 +27,7 @@ mapa_bp = Blueprint('mapa_bp', __name__)
 SPZ_HOLD_MINUTES      = 8
 SPZ_STABLE_TICKS      = 2
 SPZ_HIGH_CONFIDENCE_DIST_M = 300  # jednoznacny + blizky zasah = zamek hned, bez cekani na 2. tik
+SPZ_REAUDIT_INTERVAL_SEC = 60      # jak casto preverovat UZ overenou (fajfka) SPZ - nizsi priorita nez hledani neoverenych
 GHOST_MAX_OFFLINE_MIN = 20
 GHOST_DIST_STRICT     = 0.010
 DUPLICATE_GRACE_SEC   = 120
@@ -266,6 +267,28 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 .route-line-future{stroke-dasharray:14 10;animation:routeFlow 0.9s linear infinite;stroke-linecap:round;}
 @keyframes routeFlow{to{stroke-dashoffset:-24;}}
 .route-line-past{stroke-linecap:round;}
+.nt-dot{width:14px;height:14px;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.6);cursor:grab;box-sizing:border-box;}
+.nt-dot-normal{background:#38bdf8;border:2px solid white;}
+.nt-dot-manual{background:#10b981;border:2px solid white;}
+.nt-dot-flagged{background:#f59e0b;border:2px solid #fff;animation:ntPulse 1.2s ease-in-out infinite;}
+.nt-dot-saving{background:#a855f7;border:2px solid white;opacity:.7;}
+@keyframes ntPulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.7);}50%{box-shadow:0 0 0 7px rgba(245,158,11,0);}}
+.pub-dot{width:9px;height:9px;border-radius:50%;background:#38bdf8;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.5);}
+.pub-dot-approx{background:#f59e0b;border:2px dashed white;}
+.pub-dot-substitute{background:#a855f7;border:2px dashed white;}
+#nt-edit-pop{position:fixed;bottom:18px;left:18px;z-index:4500;background:#1e293b;border:2px solid #f59e0b;border-radius:10px;padding:12px 14px;width:240px;box-shadow:0 8px 24px rgba(0,0,0,.7);display:none;}
+#nt-edit-pop .ntp-t{color:#f59e0b;font-weight:bold;font-size:13px;margin-bottom:8px;}
+#nt-edit-pop label{display:flex;align-items:center;gap:7px;color:#cbd5e1;font-size:12px;margin-bottom:7px;cursor:pointer;}
+#nt-edit-pop input[type=checkbox]{width:15px;height:15px;cursor:pointer;}
+#nt-edit-pop button{width:100%;padding:6px;border:none;border-radius:5px;font-size:12px;font-weight:bold;cursor:pointer;margin-top:3px;}
+#log-panel{position:fixed;bottom:18px;right:18px;z-index:4500;background:#0f172a;border:2px solid #475569;border-radius:10px;width:380px;max-width:90vw;display:none;box-shadow:0 8px 24px rgba(0,0,0,.7);}
+#log-panel .lp-h{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #334155;}
+#log-panel .lp-h span{color:#94a3b8;font-size:12px;font-weight:bold;}
+#log-panel .lp-h button{background:none;border:1px solid #475569;color:#94a3b8;border-radius:4px;font-size:10px;padding:3px 7px;cursor:pointer;margin-left:5px;}
+#log-body{max-height:240px;overflow-y:auto;padding:8px 12px;font-family:monospace;font-size:10.5px;color:#94a3b8;line-height:1.5;}
+#log-body .lg-err{color:#f87171;}
+#log-body .lg-warn{color:#fbbf24;}
+#log-body .lg-ok{color:#34d399;}
 @media(max-width:768px){
   #top-nav{gap:5px;padding:0 6px;height:auto;min-height:52px;flex-wrap:wrap;padding-bottom:5px;padding-top:5px;}
   .n-title,.n-warn{display:none;}
@@ -290,7 +313,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     <div class="n-clock"><span id="systemTimeClock">--:--:--</span></div>
     <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠 Domu</a>
     <a href="/provoz-idpk" class="n-btn n-provoz">🚏 IDPK</a>
+    <button id="pub-stops-btn" onclick="togglePubStops()" class="n-btn" style="background:transparent;border:1px solid #475569;color:#94a3b8;cursor:pointer;">🚏 Zobrazit zastavky</button>
     <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:6px 11px;border-radius:6px;font-weight:bold;font-size:12px;flex-shrink:0;white-space:nowrap;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
+    <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:6px 11px;border-radius:6px;font-weight:bold;font-size:12px;flex-shrink:0;white-space:nowrap;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋 LOG</button>
     __AD_BTN__
     <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
       <input id="spz-search-inp" type="text" placeholder="🔍 Hledat SPZ..."
@@ -327,9 +352,28 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
       <button onclick="stopFollow()" style="color:#ef4444;">X</button>
     </div>
   </div>
+  <div id="nt-edit-pop">
+    <div class="ntp-t">🚏 <span id="ntp-name">-</span></div>
+    <label><input type="checkbox" id="ntp-approx"> ⚠️ Pribli\u017en\u00e1 poloha</label>
+    <label><input type="checkbox" id="ntp-substitute"> \U0001F500 N\u00e1hradn\u00ed zast\u00e1vka</label>
+    <button onclick="saveNtFlags()" style="background:#10b981;color:white;">\U0001F4BE Ulozit p\u0159\u00edznaky</button>
+    <button onclick="document.getElementById('nt-edit-pop').style.display='none'" style="background:#334155;color:#94a3b8;">Zav\u0159\u00edt</button>
+  </div>
+  <div id="log-panel">
+    <div class="lp-h">
+      <span>\U0001F4CB LOG</span>
+      <div>
+        <button onclick="copyLog()">Kop\u00edrovat</button>
+        <button onclick="clearLog()">Vymazat</button>
+        <button onclick="document.getElementById('log-panel').style.display='none'">X</button>
+      </div>
+    </div>
+    <div id="log-body"></div>
+  </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <script>
 const IS_ADMIN=__IS_ADMIN__;
 
@@ -379,7 +423,7 @@ nav.addEventListener('mouseenter',()=>clearTimeout(hideT));
 nav.addEventListener('mouseleave',()=>{hideT=setTimeout(hideNav,600);});
 document.addEventListener('touchstart',e=>{if(e.touches[0].clientY<35){showNav(4500);}else if(!nav.contains(e.target)){clearTimeout(hideT);hideT=setTimeout(hideNav,400);}},{passive:true});
 showNav(4000);
-if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';}
+if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
 
 // === MAP ===
 var dLat=49.7384,dLng=13.3736,dZoom=12;
@@ -392,6 +436,7 @@ setTimeout(()=>map.invalidateSize(),300);
 var ml=L.layerGroup().addTo(map);
 var routeLayer=L.layerGroup().addTo(map);
 var ntLayer=L.layerGroup().addTo(map);
+var pubStopsLayer=L.layerGroup().addTo(map);
 if(hp.length===2&&!isNaN(hp[0])&&hp[0]!=="")L.circleMarker([dLat,dLng],{radius:28,color:'#ef4444',weight:2,opacity:.8,fillOpacity:.12}).addTo(map);
 
 // === STATE (MODULE LEVEL) ===
@@ -402,6 +447,40 @@ let activeRouteId=null;
 // Pokud by byla lokalni, kazdy 10s refresh by vytvoril novou promennou s
 // hodnotou false a closure v popupclose by vzdy videla false -> mazala trasu.
 let isRefreshing=false;
+
+// === LOG (pro admin, k debugovani a kopirovani chyb) ===
+let logEntries=[];
+function appLog(msg,level){
+  level=level||'info';
+  let t=new Date().toLocaleTimeString('cs-CZ');
+  logEntries.push({t,msg,level});
+  if(logEntries.length>300)logEntries.shift();
+  let body=document.getElementById('log-body');
+  if(body){
+    let cls=level==='error'?'lg-err':(level==='warn'?'lg-warn':(level==='ok'?'lg-ok':''));
+    let line=document.createElement('div');
+    line.className=cls;
+    line.textContent=`[${t}] ${msg}`;
+    body.appendChild(line);
+    body.scrollTop=body.scrollHeight;
+  }
+}
+function toggleLogPanel(){
+  let p=document.getElementById('log-panel');
+  if(!p)return;
+  p.style.display=(p.style.display==='block')?'none':'block';
+}
+function copyLog(){
+  let txt=logEntries.map(e=>`[${e.t}] ${e.msg}`).join('\n');
+  navigator.clipboard.writeText(txt).then(()=>showAdminToast('📋 Log zkopirovan',true)).catch(()=>showAdminToast('Kopirovani selhalo',false));
+}
+function clearLog(){
+  logEntries=[];
+  let body=document.getElementById('log-body');
+  if(body)body.innerHTML='';
+}
+window.addEventListener('error',e=>{appLog('JS chyba: '+(e.message||e)+(e.filename?` (${e.filename}:${e.lineno})`:''),'error');});
+window.addEventListener('unhandledrejection',e=>{appLog('Neosetrena chyba (promise): '+(e.reason&&e.reason.message?e.reason.message:e.reason),'error');});
 
 // === HUD ===
 function stopFollow(){followId=null;followInflowId=null;hudMin=false;document.getElementById('hud').style.display='none';document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';}
@@ -505,10 +584,13 @@ async function toggleRoute(busId){
       if(!stop.lat||!stop.lng)return;
       let dC=stop.passed?'#475569':lC;
       let lowConf=(stop.confidence==='fuzzy'||stop.confidence==='geocoded');
-      let border=lowConf?'border:2px dashed #f59e0b;':'border:2px solid white;';
-      let si=L.divIcon({className:'',html:`<div style="width:8px;height:8px;border-radius:50%;background:${dC};${border}box-shadow:0 1px 3px rgba(0,0,0,.5);${lowConf?'opacity:0.8;':''}"></div>`,iconSize:[8,8],iconAnchor:[4,4]});
+      let border='border:2px solid white;';
+      let warn='';
+      if(stop.substitute){border='border:2px dashed #a855f7;';warn=' <span style="color:#a855f7;">🔀 nahradni zastavka</span>';}
+      else if(stop.approx){border='border:2px dashed #f59e0b;';warn=' <span style="color:#f59e0b;">⚠️ pribl. poloha</span>';}
+      else if(lowConf){border='border:2px dashed #f59e0b;';warn=' <span style="color:#f59e0b;">⚠️ pribl. poloha</span>';}
+      let si=L.divIcon({className:'',html:`<div style="width:8px;height:8px;border-radius:50%;background:${dC};${border}box-shadow:0 1px 3px rgba(0,0,0,.5);${warn?'opacity:0.85;':''}"></div>`,iconSize:[8,8],iconAnchor:[4,4]});
       let m=L.marker([stop.lat,stop.lng],{icon:si,zIndexOffset:-100});
-      let warn=lowConf?' <span style="color:#f59e0b;">⚠️ pribl. poloha</span>':'';
       m.bindTooltip(`<b>🚏 ${stop.name}</b>${stop.time?' / '+stop.time:''}${warn}`,{direction:'top',className:'dark-popup'});
       routeLayer.addLayer(m);
     });
@@ -534,16 +616,34 @@ async function toggleRoute(busId){
 // === NT (Nastaveni tras) - rucni kalibrace poloh zastavek ===
 let ntMode=false;
 let ntMoveTimer=null;
+let currentNtEdit=null;
+function ntDotIcon(cls){return L.divIcon({className:'',html:`<div class="nt-dot ${cls}"></div>`,iconSize:[14,14],iconAnchor:[7,7]});}
+function ntDotClass(s){
+  let base=s.manual?'nt-dot-manual':(s.flagged?'nt-dot-flagged':'nt-dot-normal');
+  let extra=s.substitute?' nt-dot-substitute':(s.approx?' nt-dot-approx':'');
+  return base+extra;
+}
+function ntLabel(s){
+  let parts=[];
+  if(s.manual)parts.push('✅ rucne opraveno');
+  else if(s.flagged)parts.push('⚠️ nejiste - zkontroluj');
+  if(s.substitute)parts.push('🔀 nahradni zastavka');
+  else if(s.approx)parts.push('⚠️ pribl. poloha');
+  return parts.length?'<br>'+parts.join('<br>'):'';
+}
 function toggleNT(){
   ntMode=!ntMode;
   let btn=document.getElementById('nt-toggle-btn');
   if(ntMode){
     btn.style.background='#f59e0b';btn.style.color='#0f172a';
-    showAdminToast('🛠️ Rezim uprav zapnut - tahni body mysi, uklada se hned',true);
+    showAdminToast('🛠️ Rezim uprav zapnut - tahni body, klikem nastav priznaky',true);
+    appLog('NT rezim zapnut','info');
     loadNTStops();
   }else{
     btn.style.background='transparent';btn.style.color='#f59e0b';
     ntLayer.clearLayers();
+    document.getElementById('nt-edit-pop').style.display='none';
+    appLog('NT rezim vypnut','info');
   }
 }
 async function loadNTStops(){
@@ -554,37 +654,107 @@ async function loadNTStops(){
     let r=await fetch(url);let data=await r.json();
     if(!ntMode)return; // mezitim vypnuto
     ntLayer.clearLayers();
-    if(data.status!=='success'){showAdminToast(data.message||'Chyba nacitani zastavek',false);return;}
+    if(data.status!=='success'){showAdminToast(data.message||'Chyba nacitani zastavek',false);appLog('NT nacteni selhalo: '+(data.message||'?'),'error');return;}
+    appLog(`NT nacteno ${data.stops.length} zastavek ve vyrezu`,'info');
     data.stops.forEach(s=>{
-      let cls=s.manual?'nt-dot-manual':(s.flagged?'nt-dot-flagged':'nt-dot-normal');
-      let icon=L.divIcon({className:'',html:`<div class="nt-dot ${cls}"></div>`,iconSize:[14,14],iconAnchor:[7,7]});
-      let m=L.marker([s.lat,s.lng],{icon,draggable:true,zIndexOffset:500});
-      let label=s.manual?'✅ rucne opraveno':(s.flagged?'⚠️ nejiste - zkontroluj':'');
-      m.bindTooltip(`<b>🚏 ${s.name}</b>${label?'<br>'+label:''}`,{direction:'top',className:'dark-popup'});
+      let m=L.marker([s.lat,s.lng],{icon:ntDotIcon(ntDotClass(s)),draggable:true,zIndexOffset:500});
+      m.bindTooltip(`<b>🚏 ${s.name}</b>${ntLabel(s)}`,{direction:'top',className:'dark-popup'});
+      m.on('click',()=>{
+        currentNtEdit={stop:s,marker:m};
+        document.getElementById('ntp-name').textContent=s.name;
+        document.getElementById('ntp-approx').checked=!!s.approx;
+        document.getElementById('ntp-substitute').checked=!!s.substitute;
+        document.getElementById('nt-edit-pop').style.display='block';
+      });
       m.on('dragend',async()=>{
         let pos=m.getLatLng();
-        m.setIcon(L.divIcon({className:'',html:`<div class="nt-dot nt-dot-saving"></div>`,iconSize:[14,14],iconAnchor:[7,7]}));
+        m.setIcon(ntDotIcon('nt-dot-saving'));
         try{
           let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng})});
           let rd=await res.json();
           if(rd.status==='success'){
-            m.setIcon(L.divIcon({className:'',html:`<div class="nt-dot nt-dot-manual"></div>`,iconSize:[14,14],iconAnchor:[7,7]}));
-            m.setTooltipContent(`<b>🚏 ${s.name}</b><br>✅ rucne opraveno`);
+            s.manual=true;
+            m.setIcon(ntDotIcon(ntDotClass(s)));
+            m.setTooltipContent(`<b>🚏 ${s.name}</b>${ntLabel(s)}`);
             showAdminToast(`💾 Ulozeno: ${s.name}`,true);
+            appLog(`Posunuta zastavka "${s.name}" na ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`,'ok');
           }else{
             showAdminToast('Chyba ukladani: '+(rd.message||'?'),false);
+            appLog(`Chyba ukladani pozice "${s.name}": `+(rd.message||'?'),'error');
           }
-        }catch(e){showAdminToast('Chyba spojeni pri ukladani',false);}
+        }catch(e){showAdminToast('Chyba spojeni pri ukladani',false);appLog(`Chyba spojeni pri ukladani "${s.name}": `+e,'error');}
       });
       ntLayer.addLayer(m);
     });
-  }catch(e){console.error('NT load:',e);}
+  }catch(e){console.error('NT load:',e);appLog('NT nacteni - chyba spojeni: '+e,'error');}
+}
+async function saveNtFlags(){
+  if(!currentNtEdit)return;
+  let {stop:s,marker:m}=currentNtEdit;
+  let pos=m.getLatLng();
+  let approx=document.getElementById('ntp-approx').checked;
+  let substitute=document.getElementById('ntp-substitute').checked;
+  try{
+    let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng,approx,substitute})});
+    let rd=await res.json();
+    if(rd.status==='success'){
+      s.approx=approx;s.substitute=substitute;s.manual=true;
+      m.setIcon(ntDotIcon(ntDotClass(s)));
+      m.setTooltipContent(`<b>🚏 ${s.name}</b>${ntLabel(s)}`);
+      showAdminToast(`💾 Priznaky ulozeny: ${s.name}`,true);
+      appLog(`Priznaky zastavky "${s.name}": priblizna=${approx}, nahradni=${substitute}`,'ok');
+      document.getElementById('nt-edit-pop').style.display='none';
+    }else{
+      showAdminToast('Chyba ukladani: '+(rd.message||'?'),false);
+      appLog(`Chyba ukladani priznaku "${s.name}": `+(rd.message||'?'),'error');
+    }
+  }catch(e){showAdminToast('Chyba spojeni',false);appLog(`Chyba spojeni pri ukladani priznaku "${s.name}": `+e,'error');}
 }
 map.on('moveend',()=>{
   if(!ntMode)return;
   clearTimeout(ntMoveTimer);
   ntMoveTimer=setTimeout(loadNTStops,400);
+});
+
+// === Verejne "Zobrazit zastavky" (normalni i admin mapa, jen ke cteni) ===
+let pubStopsMode=false;
+let pubMoveTimer=null;
+async function loadPubStops(){
+  if(!pubStopsMode)return;
+  let b=map.getBounds();
+  let url=`/api/stops_in_view?south=${b.getSouth()}&west=${b.getWest()}&north=${b.getNorth()}&east=${b.getEast()}`;
+  try{
+    let r=await fetch(url);let data=await r.json();
+    if(!pubStopsMode)return;
+    pubStopsLayer.clearLayers();
+    if(data.status!=='success'){showAdminToast(data.message||'Pribliz mapu pro zobrazeni zastavek',false);return;}
+    data.stops.forEach(s=>{
+      let cls=s.substitute?'pub-dot-substitute':(s.approx?'pub-dot-approx':'');
+      let icon=L.divIcon({className:'',html:`<div class="pub-dot ${cls}"></div>`,iconSize:[9,9],iconAnchor:[4,4]});
+      let m=L.marker([s.lat,s.lng],{icon,zIndexOffset:-50});
+      let note=s.substitute?'<br><span style="color:#a855f7;">🔀 nahradni zastavka</span>':(s.approx?'<br><span style="color:#f59e0b;">⚠️ pribl. poloha</span>':'');
+      m.bindTooltip(`<b>🚏 ${s.name}</b>${note}`,{direction:'top',className:'dark-popup'});
+      pubStopsLayer.addLayer(m);
+    });
+  }catch(e){console.error('Stops load:',e);}
+}
+function togglePubStops(){
+  pubStopsMode=!pubStopsMode;
+  let btn=document.getElementById('pub-stops-btn');
+  if(pubStopsMode){
+    btn.style.background='#38bdf8';btn.style.color='#0f172a';btn.style.borderColor='#38bdf8';
+    loadPubStops();
+  }else{
+    btn.style.background='transparent';btn.style.color='#94a3b8';btn.style.borderColor='#475569';
+    pubStopsLayer.clearLayers();
+  }
+}
+map.on('moveend',()=>{
+  if(!pubStopsMode)return;
+  clearTimeout(pubMoveTimer);
+  pubMoveTimer=setTimeout(loadPubStops,400);
 });
 
 // === SPZ SEARCH ===
@@ -943,7 +1113,11 @@ def _load_stop_overrides(db):
             nm = row.get("stop_name")
             if not nm:
                 continue
-            loaded[_norm_txt(nm)] = {"lat": row["lat"], "lng": row["lng"], "name": nm}
+            loaded[_norm_txt(nm)] = {
+                "lat": row["lat"], "lng": row["lng"], "name": nm,
+                "approx": bool(row.get("approx", False)),
+                "substitute": bool(row.get("substitute", False)),
+            }
         STOP_OVERRIDES = loaded
         print(f"[NT] Nacteno {len(loaded)} rucnich oprav poloh zastavek.", flush=True)
     except Exception as e:
@@ -1099,6 +1273,15 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "admin_color_override": None, "admin_status_override": None, "admin_flag": False,
         "bug_locked": False, "admin_lock_display": False, "admin_lock_permanent": False,
         "admin_note": "",
+        # spz_frozen: tvrdy zamek SPZ kdyz bus dojede na konecnou / do depa -
+        # narozdil od beznych spz_locked/spz_verified (ktere se behem jizdy
+        # porad prubezne re-auditujeji kvuli samoopravnosti) tohle uz system
+        # vubec nezkousi menit, dokud nezacne genuinly novy spoj (zmena linky).
+        "spz_frozen": False,
+        # spz_last_audit_check: kdy byla naposledy provedena re-audit kontrola
+        # jiz zamknute/overene SPZ - u overenych (fajfka) se kontroluje jen
+        # obcas (nizsi priorita), ne kazdy tik jako u jeste neovere
+        "spz_last_audit_check": None,
     }
 
 
@@ -1338,6 +1521,11 @@ def background_map_worker():
                                 if not c.get("manual_spz") and not c.get("bug_locked"):
                                     c["spz_locked"] = False
                                     c["spz_verified"] = False
+                                    # spz_frozen se UVOLNI presne tady - novy spoj na nove
+                                    # lince je legitimni duvod zacit hledat SPZ od znovu,
+                                    # i kdyz byl bus driv "Kone\u010dn\u00e1 zast\u00e1vka"/v depu.
+                                    c["spz_frozen"] = False
+                                    c["spz_last_audit_check"] = None
                                 if not c.get("admin_lock_permanent"):
                                     c["admin_lock_display"] = False
                                     c["admin_color_override"] = None
@@ -1448,11 +1636,13 @@ def background_map_worker():
                         c["color_class"] = "bg-gray"
                         c["raw_delay"] = 0
                         c["spz_locked"] = True
+                        c["spz_frozen"] = True
                     elif om >= 15:
                         c["status"] = "Odstaven (Bez sign\u00e1lu)"
                         c["color_class"] = "bg-gray"
                         c["raw_delay"] = 0
                         c["spz_locked"] = True
+                        c["spz_frozen"] = True
                     elif om > 2:
                         if not c["actual_end_time"]:
                             c["actual_end_time"] = now.strftime('%H:%M')
@@ -1460,6 +1650,7 @@ def background_map_worker():
                         c["color_class"] = "bg-purple"
                         c["raw_delay"] = 0
                         c["spz_locked"] = True
+                        c["spz_frozen"] = True
                         if om < 4:
                             upsert_to_history(db_client, c)
 
@@ -1503,9 +1694,16 @@ def background_map_worker():
                 #    vuci zive Arriva mape - hledani/re-audit SPZ za techto podminek casteji
                 #    vede ke spatnemu prirazeni nez k uzitku. SPZ zustava zamrazena na
                 #    poslednim znamem stavu, dokud se bus znovu nerozjede.
+                # 5) spz_frozen: jakmile bus opravdu DOJEL (konecna zastavka / depo /
+                #    odstaven), SPZ se TVRDE zamkne a uz se vubec nezkousi menit - ani
+                #    pri pripadnem znovu-pripojeni k Arrive. To je schvalne JINE nez
+                #    behem jizdy (kde SPZ zustava soft-zamcena a porad prubezne
+                #    samoopravna) - po dojeti uz nehrozi false-positive prebehnuti na
+                #    jinou SPZ, ale hrozi ze by re-audit kvuli ridke Arriva poloze na
+                #    parkovisti/v depu omylem SPZ odemkl a system by ji ztratil z dohledu.
                 # ══════════════════════════════════════════════════════════════════
                 if (not is_train and not c.get("investigating") and not c.get("manual_spz")
-                        and not c.get("bug_locked") and inact <= 10):
+                        and not c.get("bug_locked") and not c.get("spz_frozen") and inact <= 10):
                     d1_norm = _norm_txt(dest1)
                     near_stop = _nearest_stop_name(lat1, lng1, ARRIVA_STOP_MATCH_M) if GTFS_LOADED else None
                     near_stop_norm = _norm_txt(near_stop) if near_stop else ""
@@ -1538,30 +1736,41 @@ def background_map_worker():
                     current_spz = c.get("spz")
                     was_locked = bool(c.get("spz_locked"))
 
-                    # ── 1) Re-audit: i uz zamknuta SPZ se kontroluje kazdy tik ──
+                    # ── 1) Re-audit jiz zamknute SPZ - ALE jen obcas (nizsi priorita) ──
+                    # Jakmile uz SPZ ma fajfku (overeno), nehrozi tolik a nema smysl ji
+                    # kontrolovat porad - staci obcas (SPZ_REAUDIT_INTERVAL_SEC), at se
+                    # vykon vetsinou venuje hledani u jeste NEoverenych busu. Presto se
+                    # i overene SPZ jednou za cas znovu prubehnou (bezpecnostni sitko proti
+                    # tomu, aby se nahodou nezasekla spatna SPZ navzdy - presne to, co se
+                    # delo pred touto opravou).
                     if was_locked and current_spz and current_spz != "Nezn\u00e1m\u00e1":
-                        if current_spz in gate_pass:
-                            c["spz_last_verified"] = now  # stale sedi -> refresh
-                        else:
-                            still_listed = any((b.get("spz") or "").strip() == current_spz for b in data_arriva)
-                            last_v = c.get("spz_last_verified")
-                            stale = (not last_v) or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60
-                            if still_listed or stale:
-                                # SPZ uz nesedi (jede jinym smerem/jinym cilem) nebo dlouho nepotvrzena
-                                # -> uvolni zamek, system hleda spravnou SPZ znovu
-                                print(f"[SPZ] Uvolnuji spatnou SPZ {current_spz} u busu {bus_id}", flush=True)
-                                if c.get("spz_verified") and db_client:
-                                    try:
-                                        db_client.table("bus_history").update({
-                                            "status": "Fale\u0161n\u00fd z\u00e1znam (SPZ opravena)",
-                                            "spz_verified": False
-                                        }).eq("trip_id", c["trip_id"]).execute()
-                                    except Exception:
-                                        pass
-                                c["spz_verified"] = False
-                                c["spz_locked"] = False
-                                c["spz_stable_ticks"] = 0
-                                was_locked = False
+                        last_audit = c.get("spz_last_audit_check")
+                        due_for_audit = (not last_audit) or (now - last_audit).total_seconds() >= SPZ_REAUDIT_INTERVAL_SEC
+                        if due_for_audit:
+                            c["spz_last_audit_check"] = now
+                            if current_spz in gate_pass:
+                                c["spz_last_verified"] = now  # stale sedi -> refresh
+                            else:
+                                still_listed = any((b.get("spz") or "").strip() == current_spz for b in data_arriva)
+                                last_v = c.get("spz_last_verified")
+                                stale = (not last_v) or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60
+                                if still_listed or stale:
+                                    # SPZ uz nesedi (jede jinym smerem/jinym cilem) nebo dlouho nepotvrzena
+                                    # -> uvolni zamek, system hleda spravnou SPZ znovu
+                                    print(f"[SPZ] Uvolnuji spatnou SPZ {current_spz} u busu {bus_id}", flush=True)
+                                    if c.get("spz_verified") and db_client:
+                                        try:
+                                            db_client.table("bus_history").update({
+                                                "status": "Fale\u0161n\u00fd z\u00e1znam (SPZ opravena)",
+                                                "spz_verified": False
+                                            }).eq("trip_id", c["trip_id"]).execute()
+                                        except Exception:
+                                            pass
+                                    c["spz_verified"] = False
+                                    c["spz_locked"] = False
+                                    c["spz_stable_ticks"] = 0
+                                    was_locked = False
+                        # else: throttled - tenhle tik se uz overena SPZ vubec neresi
 
                     # ── 2) Hledani (noveho) kandidata (jen kdyz neni platny zamek) ──
                     if not was_locked:
@@ -1655,10 +1864,12 @@ def background_map_worker():
                             c["status"] = "Odstaven"
                             c["color_class"] = "bg-gray"
                             c["spz_locked"] = True
+                            c["spz_frozen"] = True
                         else:
                             c["status"] = "Kone\u010dn\u00e1 zast\u00e1vka"
                             c["color_class"] = "bg-purple"
                             c["spz_locked"] = True
+                            c["spz_frozen"] = True
                             if not c["actual_end_time"]:
                                 c["actual_end_time"] = now.strftime('%H:%M')
                                 c["_end_written"] = False
@@ -1824,6 +2035,8 @@ def api_admin_map_action():
         c["spz"] = None
         c["manual_spz"] = False
         c["bug_locked"] = False   # Admin explicitne odemkl BUG-zamek
+        c["spz_frozen"] = False   # Admin explicitne odemkl i tvrdy zamek po dojeti
+        c["spz_last_audit_check"] = None
         c["investigating"] = False
         c["spz_stable_ticks"] = 0
 
@@ -1864,6 +2077,8 @@ def api_admin_map_action():
         c["spz_locked"] = False
         c["spz_verified"] = False
         c["spz_stable_ticks"] = 0
+        c["spz_frozen"] = False
+        c["spz_last_audit_check"] = None
         c["investigating"] = False
         c["admin_color_override"] = None
         c["admin_status_override"] = None
@@ -1914,38 +2129,20 @@ def api_debug_gtfs():
     })
 
 
-@mapa_bp.route('/api/admin/route_stops')
-def api_admin_route_stops():
-    """NT rezim (Nastaveni tras): vrati zastavky v aktualnim vyrezu mapy
-    (bbox), kazdou s efektivni polohou (rucni oprava ma prednost pred GTFS),
-    priznakem "manual" (uz rucne opraveno) a "flagged" (system si pri
-    posledni trase nebyl jisty - fuzzy/geocoded/none shoda)."""
-    if not session.get('logged_in'):
-        return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
-    try:
-        south = float(request.args.get('south'))
-        west = float(request.args.get('west'))
-        north = float(request.args.get('north'))
-        east = float(request.args.get('east'))
-    except (TypeError, ValueError):
-        return jsonify({"status": "error", "message": "Chyb\u00ed/\u0161patn\u00e9 sou\u0159adnice v\u00fdezu"}), 400
-
+def _bbox_stops(south, west, north, east, max_cells=20000, max_stops=1500):
+    """Spolecny pomocnik pro NT i verejny 'Zobrazit zastavky': vrati (dict, None)
+    kde dict je {norm_name: (display_name, lat, lon)} pro GTFS zastavky uvnitr
+    bboxu, nebo (None, chybova_zprava) pri prilis velkem vyrezu/poctu bodu."""
     if not GTFS_STOPS:
-        return jsonify({"status": "error", "message": "GTFS data nejsou na\u010dtena"})
-
+        return None, "GTFS data nejsou na\u010dtena"
     lat_b0, lat_b1 = round(south / GTFS_GRID_SZ), round(north / GTFS_GRID_SZ)
     lon_b0, lon_b1 = round(west / GTFS_GRID_SZ), round(east / GTFS_GRID_SZ)
-    if (lat_b1 - lat_b0 + 1) * (lon_b1 - lon_b0 + 1) > 20000:
-        return jsonify({"status": "error", "message": "V\u00fdb\u011br na map\u011b je moc velk\u00fd - p\u0159ibli\u017e si konkr\u00e9tn\u011bj\u0161\u00ed oblast"})
-
+    if (lat_b1 - lat_b0 + 1) * (lon_b1 - lon_b0 + 1) > max_cells:
+        return None, "V\u00fdb\u011br na map\u011b je moc velk\u00fd - p\u0159ibli\u017e si konkr\u00e9tn\u011bj\u0161\u00ed oblast"
     idxs = set()
     for la_b in range(lat_b0, lat_b1 + 1):
         for lo_b in range(lon_b0, lon_b1 + 1):
             idxs.update(GTFS_GRID.get((la_b, lo_b), ()))
-
-    # Dedup podle nazvu - vicero stop_id na stejnem fyzickem miste (ruzna
-    # nastupiste) se v editacnim rezimu zobrazi jako jeden bod, protoze
-    # rucni oprava stejne pusobi na cely nazev, ne na jednotlive stop_id.
     by_name = {}
     for idx in idxs:
         name, la, lo = GTFS_STOPS[idx]
@@ -1954,9 +2151,34 @@ def api_admin_route_stops():
         key = _norm_txt(name)
         if key not in by_name:
             by_name[key] = (name, la, lo)
+    if len(by_name) > max_stops:
+        return None, f"P\u0159\u00edli\u0161 mnoho zast\u00e1vek ve v\u00fdezu ({len(by_name)}) - p\u0159ibli\u017e si v\u00edc"
+    return by_name, None
 
-    if len(by_name) > 1500:
-        return jsonify({"status": "error", "message": f"P\u0159\u00edli\u0161 mnoho zast\u00e1vek ve v\u00fdezu ({len(by_name)}) - p\u0159ibli\u017e si v\u00edc"})
+
+def _parse_bbox_args():
+    try:
+        return (float(request.args.get('south')), float(request.args.get('west')),
+                float(request.args.get('north')), float(request.args.get('east')))
+    except (TypeError, ValueError):
+        return None
+
+
+@mapa_bp.route('/api/admin/route_stops')
+def api_admin_route_stops():
+    """NT rezim (Nastaveni tras): vrati zastavky v aktualnim vyrezu mapy
+    (bbox), kazdou s efektivni polohou (rucni oprava ma prednost pred GTFS),
+    priznakem "manual" (uz rucne opraveno), "flagged" (system si pri
+    posledni trase nebyl jisty) a "approx"/"substitute" (rucne nastavene
+    priznaky viditelne i v normalnim rezimu)."""
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
+    bbox = _parse_bbox_args()
+    if not bbox:
+        return jsonify({"status": "error", "message": "Chyb\u00ed/\u0161patn\u00e9 sou\u0159adnice v\u00fdezu"}), 400
+    by_name, err = _bbox_stops(*bbox)
+    if err:
+        return jsonify({"status": "error", "message": err})
 
     stops_out = []
     for key, (name, la, lo) in by_name.items():
@@ -1967,6 +2189,34 @@ def api_admin_route_stops():
         stops_out.append({
             "name": name, "lat": eff_lat, "lng": eff_lng,
             "manual": bool(ov), "flagged": flagged,
+            "approx": bool(ov and ov.get("approx")),
+            "substitute": bool(ov and ov.get("substitute")),
+        })
+
+    return jsonify({"status": "success", "stops": stops_out, "count": len(stops_out)})
+
+
+@mapa_bp.route('/api/stops_in_view')
+def api_stops_in_view():
+    """Verejny (ne-admin) endpoint pro tlacitko 'Zobrazit zastavky' na
+    normalni mape - jen ke ctení, zadne tahani. Vraci efektivni polohu
+    (rucni oprava ma prednost) + priznaky approx/substitute, at uzivatel
+    vidi kde je poloha jen priblizna nebo nahradni."""
+    bbox = _parse_bbox_args()
+    if not bbox:
+        return jsonify({"status": "error", "message": "Chyb\u00ed/\u0161patn\u00e9 sou\u0159adnice v\u00fdezu"}), 400
+    by_name, err = _bbox_stops(*bbox)
+    if err:
+        return jsonify({"status": "error", "message": err})
+
+    stops_out = []
+    for key, (name, la, lo) in by_name.items():
+        ov = STOP_OVERRIDES.get(key)
+        eff_lat, eff_lng = (ov["lat"], ov["lng"]) if ov else (la, lo)
+        stops_out.append({
+            "name": name, "lat": eff_lat, "lng": eff_lng,
+            "approx": bool(ov and ov.get("approx")),
+            "substitute": bool(ov and ov.get("substitute")),
         })
 
     return jsonify({"status": "success", "stops": stops_out, "count": len(stops_out)})
@@ -1974,8 +2224,12 @@ def api_admin_route_stops():
 
 @mapa_bp.route('/api/admin/save_stop_override', methods=['POST'])
 def api_admin_save_stop_override():
-    """NT rezim: ulozi rucne opravenou polohu zastavky - natrvalo (do
-    Supabase) i okamzite do pameti, takze se projevi uz v dalsi trase."""
+    """NT rezim: ulozi rucne opravenou polohu zastavky (+ pripadne priznaky
+    approx/substitute) - natrvalo (do Supabase) i okamzite do pameti.
+    approx/substitute jsou volitelne - kdyz chybi, zachova se jejich
+    soucasna hodnota (aby pouhe poposunuti bodu nesmazalo drive nastavene
+    priznaky a naopak ulozeni samotnych priznaku nemuselo vzdy resit i
+    souradnice)."""
     if not session.get('logged_in'):
         return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
     data = request.get_json(silent=True) or {}
@@ -1989,7 +2243,11 @@ def api_admin_save_stop_override():
         return jsonify({"status": "error", "message": "Chyb\u00ed n\u00e1zev zast\u00e1vky"}), 400
 
     key = _norm_txt(name)
-    STOP_OVERRIDES[key] = {"lat": lat, "lng": lng, "name": name}
+    existing = STOP_OVERRIDES.get(key, {})
+    approx = bool(data["approx"]) if "approx" in data else existing.get("approx", False)
+    substitute = bool(data["substitute"]) if "substitute" in data else existing.get("substitute", False)
+
+    STOP_OVERRIDES[key] = {"lat": lat, "lng": lng, "name": name, "approx": approx, "substitute": substitute}
     CONFIDENCE_LOG.pop(key, None)  # admin to prave rucne potvrdil - uz neni "podezrele"
 
     db = get_db_client()
@@ -1997,6 +2255,7 @@ def api_admin_save_stop_override():
         try:
             db.table("stop_overrides").upsert({
                 "stop_name": name, "lat": lat, "lng": lng,
+                "approx": approx, "substitute": substitute,
                 "updated_at": get_prague_time().isoformat(),
             }, on_conflict="stop_name").execute()
         except Exception as e:
@@ -2228,10 +2487,18 @@ def api_bus_route(bus_id):
 
     # Zaznamenej jistotu kazde zastavky - NT rezim podle tohoto zvyrazni
     # "podezrele" body (fuzzy/geocoded/none), at je admin nemusi hledat
-    # proklikavanim kazde trasy zvlast.
+    # proklikavanim kazde trasy zvlast. Zaroven pripoj approx/substitute
+    # priznaky (pokud byly v NT rezimu rucne nastaveny), at je videt i
+    # primo v zobrazene trase, ne jen v samostatnem "Zobrazit zastavky".
     for s in result:
-        if s and s.get("name") and s.get("confidence") not in (None, "dup"):
-            CONFIDENCE_LOG[_norm_txt(s["name"])] = {"confidence": s["confidence"], "name": s["name"]}
+        if not (s and s.get("name")):
+            continue
+        key = _norm_txt(s["name"])
+        ov = STOP_OVERRIDES.get(key)
+        s["approx"] = bool(ov and ov.get("approx"))
+        s["substitute"] = bool(ov and ov.get("substitute"))
+        if s.get("confidence") not in (None, "dup"):
+            CONFIDENCE_LOG[key] = {"confidence": s["confidence"], "name": s["name"]}
 
     gtfs_hits = sum(1 for s in result if s["confidence"] == "exact")
     fuzzy_hits = sum(1 for s in result if s["confidence"] == "fuzzy")
