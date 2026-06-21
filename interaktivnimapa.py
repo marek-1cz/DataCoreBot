@@ -471,7 +471,7 @@ function toggleLogPanel(){
   p.style.display=(p.style.display==='block')?'none':'block';
 }
 function copyLog(){
-  let txt=logEntries.map(e=>`[${e.t}] ${e.msg}`).join('\n');
+  let txt=logEntries.map(e=>`[${e.t}] ${e.msg}`).join('\\n');
   navigator.clipboard.writeText(txt).then(()=>showAdminToast('📋 Log zkopirovan',true)).catch(()=>showAdminToast('Kopirovani selhalo',false));
 }
 function clearLog(){
