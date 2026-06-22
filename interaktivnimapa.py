@@ -274,8 +274,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 .nt-dot-saving{background:#a855f7;border:2px solid white;opacity:.7;}
 @keyframes ntPulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.7);}50%{box-shadow:0 0 0 7px rgba(245,158,11,0);}}
 .pub-dot{width:9px;height:9px;border-radius:50%;background:#38bdf8;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.5);}
+.pub-dot-train{border-radius:0 !important;background:#f59e0b;}
 .pub-dot-approx{background:#f59e0b;border:2px dashed white;}
 .pub-dot-substitute{background:#a855f7;border:2px dashed white;}
+.nt-dot-train{border-radius:0 !important;}
+#stop-info-pop{position:fixed;bottom:18px;left:18px;z-index:4400;background:#1e293b;border:2px solid #38bdf8;border-radius:10px;padding:12px 14px;width:220px;box-shadow:0 8px 24px rgba(0,0,0,.7);display:none;}
+#stop-info-pop .sip-name{color:#38bdf8;font-weight:bold;font-size:13px;margin-bottom:8px;}
+#stop-info-pop .sip-lines{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;}
+#stop-info-pop .sip-line{background:#334155;color:#cbd5e1;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:bold;}
+#log-errors-body{max-height:160px;overflow-y:auto;padding:6px 12px;font-family:monospace;font-size:10px;color:#f87171;}
 #nt-edit-pop{position:fixed;bottom:18px;left:18px;z-index:4500;background:#1e293b;border:2px solid #f59e0b;border-radius:10px;padding:12px 14px;width:240px;box-shadow:0 8px 24px rgba(0,0,0,.7);display:none;}
 #nt-edit-pop .ntp-t{color:#f59e0b;font-weight:bold;font-size:13px;margin-bottom:8px;}
 #nt-edit-pop label{display:flex;align-items:center;gap:7px;color:#cbd5e1;font-size:12px;margin-bottom:7px;cursor:pointer;}
@@ -343,7 +350,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
       <div class="hr"><span style="color:#94a3b8;">SPZ:</span><span id="h-spz">-</span></div>
       <div class="hr"><span style="color:#94a3b8;">Zpozdeni:</span><span id="h-delay">-</span></div>
       <div class="hr"><span style="color:#94a3b8;">Status:</span><span id="h-status" style="color:#94a3b8;font-size:11px;">-</span></div>
-      <div class="hac"><button class="hb hb-jr" id="h-jr">📋 JR</button><button class="hb hb-st" onclick="stopFollow()">✖️ Konec</button></div>
+      <div class="hac"><button class="hb hb-jr" id="h-jr">📋 JR</button><button class="hb" id="h-pin" onclick="togglePin()" style="background:#334155;color:#94a3b8;" title="Prilenout kameru k busu">📍</button><button class="hb hb-st" onclick="stopFollow()">✖️ Konec</button></div>
     </div>
     <div id="hm">
       <span style="color:#38bdf8;font-size:12px;font-weight:bold;">●</span>
@@ -354,21 +361,31 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
   </div>
   <div id="nt-edit-pop">
     <div class="ntp-t">🚏 <span id="ntp-name">-</span></div>
-    <label><input type="checkbox" id="ntp-approx"> ⚠️ Pribli\u017en\u00e1 poloha</label>
-    <label><input type="checkbox" id="ntp-substitute"> \U0001F500 N\u00e1hradn\u00ed zast\u00e1vka</label>
-    <button onclick="saveNtFlags()" style="background:#10b981;color:white;">\U0001F4BE Ulozit p\u0159\u00edznaky</button>
-    <button onclick="document.getElementById('nt-edit-pop').style.display='none'" style="background:#334155;color:#94a3b8;">Zav\u0159\u00edt</button>
+    <label><input type="checkbox" id="ntp-approx"> ⚠️ Přibližná poloha</label>
+    <label><input type="checkbox" id="ntp-substitute"> 🔀 Náhradní zastávka</label>
+    <button onclick="saveNtFlags()" style="background:#10b981;color:white;">💾 Uložit příznaky</button>
+    <button onclick="document.getElementById('nt-edit-pop').style.display='none'" style="background:#334155;color:#94a3b8;">Zavřít</button>
+  </div>
+  <div id="stop-info-pop">
+    <div class="sip-name">🚏 <span id="sip-name-txt">-</span></div>
+    <div id="sip-mode" style="font-size:10px;color:#64748b;margin-bottom:6px;"></div>
+    <div class="sip-lines" id="sip-lines-wrap"></div>
+    <div id="sip-note" style="font-size:10px;color:#f59e0b;"></div>
+    <button onclick="document.getElementById('stop-info-pop').style.display='none'" style="background:transparent;border:1px solid #334155;color:#64748b;border-radius:5px;font-size:11px;padding:3px 8px;cursor:pointer;margin-top:4px;">Zavřít</button>
   </div>
   <div id="log-panel">
     <div class="lp-h">
-      <span>\U0001F4CB LOG</span>
+      <span>📋 LOG</span>
       <div>
-        <button onclick="copyLog()">Kop\u00edrovat</button>
+        <button onclick="setLogTab('all')" id="log-tab-all" style="background:#334155;color:white;">Vše</button>
+        <button onclick="setLogTab('err')" id="log-tab-err" style="background:transparent;">⚠️ Chyby</button>
+        <button onclick="copyLog()">Kopírovat</button>
         <button onclick="clearLog()">Vymazat</button>
         <button onclick="document.getElementById('log-panel').style.display='none'">X</button>
       </div>
     </div>
     <div id="log-body"></div>
+    <div id="log-errors-body" style="display:none;"></div>
   </div>
 </div>
 
@@ -450,12 +467,23 @@ let isRefreshing=false;
 
 // === LOG (pro admin, k debugovani a kopirovani chyb) ===
 let logEntries=[];
+let logErrorEntries=[];
+let logCurrentTab='all';
 function appLog(msg,level){
   level=level||'info';
   let t=new Date().toLocaleTimeString('cs-CZ');
-  logEntries.push({t,msg,level});
-  if(logEntries.length>300)logEntries.shift();
-  let body=document.getElementById('log-body');
+  let entry={t,msg,level};
+  logEntries.push(entry);
+  if(logEntries.length>500)logEntries.shift();
+  if(level==='error'||level==='warn'){
+    logErrorEntries.push(entry);
+    if(logErrorEntries.length>200)logErrorEntries.shift();
+    // Upozorneni na badge u LOG tlacitka
+    let btn=document.getElementById('log-tab-err');
+    if(btn&&logCurrentTab!=='err')btn.style.color='#f87171';
+  }
+  let body=document.getElementById(logCurrentTab==='err'?'log-errors-body':'log-body');
+  if(logCurrentTab==='err'&&level!=='error'&&level!=='warn')return; // jen chyby
   if(body){
     let cls=level==='error'?'lg-err':(level==='warn'?'lg-warn':(level==='ok'?'lg-ok':''));
     let line=document.createElement('div');
@@ -465,34 +493,81 @@ function appLog(msg,level){
     body.scrollTop=body.scrollHeight;
   }
 }
+function setLogTab(tab){
+  logCurrentTab=tab;
+  document.getElementById('log-body').style.display=tab==='all'?'':'none';
+  document.getElementById('log-errors-body').style.display=tab==='err'?'':'none';
+  document.getElementById('log-tab-all').style.background=tab==='all'?'#334155':'transparent';
+  document.getElementById('log-tab-err').style.background=tab==='err'?'#7f1d1d':'transparent';
+  document.getElementById('log-tab-err').style.color='';
+  if(tab==='err'){
+    let body=document.getElementById('log-errors-body');
+    body.innerHTML='';
+    logErrorEntries.forEach(e=>{
+      let line=document.createElement('div');
+      line.className='lg-err';
+      line.textContent=`[${e.t}] ${e.msg}`;
+      body.appendChild(line);
+    });
+    body.scrollTop=body.scrollHeight;
+  }
+}
 function toggleLogPanel(){
   let p=document.getElementById('log-panel');
   if(!p)return;
   p.style.display=(p.style.display==='block')?'none':'block';
 }
 function copyLog(){
-  let txt=logEntries.map(e=>`[${e.t}] ${e.msg}`).join('\\n');
-  navigator.clipboard.writeText(txt).then(()=>showAdminToast('📋 Log zkopirovan',true)).catch(()=>showAdminToast('Kopirovani selhalo',false));
+  let txt=logEntries.map(e=>`[${e.t}][${e.level}] ${e.msg}`).join('\\n');
+  navigator.clipboard.writeText(txt).then(()=>showAdminToast('📋 Log zkopírován',true)).catch(()=>showAdminToast('Kopírování selhalo',false));
 }
 function clearLog(){
-  logEntries=[];
-  let body=document.getElementById('log-body');
-  if(body)body.innerHTML='';
+  logEntries=[];logErrorEntries=[];
+  let b1=document.getElementById('log-body'),b2=document.getElementById('log-errors-body');
+  if(b1)b1.innerHTML='';if(b2)b2.innerHTML='';
 }
 window.addEventListener('error',e=>{appLog('JS chyba: '+(e.message||e)+(e.filename?` (${e.filename}:${e.lineno})`:''),'error');});
-window.addEventListener('unhandledrejection',e=>{appLog('Neosetrena chyba (promise): '+(e.reason&&e.reason.message?e.reason.message:e.reason),'error');});
+window.addEventListener('unhandledrejection',e=>{appLog('Promise chyba: '+(e.reason&&e.reason.message?e.reason.message:e.reason),'error');});
 
-// === HUD ===
-function stopFollow(){followId=null;followInflowId=null;hudMin=false;document.getElementById('hud').style.display='none';document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';}
+// === HUD + KAMERA + ŠPENDLÍK ===
+let pinMode=false;  // true = kamera je přilepená na bus (nesmí se posunout)
+function stopFollow(){
+  followId=null;followInflowId=null;hudMin=false;pinMode=false;
+  document.getElementById('hud').style.display='none';
+  document.getElementById('hf').style.display='block';
+  document.getElementById('hm').style.display='none';
+  let pb=document.getElementById('h-pin');if(pb){pb.style.background='#334155';pb.style.color='#94a3b8';}
+}
+function togglePin(){
+  pinMode=!pinMode;
+  let btn=document.getElementById('h-pin');
+  if(btn){btn.style.background=pinMode?'#f59e0b':'#334155';btn.style.color=pinMode?'#0f172a':'#94a3b8';}
+  if(pinMode&&followId){
+    let b=lastArr.find(x=>x.id===followId);
+    if(b&&b.lat)map.setView([b.lat,b.lng]);
+    appLog(`Kamera přilepena na bus ${followId}`,'info');
+  }else{
+    appLog('Kamera odlepena, volné pohybování','info');
+  }
+}
+// Zakaz posunutí mapy když je špendlík aktivní
+map.on('movestart',()=>{
+  if(pinMode&&followId){
+    // Posunutí bude zrušeno ihned při dalším tick (followId je nastaveno + pinMode)
+  }
+});
 function minHud(){hudMin=true;document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';}
 function maxHud(){hudMin=false;document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';}
 window.toggleFollow=function(busId,inflowId){
   if(followId===busId){stopFollow();return;}
   followId=busId;followInflowId=inflowId||busId;
+  pinMode=false; // default: sledovat ale NEpřilepovat - uživatel může volně chodit po mapě
   let b=lastArr.find(x=>x.id===busId);
-  if(b&&b.lat)map.setView([b.lat,b.lng],16);
+  if(b&&b.lat)map.setView([b.lat,b.lng],16); // jednorázový zoom při zahájení sledování
   document.getElementById('hud').style.display='block';updateHud(b);
+  let pb=document.getElementById('h-pin');if(pb){pb.style.background='#334155';pb.style.color='#94a3b8';}
   if(hudMin){document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';}
+  appLog(`Sledování zahájeno: bus ${busId}`,'info');
 };
 function updateHud(b){
   if(!b)return;
@@ -608,7 +683,11 @@ async function toggleRoute(busId){
     }
     let found=data.stops.filter(s=>s.lat).length;
     let uncertain=data.stops.filter(s=>s.lat&&(s.confidence==='fuzzy'||s.confidence==='geocoded')).length;
-    let label=`🗺️ Skryt trasu (${found}/${data.stops.length} zast.)`+(uncertain>0?` ⚠️${uncertain}`:'');
+    let missing=data.stops.filter(s=>!s.lat);
+    let label=`🗺️ Skryt trasu (${found}/${data.stops.length} zast.)`+(uncertain>0?` ⚠️${uncertain}`:'')+(missing.length>0?` ❓${missing.length}`:'');
+    // Logování - přehled + chybějící zastávky do error logu
+    appLog(`Trasa ${busId}: ${found}/${data.stops.length} nalezeno (fuzzy:${uncertain} chybí:${missing.length})`,'info');
+    missing.forEach(s=>appLog(`Zastávka nenalezena: "${s.name}" - přidej v NT režimu`,'error'));
     if(btn){btn.textContent=label;btn.style.background='#1e40af';}
   }catch(e){if(btn){btn.textContent='Chyba nacitani';btn.style.background='#7f1d1d';}console.error('Route:',e);}
 }
@@ -712,15 +791,63 @@ async function saveNtFlags(){
     }
   }catch(e){showAdminToast('Chyba spojeni',false);appLog(`Chyba spojeni pri ukladani priznaku "${s.name}": `+e,'error');}
 }
+// NT: klik na mapu = přidat novou zastávku (jen v NT mode + shift klik)
+map.on('click',async(e)=>{
+  if(!ntMode)return;
+  let name=prompt('Název nové zastávky (prázdné = zrušit):');
+  if(!name||!name.trim())return;
+  name=name.trim();
+  try{
+    let res=await fetch('/api/admin/save_stop_override',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,lat:e.latlng.lat,lng:e.latlng.lng})});
+    let rd=await res.json();
+    if(rd.status==='success'){
+      showAdminToast(`✅ Přidána zastávka: ${name}`,true);
+      appLog(`Nová zastávka přidána: "${name}" @ ${e.latlng.lat.toFixed(5)},${e.latlng.lng.toFixed(5)}`,'ok');
+      loadNTStops();
+    }else{
+      showAdminToast('Chyba: '+(rd.message||'?'),false);
+      appLog('Chyba přidávání zastávky: '+(rd.message||'?'),'error');
+    }
+  }catch(er){showAdminToast('Chyba spojení',false);appLog('Chyba přidávání zastávky: '+er,'error');}
+});
 map.on('moveend',()=>{
   if(!ntMode)return;
   clearTimeout(ntMoveTimer);
   ntMoveTimer=setTimeout(loadNTStops,400);
 });
 
-// === Verejne "Zobrazit zastavky" (normalni i admin mapa, jen ke cteni) ===
+// === Veřejné "Zobrazit zastávky" + stop info popup ===
 let pubStopsMode=false;
 let pubMoveTimer=null;
+
+function showStopInfo(s){
+  document.getElementById('sip-name-txt').textContent=s.name;
+  let modeEl=document.getElementById('sip-mode');
+  modeEl.textContent=s.mode==='train'?'🚂 Vlaková zastávka':s.mode==='bus'?'🚌 Autobusová zastávka':s.mode==='mixed'?'🚌🚂 Bus + vlak':'';
+  let linesEl=document.getElementById('sip-lines-wrap');
+  linesEl.innerHTML='';
+  if(s.lines&&s.lines.length){
+    s.lines.forEach(l=>{
+      let sp=document.createElement('span');sp.className='sip-line';sp.textContent=l;linesEl.appendChild(sp);
+    });
+  }else{
+    linesEl.innerHTML='<span style="color:#64748b;font-size:11px;">Linky nejsou k dispozici</span>';
+  }
+  let noteEl=document.getElementById('sip-note');
+  noteEl.textContent=s.substitute?'🔀 Náhradní zastávka':s.approx?'⚠️ Přibližná poloha':'';
+  document.getElementById('stop-info-pop').style.display='block';
+}
+
+function pubStopIcon(s){
+  let isTrain=s.mode==='train';
+  let base=s.substitute?'pub-dot-substitute':s.approx?'pub-dot-approx':'';
+  let trainCls=isTrain?' pub-dot-train':'';
+  let size=isTrain?10:9;
+  return L.divIcon({className:'',html:`<div class="pub-dot ${base}${trainCls}"></div>`,iconSize:[size,size],iconAnchor:[size>>1,size>>1]});
+}
+
 async function loadPubStops(){
   if(!pubStopsMode)return;
   let b=map.getBounds();
@@ -729,16 +856,16 @@ async function loadPubStops(){
     let r=await fetch(url);let data=await r.json();
     if(!pubStopsMode)return;
     pubStopsLayer.clearLayers();
-    if(data.status!=='success'){showAdminToast(data.message||'Pribliz mapu pro zobrazeni zastavek',false);return;}
+    if(data.status!=='success'){showAdminToast(data.message||'Přibliž mapu pro zobrazení zastávek',false);return;}
     data.stops.forEach(s=>{
-      let cls=s.substitute?'pub-dot-substitute':(s.approx?'pub-dot-approx':'');
-      let icon=L.divIcon({className:'',html:`<div class="pub-dot ${cls}"></div>`,iconSize:[9,9],iconAnchor:[4,4]});
-      let m=L.marker([s.lat,s.lng],{icon,zIndexOffset:-50});
-      let note=s.substitute?'<br><span style="color:#a855f7;">🔀 nahradni zastavka</span>':(s.approx?'<br><span style="color:#f59e0b;">⚠️ pribl. poloha</span>':'');
-      m.bindTooltip(`<b>🚏 ${s.name}</b>${note}`,{direction:'top',className:'dark-popup'});
+      let m=L.marker([s.lat,s.lng],{icon:pubStopIcon(s),zIndexOffset:-50});
+      let note=s.substitute?'<br><span style="color:#a855f7;">🔀 náhradní</span>':s.approx?'<br><span style="color:#f59e0b;">⚠️ přibl.</span>':'';
+      m.bindTooltip(`<b>${s.mode==='train'?'🚂':'🚏'} ${s.name}</b>${note}`,{direction:'top',className:'dark-popup'});
+      m.on('click',()=>showStopInfo(s));
       pubStopsLayer.addLayer(m);
     });
-  }catch(e){console.error('Stops load:',e);}
+    appLog(`Zastávky načteny: ${data.stops.length} ve výřezu`,'info');
+  }catch(e){console.error('Stops load:',e);appLog('Chyba načítání zastávek: '+e,'error');}
 }
 function togglePubStops(){
   pubStopsMode=!pubStopsMode;
@@ -749,6 +876,7 @@ function togglePubStops(){
   }else{
     btn.style.background='transparent';btn.style.color='#94a3b8';btn.style.borderColor='#475569';
     pubStopsLayer.clearLayers();
+    document.getElementById('stop-info-pop').style.display='none';
   }
 }
 map.on('moveend',()=>{
@@ -781,8 +909,11 @@ async function fetchBuses(){
     lastArr=data.buses;
     if(followId){
       let fb=data.buses.find(b=>b.id===followId);
-      if(fb&&fb.lat){map.setView([fb.lat,fb.lng]);if(!hudMin)updateHud(fb);else document.getElementById('hm-line').textContent='L'+(fb.line||'?');}
-      else document.getElementById('h-status').textContent='Ztrata signalu';
+      if(fb&&fb.lat){
+        // Pohyb kamery jen kdyz je aktivní ŠPENDLÍK - jinak jen updatuj HUD
+        if(pinMode)map.setView([fb.lat,fb.lng]);
+        if(!hudMin)updateHud(fb);else document.getElementById('hm-line').textContent='L'+(fb.line||'?');
+      } else document.getElementById('h-status').textContent='Ztráta signálu';
     }
     saveAdminInputs();
     let savedOpenId=openPopupBusId;
@@ -908,7 +1039,21 @@ async function fetchBuses(){
     }else{
       setTimeout(()=>{isRefreshing=false;},50);
     }
-  }catch(e){console.error(e);isRefreshing=false;}
+
+    // Komplexní logování stavu mapy (jen pokud je LOG panel otevřen nebo admin)
+    if(IS_ADMIN){
+      let total=data.buses.length;
+      let noSpz=data.buses.filter(b=>!b.spz||b.spz==='Neznama').length;
+      let verified=data.buses.filter(b=>b.spz_verified).length;
+      let bug=data.buses.filter(b=>b.color_class==='bg-bug').length;
+      appLog(`Mapa OK: ${total} busů, SPZ: ${verified} ✅ ${total-noSpz-verified} ⏳ ${noSpz} ❓ ${bug>0?bug+'🐛':''}`, 'info');
+    }
+
+  }catch(e){
+    console.error(e);
+    isRefreshing=false;
+    appLog('fetchBuses chyba: '+e.message,'error');
+  }
 }
 fetchBuses();
 setInterval(fetchBuses,10000);
@@ -932,6 +1077,8 @@ GTFS_GRID_SZ   = 0.01        # ~1.1km dlazdice
 GTFS_STOP_CNT  = 0
 GTFS_TOKENS    = []           # parallel list k GTFS_STOPS: frozenset slov v nazvu
 GTFS_TOKEN_IDX = {}           # slovo -> [indexy do GTFS_STOPS] (invertovany index pro rychly fuzzy hledani)
+GTFS_MODES     = []           # parallel list k GTFS_STOPS: 'bus'/'train'/'mixed'/None
+GTFS_LINES     = []           # parallel list k GTFS_STOPS: list of route short names (napr. ['490','496']) or []
 
 # ── Rezim "Nastaveni tras" (NT) - rucni opravy poloh zastavek ────────────────
 # STOP_OVERRIDES ma VZDY prednost pred GTFS - kdyz admin v NT rezimu rucne
@@ -1043,10 +1190,22 @@ def _gtfs_grid_key(lat, lon):
     return (round(lat / GTFS_GRID_SZ), round(lon / GTFS_GRID_SZ))
 
 
+_TRAIN_HINT_WORDS = ('zeleznicni', 'zeleznice', 'nadrazi', 'vlak', 'vlakova')
+
+
+def _name_suggests_train(name):
+    """Naznacuje nazev zastavky, ze jde o VLAKOVOU stanici/zastavku (ne
+    autobusovou)? Vyuziva uz rozepsane zkratky (zel.st. -> zeleznicni
+    stanice) z _pre_normalize, takze chytne zkratkovou i plnou variantu."""
+    if not name:
+        return False
+    return any(w in _pre_normalize(name) for w in _TRAIN_HINT_WORDS)
+
+
 def _load_gtfs():
     """Nacte gtfs_stops.db do pameti. Vola se jednou pri startu workeru."""
     global GTFS_LOADED, GTFS_STOPS, GTFS_NAME_IDX, GTFS_GRID, GTFS_STOP_CNT
-    global GTFS_TOKENS, GTFS_TOKEN_IDX
+    global GTFS_TOKENS, GTFS_TOKEN_IDX, GTFS_MODES, GTFS_LINES
     if not os.path.exists(GTFS_DB_PATH):
         print(f"[GTFS] Soubor nenalezen: {GTFS_DB_PATH}", flush=True)
         return False
@@ -1054,20 +1213,22 @@ def _load_gtfs():
         conn = sqlite3.connect(GTFS_DB_PATH)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        # Auto-detekce schema (stop_name/name, stop_lat/lat, stop_lon/lon)
         cur.execute("PRAGMA table_info(stops)")
         cols = [r[1] for r in cur.fetchall()]
         def pick(cands):
             for c in cands:
                 if c in cols: return c
             return None
-        nc = pick(["stop_name","name"])
+        nc  = pick(["stop_name","name"])
         lac = pick(["stop_lat","lat","latitude"])
         loc = pick(["stop_lon","stop_lng","lon","lng","longitude"])
+        mc  = pick(["mode"])    # volitelny - 'bus'/'train'/'mixed'/NULL
+        lc  = pick(["lines"])   # volitelny - JSON pole nazvu linek napr. '["490","733"]'
         if not (nc and lac and loc):
             raise RuntimeError(f"Nerozpoznane schema: {cols}")
-        cur.execute(f"SELECT {nc} AS n, {lac} AS la, {loc} AS lo FROM stops")
-        stops, name_idx, grid = [], {}, {}
+        extras = (f", {mc} AS md" if mc else "") + (f", {lc} AS ln" if lc else "")
+        cur.execute(f"SELECT {nc} AS n, {lac} AS la, {loc} AS lo{extras} FROM stops")
+        stops, name_idx, grid, modes, lines_list = [], {}, {}, [], []
         tokens_list, token_idx = [], {}
         for row in cur.fetchall():
             name = (row["n"] or "").strip()
@@ -1079,6 +1240,12 @@ def _load_gtfs():
                 continue
             idx = len(stops)
             stops.append((name, la, lo))
+            modes.append(row["md"] if mc else None)
+            raw_lines = row["ln"] if lc else None
+            try:
+                lines_list.append(json.loads(raw_lines) if raw_lines else [])
+            except Exception:
+                lines_list.append([])
             nk = _norm_txt(name)
             name_idx.setdefault(nk, []).append(idx)
             grid.setdefault(_gtfs_grid_key(la, lo), []).append(idx)
@@ -1089,9 +1256,12 @@ def _load_gtfs():
         conn.close()
         GTFS_STOPS, GTFS_NAME_IDX, GTFS_GRID = stops, name_idx, grid
         GTFS_TOKENS, GTFS_TOKEN_IDX = tokens_list, token_idx
+        GTFS_MODES = modes
+        GTFS_LINES = lines_list
         GTFS_STOP_CNT = len(stops)
         GTFS_LOADED = True
-        print(f"[GTFS] Nacteno {len(stops)} zastavek z {GTFS_DB_PATH}", flush=True)
+        has_modes = mc is not None
+        print(f"[GTFS] Nacteno {len(stops)} zastavek z {GTFS_DB_PATH} (mode info: {'ano' if has_modes else 'ne - stary format DB'})", flush=True)
         return True
     except Exception as e:
         print(f"[GTFS] Chyba nacitani: {e}", flush=True)
@@ -1164,6 +1334,16 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000):
     spolecnemu slovu. Misto toho se pocita PREKRYV SLOV (min. 70 % kratsiho
     nazvu) pres rychly invertovany index (jen kandidati sdileji aspon jedno
     slovo - ne sken vsech 67k zastavek).
+
+    MODE-AWARENESS (vlak vs bus): nektera mista maji vlakovou stanici A
+    autobusovou zastavku se STEJNYM nazvem (napr. "Trpisty" - vlakova
+    stanice 1.3 km od "Trpisty" - autobusove zastavky uprostred vesnice).
+    Tahle appka sleduje BUS linky, takze pokud hledany nazev sam neznaci
+    vlak (zel./nadrazi/vlak), preferuji se kandidati oznaceni jako 'bus'
+    pred 'train'. Pokud presna/fuzzy shoda vyjde JEN na vlakovou variantu,
+    zkusi se jeste "zachranny" krok - hledani blizke (do 3 km) autobusove
+    zastavky s aspon castecne podobnym nazvem, presne pro pripad jako
+    Trpisty.
     """
     if not GTFS_STOPS and not STOP_OVERRIDES:
         return None, None
@@ -1180,18 +1360,30 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000):
     if not GTFS_STOPS:
         return None, None
 
+    wants_train = _name_suggests_train(name)
+    target_mode = 'train' if wants_train else 'bus'
+
+    def mode_ok(idx):
+        m = GTFS_MODES[idx] if idx < len(GTFS_MODES) else None
+        return (not m) or (m == 'mixed') or (m == target_mode)
+
     def pick_best(idxs):
         if not idxs:
             return None
-        if not anchor or len(idxs) == 1:
-            _, la, lo = GTFS_STOPS[idxs[0]]
+        # Mezi kandidaty preferuj spravny rezim dopravy (bus/train) - pokud
+        # aspon jeden vyhovuje, omez se na ne; jinak pouzij vsechny (radsi
+        # nepresny rezim nez nic).
+        preferred = [i for i in idxs if mode_ok(i)]
+        pool = preferred if preferred else idxs
+        if not anchor or len(pool) == 1:
+            _, la, lo = GTFS_STOPS[pool[0]]
             if anchor:
                 d = haversine_m(anchor[0], anchor[1], la, lo)
                 if d > max_anchor_dist_m:
                     return None
             return (la, lo)
         best_coords, best_d = None, None
-        for idx in idxs:
+        for idx in pool:
             _, la, lo = GTFS_STOPS[idx]
             d = haversine_m(anchor[0], anchor[1], la, lo)
             if best_d is None or d < best_d:
@@ -1200,10 +1392,13 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000):
             return None
         return best_coords
 
+    def idxs_have_mode_ok(idxs):
+        return any(mode_ok(i) for i in idxs)
+
     # 1) Presna shoda normalizovaneho nazvu
-    idxs = GTFS_NAME_IDX.get(key)
-    if idxs:
-        result = pick_best(idxs)
+    exact_idxs = GTFS_NAME_IDX.get(key, [])
+    if exact_idxs and idxs_have_mode_ok(exact_idxs):
+        result = pick_best(exact_idxs)
         if result:
             return result, "exact"
 
@@ -1218,12 +1413,12 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000):
     # penalizuje chybejici/navic slovo (delitel je SJEDNOCENI, ne min),
     # takze "...rozcesti" uz nevyjde stejne jako bez nej.
     search_tokens = _tokenize(name)
+    candidate_idxs = set()
+    fuzzy_matches = []
     if search_tokens and GTFS_TOKEN_IDX:
-        candidate_idxs = set()
         for tok in search_tokens:
             candidate_idxs.update(GTFS_TOKEN_IDX.get(tok, ()))
         best_score = 0.0
-        matches = []
         for idx in candidate_idxs:
             cand_tokens = GTFS_TOKENS[idx]
             if not cand_tokens:
@@ -1232,15 +1427,63 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000):
             if score < 0.7:
                 continue
             if score > best_score:
-                best_score, matches = score, [idx]
+                best_score, fuzzy_matches = score, [idx]
             elif score == best_score:
-                matches.append(idx)
-        if matches:
-            result = pick_best(matches)
+                fuzzy_matches.append(idx)
+        if fuzzy_matches and idxs_have_mode_ok(fuzzy_matches):
+            result = pick_best(fuzzy_matches)
+            if result:
+                return result, "fuzzy"
+
+    # 3) "Zachranny" krok: presna/fuzzy shoda existuje, ale JEN spatneho
+    # rezimu (typicky: hledas bus zastavku, ale jedine co se nase\u0161lo pod
+    # timhle jmenem je vlakova stanice). Zkus jeste volnejsi shodu (Jaccard
+    # >= 0.4) MEZI KANDIDATY CO MAJI ASPON JEDNO SPOLECNE SLOVO, ale jen
+    # pokud jsou opravdu blizko (do 3 km) te spatne-rezimove shody - tim se
+    # najde napr. "Trpisty, Hospoda"/"Trpisty, rozcesti" (bus) co lezi
+    # kousek od vlakove stanice "Trpisty", i kdyz se presne nazvy neshoduji.
+    fallback_idxs = exact_idxs or fuzzy_matches
+    if fallback_idxs and not idxs_have_mode_ok(fallback_idxs):
+        wrong_mode_coords = pick_best(fallback_idxs)  # bez mode filtru by tohle vratilo spatny rezim, ale souradnice potrebujeme jako kotvu
+        # pick_best uz mode-preferuje, takze pro ziskani SAMOTNE spatne-rezimove
+        # kotvy pouzijeme primy vypocet bez filtru:
+        _, la0, lo0 = GTFS_STOPS[fallback_idxs[0]]
+        rescue_anchor = (la0, lo0)
+        if search_tokens and candidate_idxs:
+            rescue = []
+            best_rescue_score = 0.0
+            for idx in candidate_idxs:
+                if not mode_ok(idx):
+                    continue
+                cand_tokens = GTFS_TOKENS[idx]
+                if not cand_tokens:
+                    continue
+                score = len(search_tokens & cand_tokens) / len(search_tokens | cand_tokens)
+                if score < 0.4:
+                    continue
+                _, la, lo = GTFS_STOPS[idx]
+                if haversine_m(rescue_anchor[0], rescue_anchor[1], la, lo) > 3000:
+                    continue
+                if score > best_rescue_score:
+                    best_rescue_score, rescue = score, [idx]
+                elif score == best_rescue_score:
+                    rescue.append(idx)
+            if rescue:
+                result = pick_best(rescue)
+                if result:
+                    return result, "fuzzy"
+        # Zachranny krok nic nenasel - radsi puvodni (spatneho rezimu) shoda nez nic
+        if exact_idxs:
+            result = pick_best(exact_idxs)
+            if result:
+                return result, "exact"
+        if fuzzy_matches:
+            result = pick_best(fuzzy_matches)
             if result:
                 return result, "fuzzy"
 
     return None, None
+
 
 def get_db_client():
     if not HAS_SUPABASE:
@@ -1703,7 +1946,7 @@ def background_map_worker():
                 #    parkovisti/v depu omylem SPZ odemkl a system by ji ztratil z dohledu.
                 # ══════════════════════════════════════════════════════════════════
                 if (not is_train and not c.get("investigating") and not c.get("manual_spz")
-                        and not c.get("bug_locked") and not c.get("spz_frozen") and inact <= 10):
+                        and not c.get("bug_locked") and not c.get("spz_frozen") and inact <= 120):
                     d1_norm = _norm_txt(dest1)
                     near_stop = _nearest_stop_name(lat1, lng1, ARRIVA_STOP_MATCH_M) if GTFS_LOADED else None
                     near_stop_norm = _norm_txt(near_stop) if near_stop else ""
@@ -1735,6 +1978,13 @@ def background_map_worker():
 
                     current_spz = c.get("spz")
                     was_locked = bool(c.get("spz_locked"))
+                    # Nekonzistentni stav: spz_locked=True ale SPZ je None/Neznama.
+                    # Stava se kdyz "Stoji prilis dlouho" zamkne zamek driv nez
+                    # SPZ vubec stihne dojit (bus cekal na prvnim zastaveni).
+                    # -> Povaz za NEzamcene, at search step muze SPZ nalezt.
+                    if was_locked and (not current_spz or current_spz == "Nezn\u00e1m\u00e1"):
+                        was_locked = False
+                        c["spz_locked"] = False
 
                     # ── 1) Re-audit jiz zamknute SPZ - ALE jen obcas (nizsi priorita) ──
                     # Jakmile uz SPZ ma fajfku (overeno), nehrozi tolik a nema smysl ji
@@ -1891,7 +2141,10 @@ def background_map_worker():
                         c["status"] = f"Stoj\u00ed p\u0159\u00edli\u0161 dlouho ({int(inact)} min)"
                         c["color_class"] = "bg-gray"
                         c["_was_long_stationary"] = True
-                        c["spz_locked"] = True
+                        # Zamkni SPZ POUZE pokud uz ji mame - nema smysl zamykat "Neznama".
+                        # Kdyz SPZ jeste neni, necháme ji odemcenou at ji muzeme najit pozdeji.
+                        if c.get("spz") and c["spz"] != "Nezn\u00e1m\u00e1":
+                            c["spz_locked"] = True
                     elif is_moving and c.get("_was_long_stationary") and c["color_class"] not in ("bg-bug", "bg-blue"):
                         c["color_class"] = "bg-orange"
                         c["status"] = "V\u00fdzkum \u2013 Reaktivace po dlouh\u00e9m st\u00e1n\u00ed"
@@ -2130,9 +2383,11 @@ def api_debug_gtfs():
 
 
 def _bbox_stops(south, west, north, east, max_cells=20000, max_stops=1500):
-    """Spolecny pomocnik pro NT i verejny 'Zobrazit zastavky': vrati (dict, None)
-    kde dict je {norm_name: (display_name, lat, lon)} pro GTFS zastavky uvnitr
-    bboxu, nebo (None, chybova_zprava) pri prilis velkem vyrezu/poctu bodu."""
+    """Spolecny pomocnik pro NT i verejny 'Zobrazit zastavky': vrati (list, None)
+    s polozkami {key, name, lat, lon, mode, lines} pro GTFS zastavky uvnitr
+    bboxu, nebo (None, chybova_zprava) pri prilis velkem vyrezu/poctu bodu.
+    Zastavky se stejnym nazvem ALE RUZNYM MODEM (napr. Trpisty bus vs Trpisty vlak)
+    se vracejí jako dva separatni zaznamy, protoze jsou fyzicky ruzna mista."""
     if not GTFS_STOPS:
         return None, "GTFS data nejsou na\u010dtena"
     lat_b0, lat_b1 = round(south / GTFS_GRID_SZ), round(north / GTFS_GRID_SZ)
@@ -2143,17 +2398,29 @@ def _bbox_stops(south, west, north, east, max_cells=20000, max_stops=1500):
     for la_b in range(lat_b0, lat_b1 + 1):
         for lo_b in range(lon_b0, lon_b1 + 1):
             idxs.update(GTFS_GRID.get((la_b, lo_b), ()))
-    by_name = {}
-    for idx in idxs:
+    # Dedup: same name+mode at same coords -> one entry; same name+different mode -> two entries
+    seen = {}  # (norm_name, mode_or_none) -> first seen entry
+    results = []
+    for idx in sorted(idxs):
         name, la, lo = GTFS_STOPS[idx]
         if not (south <= la <= north and west <= lo <= east):
             continue
         key = _norm_txt(name)
-        if key not in by_name:
-            by_name[key] = (name, la, lo)
-    if len(by_name) > max_stops:
-        return None, f"P\u0159\u00edli\u0161 mnoho zast\u00e1vek ve v\u00fdezu ({len(by_name)}) - p\u0159ibli\u017e si v\u00edc"
-    return by_name, None
+        md = GTFS_MODES[idx] if idx < len(GTFS_MODES) else None
+        ln = GTFS_LINES[idx] if idx < len(GTFS_LINES) else []
+        dedup_key = (key, md)
+        if dedup_key not in seen:
+            seen[dedup_key] = len(results)
+            results.append({"key": key, "name": name, "lat": la, "lng": lo,
+                            "mode": md, "lines": ln or []})
+        else:
+            # Merge lines for duplicate coords with same mode
+            existing = results[seen[dedup_key]]
+            merged = sorted(set(existing["lines"]) | set(ln or []))
+            existing["lines"] = merged
+    if len(results) > max_stops:
+        return None, f"P\u0159\u00edli\u0161 mnoho zast\u00e1vek ve v\u00fdezu ({len(results)}) - p\u0159ibli\u017e si v\u00edc"
+    return results, None
 
 
 def _parse_bbox_args():
@@ -2166,28 +2433,28 @@ def _parse_bbox_args():
 
 @mapa_bp.route('/api/admin/route_stops')
 def api_admin_route_stops():
-    """NT rezim (Nastaveni tras): vrati zastavky v aktualnim vyrezu mapy
-    (bbox), kazdou s efektivni polohou (rucni oprava ma prednost pred GTFS),
-    priznakem "manual" (uz rucne opraveno), "flagged" (system si pri
-    posledni trase nebyl jisty) a "approx"/"substitute" (rucne nastavene
-    priznaky viditelne i v normalnim rezimu)."""
+    """NT rezim: vrati zastavky v aktualnim vyrezu, kazda s efektivni
+    polohou, mode (bus/train/mixed), lines, manual/flagged/approx/substitute."""
     if not session.get('logged_in'):
         return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
     bbox = _parse_bbox_args()
     if not bbox:
         return jsonify({"status": "error", "message": "Chyb\u00ed/\u0161patn\u00e9 sou\u0159adnice v\u00fdezu"}), 400
-    by_name, err = _bbox_stops(*bbox)
+    items, err = _bbox_stops(*bbox)
     if err:
         return jsonify({"status": "error", "message": err})
 
     stops_out = []
-    for key, (name, la, lo) in by_name.items():
+    for s in items:
+        key = s["key"]
         ov = STOP_OVERRIDES.get(key)
-        eff_lat, eff_lng = (ov["lat"], ov["lng"]) if ov else (la, lo)
+        eff_lat = ov["lat"] if ov else s["lat"]
+        eff_lng = ov["lng"] if ov else s["lng"]
         flag = CONFIDENCE_LOG.get(key)
         flagged = bool(flag and flag.get("confidence") in ("fuzzy", "geocoded", "none"))
         stops_out.append({
-            "name": name, "lat": eff_lat, "lng": eff_lng,
+            "name": s["name"], "lat": eff_lat, "lng": eff_lng,
+            "mode": s.get("mode"), "lines": s.get("lines", []),
             "manual": bool(ov), "flagged": flagged,
             "approx": bool(ov and ov.get("approx")),
             "substitute": bool(ov and ov.get("substitute")),
@@ -2198,23 +2465,24 @@ def api_admin_route_stops():
 
 @mapa_bp.route('/api/stops_in_view')
 def api_stops_in_view():
-    """Verejny (ne-admin) endpoint pro tlacitko 'Zobrazit zastavky' na
-    normalni mape - jen ke ctení, zadne tahani. Vraci efektivni polohu
-    (rucni oprava ma prednost) + priznaky approx/substitute, at uzivatel
-    vidi kde je poloha jen priblizna nebo nahradni."""
+    """Verejny endpoint pro 'Zobrazit zastavky' + klik na zastávku = linky.
+    Vraci mode (bus/train/mixed), lines, approx/substitute."""
     bbox = _parse_bbox_args()
     if not bbox:
         return jsonify({"status": "error", "message": "Chyb\u00ed/\u0161patn\u00e9 sou\u0159adnice v\u00fdezu"}), 400
-    by_name, err = _bbox_stops(*bbox)
+    items, err = _bbox_stops(*bbox)
     if err:
         return jsonify({"status": "error", "message": err})
 
     stops_out = []
-    for key, (name, la, lo) in by_name.items():
+    for s in items:
+        key = s["key"]
         ov = STOP_OVERRIDES.get(key)
-        eff_lat, eff_lng = (ov["lat"], ov["lng"]) if ov else (la, lo)
+        eff_lat = ov["lat"] if ov else s["lat"]
+        eff_lng = ov["lng"] if ov else s["lng"]
         stops_out.append({
-            "name": name, "lat": eff_lat, "lng": eff_lng,
+            "name": s["name"], "lat": eff_lat, "lng": eff_lng,
+            "mode": s.get("mode"), "lines": s.get("lines", []),
             "approx": bool(ov and ov.get("approx")),
             "substitute": bool(ov and ov.get("substitute")),
         })
