@@ -297,13 +297,28 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 #log-body .lg-warn{color:#fbbf24;}
 #log-body .lg-ok{color:#34d399;}
 @media(max-width:768px){
-  #top-nav{gap:5px;padding:0 6px;height:auto;min-height:52px;flex-wrap:wrap;padding-bottom:5px;padding-top:5px;}
+  #top-nav{gap:4px;padding:0 5px;height:auto;min-height:50px;flex-wrap:wrap;padding-bottom:5px;padding-top:5px;}
   .n-title,.n-warn{display:none;}
-  .n-clock{font-size:10px;padding:4px 6px;}.n-btn{font-size:10px;padding:4px 6px;}
-  #spz-search-inp{width:100px;font-size:11px;}#hf{width:210px;}
-  .dark-popup .leaflet-popup-content{width:252px!important;}
+  .n-clock{font-size:10px;padding:3px 5px;}.n-btn{font-size:10px;padding:4px 7px;}
+  #spz-search-inp{width:90px;font-size:11px;}
+  #hf{width:200px;}
+  .dark-popup .leaflet-popup-content{width:240px!important;}
+  #log-panel{bottom:auto;top:58px;right:4px;left:4px;width:auto;max-width:100vw;}
+  #log-body,#log-errors-body,#log-spz-body,#log-missing-body{max-height:180px;}
+  #nt-edit-pop{left:4px;right:4px;bottom:10px;width:auto;}
+  #stop-info-pop{left:4px;right:4px;bottom:10px;width:auto;}
+  .sip-lines{flex-wrap:wrap;gap:3px;}
+  #nt-add-bar{left:4px;right:4px;transform:none;flex-wrap:wrap;gap:5px;}
+  #nt-add-name{width:100%;}
+  .lp-h div{gap:2px;flex-wrap:wrap;}
+  .lp-h div button{font-size:10px;padding:2px 5px;}
 }
-@media(max-width:420px){.n-provoz{display:none;}#spz-search-inp{width:85px;}}
+@media(max-width:420px){
+  .n-provoz{display:none;}
+  #spz-search-inp{width:75px;}
+  #pub-stops-btn{font-size:10px;padding:4px 6px;}
+  #nt-toggle-btn,#nt-add-btn,#log-toggle-btn{font-size:11px;padding:4px 7px;}
+}
 </style>
 
 <div id="map-wrap">
@@ -322,6 +337,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     <a href="/provoz-idpk" class="n-btn n-provoz">🚏 IDPK</a>
     <button id="pub-stops-btn" onclick="togglePubStops()" class="n-btn" style="background:transparent;border:1px solid #475569;color:#94a3b8;cursor:pointer;">🚏 Zobrazit zastavky</button>
     <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:6px 11px;border-radius:6px;font-weight:bold;font-size:12px;flex-shrink:0;white-space:nowrap;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
+    <button id="nt-add-btn" onclick="startNtAdd()" style="display:none;padding:6px 10px;border-radius:6px;font-weight:bold;font-size:13px;flex-shrink:0;white-space:nowrap;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;" title="Přidat novou zastávku">＋</button>
     <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:6px 11px;border-radius:6px;font-weight:bold;font-size:12px;flex-shrink:0;white-space:nowrap;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋 LOG</button>
     __AD_BTN__
     <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
@@ -361,31 +377,48 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
   </div>
   <div id="nt-edit-pop">
     <div class="ntp-t">🚏 <span id="ntp-name">-</span></div>
+    <div style="font-size:10px;color:#64748b;margin-bottom:8px;">Systémový název (pro vyhledávání v JŘ)</div>
+    <label style="display:block;margin-bottom:4px;font-size:11px;color:#94a3b8;">Zobrazovaný název (prázdné = použij systémový):</label>
+    <input id="ntp-dispname" type="text" placeholder="Zobrazovaný název..." style="width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;padding:5px 8px;font-size:12px;margin-bottom:8px;">
     <label><input type="checkbox" id="ntp-approx"> ⚠️ Přibližná poloha</label>
     <label><input type="checkbox" id="ntp-substitute"> 🔀 Náhradní zastávka</label>
-    <button onclick="saveNtFlags()" style="background:#10b981;color:white;">💾 Uložit příznaky</button>
-    <button onclick="document.getElementById('nt-edit-pop').style.display='none'" style="background:#334155;color:#94a3b8;">Zavřít</button>
+    <div style="margin:8px 0 4px;font-size:11px;color:#94a3b8;">Linky (prázdné = GTFS, čárkou oddělené):</div>
+    <input id="ntp-lines" type="text" placeholder="490, 496, 733..." style="width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;padding:5px 8px;font-size:12px;margin-bottom:8px;">
+    <button onclick="saveNtFlags()" style="width:100%;background:#10b981;color:white;border:none;border-radius:5px;padding:7px;font-weight:bold;cursor:pointer;font-size:12px;margin-bottom:4px;">💾 Uložit</button>
+    <button onclick="deleteNtStop()" style="width:100%;background:#7f1d1d;color:#fca5a5;border:none;border-radius:5px;padding:5px;font-size:11px;cursor:pointer;margin-bottom:4px;">🗑️ Odebrat zastávku</button>
+    <button onclick="document.getElementById('nt-edit-pop').style.display='none'" style="width:100%;background:transparent;border:1px solid #334155;color:#64748b;border-radius:5px;padding:4px;font-size:11px;cursor:pointer;">Zavřít</button>
   </div>
   <div id="stop-info-pop">
-    <div class="sip-name">🚏 <span id="sip-name-txt">-</span></div>
+    <div class="sip-name"><span id="sip-mode-icon">🚏</span> <span id="sip-name-txt">-</span></div>
+    <div id="sip-dispname" style="font-size:11px;color:#64748b;margin-bottom:4px;"></div>
     <div id="sip-mode" style="font-size:10px;color:#64748b;margin-bottom:6px;"></div>
     <div class="sip-lines" id="sip-lines-wrap"></div>
-    <div id="sip-note" style="font-size:10px;color:#f59e0b;"></div>
-    <button onclick="document.getElementById('stop-info-pop').style.display='none'" style="background:transparent;border:1px solid #334155;color:#64748b;border-radius:5px;font-size:11px;padding:3px 8px;cursor:pointer;margin-top:4px;">Zavřít</button>
+    <div id="sip-note" style="font-size:10px;color:#f59e0b;margin-top:4px;"></div>
+    <button onclick="document.getElementById('stop-info-pop').style.display='none'" style="background:transparent;border:1px solid #334155;color:#64748b;border-radius:5px;font-size:11px;padding:3px 8px;cursor:pointer;margin-top:6px;width:100%;">Zavřít</button>
   </div>
   <div id="log-panel">
     <div class="lp-h">
       <span>📋 LOG</span>
-      <div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap;">
         <button onclick="setLogTab('all')" id="log-tab-all" style="background:#334155;color:white;">Vše</button>
-        <button onclick="setLogTab('err')" id="log-tab-err" style="background:transparent;">⚠️ Chyby</button>
-        <button onclick="copyLog()">Kopírovat</button>
-        <button onclick="clearLog()">Vymazat</button>
+        <button onclick="setLogTab('err')" id="log-tab-err">⚠️ Chyby</button>
+        <button onclick="setLogTab('spz')" id="log-tab-spz">🚌 SPZ</button>
+        <button onclick="setLogTab('missing')" id="log-tab-missing">📍 Chybí</button>
+        <button onclick="copyLog()">Kopír.</button>
+        <button onclick="clearLog()">Smaž</button>
         <button onclick="document.getElementById('log-panel').style.display='none'">X</button>
       </div>
     </div>
     <div id="log-body"></div>
     <div id="log-errors-body" style="display:none;"></div>
+    <div id="log-spz-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-family:monospace;font-size:10.5px;color:#94a3b8;"></div>
+    <div id="log-missing-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-size:11px;"></div>
+  </div>
+  <div id="nt-add-bar" style="display:none;position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:5000;background:#1e293b;border:2px solid #f59e0b;border-radius:8px;padding:8px 14px;display:none;align-items:center;gap:8px;box-shadow:0 4px 20px rgba(0,0,0,.7);">
+    <span style="color:#f59e0b;font-size:12px;font-weight:bold;">🚏 Klikni na mapu kde je zastávka</span>
+    <input id="nt-add-name" type="text" placeholder="Název zastávky" style="background:#0f172a;color:white;border:1px solid #475569;border-radius:4px;padding:4px 8px;font-size:12px;width:160px;">
+    <button onclick="confirmNtAdd()" style="background:#10b981;color:white;border:none;border-radius:4px;padding:5px 10px;font-size:12px;cursor:pointer;">Přidat</button>
+    <button onclick="cancelNtAdd()" style="background:#334155;color:#94a3b8;border:none;border-radius:4px;padding:5px 10px;font-size:12px;cursor:pointer;">Zrušit</button>
   </div>
 </div>
 
@@ -440,7 +473,7 @@ nav.addEventListener('mouseenter',()=>clearTimeout(hideT));
 nav.addEventListener('mouseleave',()=>{hideT=setTimeout(hideNav,600);});
 document.addEventListener('touchstart',e=>{if(e.touches[0].clientY<35){showNav(4500);}else if(!nav.contains(e.target)){clearTimeout(hideT);hideT=setTimeout(hideNav,400);}},{passive:true});
 showNav(4000);
-if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
+if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
 
 // === MAP ===
 var dLat=49.7384,dLng=13.3736,dZoom=12;
@@ -465,72 +498,95 @@ let activeRouteId=null;
 // hodnotou false a closure v popupclose by vzdy videla false -> mazala trasu.
 let isRefreshing=false;
 
-// === LOG (pro admin, k debugovani a kopirovani chyb) ===
-let logEntries=[];
-let logErrorEntries=[];
+// === LOG ===
+let logEntries=[],logErrEntries=[],logSpzEntries=[],logMissingStops={};
 let logCurrentTab='all';
 function appLog(msg,level){
   level=level||'info';
   let t=new Date().toLocaleTimeString('cs-CZ');
   let entry={t,msg,level};
-  logEntries.push(entry);
-  if(logEntries.length>500)logEntries.shift();
+  logEntries.push(entry);if(logEntries.length>500)logEntries.shift();
   if(level==='error'||level==='warn'){
-    logErrorEntries.push(entry);
-    if(logErrorEntries.length>200)logErrorEntries.shift();
-    // Upozorneni na badge u LOG tlacitka
+    logErrEntries.push(entry);if(logErrEntries.length>200)logErrEntries.shift();
     let btn=document.getElementById('log-tab-err');
     if(btn&&logCurrentTab!=='err')btn.style.color='#f87171';
   }
-  let body=document.getElementById(logCurrentTab==='err'?'log-errors-body':'log-body');
-  if(logCurrentTab==='err'&&level!=='error'&&level!=='warn')return; // jen chyby
-  if(body){
-    let cls=level==='error'?'lg-err':(level==='warn'?'lg-warn':(level==='ok'?'lg-ok':''));
-    let line=document.createElement('div');
-    line.className=cls;
-    line.textContent=`[${t}] ${msg}`;
-    body.appendChild(line);
-    body.scrollTop=body.scrollHeight;
+  if(logCurrentTab==='all'){
+    let body=document.getElementById('log-body');
+    if(body){let cls=level==='error'?'lg-err':level==='warn'?'lg-warn':level==='ok'?'lg-ok':'';let line=document.createElement('div');line.className=cls;line.textContent=`[${t}] ${msg}`;body.appendChild(line);body.scrollTop=body.scrollHeight;}
   }
+}
+function appLogSpz(busId,spz,status,detail){
+  let t=new Date().toLocaleTimeString('cs-CZ');
+  let entry={t,busId,spz,status,detail};
+  logSpzEntries.push(entry);if(logSpzEntries.length>200)logSpzEntries.shift();
+  if(logCurrentTab==='spz')renderSpzLog();
+}
+function logMissingStop(name){
+  if(!logMissingStops[name])logMissingStops[name]={count:0,last:''};
+  logMissingStops[name].count++;
+  logMissingStops[name].last=new Date().toLocaleTimeString('cs-CZ');
+  let btn=document.getElementById('log-tab-missing');
+  if(btn&&logCurrentTab!=='missing')btn.style.color='#fbbf24';
+  if(logCurrentTab==='missing')renderMissingLog();
+}
+function renderSpzLog(){
+  let body=document.getElementById('log-spz-body');
+  if(!body)return;
+  body.innerHTML='';
+  [...logSpzEntries].reverse().forEach(e=>{
+    let line=document.createElement('div');
+    let cls=e.status==='ok'?'lg-ok':e.status==='err'?'lg-err':'';
+    line.className=cls;
+    line.textContent=`[${e.t}] Bus ${e.busId}: ${e.spz} — ${e.detail}`;
+    body.appendChild(line);
+  });
+}
+function renderMissingLog(){
+  let body=document.getElementById('log-missing-body');
+  if(!body)return;
+  body.innerHTML='';
+  let sorted=Object.entries(logMissingStops).sort((a,b)=>b[1].count-a[1].count);
+  if(!sorted.length){body.innerHTML='<div style="color:#64748b;padding:8px;">Žádné chybějící zastávky</div>';return;}
+  sorted.forEach(([name,info])=>{
+    let div=document.createElement('div');
+    div.style.cssText='padding:5px 0;border-bottom:1px solid #1e293b;cursor:pointer;display:flex;align-items:center;justify-content:space-between;';
+    div.innerHTML=`<span style="color:#f59e0b;font-size:12px;">📍 ${name}</span><span style="color:#64748b;font-size:10px;">${info.count}× poslední ${info.last}</span>`;
+    div.onclick=()=>{
+      // Aktivuj NT mode a nastav jméno pro přidání
+      if(!ntMode)toggleNT();
+      document.getElementById('log-panel').style.display='none';
+      startNtAdd(name);
+    };
+    body.appendChild(div);
+  });
 }
 function setLogTab(tab){
   logCurrentTab=tab;
-  document.getElementById('log-body').style.display=tab==='all'?'':'none';
-  document.getElementById('log-errors-body').style.display=tab==='err'?'':'none';
-  document.getElementById('log-tab-all').style.background=tab==='all'?'#334155':'transparent';
-  document.getElementById('log-tab-err').style.background=tab==='err'?'#7f1d1d':'transparent';
-  document.getElementById('log-tab-err').style.color='';
-  if(tab==='err'){
-    let body=document.getElementById('log-errors-body');
-    body.innerHTML='';
-    logErrorEntries.forEach(e=>{
-      let line=document.createElement('div');
-      line.className='lg-err';
-      line.textContent=`[${e.t}] ${e.msg}`;
-      body.appendChild(line);
-    });
-    body.scrollTop=body.scrollHeight;
-  }
+  ['all','err','spz','missing'].forEach(id=>{
+    let body=document.getElementById(`log-${id==='all'?'body':id==='err'?'errors-body':id+'-body'}`);
+    if(body)body.style.display=tab===id?'':'none';
+    let btn=document.getElementById(`log-tab-${id}`);
+    if(btn){btn.style.background=tab===id?'#334155':'transparent';btn.style.color='';}
+  });
+  if(tab==='err'){let b=document.getElementById('log-errors-body');b.innerHTML='';logErrEntries.forEach(e=>{let l=document.createElement('div');l.className='lg-err';l.textContent=`[${e.t}] ${e.msg}`;b.appendChild(l);});b.scrollTop=b.scrollHeight;}
+  if(tab==='spz')renderSpzLog();
+  if(tab==='missing')renderMissingLog();
 }
-function toggleLogPanel(){
-  let p=document.getElementById('log-panel');
-  if(!p)return;
-  p.style.display=(p.style.display==='block')?'none':'block';
-}
+function toggleLogPanel(){let p=document.getElementById('log-panel');if(p)p.style.display=p.style.display==='block'?'none':'block';}
 function copyLog(){
   let txt=logEntries.map(e=>`[${e.t}][${e.level}] ${e.msg}`).join('\\n');
-  navigator.clipboard.writeText(txt).then(()=>showAdminToast('📋 Log zkopírován',true)).catch(()=>showAdminToast('Kopírování selhalo',false));
+  navigator.clipboard.writeText(txt).then(()=>showAdminToast('📋 Zkopírováno',true)).catch(()=>showAdminToast('Chyba kopírování',false));
 }
 function clearLog(){
-  logEntries=[];logErrorEntries=[];
-  let b1=document.getElementById('log-body'),b2=document.getElementById('log-errors-body');
-  if(b1)b1.innerHTML='';if(b2)b2.innerHTML='';
+  logEntries=[];logErrEntries=[];logSpzEntries=[];logMissingStops={};
+  ['log-body','log-errors-body','log-spz-body','log-missing-body'].forEach(id=>{let el=document.getElementById(id);if(el)el.innerHTML='';});
 }
 window.addEventListener('error',e=>{appLog('JS chyba: '+(e.message||e)+(e.filename?` (${e.filename}:${e.lineno})`:''),'error');});
-window.addEventListener('unhandledrejection',e=>{appLog('Promise chyba: '+(e.reason&&e.reason.message?e.reason.message:e.reason),'error');});
+window.addEventListener('unhandledrejection',e=>{appLog('Promise chyba: '+(e.reason&&(e.reason.message||e.reason)),'error');});
 
 // === HUD + KAMERA + ŠPENDLÍK ===
-let pinMode=false;  // true = kamera je přilepená na bus (nesmí se posunout)
+let pinMode=false;
 function stopFollow(){
   followId=null;followInflowId=null;hudMin=false;pinMode=false;
   document.getElementById('hud').style.display='none';
@@ -542,20 +598,8 @@ function togglePin(){
   pinMode=!pinMode;
   let btn=document.getElementById('h-pin');
   if(btn){btn.style.background=pinMode?'#f59e0b':'#334155';btn.style.color=pinMode?'#0f172a':'#94a3b8';}
-  if(pinMode&&followId){
-    let b=lastArr.find(x=>x.id===followId);
-    if(b&&b.lat)map.setView([b.lat,b.lng]);
-    appLog(`Kamera přilepena na bus ${followId}`,'info');
-  }else{
-    appLog('Kamera odlepena, volné pohybování','info');
-  }
+  if(pinMode&&followId){let b=lastArr.find(x=>x.id===followId);if(b&&b.lat)map.setView([b.lat,b.lng]);}
 }
-// Zakaz posunutí mapy když je špendlík aktivní
-map.on('movestart',()=>{
-  if(pinMode&&followId){
-    // Posunutí bude zrušeno ihned při dalším tick (followId je nastaveno + pinMode)
-  }
-});
 function minHud(){hudMin=true;document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';}
 function maxHud(){hudMin=false;document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';}
 window.toggleFollow=function(busId,inflowId){
@@ -687,86 +731,66 @@ async function toggleRoute(busId){
     let label=`🗺️ Skryt trasu (${found}/${data.stops.length} zast.)`+(uncertain>0?` ⚠️${uncertain}`:'')+(missing.length>0?` ❓${missing.length}`:'');
     // Logování - přehled + chybějící zastávky do error logu
     appLog(`Trasa ${busId}: ${found}/${data.stops.length} nalezeno (fuzzy:${uncertain} chybí:${missing.length})`,'info');
-    missing.forEach(s=>appLog(`Zastávka nenalezena: "${s.name}" - přidej v NT režimu`,'error'));
+    missing.forEach(s=>{appLog(`Zastávka nenalezena: "${s.name}"  → přidej v NT`,'warn');logMissingStop(s.name);});
     if(btn){btn.textContent=label;btn.style.background='#1e40af';}
   }catch(e){if(btn){btn.textContent='Chyba nacitani';btn.style.background='#7f1d1d';}console.error('Route:',e);}
 }
 
 // === NT (Nastaveni tras) - rucni kalibrace poloh zastavek ===
-let ntMode=false;
-let ntMoveTimer=null;
-let currentNtEdit=null;
+let ntMode=false,ntMoveTimer=null,currentNtEdit=null,ntAddMode=false,ntAddName='';
 function ntDotIcon(cls){return L.divIcon({className:'',html:`<div class="nt-dot ${cls}"></div>`,iconSize:[14,14],iconAnchor:[7,7]});}
 function ntDotClass(s){
   let base=s.manual?'nt-dot-manual':(s.flagged?'nt-dot-flagged':'nt-dot-normal');
+  let train=s.mode==='train'?' nt-dot-train':'';
   let extra=s.substitute?' nt-dot-substitute':(s.approx?' nt-dot-approx':'');
-  return base+extra;
+  return base+train+extra;
 }
 function ntLabel(s){
+  let dn=s.display_name?`<br><span style="color:#38bdf8;">📛 ${s.display_name}</span>`:'';
   let parts=[];
-  if(s.manual)parts.push('✅ rucne opraveno');
-  else if(s.flagged)parts.push('⚠️ nejiste - zkontroluj');
-  if(s.substitute)parts.push('🔀 nahradni zastavka');
-  else if(s.approx)parts.push('⚠️ pribl. poloha');
-  return parts.length?'<br>'+parts.join('<br>'):'';
+  if(s.manual)parts.push('✅ ručně opraveno');else if(s.flagged)parts.push('⚠️ nejisté');
+  if(s.substitute)parts.push('🔀 náhradní');else if(s.approx)parts.push('⚠️ přibl.');
+  if(s.lines&&s.lines.length)parts.push('Linky: '+s.lines.join(', '));
+  return dn+(parts.length?'<br>'+parts.join(' · '):'');
 }
 function toggleNT(){
   ntMode=!ntMode;
   let btn=document.getElementById('nt-toggle-btn');
-  if(ntMode){
-    btn.style.background='#f59e0b';btn.style.color='#0f172a';
-    showAdminToast('🛠️ Rezim uprav zapnut - tahni body, klikem nastav priznaky',true);
-    appLog('NT rezim zapnut','info');
-    loadNTStops();
-  }else{
-    btn.style.background='transparent';btn.style.color='#f59e0b';
-    ntLayer.clearLayers();
-    document.getElementById('nt-edit-pop').style.display='none';
-    appLog('NT rezim vypnut','info');
-  }
+  if(ntMode){btn.style.background='#f59e0b';btn.style.color='#0f172a';showAdminToast('🛠️ NT zapnut – táhni body, klikni pro editaci',true);loadNTStops();}
+  else{btn.style.background='transparent';btn.style.color='#f59e0b';ntLayer.clearLayers();document.getElementById('nt-edit-pop').style.display='none';cancelNtAdd();}
 }
 async function loadNTStops(){
   if(!ntMode)return;
   let b=map.getBounds();
-  let url=`/api/admin/route_stops?south=${b.getSouth()}&west=${b.getWest()}&north=${b.getNorth()}&east=${b.getEast()}`;
   try{
-    let r=await fetch(url);let data=await r.json();
-    if(!ntMode)return; // mezitim vypnuto
+    let r=await fetch(`/api/admin/route_stops?south=${b.getSouth()}&west=${b.getWest()}&north=${b.getNorth()}&east=${b.getEast()}`);
+    let data=await r.json();
+    if(!ntMode)return;
     ntLayer.clearLayers();
-    if(data.status!=='success'){showAdminToast(data.message||'Chyba nacitani zastavek',false);appLog('NT nacteni selhalo: '+(data.message||'?'),'error');return;}
-    appLog(`NT nacteno ${data.stops.length} zastavek ve vyrezu`,'info');
+    if(data.status!=='success'){showAdminToast(data.message||'Chyba načítání',false);return;}
     data.stops.forEach(s=>{
       let m=L.marker([s.lat,s.lng],{icon:ntDotIcon(ntDotClass(s)),draggable:true,zIndexOffset:500});
-      m.bindTooltip(`<b>🚏 ${s.name}</b>${ntLabel(s)}`,{direction:'top',className:'dark-popup'});
-      m.on('click',()=>{
-        currentNtEdit={stop:s,marker:m};
-        document.getElementById('ntp-name').textContent=s.name;
-        document.getElementById('ntp-approx').checked=!!s.approx;
-        document.getElementById('ntp-substitute').checked=!!s.substitute;
-        document.getElementById('nt-edit-pop').style.display='block';
-      });
+      m.bindTooltip(`<b>${s.mode==='train'?'🚂':'🚏'} ${s.name}</b>${ntLabel(s)}`,{direction:'top',className:'dark-popup'});
+      m.on('click',()=>openNtEdit(s,m));
       m.on('dragend',async()=>{
-        let pos=m.getLatLng();
-        m.setIcon(ntDotIcon('nt-dot-saving'));
-        try{
-          let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng})});
-          let rd=await res.json();
-          if(rd.status==='success'){
-            s.manual=true;
-            m.setIcon(ntDotIcon(ntDotClass(s)));
-            m.setTooltipContent(`<b>🚏 ${s.name}</b>${ntLabel(s)}`);
-            showAdminToast(`💾 Ulozeno: ${s.name}`,true);
-            appLog(`Posunuta zastavka "${s.name}" na ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`,'ok');
-          }else{
-            showAdminToast('Chyba ukladani: '+(rd.message||'?'),false);
-            appLog(`Chyba ukladani pozice "${s.name}": `+(rd.message||'?'),'error');
-          }
-        }catch(e){showAdminToast('Chyba spojeni pri ukladani',false);appLog(`Chyba spojeni pri ukladani "${s.name}": `+e,'error');}
+        let pos=m.getLatLng();m.setIcon(ntDotIcon('nt-dot-saving'));
+        let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng})});
+        let rd=await res.json();
+        if(rd.status==='success'){s.manual=true;m.setIcon(ntDotIcon(ntDotClass(s)));m.setTooltipContent(`<b>${s.mode==='train'?'🚂':'🚏'} ${s.name}</b>${ntLabel(s)}`);showAdminToast(`💾 ${s.name}`,true);}
+        else{showAdminToast('Chyba: '+(rd.message||'?'),false);}
       });
       ntLayer.addLayer(m);
     });
-  }catch(e){console.error('NT load:',e);appLog('NT nacteni - chyba spojeni: '+e,'error');}
+  }catch(e){appLog('NT načítání selhalo: '+e,'error');}
+}
+function openNtEdit(s,m){
+  currentNtEdit={stop:s,marker:m};
+  document.getElementById('ntp-name').textContent=s.name;
+  document.getElementById('ntp-dispname').value=s.display_name||'';
+  document.getElementById('ntp-approx').checked=!!s.approx;
+  document.getElementById('ntp-substitute').checked=!!s.substitute;
+  document.getElementById('ntp-lines').value=(s.lines||[]).join(', ');
+  document.getElementById('nt-edit-pop').style.display='block';
 }
 async function saveNtFlags(){
   if(!currentNtEdit)return;
@@ -774,48 +798,70 @@ async function saveNtFlags(){
   let pos=m.getLatLng();
   let approx=document.getElementById('ntp-approx').checked;
   let substitute=document.getElementById('ntp-substitute').checked;
+  let display_name=document.getElementById('ntp-dispname').value.trim();
+  let linesRaw=document.getElementById('ntp-lines').value.trim();
+  let custom_lines=linesRaw?linesRaw.split(/[,;]+/).map(x=>x.trim()).filter(Boolean):null;
   try{
     let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng,approx,substitute})});
+      body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng,approx,substitute,display_name,custom_lines})});
     let rd=await res.json();
     if(rd.status==='success'){
-      s.approx=approx;s.substitute=substitute;s.manual=true;
+      Object.assign(s,{approx,substitute,display_name,lines:custom_lines||s.lines,manual:true});
       m.setIcon(ntDotIcon(ntDotClass(s)));
-      m.setTooltipContent(`<b>🚏 ${s.name}</b>${ntLabel(s)}`);
-      showAdminToast(`💾 Priznaky ulozeny: ${s.name}`,true);
-      appLog(`Priznaky zastavky "${s.name}": priblizna=${approx}, nahradni=${substitute}`,'ok');
+      m.setTooltipContent(`<b>${s.mode==='train'?'🚂':'🚏'} ${s.name}</b>${ntLabel(s)}`);
+      showAdminToast(`💾 Uloženo: ${s.name}`,true);
       document.getElementById('nt-edit-pop').style.display='none';
-    }else{
-      showAdminToast('Chyba ukladani: '+(rd.message||'?'),false);
-      appLog(`Chyba ukladani priznaku "${s.name}": `+(rd.message||'?'),'error');
-    }
-  }catch(e){showAdminToast('Chyba spojeni',false);appLog(`Chyba spojeni pri ukladani priznaku "${s.name}": `+e,'error');}
+    }else showAdminToast('Chyba: '+(rd.message||'?'),false);
+  }catch(e){showAdminToast('Chyba spojení',false);}
 }
-// NT: klik na mapu = přidat novou zastávku (jen v NT mode + shift klik)
-map.on('click',async(e)=>{
-  if(!ntMode)return;
-  let name=prompt('Název nové zastávky (prázdné = zrušit):');
-  if(!name||!name.trim())return;
+async function deleteNtStop(){
+  if(!currentNtEdit)return;
+  let {stop:s}=currentNtEdit;
+  if(!confirm(`Odebrat zastávku "${s.name}"? Vrátí se na automatickou GTFS polohu.`))return;
+  try{
+    let res=await fetch('/api/admin/delete_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:s.name})});
+    let rd=await res.json();
+    if(rd.status==='success'){showAdminToast(`🗑️ Odebráno: ${s.name}`,true);document.getElementById('nt-edit-pop').style.display='none';loadNTStops();}
+    else showAdminToast('Chyba: '+(rd.message||'?'),false);
+  }catch(e){showAdminToast('Chyba spojení',false);}
+}
+// NT add mode: + button → enter name in topbar → click on map → saves
+function startNtAdd(prefillName){
+  ntAddMode=true;
+  let bar=document.getElementById('nt-add-bar');if(bar){bar.style.display='flex';}
+  let inp=document.getElementById('nt-add-name');if(inp){inp.value=prefillName||'';inp.focus();}
+  showAdminToast('🚏 Zadej název a klikni na mapu pro umístění zastávky',true);
+}
+function cancelNtAdd(){
+  ntAddMode=false;
+  let bar=document.getElementById('nt-add-bar');if(bar)bar.style.display='none';
+}
+async function confirmNtAdd(lat,lng){
+  let name=(document.getElementById('nt-add-name')||{}).value;
+  if(!name||!name.trim()){showAdminToast('Zadej název zastávky',false);return;}
+  if(!lat){showAdminToast('Klikni na mapu pro umístění',false);return;}
   name=name.trim();
   try{
-    let res=await fetch('/api/admin/save_stop_override',{method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name,lat:e.latlng.lat,lng:e.latlng.lng})});
+    let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,lat,lng})});
     let rd=await res.json();
     if(rd.status==='success'){
-      showAdminToast(`✅ Přidána zastávka: ${name}`,true);
-      appLog(`Nová zastávka přidána: "${name}" @ ${e.latlng.lat.toFixed(5)},${e.latlng.lng.toFixed(5)}`,'ok');
-      loadNTStops();
-    }else{
-      showAdminToast('Chyba: '+(rd.message||'?'),false);
-      appLog('Chyba přidávání zastávky: '+(rd.message||'?'),'error');
-    }
-  }catch(er){showAdminToast('Chyba spojení',false);appLog('Chyba přidávání zastávky: '+er,'error');}
+      showAdminToast(`✅ Přidána: ${name}`,true);appLog(`Přidána zastávka: "${name}" @ ${lat.toFixed(5)},${lng.toFixed(5)}`,'ok');
+      cancelNtAdd();
+      if(!ntMode)toggleNT();else loadNTStops();
+      // Odeber ze seznamu chybějících
+      delete logMissingStops[name];
+      if(logCurrentTab==='missing')renderMissingLog();
+    }else{showAdminToast('Chyba: '+(rd.message||'?'),false);}
+  }catch(e){showAdminToast('Chyba spojení',false);}
+}
+map.on('click',(e)=>{
+  if(ntAddMode){
+    confirmNtAdd(e.latlng.lat,e.latlng.lng);
+  }
 });
 map.on('moveend',()=>{
   if(!ntMode)return;
-  clearTimeout(ntMoveTimer);
-  ntMoveTimer=setTimeout(loadNTStops,400);
+  clearTimeout(ntMoveTimer);ntMoveTimer=setTimeout(loadNTStops,400);
 });
 
 // === Veřejné "Zobrazit zastávky" + stop info popup ===
@@ -823,7 +869,11 @@ let pubStopsMode=false;
 let pubMoveTimer=null;
 
 function showStopInfo(s){
+  let icon=s.mode==='train'?'🚂':'🚏';
+  document.getElementById('sip-mode-icon').textContent=icon;
   document.getElementById('sip-name-txt').textContent=s.name;
+  let dn=document.getElementById('sip-dispname');
+  dn.textContent=s.display_name?`Zobrazovaný název: ${s.display_name}`:'';
   let modeEl=document.getElementById('sip-mode');
   modeEl.textContent=s.mode==='train'?'🚂 Vlaková zastávka':s.mode==='bus'?'🚌 Autobusová zastávka':s.mode==='mixed'?'🚌🚂 Bus + vlak':'';
   let linesEl=document.getElementById('sip-lines-wrap');
@@ -844,8 +894,8 @@ function pubStopIcon(s){
   let isTrain=s.mode==='train';
   let base=s.substitute?'pub-dot-substitute':s.approx?'pub-dot-approx':'';
   let trainCls=isTrain?' pub-dot-train':'';
-  let size=isTrain?10:9;
-  return L.divIcon({className:'',html:`<div class="pub-dot ${base}${trainCls}"></div>`,iconSize:[size,size],iconAnchor:[size>>1,size>>1]});
+  let size=isTrain?12:10; // trochu větší pro lepší touch
+  return L.divIcon({className:'',html:`<div class="pub-dot ${base}${trainCls}" style="width:${size}px;height:${size}px;"></div>`,iconSize:[size,size],iconAnchor:[size>>1,size>>1]});
 }
 
 async function loadPubStops(){
@@ -1040,13 +1090,28 @@ async function fetchBuses(){
       setTimeout(()=>{isRefreshing=false;},50);
     }
 
-    // Komplexní logování stavu mapy (jen pokud je LOG panel otevřen nebo admin)
+    // Komplexní logování stavu mapy
     if(IS_ADMIN){
       let total=data.buses.length;
       let noSpz=data.buses.filter(b=>!b.spz||b.spz==='Neznama').length;
       let verified=data.buses.filter(b=>b.spz_verified).length;
       let bug=data.buses.filter(b=>b.color_class==='bg-bug').length;
-      appLog(`Mapa OK: ${total} busů, SPZ: ${verified} ✅ ${total-noSpz-verified} ⏳ ${noSpz} ❓ ${bug>0?bug+'🐛':''}`, 'info');
+      appLog(`Mapa: ${total} busů | SPZ: ${verified}✅ ${total-noSpz-verified}⏳ ${noSpz}❓${bug?' '+bug+'🐛':''}`, 'info');
+      // SPZ log — loguj jen změny stavu, ne každý tik
+      data.buses.forEach(b=>{
+        if(b.is_train)return;
+        let prev=window._spzPrev&&window._spzPrev[b.id];
+        let cur=`${b.spz||'?'}|${b.spz_verified?'ok':'pending'}`;
+        if(!prev){window._spzPrev=window._spzPrev||{};window._spzPrev[b.id]=cur;return;}
+        if(prev!==cur){
+          window._spzPrev[b.id]=cur;
+          if(b.spz&&b.spz!=='Neznama'){
+            appLogSpz(b.id,b.spz,b.spz_verified?'ok':'pending',b.spz_verified?`✅ Ověřeno (L${b.line})`:`⏳ Čeká na ověření (L${b.line})`);
+          }else{
+            appLogSpz(b.id,'Neznámá','err',`❓ Bez SPZ (L${b.line}, stav: ${b.status})`);
+          }
+        }
+      });
     }
 
   }catch(e){
@@ -1269,10 +1334,7 @@ def _load_gtfs():
 
 
 def _load_stop_overrides(db):
-    """Nacte rucni opravy poloh zastavek (NT rezim) ze Supabase do pameti.
-    Vola se jednou pri startu workeru. Tabulka 'stop_overrides' nemusi
-    existovat (napr. pred prvnim pouzitim NT rezimu) - v tom pripade se
-    proste pokracuje s prazdnym STOP_OVERRIDES, nic se nerozbije."""
+    """Nacte rucni opravy poloh zastavek (NT rezim) ze Supabase do pameti."""
     global STOP_OVERRIDES
     if not db:
         return
@@ -1283,10 +1345,16 @@ def _load_stop_overrides(db):
             nm = row.get("stop_name")
             if not nm:
                 continue
+            try:
+                cl = json.loads(row["custom_lines"]) if row.get("custom_lines") else None
+            except Exception:
+                cl = None
             loaded[_norm_txt(nm)] = {
                 "lat": row["lat"], "lng": row["lng"], "name": nm,
                 "approx": bool(row.get("approx", False)),
                 "substitute": bool(row.get("substitute", False)),
+                "display_name": row.get("display_name") or "",
+                "custom_lines": cl,   # None = pouzij GTFS, list = pouzij toto
             }
         STOP_OVERRIDES = loaded
         print(f"[NT] Nacteno {len(loaded)} rucnich oprav poloh zastavek.", flush=True)
@@ -1874,18 +1942,21 @@ def background_map_worker():
                         del GLOBAL_BUS_CACHE[bus_id]
                         continue
                     c["is_offline"] = True
+                    spz_ok = bool(c.get("spz") and c.get("spz") != "Nezn\u00e1m\u00e1")
                     if om >= 120:
                         c["status"] = "Stoj\u00ed v depu / Vozovn\u011b"
                         c["color_class"] = "bg-gray"
                         c["raw_delay"] = 0
                         c["spz_locked"] = True
-                        c["spz_frozen"] = True
+                        if spz_ok:
+                            c["spz_frozen"] = True   # máme SPZ - zamraž ji, bude vidět i v depu
                     elif om >= 15:
                         c["status"] = "Odstaven (Bez sign\u00e1lu)"
                         c["color_class"] = "bg-gray"
                         c["raw_delay"] = 0
                         c["spz_locked"] = True
-                        c["spz_frozen"] = True
+                        if spz_ok:
+                            c["spz_frozen"] = True
                     elif om > 2:
                         if not c["actual_end_time"]:
                             c["actual_end_time"] = now.strftime('%H:%M')
@@ -1893,7 +1964,8 @@ def background_map_worker():
                         c["color_class"] = "bg-purple"
                         c["raw_delay"] = 0
                         c["spz_locked"] = True
-                        c["spz_frozen"] = True
+                        if spz_ok:
+                            c["spz_frozen"] = True
                         if om < 4:
                             upsert_to_history(db_client, c)
 
@@ -1945,14 +2017,25 @@ def background_map_worker():
                 #    jinou SPZ, ale hrozi ze by re-audit kvuli ridke Arriva poloze na
                 #    parkovisti/v depu omylem SPZ odemkl a system by ji ztratil z dohledu.
                 # ══════════════════════════════════════════════════════════════════
-                if (not is_train and not c.get("investigating") and not c.get("manual_spz")
-                        and not c.get("bug_locked") and not c.get("spz_frozen") and inact <= 120):
+                # SPZ PAROVÁNÍ: spustí se pokud:
+                # - Bus nemá SPZ vůbec (vždy hledej bez ohledu na inact)
+                # - Bus má SPZ ale není frozen (hledej/reaudituj při jízdě)
+                # Přeskočí jen: manual_spz, bug_locked, investigating, vlak,
+                #               nebo spz_frozen s platnou SPZ (po dojeti na konečnou)
+                has_valid_spz = bool(c.get("spz") and c.get("spz") != "Nezn\u00e1m\u00e1")
+                # Nikdy nezamrazuj bus bez SPZ - vozovna/konečná si má SPZ pamatovat
+                # ale bus který odjel a stále nemá SPZ musí hledat dál
+                if c.get("spz_frozen") and not has_valid_spz:
+                    c["spz_frozen"] = False
+                skip_spz = (is_train or c.get("investigating") or c.get("manual_spz")
+                            or c.get("bug_locked")
+                            or (c.get("spz_frozen") and has_valid_spz and inact > 2))
+                if not skip_spz:
                     d1_norm = _norm_txt(dest1)
                     near_stop = _nearest_stop_name(lat1, lng1, ARRIVA_STOP_MATCH_M) if GTFS_LOADED else None
                     near_stop_norm = _norm_txt(near_stop) if near_stop else ""
 
-                    # Sestav gate_pass: SPZ -> nejlepsi vzdalenost vsech kandidatu,
-                    # kteri projdou VSEMI tvrdymi branami (linka, pozice, cil, zastavka)
+                    # Sestav gate_pass (přísné brány: linka+pozice+cíl+zastávka)
                     gate_pass = {}
                     for b in data_arriva:
                         if not _arriva_line_matches(line, b):
@@ -1963,18 +2046,34 @@ def background_map_worker():
                         dist_m = haversine_m(lat1, lng1, b.get("latitude") or 0, b.get("longitude") or 0)
                         if dist_m > ARRIVA_MATCH_DIST_M:
                             continue
-                        # Tvrda brána: cíl musi sedet (pokud oba znamy)
                         a_dest_norm = _norm_txt(b.get("destinationName", ""))
                         if d1_norm and a_dest_norm:
                             if d1_norm not in a_dest_norm and a_dest_norm not in d1_norm:
-                                continue  # cil nesedi -> zahodit kandidata
-                        # Tvrda brana: lastStopName musi sedet (pokud GTFS a Arriva oba znamy)
+                                continue
                         if near_stop_norm:
                             a_stop_norm = _norm_txt(b.get("lastStopName", ""))
                             if a_stop_norm and near_stop_norm not in a_stop_norm and a_stop_norm not in near_stop_norm:
-                                continue  # zastavka nesedi -> zahodit kandidata
+                                continue
                         if b_spz not in gate_pass or dist_m < gate_pass[b_spz]:
                             gate_pass[b_spz] = dist_m
+
+                    # FALLBACK pro bus ZCELA BEZ SPZ: pokud přísné brány nic nenašly,
+                    # zkus jen linka+pozice (bez cíle a zastávky) - na začátku jízdy
+                    # nebo po výjezdu z vozovny jsou tato data nespolehlivá.
+                    # Bezpečná protože: jen pro bus bez SPZ (nepřepíše dobrou SPZ)
+                    # a distanční filtr je přísnější (500m místo 750m).
+                    if not gate_pass and not has_valid_spz:
+                        for b in data_arriva:
+                            if not _arriva_line_matches(line, b):
+                                continue
+                            b_spz = (b.get("spz") or "").strip()
+                            if not b_spz or b_spz == "Nezn\u00e1m\u00e1":
+                                continue
+                            dist_m = haversine_m(lat1, lng1, b.get("latitude") or 0, b.get("longitude") or 0)
+                            if dist_m > 500:
+                                continue
+                            if b_spz not in gate_pass or dist_m < gate_pass[b_spz]:
+                                gate_pass[b_spz] = dist_m
 
                     current_spz = c.get("spz")
                     was_locked = bool(c.get("spz_locked"))
@@ -2450,11 +2549,15 @@ def api_admin_route_stops():
         ov = STOP_OVERRIDES.get(key)
         eff_lat = ov["lat"] if ov else s["lat"]
         eff_lng = ov["lng"] if ov else s["lng"]
+        # Linky: custom_lines (rucne nastavene) maji prednost pred GTFS
+        eff_lines = ov["custom_lines"] if (ov and ov.get("custom_lines") is not None) else s.get("lines", [])
         flag = CONFIDENCE_LOG.get(key)
         flagged = bool(flag and flag.get("confidence") in ("fuzzy", "geocoded", "none"))
         stops_out.append({
-            "name": s["name"], "lat": eff_lat, "lng": eff_lng,
-            "mode": s.get("mode"), "lines": s.get("lines", []),
+            "name": s["name"],
+            "display_name": (ov.get("display_name") or "") if ov else "",
+            "lat": eff_lat, "lng": eff_lng,
+            "mode": s.get("mode"), "lines": eff_lines,
             "manual": bool(ov), "flagged": flagged,
             "approx": bool(ov and ov.get("approx")),
             "substitute": bool(ov and ov.get("substitute")),
@@ -2465,8 +2568,7 @@ def api_admin_route_stops():
 
 @mapa_bp.route('/api/stops_in_view')
 def api_stops_in_view():
-    """Verejny endpoint pro 'Zobrazit zastavky' + klik na zastávku = linky.
-    Vraci mode (bus/train/mixed), lines, approx/substitute."""
+    """Verejny endpoint pro 'Zobrazit zastavky' + klik na zastávku = linky."""
     bbox = _parse_bbox_args()
     if not bbox:
         return jsonify({"status": "error", "message": "Chyb\u00ed/\u0161patn\u00e9 sou\u0159adnice v\u00fdezu"}), 400
@@ -2480,9 +2582,12 @@ def api_stops_in_view():
         ov = STOP_OVERRIDES.get(key)
         eff_lat = ov["lat"] if ov else s["lat"]
         eff_lng = ov["lng"] if ov else s["lng"]
+        eff_lines = ov["custom_lines"] if (ov and ov.get("custom_lines") is not None) else s.get("lines", [])
         stops_out.append({
-            "name": s["name"], "lat": eff_lat, "lng": eff_lng,
-            "mode": s.get("mode"), "lines": s.get("lines", []),
+            "name": s["name"],
+            "display_name": (ov.get("display_name") or "") if ov else "",
+            "lat": eff_lat, "lng": eff_lng,
+            "mode": s.get("mode"), "lines": eff_lines,
             "approx": bool(ov and ov.get("approx")),
             "substitute": bool(ov and ov.get("substitute")),
         })
@@ -2492,31 +2597,49 @@ def api_stops_in_view():
 
 @mapa_bp.route('/api/admin/save_stop_override', methods=['POST'])
 def api_admin_save_stop_override():
-    """NT rezim: ulozi rucne opravenou polohu zastavky (+ pripadne priznaky
-    approx/substitute) - natrvalo (do Supabase) i okamzite do pameti.
-    approx/substitute jsou volitelne - kdyz chybi, zachova se jejich
-    soucasna hodnota (aby pouhe poposunuti bodu nesmazalo drive nastavene
-    priznaky a naopak ulozeni samotnych priznaku nemuselo vzdy resit i
-    souradnice)."""
+    """NT rezim: ulozi rucne opravenou zastavku natrvalo i do pameti.
+    lat/lng jsou povinne jen pro novou zastavku (existujici lze updatovat
+    jen flags/display_name/lines bez zmeny polohy)."""
     if not session.get('logged_in'):
         return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()
-    try:
-        lat = float(data.get("lat"))
-        lng = float(data.get("lng"))
-    except (TypeError, ValueError):
-        return jsonify({"status": "error", "message": "\u0160patn\u00e9 sou\u0159adnice"}), 400
     if not name:
         return jsonify({"status": "error", "message": "Chyb\u00ed n\u00e1zev zast\u00e1vky"}), 400
 
     key = _norm_txt(name)
     existing = STOP_OVERRIDES.get(key, {})
+
+    # Souradnice - povinne jen pokud zaznam jeste neexistuje
+    try:
+        lat = float(data["lat"])
+        lng = float(data["lng"])
+    except (TypeError, ValueError, KeyError):
+        if not existing:
+            return jsonify({"status": "error", "message": "\u0160patn\u00e9 nebo chyb\u011bj\u00edc\u00ed sou\u0159adnice"}), 400
+        lat = existing["lat"]
+        lng = existing["lng"]
+
     approx = bool(data["approx"]) if "approx" in data else existing.get("approx", False)
     substitute = bool(data["substitute"]) if "substitute" in data else existing.get("substitute", False)
+    display_name = str(data["display_name"]).strip() if "display_name" in data else existing.get("display_name", "")
+    # custom_lines: None = zachovej GTFS, [] = zadne linky, [...] = konkretni linky
+    if "custom_lines" in data:
+        cl = data["custom_lines"]
+        if cl is None or (isinstance(cl, list) and all(isinstance(x, str) for x in cl)):
+            custom_lines = cl
+        else:
+            custom_lines = existing.get("custom_lines")
+    else:
+        custom_lines = existing.get("custom_lines")
 
-    STOP_OVERRIDES[key] = {"lat": lat, "lng": lng, "name": name, "approx": approx, "substitute": substitute}
-    CONFIDENCE_LOG.pop(key, None)  # admin to prave rucne potvrdil - uz neni "podezrele"
+    STOP_OVERRIDES[key] = {
+        "lat": lat, "lng": lng, "name": name,
+        "approx": approx, "substitute": substitute,
+        "display_name": display_name,
+        "custom_lines": custom_lines,
+    }
+    CONFIDENCE_LOG.pop(key, None)
 
     db = get_db_client()
     if db:
@@ -2524,10 +2647,12 @@ def api_admin_save_stop_override():
             db.table("stop_overrides").upsert({
                 "stop_name": name, "lat": lat, "lng": lng,
                 "approx": approx, "substitute": substitute,
+                "display_name": display_name,
+                "custom_lines": json.dumps(custom_lines, ensure_ascii=False) if custom_lines is not None else None,
                 "updated_at": get_prague_time().isoformat(),
             }, on_conflict="stop_name").execute()
         except Exception as e:
-            print(f"[NT] Chyba ukl\u00e1d\u00e1n\u00ed do DB (v pam\u011bti ulo\u017eeno, ale neprezije restart): {e}", flush=True)
+            print(f"[NT] Chyba ukl\u00e1d\u00e1n\u00ed do DB: {e}", flush=True)
 
     return jsonify({"status": "success"})
 
