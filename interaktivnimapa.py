@@ -217,19 +217,26 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 #top-nav{position:fixed;top:-72px;left:0;right:0;height:58px;background:rgba(8,16,30,0.97);border-bottom:1px solid #334155;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:2999;transition:top 0.3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;padding:0 14px;gap:10px;box-shadow:0 4px 24px rgba(0,0,0,0.7);}
 #top-nav.vis{top:0;}
 .n-logo{display:flex;align-items:center;text-decoration:none;flex-shrink:0;}
-.n-logo img{height:34px;width:auto;filter:drop-shadow(0 0 7px rgba(56,189,248,.55));}
-.n-title{flex-shrink:0;line-height:1.2;}.n-title .a{color:#38bdf8;font-size:15px;font-weight:800;letter-spacing:.4px;}.n-title .b{color:#64748b;font-size:10px;}
-.n-warn{background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:bold;white-space:nowrap;flex-shrink:0;}
+.n-logo img{height:32px;width:auto;filter:drop-shadow(0 0 7px rgba(56,189,248,.55));}
+.n-title{flex-shrink:0;line-height:1.2;}.n-title .a{color:#38bdf8;font-size:14px;font-weight:800;}.n-title .b{color:#64748b;font-size:10px;}
+.n-warn{background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:bold;white-space:nowrap;flex-shrink:0;}
 .n-sp{flex:1;}
-.n-clock{color:#38bdf8;font-size:13px;font-weight:bold;background:rgba(56,189,248,.08);padding:5px 10px;border-radius:6px;border:1px solid #334155;white-space:nowrap;flex-shrink:0;}
-.n-btn{padding:6px 11px;border-radius:6px;font-weight:bold;text-decoration:none;font-size:12px;flex-shrink:0;white-space:nowrap;transition:.2s;}
+.n-clock{color:#38bdf8;font-size:12px;font-weight:bold;background:rgba(56,189,248,.08);padding:4px 8px;border-radius:6px;border:1px solid #334155;white-space:nowrap;flex-shrink:0;}
+.n-btn{padding:5px 10px;border-radius:6px;font-weight:bold;text-decoration:none;font-size:12px;flex-shrink:0;white-space:nowrap;transition:.2s;}
 .n-home{background:#38bdf8;color:#0f172a;}.n-home:hover{background:#0284c7;color:#fff;}
 .n-provoz{background:#334155;color:#fff;}.n-provoz:hover{background:#475569;}
-.n-ad{background:#1e3a5f;color:#38bdf8;border:1px solid #334155;}.n-ad:hover{background:#1e40af;color:#fff;}
-.n-back{background:#ef4444;color:#fff;}.n-back:hover{background:#dc2626;}
+.n-ad{background:#1e3a5f;color:#38bdf8;border:1px solid #334155;font-size:11px;padding:4px 8px;}.n-ad:hover{background:#1e40af;color:#fff;}
+.n-back{background:#ef4444;color:#fff;font-size:11px;padding:4px 8px;}.n-back:hover{background:#dc2626;}
+/* Výrazné tlačítko "Zobrazit zastávky" - prominentní pro veřejnost */
+#pub-stops-btn{background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#0f172a;border:none;padding:7px 14px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;flex-shrink:0;white-space:nowrap;box-shadow:0 2px 8px rgba(56,189,248,.4);transition:.2s;}
+#pub-stops-btn:hover{background:linear-gradient(135deg,#0284c7,#0ea5e9);box-shadow:0 3px 14px rgba(56,189,248,.6);}
+#pub-stops-btn.active{background:#f59e0b;color:#0f172a;box-shadow:0 2px 8px rgba(245,158,11,.5);}
 #nav-handle{position:fixed;top:0;left:50%;transform:translateX(-50%);width:90px;height:7px;background:rgba(56,189,248,.55);border-radius:0 0 8px 8px;z-index:3001;cursor:pointer;transition:opacity .3s,background .2s,width .2s;}
 #nav-handle:hover{background:rgba(56,189,248,.95);width:130px;}
 #nav-handle.hid{opacity:0;pointer-events:none;}
+/* Kurzor kříže v NT add mode */
+body.nt-add-active{cursor:crosshair !important;}
+body.nt-add-active #map{cursor:crosshair !important;}
 .dark-popup .leaflet-popup-content-wrapper{background:#1e293b;color:#fff;border:1px solid #334155;padding:0;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.65);}
 .dark-popup .leaflet-popup-tip{background:#1e293b;}
 .dark-popup .leaflet-popup-content{margin:0;width:292px!important;}
@@ -299,25 +306,26 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 @media(max-width:768px){
   #top-nav{gap:4px;padding:0 5px;height:auto;min-height:50px;flex-wrap:wrap;padding-bottom:5px;padding-top:5px;}
   .n-title,.n-warn{display:none;}
-  .n-clock{font-size:10px;padding:3px 5px;}.n-btn{font-size:10px;padding:4px 7px;}
-  #spz-search-inp{width:90px;font-size:11px;}
+  .n-clock{font-size:10px;padding:3px 5px;}
+  .n-btn{font-size:10px;padding:4px 7px;}
+  #pub-stops-btn{font-size:11px;padding:5px 10px;}
+  #spz-search-inp{width:80px;font-size:11px;}
   #hf{width:200px;}
   .dark-popup .leaflet-popup-content{width:240px!important;}
-  #log-panel{bottom:auto;top:58px;right:4px;left:4px;width:auto;max-width:100vw;}
-  #log-body,#log-errors-body,#log-spz-body,#log-missing-body{max-height:180px;}
-  #nt-edit-pop{left:4px;right:4px;bottom:10px;width:auto;}
+  #log-panel{bottom:auto;top:56px;right:4px;left:4px;width:auto;max-width:100vw;}
+  #log-body,#log-errors-body,#log-spz-body,#log-missing-body{max-height:160px;}
+  #nt-edit-pop{left:4px;right:4px;bottom:10px;width:auto;max-height:80vh;overflow-y:auto;}
   #stop-info-pop{left:4px;right:4px;bottom:10px;width:auto;}
   .sip-lines{flex-wrap:wrap;gap:3px;}
-  #nt-add-bar{left:4px;right:4px;transform:none;flex-wrap:wrap;gap:5px;}
-  #nt-add-name{width:100%;}
   .lp-h div{gap:2px;flex-wrap:wrap;}
   .lp-h div button{font-size:10px;padding:2px 5px;}
+  #nt-add-bar{left:4px;right:4px;transform:none;flex-wrap:wrap;gap:5px;}
 }
 @media(max-width:420px){
   .n-provoz{display:none;}
-  #spz-search-inp{width:75px;}
-  #pub-stops-btn{font-size:10px;padding:4px 6px;}
-  #nt-toggle-btn,#nt-add-btn,#log-toggle-btn{font-size:11px;padding:4px 7px;}
+  #spz-search-inp{width:65px;font-size:10px;}
+  #nt-toggle-btn,#nt-add-btn,#log-toggle-btn{font-size:11px;padding:4px 6px;}
+  #pub-stops-btn{font-size:10px;padding:4px 9px;}
 }
 </style>
 
@@ -328,24 +336,24 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     <a href="https://datacorebot.koyeb.app/" class="n-logo">
       <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png" alt="OIS IDPK">
     </a>
-    <div class="n-title"><div class="a"><i class="fas fa-map-marked-alt"></i> 🗺️ Interaktivni mapa</div><div class="b">Projekt OIS IDPK &nbsp;.&nbsp; Neoficialni</div></div>
-    <div class="n-warn">! Neni garantovana 100% presnost dat</div>
+    <!-- Výrazné tlačítko Zobrazit zastávky - první, pro veřejnost -->
+    <button id="pub-stops-btn" onclick="togglePubStops()">🚏 Zastávky</button>
+    <a href="/provoz-idpk" class="n-btn n-provoz">IDPK</a>
+    <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠</a>
     <div class="n-sp"></div>
-    <div id="admin-mode-badge" style="display:none;background:rgba(56,189,248,0.15);color:#38bdf8;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:bold;border:1px solid rgba(56,189,248,0.35);white-space:nowrap;flex-shrink:0;">Admin</div>
+    <div id="admin-mode-badge" style="display:none;background:rgba(56,189,248,0.15);color:#38bdf8;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:bold;border:1px solid rgba(56,189,248,0.3);flex-shrink:0;">Admin</div>
     <div class="n-clock"><span id="systemTimeClock">--:--:--</span></div>
-    <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠 Domu</a>
-    <a href="/provoz-idpk" class="n-btn n-provoz">🚏 IDPK</a>
-    <button id="pub-stops-btn" onclick="togglePubStops()" class="n-btn" style="background:transparent;border:1px solid #475569;color:#94a3b8;cursor:pointer;">🚏 Zobrazit zastavky</button>
-    <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:6px 11px;border-radius:6px;font-weight:bold;font-size:12px;flex-shrink:0;white-space:nowrap;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
-    <button id="nt-add-btn" onclick="startNtAdd()" style="display:none;padding:6px 10px;border-radius:6px;font-weight:bold;font-size:13px;flex-shrink:0;white-space:nowrap;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;" title="Přidat novou zastávku">＋</button>
-    <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:6px 11px;border-radius:6px;font-weight:bold;font-size:12px;flex-shrink:0;white-space:nowrap;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋 LOG</button>
-    __AD_BTN__
     <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
-      <input id="spz-search-inp" type="text" placeholder="🔍 Hledat SPZ..."
-        style="background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;padding:5px 10px;font-size:12px;width:130px;outline:none;"
+      <input id="spz-search-inp" type="text" placeholder="🔍 SPZ..."
+        style="background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;padding:5px 9px;font-size:12px;width:110px;outline:none;"
         oninput="spzSearch(this.value)" onblur="setTimeout(()=>document.getElementById('spz-results').innerHTML='',200)">
-      <div id="spz-results" style="position:absolute;top:34px;right:0;background:#1e293b;border:1px solid #334155;border-radius:8px;min-width:230px;z-index:4000;box-shadow:0 8px 20px rgba(0,0,0,.7);max-height:220px;overflow-y:auto;"></div>
+      <div id="spz-results" style="position:absolute;top:34px;right:0;background:#1e293b;border:1px solid #334155;border-radius:8px;min-width:220px;z-index:4000;box-shadow:0 8px 20px rgba(0,0,0,.7);max-height:220px;overflow-y:auto;"></div>
     </div>
+    <!-- Admin nástroje – skryté pro veřejnost -->
+    <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
+    <button id="nt-add-btn" onclick="startNtAdd()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:14px;flex-shrink:0;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;" title="Přidat zastávku">＋</button>
+    <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋</button>
+    __AD_BTN__
   </nav>
   __ADMIN_BANNER__
   <div id="map"></div>
@@ -376,15 +384,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
     </div>
   </div>
   <div id="nt-edit-pop">
-    <div class="ntp-t">🚏 <span id="ntp-name">-</span></div>
+    <div class="ntp-t"><span id="ntp-mode-icon">🚏</span> <span id="ntp-name">-</span></div>
     <div style="font-size:10px;color:#64748b;margin-bottom:8px;">Systémový název (pro vyhledávání v JŘ)</div>
     <label style="display:block;margin-bottom:4px;font-size:11px;color:#94a3b8;">Zobrazovaný název (prázdné = použij systémový):</label>
     <input id="ntp-dispname" type="text" placeholder="Zobrazovaný název..." style="width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;padding:5px 8px;font-size:12px;margin-bottom:8px;">
-    <label><input type="checkbox" id="ntp-approx"> ⚠️ Přibližná poloha</label>
-    <label><input type="checkbox" id="ntp-substitute"> 🔀 Náhradní zastávka</label>
-    <div style="margin:8px 0 4px;font-size:11px;color:#94a3b8;">Linky (prázdné = GTFS, čárkou oddělené):</div>
-    <input id="ntp-lines" type="text" placeholder="490, 496, 733..." style="width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;padding:5px 8px;font-size:12px;margin-bottom:8px;">
-    <button onclick="saveNtFlags()" style="width:100%;background:#10b981;color:white;border:none;border-radius:5px;padding:7px;font-weight:bold;cursor:pointer;font-size:12px;margin-bottom:4px;">💾 Uložit</button>
+    <label style="margin-bottom:6px;"><input type="checkbox" id="ntp-approx"> ⚠️ Přibližná poloha</label>
+    <label style="margin-bottom:8px;"><input type="checkbox" id="ntp-substitute"> 🔀 Náhradní zastávka</label>
+    <div style="margin-bottom:4px;font-size:11px;color:#94a3b8;">Linky přes zastávku:</div>
+    <div id="ntp-lines-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;min-height:22px;"></div>
+    <div style="display:flex;gap:4px;margin-bottom:8px;">
+      <input id="ntp-line-add" type="text" placeholder="Přidat linku (760 nebo 490760)" style="flex:1;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;padding:5px 8px;font-size:12px;" onkeydown="if(event.key==='Enter')addLineToNtStop()">
+      <button onclick="addLineToNtStop()" style="background:#334155;color:#38bdf8;border:none;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:12px;font-weight:bold;">＋</button>
+    </div>
+    <button onclick="saveNtFlags()" style="width:100%;background:#10b981;color:white;border:none;border-radius:5px;padding:7px;font-weight:bold;cursor:pointer;font-size:12px;margin-bottom:4px;">💾 Uložit vše</button>
     <button onclick="deleteNtStop()" style="width:100%;background:#7f1d1d;color:#fca5a5;border:none;border-radius:5px;padding:5px;font-size:11px;cursor:pointer;margin-bottom:4px;">🗑️ Odebrat zastávku</button>
     <button onclick="document.getElementById('nt-edit-pop').style.display='none'" style="width:100%;background:transparent;border:1px solid #334155;color:#64748b;border-radius:5px;padding:4px;font-size:11px;cursor:pointer;">Zavřít</button>
   </div>
@@ -731,7 +743,13 @@ async function toggleRoute(busId){
     let label=`🗺️ Skryt trasu (${found}/${data.stops.length} zast.)`+(uncertain>0?` ⚠️${uncertain}`:'')+(missing.length>0?` ❓${missing.length}`:'');
     // Logování - přehled + chybějící zastávky do error logu
     appLog(`Trasa ${busId}: ${found}/${data.stops.length} nalezeno (fuzzy:${uncertain} chybí:${missing.length})`,'info');
-    missing.forEach(s=>{appLog(`Zastávka nenalezena: "${s.name}"  → přidej v NT`,'warn');logMissingStop(s.name);});
+    missing.forEach(s=>{
+      appLog(`Zastávka nenalezena: "${s.name}"  → přidej v NT`,'warn');
+      logMissingStop(s.name);
+      // Report na backend - ukládá se do server logu + přežije reload stránky
+      fetch('/api/admin/report_missing_stop',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({stop_name:s.name,bus_id:busId})}).catch(()=>{});
+    });
     if(btn){btn.textContent=label;btn.style.background='#1e40af';}
   }catch(e){if(btn){btn.textContent='Chyba nacitani';btn.style.background='#7f1d1d';}console.error('Route:',e);}
 }
@@ -783,13 +801,58 @@ async function loadNTStops(){
     });
   }catch(e){appLog('NT načítání selhalo: '+e,'error');}
 }
+function renderNtLineChips(lines){
+  let wrap=document.getElementById('ntp-lines-chips');
+  if(!wrap)return;
+  wrap.innerHTML='';
+  (lines||[]).forEach(l=>{
+    let chip=document.createElement('span');
+    chip.style.cssText='background:#334155;color:#cbd5e1;padding:2px 6px 2px 8px;border-radius:10px;font-size:11px;font-weight:bold;display:inline-flex;align-items:center;gap:4px;';
+    chip.innerHTML=`${l}<button onclick="removeNtLine('${l}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;padding:0;line-height:1;">×</button>`;
+    wrap.appendChild(chip);
+  });
+  if(!lines||!lines.length)wrap.innerHTML='<span style="color:#475569;font-size:10px;">Žádné linky (použije se GTFS)</span>';
+}
+async function addLineToNtStop(){
+  if(!currentNtEdit)return;
+  let inp=document.getElementById('ntp-line-add');
+  let line=(inp.value||'').trim();
+  if(!line){showAdminToast('Zadej číslo linky',false);return;}
+  inp.value='';
+  let {stop:s}=currentNtEdit;
+  try{
+    let res=await fetch('/api/admin/assign_line_to_stop',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({stop_name:s.name,line,remove:false})});
+    let rd=await res.json();
+    if(rd.status==='success'){
+      s.lines=rd.lines;
+      renderNtLineChips(s.lines);
+      showAdminToast(`✅ Linka ${line} přidána`,true);
+    }else showAdminToast('Chyba: '+(rd.message||'?'),false);
+  }catch(e){showAdminToast('Chyba spojení',false);}
+}
+async function removeNtLine(line){
+  if(!currentNtEdit)return;
+  let {stop:s}=currentNtEdit;
+  try{
+    let res=await fetch('/api/admin/assign_line_to_stop',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({stop_name:s.name,line,remove:true})});
+    let rd=await res.json();
+    if(rd.status==='success'){s.lines=rd.lines;renderNtLineChips(s.lines);showAdminToast(`Linka ${line} odebrána`,true);}
+    else showAdminToast('Chyba: '+(rd.message||'?'),false);
+  }catch(e){showAdminToast('Chyba spojení',false);}
+}
 function openNtEdit(s,m){
   currentNtEdit={stop:s,marker:m};
+  let icon=s.mode==='train'?'🚂':'🚏';
+  let modeEl=document.getElementById('ntp-mode-icon');if(modeEl)modeEl.textContent=icon;
   document.getElementById('ntp-name').textContent=s.name;
   document.getElementById('ntp-dispname').value=s.display_name||'';
   document.getElementById('ntp-approx').checked=!!s.approx;
   document.getElementById('ntp-substitute').checked=!!s.substitute;
-  document.getElementById('ntp-lines').value=(s.lines||[]).join(', ');
+  renderNtLineChips(s.lines);
   document.getElementById('nt-edit-pop').style.display='block';
 }
 async function saveNtFlags(){
@@ -799,14 +862,14 @@ async function saveNtFlags(){
   let approx=document.getElementById('ntp-approx').checked;
   let substitute=document.getElementById('ntp-substitute').checked;
   let display_name=document.getElementById('ntp-dispname').value.trim();
-  let linesRaw=document.getElementById('ntp-lines').value.trim();
-  let custom_lines=linesRaw?linesRaw.split(/[,;]+/).map(x=>x.trim()).filter(Boolean):null;
+  // Linky jsou uloženy průběžně přes addLineToNtStop/removeNtLine
+  // saveNtFlags uloží jen zbývající metadata (approx/substitute/display_name)
   try{
     let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng,approx,substitute,display_name,custom_lines})});
+      body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng,approx,substitute,display_name,custom_lines:s.lines||null})});
     let rd=await res.json();
     if(rd.status==='success'){
-      Object.assign(s,{approx,substitute,display_name,lines:custom_lines||s.lines,manual:true});
+      Object.assign(s,{approx,substitute,display_name,manual:true});
       m.setIcon(ntDotIcon(ntDotClass(s)));
       m.setTooltipContent(`<b>${s.mode==='train'?'🚂':'🚏'} ${s.name}</b>${ntLabel(s)}`);
       showAdminToast(`💾 Uloženo: ${s.name}`,true);
@@ -826,38 +889,54 @@ async function deleteNtStop(){
   }catch(e){showAdminToast('Chyba spojení',false);}
 }
 // NT add mode: + button → enter name in topbar → click on map → saves
+// NT add mode: klik + → kříž → klik mapu → prompt pro název → uloží
+let ntPendingPrefill='';
 function startNtAdd(prefillName){
   ntAddMode=true;
-  let bar=document.getElementById('nt-add-bar');if(bar){bar.style.display='flex';}
-  let inp=document.getElementById('nt-add-name');if(inp){inp.value=prefillName||'';inp.focus();}
-  showAdminToast('🚏 Zadej název a klikni na mapu pro umístění zastávky',true);
+  ntPendingPrefill=prefillName||'';
+  document.body.classList.add('nt-add-active');
+  let btn=document.getElementById('nt-add-btn');
+  if(btn){btn.style.background='#10b981';btn.style.color='#0f172a';}
+  showAdminToast('🚏 Klikni na mapu kde zastávka leží',true);
 }
 function cancelNtAdd(){
   ntAddMode=false;
-  let bar=document.getElementById('nt-add-bar');if(bar)bar.style.display='none';
+  ntPendingPrefill='';
+  document.body.classList.remove('nt-add-active');
+  let btn=document.getElementById('nt-add-btn');
+  if(btn){btn.style.background='transparent';btn.style.color='#10b981';}
 }
-async function confirmNtAdd(lat,lng){
-  let name=(document.getElementById('nt-add-name')||{}).value;
-  if(!name||!name.trim()){showAdminToast('Zadej název zastávky',false);return;}
-  if(!lat){showAdminToast('Klikni na mapu pro umístění',false);return;}
+async function _doAddStop(lat,lng,name){
+  if(!name||!name.trim())return;
   name=name.trim();
   try{
-    let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,lat,lng})});
+    let res=await fetch('/api/admin/save_stop_override',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,lat,lng})});
     let rd=await res.json();
     if(rd.status==='success'){
-      showAdminToast(`✅ Přidána: ${name}`,true);appLog(`Přidána zastávka: "${name}" @ ${lat.toFixed(5)},${lng.toFixed(5)}`,'ok');
-      cancelNtAdd();
-      if(!ntMode)toggleNT();else loadNTStops();
-      // Odeber ze seznamu chybějících
+      showAdminToast(`✅ Přidána: ${name}`,true);
+      appLog(`Přidána zastávka: "${name}" @ ${lat.toFixed(5)},${lng.toFixed(5)}`,'ok');
       delete logMissingStops[name];
       if(logCurrentTab==='missing')renderMissingLog();
-    }else{showAdminToast('Chyba: '+(rd.message||'?'),false);}
+      if(!ntMode)toggleNT();else loadNTStops();
+    }else showAdminToast('Chyba: '+(rd.message||'?'),false);
   }catch(e){showAdminToast('Chyba spojení',false);}
 }
-map.on('click',(e)=>{
-  if(ntAddMode){
-    confirmNtAdd(e.latlng.lat,e.latlng.lng);
-  }
+map.on('click',async(e)=>{
+  if(!ntAddMode)return;
+  cancelNtAdd(); // odeber kříž hned
+  let prefill=ntPendingPrefill;
+  let name=prompt(
+    prefill
+      ? `Název zastávky (navrhovaný: ${prefill}):\nPonech prázdné pro použití navrhovaného.`
+      : 'Název zastávky:',
+    prefill
+  );
+  if(name===null)return; // zrušit
+  if(!name.trim()&&prefill)name=prefill; // enter = přijmi navrhovaný
+  if(!name.trim()){showAdminToast('Název je prázdný',false);return;}
+  await _doAddStop(e.latlng.lat,e.latlng.lng,name);
 });
 map.on('moveend',()=>{
   if(!ntMode)return;
@@ -921,10 +1000,10 @@ function togglePubStops(){
   pubStopsMode=!pubStopsMode;
   let btn=document.getElementById('pub-stops-btn');
   if(pubStopsMode){
-    btn.style.background='#38bdf8';btn.style.color='#0f172a';btn.style.borderColor='#38bdf8';
+    btn.classList.add('active');
     loadPubStops();
   }else{
-    btn.style.background='transparent';btn.style.color='#94a3b8';btn.style.borderColor='#475569';
+    btn.classList.remove('active');
     pubStopsLayer.clearLayers();
     document.getElementById('stop-info-pop').style.display='none';
   }
@@ -2675,6 +2754,95 @@ def api_admin_delete_stop_override():
         except Exception as e:
             print(f"[NT] Chyba maz\u00e1n\u00ed z DB: {e}", flush=True)
     return jsonify({"status": "success"})
+
+
+@mapa_bp.route('/api/admin/assign_line_to_stop', methods=['POST'])
+def api_admin_assign_line_to_stop():
+    """NT: priradi linku k zastavce. Linka muze byt zadana jako kratky kod
+    ('760') nebo plny ('490760') - ulozi se jako custom_lines.
+    Pokud zastavka jeste nema override zaznam, vytvori se s aktualnimi
+    GTFS souradnicemi (nebo chyba pokud zastavka v GTFS neni)."""
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
+    data = request.get_json(silent=True) or {}
+    stop_name = str(data.get("stop_name", "")).strip()
+    line_str = str(data.get("line", "")).strip()
+    remove = bool(data.get("remove", False))
+    if not stop_name or not line_str:
+        return jsonify({"status": "error", "message": "Chyb\u00ed n\u00e1zev zast\u00e1vky nebo linky"}), 400
+
+    key = _norm_txt(stop_name)
+    ov = STOP_OVERRIDES.get(key)
+
+    # Ziskej souradnice - z override nebo z GTFS
+    if ov:
+        lat, lng = ov["lat"], ov["lng"]
+    else:
+        coords, _ = _lookup_stop_coords(stop_name)
+        if not coords:
+            return jsonify({"status": "error", "message": f"Zast\u00e1vka '{stop_name}' nebyla nalezena v GTFS ani v NT. Nejprve ji p\u0159idej p\u0159es + tla\u010d\u00edtko."}), 404
+        lat, lng = coords
+
+    # Existujici linky
+    cur_lines = list(ov.get("custom_lines") or []) if ov else []
+    if not cur_lines:
+        # Zacni s GTFS linkami jako zakladem
+        idxs = GTFS_NAME_IDX.get(key, [])
+        for idx in idxs:
+            if idx < len(GTFS_LINES):
+                cur_lines.extend(GTFS_LINES[idx] or [])
+        cur_lines = list(dict.fromkeys(cur_lines))  # dedup
+
+    if remove:
+        cur_lines = [l for l in cur_lines if l != line_str and not l.endswith(line_str)]
+    else:
+        # Pridej linku pokud jeste neni (porovnej suffix i plny retezec)
+        already = any(l == line_str or l.endswith(line_str) or line_str.endswith(l) for l in cur_lines)
+        if not already:
+            cur_lines.append(line_str)
+        cur_lines = sorted(set(cur_lines))
+
+    existing = ov or {}
+    STOP_OVERRIDES[key] = {
+        "lat": lat, "lng": lng, "name": stop_name,
+        "approx": existing.get("approx", False),
+        "substitute": existing.get("substitute", False),
+        "display_name": existing.get("display_name", ""),
+        "custom_lines": cur_lines,
+    }
+
+    db = get_db_client()
+    if db:
+        try:
+            db.table("stop_overrides").upsert({
+                "stop_name": stop_name, "lat": lat, "lng": lng,
+                "approx": STOP_OVERRIDES[key]["approx"],
+                "substitute": STOP_OVERRIDES[key]["substitute"],
+                "display_name": STOP_OVERRIDES[key]["display_name"],
+                "custom_lines": json.dumps(cur_lines, ensure_ascii=False),
+                "updated_at": get_prague_time().isoformat(),
+            }, on_conflict="stop_name").execute()
+        except Exception as e:
+            print(f"[NT] Chyba ukl\u00e1d\u00e1n\u00ed linky: {e}", flush=True)
+
+    action = "odebr\u00e1na" if remove else "p\u0159id\u00e1na"
+    print(f"[NT] Linka {line_str} {action} k zast\u00e1vce '{stop_name}'. Linky: {cur_lines}", flush=True)
+    return jsonify({"status": "success", "lines": cur_lines})
+
+
+@mapa_bp.route('/api/admin/report_missing_stop', methods=['POST'])
+def api_admin_report_missing_stop():
+    """Backend-side logging of stops that route-builder couldn't locate.
+    Frontend also logs these; this endpoint allows the worker to report them
+    server-side so they persist across page reloads."""
+    if not session.get('logged_in'):
+        return jsonify({"status": "ok"})  # ticha chyba - neni kriticke
+    data = request.get_json(silent=True) or {}
+    stop_name = str(data.get("stop_name", "")).strip()
+    bus_id = str(data.get("bus_id", "")).strip()
+    if stop_name:
+        print(f"[ROUTE-MISS] Zast\u00e1vka nenalezena: '{stop_name}' (bus {bus_id})", flush=True)
+    return jsonify({"status": "ok"})
 
 
 @mapa_bp.route('/api/bus_detail/<bus_id>')
