@@ -562,16 +562,66 @@ function renderMissingLog(){
   if(!sorted.length){body.innerHTML='<div style="color:#64748b;padding:8px;">Žádné chybějící zastávky</div>';return;}
   sorted.forEach(([name,info])=>{
     let div=document.createElement('div');
-    div.style.cssText='padding:5px 0;border-bottom:1px solid #1e293b;cursor:pointer;display:flex;align-items:center;justify-content:space-between;';
-    div.innerHTML=`<span style="color:#f59e0b;font-size:12px;">📍 ${name}</span><span style="color:#64748b;font-size:10px;">${info.count}× poslední ${info.last}</span>`;
-    div.onclick=()=>{
-      // Aktivuj NT mode a nastav jméno pro přidání
+    div.style.cssText='padding:6px 0;border-bottom:1px solid #1e293b;';
+    div.innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <span style="color:#f59e0b;font-size:12px;">📍 ${name}</span>
+        <span style="color:#64748b;font-size:10px;">${info.count}× posl. ${info.last}</span>
+      </div>
+      <div style="display:flex;gap:4px;">
+        <button style="flex:1;background:#10b981;color:white;border:none;border-radius:4px;padding:3px 6px;font-size:10px;cursor:pointer;">🆕 Vytvořit novou</button>
+        <button style="flex:1;background:#334155;color:#94a3b8;border:none;border-radius:4px;padding:3px 6px;font-size:10px;cursor:pointer;">🔗 Použít existující</button>
+      </div>`;
+    let [createBtn,useBtn]=div.querySelectorAll('button');
+    createBtn.onclick=()=>{
       if(!ntMode)toggleNT();
       document.getElementById('log-panel').style.display='none';
       startNtAdd(name);
     };
+    useBtn.onclick=()=>{
+      document.getElementById('log-panel').style.display='none';
+      openUseExistingStopDialog(name);
+    };
     body.appendChild(div);
   });
+}
+
+// "Použít existující" - propoj chybějící jméno z JŘ s už existující zastávkou
+// (typicky: PVVD používá jiný zápis názvu než GTFS, ale fyzicky je to stejné
+// místo). Vytvoří alias - STOP_OVERRIDES záznam pod hledaným jménem, který
+// ukazuje na souřadnice té vybrané existující zastávky.
+async function openUseExistingStopDialog(missingName){
+  let query=prompt(`Zastávka "${missingName}" nenalezena.\nNapiš část názvu existující zastávky, na kterou se má napojit:`,missingName);
+  if(!query||!query.trim())return;
+  query=query.trim();
+  try{
+    let b=map.getBounds();
+    // Hledej v aktuálním výřezu i širším okolí (zvětšený bbox) - zastávka
+    // co hledáme nemusí být přesně tam kde je teď mapa
+    let pad=0.3;
+    let r=await fetch(`/api/stops_in_view?south=${b.getSouth()-pad}&west=${b.getWest()-pad}&north=${b.getNorth()+pad}&east=${b.getEast()+pad}`);
+    let data=await r.json();
+    if(data.status!=='success'){showAdminToast(data.message||'Nelze hledat - přibliž mapu na danou oblast a zkus znovu',false);return;}
+    let qn=query.toLowerCase();
+    let matches=data.stops.filter(s=>(s.name||'').toLowerCase().includes(qn)||(s.display_name||'').toLowerCase().includes(qn));
+    if(!matches.length){showAdminToast('Nic nenalezeno - zkus jiný text nebo přibliž mapu k té oblasti',false);return;}
+    let list=matches.slice(0,15).map((s,i)=>`${i+1}. ${s.name}${s.display_name?' ('+s.display_name+')':''}`).join('\\n');
+    let choice=prompt(`Vyber číslo zastávky pro napojení "${missingName}":\\n${list}`,'1');
+    if(!choice)return;
+    let idx=parseInt(choice.trim())-1;
+    if(isNaN(idx)||idx<0||idx>=matches.length){showAdminToast('Neplatná volba',false);return;}
+    let target=matches[idx];
+    // Ulož jako override pod HLEDANÝM jménem (z JŘ), souřadnice = vybraná existující zastávka
+    let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:missingName,lat:target.lat,lng:target.lng})});
+    let rd=await res.json();
+    if(rd.status==='success'){
+      showAdminToast(`✅ "${missingName}" napojeno na "${target.name}"`,true);
+      appLog(`Propojeno: "${missingName}" → existující "${target.name}"`,'ok');
+      delete logMissingStops[missingName];
+      if(logCurrentTab==='missing')renderMissingLog();
+    }else showAdminToast('Chyba: '+(rd.message||'?'),false);
+  }catch(e){showAdminToast('Chyba spojení',false);}
 }
 function setLogTab(tab){
   logCurrentTab=tab;
@@ -722,7 +772,7 @@ async function toggleRoute(busId){
       else if(lowConf){border='border:2px dashed #f59e0b;';warn=' <span style="color:#f59e0b;">⚠️ pribl. poloha</span>';}
       let si=L.divIcon({className:'',html:`<div style="width:8px;height:8px;border-radius:50%;background:${dC};${border}box-shadow:0 1px 3px rgba(0,0,0,.5);${warn?'opacity:0.85;':''}"></div>`,iconSize:[8,8],iconAnchor:[4,4]});
       let m=L.marker([stop.lat,stop.lng],{icon:si,zIndexOffset:-100});
-      m.bindTooltip(`<b>🚏 ${stop.name}</b>${stop.time?' / '+stop.time:''}${warn}`,{direction:'top',className:'dark-popup'});
+      m.bindTooltip(`<b>🚏 ${stopDisplayName(stop)}</b>${stop.time?' / '+stop.time:''}${warn}`,{direction:'top',className:'dark-popup'});
       routeLayer.addLayer(m);
     });
     // Trasa rozdelena na dva useky: jiz ujety (klidna seda staticka cara) a
@@ -756,6 +806,10 @@ async function toggleRoute(busId){
 
 // === NT (Nastaveni tras) - rucni kalibrace poloh zastavek ===
 let ntMode=false,ntMoveTimer=null,currentNtEdit=null,ntAddMode=false,ntAddName='';
+function stopDisplayName(s){
+  // Zobrazovany nazev ma prednost pred systemovym (pouzitym jen pro vyhledavani v JR)
+  return (s.display_name&&s.display_name.trim())?s.display_name.trim():s.name;
+}
 function ntDotIcon(cls){return L.divIcon({className:'',html:`<div class="nt-dot ${cls}"></div>`,iconSize:[14,14],iconAnchor:[7,7]});}
 function ntDotClass(s){
   let base=s.manual?'nt-dot-manual':(s.flagged?'nt-dot-flagged':'nt-dot-normal');
@@ -950,9 +1004,9 @@ let pubMoveTimer=null;
 function showStopInfo(s){
   let icon=s.mode==='train'?'🚂':'🚏';
   document.getElementById('sip-mode-icon').textContent=icon;
-  document.getElementById('sip-name-txt').textContent=s.name;
+  document.getElementById('sip-name-txt').textContent=stopDisplayName(s);
   let dn=document.getElementById('sip-dispname');
-  dn.textContent=s.display_name?`Zobrazovaný název: ${s.display_name}`:'';
+  dn.textContent=(s.display_name&&s.display_name.trim())?`Systémový název: ${s.name}`:'';
   let modeEl=document.getElementById('sip-mode');
   modeEl.textContent=s.mode==='train'?'🚂 Vlaková zastávka':s.mode==='bus'?'🚌 Autobusová zastávka':s.mode==='mixed'?'🚌🚂 Bus + vlak':'';
   let linesEl=document.getElementById('sip-lines-wrap');
@@ -989,7 +1043,7 @@ async function loadPubStops(){
     data.stops.forEach(s=>{
       let m=L.marker([s.lat,s.lng],{icon:pubStopIcon(s),zIndexOffset:-50});
       let note=s.substitute?'<br><span style="color:#a855f7;">🔀 náhradní</span>':s.approx?'<br><span style="color:#f59e0b;">⚠️ přibl.</span>':'';
-      m.bindTooltip(`<b>${s.mode==='train'?'🚂':'🚏'} ${s.name}</b>${note}`,{direction:'top',className:'dark-popup'});
+      m.bindTooltip(`<b>${s.mode==='train'?'🚂':'🚏'} ${stopDisplayName(s)}</b>${note}`,{direction:'top',className:'dark-popup'});
       m.on('click',()=>showStopInfo(s));
       pubStopsLayer.addLayer(m);
     });
@@ -2562,11 +2616,16 @@ def api_debug_gtfs():
 
 def _bbox_stops(south, west, north, east, max_cells=20000, max_stops=1500):
     """Spolecny pomocnik pro NT i verejny 'Zobrazit zastavky': vrati (list, None)
-    s polozkami {key, name, lat, lon, mode, lines} pro GTFS zastavky uvnitr
-    bboxu, nebo (None, chybova_zprava) pri prilis velkem vyrezu/poctu bodu.
+    s polozkami {key, name, lat, lon, mode, lines} pro zastavky uvnitr bboxu,
+    nebo (None, chybova_zprava) pri prilis velkem vyrezu/poctu bodu.
     Zastavky se stejnym nazvem ALE RUZNYM MODEM (napr. Trpisty bus vs Trpisty vlak)
-    se vracejí jako dva separatni zaznamy, protoze jsou fyzicky ruzna mista."""
-    if not GTFS_STOPS:
+    se vracejí jako dva separatni zaznamy, protoze jsou fyzicky ruzna mista.
+
+    DULEZITE: zahrnuje i RYZE RUCNE pridane zastavky z STOP_OVERRIDES, ktere
+    v GTFS vubec nemaji zaznam (admin je vytvoril v NT rezimu pres tlacitko +).
+    Bez tohohle by se takova zastavka nikdy nezobrazila na mape, protoze
+    GTFS_GRID o ni neví - hledalo by se jen v GTFS datech."""
+    if not GTFS_STOPS and not STOP_OVERRIDES:
         return None, "GTFS data nejsou na\u010dtena"
     lat_b0, lat_b1 = round(south / GTFS_GRID_SZ), round(north / GTFS_GRID_SZ)
     lon_b0, lon_b1 = round(west / GTFS_GRID_SZ), round(east / GTFS_GRID_SZ)
@@ -2596,6 +2655,22 @@ def _bbox_stops(south, west, north, east, max_cells=20000, max_stops=1500):
             existing = results[seen[dedup_key]]
             merged = sorted(set(existing["lines"]) | set(ln or []))
             existing["lines"] = merged
+
+    # Pridej rucne vytvorene zastavky bez GTFS protejsku (nove pres NT +)
+    gtfs_keys = {r["key"] for r in results}
+    for key, ov in STOP_OVERRIDES.items():
+        if key in gtfs_keys:
+            continue  # uz pokryto pres GTFS zaznam vyse (override se aplikuje pozdeji v endpointu)
+        la, lo = ov.get("lat"), ov.get("lng")
+        if la is None or lo is None:
+            continue
+        if not (south <= la <= north and west <= lo <= east):
+            continue
+        results.append({
+            "key": key, "name": ov.get("name") or key, "lat": la, "lng": lo,
+            "mode": None, "lines": ov.get("custom_lines") or [],
+        })
+
     if len(results) > max_stops:
         return None, f"P\u0159\u00edli\u0161 mnoho zast\u00e1vek ve v\u00fdezu ({len(results)}) - p\u0159ibli\u017e si v\u00edc"
     return results, None
@@ -3022,8 +3097,10 @@ def api_bus_route(bus_id):
         if coords:
             seen[name_c] = coords
             anchor = coords
+            ov = STOP_OVERRIDES.get(_norm_txt(name_c))
             result[i] = {"name": name_c, "time": t, "lat": coords[0], "lng": coords[1],
-                         "passed": i < current_idx, "confidence": conf}
+                         "passed": i < current_idx, "confidence": conf,
+                         "display_name": (ov.get("display_name") if ov else "") or ""}
         else:
             pending.append((i, name_c, anchor, t))
 
