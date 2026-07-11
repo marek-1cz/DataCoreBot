@@ -273,6 +273,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 #spz-results .sr-item:hover{background:#334155;}
 .route-line-future{stroke-dasharray:14 10;animation:routeFlow 0.9s linear infinite;stroke-linecap:round;}
 @keyframes routeFlow{to{stroke-dashoffset:-24;}}
+@keyframes routePulse{0%,100%{box-shadow:0 0 0 0 rgba(56,189,248,.8),0 2px 6px rgba(0,0,0,.5);}50%{box-shadow:0 0 0 8px rgba(56,189,248,0),0 2px 6px rgba(0,0,0,.5);}}
 .route-line-past{stroke-linecap:round;}
 .nt-dot{width:14px;height:14px;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.6);cursor:grab;box-sizing:border-box;}
 .nt-dot-normal{background:#38bdf8;border:2px solid white;}
@@ -352,6 +353,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
     <!-- Admin nástroje – skryté pro veřejnost -->
     <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
     <button id="nt-add-btn" onclick="startNtAdd()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:14px;flex-shrink:0;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;" title="Přidat zastávku">＋</button>
+    <button id="nt-line-btn" onclick="toggleLineEditor()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #38bdf8;background:transparent;color:#38bdf8;cursor:pointer;" title="Editor linky">🛤️</button>
     <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋</button>
     __AD_BTN__
   </nav>
@@ -407,6 +409,20 @@ body.nt-add-active #map{cursor:crosshair !important;}
     <div class="sip-lines" id="sip-lines-wrap"></div>
     <div id="sip-note" style="font-size:10px;color:#f59e0b;margin-top:4px;"></div>
     <button onclick="document.getElementById('stop-info-pop').style.display='none'" style="background:transparent;border:1px solid #334155;color:#64748b;border-radius:5px;font-size:11px;padding:3px 8px;cursor:pointer;margin-top:6px;width:100%;">Zavřít</button>
+  </div>
+  <div id="nt-line-editor" style="display:none;position:fixed;top:64px;right:10px;z-index:4600;background:#0f172a;border:2px solid #38bdf8;border-radius:10px;width:300px;max-width:95vw;box-shadow:0 8px 28px rgba(0,0,0,.8);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #1e293b;">
+      <span style="color:#38bdf8;font-weight:bold;font-size:13px;">🛤️ Editor linky</span>
+      <button onclick="document.getElementById('nt-line-editor').style.display='none'" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:10px 14px;">
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <input id="nt-line-inp" type="text" placeholder="Číslo linky (490735, 760...)" style="flex:1;background:#1e293b;color:white;border:1px solid #334155;border-radius:5px;padding:6px 9px;font-size:12px;" onkeydown="if(event.key==='Enter')loadLineStops()">
+        <button onclick="loadLineStops()" style="background:#38bdf8;color:#0f172a;border:none;border-radius:5px;padding:6px 12px;font-weight:bold;font-size:12px;cursor:pointer;">Načíst</button>
+      </div>
+      <div id="nt-line-status" style="font-size:11px;color:#64748b;margin-bottom:8px;"></div>
+      <div id="nt-line-stops" style="max-height:350px;overflow-y:auto;"></div>
+    </div>
   </div>
   <div id="log-panel">
     <div class="lp-h">
@@ -485,7 +501,7 @@ nav.addEventListener('mouseenter',()=>clearTimeout(hideT));
 nav.addEventListener('mouseleave',()=>{hideT=setTimeout(hideNav,600);});
 document.addEventListener('touchstart',e=>{if(e.touches[0].clientY<35){showNav(4500);}else if(!nav.contains(e.target)){clearTimeout(hideT);hideT=setTimeout(hideNav,400);}},{passive:true});
 showNav(4000);
-if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
+if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let nlb=document.getElementById('nt-line-btn');if(nlb)nlb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
 
 // === MAP ===
 var dLat=49.7384,dLng=13.3736,dZoom=12;
@@ -753,56 +769,111 @@ async function toggleRoute(busId){
   }
   routeLayer.clearLayers();activeRouteId=busId;
   let btn=document.getElementById('route-btn-'+busId);
-  if(btn){btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Hledam trasu...';btn.style.background='#1e3a8a';}
-  showAdminToast('🗺️ Hledani trasy muze chvili trvat - mapu mezitim muzes dal pouzivat',true);
+  if(btn){btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Hledám...';btn.style.background='#1e3a8a';}
+  showAdminToast('🗺️ Hledám trasu — mapu mezitím můžeš používat',true);
   try{
-    let r=await fetch('/api/bus_route/'+busId);let data=await r.json();
-    if(activeRouteId!==busId)return; // mezitim uzivatel prepnul na jiny bus / zavrel trasu
-    if(!data.stops||data.stops.length<2){if(btn){btn.textContent=(data.error?'Trasa nedostupna ('+data.error+')':'Trasa nedostupna');btn.style.background='#7f1d1d';}return;}
-    const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-bug':'#374151'};
-    let bus=lastArr.find(b=>b.id===busId);let lC=bus?(cM[bus.color_class]||'#38bdf8'):'#38bdf8';
-    data.stops.forEach(stop=>{
-      if(!stop.lat||!stop.lng)return;
-      let dC=stop.passed?'#475569':lC;
-      let lowConf=(stop.confidence==='fuzzy'||stop.confidence==='geocoded');
-      let border='border:2px solid white;';
-      let warn='';
-      if(stop.substitute){border='border:2px dashed #a855f7;';warn=' <span style="color:#a855f7;">🔀 nahradni zastavka</span>';}
-      else if(stop.approx){border='border:2px dashed #f59e0b;';warn=' <span style="color:#f59e0b;">⚠️ pribl. poloha</span>';}
-      else if(lowConf){border='border:2px dashed #f59e0b;';warn=' <span style="color:#f59e0b;">⚠️ pribl. poloha</span>';}
-      let si=L.divIcon({className:'',html:`<div style="width:8px;height:8px;border-radius:50%;background:${dC};${border}box-shadow:0 1px 3px rgba(0,0,0,.5);${warn?'opacity:0.85;':''}"></div>`,iconSize:[8,8],iconAnchor:[4,4]});
-      let m=L.marker([stop.lat,stop.lng],{icon:si,zIndexOffset:-100});
-      m.bindTooltip(`<b>🚏 ${stopDisplayName(stop)}</b>${stop.time?' / '+stop.time:''}${warn}`,{direction:'top',className:'dark-popup'});
-      routeLayer.addLayer(m);
-    });
-    // Trasa rozdelena na dva useky: jiz ujety (klidna seda staticka cara) a
-    // zbyvajici (animovana, "tece" dopredu ve smeru jizdy) - hranicni bod je
-    // v obou, aby na sebe useky vizualne navazovaly bez mezery.
-    let pts=data.stops.filter(s=>s.lat&&s.lng);
-    if(pts.length>=2){
-      let splitIdx=pts.findIndex(s=>!s.passed);
-      if(splitIdx===-1)splitIdx=pts.length;
-      let pastCoords=pts.slice(0,splitIdx+1).map(s=>[s.lat,s.lng]);
-      let futureCoords=pts.slice(splitIdx).map(s=>[s.lat,s.lng]);
-      if(pastCoords.length>=2)routeLayer.addLayer(L.polyline(pastCoords,{color:'#64748b',weight:4,opacity:0.55,className:'route-line-past'}));
-      if(futureCoords.length>=2)routeLayer.addLayer(L.polyline(futureCoords,{color:lC,weight:4,opacity:0.9,className:'route-line-future'}));
-    }
-    let found=data.stops.filter(s=>s.lat).length;
-    let uncertain=data.stops.filter(s=>s.lat&&(s.confidence==='fuzzy'||s.confidence==='geocoded')).length;
-    let missing=data.stops.filter(s=>!s.lat);
-    let label=`🗺️ Skryt trasu (${found}/${data.stops.length} zast.)`+(uncertain>0?` ⚠️${uncertain}`:'')+(missing.length>0?` ❓${missing.length}`:'');
-    // Logování - přehled + chybějící zastávky do error logu
-    appLog(`Trasa ${busId}: ${found}/${data.stops.length} nalezeno (fuzzy:${uncertain} chybí:${missing.length})`,'info');
-    missing.forEach(s=>{
-      appLog(`Zastávka nenalezena: "${s.name}"  → přidej v NT`,'warn');
-      logMissingStop(s.name);
-      // Report na backend - ukládá se do server logu + přežije reload stránky
-      fetch('/api/admin/report_missing_stop',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({stop_name:s.name,bus_id:busId})}).catch(()=>{});
-    });
-    if(btn){btn.textContent=label;btn.style.background='#1e40af';}
-  }catch(e){if(btn){btn.textContent='Chyba nacitani';btn.style.background='#7f1d1d';}console.error('Route:',e);}
+    let r=await fetch('/api/bus_route/'+busId);
+    let data=await r.json();
+    if(activeRouteId!==busId)return;
+    _renderRoute(busId,data,btn);
+  }catch(e){
+    if(btn){btn.textContent='Chyba načítání';btn.style.background='#7f1d1d';}
+    appLog('Trasa – chyba: '+e,'error');
+  }
 }
+
+async function refreshActiveRoute(){
+  if(!activeRouteId)return;
+  let busId=activeRouteId;
+  let btn=document.getElementById('route-btn-'+busId);
+  routeLayer.clearLayers();
+  try{
+    let r=await fetch('/api/bus_route/'+busId);
+    let data=await r.json();
+    if(activeRouteId!==busId)return;
+    _renderRoute(busId,data,btn);
+    showAdminToast('🗺️ Trasa obnovena',true);
+  }catch(e){appLog('Refresh trasy – chyba: '+e,'error');}
+}
+
+function _renderRoute(busId,data,btn){
+  routeLayer.clearLayers();
+  if(!data.stops||data.stops.length<2){
+    if(btn){btn.textContent=data.error?'Trasa nedostupna ('+data.error+')':'Trasa nedostupna';btn.style.background='#7f1d1d';}
+    return;
+  }
+  const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-bug':'#374151'};
+  let bus=lastArr.find(b=>b.id===busId);
+  let lC=bus?(cM[bus.color_class]||'#38bdf8'):'#38bdf8';
+  let pts=data.stops.filter(s=>s.lat&&s.lng);
+  let splitIdx=pts.findIndex(s=>!s.passed);
+  if(splitIdx===-1)splitIdx=pts.length;
+  let finalIdx=pts.length-1;
+
+  // Cary
+  let pastPts=pts.slice(0,Math.min(splitIdx+1,pts.length)).map(s=>[s.lat,s.lng]);
+  let futurePts=pts.slice(splitIdx).map(s=>[s.lat,s.lng]);
+  if(pastPts.length>=2)
+    routeLayer.addLayer(L.polyline(pastPts,{color:'#374151',weight:3,opacity:0.45,dashArray:'5,5',className:'route-line-past'}));
+  if(futurePts.length>=2)
+    routeLayer.addLayer(L.polyline(futurePts,{color:lC,weight:5,opacity:0.92,className:'route-line-future'}));
+
+  // Zastavky - kazda ma jiny vizualni styl podle stavu
+  pts.forEach((stop,i)=>{
+    let isPast=stop.passed;
+    let isFinal=(i===finalIdx);
+    let isCurrent=(i===splitIdx&&splitIdx>0&&splitIdx<pts.length);
+    let lowConf=stop.confidence==='fuzzy'||stop.confidence==='geocoded';
+    let warnHtml='';
+    if(stop.substitute)warnHtml='<br><span style="color:#a855f7;font-size:10px;">🔀 nahradni</span>';
+    else if(stop.approx||lowConf)warnHtml='<br><span style="color:#f59e0b;font-size:10px;">⚠️ pribl.</span>';
+    let icon;
+    if(isFinal){
+      // Koncova: velky ctverec s vlajkou
+      icon=L.divIcon({className:'',iconSize:[22,22],iconAnchor:[11,11],html:
+        '<div style="width:20px;height:20px;background:'+lC+';border:3px solid #fff;border-radius:4px;'+
+        'display:flex;align-items:center;justify-content:center;font-size:12px;'+
+        'box-shadow:0 0 10px '+lC+',0 2px 8px rgba(0,0,0,.7);">🏁</div>'});
+    } else if(isCurrent){
+      // Aktualni: pulsujici kolecko
+      icon=L.divIcon({className:'',iconSize:[20,20],iconAnchor:[10,10],html:
+        '<div style="width:16px;height:16px;border-radius:50%;background:'+lC+';border:3px solid #fff;'+
+        'box-shadow:0 0 12px '+lC+',0 2px 6px rgba(0,0,0,.5);'+
+        'animation:routePulse 1.1s ease-in-out infinite;"></div>'});
+    } else if(isPast){
+      // Minula: mala seda tecka
+      icon=L.divIcon({className:'',iconSize:[8,8],iconAnchor:[4,4],html:
+        '<div style="width:5px;height:5px;border-radius:50%;background:#374151;border:1.5px solid #4b5563;opacity:0.6;"></div>'});
+    } else {
+      // Budouci: stredni barevne kolecko
+      let bd=lowConf?'2px dashed #f59e0b':'2px solid rgba(255,255,255,0.85)';
+      icon=L.divIcon({className:'',iconSize:[12,12],iconAnchor:[6,6],html:
+        '<div style="width:9px;height:9px;border-radius:50%;background:'+lC+';border:'+bd+';'+
+        'box-shadow:0 1px 4px rgba(0,0,0,.6);"></div>'});
+    }
+    let m=L.marker([stop.lat,stop.lng],{icon,zIndexOffset:isFinal?300:isCurrent?200:isPast?-200:-50});
+    let timeStr=stop.time?' / <b>'+stop.time+'</b>':'';
+    let typeLabel=isFinal?' — 🏁 <b>Konecna</b>':isCurrent?' ← <b>Zde</b>':'';
+    m.bindTooltip(
+      '<span style="font-size:12px;">🚏 '+stopDisplayName(stop)+'</span>'+timeStr+typeLabel+warnHtml,
+      {direction:'top',className:'dark-popup'});
+    routeLayer.addLayer(m);
+  });
+
+  let found=data.stops.filter(s=>s.lat).length;
+  let uncertain=data.stops.filter(s=>s.lat&&(s.confidence==='fuzzy'||s.confidence==='geocoded')).length;
+  let missing=data.stops.filter(s=>!s.lat);
+  missing.forEach(s=>{
+    appLog('Zastavka nenalezena: "'+s.name+'" pridej v NT','warn');
+    logMissingStop(s.name);
+    fetch('/api/admin/report_missing_stop',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({stop_name:s.name,bus_id:busId})}).catch(()=>{});
+  });
+  appLog('Trasa '+busId+': '+found+'/'+data.stops.length+' (nejiste:'+uncertain+' chybi:'+missing.length+')','info');
+  let label='🗺️ Skryt trasu ('+found+'/'+data.stops.length+' zast.)'+(uncertain?' ⚠️'+uncertain:'')+(missing.length?' ❓'+missing.length:'');
+  if(btn){btn.textContent=label;btn.style.background='#1e40af';}
+}
+
 
 // === NT (Nastaveni tras) - rucni kalibrace poloh zastavek ===
 let ntMode=false,ntMoveTimer=null,currentNtEdit=null,ntAddMode=false,ntAddName='';
@@ -974,6 +1045,8 @@ async function _doAddStop(lat,lng,name){
       delete logMissingStops[name];
       if(logCurrentTab==='missing')renderMissingLog();
       if(!ntMode)toggleNT();else loadNTStops();
+      // Po přidání zastávky automaticky obnov aktivní trasu
+      setTimeout(refreshActiveRoute, 400);
     }else showAdminToast('Chyba: '+(rd.message||'?'),false);
   }catch(e){showAdminToast('Chyba spojení',false);}
 }
@@ -996,6 +1069,73 @@ map.on('moveend',()=>{
   if(!ntMode)return;
   clearTimeout(ntMoveTimer);ntMoveTimer=setTimeout(loadNTStops,400);
 });
+
+// === NT linka-editor ===
+let lineEditorLayer=L.layerGroup().addTo(map);
+let lineEditorActive=false;
+function toggleLineEditor(){
+  let pan=document.getElementById('nt-line-editor');
+  if(!pan)return;
+  lineEditorActive=pan.style.display==='block';
+  pan.style.display=lineEditorActive?'none':'block';
+  if(lineEditorActive){lineEditorLayer.clearLayers();}
+  else{let inp=document.getElementById('nt-line-inp');if(inp)inp.focus();}
+}
+async function loadLineStops(){
+  let inp=document.getElementById('nt-line-inp');
+  let line=(inp&&inp.value||'').trim();
+  if(!line){document.getElementById('nt-line-status').textContent='Zadej číslo linky';return;}
+  let status=document.getElementById('nt-line-status');
+  let stopsEl=document.getElementById('nt-line-stops');
+  status.textContent='Načítám...';stopsEl.innerHTML='';
+  lineEditorLayer.clearLayers();
+  // Ziskat zastavky pro linku z GTFS pres bbox (velky region pokryva cely kraj)
+  let b=map.getBounds();
+  // Rozsireny bbox pro pokryti celeho mozneho rozsahu linky
+  let pad=1.5;
+  try{
+    let r=await fetch(`/api/stops_in_view?south=${b.getSouth()-pad}&west=${b.getWest()-pad}&north=${b.getNorth()+pad}&east=${b.getEast()+pad}`);
+    let data=await r.json();
+    if(data.status!=='success'){status.textContent=data.message||'Chyba';return;}
+    // Filtruj zastavky kde je tato linka
+    let lineNorm=line.trim();
+    let matches=data.stops.filter(s=>(s.lines||[]).some(l=>l===lineNorm||l.endsWith(lineNorm)||lineNorm.endsWith(l)));
+    status.textContent=`${matches.length} zastávek pro linku ${line}`;
+    if(!matches.length){stopsEl.innerHTML='<div style="color:#64748b;padding:8px;font-size:11px;">Žádné zastávky nenalezeny. Zkus broader bbox – přibliž mapu k trase linky.</div>';return;}
+    matches.forEach((s,i)=>{
+      let div=document.createElement('div');
+      div.style.cssText='padding:5px 0;border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:6px;';
+      let dn=stopDisplayName(s);
+      div.innerHTML=`
+        <span style="color:#64748b;font-size:10px;width:18px;text-align:right;">${i+1}</span>
+        <div style="flex:1;">
+          <div style="font-size:12px;color:${s.approx?'#f59e0b':'#cbd5e1'};">${dn}</div>
+          ${s.display_name?'<div style="font-size:9px;color:#475569;">sys: '+s.name+'</div>':''}
+        </div>
+        <button style="background:#334155;color:#38bdf8;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">Na mapě</button>
+        <button style="background:#1e3a5f;color:#94a3b8;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">NT</button>`;
+      let [mapBtn,ntBtn]=div.querySelectorAll('button');
+      // Ukaz zastavku na mape
+      let m=L.circleMarker([s.lat,s.lng],{radius:6,color:'#38bdf8',fillColor:'#38bdf8',fillOpacity:0.8,weight:2});
+      m.bindTooltip(`<b>${dn}</b><br>Linka: ${line}`,{direction:'top',className:'dark-popup'});
+      lineEditorLayer.addLayer(m);
+      mapBtn.onclick=()=>{map.setView([s.lat,s.lng],17);m.openTooltip();};
+      // Otevri NT editor pro tuto zastavku
+      ntBtn.onclick=()=>{
+        if(!ntMode)toggleNT();
+        map.setView([s.lat,s.lng],17);
+        setTimeout(()=>{
+          ntLayer.eachLayer(layer=>{
+            if(layer.getLatLng&&Math.abs(layer.getLatLng().lat-s.lat)<0.0001&&Math.abs(layer.getLatLng().lng-s.lng)<0.0001){
+              layer.fire('click');
+            }
+          });
+        },600);
+      };
+      stopsEl.appendChild(div);
+    });
+  }catch(e){status.textContent='Chyba: '+e;appLog('Linka-editor chyba: '+e,'error');}
+}
 
 // === Veřejné "Zobrazit zastávky" + stop info popup ===
 let pubStopsMode=false;
