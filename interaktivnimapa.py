@@ -26,8 +26,8 @@ mapa_bp = Blueprint('mapa_bp', __name__)
 
 SPZ_HOLD_MINUTES      = 8
 SPZ_STABLE_TICKS      = 2
-SPZ_HIGH_CONFIDENCE_DIST_M = 300  # jednoznacny + blizky zasah = zamek hned, bez cekani na 2. tik
-SPZ_REAUDIT_INTERVAL_SEC = 60      # jak casto preverovat UZ overenou (fajfka) SPZ - nizsi priorita nez hledani neoverenych
+SPZ_HIGH_CONFIDENCE_DIST_M = 300  # 3-faktor match = okamzita fajfka (zadne cekani na 2. tik)
+SPZ_REAUDIT_INTERVAL_SEC = 60      # jak casto preverovat UZ overenou (fajfka) SPZ
 GHOST_MAX_OFFLINE_MIN = 20
 GHOST_DIST_STRICT     = 0.010
 DUPLICATE_GRACE_SEC   = 120
@@ -38,6 +38,25 @@ GTFS_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gtfs_st
 # Tolerance pro parovani SPZ v metrech (presnejsi nez stupne)
 ARRIVA_MATCH_DIST_M = 750   # max vzdalenost PVVD pozice od Arriva pozice same SPZ
 ARRIVA_STOP_MATCH_M = 400   # max vzdalenost k nejblizsi GTFS zastavce pro krizovou kontrolu
+
+# REPORT SITUACE: kruhovy buffer poslednich anomalii (duplicitni SPZ, spatne prirazeni, atd.)
+# Kazdy zaznam: {ts, typ, zprava, data}
+_REPORT_SITUACE = []
+_REPORT_SITUACE_MAX = 200
+
+def _report_situace(typ, zprava, **data):
+    """Zapise anomalii do REPORT SITUACE bufferu (viditelny v logu mapy)."""
+    import traceback as _tb
+    entry = {
+        "ts": datetime.now().isoformat(timespec='seconds'),
+        "typ": typ,
+        "zprava": zprava,
+        "data": data,
+    }
+    _REPORT_SITUACE.append(entry)
+    if len(_REPORT_SITUACE) > _REPORT_SITUACE_MAX:
+        _REPORT_SITUACE.pop(0)
+    print(f"[REPORT] {typ}: {zprava} | {data}", flush=True)
 
 # === HTML SABLONY ===
 
@@ -314,7 +333,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
   #hf{width:200px;}
   .dark-popup .leaflet-popup-content{width:240px!important;}
   #log-panel{bottom:auto;top:56px;right:4px;left:4px;width:auto;max-width:100vw;}
-  #log-body,#log-errors-body,#log-spz-body,#log-missing-body{max-height:160px;}
+  #log-body,#log-errors-body,#log-spz-body,#log-missing-body,#log-report-body{max-height:160px;}
   #nt-edit-pop{left:4px;right:4px;bottom:10px;width:auto;max-height:80vh;overflow-y:auto;}
   #stop-info-pop{left:4px;right:4px;bottom:10px;width:auto;}
   .sip-lines{flex-wrap:wrap;gap:3px;}
@@ -432,6 +451,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
         <button onclick="setLogTab('err')" id="log-tab-err">⚠️ Chyby</button>
         <button onclick="setLogTab('spz')" id="log-tab-spz">🚌 SPZ</button>
         <button onclick="setLogTab('missing')" id="log-tab-missing">📍 Chybí</button>
+        <button onclick="setLogTab('report')" id="log-tab-report">🔴 REPORT</button>
         <button onclick="copyLog()">Kopír.</button>
         <button onclick="clearLog()">Smaž</button>
         <button onclick="document.getElementById('log-panel').style.display='none'">X</button>
@@ -441,6 +461,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
     <div id="log-errors-body" style="display:none;"></div>
     <div id="log-spz-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-family:monospace;font-size:10.5px;color:#94a3b8;"></div>
     <div id="log-missing-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-size:11px;"></div>
+    <div id="log-report-body" style="display:none;max-height:240px;overflow-y:auto;padding:6px 12px;"></div>
   </div>
   <div id="nt-add-bar" style="display:none;position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:5000;background:#1e293b;border:2px solid #f59e0b;border-radius:8px;padding:8px 14px;display:none;align-items:center;gap:8px;box-shadow:0 4px 20px rgba(0,0,0,.7);">
     <span style="color:#f59e0b;font-size:12px;font-weight:bold;">🚏 Klikni na mapu kde je zastávka</span>
@@ -641,24 +662,44 @@ async function openUseExistingStopDialog(missingName){
 }
 function setLogTab(tab){
   logCurrentTab=tab;
-  ['all','err','spz','missing'].forEach(id=>{
-    let body=document.getElementById(`log-${id==='all'?'body':id==='err'?'errors-body':id+'-body'}`);
-    if(body)body.style.display=tab===id?'':'none';
+  let tabIds=['all','err','spz','missing','report'];
+  tabIds.forEach(id=>{
+    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':`log-${id}-body`);
+    if(body)body.style.display=(tab===id?'':'none');
     let btn=document.getElementById(`log-tab-${id}`);
-    if(btn){btn.style.background=tab===id?'#334155':'transparent';btn.style.color='';}
+    if(btn){btn.style.background=(tab===id?'#334155':'transparent');btn.style.color='';}
   });
   if(tab==='err'){let b=document.getElementById('log-errors-body');b.innerHTML='';logErrEntries.forEach(e=>{let l=document.createElement('div');l.className='lg-err';l.textContent=`[${e.t}] ${e.msg}`;b.appendChild(l);});b.scrollTop=b.scrollHeight;}
   if(tab==='spz')renderSpzLog();
   if(tab==='missing')renderMissingLog();
+  if(tab==='report')loadReportSituace();
 }
 function toggleLogPanel(){let p=document.getElementById('log-panel');if(p)p.style.display=p.style.display==='block'?'none':'block';}
 function copyLog(){
   let txt=logEntries.map(e=>`[${e.t}][${e.level}] ${e.msg}`).join('\\n');
   navigator.clipboard.writeText(txt).then(()=>showAdminToast('📋 Zkopírováno',true)).catch(()=>showAdminToast('Chyba kopírování',false));
 }
+async function loadReportSituace(){
+  let body=document.getElementById('log-report-body');
+  if(!body)return;
+  body.innerHTML='<div style="color:#64748b;padding:6px;">Načítám...</div>';
+  try{
+    let r=await fetch('/api/admin/report_situace?limit=100');
+    let data=await r.json();
+    body.innerHTML='';
+    if(!data.entries||!data.entries.length){body.innerHTML='<div style="color:#64748b;padding:6px;">Žádné záznamy</div>';return;}
+    data.entries.forEach(e=>{
+      let div=document.createElement('div');
+      div.style.cssText='padding:5px 0;border-bottom:1px solid #1e293b;font-family:monospace;font-size:10px;';
+      let clr=e.typ==='DUP_SPZ'?'#f87171':e.typ==='SPZ_RESET'?'#fbbf24':'#94a3b8';
+      div.innerHTML=`<span style="color:${clr};font-weight:bold;">[${e.ts}] ${e.typ}</span><br><span style="color:#cbd5e1;">${e.zprava}</span>`;
+      body.appendChild(div);
+    });
+  }catch(err){body.innerHTML='<div style="color:#f87171;padding:6px;">Chyba načítání: '+err+'</div>';}
+}
 function clearLog(){
   logEntries=[];logErrEntries=[];logSpzEntries=[];logMissingStops={};
-  ['log-body','log-errors-body','log-spz-body','log-missing-body'].forEach(id=>{let el=document.getElementById(id);if(el)el.innerHTML='';});
+  ['log-body','log-errors-body','log-spz-body','log-missing-body','log-report-body'].forEach(id=>{let el=document.getElementById(id);if(el)el.innerHTML='';});
 }
 window.addEventListener('error',e=>{appLog('JS chyba: '+(e.message||e)+(e.filename?` (${e.filename}:${e.lineno})`:''),'error');});
 window.addEventListener('unhandledrejection',e=>{appLog('Promise chyba: '+(e.reason&&(e.reason.message||e.reason)),'error');});
@@ -1089,38 +1130,31 @@ async function loadLineStops(){
   let stopsEl=document.getElementById('nt-line-stops');
   status.textContent='Načítám...';stopsEl.innerHTML='';
   lineEditorLayer.clearLayers();
-  // Ziskat zastavky pro linku z GTFS pres bbox (velky region pokryva cely kraj)
-  let b=map.getBounds();
-  // Rozsireny bbox pro pokryti celeho mozneho rozsahu linky
-  let pad=1.5;
   try{
-    let r=await fetch(`/api/stops_in_view?south=${b.getSouth()-pad}&west=${b.getWest()-pad}&north=${b.getNorth()+pad}&east=${b.getEast()+pad}`);
+    // Novy endpoint – zadne bbox omezeni, hleda pres cely GTFS index v pameti
+    let r=await fetch('/api/admin/line_stops?line='+encodeURIComponent(line));
     let data=await r.json();
     if(data.status!=='success'){status.textContent=data.message||'Chyba';return;}
-    // Filtruj zastavky kde je tato linka
-    let lineNorm=line.trim();
-    let matches=data.stops.filter(s=>(s.lines||[]).some(l=>l===lineNorm||l.endsWith(lineNorm)||lineNorm.endsWith(l)));
-    status.textContent=`${matches.length} zastávek pro linku ${line}`;
-    if(!matches.length){stopsEl.innerHTML='<div style="color:#64748b;padding:8px;font-size:11px;">Žádné zastávky nenalezeny. Zkus broader bbox – přibliž mapu k trase linky.</div>';return;}
+    let matches=data.stops;
+    status.textContent=matches.length+' zastávek pro linku '+line;
+    if(!matches.length){stopsEl.innerHTML='<div style="color:#64748b;padding:8px;font-size:11px;">Žádné zastávky nenalezeny – zkus celé číslo (490735) nebo zkrácené (735).</div>';return;}
     matches.forEach((s,i)=>{
       let div=document.createElement('div');
       div.style.cssText='padding:5px 0;border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:6px;';
       let dn=stopDisplayName(s);
-      div.innerHTML=`
-        <span style="color:#64748b;font-size:10px;width:18px;text-align:right;">${i+1}</span>
-        <div style="flex:1;">
-          <div style="font-size:12px;color:${s.approx?'#f59e0b':'#cbd5e1'};">${dn}</div>
-          ${s.display_name?'<div style="font-size:9px;color:#475569;">sys: '+s.name+'</div>':''}
-        </div>
-        <button style="background:#334155;color:#38bdf8;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">Na mapě</button>
-        <button style="background:#1e3a5f;color:#94a3b8;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">NT</button>`;
+      div.innerHTML=
+        '<span style="color:#64748b;font-size:10px;width:18px;text-align:right;">'+(i+1)+'</span>'+
+        '<div style="flex:1;">'+
+          '<div style="font-size:12px;color:'+(s.approx?'#f59e0b':'#cbd5e1')+';">'+dn+'</div>'+
+          (s.display_name?'<div style="font-size:9px;color:#475569;">sys: '+s.name+'</div>':'')+
+        '</div>'+
+        '<button style="background:#334155;color:#38bdf8;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">Na mapě</button>'+
+        '<button style="background:#1e3a5f;color:#94a3b8;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">NT</button>';
       let [mapBtn,ntBtn]=div.querySelectorAll('button');
-      // Ukaz zastavku na mape
       let m=L.circleMarker([s.lat,s.lng],{radius:6,color:'#38bdf8',fillColor:'#38bdf8',fillOpacity:0.8,weight:2});
-      m.bindTooltip(`<b>${dn}</b><br>Linka: ${line}`,{direction:'top',className:'dark-popup'});
+      m.bindTooltip('<b>'+dn+'</b><br>Linka: '+line,{direction:'top',className:'dark-popup'});
       lineEditorLayer.addLayer(m);
       mapBtn.onclick=()=>{map.setView([s.lat,s.lng],17);m.openTooltip();};
-      // Otevri NT editor pro tuto zastavku
       ntBtn.onclick=()=>{
         if(!ntMode)toggleNT();
         map.setView([s.lat,s.lng],17);
@@ -1273,7 +1307,7 @@ async function fetchBuses(){
         else spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Ceka na overeni</span></div>`;
       }
       let bugW='';
-      if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#374151;border:1px dashed #6b7280;border-radius:5px;padding:7px;margin:5px 0;color:#9ca3af;font-size:10px;text-align:center;"><b style="color:#f59e0b;">🐛 BUG - NEAKTUALNI MISTO</b><br>SPZ <b>${bS}</b> zamknuta (posledni znama pred zaseknutim), jede na jinem miste.</div>`;}
+      if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#3f0000;border:2px solid #ef4444;border-radius:5px;padding:8px;margin:5px 0;font-size:11px;text-align:center;"><b style="color:#ef4444;font-size:13px;letter-spacing:.5px;">\u26d4 NEN\u00cd RE\u00c1LN\u00c1 POLOHA</b><br><span style="color:#fca5a5;font-weight:bold;">PRAVD\u011aPODOBN\u011a BUG NEBO POSLEDN\u00cd ZN\u00c1M\u00c1 POZICE</span><br><span style="color:#94a3b8;font-size:10px;">Pravd\u011bpodobn\u011b SPZ <b style="color:#fbbf24;">${bS}</b> \u2013 pozice nemus\u00ed odpov\u00eddat realit\u011b</span></div>`;}
       let orangeW='';
       if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>🔍 Vyzkum - bus byl zasekly, nyni jede</b></div>`;
       let sc='#10b981';
@@ -1345,6 +1379,7 @@ async function fetchBuses(){
                 <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:16px;height:16px;cursor:pointer;">
                 Admin uprava
               </label>
+              <button onclick="adminAction('mark_bug','${bus.id}')" style="background:#3f0000;color:#fca5a5;border:1px solid #ef4444;border-radius:5px;font-size:11px;cursor:pointer;padding:5px 10px;touch-action:manipulation;font-weight:bold;">⛔ Označit BUG</button>
               <button onclick="adminAction('reset_admin','${bus.id}')" style="background:transparent;color:#64748b;border:1px solid #334155;border-radius:5px;font-size:11px;cursor:pointer;padding:5px 10px;touch-action:manipulation;">🔄 Reset</button>
             </div>
           </div>`;
@@ -1935,7 +1970,7 @@ def upsert_to_history(db, c):
     jr_l = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={c['inflow_id']}&currentStopId=0"
     try:
         db.table("bus_history").upsert({
-            "trip_id": c["trip_id"], "spz": spz, "spz_verified": c.get("spz_verified", False),
+            "trip_id": c["trip_id"], "spz": spz, "spz_verified": c.get("spz_verified", False), "spz_3factor": c.get("spz_3factor", False), "spz_conflict_warn": c.get("spz_conflict_warn", False),
             "linka": final_linka, "jr_link": jr_l, "start_scheduled": c.get("first_dep_time"),
             "start_actual": c.get("actual_start_time"), "end_actual": c.get("actual_end_time"),
             "last_lat": c.get("lat"), "last_lng": c.get("lng"), "status": c.get("status"),
@@ -2296,8 +2331,6 @@ def background_map_worker():
                 # Přeskočí jen: manual_spz, bug_locked, investigating, vlak,
                 #               nebo spz_frozen s platnou SPZ (po dojeti na konečnou)
                 has_valid_spz = bool(c.get("spz") and c.get("spz") != "Nezn\u00e1m\u00e1")
-                # Nikdy nezamrazuj bus bez SPZ - vozovna/konečná si má SPZ pamatovat
-                # ale bus který odjel a stále nemá SPZ musí hledat dál
                 if c.get("spz_frozen") and not has_valid_spz:
                     c["spz_frozen"] = False
                 skip_spz = (is_train or c.get("investigating") or c.get("manual_spz")
@@ -2308,78 +2341,98 @@ def background_map_worker():
                     near_stop = _nearest_stop_name(lat1, lng1, ARRIVA_STOP_MATCH_M) if GTFS_LOADED else None
                     near_stop_norm = _norm_txt(near_stop) if near_stop else ""
 
-                    # Sestav gate_pass (přísné brány: linka+pozice+cíl+zastávka)
-                    gate_pass = {}
-                    for b in data_arriva:
-                        if not _arriva_line_matches(line, b):
-                            continue
-                        b_spz = (b.get("spz") or "").strip()
+                    # 3-FAKTOROVY SPZ ALGORITMUS
+                    gate_pass    = {}   # spz -> dist_m (linka+pozice+cil = full match)
+                    gate_3f      = set()  # spz ktere prosly vsemi 3 faktory => prima fajfka
+                    gate_partial = {}   # spz -> dist_m (jen linka+pozice <= 500m, fallback)
+
+                    for b_a in data_arriva:
+                        b_spz = (b_a.get("spz") or "").strip()
                         if not b_spz or b_spz == "Nezn\u00e1m\u00e1":
                             continue
-                        dist_m = haversine_m(lat1, lng1, b.get("latitude") or 0, b.get("longitude") or 0)
+                        if not _arriva_line_matches(line, b_a):
+                            continue
+                        b_lat = b_a.get("latitude") or 0
+                        b_lon = b_a.get("longitude") or 0
+                        dist_m = haversine_m(lat1, lng1, b_lat, b_lon)
+                        if dist_m <= 500:
+                            if b_spz not in gate_partial or dist_m < gate_partial[b_spz]:
+                                gate_partial[b_spz] = dist_m
                         if dist_m > ARRIVA_MATCH_DIST_M:
                             continue
-                        a_dest_norm = _norm_txt(b.get("destinationName", ""))
-                        if d1_norm and a_dest_norm:
-                            if d1_norm not in a_dest_norm and a_dest_norm not in d1_norm:
-                                continue
-                        if near_stop_norm:
-                            a_stop_norm = _norm_txt(b.get("lastStopName", ""))
-                            if a_stop_norm and near_stop_norm not in a_stop_norm and a_stop_norm not in near_stop_norm:
-                                continue
                         if b_spz not in gate_pass or dist_m < gate_pass[b_spz]:
                             gate_pass[b_spz] = dist_m
+                        # Faktor 3: cil + posledni zastavka
+                        ok_dir = True
+                        a_dest_norm = _norm_txt(b_a.get("destinationName", ""))
+                        if d1_norm and a_dest_norm:
+                            ok_dir = (d1_norm in a_dest_norm or a_dest_norm in d1_norm)
+                        ok_stop = True
+                        if near_stop_norm:
+                            a_stop_norm = _norm_txt(b_a.get("lastStopName", ""))
+                            if a_stop_norm:
+                                ok_stop = (near_stop_norm in a_stop_norm or a_stop_norm in near_stop_norm)
+                        if ok_dir and ok_stop:
+                            gate_3f.add(b_spz)
 
-                    # FALLBACK pro bus ZCELA BEZ SPZ: pokud přísné brány nic nenašly,
-                    # zkus jen linka+pozice (bez cíle a zastávky) - na začátku jízdy
-                    # nebo po výjezdu z vozovny jsou tato data nespolehlivá.
-                    # Bezpečná protože: jen pro bus bez SPZ (nepřepíše dobrou SPZ)
-                    # a distanční filtr je přísnější (500m místo 750m).
-                    if not gate_pass and not has_valid_spz:
-                        for b in data_arriva:
-                            if not _arriva_line_matches(line, b):
+                    if gate_3f:
+                        best_spz = min(gate_3f, key=lambda s: gate_pass.get(s, 9999))
+                    elif gate_pass:
+                        best_spz = min(gate_pass, key=gate_pass.get)
+                    elif not has_valid_spz and gate_partial:
+                        best_spz = min(gate_partial, key=gate_partial.get)
+                    else:
+                        best_spz = None
+
+                    # REPORT SITUACE: duplicitni SPZ
+                    if best_spz:
+                        for oth_id, oth_c in GLOBAL_BUS_CACHE.items():
+                            if oth_id == bus_id:
                                 continue
-                            b_spz = (b.get("spz") or "").strip()
-                            if not b_spz or b_spz == "Nezn\u00e1m\u00e1":
-                                continue
-                            dist_m = haversine_m(lat1, lng1, b.get("latitude") or 0, b.get("longitude") or 0)
-                            if dist_m > 500:
-                                continue
-                            if b_spz not in gate_pass or dist_m < gate_pass[b_spz]:
-                                gate_pass[b_spz] = dist_m
+                            if (oth_c.get("spz") == best_spz
+                                    and oth_c.get("spz_verified")
+                                    and not oth_c.get("is_offline")):
+                                _report_situace(
+                                    "DUP_SPZ",
+                                    f"SPZ {best_spz} pouziva aktivni bus {oth_id} (L{oth_c.get('line')})"
+                                    f" a take bus {bus_id} (L{line})",
+                                    spz=best_spz,
+                                    bus_a=bus_id, line_a=line, lat_a=lat1, lon_a=lng1,
+                                    bus_b=oth_id, line_b=oth_c.get("line"),
+                                    lat_b=oth_c.get("lat"), lon_b=oth_c.get("lng"),
+                                    dist_between=round(haversine_m(
+                                        lat1, lng1, oth_c.get("lat") or 0, oth_c.get("lng") or 0)),
+                                    is_3factor=(best_spz in gate_3f),
+                                )
+                                if best_spz in gate_3f and not oth_c.get("spz_3factor"):
+                                    oth_c["spz_conflict_warn"] = True
 
                     current_spz = c.get("spz")
                     was_locked = bool(c.get("spz_locked"))
-                    # Nekonzistentni stav: spz_locked=True ale SPZ je None/Neznama.
-                    # Stava se kdyz "Stoji prilis dlouho" zamkne zamek driv nez
-                    # SPZ vubec stihne dojit (bus cekal na prvnim zastaveni).
-                    # -> Povaz za NEzamcene, at search step muze SPZ nalezt.
                     if was_locked and (not current_spz or current_spz == "Nezn\u00e1m\u00e1"):
                         was_locked = False
                         c["spz_locked"] = False
 
-                    # ── 1) Re-audit jiz zamknute SPZ - ALE jen obcas (nizsi priorita) ──
-                    # Jakmile uz SPZ ma fajfku (overeno), nehrozi tolik a nema smysl ji
-                    # kontrolovat porad - staci obcas (SPZ_REAUDIT_INTERVAL_SEC), at se
-                    # vykon vetsinou venuje hledani u jeste NEoverenych busu. Presto se
-                    # i overene SPZ jednou za cas znovu prubehnou (bezpecnostni sitko proti
-                    # tomu, aby se nahodou nezasekla spatna SPZ navzdy - presne to, co se
-                    # delo pred touto opravou).
+                    # Re-audit periodicky
                     if was_locked and current_spz and current_spz != "Nezn\u00e1m\u00e1":
                         last_audit = c.get("spz_last_audit_check")
-                        due_for_audit = (not last_audit) or (now - last_audit).total_seconds() >= SPZ_REAUDIT_INTERVAL_SEC
-                        if due_for_audit:
+                        due = (not last_audit) or (now - last_audit).total_seconds() >= SPZ_REAUDIT_INTERVAL_SEC
+                        if due:
                             c["spz_last_audit_check"] = now
-                            if current_spz in gate_pass:
-                                c["spz_last_verified"] = now  # stale sedi -> refresh
+                            if current_spz in gate_pass or current_spz in gate_3f:
+                                c["spz_last_verified"] = now
+                                if current_spz in gate_3f:
+                                    c["spz_verified"] = True
+                                    c["spz_3factor"] = True
                             else:
-                                still_listed = any((b.get("spz") or "").strip() == current_spz for b in data_arriva)
+                                still_listed = any((ba.get("spz") or "").strip() == current_spz for ba in data_arriva)
                                 last_v = c.get("spz_last_verified")
                                 stale = (not last_v) or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60
                                 if still_listed or stale:
-                                    # SPZ uz nesedi (jede jinym smerem/jinym cilem) nebo dlouho nepotvrzena
-                                    # -> uvolni zamek, system hleda spravnou SPZ znovu
-                                    print(f"[SPZ] Uvolnuji spatnou SPZ {current_spz} u busu {bus_id}", flush=True)
+                                    _report_situace("SPZ_RESET", f"SPZ {current_spz} uvolnena u busu {bus_id}",
+                                                    bus=bus_id, spz=current_spz,
+                                                    reason="not_in_arriva" if not still_listed else "stale")
+                                    print(f"[SPZ] Uvolnuji {current_spz} u busu {bus_id}", flush=True)
                                     if c.get("spz_verified") and db_client:
                                         try:
                                             db_client.table("bus_history").update({
@@ -2390,23 +2443,15 @@ def background_map_worker():
                                             pass
                                     c["spz_verified"] = False
                                     c["spz_locked"] = False
+                                    c["spz_3factor"] = False
                                     c["spz_stable_ticks"] = 0
                                     was_locked = False
-                        # else: throttled - tenhle tik se uz overena SPZ vubec neresi
 
-                    # ── 2) Hledani (noveho) kandidata (jen kdyz neni platny zamek) ──
+                    # Prirazeni noveho kandidata
                     if not was_locked:
-                        best_spz = min(gate_pass, key=gate_pass.get) if gate_pass else None
                         if best_spz:
-                            # Jednoznacny + blizky zasah (jediny kandidat presel vsemi branami
-                            # A je opravdu blizko) = okamzity zamek hned napoprve - rychlejsi.
-                            # Vicero kandidatu nebo jen hranicni vzdalenost = pojistka 2 tiky
-                            # (SPZ_STABLE_TICKS), aby se nezamykalo nahodou spatne.
-                            ambiguous = len(gate_pass) > 1
-                            high_confidence = (not ambiguous) and gate_pass[best_spz] <= SPZ_HIGH_CONFIDENCE_DIST_M
-                            if best_spz == current_spz:
-                                c["spz_stable_ticks"] = c.get("spz_stable_ticks", 0) + 1
-                            else:
+                            is_3f = best_spz in gate_3f
+                            if best_spz != current_spz:
                                 if c.get("spz_verified") and current_spz and db_client:
                                     try:
                                         db_client.table("bus_history").update({
@@ -2421,16 +2466,20 @@ def background_map_worker():
                                 c["spz_stable_ticks"] = 1
                                 c["spz_verified"] = False
                                 c["spz_locked"] = False
+                                c["spz_3factor"] = False
+                            else:
+                                c["spz_stable_ticks"] = c.get("spz_stable_ticks", 0) + 1
                             c["spz_last_verified"] = now
-                            if high_confidence or c.get("spz_stable_ticks", 0) >= SPZ_STABLE_TICKS:
+                            if is_3f or c.get("spz_stable_ticks", 0) >= SPZ_STABLE_TICKS:
                                 c["spz_verified"] = True
                                 c["spz_locked"] = True
+                                c["spz_3factor"] = is_3f
                         else:
-                            # Zadny kandidat nesplnil vsechny podminky
                             last_v = c.get("spz_last_verified")
                             if not last_v or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60:
                                 c["spz_verified"] = False
                                 c["spz_locked"] = False
+                                c["spz_3factor"] = False
 
                 # ── JR fetch ──────────────────────────────────────────────────────────────
                 if not is_train:
@@ -2697,12 +2746,23 @@ def api_admin_map_action():
             c["admin_note"] = new_note
         c["admin_lock_permanent"] = permanent
 
+    elif action == "mark_bug":
+        # Admin rucne oznaci bus jako "BUG / nestoji tu" - bude mit cerveny alert
+        # ale SPZ se mu nesmazava (zustavaji videt kde byl naposledy)
+        c["bug_locked"] = True
+        c["color_class"] = "bg-bug"
+        c["status"] = "BUG / Nerealna poloha (oznaceno adminem)"
+        c["spz_frozen"] = True  # zamraz SPZ aby se nesmazala
+        c["spz_conflict_warn"] = False  # admin to vedome oznacil, uz neni potreba duplikat alert
+
     elif action == "reset_admin":
         c["manual_spz"] = False
         c["spz_locked"] = False
         c["spz_verified"] = False
         c["spz_stable_ticks"] = 0
         c["spz_frozen"] = False
+        c["spz_3factor"] = False
+        c["spz_conflict_warn"] = False
         c["spz_last_audit_check"] = None
         c["investigating"] = False
         c["admin_color_override"] = None
@@ -3058,6 +3118,82 @@ def api_admin_report_missing_stop():
     if stop_name:
         print(f"[ROUTE-MISS] Zast\u00e1vka nenalezena: '{stop_name}' (bus {bus_id})", flush=True)
     return jsonify({"status": "ok"})
+
+
+@mapa_bp.route('/api/admin/report_situace')
+def api_admin_report_situace():
+    """Vrati posledni zaznamy z REPORT SITUACE bufferu (anomalie, duplikaty SPZ atd.)
+    Volano frontendem pro zobrazeni v logu — založka REPORT SITUACE."""
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
+    limit = min(int(request.args.get("limit", 100)), 200)
+    return jsonify({
+        "status": "success",
+        "entries": list(reversed(_REPORT_SITUACE[-limit:])),
+        "total": len(_REPORT_SITUACE),
+    })
+
+
+@mapa_bp.route('/api/admin/line_stops')
+def api_admin_line_stops():
+    """NT linka-editor: vrati vsechny zastavky pro dané číslo linky Z CELE GTFS DB,
+    BEZ JAKEHOKOLI BBOXU. Pouziva GTFS_LINES pole (nacitane z DB), takze staci
+    zadne sitove pozadavky, vsechno je v pameti.
+
+    Hledani je flexibilni: '722' najde zastavky kde je linka '722', '490722'
+    i '722' se berou jako ekvivalentni — porovna se suffix i cele cislo."""
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
+    line_q = (request.args.get("line") or "").strip()
+    if not line_q:
+        return jsonify({"status": "error", "message": "Chybi cislo linky"}), 400
+    if not GTFS_LOADED:
+        return jsonify({"status": "error", "message": "GTFS data nejsou nactena"}), 503
+
+    # Normalizuj dotaz pro flexibilni porovnani
+    q_norm = re.sub(r'\D', '', line_q)  # jen cislice
+
+    matches = []
+    seen_key = {}  # norm_name -> index do matches (pro deduplikaci)
+    for idx, ln_list in enumerate(GTFS_LINES):
+        if not ln_list:
+            continue
+        found = False
+        for l in ln_list:
+            l_norm = re.sub(r'\D', '', l)
+            if l_norm == q_norm or l_norm.endswith(q_norm) or q_norm.endswith(l_norm):
+                found = True
+                break
+        if not found:
+            continue
+        name, la, lo = GTFS_STOPS[idx]
+        key = _norm_txt(name)
+        ov = STOP_OVERRIDES.get(key)
+        eff_lat = ov["lat"] if ov else la
+        eff_lng = ov["lng"] if ov else lo
+        eff_lines = (ov.get("custom_lines") if ov and ov.get("custom_lines") is not None else ln_list) or []
+        md = GTFS_MODES[idx] if idx < len(GTFS_MODES) else None
+
+        if key in seen_key:
+            # Stejna zastavka na jine nastupisté — jen sluc linky
+            matches[seen_key[key]]["lines"] = sorted(set(matches[seen_key[key]]["lines"]) | set(eff_lines))
+            continue
+        seen_key[key] = len(matches)
+        matches.append({
+            "name": name,
+            "display_name": (ov.get("display_name") or "") if ov else "",
+            "lat": eff_lat, "lng": eff_lng,
+            "mode": md, "lines": eff_lines,
+            "manual": bool(ov),
+            "approx": bool(ov and ov.get("approx")),
+        })
+
+    return jsonify({
+        "status": "success",
+        "stops": matches,
+        "count": len(matches),
+        "line_query": line_q,
+    })
 
 
 @mapa_bp.route('/api/bus_detail/<bus_id>')
