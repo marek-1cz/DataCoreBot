@@ -372,7 +372,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
     <!-- Admin nástroje – skryté pro veřejnost -->
     <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
     <button id="nt-add-btn" onclick="startNtAdd()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:14px;flex-shrink:0;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;" title="Přidat zastávku">＋</button>
-    <button id="nt-line-btn" onclick="toggleLineEditor()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #38bdf8;background:transparent;color:#38bdf8;cursor:pointer;" title="Editor linky">🛤️</button>
+    <button id="lines-overlay-btn" onclick="toggleLinesPanel()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #38bdf8;background:transparent;color:#38bdf8;cursor:pointer;" title="Zobrazit linky na mapě">🗺️ Linky</button>
     <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋</button>
     __AD_BTN__
   </nav>
@@ -429,18 +429,20 @@ body.nt-add-active #map{cursor:crosshair !important;}
     <div id="sip-note" style="font-size:10px;color:#f59e0b;margin-top:4px;"></div>
     <button onclick="document.getElementById('stop-info-pop').style.display='none'" style="background:transparent;border:1px solid #334155;color:#64748b;border-radius:5px;font-size:11px;padding:3px 8px;cursor:pointer;margin-top:6px;width:100%;">Zavřít</button>
   </div>
-  <div id="nt-line-editor" style="display:none;position:fixed;top:64px;right:10px;z-index:4600;background:#0f172a;border:2px solid #38bdf8;border-radius:10px;width:300px;max-width:95vw;box-shadow:0 8px 28px rgba(0,0,0,.8);">
+  <div id="lines-overlay-panel" style="display:none;position:fixed;top:64px;right:10px;z-index:4600;background:#0f172a;border:2px solid #38bdf8;border-radius:10px;width:290px;max-width:95vw;box-shadow:0 8px 28px rgba(0,0,0,.8);">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #1e293b;">
-      <span style="color:#38bdf8;font-weight:bold;font-size:13px;">🛤️ Editor linky</span>
-      <button onclick="document.getElementById('nt-line-editor').style.display='none'" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer;">✕</button>
+      <span style="color:#38bdf8;font-weight:bold;font-size:13px;">🗺️ Zobrazit linky</span>
+      <button onclick="toggleLinesPanel()" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer;">✕</button>
     </div>
     <div style="padding:10px 14px;">
-      <div style="display:flex;gap:6px;margin-bottom:10px;">
-        <input id="nt-line-inp" type="text" placeholder="Číslo linky (490735, 760...)" style="flex:1;background:#1e293b;color:white;border:1px solid #334155;border-radius:5px;padding:6px 9px;font-size:12px;" onkeydown="if(event.key==='Enter')loadLineStops()">
-        <button onclick="loadLineStops()" style="background:#38bdf8;color:#0f172a;border:none;border-radius:5px;padding:6px 12px;font-weight:bold;font-size:12px;cursor:pointer;">Načíst</button>
+      <div style="font-size:11px;color:#64748b;margin-bottom:8px;">Zadej prefix nebo číslo linky. Prázdné = vše (pomalé!)</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <input id="lines-filter-inp" type="text" placeholder="490, 760, 490735..." style="flex:1;background:#1e293b;color:white;border:1px solid #334155;border-radius:5px;padding:6px 9px;font-size:12px;" onkeydown="if(event.key==='Enter')loadLinesOverlay()">
+        <button onclick="loadLinesOverlay()" style="background:#38bdf8;color:#0f172a;border:none;border-radius:5px;padding:6px 12px;font-weight:bold;font-size:12px;cursor:pointer;">Zobrazit</button>
       </div>
-      <div id="nt-line-status" style="font-size:11px;color:#64748b;margin-bottom:8px;"></div>
-      <div id="nt-line-stops" style="max-height:350px;overflow-y:auto;"></div>
+      <button onclick="clearLinesOverlay()" style="width:100%;background:#334155;color:#94a3b8;border:none;border-radius:5px;padding:5px;font-size:11px;cursor:pointer;margin-bottom:8px;">Skrýt linky</button>
+      <div id="lines-status" style="font-size:11px;color:#64748b;margin-bottom:6px;"></div>
+      <div id="lines-legend" style="max-height:200px;overflow-y:auto;"></div>
     </div>
   </div>
   <div id="log-panel">
@@ -522,7 +524,7 @@ nav.addEventListener('mouseenter',()=>clearTimeout(hideT));
 nav.addEventListener('mouseleave',()=>{hideT=setTimeout(hideNav,600);});
 document.addEventListener('touchstart',e=>{if(e.touches[0].clientY<35){showNav(4500);}else if(!nav.contains(e.target)){clearTimeout(hideT);hideT=setTimeout(hideNav,400);}},{passive:true});
 showNav(4000);
-if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let nlb=document.getElementById('nt-line-btn');if(nlb)nlb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
+if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let nlb=document.getElementById('lines-overlay-btn');if(nlb)nlb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
 
 // === MAP ===
 var dLat=49.7384,dLng=13.3736,dZoom=12;
@@ -611,55 +613,68 @@ function renderMissingLog(){
       </div>`;
     let [createBtn,useBtn]=div.querySelectorAll('button');
     createBtn.onclick=()=>{
-      if(!ntMode)toggleNT();
+      // Vytvořit novou: přijmi název z JŘ přímo (bez promptu), jen klikni kde to leží
       document.getElementById('log-panel').style.display='none';
-      startNtAdd(name);
+      _startMissingFix(name,'new');
     };
     useBtn.onclick=()=>{
       document.getElementById('log-panel').style.display='none';
-      openUseExistingStopDialog(name);
+      _startMissingFix(name,'existing');
     };
     body.appendChild(div);
   });
 }
 
-// "Použít existující" - propoj chybějící jméno z JŘ s už existující zastávkou
-// (typicky: PVVD používá jiný zápis názvu než GTFS, ale fyzicky je to stejné
-// místo). Vytvoří alias - STOP_OVERRIDES záznam pod hledaným jménem, který
-// ukazuje na souřadnice té vybrané existující zastávky.
-async function openUseExistingStopDialog(missingName){
-  let query=prompt(`Zastávka "${missingName}" nenalezena.\nNapiš část názvu existující zastávky, na kterou se má napojit:`,missingName);
-  if(!query||!query.trim())return;
-  query=query.trim();
-  try{
+// Vizuální režim opravy chybějící zastávky - žádné prompty, vše klikáním
+let _missingFixName='', _missingFixMode='', _missingPickLayer=null;
+function _startMissingFix(name, mode){
+  _missingFixName=name; _missingFixMode=mode;
+  if(_missingPickLayer){_missingPickLayer.clearLayers();}
+  _missingPickLayer=_missingPickLayer||L.layerGroup().addTo(map);
+  if(mode==='existing'){
+    // Zobraz GTFS zastávky v okolí jako žluté kroužky pro výběr
     let b=map.getBounds();
-    // Hledej v aktuálním výřezu i širším okolí (zvětšený bbox) - zastávka
-    // co hledáme nemusí být přesně tam kde je teď mapa
-    let pad=0.3;
-    let r=await fetch(`/api/stops_in_view?south=${b.getSouth()-pad}&west=${b.getWest()-pad}&north=${b.getNorth()+pad}&east=${b.getEast()+pad}`);
-    let data=await r.json();
-    if(data.status!=='success'){showAdminToast(data.message||'Nelze hledat - přibliž mapu na danou oblast a zkus znovu',false);return;}
-    let qn=query.toLowerCase();
-    let matches=data.stops.filter(s=>(s.name||'').toLowerCase().includes(qn)||(s.display_name||'').toLowerCase().includes(qn));
-    if(!matches.length){showAdminToast('Nic nenalezeno - zkus jiný text nebo přibliž mapu k té oblasti',false);return;}
-    let list=matches.slice(0,15).map((s,i)=>`${i+1}. ${s.name}${s.display_name?' ('+s.display_name+')':''}`).join('\\n');
-    let choice=prompt(`Vyber číslo zastávky pro napojení "${missingName}":\\n${list}`,'1');
-    if(!choice)return;
-    let idx=parseInt(choice.trim())-1;
-    if(isNaN(idx)||idx<0||idx>=matches.length){showAdminToast('Neplatná volba',false);return;}
-    let target=matches[idx];
-    // Ulož jako override pod HLEDANÝM jménem (z JŘ), souřadnice = vybraná existující zastávka
-    let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:missingName,lat:target.lat,lng:target.lng})});
+    let pad=0.25;
+    fetch(`/api/stops_in_view?south=${b.getSouth()-pad}&west=${b.getWest()-pad}&north=${b.getNorth()+pad}&east=${b.getEast()+pad}`)
+      .then(r=>r.json()).then(data=>{
+        if(data.status!=='success'){showAdminToast(data.message||'Přibliž mapu k oblasti linky',false);return;}
+        _missingPickLayer.clearLayers();
+        data.stops.forEach(s=>{
+          let m=L.circleMarker([s.lat,s.lng],{radius:9,color:'#f59e0b',fillColor:'#fbbf24',fillOpacity:0.7,weight:2});
+          m.bindTooltip(`<b>${s.name}</b><br><span style="color:#38bdf8;font-size:10px;">Klikni pro napojení</span>`,{direction:'top',className:'dark-popup'});
+          m.on('click',async()=>{
+            _missingPickLayer.clearLayers();
+            await _saveMissingFix(_missingFixName, s.lat, s.lng, s.name);
+          });
+          _missingPickLayer.addLayer(m);
+        });
+        showAdminToast(`🟡 Klikni na správnou zastávku pro "${name}"`,true);
+      }).catch(()=>showAdminToast('Chyba načítání zastávek',false));
+  } else {
+    // Nová zastávka: kříž kurzor, klikni kam patří
+    ntAddMode=true; ntPendingPrefill=name;
+    document.body.classList.add('nt-add-active');
+    showAdminToast(`🚏 Klikni kam patří "${name}"`,true);
+  }
+}
+async function _saveMissingFix(missingName, lat, lng, sourceName){
+  try{
+    let res=await fetch('/api/admin/save_stop_override',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:missingName, lat, lng})});
     let rd=await res.json();
     if(rd.status==='success'){
-      showAdminToast(`✅ "${missingName}" napojeno na "${target.name}"`,true);
-      appLog(`Propojeno: "${missingName}" → existující "${target.name}"`,'ok');
+      showAdminToast(`✅ "${missingName}" → "${sourceName||'nová poloha'}"`,true);
+      appLog(`Opravena zastávka: "${missingName}" @ ${lat.toFixed(5)},${lng.toFixed(5)} (${sourceName||'nový bod'})`,'ok');
       delete logMissingStops[missingName];
       if(logCurrentTab==='missing')renderMissingLog();
+      if(_missingPickLayer){_missingPickLayer.clearLayers();}
+      // Obnov trasu - tohle je klíčové!
+      setTimeout(refreshActiveRoute, 300);
     }else showAdminToast('Chyba: '+(rd.message||'?'),false);
   }catch(e){showAdminToast('Chyba spojení',false);}
 }
+
 function setLogTab(tab){
   logCurrentTab=tab;
   let tabIds=['all','err','spz','missing','report'];
@@ -1093,83 +1108,97 @@ async function _doAddStop(lat,lng,name){
 }
 map.on('click',async(e)=>{
   if(!ntAddMode)return;
-  cancelNtAdd(); // odeber kříž hned
   let prefill=ntPendingPrefill;
-  let name=prompt(
-    prefill
-      ? `Název zastávky (navrhovaný: ${prefill}):\nPonech prázdné pro použití navrhovaného.`
-      : 'Název zastávky:',
-    prefill
-  );
-  if(name===null)return; // zrušit
-  if(!name.trim()&&prefill)name=prefill; // enter = přijmi navrhovaný
-  if(!name.trim()){showAdminToast('Název je prázdný',false);return;}
-  await _doAddStop(e.latlng.lat,e.latlng.lng,name);
+  cancelNtAdd();
+  if(prefill){
+    // Volano z logu "Chybí" - název z JŘ, žádný prompt, rovnou ulož
+    await _saveMissingFix(prefill, e.latlng.lat, e.latlng.lng, null);
+  } else {
+    // Volano z tlačítka + - zeptej se na název
+    let name=prompt('Název nové zastávky:','');
+    if(!name||!name.trim())return;
+    await _doAddStop(e.latlng.lat,e.latlng.lng,name.trim());
+  }
 });
 map.on('moveend',()=>{
   if(!ntMode)return;
   clearTimeout(ntMoveTimer);ntMoveTimer=setTimeout(loadNTStops,400);
 });
 
-// === NT linka-editor ===
-let lineEditorLayer=L.layerGroup().addTo(map);
-let lineEditorActive=false;
-function toggleLineEditor(){
-  let pan=document.getElementById('nt-line-editor');
+// === Zobrazit linky na mapě ===
+let linesOverlayLayer=L.layerGroup().addTo(map);
+let lineEditorLayer=linesOverlayLayer; // backward compat alias
+let _lineColors={};
+function _lineColor(line){
+  if(!_lineColors[line]){
+    // Deterministická barva z čísla linky - každá linka má vždy stejnou barvu
+    let hash=0;for(let ch of line){hash=(hash*31+ch.charCodeAt(0))&0xffffff;}
+    let h=(hash%360);
+    _lineColors[line]=`hsl(${h},75%,55%)`;
+  }
+  return _lineColors[line];
+}
+function toggleLinesPanel(){
+  let pan=document.getElementById('lines-overlay-panel');
   if(!pan)return;
-  lineEditorActive=pan.style.display==='block';
-  pan.style.display=lineEditorActive?'none':'block';
-  if(lineEditorActive){lineEditorLayer.clearLayers();}
-  else{let inp=document.getElementById('nt-line-inp');if(inp)inp.focus();}
+  pan.style.display=(pan.style.display==='block'?'none':'block');
 }
-async function loadLineStops(){
-  let inp=document.getElementById('nt-line-inp');
-  let line=(inp&&inp.value||'').trim();
-  if(!line){document.getElementById('nt-line-status').textContent='Zadej číslo linky';return;}
-  let status=document.getElementById('nt-line-status');
-  let stopsEl=document.getElementById('nt-line-stops');
-  status.textContent='Načítám...';stopsEl.innerHTML='';
-  lineEditorLayer.clearLayers();
+async function loadLinesOverlay(){
+  let q=(document.getElementById('lines-filter-inp')||{}).value||'';
+  let status=document.getElementById('lines-status');
+  let legend=document.getElementById('lines-legend');
+  if(status)status.textContent='Načítám...';
+  if(legend)legend.innerHTML='';
+  linesOverlayLayer.clearLayers();
   try{
-    // Novy endpoint – zadne bbox omezeni, hleda pres cely GTFS index v pameti
-    let r=await fetch('/api/admin/line_stops?line='+encodeURIComponent(line));
+    let url='/api/lines_map'+(q.trim()?'?q='+encodeURIComponent(q.trim()):'');
+    let r=await fetch(url);
     let data=await r.json();
-    if(data.status!=='success'){status.textContent=data.message||'Chyba';return;}
-    let matches=data.stops;
-    status.textContent=matches.length+' zastávek pro linku '+line;
-    if(!matches.length){stopsEl.innerHTML='<div style="color:#64748b;padding:8px;font-size:11px;">Žádné zastávky nenalezeny – zkus celé číslo (490735) nebo zkrácené (735).</div>';return;}
-    matches.forEach((s,i)=>{
-      let div=document.createElement('div');
-      div.style.cssText='padding:5px 0;border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:6px;';
-      let dn=stopDisplayName(s);
-      div.innerHTML=
-        '<span style="color:#64748b;font-size:10px;width:18px;text-align:right;">'+(i+1)+'</span>'+
-        '<div style="flex:1;">'+
-          '<div style="font-size:12px;color:'+(s.approx?'#f59e0b':'#cbd5e1')+';">'+dn+'</div>'+
-          (s.display_name?'<div style="font-size:9px;color:#475569;">sys: '+s.name+'</div>':'')+
-        '</div>'+
-        '<button style="background:#334155;color:#38bdf8;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">Na mapě</button>'+
-        '<button style="background:#1e3a5f;color:#94a3b8;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">NT</button>';
-      let [mapBtn,ntBtn]=div.querySelectorAll('button');
-      let m=L.circleMarker([s.lat,s.lng],{radius:6,color:'#38bdf8',fillColor:'#38bdf8',fillOpacity:0.8,weight:2});
-      m.bindTooltip('<b>'+dn+'</b><br>Linka: '+line,{direction:'top',className:'dark-popup'});
-      lineEditorLayer.addLayer(m);
-      mapBtn.onclick=()=>{map.setView([s.lat,s.lng],17);m.openTooltip();};
-      ntBtn.onclick=()=>{
-        if(!ntMode)toggleNT();
-        map.setView([s.lat,s.lng],17);
-        setTimeout(()=>{
-          ntLayer.eachLayer(layer=>{
-            if(layer.getLatLng&&Math.abs(layer.getLatLng().lat-s.lat)<0.0001&&Math.abs(layer.getLatLng().lng-s.lng)<0.0001){
-              layer.fire('click');
-            }
-          });
-        },600);
-      };
-      stopsEl.appendChild(div);
+    if(data.status!=='success'){if(status)status.textContent=data.message||'Chyba';return;}
+    let lines=data.lines;
+    let lineNames=Object.keys(lines).sort();
+    if(status)status.textContent=`${lineNames.length} linek`;
+    if(legend)legend.innerHTML='';
+    lineNames.forEach(l=>{
+      let col=_lineColor(l);
+      let stops=lines[l];
+      if(stops.length<2)return;
+      // Linie
+      let coords=stops.map(s=>[s.lat,s.lng]);
+      let poly=L.polyline(coords,{color:col,weight:3,opacity:0.75});
+      poly.bindTooltip(`<b>Linka ${l}</b><br>${stops.length} zastávek`,{sticky:true,className:'dark-popup'});
+      linesOverlayLayer.addLayer(poly);
+      // Bod první a poslední zastávky
+      [[stops[0],'▶'],[stops[stops.length-1],'■']].forEach(([s,sym])=>{
+        let ic=L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],
+          html:`<div style="width:12px;height:12px;background:${col};border:2px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:7px;color:white;">${sym}</div>`});
+        linesOverlayLayer.addLayer(L.marker([s.lat,s.lng],{icon:ic,zIndexOffset:-10}));
+      });
+      // Legenda
+      if(legend){
+        let row=document.createElement('div');
+        row.style.cssText='display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11px;cursor:pointer;';
+        row.innerHTML=`<div style="width:22px;height:4px;background:${col};border-radius:2px;flex-shrink:0;"></div><span style="color:#cbd5e1;">${l}</span><span style="color:#64748b;font-size:10px;">(${stops.length} zast.)</span>`;
+        row.onclick=()=>{
+          // Zoom na linku
+          let bounds=L.latLngBounds(coords);
+          map.fitBounds(bounds,{padding:[30,30]});
+        };
+        legend.appendChild(row);
+      }
     });
-  }catch(e){status.textContent='Chyba: '+e;appLog('Linka-editor chyba: '+e,'error');}
+  }catch(e){if(status)status.textContent='Chyba: '+e;appLog('Linky: '+e,'error');}
 }
+function clearLinesOverlay(){
+  linesOverlayLayer.clearLayers();
+  let status=document.getElementById('lines-status');
+  let legend=document.getElementById('lines-legend');
+  if(status)status.textContent='';
+  if(legend)legend.innerHTML='';
+}
+// Backward compat - loadLineStops still works if called elsewhere
+function loadLineStops(){loadLinesOverlay();}
+function toggleLineEditor(){toggleLinesPanel();}
 
 // === Veřejné "Zobrazit zastávky" + stop info popup ===
 let pubStopsMode=false;
@@ -3121,6 +3150,78 @@ def api_admin_report_missing_stop():
 
 
 @mapa_bp.route('/api/admin/report_situace')
+@mapa_bp.route('/api/lines_map')
+def api_lines_map():
+    """Verejny endpoint: vrati zastávky (s pořadím) pro filtrovane linky.
+    Parametr q: prefix nebo cele cislo linky (napr. '490', '760', '490735').
+    Vraci: {lines: {linka: [stops]}} kde kazdy stop ma name/lat/lng.
+    Poradi zastávek je urceno sekvenci z JR (jizda po trase ze zapad na vychod
+    nebo sever-jih, na zaklade heuristiky).
+    POZNAMKA: pro kazde unikatni cislo linky se zastávky RADI metodou
+    nejblizsiho souseda (nearest-neighbor) od prvniho bodu, cimz se ziskava
+    priblizna ale vizualne smysluplna trasa bez nutnosti mit ulozene stop_times."""
+    q = (request.args.get('q') or '').strip()
+    if not GTFS_LOADED:
+        return jsonify({'status': 'error', 'message': 'GTFS data nejsou načtena'}), 503
+
+    q_digits = re.sub(r'\D', '', q) if q else ''
+
+    # Seskup zastávky podle linek
+    line_stops = {}  # linka -> [(name, lat, lon, display_name)]
+    for idx, ln_list in enumerate(GTFS_LINES):
+        if not ln_list:
+            continue
+        name, la, lo = GTFS_STOPS[idx]
+        ov = STOP_OVERRIDES.get(_norm_txt(name))
+        eff_lat = ov['lat'] if ov else la
+        eff_lng = ov['lng'] if ov else lo
+        disp = (ov.get('display_name') or '') if ov else ''
+        for l in ln_list:
+            l_digits = re.sub(r'\D', '', l)
+            # Filtruj: pokud q zadano, shoda prefixu ci sufixu
+            if q_digits:
+                if not (l_digits == q_digits
+                        or l_digits.startswith(q_digits)
+                        or l_digits.endswith(q_digits)
+                        or q_digits.endswith(l_digits)):
+                    continue
+            if l not in line_stops:
+                line_stops[l] = []
+            line_stops[l].append({'name': disp or name, 'lat': eff_lat, 'lng': eff_lng})
+
+    if len(line_stops) > 150:
+        return jsonify({'status': 'error', 'message': f'Příliš mnoho linek ({len(line_stops)}) — zadej přesnější prefix'}), 400
+
+    # Seřaď zastávky každé linky metodou nejbližšího souseda
+    def sort_stops_nn(stops):
+        if len(stops) <= 2:
+            return stops
+        # Začni od nejzápadnějšího bodu
+        remaining = list(stops)
+        remaining.sort(key=lambda s: s['lng'])
+        ordered = [remaining.pop(0)]
+        while remaining:
+            last = ordered[-1]
+            best = min(remaining, key=lambda s: (s['lat']-last['lat'])**2 + (s['lng']-last['lng'])**2)
+            ordered.append(best)
+            remaining.remove(best)
+        return ordered
+
+    result = {}
+    for l, stops in line_stops.items():
+        # Deduplikuj (stejný bod z více stop_id)
+        seen = set()
+        unique = []
+        for s in stops:
+            k = (round(s['lat'],4), round(s['lng'],4))
+            if k not in seen:
+                seen.add(k)
+                unique.append(s)
+        result[l] = sort_stops_nn(unique)
+
+    return jsonify({'status': 'success', 'lines': result, 'count': len(result)})
+
+
 def api_admin_report_situace():
     """Vrati posledni zaznamy z REPORT SITUACE bufferu (anomalie, duplikaty SPZ atd.)
     Volano frontendem pro zobrazeni v logu — založka REPORT SITUACE."""
