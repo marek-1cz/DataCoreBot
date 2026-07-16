@@ -358,6 +358,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
     </a>
     <!-- Výrazné tlačítko Zobrazit zastávky - první, pro veřejnost -->
     <button id="pub-stops-btn" onclick="togglePubStops()">🚏 Zastávky</button>
+    <button id="lines-overlay-btn-pub" onclick="toggleLinesPanel()" class="n-btn" style="background:#1e3a5f;color:#38bdf8;border:1px solid #334155;font-size:12px;padding:5px 10px;">🗺️ Linky</button>
     <a href="/provoz-idpk" class="n-btn n-provoz">IDPK</a>
     <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠</a>
     <div class="n-sp"></div>
@@ -411,6 +412,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
     <input id="ntp-dispname" type="text" placeholder="Zobrazovaný název..." style="width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;padding:5px 8px;font-size:12px;margin-bottom:8px;">
     <label style="margin-bottom:6px;"><input type="checkbox" id="ntp-approx"> ⚠️ Přibližná poloha</label>
     <label style="margin-bottom:8px;"><input type="checkbox" id="ntp-substitute"> 🔀 Náhradní zastávka</label>
+    <label style="margin-bottom:8px;"><input type="checkbox" id="ntp-notfound"> ❌ Nenalezeno (error)</label>
     <div style="margin-bottom:4px;font-size:11px;color:#94a3b8;">Linky přes zastávku:</div>
     <div id="ntp-lines-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;min-height:22px;"></div>
     <div style="display:flex;gap:4px;margin-bottom:8px;">
@@ -1033,6 +1035,7 @@ function openNtEdit(s,m){
   document.getElementById('ntp-dispname').value=s.display_name||'';
   document.getElementById('ntp-approx').checked=!!s.approx;
   document.getElementById('ntp-substitute').checked=!!s.substitute;
+  let nf=document.getElementById('ntp-notfound');if(nf)nf.checked=!!s.notfound;
   renderNtLineChips(s.lines);
   document.getElementById('nt-edit-pop').style.display='block';
 }
@@ -1042,12 +1045,13 @@ async function saveNtFlags(){
   let pos=m.getLatLng();
   let approx=document.getElementById('ntp-approx').checked;
   let substitute=document.getElementById('ntp-substitute').checked;
+  let notfound=!!(document.getElementById('ntp-notfound')||{}).checked;
   let display_name=document.getElementById('ntp-dispname').value.trim();
   // Linky jsou uloženy průběžně přes addLineToNtStop/removeNtLine
   // saveNtFlags uloží jen zbývající metadata (approx/substitute/display_name)
   try{
     let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng,approx,substitute,display_name,custom_lines:s.lines||null})});
+      body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng,approx,substitute,notfound,display_name,custom_lines:s.lines||null})});
     let rd=await res.json();
     if(rd.status==='success'){
       Object.assign(s,{approx,substitute,display_name,manual:true});
@@ -1150,6 +1154,7 @@ async function loadLinesOverlay(){
   if(status)status.textContent='Načítám...';
   if(legend)legend.innerHTML='';
   linesOverlayLayer.clearLayers();
+  _linePolylines={}; _legendRows={}; _activeLine=null;
   try{
     let url='/api/lines_map'+(q.trim()?'?q='+encodeURIComponent(q.trim()):'');
     let r=await fetch(url);
@@ -1168,6 +1173,7 @@ async function loadLinesOverlay(){
       let poly=L.polyline(coords,{color:col,weight:3,opacity:0.75});
       poly.bindTooltip(`<b>Linka ${l}</b><br>${stops.length} zastávek`,{sticky:true,className:'dark-popup'});
       linesOverlayLayer.addLayer(poly);
+      _linePolylines[l]=poly;
       // Bod první a poslední zastávky
       [[stops[0],'▶'],[stops[stops.length-1],'■']].forEach(([s,sym])=>{
         let ic=L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],
@@ -1179,15 +1185,30 @@ async function loadLinesOverlay(){
         let row=document.createElement('div');
         row.style.cssText='display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11px;cursor:pointer;';
         row.innerHTML=`<div style="width:22px;height:4px;background:${col};border-radius:2px;flex-shrink:0;"></div><span style="color:#cbd5e1;">${l}</span><span style="color:#64748b;font-size:10px;">(${stops.length} zast.)</span>`;
-        row.onclick=()=>{
-          // Zoom na linku
-          let bounds=L.latLngBounds(coords);
-          map.fitBounds(bounds,{padding:[30,30]});
-        };
+        row.onclick=()=>_highlightLine(l);
         legend.appendChild(row);
+        _legendRows[l]=row;
       }
     });
   }catch(e){if(status)status.textContent='Chyba: '+e;appLog('Linky: '+e,'error');}
+}
+let _activeLine=null;
+let _linePolylines={};
+let _legendRows={};
+function _highlightLine(l){
+  if(_activeLine&&_linePolylines[_activeLine]){
+    _linePolylines[_activeLine].setStyle({weight:3,opacity:0.7});
+    if(_legendRows[_activeLine]){_legendRows[_activeLine].style.background='';_legendRows[_activeLine].style.borderLeft='';}
+  }
+  if(_activeLine===l){_activeLine=null;return;}
+  _activeLine=l;
+  let poly=_linePolylines[l];
+  if(!poly)return;
+  poly.setStyle({weight:6,opacity:1.0});
+  poly.bringToFront();
+  let col=_lineColor(l);
+  map.fitBounds(poly.getBounds(),{padding:[30,30]});
+  if(_legendRows[l]){_legendRows[l].style.background='rgba(56,189,248,0.12)';_legendRows[l].style.borderLeft='3px solid '+col;}
 }
 function clearLinesOverlay(){
   linesOverlayLayer.clearLayers();
@@ -3165,9 +3186,9 @@ def api_lines_map():
         return jsonify({'status': 'error', 'message': 'GTFS data nejsou načtena'}), 503
 
     q_digits = re.sub(r'\D', '', q) if q else ''
-
-    # Seskup zastávky podle linek
-    line_stops = {}  # linka -> [(name, lat, lon, display_name)]
+    LAT_MIN, LAT_MAX = 49.0, 50.5
+    LON_MIN, LON_MAX = 12.0, 14.2
+    line_stops = {}
     for idx, ln_list in enumerate(GTFS_LINES):
         if not ln_list:
             continue
@@ -3179,18 +3200,19 @@ def api_lines_map():
         for l in ln_list:
             l_digits = re.sub(r'\D', '', l)
             # Filtruj: pokud q zadano, shoda prefixu ci sufixu
+            if not (LAT_MIN <= la <= LAT_MAX and LON_MIN <= lo <= LON_MAX):
+                continue
             if q_digits:
-                if not (l_digits == q_digits
-                        or l_digits.startswith(q_digits)
-                        or l_digits.endswith(q_digits)
-                        or q_digits.endswith(l_digits)):
+                if not (l_digits == q_digits or l_digits.startswith(q_digits)):
                     continue
             if l not in line_stops:
                 line_stops[l] = []
             line_stops[l].append({'name': disp or name, 'lat': eff_lat, 'lng': eff_lng})
 
-    if len(line_stops) > 150:
-        return jsonify({'status': 'error', 'message': f'Příliš mnoho linek ({len(line_stops)}) — zadej přesnější prefix'}), 400
+    line_stops = {l: s for l, s in line_stops.items() if len(s) >= 3}
+    if len(line_stops) > 200:
+        return jsonify({'status': 'error',
+                        'message': f'Nalezeno {len(line_stops)} linek — zadej přesnější číslo (např. 490)'}), 400
 
     # Seřaď zastávky každé linky metodou nejbližšího souseda
     def sort_stops_nn(stops):
