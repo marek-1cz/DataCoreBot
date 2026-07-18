@@ -28,6 +28,8 @@ SPZ_HOLD_MINUTES      = 8
 SPZ_STABLE_TICKS      = 2
 SPZ_HIGH_CONFIDENCE_DIST_M = 300  # 3-faktor match = okamzita fajfka (zadne cekani na 2. tik)
 SPZ_REAUDIT_INTERVAL_SEC = 60      # jak casto preverovat UZ overenou (fajfka) SPZ
+SPZ_AUTO_REFRESH_MIN     = 8       # kazdych N minut proved plny refresh SPZ u vsech aktivnich busu
+                                   # (ekvivalent knofliku "Najit SPZ" ale pro vsechny najednou)
 GHOST_MAX_OFFLINE_MIN = 20
 GHOST_DIST_STRICT     = 0.010
 DUPLICATE_GRACE_SEC   = 120
@@ -333,7 +335,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
   #hf{width:200px;}
   .dark-popup .leaflet-popup-content{width:240px!important;}
   #log-panel{bottom:auto;top:56px;right:4px;left:4px;width:auto;max-width:100vw;}
-  #log-body,#log-errors-body,#log-spz-body,#log-missing-body,#log-report-body{max-height:160px;}
+  #log-body,#log-errors-body,#log-spz-body,#log-missing-body,#log-report-body,#log-approx-body{max-height:160px;}
   #nt-edit-pop{left:4px;right:4px;bottom:10px;width:auto;max-height:80vh;overflow-y:auto;}
   #stop-info-pop{left:4px;right:4px;bottom:10px;width:auto;}
   .sip-lines{flex-wrap:wrap;gap:3px;}
@@ -456,6 +458,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
         <button onclick="setLogTab('spz')" id="log-tab-spz">🚌 SPZ</button>
         <button onclick="setLogTab('missing')" id="log-tab-missing">📍 Chybí</button>
         <button onclick="setLogTab('report')" id="log-tab-report">🔴 REPORT</button>
+        <button onclick="setLogTab('approx')" id="log-tab-approx">⚠️ Přibliž.</button>
         <button onclick="copyLog()">Kopír.</button>
         <button onclick="clearLog()">Smaž</button>
         <button onclick="document.getElementById('log-panel').style.display='none'">X</button>
@@ -466,6 +469,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
     <div id="log-spz-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-family:monospace;font-size:10.5px;color:#94a3b8;"></div>
     <div id="log-missing-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-size:11px;"></div>
     <div id="log-report-body" style="display:none;max-height:240px;overflow-y:auto;padding:6px 12px;"></div>
+    <div id="log-approx-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-size:11px;"></div>
   </div>
   <div id="nt-add-bar" style="display:none;position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:5000;background:#1e293b;border:2px solid #f59e0b;border-radius:8px;padding:8px 14px;display:none;align-items:center;gap:8px;box-shadow:0 4px 20px rgba(0,0,0,.7);">
     <span style="color:#f59e0b;font-size:12px;font-weight:bold;">🚏 Klikni na mapu kde je zastávka</span>
@@ -637,7 +641,7 @@ function _startMissingFix(name, mode){
     // Zobraz GTFS zastávky v okolí jako žluté kroužky pro výběr
     let b=map.getBounds();
     let pad=0.25;
-    fetch(`/api/stops_in_view?south=${b.getSouth()-pad}&west=${b.getWest()-pad}&north=${b.getNorth()+pad}&east=${b.getEast()+pad}`)
+    fetch(`/api/stops_near?lat=${b.getCenter().lat}&lng=${b.getCenter().lng}&radius_m=5000`)
       .then(r=>r.json()).then(data=>{
         if(data.status!=='success'){showAdminToast(data.message||'Přibliž mapu k oblasti linky',false);return;}
         _missingPickLayer.clearLayers();
@@ -679,9 +683,9 @@ async function _saveMissingFix(missingName, lat, lng, sourceName){
 
 function setLogTab(tab){
   logCurrentTab=tab;
-  let tabIds=['all','err','spz','missing','report'];
+  let tabIds=['all','err','spz','missing','report','approx'];
   tabIds.forEach(id=>{
-    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':`log-${id}-body`);
+    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':id==='spz'?'log-spz-body':id==='missing'?'log-missing-body':id==='report'?'log-report-body':'log-approx-body');
     if(body)body.style.display=(tab===id?'':'none');
     let btn=document.getElementById(`log-tab-${id}`);
     if(btn){btn.style.background=(tab===id?'#334155':'transparent');btn.style.color='';}
@@ -690,12 +694,62 @@ function setLogTab(tab){
   if(tab==='spz')renderSpzLog();
   if(tab==='missing')renderMissingLog();
   if(tab==='report')loadReportSituace();
+  if(tab==='approx')renderApproxLog();
 }
 function toggleLogPanel(){let p=document.getElementById('log-panel');if(p)p.style.display=p.style.display==='block'?'none':'block';}
 function copyLog(){
   let txt=logEntries.map(e=>`[${e.t}][${e.level}] ${e.msg}`).join('\\n');
   navigator.clipboard.writeText(txt).then(()=>showAdminToast('📋 Zkopírováno',true)).catch(()=>showAdminToast('Chyba kopírování',false));
 }
+// === Přibližné polohy log ===
+let logApproxStops = {};  // name -> {confidence, lat, lng}
+function logApproxStop(name, lat, lng, confidence){
+  logApproxStops[name] = {name, lat, lng, confidence, ts: new Date().toLocaleTimeString('cs-CZ')};
+  let btn = document.getElementById('log-tab-approx');
+  if(btn && logCurrentTab !== 'approx') btn.style.color = '#f59e0b';
+  if(logCurrentTab === 'approx') renderApproxLog();
+}
+function renderApproxLog(){
+  let body = document.getElementById('log-approx-body');
+  if(!body) return;
+  body.innerHTML = '';
+  let entries = Object.values(logApproxStops).sort((a,b) => a.name.localeCompare(b.name));
+  if(!entries.length){body.innerHTML='<div style="color:#64748b;padding:8px;">Žádné přibližné polohy</div>';return;}
+  entries.forEach(s=>{
+    let div = document.createElement('div');
+    div.style.cssText = 'padding:5px 0;border-bottom:1px solid #1e293b;';
+    let confLabel = s.confidence==='geocoded'?'Nominatim':'Fuzzy GTFS';
+    div.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <span style="color:#f59e0b;font-size:12px;">⚠️ ${s.name}</span>
+        <span style="color:#64748b;font-size:10px;">${confLabel} · ${s.ts}</span>
+      </div>
+      <div style="display:flex;gap:4px;">
+        <button style="flex:1;background:#10b981;color:white;border:none;border-radius:4px;padding:3px 6px;font-size:10px;cursor:pointer;">✅ Poloha sedí</button>
+        <button style="flex:1;background:#334155;color:#94a3b8;border:none;border-radius:4px;padding:3px 6px;font-size:10px;cursor:pointer;">📍 Přesunout</button>
+      </div>`;
+    let [okBtn, moveBtn] = div.querySelectorAll('button');
+    okBtn.onclick = async () => {
+      // Oznac jako overeno - ulozi approx=false
+      let res = await fetch('/api/admin/save_stop_override', {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({name: s.name, lat: s.lat, lng: s.lng, approx: false})});
+      let rd = await res.json();
+      if(rd.status==='success'){
+        delete logApproxStops[s.name];
+        showAdminToast(`✅ Poloha potvrzena: ${s.name}`, true);
+        renderApproxLog();
+        setTimeout(refreshActiveRoute, 300);
+      }
+    };
+    moveBtn.onclick = () => {
+      document.getElementById('log-panel').style.display = 'none';
+      _startMissingFix(s.name, 'new');  // reuse the NT add flow
+    };
+    body.appendChild(div);
+  });
+}
+
 async function loadReportSituace(){
   let body=document.getElementById('log-report-body');
   if(!body)return;
@@ -716,7 +770,7 @@ async function loadReportSituace(){
 }
 function clearLog(){
   logEntries=[];logErrEntries=[];logSpzEntries=[];logMissingStops={};
-  ['log-body','log-errors-body','log-spz-body','log-missing-body','log-report-body'].forEach(id=>{let el=document.getElementById(id);if(el)el.innerHTML='';});
+  ['log-body','log-errors-body','log-spz-body','log-missing-body','log-report-body','log-approx-body'].forEach(id=>{let el=document.getElementById(id);if(el)el.innerHTML='';});
 }
 window.addEventListener('error',e=>{appLog('JS chyba: '+(e.message||e)+(e.filename?` (${e.filename}:${e.lineno})`:''),'error');});
 window.addEventListener('unhandledrejection',e=>{appLog('Promise chyba: '+(e.reason&&(e.reason.message||e.reason)),'error');});
@@ -927,6 +981,11 @@ function _renderRoute(busId,data,btn){
     fetch('/api/admin/report_missing_stop',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({stop_name:s.name,bus_id:busId})}).catch(()=>{});
   });
+  // Zaloguj priblizne polohy do zalozky PRIBLI Z. POLOHA
+  if(IS_ADMIN){
+    data.stops.filter(s=>s.lat&&(s.confidence==='fuzzy'||s.confidence==='geocoded')&&!s.substitute)
+      .forEach(s=>logApproxStop(s.name, s.lat, s.lng, s.confidence));
+  }
   appLog('Trasa '+busId+': '+found+'/'+data.stops.length+' (nejiste:'+uncertain+' chybi:'+missing.length+')','info');
   let label='🗺️ Skryt trasu ('+found+'/'+data.stops.length+' zast.)'+(uncertain?' ⚠️'+uncertain:'')+(missing.length?' ❓'+missing.length:'');
   if(btn){btn.textContent=label;btn.style.background='#1e40af';}
@@ -1490,6 +1549,7 @@ TRACKED_SPZS        = set()
 WORKER_START_TIME   = None
 ADMIN_DELETED_BUSES = {}
 _stop_geo_cache     = {}
+_last_spz_auto_refresh = None   # kdy byl naposledy proveden automaticky reset SPZ u vsech busu
 
 # ── GTFS zastavky v pameti ───────────────────────────────────────────────────
 GTFS_LOADED    = False
@@ -2661,8 +2721,32 @@ def background_map_worker():
                     "admin_flag": c.get("admin_flag", False), "admin_note": c.get("admin_note", ""),
                 })
 
-            global LIVE_BUSES_DATA
+            global LIVE_BUSES_DATA, _last_spz_auto_refresh
             LIVE_BUSES_DATA = new_live_data
+
+            # ── Auto-refresh SPZ (kazdych SPZ_AUTO_REFRESH_MIN minut) ─────────
+            # Ekvivalent knofliku "Najit SPZ" pro vsechny aktivni busy najednou.
+            # Klicove: ZACHOVA aktualni SPZ hodnotu pro zobrazeni, jen uvolni zamek.
+            # Dalsi tik (10s) provede cerstve parovani - pokud najde STEJNOU SPZ
+            # = automaticky ji znovu overi (fajfka zustane). Pokud jinou = nahradi.
+            if (not _last_spz_auto_refresh or
+                    (now - _last_spz_auto_refresh).total_seconds() >= SPZ_AUTO_REFRESH_MIN * 60):
+                _last_spz_auto_refresh = now
+                refreshed = 0
+                for bid, bc in GLOBAL_BUS_CACHE.items():
+                    if (bc.get("is_offline") or bc.get("manual_spz") or
+                            bc.get("spz_frozen") or bc.get("bug_locked") or bc.get("is_train")):
+                        continue
+                    if bc.get("spz_locked"):
+                        bc["spz_locked"] = False
+                        bc["spz_verified"] = False
+                        bc["spz_3factor"] = False
+                        bc["spz_stable_ticks"] = 0
+                        bc["spz_last_audit_check"] = None
+                        refreshed += 1
+                if refreshed:
+                    print(f"[SPZ AUTO-REFRESH] Reset SPZ zamku u {refreshed} busu → dalsi tik opatri cerstve parovani", flush=True)
+
             time.sleep(10)
 
         except Exception as crash_error:
@@ -2970,6 +3054,57 @@ def api_admin_route_stops():
     return jsonify({"status": "success", "stops": stops_out, "count": len(stops_out)})
 
 
+@mapa_bp.route('/api/stops_near')
+def api_stops_near():
+    """Vraci zastavky do dane vzdalenosti od bodu (v metrech).
+    Zadny limit na pocet - nikdy nehazi 'oblast je prilis velka'."""
+    try:
+        lat = float(request.args.get('lat'))
+        lng = float(request.args.get('lng'))
+        radius_m = min(float(request.args.get('radius_m', 3000)), 10000)
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "Chybí lat/lng"}), 400
+
+    if not GTFS_STOPS:
+        return jsonify({"status": "error", "message": "GTFS data nejsou načtena"}), 503
+
+    # Hledej pres GTFS_GRID - rychle, bez skenování vsech 67k zastavek
+    pad_deg = radius_m / 100000  # hruba konverze: ~1.1 km/0.01 deg
+    lat_b0 = round((lat - pad_deg) / GTFS_GRID_SZ)
+    lat_b1 = round((lat + pad_deg) / GTFS_GRID_SZ)
+    lon_b0 = round((lng - pad_deg) / GTFS_GRID_SZ)
+    lon_b1 = round((lng + pad_deg) / GTFS_GRID_SZ)
+
+    seen = {}
+    for la_b in range(lat_b0, lat_b1 + 1):
+        for lo_b in range(lon_b0, lon_b1 + 1):
+            for idx in GTFS_GRID.get((la_b, lo_b), ()):
+                name, la, lo = GTFS_STOPS[idx]
+                d = haversine_m(lat, lng, la, lo)
+                if d > radius_m:
+                    continue
+                key = _norm_txt(name)
+                ov = STOP_OVERRIDES.get(key)
+                eff_lat = ov["lat"] if ov else la
+                eff_lng = ov["lng"] if ov else lo
+                if key not in seen or d < seen[key]["_d"]:
+                    seen[key] = {
+                        "name": name,
+                        "display_name": (ov.get("display_name") or "") if ov else "",
+                        "lat": eff_lat, "lng": eff_lng,
+                        "approx": bool(ov and ov.get("approx")),
+                        "substitute": bool(ov and ov.get("substitute")),
+                        "mode": GTFS_MODES[idx] if idx < len(GTFS_MODES) else None,
+                        "lines": (ov.get("custom_lines") if ov and ov.get("custom_lines") is not None
+                                  else (GTFS_LINES[idx] if idx < len(GTFS_LINES) else [])) or [],
+                        "_d": d,
+                    }
+
+    stops = [{k: v for k, v in s.items() if k != "_d"} for s in
+             sorted(seen.values(), key=lambda x: x["_d"])]
+    return jsonify({"status": "success", "stops": stops, "count": len(stops)})
+
+
 @mapa_bp.route('/api/stops_in_view')
 def api_stops_in_view():
     """Verejny endpoint pro 'Zobrazit zastavky' + klik na zastávku = linky."""
@@ -3185,7 +3320,18 @@ def api_lines_map():
     if not GTFS_LOADED:
         return jsonify({'status': 'error', 'message': 'GTFS data nejsou načtena'}), 503
 
+    # Normalizuj dotaz: "490735" → hledej taky "735", "490735", "735" a "490" (zkraceni)
+    # Cesty jake uzivatel zadava v PVVD (490735) vs jak jsou v GTFS (735)
+    q_raw = q
     q_digits = re.sub(r'\D', '', q) if q else ''
+    # Pokud uzivatel zadal dlouhe cislo (>=6 cifer), zkus taky posledni 3
+    q_variants = set([q_digits])
+    if len(q_digits) >= 6:
+        q_variants.add(q_digits[-3:])  # 490735 → 735
+        q_variants.add(q_digits[-4:])  # 490735 → 0735
+    # Pokud zadal kratke cislo, zkus taky s prefixem (735 → 490735) - matchuje oba
+    q_variants = {v for v in q_variants if v}
+
     LAT_MIN, LAT_MAX = 49.0, 50.5
     LON_MIN, LON_MAX = 12.0, 14.2
     line_stops = {}
@@ -3202,8 +3348,14 @@ def api_lines_map():
             # Filtruj: pokud q zadano, shoda prefixu ci sufixu
             if not (LAT_MIN <= la <= LAT_MAX and LON_MIN <= lo <= LON_MAX):
                 continue
-            if q_digits:
-                if not (l_digits == q_digits or l_digits.startswith(q_digits)):
+            if q_variants:
+                # Match: linka odpovida kterekoliv varianté dotazu
+                matched = any(
+                    l_digits == v or l_digits.startswith(v) or v == l_digits or
+                    (len(v) >= 3 and l_digits == v)
+                    for v in q_variants
+                )
+                if not matched:
                     continue
             if l not in line_stops:
                 line_stops[l] = []
