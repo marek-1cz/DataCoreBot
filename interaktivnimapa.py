@@ -100,7 +100,7 @@ HTML_HISTORIE_INDEX = """
       <th style="color:#38bdf8;padding:11px 14px;border-bottom:1px solid #334155;text-align:left;">Status / Konec</th>
       <th style="color:#38bdf8;padding:11px 14px;border-bottom:1px solid #334155;text-align:center;">Akce</th>
     </tr></thead>
-    <tbody id="historyTableBody"><tr><td colspan="6" style="text-align:center;padding:30px;color:#38bdf8;"><i class="fas fa-spinner fa-spin"></i> Načítám…</td></tr></tbody>
+    <tbody id="historyTableBody"><tr><td colspan="6" style="text-align:center;padding:30px;color:#38bdf8;"><i class="fas fa-spinner fa-spin"></i> Nacitam...</td></tr></tbody>
   </table>
 </div>
 <p style="color:#64748b;font-size:11px;margin-top:8px;">* Neomezena historie. Aktualizace kazdych 10s.</p>
@@ -183,7 +183,7 @@ HTML_HISTORIE_DETAIL = """
 <div style="background:#dc2626;color:white;padding:15px;border-radius:8px;font-weight:bold;text-align:center;margin-bottom:20px;font-size:18px;border:2px solid #991b1b;">!!! DATA NEMUSI SEDET - STRANKA JE VE VYVOJI !!!</div>
 <div style="background:#1e293b;padding:20px;border-radius:10px;border:1px solid #38bdf8;margin-bottom:25px;">
   <h2 style="color:white;margin:0 0 10px 0;font-size:28px;">🚌 Autobus SPZ: <span style="color:#f59e0b;">__SPZ__</span></h2>
-  <div id="absoluteLastPos"><span style="color:#38bdf8;"><i class="fas fa-spinner fa-spin"></i> Načítám…</span></div>
+  <div id="absoluteLastPos"><span style="color:#38bdf8;"><i class="fas fa-spinner fa-spin"></i> Nacitam...</span></div>
 </div>
 <h3 style="color:#38bdf8;margin-bottom:15px;"><i class="fas fa-route"></i> 🚌 Odjete spoje</h3>
 <div style="background:#0f172a;border-radius:10px;border:1px solid #334155;overflow-x:auto;">
@@ -243,22 +243,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 .n-warn{background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:bold;white-space:nowrap;flex-shrink:0;}
 .n-sp{flex:1;}
 .n-clock{color:#38bdf8;font-size:12px;font-weight:bold;background:rgba(56,189,248,.08);padding:4px 8px;border-radius:6px;border:1px solid #334155;white-space:nowrap;flex-shrink:0;}
-.n-btn{padding:6px 13px;border-radius:8px;font-weight:700;text-decoration:none;font-size:12px;flex-shrink:0;white-space:nowrap;transition:all .2s;cursor:pointer;display:inline-flex;align-items:center;gap:5px;letter-spacing:.2px;}
-.n-btn:hover{transform:translateY(-1px);}
-.n-home{background:rgba(56,189,248,.12);color:#38bdf8;border:1px solid rgba(56,189,248,.25);box-shadow:0 0 12px rgba(56,189,248,.08);}
-.n-home:hover{background:rgba(56,189,248,.22);box-shadow:0 0 18px rgba(56,189,248,.3);}
-.n-provoz{background:rgba(100,116,139,.15);color:#cbd5e1;border:1px solid rgba(100,116,139,.25);}
-.n-provoz:hover{background:rgba(100,116,139,.28);color:#fff;}
-.n-ad{background:rgba(30,58,95,.7);color:#38bdf8;border:1px solid rgba(56,189,248,.2);font-size:11px;padding:4px 10px;}
-.n-ad:hover{background:#1e40af;color:#fff;box-shadow:0 0 14px rgba(56,189,248,.4);}
-.n-back{background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.3);font-size:11px;padding:4px 10px;}
-.n-back:hover{background:#ef4444;color:#fff;}
-/* Nav pin button */
-#nav-pin-btn{background:none;border:none;color:#64748b;cursor:pointer;padding:4px 6px;border-radius:6px;font-size:14px;transition:.2s;flex-shrink:0;}
-#nav-pin-btn.pinned{color:#f59e0b;text-shadow:0 0 8px rgba(245,158,11,.6);}
-#nav-pin-btn:hover{color:#94a3b8;}
-/* Lines overlay buttons in legend */
-#lines-legend>div:hover{background:rgba(56,189,248,.08);}
+.n-btn{padding:5px 10px;border-radius:6px;font-weight:bold;text-decoration:none;font-size:12px;flex-shrink:0;white-space:nowrap;transition:.2s;}
+.n-home{background:#38bdf8;color:#0f172a;}.n-home:hover{background:#0284c7;color:#fff;}
+.n-provoz{background:#334155;color:#fff;}.n-provoz:hover{background:#475569;}
+.n-ad{background:#1e3a5f;color:#38bdf8;border:1px solid #334155;font-size:11px;padding:4px 8px;}.n-ad:hover{background:#1e40af;color:#fff;}
+.n-back{background:#ef4444;color:#fff;font-size:11px;padding:4px 8px;}.n-back:hover{background:#dc2626;}
 /* Výrazné tlačítko "Zobrazit zastávky" - prominentní pro veřejnost */
 #pub-stops-btn{background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#0f172a;border:none;padding:7px 14px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;flex-shrink:0;white-space:nowrap;box-shadow:0 2px 8px rgba(56,189,248,.4);transition:.2s;}
 #pub-stops-btn:hover{background:linear-gradient(135deg,#0284c7,#0ea5e9);box-shadow:0 3px 14px rgba(56,189,248,.6);}
@@ -303,18 +292,9 @@ body.nt-add-active #map{cursor:crosshair !important;}
 #ttc-btn{position:absolute;top:10px;right:10px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px;font-weight:bold;}
 #spz-results .sr-item{padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #334155;display:flex;align-items:center;gap:8px;}
 #spz-results .sr-item:hover{background:#334155;}
-.route-line-future{stroke-dasharray:14 10;animation:routeFlow 0.8s linear infinite;stroke-linecap:round;filter:drop-shadow(0 0 4px currentColor);}
-.route-line-past{stroke-linecap:round;filter:drop-shadow(0 0 1px rgba(0,0,0,.5));}
-.route-line-draw{animation:routeDraw 1.2s ease-out forwards;}
+.route-line-future{stroke-dasharray:14 10;animation:routeFlow 0.9s linear infinite;stroke-linecap:round;}
 @keyframes routeFlow{to{stroke-dashoffset:-24;}}
-@keyframes routePulse{0%,100%{box-shadow:0 0 0 0 rgba(56,189,248,.8),0 2px 6px rgba(0,0,0,.5);}50%{box-shadow:0 0 0 10px rgba(56,189,248,0),0 2px 6px rgba(0,0,0,.5);}}
-@keyframes routeDraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0;}}
-/* Floating close-route button */
-#close-route-btn{display:none;position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#ef4444;border:1.5px solid #ef4444;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(239,68,68,.35);transition:all .2s;letter-spacing:.3px;}
-#close-route-btn:hover{background:#ef4444;color:#fff;box-shadow:0 4px 28px rgba(239,68,68,.6);}
-/* Leaflet popup fade-in */
-.leaflet-popup{animation:popupIn .22s cubic-bezier(.34,1.56,.64,1);}
-@keyframes popupIn{from{opacity:0;transform:translateY(10px) scale(.96);}to{opacity:1;transform:translateY(0) scale(1);}}
+@keyframes routePulse{0%,100%{box-shadow:0 0 0 0 rgba(56,189,248,.8),0 2px 6px rgba(0,0,0,.5);}50%{box-shadow:0 0 0 8px rgba(56,189,248,0),0 2px 6px rgba(0,0,0,.5);}}
 .route-line-past{stroke-linecap:round;}
 .nt-dot{width:14px;height:14px;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.6);cursor:grab;box-sizing:border-box;}
 .nt-dot-normal{background:#38bdf8;border:2px solid white;}
@@ -379,11 +359,10 @@ body.nt-add-active #map{cursor:crosshair !important;}
       <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png" alt="OIS IDPK">
     </a>
     <!-- Výrazné tlačítko Zobrazit zastávky - první, pro veřejnost -->
-    <button id="pub-stops-btn" onclick="togglePubStops()"><i class="fas fa-bus"></i> Zastávky</button>
-    <button id="lines-overlay-btn-pub" onclick="toggleLinesPanel()" class="n-btn" style="background:rgba(56,189,248,.1);color:#38bdf8;border:1px solid rgba(56,189,248,.25);font-size:12px;padding:5px 11px;"><i class="fas fa-route"></i> Linky</button>
-    <a href="/provoz-idpk" class="n-btn n-provoz"><i class="fas fa-ticket-alt"></i> IDPK</a>
-    <a href="https://datacorebot.koyeb.app/" class="n-btn n-home"><i class="fas fa-home"></i> Domů</a>
-    <button id="nav-pin-btn" onclick="toggleNavPin()" title="Uzamknout lištu"><i class="fas fa-thumbtack"></i></button>
+    <button id="pub-stops-btn" onclick="togglePubStops()">🚏 Zastávky</button>
+    <button id="lines-overlay-btn-pub" onclick="toggleLinesPanel()" class="n-btn" style="background:#1e3a5f;color:#38bdf8;border:1px solid #334155;font-size:12px;padding:5px 10px;">🗺️ Linky</button>
+    <a href="/provoz-idpk" class="n-btn n-provoz">IDPK</a>
+    <a href="https://datacorebot.koyeb.app/" class="n-btn n-home">🏠</a>
     <div class="n-sp"></div>
     <div id="admin-mode-badge" style="display:none;background:rgba(56,189,248,0.15);color:#38bdf8;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:bold;border:1px solid rgba(56,189,248,0.3);flex-shrink:0;">Admin</div>
     <div class="n-clock"><span id="systemTimeClock">--:--:--</span></div>
@@ -396,7 +375,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
     <!-- Admin nástroje – skryté pro veřejnost -->
     <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
     <button id="nt-add-btn" onclick="startNtAdd()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:14px;flex-shrink:0;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;" title="Přidat zastávku">＋</button>
-    <!-- lines-overlay-btn-pub is already in nav for everyone -->
+    <button id="lines-overlay-btn" onclick="toggleLinesPanel()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #38bdf8;background:transparent;color:#38bdf8;cursor:pointer;" title="Zobrazit linky na mapě">🗺️ Linky</button>
     <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋</button>
     __AD_BTN__
   </nav>
@@ -409,18 +388,17 @@ body.nt-add-active #map{cursor:crosshair !important;}
   </div>
   <div id="ttm"><div id="ttb">
     <button id="ttc-btn" onclick="document.getElementById('ttm').classList.remove('open')">X</button>
-    <div id="ttc" style="color:white;">Načítám…</div>
+    <div id="ttc" style="color:white;">Nacitam...</div>
   </div></div>
-  <div id="close-route-btn" onclick="closeActiveRoute()"><i class="fas fa-times"></i> Zavřít trasu</div>
   <div id="hud">
     <div id="hf">
       <div class="hh"><span class="hl">📡 SLEDOVANI SPOJE</span><button class="hb-mn" onclick="minHud()">-</button></div>
       <div id="h-trip" class="ht">Spoj: -</div>
-      <div id="h-dest" class="hd">Načítám…</div>
+      <div id="h-dest" class="hd">Nacitam...</div>
       <div class="hr"><span style="color:#94a3b8;">SPZ:</span><span id="h-spz">-</span></div>
       <div class="hr"><span style="color:#94a3b8;">Zpozdeni:</span><span id="h-delay">-</span></div>
       <div class="hr"><span style="color:#94a3b8;">Status:</span><span id="h-status" style="color:#94a3b8;font-size:11px;">-</span></div>
-      <div class="hac"><button class="hb hb-jr" id="h-jr"><i class="fas fa-list"></i> JR</button><button class="hb hb-route" id="h-route" onclick="_hudShowRoute()" style="background:#1e3a8a;color:#93c5fd;" title="Zobrazit trasu"><i class="fas fa-route"></i></button><button class="hb" id="h-pin" onclick="togglePin()" style="background:#f59e0b;color:#0f172a;" title="Připnout kameru"><i class="fas fa-thumbtack"></i></button><button class="hb hb-st" onclick="stopFollow()"><i class="fas fa-times"></i></button></div>
+      <div class="hac"><button class="hb hb-jr" id="h-jr">📋 JR</button><button class="hb" id="h-pin" onclick="togglePin()" style="background:#334155;color:#94a3b8;" title="Prilenout kameru k busu">📍</button><button class="hb hb-st" onclick="stopFollow()">✖️ Konec</button></div>
     </div>
     <div id="hm">
       <span style="color:#38bdf8;font-size:12px;font-weight:bold;">●</span>
@@ -528,9 +506,9 @@ async function adminAction(action,busId,extraData={}){
   try{
     let res=await fetch('/api/admin/map_action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,bus_id:busId,...extraData})});
     let data=await res.json();
-    if(data.status==='success'){showAdminToast('Uloženo - system zpracovava');setTimeout(()=>{if(action==='reset_admin'||action==='recheck_spz')Object.keys(adminInputCache).forEach(k=>{if(k.endsWith('_'+busId))delete adminInputCache[k];});fetchBuses();},800);}
+    if(data.status==='success'){showAdminToast('Ulozeno - system zpracovava');setTimeout(()=>{if(action==='reset_admin'||action==='recheck_spz')Object.keys(adminInputCache).forEach(k=>{if(k.endsWith('_'+busId))delete adminInputCache[k];});fetchBuses();},800);}
     else showAdminToast('Chyba: '+(data.message||'neznama'),false);
-  }catch(e){showAdminToast('Chyba spojení',false);}
+  }catch(e){showAdminToast('Chyba spojeni',false);}
 }
 window.adminDelete=(id)=>{if(confirm('Smazat tecku? Vrati se az pri novem spoji.')){adminAction('delete',id);openPopupBusId=null;}};
 window.adminRecheck=(id)=>adminAction('recheck_spz',id);
@@ -546,32 +524,13 @@ const nav=document.getElementById('top-nav'),handle=document.getElementById('nav
 let hideT=null;
 function showNav(dur){clearTimeout(hideT);nav.classList.add('vis');handle.classList.add('hid');if(dur)hideT=setTimeout(hideNav,dur);}
 function hideNav(){nav.classList.remove('vis');handle.classList.remove('hid');}
-let navPinned=false;
-function toggleNavPin(){
-  navPinned=!navPinned;
-  let btn=document.getElementById('nav-pin-btn');
-  if(navPinned){btn.classList.add('pinned');showNav(0);}
-  else{btn.classList.remove('pinned');hideT=setTimeout(hideNav,1500);}
-}
 handle.addEventListener('click',()=>showNav(5000));
 document.addEventListener('mousemove',e=>{if(e.clientY<6)showNav();},{passive:true});
 nav.addEventListener('mouseenter',()=>clearTimeout(hideT));
-nav.addEventListener('mouseleave',()=>{if(!navPinned)hideT=setTimeout(hideNav,600);});
-document.addEventListener('touchstart',e=>{if(e.touches[0].clientY<35){showNav(4500);}else if(!nav.contains(e.target)&&!navPinned){clearTimeout(hideT);hideT=setTimeout(hideNav,400);}},{passive:true});
+nav.addEventListener('mouseleave',()=>{hideT=setTimeout(hideNav,600);});
+document.addEventListener('touchstart',e=>{if(e.touches[0].clientY<35){showNav(4500);}else if(!nav.contains(e.target)){clearTimeout(hideT);hideT=setTimeout(hideNav,400);}},{passive:true});
 showNav(4000);
-// Smart pan during tracking: allow user to pan, return to bus 1.5s after release
-let _panReturnTimer=null;
-map.on('mousedown touchstart',()=>{if(followId&&pinMode)clearTimeout(_panReturnTimer);});
-map.on('mouseup touchend',()=>{
-  if(followId&&pinMode){
-    clearTimeout(_panReturnTimer);
-    _panReturnTimer=setTimeout(()=>{
-      let b=lastArr.find(x=>x.id===followId);
-      if(b&&b.lat&&pinMode)map.panTo([b.lat,b.lng],{animate:true,duration:0.6});
-    },1500);
-  }
-});
-if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
+if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let nlb=document.getElementById('lines-overlay-btn');if(nlb)nlb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
 
 // === MAP ===
 var dLat=49.7384,dLng=13.3736,dZoom=12;
@@ -833,18 +792,16 @@ function togglePin(){
 }
 function minHud(){hudMin=true;document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';}
 function maxHud(){hudMin=false;document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';}
-function _hudShowRoute(){if(followId)toggleRoute(followId);}
 window.toggleFollow=function(busId,inflowId){
   if(followId===busId){stopFollow();return;}
   followId=busId;followInflowId=inflowId||busId;
-  // Auto-pin: kamera se okamžitě připne na bus
-  pinMode=true;
+  pinMode=false; // default: sledovat ale NEpřilepovat - uživatel může volně chodit po mapě
   let b=lastArr.find(x=>x.id===busId);
-  if(b&&b.lat)map.setView([b.lat,b.lng],16);
+  if(b&&b.lat)map.setView([b.lat,b.lng],16); // jednorázový zoom při zahájení sledování
   document.getElementById('hud').style.display='block';updateHud(b);
-  let pb=document.getElementById('h-pin');if(pb){pb.style.background='#f59e0b';pb.style.color='#0f172a';}
+  let pb=document.getElementById('h-pin');if(pb){pb.style.background='#334155';pb.style.color='#94a3b8';}
   if(hudMin){document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';}
-  appLog('Sledování zahájeno (auto-pin): bus '+busId,'info');
+  appLog(`Sledování zahájeno: bus ${busId}`,'info');
 };
 function updateHud(b){
   if(!b)return;
@@ -871,7 +828,7 @@ function updateHud(b){
 // === JR MODAL ===
 async function showTT(busId){
   document.getElementById('ttm').classList.add('open');
-  document.getElementById('ttc').innerHTML="<div style='text-align:center;padding:40px;color:#38bdf8;'><i class='fas fa-circle-notch fa-spin fa-2x'></i><p style='margin-top:14px;font-weight:bold;'>📋 Načítám JízdníŘád…...</p></div>";
+  document.getElementById('ttc').innerHTML="<div style='text-align:center;padding:40px;color:#38bdf8;'><i class='fas fa-circle-notch fa-spin fa-2x'></i><p style='margin-top:14px;font-weight:bold;'>📋 Nacitam JR z PVVD...</p></div>";
   try{let r=await fetch('/api/bus_detail/'+busId);document.getElementById('ttc').innerHTML=await r.text();}
   catch(e){document.getElementById('ttc').innerHTML="<p style='color:#ef4444;padding:20px;text-align:center;'>Chyba pri nacitani JR.</p>";}
 }
@@ -915,20 +872,11 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain){
 }
 
 // === ROUTE DISPLAY ===
-function closeActiveRoute(){
-  if(!activeRouteId)return;
-  routeLayer.clearLayers();
-  let btn=document.getElementById('route-btn-'+activeRouteId);
-  if(btn){btn.textContent='🗺️ Zobrazit trasu';btn.style.background='#334155';}
-  activeRouteId=null;
-  document.getElementById('close-route-btn').style.display='none';
-}
 async function toggleRoute(busId){
   if(activeRouteId===busId){
     routeLayer.clearLayers();activeRouteId=null;
     let btn=document.getElementById('route-btn-'+busId);
     if(btn){btn.textContent='🗺️ Zobrazit trasu';btn.style.background='#334155';}
-    let crb=document.getElementById('close-route-btn');if(crb)crb.style.display='none';
     return;
   }
   routeLayer.clearLayers();activeRouteId=busId;
@@ -978,20 +926,9 @@ function _renderRoute(busId,data,btn){
   let pastPts=pts.slice(0,Math.min(splitIdx+1,pts.length)).map(s=>[s.lat,s.lng]);
   let futurePts=pts.slice(splitIdx).map(s=>[s.lat,s.lng]);
   if(pastPts.length>=2)
-    routeLayer.addLayer(L.polyline(pastPts,{color:'#475569',weight:4,opacity:0.5,dashArray:'6,5',className:'route-line-past'}));
-  if(futurePts.length>=2){
-    // Výpočet celkové délky pro animaci draw-in
-    let futPoly=L.polyline(futurePts,{color:lC,weight:8,opacity:0.95,className:'route-line-future',
-      // drop-shadow skrze filter na SVG elementu
-    });
-    futPoly.on('add',function(){
-      let el=futPoly.getElement();
-      if(el){el.style.strokeDasharray='5000';el.style.strokeDashoffset='5000';
-        el.style.transition='stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1)';
-        setTimeout(()=>{el.style.strokeDashoffset='0';},30);}
-    });
-    routeLayer.addLayer(futPoly);
-  }
+    routeLayer.addLayer(L.polyline(pastPts,{color:'#374151',weight:3,opacity:0.45,dashArray:'5,5',className:'route-line-past'}));
+  if(futurePts.length>=2)
+    routeLayer.addLayer(L.polyline(futurePts,{color:lC,weight:5,opacity:0.92,className:'route-line-future'}));
 
   // Zastavky - kazda ma jiny vizualni styl podle stavu
   pts.forEach((stop,i)=>{
@@ -1028,7 +965,7 @@ function _renderRoute(busId,data,btn){
     }
     let m=L.marker([stop.lat,stop.lng],{icon,zIndexOffset:isFinal?300:isCurrent?200:isPast?-200:-50});
     let timeStr=stop.time?' / <b>'+stop.time+'</b>':'';
-    let typeLabel=isFinal?' — 🏁 <b>Konečná</b>':isCurrent?' ← <b>Zde</b>':'';
+    let typeLabel=isFinal?' — 🏁 <b>Konecna</b>':isCurrent?' ← <b>Zde</b>':'';
     m.bindTooltip(
       '<span style="font-size:12px;">🚏 '+stopDisplayName(stop)+'</span>'+timeStr+typeLabel+warnHtml,
       {direction:'top',className:'dark-popup'});
@@ -1039,7 +976,7 @@ function _renderRoute(busId,data,btn){
   let uncertain=data.stops.filter(s=>s.lat&&(s.confidence==='fuzzy'||s.confidence==='geocoded')).length;
   let missing=data.stops.filter(s=>!s.lat);
   missing.forEach(s=>{
-    appLog('Zastávka nenalezena: "'+s.name+'" pridej v NT','warn');
+    appLog('Zastavka nenalezena: "'+s.name+'" pridej v NT','warn');
     logMissingStop(s.name);
     fetch('/api/admin/report_missing_stop',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({stop_name:s.name,bus_id:busId})}).catch(()=>{});
@@ -1052,7 +989,6 @@ function _renderRoute(busId,data,btn){
   appLog('Trasa '+busId+': '+found+'/'+data.stops.length+' (nejiste:'+uncertain+' chybi:'+missing.length+')','info');
   let label='🗺️ Skryt trasu ('+found+'/'+data.stops.length+' zast.)'+(uncertain?' ⚠️'+uncertain:'')+(missing.length?' ❓'+missing.length:'');
   if(btn){btn.textContent=label;btn.style.background='#1e40af';}
-  let crb=document.getElementById('close-route-btn');if(crb)crb.style.display='block';
 }
 
 
@@ -1256,23 +1192,15 @@ map.on('moveend',()=>{
 let linesOverlayLayer=L.layerGroup().addTo(map);
 let lineEditorLayer=linesOverlayLayer; // backward compat alias
 let _lineColors={};
-let _lineColorOrder=[];
-// Paleta: první vždy červená, zbytek rotuje přes bezpečné barvy (žádná zelená/žlutozelená)
-const _LINE_PALETTE=['#ef4444','#a855f7','#f97316','#38bdf8','#e879f9','#fb923c','#818cf8','#c084fc','#f43f5e','#0ea5e9','#c026d3','#7c3aed'];
 function _lineColor(line){
   if(!_lineColors[line]){
-    if(_lineColorOrder.length===0){
-      _lineColors[line]=_LINE_PALETTE[0]; // první linka vždy červená
-    } else {
-      // Přiřaď deterministicky ale vyhni se zeleným/žlutým odstínům
-      let idx=(_lineColorOrder.length % (_LINE_PALETTE.length-1))+1;
-      _lineColors[line]=_LINE_PALETTE[idx];
-    }
-    _lineColorOrder.push(line);
+    // Deterministická barva z čísla linky - každá linka má vždy stejnou barvu
+    let hash=0;for(let ch of line){hash=(hash*31+ch.charCodeAt(0))&0xffffff;}
+    let h=(hash%360);
+    _lineColors[line]=`hsl(${h},75%,55%)`;
   }
   return _lineColors[line];
 }
-function _resetLineColors(){_lineColors={};_lineColorOrder=[];}
 function toggleLinesPanel(){
   let pan=document.getElementById('lines-overlay-panel');
   if(!pan)return;
@@ -1286,7 +1214,6 @@ async function loadLinesOverlay(){
   if(legend)legend.innerHTML='';
   linesOverlayLayer.clearLayers();
   _linePolylines={}; _legendRows={}; _activeLine=null;
-  _resetLineColors();
   try{
     let url='/api/lines_map'+(q.trim()?'?q='+encodeURIComponent(q.trim()):'');
     let r=await fetch(url);
@@ -1294,7 +1221,7 @@ async function loadLinesOverlay(){
     if(data.status!=='success'){if(status)status.textContent=data.message||'Chyba';return;}
     let lines=data.lines;
     let lineNames=Object.keys(lines).sort();
-    if(status)status.textContent=lineNames.length+' linek (Plzeňský kraj)';
+    if(status)status.textContent=`${lineNames.length} linek`;
     if(legend)legend.innerHTML='';
     lineNames.forEach(l=>{
       let col=_lineColor(l);
@@ -1463,7 +1390,7 @@ async function fetchBuses(){
       if(!bus.lat||!bus.lng)return;
       let mc=bus.color_class,dv=parseInt(bus.delay),dTxt='';
       if(mc==='bg-gray'||mc==='bg-bug')dTxt='<span style="color:#94a3b8;">N/A</span>';
-      else if(mc==='bg-purple')dTxt='<span style="color:#a855f7;">Konečná</span>';
+      else if(mc==='bg-purple')dTxt='<span style="color:#a855f7;">Konecna</span>';
       else if(mc==='bg-orange')dTxt='<span style="color:#f59e0b;">Vyzkum</span>';
       else if(mc==='bg-blue'){let dm=Math.abs(dv),dh=Math.floor(dm/60),dmn=dm%60;dTxt=`<span style="color:#3b82f6;">Za ${dh>0?dh+'h '+dmn+'m':dmn+' min'}</span>`;}
       else if(mc==='bg-darkblue')dTxt=`<span style="color:#60a5fa;">Naskok ${Math.abs(dv)} min</span>`;
@@ -1495,7 +1422,7 @@ async function fetchBuses(){
       let sc='#10b981';
       if(mc==='bg-bug')sc='#6b7280';else if(mc==='bg-orange')sc='#f59e0b';
       else if(bus.status.includes('prilis'))sc='#94a3b8';else if(bus.status.includes('Stoji'))sc='#ef4444';
-      else if(bus.status.includes('Konečná')||bus.status.includes('Ztrata'))sc='#a855f7';
+      else if(bus.status.includes('Konecna')||bus.status.includes('Ztrata'))sc='#a855f7';
       else if(bus.status.includes('Ceka')||bus.status.includes('Zacatek'))sc='#3b82f6';
       else if(bus.status.includes('Odstaven')||bus.status.includes('signal'))sc='#94a3b8';
       else if(bus.status.includes('Naskok'))sc='#60a5fa';
@@ -1515,7 +1442,7 @@ async function fetchBuses(){
           ${spzH}${invTxt}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
           <div class="pr" style="border:none;"><span class="pl">JR:</span><span class="pv">${dTxt}</span></div>
-          <button class="pa" onclick="showTT('${bus.id}')">📋 Zobrazit jízdní řád</button>
+          <button class="pa" onclick="showTT('${bus.id}')">📋 Zobrazit Jizdni rad</button>
           <button class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
           ${histBtn}
           <button id="route-btn-${bus.id}" class="pa pa-d" style="margin-top:5px;${rA?'background:#1e40af;':''}" onclick="toggleRoute('${bus.id}')">${rA?'🗺️ Skryt trasu':'🗺️ Zobrazit trasu'}</button>
