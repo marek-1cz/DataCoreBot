@@ -1684,20 +1684,6 @@ ADMIN_DELETED_BUSES = {}
 _stop_geo_cache     = {}
 _last_spz_auto_refresh = None   # kdy byl naposledy proveden automaticky reset SPZ u vsech busu
 
-# === SPZ MEMORY: Persistentni sledovani SPZ i kdyz bus zmizi z Arrivy ===
-# Klic: SPZ (str) -> hodnota: dict s:
-#   - last_arriva_lat, last_arriva_lng: posledni zname Arriva pozice
-#   - last_arriva_time: kdyz byla pozice z Arriva aktualizovana
-#   - last_pvvd_bus_id: ktery PVVD bus_id SPZ nosil naposledy
-#   - last_pvvd_time: kdyz byl PVVD bus naposledy viden
-#   - line: linka na ktere SPZ byla
-#   - destination: cil
-#   - trip_id: trip_id vozu (pro spojitost pri zmene linky)
-#   - verified: mel 3-faktor match
-#   - frozen: SPZ je "zamrazena" (bus v depu/na konecne)
-SPZ_MEMORY = {}  # spz -> dict
-SPZ_MEMORY_MAX_AGE_HOURS = 24  # jak dlouho pamatovat SPZ bez aktualizace
-
 # ── GTFS zastavky v pameti ───────────────────────────────────────────────────
 GTFS_LOADED    = False
 GTFS_STOPS     = []          # list of (name, lat, lon)
@@ -2270,7 +2256,6 @@ def background_map_worker():
         pass
 
     last_db_cleanup = get_prague_time()
-    last_spz_memory_cleanup = get_prague_time()
     TRIP_COUNTER = int(time.time())
 
     while True:
@@ -2278,20 +2263,6 @@ def background_map_worker():
             now = get_prague_time()
             if db_client and (now - last_db_cleanup).total_seconds() > 86400:
                 last_db_cleanup = now
-
-            # === SPZ MEMORY CLEANUP: smaz stare zaznamy (max 24h) ===
-            if (now - last_spz_memory_cleanup).total_seconds() > 3600:
-                last_spz_memory_cleanup = now
-                max_age = SPZ_MEMORY_MAX_AGE_HOURS * 3600
-                to_delete = []
-                for spz, mem in SPZ_MEMORY.items():
-                    last_time = mem.get("last_arriva_time") or mem.get("last_pvvd_time") or now
-                    if (now - last_time).total_seconds() > max_age:
-                        to_delete.append(spz)
-                for spz in to_delete:
-                    del SPZ_MEMORY[spz]
-                if to_delete:
-                    print(f"[SPZ MEMORY] Vymazano {len(to_delete)} starych zaznamu", flush=True)
 
             data_inflow, data_arriva = [], []
             url_inflow = f"{url_inflow_base}?_={int(time.time() * 1000)}"
@@ -2324,26 +2295,6 @@ def background_map_worker():
                     data_arriva = resp2.get("data", {}).get("busesCurrentLocations", [])
             except Exception:
                 pass
-
-            # === SPZ MEMORY UPDATE: uloz pozice z Arriva pro kazdou SPZ ===
-            # To nam umozni matchovat SPZ i kdyz Arriva bus momentalne nevidí
-            for b_a in data_arriva:
-                b_spz = (b_a.get("spz") or "").strip()
-                if not b_spz or b_spz == "Neznámá":
-                    continue
-                b_lat = b_a.get("latitude") or 0
-                b_lon = b_a.get("longitude") or 0
-                b_line = str(b_a.get("linkNumber") or b_a.get("linkNumberAlias") or "").strip()
-                b_dest = str(b_a.get("destinationName") or "").strip()
-                # aktualizuj/pridej do pameti
-                SPZ_MEMORY[b_spz] = {
-                    "last_arriva_lat": b_lat,
-                    "last_arriva_lng": b_lon,
-                    "last_arriva_time": now,
-                    "line": b_line,
-                    "destination": b_dest,
-                    "verified": False,  # bude nastaveno pri 3-faktor match
-                }
 
             current_inflow_ids = set()
 
@@ -2543,12 +2494,6 @@ def background_map_worker():
                         continue
                     c["is_offline"] = True
                     spz_ok = bool(c.get("spz") and c.get("spz") != "Nezn\u00e1m\u00e1")
-                    # === SPZ MEMORY: uloz posledni PVVD pozici pro offline bus ===
-                    if spz_ok and c.get("spz") in SPZ_MEMORY:
-                        SPZ_MEMORY[c["spz"]]["last_pvvd_lat"] = c["lat"]
-                        SPZ_MEMORY[c["spz"]]["last_pvvd_lng"] = c["lng"]
-                        SPZ_MEMORY[c["spz"]]["last_pvvd_time"] = now
-                        SPZ_MEMORY[c["spz"]]["last_pvvd_bus_id"] = bus_id
                     if om >= 120:
                         c["status"] = "Stoj\u00ed v depu / Vozovn\u011b"
                         c["color_class"] = "bg-gray"
@@ -2687,35 +2632,6 @@ def background_map_worker():
                     else:
                         best_spz = None
 
-                    # === SPZ MEMORY FALLBACK: kdyz Arriva nevidí bus, pouzij pamet ===
-                    # Pokud nemame best_spz z aktualnich Arriva dat, ale bus ma trip_id
-                    # a v pameti je SPZ stejne linky blizko, pouzij tu.
-                    if not best_spz and not has_valid_spz and not c.get("spz_frozen"):
-                        trip_id = c.get("trip_id")
-                        # Hledej v SPZ_MEMORY SPZ na stejne lince blizko PVVD pozice
-                        mem_candidates = []
-                        for spz, mem in SPZ_MEMORY.items():
-                            if not is_same_line(mem.get("line", ""), line):
-                                continue
-                            mem_lat = mem.get("last_arriva_lat", 0)
-                            mem_lng = mem.get("last_arriva_lng", 0)
-                            if mem_lat == 0 or mem_lng == 0:
-                                continue
-                            dist_m = haversine_m(lat1, lng1, mem_lat, mem_lng)
-                            # Pripustna vzdalenost: 1.5km (vetsi nez ARRIVA_MATCH_DIST_M=750)
-                            # protoze pamet muze byt starsi a bus se mohl pohnout
-                            if dist_m <= 1500:
-                                age_sec = (now - mem.get("last_arriva_time", now)).total_seconds()
-                                if age_sec <= SPZ_MEMORY_MAX_AGE_HOURS * 3600:
-                                    mem_candidates.append((spz, dist_m, age_sec, mem.get("verified", False)))
-                        if mem_candidates:
-                            # Preferuj: mensi vzdalenost, novejsi data, verified
-                            mem_candidates.sort(key=lambda x: (x[1], x[2], not x[3]))
-                            best_spz = mem_candidates[0][0]
-                            # Označ jako z paměti (ne 3-faktor)
-                            c["spz_from_memory"] = True
-                            appLog(f"SPZ MEMORY MATCH: bus {bus_id} (L{line}) -> {best_spz} (dist={mem_candidates[0][1]:.0f}m, age={mem_candidates[0][2]:.0f}s)", 'info')
-
                     # REPORT SITUACE: duplicitni SPZ
                     if best_spz:
                         for oth_id, oth_c in GLOBAL_BUS_CACHE.items():
@@ -2806,14 +2722,6 @@ def background_map_worker():
                                 c["spz_verified"] = True
                                 c["spz_locked"] = True
                                 c["spz_3factor"] = is_3f
-                                # === SPZ MEMORY UPDATE: oznac jako verified v pameti ===
-                                if best_spz in SPZ_MEMORY:
-                                    SPZ_MEMORY[best_spz]["verified"] = True
-                                    SPZ_MEMORY[best_spz]["last_pvvd_bus_id"] = bus_id
-                                    SPZ_MEMORY[best_spz]["last_pvvd_time"] = now
-                                    SPZ_MEMORY[best_spz]["trip_id"] = c.get("trip_id")
-                                    if is_3f:
-                                        SPZ_MEMORY[best_spz]["verified"] = True
                         else:
                             last_v = c.get("spz_last_verified")
                             if not last_v or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60:
