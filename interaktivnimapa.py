@@ -733,7 +733,7 @@ async function _saveMissingFix(missingName, lat, lng, sourceName){
       body:JSON.stringify({name:missingName, lat, lng})});
     let rd=await res.json();
     if(rd.status==='success'){
-      showAdminToast(`✅ "${missingName}" → "${sourceName||'nová poloha'}"`,true);
+      showAdminToast(`✅ "${missingName}" -> "${sourceName||'nová poloha'}"`,true);
       appLog(`Opravena zastávka: "${missingName}" @ ${lat.toFixed(5)},${lng.toFixed(5)} (${sourceName||'nový bod'})`,'ok');
       delete logMissingStops[missingName];
       if(logCurrentTab==='missing')renderMissingLog();
@@ -1253,8 +1253,8 @@ async function deleteNtStop(){
     else showAdminToast('Chyba: '+(rd.message||'?'),false);
   }catch(e){showAdminToast('Chyba spojení',false);}
 }
-// NT add mode: + button → enter name in topbar → click on map → saves
-// NT add mode: klik + → kříž → klik mapu → prompt pro název → uloží
+// NT add mode: + button -> enter name in topbar -> click on map -> saves
+// NT add mode: klik + -> kříž -> klik mapu -> prompt pro název -> uloží
 let ntPendingPrefill='';
 function startNtAdd(prefillName){
   ntAddMode=true;
@@ -2717,7 +2717,7 @@ def background_map_worker():
                             best_spz = mem_candidates[0][0]
                             # Označ jako z paměti (ne 3-faktor)
                             c["spz_from_memory"] = True
-                            appLog(f"SPZ MEMORY MATCH: bus {bus_id} (L{line}) -> {best_spz} (dist={mem_candidates[0][1]:.0f}m, age={mem_candidates[0][2]:.0f}s)", 'info')
+                            print(f"[MAPA] SPZ MEMORY MATCH: bus {bus_id} (L{line}) -> {best_spz} (dist={mem_candidates[0][1]:.0f}m, age={mem_candidates[0][2]:.0f}s)")
 
                     # REPORT SITUACE: duplicitni SPZ
                     if best_spz:
@@ -2978,7 +2978,7 @@ def background_map_worker():
                         bc["spz_last_audit_check"] = None
                         refreshed += 1
                 if refreshed:
-                    print(f"[SPZ AUTO-REFRESH] Reset SPZ zamku u {refreshed} busu → dalsi tik opatri cerstve parovani", flush=True)
+                    print(f"[SPZ AUTO-REFRESH] Reset SPZ zamku u {refreshed} busu -> dalsi tik opatri cerstve parovani", flush=True)
 
             time.sleep(10)
 
@@ -3553,16 +3553,16 @@ def api_lines_map():
     if not GTFS_LOADED:
         return jsonify({'status': 'error', 'message': 'GTFS data nejsou načtena'}), 503
 
-    # Normalizuj dotaz: "490735" → hledej taky "735", "490735", "735" a "490" (zkraceni)
+    # Normalizuj dotaz: "490735" -> hledej taky "735", "490735", "735" a "490" (zkraceni)
     # Cesty jake uzivatel zadava v PVVD (490735) vs jak jsou v GTFS (735)
     q_raw = q
     q_digits = re.sub(r'\D', '', q) if q else ''
     # Pokud uzivatel zadal dlouhe cislo (>=6 cifer), zkus taky posledni 3
     q_variants = set([q_digits])
     if len(q_digits) >= 6:
-        q_variants.add(q_digits[-3:])  # 490735 → 735
-        q_variants.add(q_digits[-4:])  # 490735 → 0735
-    # Pokud zadal kratke cislo, zkus taky s prefixem (735 → 490735) - matchuje oba
+        q_variants.add(q_digits[-3:])  # 490735 -> 735
+        q_variants.add(q_digits[-4:])  # 490735 -> 0735
+    # Pokud zadal kratke cislo, zkus taky s prefixem (735 -> 490735) - matchuje oba
     q_variants = {v for v in q_variants if v}
 
     LAT_MIN, LAT_MAX = 49.2, 50.2
