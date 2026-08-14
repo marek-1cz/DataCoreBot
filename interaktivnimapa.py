@@ -308,6 +308,11 @@ body.nt-add-active #map{cursor:crosshair !important;}
 .route-line-draw{animation:routeDraw 1.2s ease-out forwards;}
 @keyframes routeFlow{to{stroke-dashoffset:-24;}}
 @keyframes routePulse{0%,100%{box-shadow:0 0 0 0 rgba(56,189,248,.8),0 2px 6px rgba(0,0,0,.5);}50%{box-shadow:0 0 0 10px rgba(56,189,248,0),0 2px 6px rgba(0,0,0,.5);}}
+@keyframes routeDrawLoop {
+  0% { stroke-dashoffset: var(--r-len); }
+  65% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
 @keyframes routeDraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0;}}
 /* Floating close-route button */
 #close-route-btn{display:none;position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#ef4444;border:1.5px solid #ef4444;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(239,68,68,.35);transition:all .2s;letter-spacing:.3px;}
@@ -3793,11 +3798,6 @@ def api_bus_detail(bus_id):
         return f"""<div style="background:#0f172a;color:white;font-family:sans-serif;">
 <div style="background:#1e293b;padding:12px;border-radius:6px;margin-bottom:12px;">{info_html}</div>
 <div style="overflow-x:auto;"><style>table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #334155;padding:6px 10px;text-align:left}}th{{background:#0f172a;color:#38bdf8}}tr:hover td{{background:#1e293b}}.current{{background:#166534!important;font-weight:bold}}
-@keyframes routeDrawLoop {
-  0% { stroke-dashoffset: var(--r-len); }
-  65% { stroke-dashoffset: 0; }
-  100% { stroke-dashoffset: 0; }
-}
 </style>{tt_html}</div></div>"""
     except Exception as e:
         return f"<p style='color:#ef4444;padding:20px;'>Chyba: {e}</p>"
