@@ -369,6 +369,12 @@ body.nt-add-active #map{cursor:crosshair !important;}
   #nt-toggle-btn,#nt-add-btn,#log-toggle-btn{font-size:11px;padding:4px 6px;}
   #pub-stops-btn{font-size:10px;padding:4px 9px;}
 }
+
+@keyframes routeDrawLoop {
+  0% { stroke-dashoffset: var(--r-len); }
+  65% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
 </style>
 
 <div id="map-wrap">
@@ -1012,7 +1018,7 @@ function _renderRoute(busId,data,btn){
   let pastPts=pts.slice(0,Math.min(splitIdx+1,pts.length)).map(s=>[s.lat,s.lng]);
   let futurePts=pts.slice(splitIdx).map(s=>[s.lat,s.lng]);
 
-  let animFn = function(el, speed, waitMs) {
+  let animFn = function(el, speed) {
     if(!el) return;
     let attempts = 0;
     let tryAnim = () => {
@@ -1023,16 +1029,11 @@ function _renderRoute(busId,data,btn){
         return;
       }
       if (len === 0) len = 5000;
+      el.style.setProperty('--r-len', len);
       el.style.strokeDasharray = len + ' ' + (len * 10);
       let drawMs = Math.max(1500, Math.min((len / speed) * 1000, 8000));
-      let totalDur = drawMs + waitMs;
-      if (el.animate) {
-        el.animate([
-          { strokeDashoffset: len, offset: 0 },
-          { strokeDashoffset: 0, offset: drawMs / totalDur },
-          { strokeDashoffset: 0, offset: 1.0 }
-        ], { duration: totalDur, iterations: Infinity, easing: 'ease-in-out' });
-      } else el.style.strokeDashoffset = '0';
+      let totalDur = drawMs / 0.65; // Vypočítá se tak, že kreslení trvá 65% a zbytek do 100% je pauza
+      el.style.animation = 'routeDrawLoop ' + totalDur + 'ms ease-in-out infinite';
     };
     setTimeout(tryAnim, 50);
   };
@@ -1046,7 +1047,7 @@ function _renderRoute(busId,data,btn){
     routeLayer.addLayer(L.polyline(pastPts,{color:pCol,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
     let pastPoly = L.polyline(pastPts,{color:pCol,weight:7,opacity:fgOp,lineCap:'round',lineJoin:'round',className:'route-line-past'});
     if(isFinished && !isBug) {
-      pastPoly.on('add', function() { animFn(this.getElement(), 150, 3000); });
+      pastPoly.on('add', function() { animFn(this.getElement(), 150); });
     }
     routeLayer.addLayer(pastPoly);
   }
@@ -1054,31 +1055,39 @@ function _renderRoute(busId,data,btn){
     routeLayer.addLayer(L.polyline(futurePts,{color:futColor,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
     let futPoly = L.polyline(futurePts,{color:futColor,weight:7,opacity:futFgOp,lineCap:'round',lineJoin:'round',className:'route-line-past'});
     if(!isBug && !isFinished) {
-      futPoly.on('add', function() { animFn(this.getElement(), 400, 3000); });
+      futPoly.on('add', function() { animFn(this.getElement(), 400); });
     }
     routeLayer.addLayer(futPoly);
   }
   pts.forEach((stop,i)=>{
-    let isPast=stop.passed,isFinal=(i===finalIdx),isCurrent=(i===splitIdx&&splitIdx>0&&splitIdx<pts.length);
-    let lowConf=stop.confidence==='fuzzy'||stop.confidence==='geocoded';
-    let warnHtml='';
+    let isPast = (i < splitIdx);
+    let isFinal = (i === finalIdx);
+    let isBusPos = (i === splitIdx && !isFinished);
+    let isNext = (i === splitIdx + 1 && i <= finalIdx && !isFinished);
+    let lowConf = stop.confidence==='fuzzy'||stop.confidence==='geocoded';
+    let warnHtml = '';
     if(stop.substitute)warnHtml='<br><span style="color:#a855f7;font-size:10px;">🔀 náhradní</span>';
     else if(stop.approx||lowConf)warnHtml='<br><span style="color:#f59e0b;font-size:10px;">⚠️ přibl.</span>';
+    
     let icon;
     if(isFinal){
       let fc=isFinished?'#a855f7':futColor;
       icon=L.divIcon({className:'',iconSize:[24,24],iconAnchor:[12,12],html:'<div style="width:22px;height:22px;background:'+fc+';border:3px solid #fff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 0 12px '+fc+',0 2px 8px rgba(0,0,0,.8);">🏁</div>'});
-    } else if(isCurrent){
+    } else if(isNext){
       icon=L.divIcon({className:'',iconSize:[22,22],iconAnchor:[11,11],html:'<div style="width:18px;height:18px;border-radius:50%;background:'+futColor+';border:3px solid #fff;box-shadow:0 0 14px '+futColor+',0 2px 6px rgba(0,0,0,.6);animation:routePulse 1.1s ease-in-out infinite;"></div>'});
-    } else if(isPast){
+    } else if(isBusPos){
+      icon=L.divIcon({className:'',iconSize:[16,16],iconAnchor:[8,8],html:'<div style="width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid '+futColor+';box-shadow:0 0 10px '+futColor+',0 2px 6px rgba(0,0,0,.5);"></div>'});
+    } else if(isPast || isFinished){
       icon=L.divIcon({className:'',iconSize:[8,8],iconAnchor:[4,4],html:'<div style="width:5px;height:5px;border-radius:50%;background:'+(isFinished?'#a855f7':'#4b5563')+';border:1px solid '+(isFinished?'#c084fc':'#6b7280')+';opacity:0.7;"></div>'});
     } else {
       let bd=lowConf?'2px dashed #f59e0b':'2px solid rgba(255,255,255,0.9)';
       icon=L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],html:'<div style="width:10px;height:10px;border-radius:50%;background:'+futColor+';border:'+bd+';box-shadow:0 0 6px '+futColor+',0 1px 4px rgba(0,0,0,.5);"></div>'});
     }
-    let m=L.marker([stop.lat,stop.lng],{icon,zIndexOffset:isFinal?300:isCurrent?200:isPast?-200:-50});
+    
+    let zIdx = isFinal?300:isNext?250:isBusPos?200:isPast?-200:-50;
+    let m=L.marker([stop.lat,stop.lng],{icon,zIndexOffset:zIdx});
     let timeStr=stop.time?' / <b>'+stop.time+'</b>':'';
-    let typeLabel=isFinal?' — 🏁 <b>Konečná</b>':isCurrent?' ← <b>Zde</b>':'';
+    let typeLabel=isFinal?' — 🏁 <b>Konečná</b>':isNext?' ← <b>Směřuje</b>':isBusPos?' ← <b>Zde</b>':'';
     m.bindTooltip('<span style="font-size:12px;">🚏 '+stopDisplayName(stop)+'</span>'+timeStr+typeLabel+warnHtml,{direction:'top',className:'dark-popup'});
     routeLayer.addLayer(m);
   });
@@ -1631,7 +1640,13 @@ async function fetchBuses(){
         let cSpz=restoreAdminInput(bus.id,'spz')??oSpz;
         let cSt=restoreAdminInput(bus.id,'st')??bus.status;
         let cNote=restoreAdminInput(bus.id,'note')??(bus.admin_note||'');
-        popH+=`<style>.adm-inp{width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:5px;padding:7px 8px;font-size:12px;margin-top:4px;}.adm-inp:focus{outline:none;border-color:#38bdf8;}.adm-btn{width:100%;padding:11px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;touch-action:manipulation;}</style>
+        popH+=`<style>.adm-inp{width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:5px;padding:7px 8px;font-size:12px;margin-top:4px;}.adm-inp:focus{outline:none;border-color:#38bdf8;}.adm-btn{width:100%;padding:11px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;touch-action:manipulation;}
+@keyframes routeDrawLoop {
+  0% { stroke-dashoffset: var(--r-len); }
+  65% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+</style>
           <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;">
             <strong style="color:#38bdf8;font-size:11px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
             <div style="display:flex;gap:5px;margin-top:8px;">
@@ -3049,7 +3064,13 @@ def _full_page(title, body_html, is_map=False):
     html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;color:white;}
     #map-wrap{position:fixed;top:0;left:0;width:100vw;height:100vh;}
     #map{position:absolute;top:0;left:0;width:100%;height:100%!important;min-height:100vh;z-index:1;}
-  </style>"""
+  
+@keyframes routeDrawLoop {
+  0% { stroke-dashoffset: var(--r-len); }
+  65% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+</style>"""
     return Response(
         f"""<!DOCTYPE html>
 <html style="background:#0f172a;">
@@ -3771,7 +3792,13 @@ def api_bus_detail(bus_id):
             tt_html = "<p style='color:#94a3b8;'>J\u0158 nen\u00ed dostupn\u00fd.</p>"
         return f"""<div style="background:#0f172a;color:white;font-family:sans-serif;">
 <div style="background:#1e293b;padding:12px;border-radius:6px;margin-bottom:12px;">{info_html}</div>
-<div style="overflow-x:auto;"><style>table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #334155;padding:6px 10px;text-align:left}}th{{background:#0f172a;color:#38bdf8}}tr:hover td{{background:#1e293b}}.current{{background:#166534!important;font-weight:bold}}</style>{tt_html}</div></div>"""
+<div style="overflow-x:auto;"><style>table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #334155;padding:6px 10px;text-align:left}}th{{background:#0f172a;color:#38bdf8}}tr:hover td{{background:#1e293b}}.current{{background:#166534!important;font-weight:bold}}
+@keyframes routeDrawLoop {
+  0% { stroke-dashoffset: var(--r-len); }
+  65% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+</style>{tt_html}</div></div>"""
     except Exception as e:
         return f"<p style='color:#ef4444;padding:20px;'>Chyba: {e}</p>"
 
