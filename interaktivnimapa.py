@@ -391,6 +391,12 @@ body.low-graphics path,
 body.low-graphics .leaflet-marker-icon div {
   animation: none !important;
 }
+#settings-toggle-btn{background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid #334155;color:#cbd5e1;border-radius:30px;height:42px;padding:0 14px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 15px rgba(0,0,0,0.4);transition:all 0.4s cubic-bezier(.34,1.56,.64,1);overflow:hidden;position:relative;}
+#settings-toggle-btn:hover{transform:scale(1.05);box-shadow:0 6px 20px rgba(0,0,0,0.6);background:rgba(15,23,42,0.95);color:#38bdf8;border-color:#38bdf8;}
+body.dark-map #settings-toggle-btn{background:rgba(56,189,248,0.2);border:1px solid rgba(56,189,248,0.6);color:#38bdf8;box-shadow:0 0 20px rgba(56,189,248,0.3), inset 0 0 12px rgba(56,189,248,0.2);}
+body.dark-map #settings-toggle-btn:hover{background:rgba(56,189,248,0.3);box-shadow:0 0 30px rgba(56,189,248,0.5), inset 0 0 20px rgba(56,189,248,0.4);}
+#settings-toggle-btn .st-text{font-size:13px;font-weight:700;width:0px;opacity:0;transition:all 0.4s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;overflow:hidden;margin-left:0px;}
+#settings-toggle-btn:hover .st-text{width:75px;opacity:1;margin-left:6px;}
 </style>
 
 <div id="map-wrap">
@@ -546,9 +552,9 @@ body.low-graphics .leaflet-marker-icon div {
 </div>
 
 <div id="settings-btn-wrap" style="position:fixed;top:75px;right:20px;z-index:5000;display:flex;flex-direction:column;align-items:flex-end;">
-  <button id="settings-toggle-btn" onclick="toggleSettingsPanel()" style="background:rgba(56,189,248,0.2);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(56,189,248,0.6);color:#38bdf8;border-radius:30px;height:50px;padding:0 16px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(56,189,248,0.3), inset 0 0 12px rgba(56,189,248,0.2);transition:all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);overflow:hidden;position:relative;" onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 0 30px rgba(56,189,248,0.5), inset 0 0 20px rgba(56,189,248,0.4)';this.style.background='rgba(56,189,248,0.3)';this.querySelector('.st-text').style.width='80px';this.querySelector('.st-text').style.opacity='1';this.querySelector('.st-text').style.marginLeft='8px';" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 0 20px rgba(56,189,248,0.3), inset 0 0 12px rgba(56,189,248,0.2)';this.style.background='rgba(56,189,248,0.2)';this.querySelector('.st-text').style.width='0px';this.querySelector('.st-text').style.opacity='0';this.querySelector('.st-text').style.marginLeft='0px';">
+  <button id="settings-toggle-btn" onclick="toggleSettingsPanel()">
     <i class="fas fa-cog"></i>
-    <span class="st-text" style="font-size:14px;font-weight:700;width:0px;opacity:0;transition:all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);white-space:nowrap;overflow:hidden;margin-left:0px;">Nastavení</span>
+    <span class="st-text">Nastavení</span>
   </button>
   
   <div id="settings-panel" style="display:none;margin-top:15px;background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(56,189,248,0.4);border-radius:16px;width:280px;box-shadow:0 10px 40px rgba(0,0,0,0.8);padding:20px;transform-origin:top right;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
@@ -663,6 +669,11 @@ window.setBaseMap = function(type) {
   if(activeBtn) {
     activeBtn.style.borderColor = '#38bdf8';
     activeBtn.style.color = '#38bdf8';
+  }
+  if (type === 'dark') {
+    document.body.classList.add('dark-map');
+  } else {
+    document.body.classList.remove('dark-map');
   }
 };
 
