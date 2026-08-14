@@ -380,6 +380,16 @@ body.nt-add-active #map{cursor:crosshair !important;}
   65% { stroke-dashoffset: 0; }
   100% { stroke-dashoffset: 0; }
 }
+/* Low Graphics Mode overrides */
+body.low-graphics * {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+body.low-graphics .route-line-past,
+body.low-graphics path,
+body.low-graphics .leaflet-marker-icon div {
+  animation: none !important;
+}
 </style>
 
 <div id="map-wrap">
@@ -403,6 +413,22 @@ body.nt-add-active #map{cursor:crosshair !important;}
         style="background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;padding:5px 9px;font-size:12px;width:110px;outline:none;"
         oninput="spzSearch(this.value)" onblur="setTimeout(()=>document.getElementById('spz-results').innerHTML='',200)">
       <div id="spz-results" style="position:absolute;top:34px;right:0;background:#1e293b;border:1px solid #334155;border-radius:8px;min-width:220px;z-index:4000;box-shadow:0 8px 20px rgba(0,0,0,.7);max-height:220px;overflow-y:auto;"></div>
+    </div>
+    <div id="settings-btn-wrap" style="position:relative;flex-shrink:0;margin-left:8px;">
+      <button id="settings-toggle-btn" onclick="toggleSettingsPanel()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:5px 9px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.3s;overflow:hidden;white-space:nowrap;width:32px;" onmouseover="this.style.width='115px'; this.style.color='#38bdf8'; this.querySelector('span').style.opacity='1'" onmouseout="this.style.width='32px'; this.style.color='#94a3b8'; this.querySelector('span').style.opacity='0'">
+        <i class="fas fa-cog"></i> <span style="font-size:12px;font-weight:bold;opacity:0;transition:opacity 0.3s;">Nastavení</span>
+      </button>
+      <div id="settings-panel" style="display:none;position:absolute;top:38px;right:0;background:#0f172a;border:1px solid #38bdf8;border-radius:8px;width:240px;z-index:4600;box-shadow:0 8px 25px rgba(0,0,0,.8);padding:12px;">
+        <div style="color:#38bdf8;font-weight:bold;font-size:13px;margin-bottom:12px;border-bottom:1px solid #1e293b;padding-bottom:6px;">⚙️ Nastavení Mapy</div>
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:12px;">
+          <div>
+            <div style="color:white;font-size:12px;font-weight:bold;">Low Graphics Mode</div>
+            <div style="color:#64748b;font-size:10px;margin-top:2px;">Vypne animace a efekty pro plynulejší běh na slabších zařízeních.</div>
+          </div>
+          <input type="checkbox" id="settings-low-graphics" onchange="toggleLowGraphics(this.checked)" style="transform:scale(1.2);">
+        </label>
+        <button onclick="toggleSettingsPanel()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:5px;padding:6px;font-size:11px;cursor:pointer;">Zavřít</button>
+      </div>
     </div>
     <!-- Admin nástroje – skryté pro veřejnost -->
     <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
@@ -1009,22 +1035,17 @@ function _renderRoute(busId,data,btn){
   if(splitIdx===-1)splitIdx=pts.length;
 
   let isAtStop = false;
+  let isWaiting = bus && ((bus.status && (bus.status.includes('ceka') || bus.status.includes('zacatek'))) || status === 'bg-gray');
+  
   if (bus && bus.lat && bus.lng && pts.length > 0) {
-    let minDist = Infinity;
-    let closestIdx = 0;
-    pts.forEach((s, i) => {
-      let dx = s.lat - bus.lat, dy = s.lng - bus.lng;
-      let d = dx*dx + dy*dy;
-      if (d < minDist) { minDist = d; closestIdx = i; }
-    });
-    splitIdx = closestIdx;
-    
-    // Zjištění, zda je bus zhruba na zastávce (méně než ~150 metrů)
     if (typeof map !== 'undefined' && pts[splitIdx]) {
       let distMeters = map.distance([bus.lat, bus.lng], [pts[splitIdx].lat, pts[splitIdx].lng]);
       if (distMeters < 150) isAtStop = true;
     }
   }
+
+  // U čekajících autobusů budeme animovat celou trasu od první zastávky
+  if (isWaiting) splitIdx = 0;
 
   let finalIdx=pts.length-1;
   let pastPts=pts.slice(0,Math.min(splitIdx+1,pts.length)).map(s=>[s.lat,s.lng]);
@@ -1091,8 +1112,8 @@ function _renderRoute(busId,data,btn){
   pts.forEach((stop,i)=>{
     let isPast = (i < splitIdx);
     let isFinal = (i === finalIdx);
-    let isBusPos = (i === splitIdx && !isFinished);
-    let isNext = (i === splitIdx + 1 && i <= finalIdx && !isFinished);
+    let isBusPos = (i === splitIdx && !isFinished && !isWaiting);
+    let isNext = (i === splitIdx + 1 && i <= finalIdx && !isFinished && !isWaiting) || (isWaiting && i === 0);
     let lowConf = stop.confidence==='fuzzy'||stop.confidence==='geocoded';
     let warnHtml = '';
     if(stop.substitute)warnHtml='<br><span style="color:#a855f7;font-size:10px;">🔀 náhradní</span>';
@@ -1107,7 +1128,10 @@ function _renderRoute(busId,data,btn){
     } else if(isBusPos){
       icon=L.divIcon({className:'',iconSize:[16,16],iconAnchor:[8,8],html:'<div style="width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid '+futColor+';box-shadow:0 0 10px '+futColor+',0 2px 6px rgba(0,0,0,.5);"></div>'});
     } else if(isPast || isFinished){
-      icon=L.divIcon({className:'',iconSize:[12,12],iconAnchor:[6,6],html:'<div style="width:9px;height:9px;border-radius:50%;background:'+(isFinished?'#a855f7':'#cbd5e1')+';border:1.5px solid '+(isFinished?'#c084fc':'#64748b')+';opacity:1;"></div>'});
+      let w = isFinished ? 11 : 9;
+      let bg = isFinished ? '#d8b4fe' : '#cbd5e1';
+      let brd = isFinished ? '#9333ea' : '#64748b';
+      icon=L.divIcon({className:'',iconSize:[w+3,w+3],iconAnchor:[(w+3)/2,(w+3)/2],html:'<div style="width:'+w+'px;height:'+w+'px;border-radius:50%;background:'+bg+';border:1.5px solid '+brd+';opacity:1;"></div>'});
     } else {
       let bd=lowConf?'2px dashed #f59e0b':'2px solid rgba(255,255,255,0.9)';
       icon=L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],html:'<div style="width:10px;height:10px;border-radius:50%;background:'+futColor+';border:'+bd+';box-shadow:0 0 6px '+futColor+',0 1px 4px rgba(0,0,0,.5);"></div>'});
@@ -1116,7 +1140,9 @@ function _renderRoute(busId,data,btn){
     let zIdx = isFinal?300:isNext?250:isBusPos?200:isPast?-200:-50;
     let m=L.marker([stop.lat,stop.lng],{icon,zIndexOffset:zIdx});
     let timeStr=stop.time?' / <b>'+stop.time+'</b>':'';
-    let typeLabel=isFinal?' — 🏁 <b>Konečná</b>':isNext?' ← <b>Následující zastávka</b>':isBusPos?(isAtStop?' ← <b>Aktuální zastávka</b>':' ← <b>Poslední potvrzená zastávka</b>'):'';
+    let typeLabel='';
+    if (isWaiting && i === 0) typeLabel = ' — ⏳ <b>Počáteční zastávka</b>';
+    else typeLabel = isFinal?' — 🏁 <b>Konečná</b>':isNext?' ← <b>Následující zastávka</b>':isBusPos?(isAtStop?' ← <b>Aktuální zastávka</b>':' ← <b>Poslední potvrzená zastávka</b>'):'';
     m.bindTooltip('<span style="font-size:12px;">🚏 '+stopDisplayName(stop)+'</span>'+timeStr+typeLabel+warnHtml,{direction:'top',className:'dark-popup'});
     routeLayer.addLayer(m);
   });
@@ -1400,6 +1426,22 @@ let _lineColors={};
 let _lineColorOrder=[];
 // Paleta: první vždy červená, zbytek rotuje přes bezpečné barvy (žádná zelená/žlutozelená)
 const _LINE_PALETTE=['#ef4444','#a855f7','#f97316','#38bdf8','#e879f9','#fb923c','#818cf8','#c084fc','#f43f5e','#0ea5e9','#c026d3','#7c3aed'];
+
+function toggleSettingsPanel() {
+  let p = document.getElementById('settings-panel');
+  if(p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+function toggleLowGraphics(enabled) {
+  localStorage.setItem('low_graphics_mode', enabled ? '1' : '0');
+  if (enabled) document.body.classList.add('low-graphics');
+  else document.body.classList.remove('low-graphics');
+}
+document.addEventListener('DOMContentLoaded', () => {
+  let lgm = localStorage.getItem('low_graphics_mode') === '1';
+  let cb = document.getElementById('settings-low-graphics');
+  if(cb) cb.checked = lgm;
+  if(lgm) document.body.classList.add('low-graphics');
+});
 function _lineColor(line){
   if(!_lineColors[line]){
     if(_lineColorOrder.length===0){
