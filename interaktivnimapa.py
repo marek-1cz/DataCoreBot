@@ -232,6 +232,7 @@ HTML_MAPA = """
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
+.dark-tiles { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
 #map-wrap{position:fixed;top:0;left:0;width:100vw;height:100vh;}
 #map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;}
 #panel-zone{position:fixed;top:0;left:0;right:0;height:40px;z-index:3000;pointer-events:none;}
@@ -566,9 +567,9 @@ body.low-graphics .leaflet-marker-icon div {
     </label>
   </div>
 
-  <button id="settings-toggle-btn" onclick="toggleSettingsPanel()" style="background:rgba(15,23,42,0.85);backdrop-filter:blur(12px);border:1px solid rgba(56,189,248,0.5);color:#38bdf8;border-radius:30px;height:50px;padding:0 16px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,0.5);transition:all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);overflow:hidden;position:relative;" onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 8px 25px rgba(56,189,248,0.3)';this.querySelector('.st-text').style.width='80px';this.querySelector('.st-text').style.opacity='1';this.querySelector('.st-text').style.marginLeft='8px';" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 6px 20px rgba(0,0,0,0.5)';this.querySelector('.st-text').style.width='0px';this.querySelector('.st-text').style.opacity='0';this.querySelector('.st-text').style.marginLeft='0px';">
+  <button id="settings-toggle-btn" onclick="toggleSettingsPanel()" style="background:rgba(56,189,248,0.05);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(56,189,248,0.3);color:#38bdf8;border-radius:30px;height:50px;padding:0 16px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(56,189,248,0.15), inset 0 0 12px rgba(56,189,248,0.1);transition:all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);overflow:hidden;position:relative;" onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 0 30px rgba(56,189,248,0.3), inset 0 0 20px rgba(56,189,248,0.2)';this.style.background='rgba(56,189,248,0.1)';this.querySelector('.st-text').style.width='80px';this.querySelector('.st-text').style.opacity='1';this.querySelector('.st-text').style.marginLeft='8px';" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 0 20px rgba(56,189,248,0.15), inset 0 0 12px rgba(56,189,248,0.1)';this.style.background='rgba(56,189,248,0.05)';this.querySelector('.st-text').style.width='0px';this.querySelector('.st-text').style.opacity='0';this.querySelector('.st-text').style.marginLeft='0px';">
     <i class="fas fa-cog"></i>
-    <span class="st-text" style="font-size:14px;font-weight:700;width:0px;opacity:0;transition:all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);white-space:nowrap;overflow:hidden;margin-left:0px;">Nastavení</span>
+    <span class="st-text" style="font-size:14px;font-weight:700;width:0px;opacity:0;transition:all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);white-space:nowrap;overflow:hidden;margin-left:0px;">Nastavení</span>
   </button>
 </div>
 
@@ -641,12 +642,12 @@ var map=L.map('map',{zoomControl:false}).setView([dLat,dLng],dZoom);
 L.control.zoom({position:'bottomleft'}).addTo(map);
 window.mapLayers = {
   osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
-  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
+  dark: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap', className: 'dark-tiles'}),
   bw: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
   satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'})
 };
-window.currentBaseMap = localStorage.getItem('ois_basemap') || 'dark';
-if (!window.mapLayers[window.currentBaseMap]) window.currentBaseMap = 'dark';
+window.currentBaseMap = localStorage.getItem('ois_basemap') || 'osm';
+if (!window.mapLayers[window.currentBaseMap]) window.currentBaseMap = 'osm';
 window.mapLayers[window.currentBaseMap].addTo(map);
 
 window.setBaseMap = function(type) {
