@@ -157,7 +157,7 @@ async function loadIndex(){
       const sH=`<div style="color:#94a3b8;font-size:11px;margin-bottom:2px;">${row.status||''}</div><div style="color:${sc};font-weight:bold;font-size:13px;">${el}</div>`;
       const rt=`${spz} ${linka} ${row.status||''}`.toLowerCase(),rs=(row.status||'').toLowerCase();
       html+=`<tr style="border-bottom:1px solid #334155;" data-search="${rt}" data-linka="${lb}" data-status="${rs}">
-        <td style="padding:11px 14px;vertical-align:middle;font-size:13px;">${dayStr}<br><span style="color:#475569;font-size:10px;">${(row.trip_id||'').substring(0,10)}...</span></td>
+        <td style="padding:11px 14px;vertical-align:middle;font-size:13px;">${dayStr}<br><span style="color:#475569;font-size:10px;">${String(row.trip_id||'').substring(0,10)}...</span></td>
         <td style="padding:11px 14px;vertical-align:middle;">${spzB}${fb}</td>
         <td style="padding:11px 14px;vertical-align:middle;"><strong style="color:white;">${linka}</strong>${row.jr_link?`<br><a href="${row.jr_link}" target="_blank" style="font-size:11px;color:#38bdf8;">JR <i class="fas fa-external-link-alt"></i></a>`:''}</td>
         <td style="padding:11px 14px;vertical-align:middle;font-size:13px;">${ss}</td>
@@ -870,7 +870,7 @@ window.toggleFollow=function(busId,inflowId){
 };
 function updateHud(b){
   if(!b)return;
-  document.getElementById('h-trip').textContent='Spoj: '+(b.line||'?')+(b.trip_id?' / '+b.trip_id.replace('TRIP-','').substring(0,8):'');
+  document.getElementById('h-trip').textContent='Spoj: '+(b.line||'?')+(b.trip_id?' / '+String(b.trip_id).replace('TRIP-','').substring(0,8):'');
   document.getElementById('h-dest').innerHTML='-> '+(b.destination||'Neznamy cil');
   let se=document.getElementById('h-spz');
   if(b.spz&&b.spz!=='Neznama'){
@@ -1554,11 +1554,11 @@ async function fetchBuses(){
       if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>🔍 Vyzkum - bus byl zasekly, nyni jede</b></div>`;
       let sc='#10b981';
       if(mc==='bg-bug')sc='#6b7280';else if(mc==='bg-orange')sc='#f59e0b';
-      else if(bus.status.includes('prilis'))sc='#94a3b8';else if(bus.status.includes('Stoji'))sc='#ef4444';
-      else if(bus.status.includes('Konečná')||bus.status.includes('Ztrata'))sc='#a855f7';
-      else if(bus.status.includes('Ceka')||bus.status.includes('Zacatek'))sc='#3b82f6';
-      else if(bus.status.includes('Odstaven')||bus.status.includes('signal'))sc='#94a3b8';
-      else if(bus.status.includes('Naskok'))sc='#60a5fa';
+      else if(bus.status?.includes('prilis'))sc='#94a3b8';else if(bus.status?.includes('Stoji'))sc='#ef4444';
+      else if(bus.status?.includes('Konečná')||bus.status?.includes('Ztrata'))sc='#a855f7';
+      else if(bus.status?.includes('Ceka')||bus.status?.includes('Zacatek'))sc='#3b82f6';
+      else if(bus.status?.includes('Odstaven')||bus.status?.includes('signal'))sc='#94a3b8';
+      else if(bus.status?.includes('Naskok'))sc='#60a5fa';
       let fTxt=(followId===bus.id)?'✖️ Zrusit sledovani':'📡 Sledovat';
       let fSt=(followId===bus.id)?'background:#ef4444;color:#fff;':'background:#3b82f6;color:#fff;';
       let afH=bus.admin_flag?'<span style="background:#1e40af;color:#93c5fd;padding:2px 7px;border-radius:10px;font-size:10px;margin-left:6px;font-weight:bold;">Admin uprava</span>':'';
@@ -1727,7 +1727,10 @@ opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
 
 
 def get_prague_time():
-    return datetime.now(ZoneInfo('Europe/Prague')).replace(tzinfo=None)
+    try:
+        return datetime.now(ZoneInfo('Europe/Prague')).replace(tzinfo=None)
+    except Exception:
+        return datetime.now()
 
 
 def is_same_line(l1, l2):
