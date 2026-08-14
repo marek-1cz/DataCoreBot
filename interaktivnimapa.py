@@ -1023,24 +1023,41 @@ function _renderRoute(busId,data,btn){
   let pastPts=pts.slice(0,Math.min(splitIdx+1,pts.length)).map(s=>[s.lat,s.lng]);
   let futurePts=pts.slice(splitIdx).map(s=>[s.lat,s.lng]);
 
-  let animFn = function(el, speed) {
+  let animFn = function(el, speed, ptsArr) {
     if(!el) return;
-    let attempts = 0;
-    let tryAnim = () => {
-      let len = el.getTotalLength ? el.getTotalLength() : 0;
-      if (len === 0 && attempts < 10) {
-        attempts++;
-        setTimeout(tryAnim, 50);
-        return;
+    let updateLength = () => {
+      let len = 0;
+      if (typeof map !== 'undefined' && ptsArr && ptsArr.length > 1) {
+        for(let i=1; i<ptsArr.length; i++){
+          let p1 = map.latLngToLayerPoint(ptsArr[i-1]);
+          let p2 = map.latLngToLayerPoint(ptsArr[i]);
+          let dx = p1.x - p2.x, dy = p1.y - p2.y;
+          len += Math.sqrt(dx*dx + dy*dy);
+        }
+      } else {
+        len = el.getTotalLength ? el.getTotalLength() : 5000;
       }
       if (len === 0) len = 5000;
+      
       el.style.setProperty('--r-len', len);
       el.style.strokeDasharray = len + ' ' + (len * 10);
       let drawMs = Math.max(1500, Math.min((len / speed) * 1000, 8000));
-      let totalDur = drawMs / 0.65; // Vypočítá se tak, že kreslení trvá 65% a zbytek do 100% je pauza
+      let totalDur = drawMs / 0.65;
       el.style.animation = 'routeDrawLoop ' + totalDur + 'ms ease-in-out infinite';
     };
-    setTimeout(tryAnim, 50);
+    
+    updateLength();
+    
+    if (typeof map !== 'undefined') {
+      let onZoom = () => {
+        if (!el || !el.parentNode) {
+          map.off('zoomend', onZoom);
+          return;
+        }
+        updateLength();
+      };
+      map.on('zoomend', onZoom);
+    }
   };
 
   let bgOp = isBug ? 0.05 : 0.18;
@@ -1052,7 +1069,7 @@ function _renderRoute(busId,data,btn){
     routeLayer.addLayer(L.polyline(pastPts,{color:pCol,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
     let pastPoly = L.polyline(pastPts,{color:pCol,weight:7,opacity:fgOp,lineCap:'round',lineJoin:'round',className:'route-line-past'});
     if(isFinished && !isBug) {
-      pastPoly.on('add', function() { animFn(this.getElement(), 150); });
+      pastPoly.on('add', function() { animFn(this.getElement(), 150, pastPts); });
     }
     routeLayer.addLayer(pastPoly);
   }
@@ -1060,7 +1077,7 @@ function _renderRoute(busId,data,btn){
     routeLayer.addLayer(L.polyline(futurePts,{color:futColor,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
     let futPoly = L.polyline(futurePts,{color:futColor,weight:7,opacity:futFgOp,lineCap:'round',lineJoin:'round',className:'route-line-past'});
     if(!isBug && !isFinished) {
-      futPoly.on('add', function() { animFn(this.getElement(), 400); });
+      futPoly.on('add', function() { animFn(this.getElement(), 400, futurePts); });
     }
     routeLayer.addLayer(futPoly);
   }
@@ -1083,7 +1100,7 @@ function _renderRoute(busId,data,btn){
     } else if(isBusPos){
       icon=L.divIcon({className:'',iconSize:[16,16],iconAnchor:[8,8],html:'<div style="width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid '+futColor+';box-shadow:0 0 10px '+futColor+',0 2px 6px rgba(0,0,0,.5);"></div>'});
     } else if(isPast || isFinished){
-      icon=L.divIcon({className:'',iconSize:[8,8],iconAnchor:[4,4],html:'<div style="width:5px;height:5px;border-radius:50%;background:'+(isFinished?'#a855f7':'#4b5563')+';border:1px solid '+(isFinished?'#c084fc':'#6b7280')+';opacity:0.7;"></div>'});
+      icon=L.divIcon({className:'',iconSize:[10,10],iconAnchor:[5,5],html:'<div style="width:7px;height:7px;border-radius:50%;background:'+(isFinished?'#a855f7':'#94a3b8')+';border:1.5px solid '+(isFinished?'#c084fc':'#cbd5e1')+';opacity:1;"></div>'});
     } else {
       let bd=lowConf?'2px dashed #f59e0b':'2px solid rgba(255,255,255,0.9)';
       icon=L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],html:'<div style="width:10px;height:10px;border-radius:50%;background:'+futColor+';border:'+bd+';box-shadow:0 0 6px '+futColor+',0 1px 4px rgba(0,0,0,.5);"></div>'});
@@ -1092,7 +1109,7 @@ function _renderRoute(busId,data,btn){
     let zIdx = isFinal?300:isNext?250:isBusPos?200:isPast?-200:-50;
     let m=L.marker([stop.lat,stop.lng],{icon,zIndexOffset:zIdx});
     let timeStr=stop.time?' / <b>'+stop.time+'</b>':'';
-    let typeLabel=isFinal?' — 🏁 <b>Konečná</b>':isNext?' ← <b>Směřuje</b>':isBusPos?' ← <b>Zde</b>':'';
+    let typeLabel=isFinal?' — 🏁 <b>Konečná</b>':isNext?' ← <b>Následující zastávka</b>':isBusPos?' ← <b>Aktuální zastávka</b>':'';
     m.bindTooltip('<span style="font-size:12px;">🚏 '+stopDisplayName(stop)+'</span>'+timeStr+typeLabel+warnHtml,{direction:'top',className:'dark-popup'});
     routeLayer.addLayer(m);
   });
