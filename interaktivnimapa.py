@@ -544,21 +544,32 @@ body.low-graphics .leaflet-marker-icon div {
   </div>
 </div>
 
-<div id="settings-btn-wrap" style="position:fixed;bottom:20px;right:20px;z-index:5000;">
-  <button id="settings-toggle-btn" onclick="toggleSettingsPanel()" style="background:#0f172a;border:2px solid #38bdf8;color:#38bdf8;border-radius:50%;width:46px;height:46px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 15px rgba(56,189,248,.3);transition:all 0.3s;" onmouseover="this.style.transform='scale(1.1)'; this.style.boxShadow='0 6px 20px rgba(56,189,248,.5)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 15px rgba(56,189,248,.3)'">
-    <i class="fas fa-cog"></i>
-  </button>
-  <div id="settings-panel" style="display:none;position:absolute;bottom:56px;right:0;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;width:260px;box-shadow:0 10px 30px rgba(0,0,0,.9);padding:16px;">
-    <div style="color:#38bdf8;font-weight:bold;font-size:14px;margin-bottom:14px;border-bottom:1px solid #1e293b;padding-bottom:8px;text-align:center;">⚙️ Nastavení Mapy</div>
-    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:16px;background:rgba(255,255,255,0.05);padding:10px;border-radius:8px;">
+<div id="settings-btn-wrap" style="position:fixed;bottom:20px;right:20px;z-index:5000;display:flex;flex-direction:column;align-items:flex-end;">
+  <div id="settings-panel" style="display:none;margin-bottom:15px;background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(56,189,248,0.4);border-radius:16px;width:280px;box-shadow:0 10px 40px rgba(0,0,0,0.8);padding:20px;transform-origin:bottom right;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+    <div style="color:#38bdf8;font-weight:800;font-size:15px;margin-bottom:16px;text-align:center;letter-spacing:1px;text-transform:uppercase;">Nastavení</div>
+    
+    <div style="color:white;font-size:12px;font-weight:bold;margin-bottom:8px;padding-left:4px;">Základní mapa</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
+      <button id="bm-btn-dark" class="bm-btn" onclick="setBaseMap('dark')" style="background:#1e293b;border:1px solid #38bdf8;color:#38bdf8;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🌙 Tmavá</button>
+      <button id="bm-btn-osm" class="bm-btn" onclick="setBaseMap('osm')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🗺️ Výchozí</button>
+      <button id="bm-btn-satellite" class="bm-btn" onclick="setBaseMap('satellite')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🛰️ Satelit</button>
+      <button id="bm-btn-bw" class="bm-btn" onclick="setBaseMap('bw')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">⚪ Černobílá</button>
+    </div>
+
+    <div style="color:white;font-size:12px;font-weight:bold;margin-bottom:8px;padding-left:4px;">Výkon</div>
+    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:rgba(255,255,255,0.03);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);transition:0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
       <div style="flex:1;">
-        <div style="color:white;font-size:13px;font-weight:bold;">Low Graphics Mode</div>
-        <div style="color:#94a3b8;font-size:11px;margin-top:4px;line-height:1.3;">Vypne animace a efekty pro plynulejší běh.</div>
+        <div style="color:white;font-size:13px;font-weight:bold;">Nízké detaily</div>
+        <div style="color:#94a3b8;font-size:11px;margin-top:4px;line-height:1.4;">Vypne plynulé animace.</div>
       </div>
-      <input type="checkbox" id="settings-low-graphics" onchange="toggleLowGraphics(this.checked)" style="transform:scale(1.3);margin-left:10px;">
+      <input type="checkbox" id="settings-low-graphics" onchange="toggleLowGraphics(this.checked)" style="transform:scale(1.2);margin-left:12px;accent-color:#38bdf8;">
     </label>
-    <button onclick="toggleSettingsPanel()" style="width:100%;background:#38bdf8;border:none;color:#0f172a;border-radius:6px;padding:8px;font-size:13px;font-weight:bold;cursor:pointer;">Hotovo</button>
   </div>
+
+  <button id="settings-toggle-btn" onclick="toggleSettingsPanel()" style="background:rgba(15,23,42,0.85);backdrop-filter:blur(12px);border:1px solid rgba(56,189,248,0.5);color:#38bdf8;border-radius:30px;height:50px;padding:0 16px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,0.5);transition:all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);overflow:hidden;position:relative;" onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 8px 25px rgba(56,189,248,0.3)';this.querySelector('.st-text').style.width='80px';this.querySelector('.st-text').style.opacity='1';this.querySelector('.st-text').style.marginLeft='8px';" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 6px 20px rgba(0,0,0,0.5)';this.querySelector('.st-text').style.width='0px';this.querySelector('.st-text').style.opacity='0';this.querySelector('.st-text').style.marginLeft='0px';">
+    <i class="fas fa-cog"></i>
+    <span class="st-text" style="font-size:14px;font-weight:700;width:0px;opacity:0;transition:all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);white-space:nowrap;overflow:hidden;margin-left:0px;">Nastavení</span>
+  </button>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -628,7 +639,34 @@ var hp=window.location.hash.replace('#','').split(',');
 if(hp.length===2&&!isNaN(hp[0])&&!isNaN(hp[1])&&hp[0]!==""){dLat=parseFloat(hp[0]);dLng=parseFloat(hp[1]);dZoom=17;}
 var map=L.map('map',{zoomControl:false}).setView([dLat,dLng],dZoom);
 L.control.zoom({position:'bottomleft'}).addTo(map);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'(c) OpenStreetMap'}).addTo(map);
+window.mapLayers = {
+  osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
+  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
+  bw: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'})
+};
+window.currentBaseMap = localStorage.getItem('ois_basemap') || 'dark';
+if (!window.mapLayers[window.currentBaseMap]) window.currentBaseMap = 'dark';
+window.mapLayers[window.currentBaseMap].addTo(map);
+
+window.setBaseMap = function(type) {
+  Object.values(window.mapLayers).forEach(layer => map.removeLayer(layer));
+  window.mapLayers[type].addTo(map);
+  window.currentBaseMap = type;
+  localStorage.setItem('ois_basemap', type);
+  document.querySelectorAll('.bm-btn').forEach(b => {
+    b.style.borderColor = '#334155';
+    b.style.color = '#cbd5e1';
+  });
+  let activeBtn = document.getElementById('bm-btn-' + type);
+  if(activeBtn) {
+    activeBtn.style.borderColor = '#38bdf8';
+    activeBtn.style.color = '#38bdf8';
+  }
+};
+
+// Inicializace aktivního tlačítka při načtení
+setTimeout(() => setBaseMap(window.currentBaseMap), 100);
 setTimeout(()=>map.invalidateSize(),300);
 var ml=L.layerGroup().addTo(map);
 var routeLayer=L.layerGroup().addTo(map);
