@@ -545,8 +545,13 @@ body.low-graphics .leaflet-marker-icon div {
   </div>
 </div>
 
-<div id="settings-btn-wrap" style="position:fixed;bottom:20px;right:20px;z-index:5000;display:flex;flex-direction:column;align-items:flex-end;">
-  <div id="settings-panel" style="display:none;margin-bottom:15px;background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(56,189,248,0.4);border-radius:16px;width:280px;box-shadow:0 10px 40px rgba(0,0,0,0.8);padding:20px;transform-origin:bottom right;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+<div id="settings-btn-wrap" style="position:fixed;top:75px;right:20px;z-index:5000;display:flex;flex-direction:column;align-items:flex-end;">
+  <button id="settings-toggle-btn" onclick="toggleSettingsPanel()" style="background:rgba(56,189,248,0.2);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(56,189,248,0.6);color:#38bdf8;border-radius:30px;height:50px;padding:0 16px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(56,189,248,0.3), inset 0 0 12px rgba(56,189,248,0.2);transition:all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);overflow:hidden;position:relative;" onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 0 30px rgba(56,189,248,0.5), inset 0 0 20px rgba(56,189,248,0.4)';this.style.background='rgba(56,189,248,0.3)';this.querySelector('.st-text').style.width='80px';this.querySelector('.st-text').style.opacity='1';this.querySelector('.st-text').style.marginLeft='8px';" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 0 20px rgba(56,189,248,0.3), inset 0 0 12px rgba(56,189,248,0.2)';this.style.background='rgba(56,189,248,0.2)';this.querySelector('.st-text').style.width='0px';this.querySelector('.st-text').style.opacity='0';this.querySelector('.st-text').style.marginLeft='0px';">
+    <i class="fas fa-cog"></i>
+    <span class="st-text" style="font-size:14px;font-weight:700;width:0px;opacity:0;transition:all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);white-space:nowrap;overflow:hidden;margin-left:0px;">Nastavení</span>
+  </button>
+  
+  <div id="settings-panel" style="display:none;margin-top:15px;background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(56,189,248,0.4);border-radius:16px;width:280px;box-shadow:0 10px 40px rgba(0,0,0,0.8);padding:20px;transform-origin:top right;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
     <div style="color:#38bdf8;font-weight:800;font-size:15px;margin-bottom:16px;text-align:center;letter-spacing:1px;text-transform:uppercase;">Nastavení</div>
     
     <div style="color:white;font-size:12px;font-weight:bold;margin-bottom:8px;padding-left:4px;">Základní mapa</div>
@@ -566,11 +571,6 @@ body.low-graphics .leaflet-marker-icon div {
       <input type="checkbox" id="settings-low-graphics" onchange="toggleLowGraphics(this.checked)" style="transform:scale(1.2);margin-left:12px;accent-color:#38bdf8;">
     </label>
   </div>
-
-  <button id="settings-toggle-btn" onclick="toggleSettingsPanel()" style="background:rgba(56,189,248,0.05);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(56,189,248,0.3);color:#38bdf8;border-radius:30px;height:50px;padding:0 16px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(56,189,248,0.15), inset 0 0 12px rgba(56,189,248,0.1);transition:all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);overflow:hidden;position:relative;" onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 0 30px rgba(56,189,248,0.3), inset 0 0 20px rgba(56,189,248,0.2)';this.style.background='rgba(56,189,248,0.1)';this.querySelector('.st-text').style.width='80px';this.querySelector('.st-text').style.opacity='1';this.querySelector('.st-text').style.marginLeft='8px';" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 0 20px rgba(56,189,248,0.15), inset 0 0 12px rgba(56,189,248,0.1)';this.style.background='rgba(56,189,248,0.05)';this.querySelector('.st-text').style.width='0px';this.querySelector('.st-text').style.opacity='0';this.querySelector('.st-text').style.marginLeft='0px';">
-    <i class="fas fa-cog"></i>
-    <span class="st-text" style="font-size:14px;font-weight:700;width:0px;opacity:0;transition:all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);white-space:nowrap;overflow:hidden;margin-left:0px;">Nastavení</span>
-  </button>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
