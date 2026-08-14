@@ -999,29 +999,42 @@ function _renderRoute(busId,data,btn){
   let finalIdx=pts.length-1;
   let pastPts=pts.slice(0,Math.min(splitIdx+1,pts.length)).map(s=>[s.lat,s.lng]);
   let futurePts=pts.slice(splitIdx).map(s=>[s.lat,s.lng]);
+  let animFn = function(el, speed, waitMs) {
+    if(!el) return;
+    setTimeout(() => {
+      let len = (el.getTotalLength && el.getTotalLength()) || 2000;
+      el.style.strokeDasharray = len + ' ' + len;
+      let drawMs = Math.max(1500, Math.min((len / speed) * 1000, 8000));
+      let totalDur = drawMs + waitMs;
+      if (el.animate) {
+        el.animate([
+          { strokeDashoffset: len, offset: 0 },
+          { strokeDashoffset: 0, offset: drawMs / totalDur },
+          { strokeDashoffset: 0, offset: 1.0 }
+        ], { duration: totalDur, iterations: Infinity, easing: 'ease-in-out' });
+      } else el.style.strokeDashoffset = '0';
+    }, 50);
+  };
+
+  let bgOp = isBug ? 0.05 : 0.18;
+  let fgOp = isBug ? 0.3 : 0.85;
+  let futFgOp = isBug ? 0.3 : 0.95;
+
   if(pastPts.length>=2){
     let pCol = isFinished ? '#a855f7' : pastColor;
-    routeLayer.addLayer(L.polyline(pastPts,{color:pCol,weight:14,opacity:0.18,lineCap:'round',lineJoin:'round'}));
-    routeLayer.addLayer(L.polyline(pastPts,{color:pCol,weight:7,opacity:0.85,lineCap:'round',lineJoin:'round',className:'route-line-past'}));
+    routeLayer.addLayer(L.polyline(pastPts,{color:pCol,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
+    let pastPoly = L.polyline(pastPts,{color:pCol,weight:7,opacity:fgOp,lineCap:'round',lineJoin:'round',className:'route-line-past'});
+    if(isFinished && !isBug) {
+      pastPoly.on('add', function() { animFn(this.getElement(), 150, 3000); });
+    }
+    routeLayer.addLayer(pastPoly);
   }
   if(futurePts.length>=2){
-    routeLayer.addLayer(L.polyline(futurePts,{color:futColor,weight:14,opacity:0.18,lineCap:'round',lineJoin:'round'}));
-    let cls = (isBug || isFinished) ? 'route-line-past' : 'route-line-future';
-    let futPoly=L.polyline(futurePts,{color:futColor,weight:7,opacity:0.95,lineCap:'round',lineJoin:'round',className:cls});
-    futPoly.on('add',function(){
-      let el=this.getElement();
-      if(!el)return;
-      el.style.strokeDasharray='8000';el.style.strokeDashoffset='8000';
-      el.style.transition='stroke-dashoffset 1.6s cubic-bezier(.4,0,.2,1)';
-      setTimeout(()=>{
-        el.style.strokeDashoffset='0';
-        setTimeout(()=>{
-          el.style.strokeDasharray='';
-          el.style.strokeDashoffset='';
-          el.style.transition='';
-        }, 1600);
-      },30);
-    });
+    routeLayer.addLayer(L.polyline(futurePts,{color:futColor,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
+    let futPoly = L.polyline(futurePts,{color:futColor,weight:7,opacity:futFgOp,lineCap:'round',lineJoin:'round',className:'route-line-past'});
+    if(!isBug && !isFinished) {
+      futPoly.on('add', function() { animFn(this.getElement(), 400, 3000); });
+    }
     routeLayer.addLayer(futPoly);
   }
   pts.forEach((stop,i)=>{
