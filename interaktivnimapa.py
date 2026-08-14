@@ -232,7 +232,6 @@ HTML_MAPA = """
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
-.carto-dark { filter: brightness(1.3) contrast(1.1); }
 .dark-map .leaflet-marker-pane, .dark-map .leaflet-overlay-pane { filter: brightness(0.85); }
 #map-wrap{position:fixed;top:0;left:0;width:100vw;height:100vh;}
 #map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;}
@@ -398,6 +397,11 @@ body.dark-map #settings-toggle-btn{background:rgba(56,189,248,0.2);border:1px so
 body.dark-map #settings-toggle-btn:hover{background:rgba(56,189,248,0.3);box-shadow:0 0 30px rgba(56,189,248,0.5), inset 0 0 20px rgba(56,189,248,0.4);}
 #settings-toggle-btn .st-text{font-size:13px;font-weight:700;width:0px;opacity:0;transition:all 0.4s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;overflow:hidden;margin-left:0px;}
 #settings-toggle-btn:hover .st-text{width:75px;opacity:1;margin-left:6px;}
+
+body.nav-static #top-nav { top: 0 !important; }
+body.nav-static #nav-handle { display: none !important; }
+body.nav-glass #top-nav { top: 15px !important; left: 50% !important; transform: translateX(-50%); width: 96%; max-width: 1000px; border-radius: 20px; border: 1px solid rgba(56,189,248,0.4); background: rgba(15,23,42,0.65); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 10px 40px rgba(0,0,0,0.8), inset 0 0 20px rgba(56,189,248,0.15); }
+body.nav-glass #nav-handle { display: none !important; }
 </style>
 
 <div id="map-wrap">
@@ -569,6 +573,13 @@ body.dark-map #settings-toggle-btn:hover{background:rgba(56,189,248,0.3);box-sha
       <button id="bm-btn-bw" class="bm-btn" onclick="setBaseMap('bw')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">⚪ Černobílá</button>
     </div>
 
+    <div style="color:white;font-size:12px;font-weight:bold;margin-bottom:8px;padding-left:4px;">Design navigace</div>
+    <select id="settings-nav-design" onchange="setNavDesign(this.value)" style="width:100%;background:rgba(255,255,255,0.05);color:white;border:1px solid #334155;border-radius:8px;padding:8px;font-size:12px;outline:none;cursor:pointer;margin-bottom:16px;">
+      <option value="classic" style="background:#0f172a;">Klasická (srolovací)</option>
+      <option value="static" style="background:#0f172a;">Klasická stálá</option>
+      <option value="glass" style="background:#0f172a;">Nový design (Glass)</option>
+    </select>
+
     <div style="color:white;font-size:12px;font-weight:bold;margin-bottom:8px;padding-left:4px;">Výkon</div>
     <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:rgba(255,255,255,0.03);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);transition:0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
       <div style="flex:1;">
@@ -649,7 +660,7 @@ var map=L.map('map',{zoomControl:false}).setView([dLat,dLng],dZoom);
 L.control.zoom({position:'bottomleft'}).addTo(map);
 window.mapLayers = {
   osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
-  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO', className: 'carto-dark'}),
+  dark: L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; Stadia Maps'}),
   bw: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
   satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'})
 };
@@ -680,6 +691,19 @@ window.setBaseMap = function(type) {
 
 // Inicializace aktivního tlačítka při načtení
 setTimeout(() => setBaseMap(window.currentBaseMap), 100);
+
+window.setNavDesign = function(type) {
+  document.body.classList.remove('nav-static', 'nav-glass');
+  if(type === 'static') document.body.classList.add('nav-static');
+  if(type === 'glass') document.body.classList.add('nav-glass');
+  localStorage.setItem('ois_nav_design', type);
+};
+setTimeout(() => {
+  let savedNav = localStorage.getItem('ois_nav_design') || 'classic';
+  let el = document.getElementById('settings-nav-design');
+  if(el) el.value = savedNav;
+  window.setNavDesign(savedNav);
+}, 100);
 setTimeout(()=>map.invalidateSize(),300);
 var ml=L.layerGroup().addTo(map);
 var routeLayer=L.layerGroup().addTo(map);
