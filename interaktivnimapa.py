@@ -1038,6 +1038,32 @@ function _renderRoute(busId,data,btn){
   let isWaiting = bus && (bus.status && (bus.status.includes('ceka') || bus.status.includes('zacatek')));
   
   if (bus && bus.lat && bus.lng && pts.length > 0) {
+    let minDist = Infinity;
+    let rawClosestIdx = 0;
+    pts.forEach((s, i) => {
+      let dx = s.lat - bus.lat, dy = s.lng - bus.lng;
+      let d = dx*dx + dy*dy;
+      if (d < minDist) { minDist = d; rawClosestIdx = i; }
+    });
+
+    // Logika 10s zpoždění na přepnutí zastávky (debounce)
+    if (!window._stopDelays) window._stopDelays = {};
+    let now = Date.now();
+    let state = window._stopDelays[busId] || { activeIdx: rawClosestIdx, candidateIdx: rawClosestIdx, candidateTime: now };
+    
+    if (rawClosestIdx !== state.candidateIdx) {
+      state.candidateIdx = rawClosestIdx;
+      state.candidateTime = now;
+    }
+    
+    // Pokud je kandidát stabilní alespoň 10 sekund (10000 ms), potvrdíme ho
+    if (now - state.candidateTime >= 10000) {
+      state.activeIdx = state.candidateIdx;
+    }
+    
+    window._stopDelays[busId] = state;
+    splitIdx = state.activeIdx;
+
     if (typeof map !== 'undefined' && pts[splitIdx]) {
       let distMeters = map.distance([bus.lat, bus.lng], [pts[splitIdx].lat, pts[splitIdx].lng]);
       if (distMeters < 150) isAtStop = true;
