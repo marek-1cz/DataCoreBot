@@ -1033,14 +1033,47 @@ function _renderRoute(busId,data,btn){
   let pts=data.stops.filter(s=>s.lat&&s.lng);
   let splitIdx=pts.findIndex(s=>!s.passed);
   if(splitIdx===-1)splitIdx=pts.length;
-
   let isAtStop = false;
   let isWaiting = bus && (bus.status && (bus.status.includes('ceka') || bus.status.includes('zacatek')));
-  
   if (bus && bus.lat && bus.lng && pts.length > 0) {
+    let bestDist = Infinity;
+    let bestSegmentIdx = 0;
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      let v = pts[i];
+      let w = pts[i+1];
+      let p = bus;
+      
+      let l2 = (w.lat - v.lat)**2 + (w.lng - v.lng)**2;
+      let t = 0;
+      if (l2 !== 0) {
+        t = ((p.lat - v.lat) * (w.lat - v.lat) + (p.lng - v.lng) * (w.lng - v.lng)) / l2;
+        t = Math.max(0, Math.min(1, t));
+      }
+      
+      let projLat = v.lat + t * (w.lat - v.lat);
+      let projLng = v.lng + t * (w.lng - v.lng);
+      let d2 = (p.lat - projLat)**2 + (p.lng - projLng)**2;
+      
+      if (d2 < bestDist) {
+        bestDist = d2;
+        bestSegmentIdx = i;
+      }
+    }
+    
+    splitIdx = bestSegmentIdx;
+
     if (typeof map !== 'undefined' && pts[splitIdx]) {
       let distMeters = map.distance([bus.lat, bus.lng], [pts[splitIdx].lat, pts[splitIdx].lng]);
       if (distMeters < 150) isAtStop = true;
+      else if (splitIdx + 1 < pts.length) {
+        // Pokud je už blízko k další zastávce (např. na křižovatce těsně před ní)
+        let distNext = map.distance([bus.lat, bus.lng], [pts[splitIdx+1].lat, pts[splitIdx+1].lng]);
+        if (distNext < 150) {
+           isAtStop = true;
+           splitIdx = splitIdx + 1;
+        }
+      }
     }
   }
 
