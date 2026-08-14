@@ -400,8 +400,16 @@ body.dark-map #settings-toggle-btn:hover{background:rgba(56,189,248,0.3);box-sha
 
 body.nav-static #top-nav { top: 0 !important; }
 body.nav-static #nav-handle { display: none !important; }
-body.nav-glass #top-nav { top: 15px !important; left: 50% !important; transform: translateX(-50%); width: 96%; max-width: 1000px; border-radius: 20px; border: 1px solid rgba(56,189,248,0.4); background: rgba(15,23,42,0.65); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 10px 40px rgba(0,0,0,0.8), inset 0 0 20px rgba(56,189,248,0.15); }
+body.nav-glass #top-nav { top: 15px !important; left: 50% !important; transform: translateX(-50%); width: 96%; max-width: 1000px; border-radius: 20px; border: 1px solid rgba(56,189,248,0.4); background: rgba(15,23,42,0.65); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 10px 40px rgba(0,0,0,0.8), inset 0 0 20px rgba(56,189,248,0.15); height: auto !important; min-height: 58px; flex-wrap: wrap; padding: 10px 14px; justify-content: center; }
 body.nav-glass #nav-handle { display: none !important; }
+body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !important; }
+
+@media (max-width: 768px) {
+  #top-nav { flex-wrap: wrap; height: auto; min-height: 58px; padding-top: 10px; padding-bottom: 10px; justify-content: center; gap: 8px; }
+  body.nav-glass #top-nav { width: 98%; border-radius: 14px; top: 10px !important; }
+  .n-warn, .n-clock, .n-title { display: none !important; }
+  #spz-search-inp { width: 90px !important; }
+}
 </style>
 
 <div id="map-wrap">
@@ -699,7 +707,7 @@ window.setNavDesign = function(type) {
   localStorage.setItem('ois_nav_design', type);
 };
 setTimeout(() => {
-  let savedNav = localStorage.getItem('ois_nav_design') || 'classic';
+  let savedNav = localStorage.getItem('ois_nav_design') || 'glass';
   let el = document.getElementById('settings-nav-design');
   if(el) el.value = savedNav;
   window.setNavDesign(savedNav);
