@@ -999,17 +999,28 @@ function _renderRoute(busId,data,btn){
   let finalIdx=pts.length-1;
   let pastPts=pts.slice(0,Math.min(splitIdx+1,pts.length)).map(s=>[s.lat,s.lng]);
   let futurePts=pts.slice(splitIdx).map(s=>[s.lat,s.lng]);
-  if(pastPts.length>=2)
-    routeLayer.addLayer(L.polyline(pastPts,{color:isFinished?'#a855f7':pastColor,weight:5,opacity:0.55,dashArray:'5,5',className:'route-line-past'}));
+  if(pastPts.length>=2){
+    let pCol = isFinished ? '#a855f7' : pastColor;
+    routeLayer.addLayer(L.polyline(pastPts,{color:pCol,weight:14,opacity:0.18,lineCap:'round',lineJoin:'round'}));
+    routeLayer.addLayer(L.polyline(pastPts,{color:pCol,weight:7,opacity:0.85,lineCap:'round',lineJoin:'round',className:'route-line-past'}));
+  }
   if(futurePts.length>=2){
     routeLayer.addLayer(L.polyline(futurePts,{color:futColor,weight:14,opacity:0.18,lineCap:'round',lineJoin:'round'}));
-    let futPoly=L.polyline(futurePts,{color:futColor,weight:7,opacity:0.95,lineCap:'round',lineJoin:'round',className:isBug?'route-line-past':'route-line-future'});
+    let cls = (isBug || isFinished) ? 'route-line-past' : 'route-line-future';
+    let futPoly=L.polyline(futurePts,{color:futColor,weight:7,opacity:0.95,lineCap:'round',lineJoin:'round',className:cls});
     futPoly.on('add',function(){
       let el=this.getElement();
       if(!el)return;
       el.style.strokeDasharray='8000';el.style.strokeDashoffset='8000';
       el.style.transition='stroke-dashoffset 1.6s cubic-bezier(.4,0,.2,1)';
-      setTimeout(()=>{el.style.strokeDashoffset='0';},30);
+      setTimeout(()=>{
+        el.style.strokeDashoffset='0';
+        setTimeout(()=>{
+          el.style.strokeDasharray='';
+          el.style.strokeDashoffset='';
+          el.style.transition='';
+        }, 1600);
+      },30);
     });
     routeLayer.addLayer(futPoly);
   }
