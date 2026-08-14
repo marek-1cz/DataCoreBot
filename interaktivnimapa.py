@@ -996,14 +996,34 @@ function _renderRoute(busId,data,btn){
   let pts=data.stops.filter(s=>s.lat&&s.lng);
   let splitIdx=pts.findIndex(s=>!s.passed);
   if(splitIdx===-1)splitIdx=pts.length;
+
+  if (bus && bus.lat && bus.lng && pts.length > 0) {
+    let minDist = Infinity;
+    let closestIdx = 0;
+    pts.forEach((s, i) => {
+      let dx = s.lat - bus.lat, dy = s.lng - bus.lng;
+      let d = dx*dx + dy*dy;
+      if (d < minDist) { minDist = d; closestIdx = i; }
+    });
+    splitIdx = closestIdx;
+  }
+
   let finalIdx=pts.length-1;
   let pastPts=pts.slice(0,Math.min(splitIdx+1,pts.length)).map(s=>[s.lat,s.lng]);
   let futurePts=pts.slice(splitIdx).map(s=>[s.lat,s.lng]);
+
   let animFn = function(el, speed, waitMs) {
     if(!el) return;
-    setTimeout(() => {
-      let len = (el.getTotalLength && el.getTotalLength()) || 2000;
-      el.style.strokeDasharray = len + ' ' + len;
+    let attempts = 0;
+    let tryAnim = () => {
+      let len = el.getTotalLength ? el.getTotalLength() : 0;
+      if (len === 0 && attempts < 10) {
+        attempts++;
+        setTimeout(tryAnim, 50);
+        return;
+      }
+      if (len === 0) len = 5000;
+      el.style.strokeDasharray = len + ' ' + (len * 10);
       let drawMs = Math.max(1500, Math.min((len / speed) * 1000, 8000));
       let totalDur = drawMs + waitMs;
       if (el.animate) {
@@ -1013,7 +1033,8 @@ function _renderRoute(busId,data,btn){
           { strokeDashoffset: 0, offset: 1.0 }
         ], { duration: totalDur, iterations: Infinity, easing: 'ease-in-out' });
       } else el.style.strokeDashoffset = '0';
-    }, 50);
+    };
+    setTimeout(tryAnim, 50);
   };
 
   let bgOp = isBug ? 0.05 : 0.18;
