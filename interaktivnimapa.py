@@ -1002,12 +1002,13 @@ function _renderRoute(busId,data,btn){
   let status=bus?bus.color_class:'bg-gray';
   let isBug=status==='bg-bug'||status==='bg-gray';
   let isFinished=status==='bg-purple';
-  let futColor=isBug||isFinished?'#a855f7':delay>300?'#ef4444':'#3b82f6';
-  let pastColor=isBug||isFinished?'#6b7280':'#475569';
+  let futColor=isBug||isFinished?'#a855f7':delay>=5?'#ef4444':'#3b82f6';
+  let pastColor=isBug||isFinished?'#6b7280':'#64748b';
   let pts=data.stops.filter(s=>s.lat&&s.lng);
   let splitIdx=pts.findIndex(s=>!s.passed);
   if(splitIdx===-1)splitIdx=pts.length;
 
+  let isAtStop = false;
   if (bus && bus.lat && bus.lng && pts.length > 0) {
     let minDist = Infinity;
     let closestIdx = 0;
@@ -1017,6 +1018,12 @@ function _renderRoute(busId,data,btn){
       if (d < minDist) { minDist = d; closestIdx = i; }
     });
     splitIdx = closestIdx;
+    
+    // Zjištění, zda je bus zhruba na zastávce (méně než ~150 metrů)
+    if (typeof map !== 'undefined' && pts[splitIdx]) {
+      let distMeters = map.distance([bus.lat, bus.lng], [pts[splitIdx].lat, pts[splitIdx].lng]);
+      if (distMeters < 150) isAtStop = true;
+    }
   }
 
   let finalIdx=pts.length-1;
@@ -1100,7 +1107,7 @@ function _renderRoute(busId,data,btn){
     } else if(isBusPos){
       icon=L.divIcon({className:'',iconSize:[16,16],iconAnchor:[8,8],html:'<div style="width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid '+futColor+';box-shadow:0 0 10px '+futColor+',0 2px 6px rgba(0,0,0,.5);"></div>'});
     } else if(isPast || isFinished){
-      icon=L.divIcon({className:'',iconSize:[10,10],iconAnchor:[5,5],html:'<div style="width:7px;height:7px;border-radius:50%;background:'+(isFinished?'#a855f7':'#94a3b8')+';border:1.5px solid '+(isFinished?'#c084fc':'#cbd5e1')+';opacity:1;"></div>'});
+      icon=L.divIcon({className:'',iconSize:[12,12],iconAnchor:[6,6],html:'<div style="width:9px;height:9px;border-radius:50%;background:'+(isFinished?'#a855f7':'#cbd5e1')+';border:1.5px solid '+(isFinished?'#c084fc':'#64748b')+';opacity:1;"></div>'});
     } else {
       let bd=lowConf?'2px dashed #f59e0b':'2px solid rgba(255,255,255,0.9)';
       icon=L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],html:'<div style="width:10px;height:10px;border-radius:50%;background:'+futColor+';border:'+bd+';box-shadow:0 0 6px '+futColor+',0 1px 4px rgba(0,0,0,.5);"></div>'});
@@ -1109,7 +1116,7 @@ function _renderRoute(busId,data,btn){
     let zIdx = isFinal?300:isNext?250:isBusPos?200:isPast?-200:-50;
     let m=L.marker([stop.lat,stop.lng],{icon,zIndexOffset:zIdx});
     let timeStr=stop.time?' / <b>'+stop.time+'</b>':'';
-    let typeLabel=isFinal?' — 🏁 <b>Konečná</b>':isNext?' ← <b>Následující zastávka</b>':isBusPos?' ← <b>Aktuální zastávka</b>':'';
+    let typeLabel=isFinal?' — 🏁 <b>Konečná</b>':isNext?' ← <b>Následující zastávka</b>':isBusPos?(isAtStop?' ← <b>Aktuální zastávka</b>':' ← <b>Poslední potvrzená zastávka</b>'):'';
     m.bindTooltip('<span style="font-size:12px;">🚏 '+stopDisplayName(stop)+'</span>'+timeStr+typeLabel+warnHtml,{direction:'top',className:'dark-popup'});
     routeLayer.addLayer(m);
   });
@@ -1607,7 +1614,7 @@ async function fetchBuses(){
       else dTxt=`<span style="color:#10b981;">+${dv} min</span>`;
 
       let icon=L.divIcon({className:'',html:buildMarkerSvg(mc,bus.bearing,bus.line,bus.is_train),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
-      let marker=L.marker([bus.lat,bus.lng],{icon});
+      let marker=L.marker([bus.lat,bus.lng],{icon,zIndexOffset:1000});
       marker._busId=bus.id;
       marker.on('popupopen',()=>{openPopupBusId=bus.id;});
       marker.on('popupclose',()=>{
