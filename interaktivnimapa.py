@@ -414,22 +414,7 @@ body.low-graphics .leaflet-marker-icon div {
         oninput="spzSearch(this.value)" onblur="setTimeout(()=>document.getElementById('spz-results').innerHTML='',200)">
       <div id="spz-results" style="position:absolute;top:34px;right:0;background:#1e293b;border:1px solid #334155;border-radius:8px;min-width:220px;z-index:4000;box-shadow:0 8px 20px rgba(0,0,0,.7);max-height:220px;overflow-y:auto;"></div>
     </div>
-    <div id="settings-btn-wrap" style="position:relative;flex-shrink:0;margin-left:8px;">
-      <button id="settings-toggle-btn" onclick="toggleSettingsPanel()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:5px 9px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.3s;overflow:hidden;white-space:nowrap;width:32px;" onmouseover="this.style.width='115px'; this.style.color='#38bdf8'; this.querySelector('span').style.opacity='1'" onmouseout="this.style.width='32px'; this.style.color='#94a3b8'; this.querySelector('span').style.opacity='0'">
-        <i class="fas fa-cog"></i> <span style="font-size:12px;font-weight:bold;opacity:0;transition:opacity 0.3s;">Nastavení</span>
-      </button>
-      <div id="settings-panel" style="display:none;position:absolute;top:38px;right:0;background:#0f172a;border:1px solid #38bdf8;border-radius:8px;width:240px;z-index:4600;box-shadow:0 8px 25px rgba(0,0,0,.8);padding:12px;">
-        <div style="color:#38bdf8;font-weight:bold;font-size:13px;margin-bottom:12px;border-bottom:1px solid #1e293b;padding-bottom:6px;">⚙️ Nastavení Mapy</div>
-        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:12px;">
-          <div>
-            <div style="color:white;font-size:12px;font-weight:bold;">Low Graphics Mode</div>
-            <div style="color:#64748b;font-size:10px;margin-top:2px;">Vypne animace a efekty pro plynulejší běh na slabších zařízeních.</div>
-          </div>
-          <input type="checkbox" id="settings-low-graphics" onchange="toggleLowGraphics(this.checked)" style="transform:scale(1.2);">
-        </label>
-        <button onclick="toggleSettingsPanel()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:5px;padding:6px;font-size:11px;cursor:pointer;">Zavřít</button>
-      </div>
-    </div>
+
     <!-- Admin nástroje – skryté pro veřejnost -->
     <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
     <button id="nt-add-btn" onclick="startNtAdd()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:14px;flex-shrink:0;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;" title="Přidat zastávku">＋</button>
@@ -556,6 +541,23 @@ body.low-graphics .leaflet-marker-icon div {
     <input id="nt-add-name" type="text" placeholder="Název zastávky" style="background:#0f172a;color:white;border:1px solid #475569;border-radius:4px;padding:4px 8px;font-size:12px;width:160px;">
     <button onclick="confirmNtAdd()" style="background:#10b981;color:white;border:none;border-radius:4px;padding:5px 10px;font-size:12px;cursor:pointer;">Přidat</button>
     <button onclick="cancelNtAdd()" style="background:#334155;color:#94a3b8;border:none;border-radius:4px;padding:5px 10px;font-size:12px;cursor:pointer;">Zrušit</button>
+  </div>
+</div>
+
+<div id="settings-btn-wrap" style="position:fixed;bottom:20px;right:20px;z-index:5000;">
+  <button id="settings-toggle-btn" onclick="toggleSettingsPanel()" style="background:#0f172a;border:2px solid #38bdf8;color:#38bdf8;border-radius:50%;width:46px;height:46px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 15px rgba(56,189,248,.3);transition:all 0.3s;" onmouseover="this.style.transform='scale(1.1)'; this.style.boxShadow='0 6px 20px rgba(56,189,248,.5)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 15px rgba(56,189,248,.3)'">
+    <i class="fas fa-cog"></i>
+  </button>
+  <div id="settings-panel" style="display:none;position:absolute;bottom:56px;right:0;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;width:260px;box-shadow:0 10px 30px rgba(0,0,0,.9);padding:16px;">
+    <div style="color:#38bdf8;font-weight:bold;font-size:14px;margin-bottom:14px;border-bottom:1px solid #1e293b;padding-bottom:8px;text-align:center;">⚙️ Nastavení Mapy</div>
+    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:16px;background:rgba(255,255,255,0.05);padding:10px;border-radius:8px;">
+      <div style="flex:1;">
+        <div style="color:white;font-size:13px;font-weight:bold;">Low Graphics Mode</div>
+        <div style="color:#94a3b8;font-size:11px;margin-top:4px;line-height:1.3;">Vypne animace a efekty pro plynulejší běh.</div>
+      </div>
+      <input type="checkbox" id="settings-low-graphics" onchange="toggleLowGraphics(this.checked)" style="transform:scale(1.3);margin-left:10px;">
+    </label>
+    <button onclick="toggleSettingsPanel()" style="width:100%;background:#38bdf8;border:none;color:#0f172a;border-radius:6px;padding:8px;font-size:13px;font-weight:bold;cursor:pointer;">Hotovo</button>
   </div>
 </div>
 
@@ -1145,8 +1147,8 @@ function _renderRoute(busId,data,btn){
   pts.forEach((stop,i)=>{
     let isPast = (i < splitIdx);
     let isFinal = (i === finalIdx);
-    let isBusPos = (i === splitIdx && !isFinished && !isWaiting);
-    let isNext = (i === splitIdx + 1 && i <= finalIdx && !isFinished && !isWaiting) || (isWaiting && i === 0);
+    let isBusPos = (i === splitIdx && !isFinished && !isWaiting && !isBug);
+    let isNext = (i === splitIdx + 1 && i <= finalIdx && !isFinished && !isWaiting && !isBug) || (isWaiting && i === 0 && !isBug);
     let lowConf = stop.confidence==='fuzzy'||stop.confidence==='geocoded';
     let warnHtml = '';
     if(stop.substitute)warnHtml='<br><span style="color:#a855f7;font-size:10px;">🔀 náhradní</span>';
