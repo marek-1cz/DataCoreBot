@@ -232,7 +232,8 @@ HTML_MAPA = """
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
-.dark-tiles { filter: invert(100%) hue-rotate(180deg) brightness(60%) contrast(120%) saturate(80%); }
+.carto-dark { filter: brightness(1.3) contrast(1.1); }
+.dark-map .leaflet-marker-pane, .dark-map .leaflet-overlay-pane { filter: brightness(0.85); }
 #map-wrap{position:fixed;top:0;left:0;width:100vw;height:100vh;}
 #map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;}
 #panel-zone{position:fixed;top:0;left:0;right:0;height:40px;z-index:3000;pointer-events:none;}
@@ -648,7 +649,7 @@ var map=L.map('map',{zoomControl:false}).setView([dLat,dLng],dZoom);
 L.control.zoom({position:'bottomleft'}).addTo(map);
 window.mapLayers = {
   osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
-  dark: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap', className: 'dark-tiles'}),
+  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO', className: 'carto-dark'}),
   bw: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
   satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'})
 };
