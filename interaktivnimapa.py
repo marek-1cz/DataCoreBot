@@ -232,7 +232,7 @@ HTML_MAPA = """
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
-.dark-tiles { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
+.dark-tiles { filter: invert(100%) hue-rotate(180deg) brightness(60%) contrast(120%) saturate(80%); }
 #map-wrap{position:fixed;top:0;left:0;width:100vw;height:100vh;}
 #map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;}
 #panel-zone{position:fixed;top:0;left:0;right:0;height:40px;z-index:3000;pointer-events:none;}
