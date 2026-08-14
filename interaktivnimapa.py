@@ -1028,14 +1028,14 @@ function _renderRoute(busId,data,btn){
   let status=bus?bus.color_class:'bg-gray';
   let isBug=status==='bg-bug'||status==='bg-gray';
   let isFinished=status==='bg-purple';
-  let futColor=isBug||isFinished?'#a855f7':delay>=5?'#ef4444':'#3b82f6';
+  let futColor = isFinished ? '#a855f7' : isBug ? '#64748b' : delay >= 5 ? '#ef4444' : '#3b82f6';
   let pastColor=isBug||isFinished?'#6b7280':'#64748b';
   let pts=data.stops.filter(s=>s.lat&&s.lng);
   let splitIdx=pts.findIndex(s=>!s.passed);
   if(splitIdx===-1)splitIdx=pts.length;
 
   let isAtStop = false;
-  let isWaiting = bus && ((bus.status && (bus.status.includes('ceka') || bus.status.includes('zacatek'))) || status === 'bg-gray');
+  let isWaiting = bus && (bus.status && (bus.status.includes('ceka') || bus.status.includes('zacatek')));
   
   if (bus && bus.lat && bus.lng && pts.length > 0) {
     if (typeof map !== 'undefined' && pts[splitIdx]) {
