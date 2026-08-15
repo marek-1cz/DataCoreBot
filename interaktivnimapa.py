@@ -1101,7 +1101,7 @@ async function toggleRoute(busId){
     let r=await fetch('/api/bus_route/'+busId);
     let data=await r.json();
     if(activeRouteId!==busId)return;
-    await _renderRoute(busId,data,btn);
+    _renderRoute(busId,data,btn);
   }catch(e){
     if(btn){btn.textContent='Chyba načítání';btn.style.background='#7f1d1d';}
     appLog('Trasa – chyba: '+e,'error');
@@ -1117,36 +1117,12 @@ async function refreshActiveRoute(){
     let r=await fetch('/api/bus_route/'+busId);
     let data=await r.json();
     if(activeRouteId!==busId)return;
-    await _renderRoute(busId,data,btn);
+    _renderRoute(busId,data,btn);
     showAdminToast('🗺️ Trasa obnovena',true);
   }catch(e){appLog('Refresh trasy – chyba: '+e,'error');}
 }
 
-async function fetchOsrmGeometry(pts) {
-  if (!pts || pts.length < 2) return pts;
-  if (pts.length > 95) {
-    appLog('Trasa má přes 95 bodů, OSRM přeskočeno (limit).', 'warn');
-    return pts;
-  }
-  let coords = pts.map(p => `${p.lng},${p.lat}`).join(';');
-  let url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
-  try {
-    let r = await fetch(url);
-    if (!r.ok) return pts;
-    let data = await r.json();
-    if (data.code !== 'Ok' || !data.routes || !data.routes[0]) return pts;
-    let geom = data.routes[0].geometry;
-    if (geom && geom.coordinates) {
-      return geom.coordinates.map(c => ({ lat: c[1], lng: c[0] }));
-    }
-    return pts;
-  } catch (e) {
-    console.error('OSRM fail', e);
-    return pts;
-  }
-}
-
-async function _renderRoute(busId,data,btn){
+function _renderRoute(busId,data,btn){
   routeLayer.clearLayers();
   if(!data.stops||data.stops.length<2){
     if(btn){btn.textContent=data.error?'Trasa nedostupná ('+data.error+')':'Trasa nedostupná';btn.style.background='#7f1d1d';}
@@ -1210,11 +1186,8 @@ async function _renderRoute(busId,data,btn){
   if (isWaiting) splitIdx = 0;
 
   let finalIdx=pts.length-1;
-  let pastPtsRaw=pts.slice(0,Math.min(splitIdx+1,pts.length));
-  let futurePtsRaw=pts.slice(splitIdx);
-  
-  let pastPts = (await fetchOsrmGeometry(pastPtsRaw)).map(s=>[s.lat,s.lng]);
-  let futurePts = (await fetchOsrmGeometry(futurePtsRaw)).map(s=>[s.lat,s.lng]);
+  let pastPts=pts.slice(0,Math.min(splitIdx+1,pts.length)).map(s=>[s.lat,s.lng]);
+  let futurePts=pts.slice(splitIdx).map(s=>[s.lat,s.lng]);
 
   let animFn = function(el, speed, ptsArr) {
     if(!el) return;
