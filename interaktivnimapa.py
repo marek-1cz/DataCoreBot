@@ -1097,26 +1097,64 @@ function startEditRouteRoads() {
     window.routeRoutingControl = null;
   }
 
-  let waypoints = window.currentRouteData.stops.filter(s=>s.lat&&s.lng).map(s=>L.latLng(s.lat, s.lng));
+  let pts = window.currentRouteData.stops.filter(s=>s.lat&&s.lng);
+  let waypoints = pts.map(s=>L.latLng(s.lat, s.lng));
   if(waypoints.length < 2) return;
   routeLayer.clearLayers();
   document.getElementById('edit-route-btn').style.display = 'none';
   document.getElementById('save-route-btn').style.display = 'block';
-  showAdminToast('Přesuňte uzly na mapě pro úpravu', true);
+  showAdminToast('Přesuňte zastávky pro úpravu jejich pozice na trase. Pro autobusy lze měnit i tvar čáry.', true);
   
-  window.routeRoutingControl = L.Routing.control({
-    waypoints: waypoints,
-    router: L.Routing.osrmv1({
-      serviceUrl: 'https://router.project-osrm.org/route/v1',
-      profile: 'driving',
-      useHints: false
-    }),
-    routeWhileDragging: true,
-    addWaypoints: true,
-    show: false
-  }).on('routesfound', function(e) {
-    window.latestLRMRoute = e.routes[0];
-  }).addTo(map);
+  let bus = lastArr.find(b=>b.id===window.currentRouteBusId);
+  let isTrain = bus && bus.is_train;
+
+  if (isTrain) {
+    let routeCoords = waypoints.map(wp => [wp.lat, wp.lng]);
+    let shapePoly = L.polyline(routeCoords, {color: '#f59e0b', weight: 6, opacity: 0.8});
+    routeLayer.addLayer(shapePoly);
+  } else {
+    window.routeRoutingControl = L.Routing.control({
+      waypoints: waypoints,
+      router: L.Routing.osrmv1({
+        serviceUrl: 'https://router.project-osrm.org/route/v1',
+        profile: 'driving',
+        useHints: false
+      }),
+      routeWhileDragging: true,
+      addWaypoints: true,
+      show: false
+    }).on('routesfound', function(e) {
+      window.latestLRMRoute = e.routes[0];
+    }).addTo(map);
+  }
+
+  // Přidání draggable zastávek pro per-route posun
+  pts.forEach(stop => {
+    let baseCls = isTrain ? 'pub-dot pub-dot-train' : 'pub-dot';
+    let icon = L.divIcon({className:'',html:`<div class="${baseCls}" style="width:12px;height:12px;border:3px solid red;background:#fff;"></div>`,iconSize:[12,12],iconAnchor:[6,6]});
+    let m = L.marker([stop.lat, stop.lng], {icon: icon, draggable: true, zIndexOffset: 2000}).addTo(routeLayer);
+    m.bindTooltip(`Posunout <b>${stop.name}</b> (pouze pro linku)`, {direction: 'top'});
+    m.on('dragend', async function(e) {
+      let pos = e.target.getLatLng();
+      let rk = window.currentRouteData.route_key;
+      if(!rk) return;
+      try {
+        let r = await fetch('/api/admin/save_route_stop_override', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({route_key: rk, stop_name: stop.name, lat: pos.lat, lng: pos.lng})
+        });
+        let rd = await r.json();
+        if(rd.status === 'success') {
+          showAdminToast(`Zastávka ${stop.name} upravena pro tuto trasu`, true);
+          // Překreslíme trasu aby se projevila změna
+          refreshActiveRoute();
+        } else {
+          showAdminToast('Chyba: ' + rd.message, false);
+        }
+      } catch(ex) {}
+    });
+  });
 }
 
 async function saveRouteRoads() {
@@ -1324,30 +1362,40 @@ function _renderRoute(busId,data,btn){
   } else {
     let waypoints = pts.filter(s=>s.lat&&s.lng).map(s=>L.latLng(s.lat, s.lng));
     if(waypoints.length >= 2) {
-      let tempControl = L.Routing.control({
-        waypoints: waypoints,
-        router: L.Routing.osrmv1({
-          serviceUrl: 'https://router.project-osrm.org/route/v1',
-          profile: 'driving',
-          useHints: false
-        }),
-        routeWhileDragging: false,
-        addWaypoints: false,
-        show: false,
-        lineOptions: { styles: [{opacity: 0}] },
-        createMarker: function() { return null; }
-      }).on('routesfound', function(e) {
-        let routeCoords = e.routes[0].coordinates.map(c => [c.lat, c.lng]);
+      if (bus && bus.is_train) {
+        let routeCoords = waypoints.map(wp => [wp.lat, wp.lng]);
         routeLayer.addLayer(L.polyline(routeCoords,{color:futColor,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
         let shapePoly = L.polyline(routeCoords, {color: futColor, weight: 7, opacity: futFgOp, lineCap: 'round', lineJoin: 'round', className: 'route-line-past'});
         if(!isBug && !isFinished) {
           shapePoly.on('add', function() { animFn(this.getElement(), 400, routeCoords); });
         }
         routeLayer.addLayer(shapePoly);
-      }).addTo(map);
-      
-      if(window.autoRoutingControl) map.removeControl(window.autoRoutingControl);
-      window.autoRoutingControl = tempControl;
+      } else {
+        let tempControl = L.Routing.control({
+          waypoints: waypoints,
+          router: L.Routing.osrmv1({
+            serviceUrl: 'https://router.project-osrm.org/route/v1',
+            profile: 'driving',
+            useHints: false
+          }),
+          routeWhileDragging: false,
+          addWaypoints: false,
+          show: false,
+          lineOptions: { styles: [{opacity: 0}] },
+          createMarker: function() { return null; }
+        }).on('routesfound', function(e) {
+          let routeCoords = e.routes[0].coordinates.map(c => [c.lat, c.lng]);
+          routeLayer.addLayer(L.polyline(routeCoords,{color:futColor,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
+          let shapePoly = L.polyline(routeCoords, {color: futColor, weight: 7, opacity: futFgOp, lineCap: 'round', lineJoin: 'round', className: 'route-line-past'});
+          if(!isBug && !isFinished) {
+            shapePoly.on('add', function() { animFn(this.getElement(), 400, routeCoords); });
+          }
+          routeLayer.addLayer(shapePoly);
+        }).addTo(map);
+        
+        if(window.autoRoutingControl) map.removeControl(window.autoRoutingControl);
+        window.autoRoutingControl = tempControl;
+      }
     }
   }
   pts.forEach((stop,i)=>{
@@ -1361,21 +1409,22 @@ function _renderRoute(busId,data,btn){
     else if(stop.approx||lowConf)warnHtml='<br><span style="color:#f59e0b;font-size:10px;">⚠️ přibl.</span>';
     
     let icon;
+    let br = (bus && bus.is_train) ? '4px' : '50%';
     if(isFinal){
       let fc=isFinished?'#a855f7':futColor;
       icon=L.divIcon({className:'',iconSize:[24,24],iconAnchor:[12,12],html:'<div style="width:22px;height:22px;background:'+fc+';border:3px solid #fff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 0 12px '+fc+',0 2px 8px rgba(0,0,0,.8);">🏁</div>'});
     } else if(isNext){
-      icon=L.divIcon({className:'',iconSize:[22,22],iconAnchor:[11,11],html:'<div style="width:18px;height:18px;border-radius:50%;background:'+futColor+';border:3px solid #fff;box-shadow:0 0 14px '+futColor+',0 2px 6px rgba(0,0,0,.6);animation:routePulse 1.1s ease-in-out infinite;"></div>'});
+      icon=L.divIcon({className:'',iconSize:[22,22],iconAnchor:[11,11],html:'<div style="width:18px;height:18px;border-radius:'+br+';background:'+futColor+';border:3px solid #fff;box-shadow:0 0 14px '+futColor+',0 2px 6px rgba(0,0,0,.6);animation:routePulse 1.1s ease-in-out infinite;"></div>'});
     } else if(isBusPos){
-      icon=L.divIcon({className:'',iconSize:[16,16],iconAnchor:[8,8],html:'<div style="width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid '+futColor+';box-shadow:0 0 10px '+futColor+',0 2px 6px rgba(0,0,0,.5);"></div>'});
+      icon=L.divIcon({className:'',iconSize:[16,16],iconAnchor:[8,8],html:'<div style="width:12px;height:12px;border-radius:'+br+';background:#fff;border:3px solid '+futColor+';box-shadow:0 0 10px '+futColor+',0 2px 6px rgba(0,0,0,.5);"></div>'});
     } else if(isPast || isFinished){
       let w = isFinished ? 11 : 9;
       let bg = isFinished ? '#d8b4fe' : '#cbd5e1';
       let brd = isFinished ? '#9333ea' : '#64748b';
-      icon=L.divIcon({className:'',iconSize:[w+3,w+3],iconAnchor:[(w+3)/2,(w+3)/2],html:'<div style="width:'+w+'px;height:'+w+'px;border-radius:50%;background:'+bg+';border:1.5px solid '+brd+';opacity:1;"></div>'});
+      icon=L.divIcon({className:'',iconSize:[w+3,w+3],iconAnchor:[(w+3)/2,(w+3)/2],html:'<div style="width:'+w+'px;height:'+w+'px;border-radius:'+br+';background:'+bg+';border:1.5px solid '+brd+';opacity:1;"></div>'});
     } else {
       let bd=lowConf?'2px dashed #f59e0b':'2px solid rgba(255,255,255,0.9)';
-      icon=L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],html:'<div style="width:10px;height:10px;border-radius:50%;background:'+futColor+';border:'+bd+';box-shadow:0 0 6px '+futColor+',0 1px 4px rgba(0,0,0,.5);"></div>'});
+      icon=L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],html:'<div style="width:10px;height:10px;border-radius:'+br+';background:'+futColor+';border:'+bd+';box-shadow:0 0 6px '+futColor+',0 1px 4px rgba(0,0,0,.5);"></div>'});
     }
     
     let zIdx = isFinal?300:isNext?250:isBusPos?200:isPast?-200:-50;
@@ -1384,7 +1433,9 @@ function _renderRoute(busId,data,btn){
     let typeLabel='';
     if (isWaiting && i === 0) typeLabel = ' — ⏳ <b>Počáteční zastávka</b>';
     else typeLabel = isFinal?' — 🏁 <b>Konečná</b>':isNext?' ← <b>Následující zastávka</b>':isBusPos?(isAtStop?' ← <b>Aktuální zastávka</b>':' ← <b>Poslední potvrzená zastávka</b>'):'';
-    m.bindTooltip('<span style="font-size:12px;">🚏 '+stopDisplayName(stop)+'</span>'+timeStr+typeLabel+warnHtml,{direction:'top',className:'dark-popup'});
+    let emj = (bus && bus.is_train) ? '🚂' : '🚏';
+    m.bindTooltip('<span style="font-size:12px;">'+emj+' '+stopDisplayName(stop)+'</span>'+timeStr+typeLabel+warnHtml,{direction:'top',className:'dark-popup'});
+
     routeLayer.addLayer(m);
   });
   let found=data.stops.filter(s=>s.lat).length;
@@ -1812,9 +1863,14 @@ function showStopInfo(s){
   
   let idosBtn=document.getElementById('sip-idos-btn');
   if(idosBtn){
+    let btnIcon = s.mode === 'train' ? '🚂' : '🚌';
+    let btnText = s.mode === 'train' ? ' Odjezdy vlaků' : ' Odjezdy autobusů';
+    idosBtn.textContent = btnIcon + btnText;
     idosBtn.onclick = function() {
       let url = `https://idos.idnes.cz/vlakyautobusymhdvse/odjezdy/vysledky/?f=${encodeURIComponent(s.name)}`;
       document.getElementById('idos-iframe').src = url;
+      let modalHeader = document.querySelector('#idos-modal-box span');
+      if (modalHeader) modalHeader.textContent = btnIcon + btnText;
       document.getElementById('idos-modal').style.display = 'flex';
       document.getElementById('stop-info-pop').style.display = 'none';
     };
@@ -2079,6 +2135,15 @@ try:
             CUSTOM_ROUTES = json.load(f)
 except Exception as e:
     print(f"Chyba nacteni {CUSTOM_ROUTES_FILE}: {e}")
+
+ROUTE_STOP_OVERRIDES = {}
+ROUTE_STOP_OVERRIDES_FILE = "route_stop_overrides.json"
+try:
+    if os.path.exists(ROUTE_STOP_OVERRIDES_FILE):
+        with open(ROUTE_STOP_OVERRIDES_FILE, "r", encoding="utf-8") as f:
+            ROUTE_STOP_OVERRIDES = json.load(f)
+except Exception as e:
+    print(f"Chyba nacteni {ROUTE_STOP_OVERRIDES_FILE}: {e}")
 
 _stop_geo_cache     = {}
 _last_spz_auto_refresh = None   # kdy byl naposledy proveden automaticky reset SPZ u vsech busu
@@ -3789,6 +3854,27 @@ def api_admin_save_custom_route():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@mapa_bp.route('/api/admin/save_route_stop_override', methods=['POST'])
+def api_admin_save_route_stop_override():
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizováno"}), 401
+    data = request.get_json(silent=True) or {}
+    route_key = str(data.get("route_key", "")).strip()
+    stop_name = str(data.get("stop_name", "")).strip()
+    lat = data.get("lat")
+    lng = data.get("lng")
+    if not route_key or not stop_name or lat is None or lng is None:
+        return jsonify({"status": "error", "message": "Chybná data"}), 400
+    if route_key not in ROUTE_STOP_OVERRIDES:
+        ROUTE_STOP_OVERRIDES[route_key] = {}
+    ROUTE_STOP_OVERRIDES[route_key][stop_name] = {"lat": float(lat), "lng": float(lng)}
+    try:
+        with open(ROUTE_STOP_OVERRIDES_FILE, "w", encoding="utf-8") as f:
+            json.dump(ROUTE_STOP_OVERRIDES, f, ensure_ascii=False, indent=2)
+        return jsonify({"status": "success", "message": "Zastávka upravena pro tuto trasu"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @mapa_bp.route('/api/admin/save_stop_override', methods=['POST'])
 def api_admin_save_stop_override():
     """NT rezim: ulozi rucne opravenou zastavku natrvalo i do pameti.
@@ -4353,10 +4439,17 @@ def api_bus_route(bus_id):
           f"(presne:{gtfs_hits} fuzzy:{fuzzy_hits} nominatim:{nominatim_hits})", flush=True)
 
     custom_shape = None
+    route_key = None
     if result and c.get('line'):
         route_key = f"{c.get('line')}_{result[0]['name']}_{result[-1]['name']}"
         if route_key in CUSTOM_ROUTES:
             custom_shape = CUSTOM_ROUTES[route_key]
+        if route_key in ROUTE_STOP_OVERRIDES:
+            for s in result:
+                if s and s.get("name") and s["name"] in ROUTE_STOP_OVERRIDES[route_key]:
+                    ovr = ROUTE_STOP_OVERRIDES[route_key][s["name"]]
+                    s["lat"] = ovr["lat"]
+                    s["lng"] = ovr["lng"]
 
     return jsonify({
         "stops": result,
