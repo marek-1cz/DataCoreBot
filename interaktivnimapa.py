@@ -1087,6 +1087,16 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain){
 // === ROUTE DISPLAY ===
 function startEditRouteRoads() {
   if(!window.currentRouteData || !window.currentRouteData.stops) return;
+  
+  if(window.autoRoutingControl) {
+    map.removeControl(window.autoRoutingControl);
+    window.autoRoutingControl = null;
+  }
+  if(window.routeRoutingControl) {
+    map.removeControl(window.routeRoutingControl);
+    window.routeRoutingControl = null;
+  }
+
   let waypoints = window.currentRouteData.stops.filter(s=>s.lat&&s.lng).map(s=>L.latLng(s.lat, s.lng));
   if(waypoints.length < 2) return;
   routeLayer.clearLayers();
@@ -1094,24 +1104,18 @@ function startEditRouteRoads() {
   document.getElementById('save-route-btn').style.display = 'block';
   showAdminToast('Přesuňte uzly na mapě pro úpravu', true);
   
-  if(!window.routeRoutingControl) {
-    window.routeRoutingControl = L.Routing.control({
-      waypoints: waypoints,
-      routeWhileDragging: true,
-      lineOptions: {
-        styles: [{color: '#10b981', opacity: 0.8, weight: 6}]
-      },
-      show: false,
-      createMarker: function(i, wp, nWps) {
-        return L.marker(wp.latLng, {
-          draggable: true,
-          icon: L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],html:'<div style="width:14px;height:14px;border-radius:50%;background:#10b981;border:2px solid #fff;box-shadow:0 0 8px rgba(0,0,0,0.5);"></div>'})
-        });
-      }
-    }).on('routesfound', function(e) {
-      window.latestLRMRoute = e.routes[0];
-    }).addTo(map);
-  }
+  window.routeRoutingControl = L.Routing.control({
+    waypoints: waypoints,
+    routeWhileDragging: true,
+    addWaypoints: true,
+    show: false,
+    lineOptions: {
+      addWaypoints: true,
+      styles: [{color: '#10b981', opacity: 0.8, weight: 6}]
+    }
+  }).on('routesfound', function(e) {
+    window.latestLRMRoute = e.routes[0];
+  }).addTo(map);
 }
 
 async function saveRouteRoads() {
