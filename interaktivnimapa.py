@@ -582,6 +582,7 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
       <button id="bm-btn-dark" class="bm-btn" onclick="setBaseMap('dark')" style="background:#1e293b;border:1px solid #38bdf8;color:#38bdf8;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🌙 Tmavá</button>
       <button id="bm-btn-osm" class="bm-btn" onclick="setBaseMap('osm')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🗺️ Výchozí</button>
+      <button id="bm-btn-transport_dark" class="bm-btn" onclick="setBaseMap('transport_dark')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🌃 Dopravní (tmavá)</button>
       <button id="bm-btn-transport" class="bm-btn" onclick="setBaseMap('transport')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🚇 Dopravní</button>
       <button id="bm-btn-satellite" class="bm-btn" onclick="setBaseMap('satellite')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🛰️ Satelit</button>
       <button id="bm-btn-bw" class="bm-btn" onclick="setBaseMap('bw')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">⚪ Černobílá</button>
@@ -674,10 +675,11 @@ var map=L.map('map',{zoomControl:false}).setView([dLat,dLng],dZoom);
 L.control.zoom({position:'bottomleft'}).addTo(map);
 window.mapLayers = {
   osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
-  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:20,attribution:'&copy; CARTO'}),
+  dark: L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=086ca59fb24640be82e5259e96c7a0cb',{maxZoom:20,attribution:'&copy; Stadia Maps'}),
   bw: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
   satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'}),
-  transport: L.tileLayer('https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; ÖPNVKarte'})
+  transport_dark: L.tileLayer('https://{s}.tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png?apikey=086ca59fb24640be82e5259e96c7a0cb',{maxZoom:22,attribution:'&copy; Thunderforest'}),
+  transport: L.tileLayer('https://{s}.tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=086ca59fb24640be82e5259e96c7a0cb',{maxZoom:22,attribution:'&copy; Thunderforest'})
 };
 window.currentBaseMap = localStorage.getItem('ois_basemap') || 'osm';
 if (!window.mapLayers[window.currentBaseMap]) window.currentBaseMap = 'osm';
