@@ -465,7 +465,7 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
   </div></div>
   <div id="close-route-btn" onclick="closeActiveRoute()"><i class="fas fa-times"></i> Zavřít trasu</div>
   <div id="edit-route-btn" onclick="startEditRouteRoads()" style="display:none;position:fixed;top:72px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#38bdf8;border:1.5px solid #38bdf8;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(56,189,248,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-edit"></i> Silnice</div>
-  <div id="save-route-btn" onclick="saveRouteRoads()" style="display:none;position:fixed;top:120px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(239,68,68,.92);color:white;border:1.5px solid #f87171;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(239,68,68,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-exclamation-triangle"></i> Režim úprav ZAPNUTÝ (tažením upravte) - ULOŽIT</div>
+  <div id="save-route-btn" onclick="saveRouteRoads()" style="display:none;position:fixed;top:120px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(239,68,68,.92);color:white;border:1.5px solid #f87171;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(239,68,68,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-save"></i> ULOŽIT (Táhni modrou čáru = trasu, červený bod = zastávku)</div>
   <div id="hud">
     <div id="hf">
       <div class="hh"><span class="hl">📡 SLEDOVANI SPOJE</span><button class="hb-mn" onclick="minHud()">-</button></div>
@@ -488,6 +488,12 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
     <div style="font-size:10px;color:#64748b;margin-bottom:8px;">Systémový název (pro vyhledávání v JŘ)</div>
     <label style="display:block;margin-bottom:4px;font-size:11px;color:#94a3b8;">Zobrazovaný název (prázdné = použij systémový):</label>
     <input id="ntp-dispname" type="text" placeholder="Zobrazovaný název..." style="width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;padding:5px 8px;font-size:12px;margin-bottom:8px;">
+    <label style="display:block;margin-bottom:4px;font-size:11px;color:#94a3b8;">Mód zastávky (Doprava):</label>
+    <select id="ntp-mode-select" style="width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:4px;padding:5px 8px;font-size:12px;margin-bottom:8px;">
+      <option value="bus">🚌 Autobus</option>
+      <option value="train">🚂 Vlak</option>
+      <option value="mixed">🚌🚂 Smíšená (Bus + Vlak)</option>
+    </select>
     <label style="margin-bottom:6px;"><input type="checkbox" id="ntp-approx"> ⚠️ Přibližná poloha</label>
     <label style="margin-bottom:8px;"><input type="checkbox" id="ntp-substitute"> 🔀 Náhradní zastávka</label>
     <label style="margin-bottom:8px;"><input type="checkbox" id="ntp-notfound"> ❌ Nenalezeno (error)</label>
@@ -1129,20 +1135,20 @@ function startEditRouteRoads() {
   }
 
   // Přidání draggable zastávek pro per-route posun
-  pts.forEach(stop => {
+  pts.forEach((stop, idx) => {
     let baseCls = isTrain ? 'pub-dot pub-dot-train' : 'pub-dot';
     let icon = L.divIcon({className:'',html:`<div class="${baseCls}" style="width:12px;height:12px;border:3px solid red;background:#fff;"></div>`,iconSize:[12,12],iconAnchor:[6,6]});
     let m = L.marker([stop.lat, stop.lng], {icon: icon, draggable: true, zIndexOffset: 2000}).addTo(routeLayer);
-    m.bindTooltip(`Posunout <b>${stop.name}</b> (pouze pro linku)`, {direction: 'top'});
+    m.bindTooltip(`Posunout <b>${stop.name}</b> (pro celý směr trasy)`, {direction: 'top'});
     m.on('dragend', async function(e) {
       let pos = e.target.getLatLng();
-      let rk = window.currentRouteData.route_key;
-      if(!rk) return;
+      let prev_name = idx > 0 ? pts[idx-1].name : "";
+      let next_name = idx < pts.length - 1 ? pts[idx+1].name : "";
       try {
         let r = await fetch('/api/admin/save_route_stop_override', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({route_key: rk, stop_name: stop.name, lat: pos.lat, lng: pos.lng})
+          body: JSON.stringify({prev_stop: prev_name, this_stop: stop.name, next_stop: next_name, lat: pos.lat, lng: pos.lng})
         });
         let rd = await r.json();
         if(rd.status === 'success') {
@@ -1202,6 +1208,8 @@ function closeActiveRoute(){
   }
   if(activeRouteId){let btn=document.getElementById('route-btn-'+activeRouteId);if(btn){btn.textContent='🗺️ Zobrazit trasu';btn.style.background='#334155';}}
   activeRouteId=null;
+  let eBtn=document.getElementById('edit-route-btn');if(eBtn)eBtn.style.display='none';
+  let sBtn=document.getElementById('save-route-btn');if(sBtn)sBtn.style.display='none';
   let crb=document.getElementById('close-route-btn');if(crb)crb.style.display='none';
   let erb=document.getElementById('edit-route-btn');if(erb)erb.style.display='none';
   let srb=document.getElementById('save-route-btn');if(srb)srb.style.display='none';
@@ -1621,6 +1629,8 @@ function openNtEdit(s,m){
   let modeEl=document.getElementById('ntp-mode-icon');if(modeEl)modeEl.textContent=icon;
   document.getElementById('ntp-name').textContent=s.name;
   document.getElementById('ntp-dispname').value=s.display_name||'';
+  let ms=document.getElementById('ntp-mode-select');
+  if(ms)ms.value=s.mode||'bus';
   document.getElementById('ntp-approx').checked=!!s.approx;
   document.getElementById('ntp-substitute').checked=!!s.substitute;
   let nf=document.getElementById('ntp-notfound');if(nf)nf.checked=!!s.notfound;
@@ -1635,16 +1645,19 @@ async function saveNtFlags(){
   let substitute=document.getElementById('ntp-substitute').checked;
   let notfound=!!(document.getElementById('ntp-notfound')||{}).checked;
   let display_name=document.getElementById('ntp-dispname').value.trim();
+  let ms=document.getElementById('ntp-mode-select');
+  let mode=ms?ms.value:'bus';
   // Linky jsou uloženy průběžně přes addLineToNtStop/removeNtLine
   // saveNtFlags uloží jen zbývající metadata (approx/substitute/display_name)
   try{
     let res=await fetch('/api/admin/save_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng,approx,substitute,notfound,display_name,custom_lines:s.lines||null})});
+      body:JSON.stringify({name:s.name,lat:pos.lat,lng:pos.lng,approx,substitute,notfound,display_name,mode,custom_lines:s.lines||null})});
     let rd=await res.json();
     if(rd.status==='success'){
-      Object.assign(s,{approx,substitute,display_name,manual:true});
+      Object.assign(s,{approx,substitute,display_name,mode,manual:true});
       m.setIcon(ntDotIcon(ntDotClass(s)));
-      m.setTooltipContent(`<b>${s.mode==='train'?'🚂':'🚏'} ${s.name}</b>${ntLabel(s)}`);
+      let icon=s.mode==='train'?'🚂':'🚏';
+      m.setTooltipContent(`<b>${icon} ${s.name}</b>${ntLabel(s)}`);
       showAdminToast(`💾 Uloženo: ${s.name}`,true);
       document.getElementById('nt-edit-pop').style.display='none';
     }else showAdminToast('Chyba: '+(rd.message||'?'),false);
@@ -1682,10 +1695,12 @@ function cancelNtAdd(){
 async function _doAddStop(lat,lng,name){
   if(!name||!name.trim())return;
   name=name.trim();
+  let mode=prompt('Zadej mód zastávky (bus / train / mixed):','bus');
+  if(!mode)mode='bus';
   try{
     let res=await fetch('/api/admin/save_stop_override',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name,lat,lng})});
+      body:JSON.stringify({name,lat,lng,mode})});
     let rd=await res.json();
     if(rd.status==='success'){
       showAdminToast(`✅ Přidána: ${name}`,true);
@@ -2412,7 +2427,7 @@ def _nearest_stop_name(lat, lon, max_m=400):
     return best_name if (best_d is not None and best_d <= max_m) else None
 
 
-def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000):
+def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000, bus_mode=None):
     """GPS souradnice zastavky podle nazvu z GTFS. Vraci (coords, confidence)
     kde confidence je "exact" / "fuzzy" / None (kdyz se nic nenajde).
 
@@ -2451,17 +2466,26 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000):
     if not key:
         return None, None
 
+    target_mode = bus_mode
+    if not target_mode:
+        wants_train = _name_suggests_train(name)
+        target_mode = 'train' if wants_train else 'bus'
+
     # 0) Rucni oprava z NT rezimu ma VZDY prednost - admin uz to jednou
     # rucne overil a ulozil, takze se uz znovu nehleda v GTFS/Nominatim.
     ov = STOP_OVERRIDES.get(key)
     if ov:
-        return (ov["lat"], ov["lng"]), "manual"
+        # Zkontroluj mode match, pokud se neshoduje a existuje alternativa v GTFS, pouzij GTFS (zamezi michani)
+        ov_mode = ov.get("mode", "bus")
+        if bus_mode and ov_mode != "mixed" and ov_mode != bus_mode:
+            # Ignorovat manualni override s jinym modem (např. vlak na bus zastavce),
+            # pokud nepotvrdime presnou shodu. Spis proste prejdeme na GTFS.
+            pass
+        else:
+            return (ov["lat"], ov["lng"]), "manual"
 
     if not GTFS_STOPS:
         return None, None
-
-    wants_train = _name_suggests_train(name)
-    target_mode = 'train' if wants_train else 'bus'
 
     def mode_ok(idx):
         m = GTFS_MODES[idx] if idx < len(GTFS_MODES) else None
@@ -3859,15 +3883,16 @@ def api_admin_save_route_stop_override():
     if not session.get('logged_in'):
         return jsonify({"status": "error", "message": "Neautorizováno"}), 401
     data = request.get_json(silent=True) or {}
-    route_key = str(data.get("route_key", "")).strip()
-    stop_name = str(data.get("stop_name", "")).strip()
+    prev_stop = str(data.get("prev_stop", "")).strip()
+    this_stop = str(data.get("this_stop", "")).strip()
+    next_stop = str(data.get("next_stop", "")).strip()
     lat = data.get("lat")
     lng = data.get("lng")
-    if not route_key or not stop_name or lat is None or lng is None:
+    if not this_stop or lat is None or lng is None:
         return jsonify({"status": "error", "message": "Chybná data"}), 400
-    if route_key not in ROUTE_STOP_OVERRIDES:
-        ROUTE_STOP_OVERRIDES[route_key] = {}
-    ROUTE_STOP_OVERRIDES[route_key][stop_name] = {"lat": float(lat), "lng": float(lng)}
+    
+    route_key = f"{_norm_txt(prev_stop)}|{_norm_txt(this_stop)}|{_norm_txt(next_stop)}"
+    ROUTE_STOP_OVERRIDES[route_key] = {"lat": float(lat), "lng": float(lng)}
     try:
         with open(ROUTE_STOP_OVERRIDES_FILE, "w", encoding="utf-8") as f:
             json.dump(ROUTE_STOP_OVERRIDES, f, ensure_ascii=False, indent=2)
@@ -3912,6 +3937,8 @@ def api_admin_save_stop_override():
             custom_lines = existing.get("custom_lines")
     else:
         custom_lines = existing.get("custom_lines")
+        
+    mode = str(data["mode"]).strip() if "mode" in data else existing.get("mode", "bus")
 
     STOP_OVERRIDES[key] = {
         "lat": lat, "lng": lng, "name": name,
@@ -4367,6 +4394,7 @@ def api_bus_route(bus_id):
     seen = {}
     pending = []  # (index, name_c, anchor_v_danou_chvili) - pro Nominatim fallback
     anchor = (c.get("lat"), c.get("lng")) if c.get("lat") and c.get("lng") else None
+    bus_mode = "train" if c.get("is_train") else "bus"
 
     # ── PASS 1: sekvencni GTFS pruchod s anchor retezenim ───────────────────
     for i, (name, t) in enumerate(zip(stop_names, stop_times)):
@@ -4385,7 +4413,7 @@ def api_bus_route(bus_id):
 
         coords, conf = (None, None)
         if GTFS_LOADED or STOP_OVERRIDES:
-            coords, conf = _lookup_stop_coords(name_c, anchor=anchor)
+            coords, conf = _lookup_stop_coords(name_c, anchor=anchor, bus_mode=bus_mode)
 
         if coords:
             seen[name_c] = coords
@@ -4444,12 +4472,16 @@ def api_bus_route(bus_id):
         route_key = f"{c.get('line')}_{result[0]['name']}_{result[-1]['name']}"
         if route_key in CUSTOM_ROUTES:
             custom_shape = CUSTOM_ROUTES[route_key]
-        if route_key in ROUTE_STOP_OVERRIDES:
-            for s in result:
-                if s and s.get("name") and s["name"] in ROUTE_STOP_OVERRIDES[route_key]:
-                    ovr = ROUTE_STOP_OVERRIDES[route_key][s["name"]]
-                    s["lat"] = ovr["lat"]
-                    s["lng"] = ovr["lng"]
+        for i, s in enumerate(result):
+            if not (s and s.get("name")):
+                continue
+            prev_s = result[i-1]["name"] if i > 0 and result[i-1] else ""
+            next_s = result[i+1]["name"] if i < len(result)-1 and result[i+1] else ""
+            segment_key = f"{_norm_txt(prev_s)}|{_norm_txt(s['name'])}|{_norm_txt(next_s)}"
+            if segment_key in ROUTE_STOP_OVERRIDES:
+                ovr = ROUTE_STOP_OVERRIDES[segment_key]
+                s["lat"] = ovr["lat"]
+                s["lng"] = ovr["lng"]
 
     return jsonify({
         "stops": result,
