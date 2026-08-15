@@ -405,7 +405,7 @@ body.dark-map #settings-toggle-btn:hover{background:rgba(56,189,248,0.3);box-sha
 
 body.nav-static #top-nav { top: 0 !important; }
 body.nav-static #nav-handle { display: none !important; }
-body.nav-glass #top-nav { top: 15px !important; left: 50% !important; transform: translateX(-50%); width: 96%; max-width: 1000px; border-radius: 24px; border: 1px solid rgba(56,189,248,0.6); background: linear-gradient(135deg, rgba(15,23,42,0.5), rgba(30,58,95,0.3)); backdrop-filter: blur(32px) saturate(150%); -webkit-backdrop-filter: blur(32px) saturate(150%); box-shadow: 0 16px 40px rgba(0,0,0,0.9), inset 0 2px 25px rgba(56,189,248,0.3); height: auto !important; min-height: 58px; flex-wrap: wrap; gap: 6px; padding: 10px 14px; justify-content: center; }
+body.nav-glass #top-nav { top: 15px !important; left: 50% !important; transform: translateX(-50%); width: 96%; max-width: 1000px; border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.15); background: rgba(15, 23, 42, 0.25); backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35); height: auto !important; min-height: 58px; flex-wrap: wrap; gap: 6px; padding: 10px 14px; justify-content: center; }
 body.nav-glass #nav-handle { display: none !important; }
 body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !important; }
 
@@ -582,6 +582,8 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
       <button id="bm-btn-dark" class="bm-btn" onclick="setBaseMap('dark')" style="background:#1e293b;border:1px solid #38bdf8;color:#38bdf8;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🌙 Tmavá</button>
       <button id="bm-btn-osm" class="bm-btn" onclick="setBaseMap('osm')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🗺️ Výchozí</button>
+      <button id="bm-btn-transport_dark" class="bm-btn" onclick="setBaseMap('transport_dark')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🌃 Dopravní (tmavá)</button>
+      <button id="bm-btn-transport" class="bm-btn" onclick="setBaseMap('transport')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🚇 Dopravní</button>
       <button id="bm-btn-satellite" class="bm-btn" onclick="setBaseMap('satellite')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">🛰️ Satelit</button>
       <button id="bm-btn-bw" class="bm-btn" onclick="setBaseMap('bw')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;transition:0.2s;">⚪ Černobílá</button>
     </div>
@@ -673,9 +675,11 @@ var map=L.map('map',{zoomControl:false}).setView([dLat,dLng],dZoom);
 L.control.zoom({position:'bottomleft'}).addTo(map);
 window.mapLayers = {
   osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
-  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
+  dark: L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',{maxZoom:20,attribution:'&copy; Stadia Maps'}),
   bw: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
-  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'})
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'}),
+  transport_dark: L.tileLayer('https://{s}.tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png',{maxZoom:22,attribution:'&copy; Thunderforest'}),
+  transport: L.tileLayer('https://{s}.tile.thunderforest.com/transport/{z}/{x}/{y}.png',{maxZoom:22,attribution:'&copy; Thunderforest'})
 };
 window.currentBaseMap = localStorage.getItem('ois_basemap') || 'osm';
 if (!window.mapLayers[window.currentBaseMap]) window.currentBaseMap = 'osm';
