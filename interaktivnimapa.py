@@ -1939,15 +1939,11 @@ function showStopInfo(s){
     idosBtn.textContent = btnIcon + btnText;
     idosBtn.onclick = function() {
       let url = `https://idos.idnes.cz/vlakyautobusymhdvse/odjezdy/vysledky/?f=${encodeURIComponent(s.name)}`;
-      if (window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent)) {
-        window.open(url, '_blank');
-      } else {
-        document.getElementById('idos-iframe').src = url;
-        let modalHeader = document.querySelector('#idos-modal-box span');
-        if (modalHeader) modalHeader.textContent = btnIcon + btnText;
-        document.getElementById('idos-modal').style.display = 'flex';
-        document.getElementById('stop-info-pop').style.display = 'none';
-      }
+      document.getElementById('idos-iframe').src = url;
+      let modalHeader = document.querySelector('#idos-modal-box span');
+      if (modalHeader) modalHeader.textContent = btnIcon + btnText;
+      document.getElementById('idos-modal').style.display = 'flex';
+      document.getElementById('stop-info-pop').style.display = 'none';
     };
   }
   
