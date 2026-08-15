@@ -782,8 +782,8 @@ function appLog(msg,level){
   logEntries.push(entry);if(logEntries.length>500)logEntries.shift();
   if(level==='error'||level==='warn'){
     logErrEntries.push(entry);if(logErrEntries.length>200)logErrEntries.shift();
-    let btn=document.getElementById('log-tab-err');
-    if(btn&&logCurrentTab!=='err')btn.style.color='#f87171';
+    let btn=document.getElementById('log-tab-report');
+    if(btn&&logCurrentTab!=='report')btn.style.color='#f87171';
   }
   if(logCurrentTab==='all'){
     let body=document.getElementById('log-body');
@@ -975,7 +975,27 @@ async function loadReportSituace(){
     let r=await fetch('/api/admin/report_situace?limit=100');
     let data=await r.json();
     body.innerHTML='';
-    if(!data.entries||!data.entries.length){body.innerHTML='<div style="color:#64748b;padding:6px;">Žádné záznamy</div>';return;}
+    if(!data.entries||!data.entries.length){body.innerHTML='<div style="color:#64748b;padding:6px;">Žádné záznamy ze serveru</div>';}
+    
+    // Přidání klientských chyb (logErrEntries) do záložky REPORT, jak uživatel požadoval
+    if(logErrEntries.length > 0){
+      let head=document.createElement('div');
+      head.style.cssText='padding:5px 0;border-bottom:1px solid #1e293b;font-weight:bold;color:#f87171;';
+      head.textContent='=== KLIENTSKÉ CHYBY ===';
+      body.insertBefore(head, body.firstChild);
+      
+      logErrEntries.slice().reverse().forEach(e=>{
+        let div=document.createElement('div');
+        div.style.cssText='padding:3px 0;font-family:monospace;font-size:10px;color:#f87171;';
+        div.textContent=`[${e.t}] ${e.msg}`;
+        body.insertBefore(div, head.nextSibling);
+      });
+      
+      let sep=document.createElement('div');
+      sep.style.cssText='padding:5px 0;border-bottom:1px solid #1e293b;font-weight:bold;color:#60a5fa;margin-top:10px;';
+      sep.textContent='=== HLÁŠENÍ SERVERU ===';
+      body.appendChild(sep);
+    }
     data.entries.forEach(e=>{
       let div=document.createElement('div');
       div.style.cssText='padding:5px 0;border-bottom:1px solid #1e293b;font-family:monospace;font-size:10px;';
@@ -1881,6 +1901,35 @@ function showStopInfo(s){
   let noteEl=document.getElementById('sip-note');
   noteEl.textContent=s.substitute?'🔀 Náhradní zastávka':s.approx?'⚠️ Přibližná poloha':'';
   
+  let depsHtml = '';
+  if (window.lastArr && window.lastArr.length) {
+    let deps = window.lastArr.filter(b => b.next_stop && stopDisplayName({name: b.next_stop, display_name: ''}) === stopDisplayName({name: s.name, display_name: ''}));
+    deps = deps.slice(0, 5);
+    if (deps.length > 0) {
+      depsHtml = '<div style="margin:10px 0;"><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Spoje na cestě sem (odhad dle polohy):</div>';
+      deps.forEach(b => {
+        let dv = parseInt(b.delay) || 0;
+        let dTxt = dv >= 5 ? `<span style="color:#ef4444;">+${dv} min</span>` : (dv > 0 ? `<span style="color:#10b981;">+${dv} min</span>` : (dv < 0 ? `<span style="color:#60a5fa;">${Math.abs(dv)} min napřed</span>` : `<span style="color:#10b981;">Včas</span>`));
+        let prev = b.last_stop ? `z ${b.last_stop}` : '';
+        depsHtml += `<div style="display:flex;justify-content:space-between;background:rgba(15,23,42,0.5);padding:4px 8px;border-radius:4px;margin-bottom:2px;font-size:12px;">
+           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;"><b>L${b.line||'?'}</b> ${prev}</span>
+           <span>${dTxt}</span>
+        </div>`;
+      });
+      depsHtml += '</div>';
+    } else {
+      depsHtml = '<div style="color:#64748b;font-size:12px;margin:8px 0;text-align:center;">Žádné aktivní spoje na mapě na cestě sem</div>';
+    }
+  }
+  
+  let depsContainer = document.getElementById('sip-live-deps');
+  if(!depsContainer) {
+    depsContainer = document.createElement('div');
+    depsContainer.id = 'sip-live-deps';
+    noteEl.parentNode.insertBefore(depsContainer, noteEl.nextSibling);
+  }
+  depsContainer.innerHTML = depsHtml;
+
   let idosBtn=document.getElementById('sip-idos-btn');
   if(idosBtn){
     let btnIcon = s.mode === 'train' ? '🚂' : '🚌';
@@ -4054,9 +4103,12 @@ def api_admin_assign_line_to_stop():
         lat, lng = coords
 
     # Existujici linky
-    cur_lines = list(ov.get("custom_lines") or []) if ov else []
-    if not cur_lines:
-        # Zacni s GTFS linkami jako zakladem
+    custom_lines_exist = "custom_lines" in ov if ov else False
+    if custom_lines_exist and ov["custom_lines"] is not None:
+        cur_lines = list(ov["custom_lines"])
+    else:
+        # Zacni s GTFS linkami jako zakladem, pokud override vlastnich linek neni vubec definovan
+        cur_lines = []
         idxs = GTFS_NAME_IDX.get(key, [])
         for idx in idxs:
             if idx < len(GTFS_LINES):
@@ -4073,12 +4125,15 @@ def api_admin_assign_line_to_stop():
         cur_lines = sorted(set(cur_lines))
 
     existing = ov or {}
+    mode = existing.get("mode", "bus")
+    
     STOP_OVERRIDES[key] = {
         "lat": lat, "lng": lng, "name": stop_name,
         "approx": existing.get("approx", False),
         "substitute": existing.get("substitute", False),
         "display_name": existing.get("display_name", ""),
         "custom_lines": cur_lines,
+        "mode": mode
     }
 
     db = get_db_client()
@@ -4090,6 +4145,7 @@ def api_admin_assign_line_to_stop():
                 "substitute": STOP_OVERRIDES[key]["substitute"],
                 "display_name": STOP_OVERRIDES[key]["display_name"],
                 "custom_lines": json.dumps(cur_lines, ensure_ascii=False),
+                "mode": mode,
                 "updated_at": get_prague_time().isoformat(),
             }, on_conflict="stop_name").execute()
         except Exception as e:
