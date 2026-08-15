@@ -461,6 +461,8 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
     <div id="ttc" style="color:white;">Načítám…</div>
   </div></div>
   <div id="close-route-btn" onclick="closeActiveRoute()"><i class="fas fa-times"></i> Zavřít trasu</div>
+  <div id="edit-route-btn" onclick="startEditRouteRoads()" style="display:none;position:fixed;top:72px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#38bdf8;border:1.5px solid #38bdf8;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(56,189,248,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-edit"></i> Silnice</div>
+  <div id="save-route-btn" onclick="saveRouteRoads()" style="display:none;position:fixed;top:120px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#10b981;border:1.5px solid #10b981;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(16,185,129,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-save"></i> Uložit silnice</div>
   <div id="hud">
     <div id="hf">
       <div class="hh"><span class="hl">📡 SLEDOVANI SPOJE</span><button class="hb-mn" onclick="minHud()">-</button></div>
@@ -618,6 +620,7 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
 <script>
 const IS_ADMIN=__IS_ADMIN__;
@@ -1079,11 +1082,79 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain){
 }
 
 // === ROUTE DISPLAY ===
+function startEditRouteRoads() {
+  if(!window.currentRouteData || !window.currentRouteData.stops) return;
+  let waypoints = window.currentRouteData.stops.filter(s=>s.lat&&s.lng).map(s=>L.latLng(s.lat, s.lng));
+  if(waypoints.length < 2) return;
+  routeLayer.clearLayers();
+  document.getElementById('edit-route-btn').style.display = 'none';
+  document.getElementById('save-route-btn').style.display = 'block';
+  showAdminToast('Přesuňte uzly na mapě pro úpravu', true);
+  
+  if(!window.routeRoutingControl) {
+    window.routeRoutingControl = L.Routing.control({
+      waypoints: waypoints,
+      routeWhileDragging: true,
+      lineOptions: {
+        styles: [{color: '#10b981', opacity: 0.8, weight: 6}]
+      },
+      show: false,
+      createMarker: function(i, wp, nWps) {
+        return L.marker(wp.latLng, {
+          draggable: true,
+          icon: L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],html:'<div style="width:14px;height:14px;border-radius:50%;background:#10b981;border:2px solid #fff;box-shadow:0 0 8px rgba(0,0,0,0.5);"></div>'})
+        });
+      }
+    }).on('routesfound', function(e) {
+      window.latestLRMRoute = e.routes[0];
+    }).addTo(map);
+  }
+}
+
+async function saveRouteRoads() {
+  if(!window.routeRoutingControl || !window.currentRouteData || !window.latestLRMRoute) { 
+    showAdminToast('Trasa nenalezena - zkuste pohnout bodem', false); 
+    return; 
+  }
+  let route = window.latestLRMRoute;
+  
+  let coords = route.coordinates.map(c => [c.lat, c.lng]);
+  let rk = window.currentRouteData.route_key;
+  if(!rk) { showAdminToast('Chybí route_key', false); return; }
+  
+  document.getElementById('save-route-btn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ukládám...';
+  try {
+    let r = await fetch('/api/admin/save_custom_route', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({route_key: rk, points: coords})
+    });
+    let rd = await r.json();
+    if(rd.status === 'success') {
+      showAdminToast('Úprava trasy uložena', true);
+      closeActiveRoute();
+      toggleRoute(window.currentRouteBusId); // reload
+    } else {
+      showAdminToast('Chyba: ' + rd.message, false);
+      document.getElementById('save-route-btn').innerHTML = '<i class="fas fa-save"></i> Uložit silnice';
+    }
+  } catch(e) {
+    showAdminToast('Chyba uložení', false);
+    document.getElementById('save-route-btn').innerHTML = '<i class="fas fa-save"></i> Uložit silnice';
+  }
+}
+
 function closeActiveRoute(){
   routeLayer.clearLayers();
+  if(window.routeRoutingControl) {
+    map.removeControl(window.routeRoutingControl);
+    window.routeRoutingControl = null;
+  }
   if(activeRouteId){let btn=document.getElementById('route-btn-'+activeRouteId);if(btn){btn.textContent='🗺️ Zobrazit trasu';btn.style.background='#334155';}}
   activeRouteId=null;
   let crb=document.getElementById('close-route-btn');if(crb)crb.style.display='none';
+  let erb=document.getElementById('edit-route-btn');if(erb)erb.style.display='none';
+  let srb=document.getElementById('save-route-btn');if(srb)srb.style.display='none';
 }
 async function toggleRoute(busId){
   if(activeRouteId===busId){
@@ -1230,22 +1301,30 @@ function _renderRoute(busId,data,btn){
   let fgOp = isBug ? 0.3 : 0.85;
   let futFgOp = isBug ? 0.3 : 0.95;
 
-  if(pastPts.length>=2){
-    let pCol = isFinished ? '#a855f7' : pastColor;
-    routeLayer.addLayer(L.polyline(pastPts,{color:pCol,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
-    let pastPoly = L.polyline(pastPts,{color:pCol,weight:7,opacity:fgOp,lineCap:'round',lineJoin:'round',className:'route-line-past'});
-    if(isFinished && !isBug) {
-      pastPoly.on('add', function() { animFn(this.getElement(), 150, pastPts); });
-    }
-    routeLayer.addLayer(pastPoly);
-  }
-  if(futurePts.length>=2){
-    routeLayer.addLayer(L.polyline(futurePts,{color:futColor,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
-    let futPoly = L.polyline(futurePts,{color:futColor,weight:7,opacity:futFgOp,lineCap:'round',lineJoin:'round',className:'route-line-past'});
+  if(data.custom_shape && data.custom_shape.length > 0) {
+    let shapePoly = L.polyline(data.custom_shape, {color: futColor, weight: 7, opacity: futFgOp, lineCap: 'round', lineJoin: 'round', className: 'route-line-past'});
     if(!isBug && !isFinished) {
-      futPoly.on('add', function() { animFn(this.getElement(), 400, futurePts); });
+      shapePoly.on('add', function() { animFn(this.getElement(), 400, data.custom_shape); });
     }
-    routeLayer.addLayer(futPoly);
+    routeLayer.addLayer(shapePoly);
+  } else {
+    if(pastPts.length>=2){
+      let pCol = isFinished ? '#a855f7' : pastColor;
+      routeLayer.addLayer(L.polyline(pastPts,{color:pCol,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
+      let pastPoly = L.polyline(pastPts,{color:pCol,weight:7,opacity:fgOp,lineCap:'round',lineJoin:'round',className:'route-line-past'});
+      if(isFinished && !isBug) {
+        pastPoly.on('add', function() { animFn(this.getElement(), 150, pastPts); });
+      }
+      routeLayer.addLayer(pastPoly);
+    }
+    if(futurePts.length>=2){
+      routeLayer.addLayer(L.polyline(futurePts,{color:futColor,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
+      let futPoly = L.polyline(futurePts,{color:futColor,weight:7,opacity:futFgOp,lineCap:'round',lineJoin:'round',className:'route-line-past'});
+      if(!isBug && !isFinished) {
+        futPoly.on('add', function() { animFn(this.getElement(), 400, futurePts); });
+      }
+      routeLayer.addLayer(futPoly);
+    }
   }
   pts.forEach((stop,i)=>{
     let isPast = (i < splitIdx);
@@ -1293,6 +1372,10 @@ function _renderRoute(busId,data,btn){
   let label='🗺️ Zavřít trasu ('+found+'/'+data.stops.length+' zast.)'+(uncertain?' ⚠️'+uncertain:'')+(missing.length?' ❓'+missing.length:'');
   if(btn){btn.textContent=label;btn.style.background='#1e40af';}
   let crb=document.getElementById('close-route-btn');if(crb)crb.style.display='block';
+  if(IS_ADMIN && data.route_key) {
+    let erb = document.getElementById('edit-route-btn');
+    if(erb) erb.style.display = 'block';
+  }
 }
 
 
@@ -1961,6 +2044,15 @@ LIVE_BUSES_DATA     = []
 TRACKED_SPZS        = set()
 WORKER_START_TIME   = None
 ADMIN_DELETED_BUSES = {}
+CUSTOM_ROUTES = {}
+CUSTOM_ROUTES_FILE = "custom_routes.json"
+try:
+    if os.path.exists(CUSTOM_ROUTES_FILE):
+        with open(CUSTOM_ROUTES_FILE, "r", encoding="utf-8") as f:
+            CUSTOM_ROUTES = json.load(f)
+except Exception as e:
+    print(f"Chyba nacteni {CUSTOM_ROUTES_FILE}: {e}")
+
 _stop_geo_cache     = {}
 _last_spz_auto_refresh = None   # kdy byl naposledy proveden automaticky reset SPZ u vsech busu
 
@@ -3278,6 +3370,7 @@ def _full_page(title, body_html, is_map=False):
     if is_map:
         map_head = """
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"/>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
   <style>
     *{margin:0;padding:0;box-sizing:border-box;}
@@ -3652,6 +3745,22 @@ def api_stops_in_view():
 
     return jsonify({"status": "success", "stops": stops_out, "count": len(stops_out)})
 
+@mapa_bp.route('/api/admin/save_custom_route', methods=['POST'])
+def api_admin_save_custom_route():
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizováno"}), 401
+    data = request.get_json(silent=True) or {}
+    route_key = str(data.get("route_key", "")).strip()
+    points = data.get("points")
+    if not route_key or not isinstance(points, list):
+        return jsonify({"status": "error", "message": "Chybná data"}), 400
+    CUSTOM_ROUTES[route_key] = points
+    try:
+        with open(CUSTOM_ROUTES_FILE, "w", encoding="utf-8") as f:
+            json.dump(CUSTOM_ROUTES, f, ensure_ascii=False, indent=2)
+        return jsonify({"status": "success", "message": "Trasa uložena"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @mapa_bp.route('/api/admin/save_stop_override', methods=['POST'])
 def api_admin_save_stop_override():
@@ -4215,6 +4324,13 @@ def api_bus_route(bus_id):
     found = sum(1 for s in result if s["lat"])
     print(f"[ROUTE] Bus {bus_id}: {found}/{len(result)} zastavek "
           f"(presne:{gtfs_hits} fuzzy:{fuzzy_hits} nominatim:{nominatim_hits})", flush=True)
+
+    custom_shape = None
+    if result and c.get('line'):
+        route_key = f"{c.get('line')}_{result[0]['name']}_{result[-1]['name']}"
+        if route_key in CUSTOM_ROUTES:
+            custom_shape = CUSTOM_ROUTES[route_key]
+
     return jsonify({
         "stops": result,
         "bus_id": bus_id,
@@ -4223,4 +4339,6 @@ def api_bus_route(bus_id):
         "gtfs_hits": gtfs_hits,
         "fuzzy_hits": fuzzy_hits,
         "nominatim_hits": nominatim_hits,
+        "custom_shape": custom_shape,
+        "route_key": route_key if result and c.get('line') else None
     })
