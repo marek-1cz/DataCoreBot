@@ -452,7 +452,10 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
   __ADMIN_BANNER__
   <div id="map"></div>
   <div id="sw">
-    <div style="font-size:17px;margin-bottom:3px;">🚍 Mapa se startuje</div>
+    <div style="font-size:17px;margin-bottom:3px;display:flex;justify-content:space-between;align-items:center;">
+      <span><i class="fas fa-spinner fa-spin"></i> Mapa se startuje</span>
+      <button onclick="document.getElementById('sw').style.display='none'" style="background:rgba(255,255,255,0.1);color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;">Vypnout</button>
+    </div>
     <div style="font-size:12px;font-weight:normal;opacity:.9;">Probiha nacitani dat - vyckejte prosim.</div>
     <div id="sw-cd" style="margin-top:5px;font-size:11px;opacity:.8;"></div>
   </div>
@@ -1150,6 +1153,10 @@ function closeActiveRoute(){
     map.removeControl(window.routeRoutingControl);
     window.routeRoutingControl = null;
   }
+  if(window.autoRoutingControl) {
+    map.removeControl(window.autoRoutingControl);
+    window.autoRoutingControl = null;
+  }
   if(activeRouteId){let btn=document.getElementById('route-btn-'+activeRouteId);if(btn){btn.textContent='🗺️ Zobrazit trasu';btn.style.background='#334155';}}
   activeRouteId=null;
   let crb=document.getElementById('close-route-btn');if(crb)crb.style.display='none';
@@ -1308,22 +1315,27 @@ function _renderRoute(busId,data,btn){
     }
     routeLayer.addLayer(shapePoly);
   } else {
-    if(pastPts.length>=2){
-      let pCol = isFinished ? '#a855f7' : pastColor;
-      routeLayer.addLayer(L.polyline(pastPts,{color:pCol,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
-      let pastPoly = L.polyline(pastPts,{color:pCol,weight:7,opacity:fgOp,lineCap:'round',lineJoin:'round',className:'route-line-past'});
-      if(isFinished && !isBug) {
-        pastPoly.on('add', function() { animFn(this.getElement(), 150, pastPts); });
-      }
-      routeLayer.addLayer(pastPoly);
-    }
-    if(futurePts.length>=2){
-      routeLayer.addLayer(L.polyline(futurePts,{color:futColor,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
-      let futPoly = L.polyline(futurePts,{color:futColor,weight:7,opacity:futFgOp,lineCap:'round',lineJoin:'round',className:'route-line-past'});
-      if(!isBug && !isFinished) {
-        futPoly.on('add', function() { animFn(this.getElement(), 400, futurePts); });
-      }
-      routeLayer.addLayer(futPoly);
+    let waypoints = pts.filter(s=>s.lat&&s.lng).map(s=>L.latLng(s.lat, s.lng));
+    if(waypoints.length >= 2) {
+      let tempControl = L.Routing.control({
+        waypoints: waypoints,
+        routeWhileDragging: false,
+        addWaypoints: false,
+        show: false,
+        lineOptions: { styles: [{opacity: 0}] },
+        createMarker: function() { return null; }
+      }).on('routesfound', function(e) {
+        let routeCoords = e.routes[0].coordinates.map(c => [c.lat, c.lng]);
+        routeLayer.addLayer(L.polyline(routeCoords,{color:futColor,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
+        let shapePoly = L.polyline(routeCoords, {color: futColor, weight: 7, opacity: futFgOp, lineCap: 'round', lineJoin: 'round', className: 'route-line-past'});
+        if(!isBug && !isFinished) {
+          shapePoly.on('add', function() { animFn(this.getElement(), 400, routeCoords); });
+        }
+        routeLayer.addLayer(shapePoly);
+      }).addTo(map);
+      
+      if(window.autoRoutingControl) map.removeControl(window.autoRoutingControl);
+      window.autoRoutingControl = tempControl;
     }
   }
   pts.forEach((stop,i)=>{
@@ -1372,7 +1384,10 @@ function _renderRoute(busId,data,btn){
   let label='🗺️ Zavřít trasu ('+found+'/'+data.stops.length+' zast.)'+(uncertain?' ⚠️'+uncertain:'')+(missing.length?' ❓'+missing.length:'');
   if(btn){btn.textContent=label;btn.style.background='#1e40af';}
   let crb=document.getElementById('close-route-btn');if(crb)crb.style.display='block';
-  if(IS_ADMIN && data.route_key) {
+  if(IS_ADMIN) {
+    if(!data.route_key && pts.length > 0 && bus && bus.line) {
+      data.route_key = bus.line + '_' + pts[0].name + '_' + pts[pts.length-1].name;
+    }
     let erb = document.getElementById('edit-route-btn');
     if(erb) erb.style.display = 'block';
   }
