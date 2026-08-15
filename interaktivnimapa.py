@@ -368,6 +368,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
   .lp-h div{gap:2px;flex-wrap:wrap;}
   .lp-h div button{font-size:10px;padding:2px 5px;}
   #nt-add-bar{left:4px;right:4px;transform:none;flex-wrap:wrap;gap:5px;}
+  #idos-modal-box{width:100% !important;height:100% !important;max-width:none !important;border:none !important;border-radius:0 !important;}
 }
 @media(max-width:420px){
   .n-provoz{display:none;}
@@ -505,7 +506,7 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
     <button onclick="document.getElementById('stop-info-pop').style.display='none'" style="background:transparent;border:1px solid #334155;color:#64748b;border-radius:5px;font-size:11px;padding:3px 8px;cursor:pointer;margin-top:6px;width:100%;">Zavřít</button>
   </div>
   <div id="idos-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.85);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:9000;align-items:center;justify-content:center;">
-    <div style="background:#1e293b;width:95%;max-width:800px;height:85vh;border-radius:12px;border:2px solid #38bdf8;box-shadow:0 10px 40px rgba(0,0,0,0.8);display:flex;flex-direction:column;overflow:hidden;">
+    <div id="idos-modal-box" style="background:#1e293b;width:95%;max-width:1000px;height:85vh;border-radius:12px;border:2px solid #38bdf8;box-shadow:0 10px 40px rgba(0,0,0,0.8);display:flex;flex-direction:column;overflow:hidden;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#0f172a;border-bottom:1px solid #334155;">
         <span style="color:#38bdf8;font-weight:bold;font-size:15px;">📅 Odjezdy ze zastávky</span>
         <button onclick="document.getElementById('idos-modal').style.display='none';document.getElementById('idos-iframe').src='';" style="background:none;border:none;color:#ef4444;font-size:20px;cursor:pointer;">✕</button>
@@ -1100,7 +1101,7 @@ async function toggleRoute(busId){
     let r=await fetch('/api/bus_route/'+busId);
     let data=await r.json();
     if(activeRouteId!==busId)return;
-    _renderRoute(busId,data,btn);
+    await _renderRoute(busId,data,btn);
   }catch(e){
     if(btn){btn.textContent='Chyba načítání';btn.style.background='#7f1d1d';}
     appLog('Trasa – chyba: '+e,'error');
@@ -1116,12 +1117,36 @@ async function refreshActiveRoute(){
     let r=await fetch('/api/bus_route/'+busId);
     let data=await r.json();
     if(activeRouteId!==busId)return;
-    _renderRoute(busId,data,btn);
+    await _renderRoute(busId,data,btn);
     showAdminToast('🗺️ Trasa obnovena',true);
   }catch(e){appLog('Refresh trasy – chyba: '+e,'error');}
 }
 
-function _renderRoute(busId,data,btn){
+async function fetchOsrmGeometry(pts) {
+  if (!pts || pts.length < 2) return pts;
+  if (pts.length > 95) {
+    appLog('Trasa má přes 95 bodů, OSRM přeskočeno (limit).', 'warn');
+    return pts;
+  }
+  let coords = pts.map(p => `${p.lng},${p.lat}`).join(';');
+  let url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+  try {
+    let r = await fetch(url);
+    if (!r.ok) return pts;
+    let data = await r.json();
+    if (data.code !== 'Ok' || !data.routes || !data.routes[0]) return pts;
+    let geom = data.routes[0].geometry;
+    if (geom && geom.coordinates) {
+      return geom.coordinates.map(c => ({ lat: c[1], lng: c[0] }));
+    }
+    return pts;
+  } catch (e) {
+    console.error('OSRM fail', e);
+    return pts;
+  }
+}
+
+async function _renderRoute(busId,data,btn){
   routeLayer.clearLayers();
   if(!data.stops||data.stops.length<2){
     if(btn){btn.textContent=data.error?'Trasa nedostupná ('+data.error+')':'Trasa nedostupná';btn.style.background='#7f1d1d';}
@@ -1185,8 +1210,11 @@ function _renderRoute(busId,data,btn){
   if (isWaiting) splitIdx = 0;
 
   let finalIdx=pts.length-1;
-  let pastPts=pts.slice(0,Math.min(splitIdx+1,pts.length)).map(s=>[s.lat,s.lng]);
-  let futurePts=pts.slice(splitIdx).map(s=>[s.lat,s.lng]);
+  let pastPtsRaw=pts.slice(0,Math.min(splitIdx+1,pts.length));
+  let futurePtsRaw=pts.slice(splitIdx);
+  
+  let pastPts = (await fetchOsrmGeometry(pastPtsRaw)).map(s=>[s.lat,s.lng]);
+  let futurePts = (await fetchOsrmGeometry(futurePtsRaw)).map(s=>[s.lat,s.lng]);
 
   let animFn = function(el, speed, ptsArr) {
     if(!el) return;
