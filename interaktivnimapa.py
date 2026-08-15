@@ -1106,12 +1106,20 @@ function startEditRouteRoads() {
   
   window.routeRoutingControl = L.Routing.control({
     waypoints: waypoints,
+    router: L.Routing.osrmv1({
+      serviceUrl: 'https://router.project-osrm.org/route/v1',
+      profile: 'driving',
+      useHints: false
+    }),
     routeWhileDragging: true,
     addWaypoints: true,
     show: false,
     lineOptions: {
       addWaypoints: true,
-      styles: [{color: '#10b981', opacity: 0.8, weight: 6}]
+      styles: [
+        {color: 'black', opacity: 0.15, weight: 16},
+        {color: '#10b981', opacity: 0.8, weight: 6}
+      ]
     }
   }).on('routesfound', function(e) {
     window.latestLRMRoute = e.routes[0];
@@ -1323,6 +1331,11 @@ function _renderRoute(busId,data,btn){
     if(waypoints.length >= 2) {
       let tempControl = L.Routing.control({
         waypoints: waypoints,
+        router: L.Routing.osrmv1({
+          serviceUrl: 'https://router.project-osrm.org/route/v1',
+          profile: 'driving',
+          useHints: false
+        }),
         routeWhileDragging: false,
         addWaypoints: false,
         show: false,
