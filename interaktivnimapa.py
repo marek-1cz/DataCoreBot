@@ -501,6 +501,7 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
     <div id="sip-mode" style="font-size:10px;color:#64748b;margin-bottom:6px;"></div>
     <div class="sip-lines" id="sip-lines-wrap"></div>
     <div id="sip-note" style="font-size:10px;color:#f59e0b;margin-top:4px;"></div>
+    <a id="sip-idos-btn" href="#" target="_blank" style="display:block;background:#38bdf8;color:#0f172a;text-align:center;text-decoration:none;border-radius:5px;font-size:12px;font-weight:bold;padding:6px;margin-top:10px;width:100%;box-sizing:border-box;transition:0.2s;" onmouseover="this.style.background='#7dd3fc'" onmouseout="this.style.background='#38bdf8'">📅 Odjezdy (IDOS)</a>
     <button onclick="document.getElementById('stop-info-pop').style.display='none'" style="background:transparent;border:1px solid #334155;color:#64748b;border-radius:5px;font-size:11px;padding:3px 8px;cursor:pointer;margin-top:6px;width:100%;">Zavřít</button>
   </div>
   <div id="lines-overlay-panel" style="display:none;position:fixed;top:64px;right:10px;z-index:4600;background:#0f172a;border:2px solid #38bdf8;border-radius:10px;width:290px;max-width:95vw;box-shadow:0 8px 28px rgba(0,0,0,.8);">
@@ -1688,6 +1689,12 @@ function showStopInfo(s){
   }
   let noteEl=document.getElementById('sip-note');
   noteEl.textContent=s.substitute?'🔀 Náhradní zastávka':s.approx?'⚠️ Přibližná poloha':'';
+  
+  let idosBtn=document.getElementById('sip-idos-btn');
+  if(idosBtn){
+    idosBtn.href=`https://idos.idnes.cz/vlakyautobusymhdvse/odjezdy/vysledky/?f=${encodeURIComponent(s.name)}`;
+  }
+  
   document.getElementById('stop-info-pop').style.display='block';
 }
 
