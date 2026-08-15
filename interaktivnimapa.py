@@ -236,7 +236,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 #map-wrap{position:fixed;top:0;left:0;width:100vw;height:100vh;}
 #map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;}
 #panel-zone{position:fixed;top:0;left:0;right:0;height:40px;z-index:3000;pointer-events:none;}
-#top-nav{position:fixed;top:-72px;left:0;right:0;height:58px;background:rgba(8,16,30,0.97);border-bottom:1px solid #334155;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:2999;transition:top 0.3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;padding:0 14px;gap:10px;box-shadow:0 4px 24px rgba(0,0,0,0.7);}
+#top-nav{position:fixed;top:-72px;left:0;right:0;min-height:58px;background:rgba(8,16,30,0.97);border-bottom:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:2999;transition:top 0.3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;padding:6px 14px;gap:6px;box-shadow:0 4px 24px rgba(0,0,0,0.7);flex-wrap:wrap;}
 #top-nav.vis{top:0;}
 .n-logo{display:flex;align-items:center;text-decoration:none;flex-shrink:0;}
 .n-logo img{height:32px;width:auto;filter:drop-shadow(0 0 7px rgba(56,189,248,.55));}
@@ -352,7 +352,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 #log-body .lg-warn{color:#fbbf24;}
 #log-body .lg-ok{color:#34d399;}
 @media(max-width:768px){
-  #top-nav{gap:4px;padding:0 5px;height:auto;min-height:50px;flex-wrap:wrap;padding-bottom:5px;padding-top:5px;}
+  #top-nav{gap:4px;padding:4px 5px;height:auto;min-height:50px;flex-wrap:wrap;justify-content:center;}
   .n-title,.n-warn{display:none;}
   .n-clock{font-size:10px;padding:3px 5px;}
   .n-btn{font-size:10px;padding:4px 7px;}
@@ -385,6 +385,11 @@ body.nt-add-active #map{cursor:crosshair !important;}
 body.low-graphics * {
   box-shadow: none !important;
   text-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: none !important;
+  animation: none !important;
+  filter: none !important;
 }
 body.low-graphics .route-line-past,
 body.low-graphics path,
@@ -400,12 +405,12 @@ body.dark-map #settings-toggle-btn:hover{background:rgba(56,189,248,0.3);box-sha
 
 body.nav-static #top-nav { top: 0 !important; }
 body.nav-static #nav-handle { display: none !important; }
-body.nav-glass #top-nav { top: 15px !important; left: 50% !important; transform: translateX(-50%); width: 96%; max-width: 1000px; border-radius: 20px; border: 1px solid rgba(56,189,248,0.4); background: rgba(15,23,42,0.65); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 10px 40px rgba(0,0,0,0.8), inset 0 0 20px rgba(56,189,248,0.15); height: auto !important; min-height: 58px; flex-wrap: wrap; padding: 10px 14px; justify-content: center; }
+body.nav-glass #top-nav { top: 15px !important; left: 50% !important; transform: translateX(-50%); width: 96%; max-width: 1000px; border-radius: 24px; border: 1px solid rgba(56,189,248,0.6); background: linear-gradient(135deg, rgba(15,23,42,0.5), rgba(30,58,95,0.3)); backdrop-filter: blur(32px) saturate(150%); -webkit-backdrop-filter: blur(32px) saturate(150%); box-shadow: 0 16px 40px rgba(0,0,0,0.9), inset 0 2px 25px rgba(56,189,248,0.3); height: auto !important; min-height: 58px; flex-wrap: wrap; gap: 6px; padding: 10px 14px; justify-content: center; }
 body.nav-glass #nav-handle { display: none !important; }
 body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !important; }
 
 @media (max-width: 768px) {
-  #top-nav { flex-wrap: wrap; height: auto; min-height: 58px; padding-top: 10px; padding-bottom: 10px; justify-content: center; gap: 8px; }
+  #top-nav { flex-wrap: wrap; height: auto; min-height: 50px; padding: 4px 6px; justify-content: center; gap: 4px; }
   body.nav-glass #top-nav { width: 98%; border-radius: 14px; top: 10px !important; }
   .n-warn, .n-clock, .n-title { display: none !important; }
   #spz-search-inp { width: 90px !important; }
@@ -668,7 +673,7 @@ var map=L.map('map',{zoomControl:false}).setView([dLat,dLng],dZoom);
 L.control.zoom({position:'bottomleft'}).addTo(map);
 window.mapLayers = {
   osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
-  dark: L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; Stadia Maps'}),
+  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
   bw: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
   satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'})
 };
