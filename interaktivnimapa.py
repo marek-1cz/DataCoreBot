@@ -1206,6 +1206,8 @@ async function refreshActiveRoute(){
 }
 
 function _renderRoute(busId,data,btn){
+  window.currentRouteData = data;
+  window.currentRouteBusId = busId;
   routeLayer.clearLayers();
   if(!data.stops||data.stops.length<2){
     if(btn){btn.textContent=data.error?'Trasa nedostupná ('+data.error+')':'Trasa nedostupná';btn.style.background='#7f1d1d';}
