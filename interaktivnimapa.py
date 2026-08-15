@@ -1152,9 +1152,14 @@ function startEditRouteRoads() {
         });
         let rd = await r.json();
         if(rd.status === 'success') {
-          showAdminToast(`Zastávka ${stop.name} upravena pro tuto trasu`, true);
-          // Překreslíme trasu aby se projevila změna
-          refreshActiveRoute();
+          showAdminToast(`Zastávka ${stop.name} upravena pro tento směr`, true);
+          if (window.routeRoutingControl) {
+            let wps = window.routeRoutingControl.getWaypoints();
+            if (wps[idx]) {
+              wps[idx].latLng = pos;
+              window.routeRoutingControl.setWaypoints(wps);
+            }
+          }
         } else {
           showAdminToast('Chyba: ' + rd.message, false);
         }
@@ -1188,11 +1193,11 @@ async function saveRouteRoads() {
       toggleRoute(window.currentRouteBusId); // reload
     } else {
       showAdminToast('Chyba: ' + rd.message, false);
-      document.getElementById('save-route-btn').innerHTML = '<i class="fas fa-save"></i> Uložit silnice';
+      document.getElementById('save-route-btn').innerHTML = '<i class="fas fa-save"></i> ULOŽIT (Táhni modrou čáru = trasu, červený bod = zastávku)';
     }
   } catch(e) {
     showAdminToast('Chyba uložení', false);
-    document.getElementById('save-route-btn').innerHTML = '<i class="fas fa-save"></i> Uložit silnice';
+    document.getElementById('save-route-btn').innerHTML = '<i class="fas fa-save"></i> ULOŽIT (Táhni modrou čáru = trasu, červený bod = zastávku)';
   }
 }
 
@@ -2143,22 +2148,7 @@ TRACKED_SPZS        = set()
 WORKER_START_TIME   = None
 ADMIN_DELETED_BUSES = {}
 CUSTOM_ROUTES = {}
-CUSTOM_ROUTES_FILE = "custom_routes.json"
-try:
-    if os.path.exists(CUSTOM_ROUTES_FILE):
-        with open(CUSTOM_ROUTES_FILE, "r", encoding="utf-8") as f:
-            CUSTOM_ROUTES = json.load(f)
-except Exception as e:
-    print(f"Chyba nacteni {CUSTOM_ROUTES_FILE}: {e}")
-
 ROUTE_STOP_OVERRIDES = {}
-ROUTE_STOP_OVERRIDES_FILE = "route_stop_overrides.json"
-try:
-    if os.path.exists(ROUTE_STOP_OVERRIDES_FILE):
-        with open(ROUTE_STOP_OVERRIDES_FILE, "r", encoding="utf-8") as f:
-            ROUTE_STOP_OVERRIDES = json.load(f)
-except Exception as e:
-    print(f"Chyba nacteni {ROUTE_STOP_OVERRIDES_FILE}: {e}")
 
 _stop_geo_cache     = {}
 _last_spz_auto_refresh = None   # kdy byl naposledy proveden automaticky reset SPZ u vsech busu
@@ -2402,11 +2392,43 @@ def _load_stop_overrides(db):
                 "substitute": bool(row.get("substitute", False)),
                 "display_name": row.get("display_name") or "",
                 "custom_lines": cl,   # None = pouzij GTFS, list = pouzij toto
+                "mode": row.get("mode") or "bus",
             }
         STOP_OVERRIDES = loaded
         print(f"[NT] Nacteno {len(loaded)} rucnich oprav poloh zastavek.", flush=True)
     except Exception as e:
         print(f"[NT] Tabulka stop_overrides nedostupna (OK pokud NT jeste nebyl pouzit): {e}", flush=True)
+
+def _load_route_stop_overrides(db):
+    global ROUTE_STOP_OVERRIDES
+    if not db:
+        return
+    try:
+        res = db.table("route_stop_overrides").select("*").execute()
+        loaded = {}
+        for row in (res.data or []):
+            loaded[row["segment_key"]] = {"lat": row["lat"], "lng": row["lng"]}
+        ROUTE_STOP_OVERRIDES = loaded
+        print(f"[NT] Nacteno {len(loaded)} smerovych oprav poloh zastavek.", flush=True)
+    except Exception as e:
+        print(f"[NT] Tabulka route_stop_overrides nedostupna: {e}", flush=True)
+
+def _load_custom_routes(db):
+    global CUSTOM_ROUTES
+    if not db:
+        return
+    try:
+        res = db.table("custom_routes").select("*").execute()
+        loaded = {}
+        for row in (res.data or []):
+            try:
+                loaded[row["route_key"]] = row["points"] if isinstance(row["points"], list) else json.loads(row["points"])
+            except Exception:
+                pass
+        CUSTOM_ROUTES = loaded
+        print(f"[NT] Nacteno {len(loaded)} vlastnich tvaru silnic.", flush=True)
+    except Exception as e:
+        print(f"[NT] Tabulka custom_routes nedostupna: {e}", flush=True)
 
 
 def _nearest_stop_name(lat, lon, max_m=400):
@@ -2747,6 +2769,8 @@ def background_map_worker():
         except Exception:
             pass
         _load_stop_overrides(db_client)
+        _load_route_stop_overrides(db_client)
+        _load_custom_routes(db_client)
 
     url_inflow_base = "https://pvvd.idpk.cz/Ajax/GetPoints"
     url_arriva = "https://www.arriva.cz/api/graphql"
@@ -3871,12 +3895,20 @@ def api_admin_save_custom_route():
     if not route_key or not isinstance(points, list):
         return jsonify({"status": "error", "message": "Chybná data"}), 400
     CUSTOM_ROUTES[route_key] = points
-    try:
-        with open(CUSTOM_ROUTES_FILE, "w", encoding="utf-8") as f:
-            json.dump(CUSTOM_ROUTES, f, ensure_ascii=False, indent=2)
-        return jsonify({"status": "success", "message": "Trasa uložena"})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    
+    db = get_db_client()
+    if db:
+        try:
+            db.table("custom_routes").upsert({
+                "route_key": route_key,
+                "points": json.dumps(points, ensure_ascii=False),
+                "updated_at": get_prague_time().isoformat(),
+            }, on_conflict="route_key").execute()
+            return jsonify({"status": "success", "message": "Trasa uložena do Supabase"})
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+    else:
+        return jsonify({"status": "error", "message": "DB nedostupná"}), 500
 
 @mapa_bp.route('/api/admin/save_route_stop_override', methods=['POST'])
 def api_admin_save_route_stop_override():
@@ -3893,12 +3925,20 @@ def api_admin_save_route_stop_override():
     
     route_key = f"{_norm_txt(prev_stop)}|{_norm_txt(this_stop)}|{_norm_txt(next_stop)}"
     ROUTE_STOP_OVERRIDES[route_key] = {"lat": float(lat), "lng": float(lng)}
-    try:
-        with open(ROUTE_STOP_OVERRIDES_FILE, "w", encoding="utf-8") as f:
-            json.dump(ROUTE_STOP_OVERRIDES, f, ensure_ascii=False, indent=2)
-        return jsonify({"status": "success", "message": "Zastávka upravena pro tuto trasu"})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    
+    db = get_db_client()
+    if db:
+        try:
+            db.table("route_stop_overrides").upsert({
+                "segment_key": route_key,
+                "lat": float(lat), "lng": float(lng),
+                "updated_at": get_prague_time().isoformat(),
+            }, on_conflict="segment_key").execute()
+            return jsonify({"status": "success", "message": "Zastávka upravena pro tento směr"})
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+    else:
+        return jsonify({"status": "error", "message": "DB nedostupná"}), 500
 
 @mapa_bp.route('/api/admin/save_stop_override', methods=['POST'])
 def api_admin_save_stop_override():
@@ -3945,6 +3985,7 @@ def api_admin_save_stop_override():
         "approx": approx, "substitute": substitute,
         "display_name": display_name,
         "custom_lines": custom_lines,
+        "mode": mode
     }
     CONFIDENCE_LOG.pop(key, None)
 
@@ -3956,6 +3997,7 @@ def api_admin_save_stop_override():
                 "approx": approx, "substitute": substitute,
                 "display_name": display_name,
                 "custom_lines": json.dumps(custom_lines, ensure_ascii=False) if custom_lines is not None else None,
+                "mode": mode,
                 "updated_at": get_prague_time().isoformat(),
             }, on_conflict="stop_name").execute()
         except Exception as e:
