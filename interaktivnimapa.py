@@ -501,8 +501,17 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
     <div id="sip-mode" style="font-size:10px;color:#64748b;margin-bottom:6px;"></div>
     <div class="sip-lines" id="sip-lines-wrap"></div>
     <div id="sip-note" style="font-size:10px;color:#f59e0b;margin-top:4px;"></div>
-    <a id="sip-idos-btn" href="#" target="_blank" style="display:block;background:#38bdf8;color:#0f172a;text-align:center;text-decoration:none;border-radius:5px;font-size:12px;font-weight:bold;padding:6px;margin-top:10px;width:100%;box-sizing:border-box;transition:0.2s;" onmouseover="this.style.background='#7dd3fc'" onmouseout="this.style.background='#38bdf8'">📅 Odjezdy (IDOS)</a>
+    <button id="sip-idos-btn" style="display:block;background:#38bdf8;color:#0f172a;text-align:center;border:none;border-radius:5px;font-size:12px;font-weight:bold;padding:6px;margin-top:10px;width:100%;box-sizing:border-box;transition:0.2s;cursor:pointer;" onmouseover="this.style.background='#7dd3fc'" onmouseout="this.style.background='#38bdf8'">📅 Odjezdy ze zastávky</button>
     <button onclick="document.getElementById('stop-info-pop').style.display='none'" style="background:transparent;border:1px solid #334155;color:#64748b;border-radius:5px;font-size:11px;padding:3px 8px;cursor:pointer;margin-top:6px;width:100%;">Zavřít</button>
+  </div>
+  <div id="idos-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.85);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:9000;align-items:center;justify-content:center;">
+    <div style="background:#1e293b;width:95%;max-width:800px;height:85vh;border-radius:12px;border:2px solid #38bdf8;box-shadow:0 10px 40px rgba(0,0,0,0.8);display:flex;flex-direction:column;overflow:hidden;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#0f172a;border-bottom:1px solid #334155;">
+        <span style="color:#38bdf8;font-weight:bold;font-size:15px;">📅 Odjezdy ze zastávky</span>
+        <button onclick="document.getElementById('idos-modal').style.display='none';document.getElementById('idos-iframe').src='';" style="background:none;border:none;color:#ef4444;font-size:20px;cursor:pointer;">✕</button>
+      </div>
+      <iframe id="idos-iframe" src="" style="width:100%;height:100%;border:none;background:white;"></iframe>
+    </div>
   </div>
   <div id="lines-overlay-panel" style="display:none;position:fixed;top:64px;right:10px;z-index:4600;background:#0f172a;border:2px solid #38bdf8;border-radius:10px;width:290px;max-width:95vw;box-shadow:0 8px 28px rgba(0,0,0,.8);">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #1e293b;">
@@ -1692,7 +1701,12 @@ function showStopInfo(s){
   
   let idosBtn=document.getElementById('sip-idos-btn');
   if(idosBtn){
-    idosBtn.href=`https://idos.idnes.cz/vlakyautobusymhdvse/odjezdy/vysledky/?f=${encodeURIComponent(s.name)}`;
+    idosBtn.onclick = function() {
+      let url = `https://idos.idnes.cz/vlakyautobusymhdvse/odjezdy/vysledky/?f=${encodeURIComponent(s.name)}`;
+      document.getElementById('idos-iframe').src = url;
+      document.getElementById('idos-modal').style.display = 'flex';
+      document.getElementById('stop-info-pop').style.display = 'none';
+    };
   }
   
   document.getElementById('stop-info-pop').style.display='block';
