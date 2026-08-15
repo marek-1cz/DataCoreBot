@@ -516,8 +516,8 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
     <button id="sip-idos-btn" style="display:block;background:#38bdf8;color:#0f172a;text-align:center;border:none;border-radius:5px;font-size:12px;font-weight:bold;padding:6px;margin-top:10px;width:100%;box-sizing:border-box;transition:0.2s;cursor:pointer;" onmouseover="this.style.background='#7dd3fc'" onmouseout="this.style.background='#38bdf8'">📅 Odjezdy ze zastávky</button>
     <button onclick="document.getElementById('stop-info-pop').style.display='none'" style="background:transparent;border:1px solid #334155;color:#64748b;border-radius:5px;font-size:11px;padding:3px 8px;cursor:pointer;margin-top:6px;width:100%;">Zavřít</button>
   </div>
-  <div id="idos-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.85);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:9000;align-items:center;justify-content:center;">
-    <div id="idos-modal-box" style="background:#1e293b;width:95%;max-width:1000px;height:85vh;border-radius:12px;border:2px solid #38bdf8;box-shadow:0 10px 40px rgba(0,0,0,0.8);display:flex;flex-direction:column;overflow:hidden;">
+  <div id="idos-modal" onclick="if(event.target===this){this.style.display='none';document.getElementById('idos-iframe').src='';}" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.85);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:9000;align-items:center;justify-content:center;">
+    <div id="idos-modal-box" style="background:#1e293b;width:95vw;max-width:1400px;height:95vh;border-radius:12px;border:2px solid #38bdf8;box-shadow:0 10px 40px rgba(0,0,0,0.8);display:flex;flex-direction:column;overflow:hidden;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#0f172a;border-bottom:1px solid #334155;">
         <span style="color:#38bdf8;font-weight:bold;font-size:15px;">📅 Odjezdy ze zastávky</span>
         <button onclick="document.getElementById('idos-modal').style.display='none';document.getElementById('idos-iframe').src='';" style="background:none;border:none;color:#ef4444;font-size:20px;cursor:pointer;">✕</button>
@@ -996,13 +996,15 @@ async function loadReportSituace(){
       sep.textContent='=== HLÁŠENÍ SERVERU ===';
       body.appendChild(sep);
     }
-    data.entries.forEach(e=>{
-      let div=document.createElement('div');
-      div.style.cssText='padding:5px 0;border-bottom:1px solid #1e293b;font-family:monospace;font-size:10px;';
-      let clr=e.typ==='DUP_SPZ'?'#f87171':e.typ==='SPZ_RESET'?'#fbbf24':'#94a3b8';
-      div.innerHTML=`<span style="color:${clr};font-weight:bold;">[${e.ts}] ${e.typ}</span><br><span style="color:#cbd5e1;">${e.zprava}</span>`;
-      body.appendChild(div);
-    });
+    if(data.entries && data.entries.length){
+      data.entries.forEach(e=>{
+        let div=document.createElement('div');
+        div.style.cssText='padding:5px 0;border-bottom:1px solid #1e293b;font-family:monospace;font-size:10px;';
+        let clr=e.typ==='DUP_SPZ'?'#f87171':e.typ==='SPZ_RESET'?'#fbbf24':'#94a3b8';
+        div.innerHTML=`<span style="color:${clr};font-weight:bold;">[${e.ts}] ${e.typ}</span><br><span style="color:#cbd5e1;">${e.zprava}</span>`;
+        body.appendChild(div);
+      });
+    }
   }catch(err){body.innerHTML='<div style="color:#f87171;padding:6px;">Chyba načítání: '+err+'</div>';}
 }
 function clearLog(){
@@ -1627,7 +1629,7 @@ async function addLineToNtStop(){
   try{
     let res=await fetch('/api/admin/assign_line_to_stop',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({stop_name:s.name,line,remove:false})});
+      body:JSON.stringify({stop_name:s.name,line,remove:false,mode:s.mode})});
     let rd=await res.json();
     if(rd.status==='success'){
       s.lines=rd.lines;
@@ -1642,7 +1644,7 @@ async function removeNtLine(line){
   try{
     let res=await fetch('/api/admin/assign_line_to_stop',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({stop_name:s.name,line,remove:true})});
+      body:JSON.stringify({stop_name:s.name,line,remove:true,mode:s.mode})});
     let rd=await res.json();
     if(rd.status==='success'){s.lines=rd.lines;renderNtLineChips(s.lines);showAdminToast(`Linka ${line} odebrána`,true);}
     else showAdminToast('Chyba: '+(rd.message||'?'),false);
@@ -1693,7 +1695,7 @@ async function deleteNtStop(){
   let {stop:s}=currentNtEdit;
   if(!confirm(`Odebrat zastávku "${s.name}"? Vrátí se na automatickou GTFS polohu.`))return;
   try{
-    let res=await fetch('/api/admin/delete_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:s.name})});
+    let res=await fetch('/api/admin/delete_stop_override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:s.name, mode:s.mode})});
     let rd=await res.json();
     if(rd.status==='success'){showAdminToast(`🗑️ Odebráno: ${s.name}`,true);document.getElementById('nt-edit-pop').style.display='none';loadNTStops();}
     else showAdminToast('Chyba: '+(rd.message||'?'),false);
@@ -1937,11 +1939,15 @@ function showStopInfo(s){
     idosBtn.textContent = btnIcon + btnText;
     idosBtn.onclick = function() {
       let url = `https://idos.idnes.cz/vlakyautobusymhdvse/odjezdy/vysledky/?f=${encodeURIComponent(s.name)}`;
-      document.getElementById('idos-iframe').src = url;
-      let modalHeader = document.querySelector('#idos-modal-box span');
-      if (modalHeader) modalHeader.textContent = btnIcon + btnText;
-      document.getElementById('idos-modal').style.display = 'flex';
-      document.getElementById('stop-info-pop').style.display = 'none';
+      if (window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent)) {
+        window.open(url, '_blank');
+      } else {
+        document.getElementById('idos-iframe').src = url;
+        let modalHeader = document.querySelector('#idos-modal-box span');
+        if (modalHeader) modalHeader.textContent = btnIcon + btnText;
+        document.getElementById('idos-modal').style.display = 'flex';
+        document.getElementById('stop-info-pop').style.display = 'none';
+      }
     };
   }
   
@@ -2544,16 +2550,12 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000, bus_mode=Non
 
     # 0) Rucni oprava z NT rezimu ma VZDY prednost - admin uz to jednou
     # rucne overil a ulozil, takze se uz znovu nehleda v GTFS/Nominatim.
-    ov = STOP_OVERRIDES.get(key)
+    ov = STOP_OVERRIDES.get(f"{key}|{target_mode}")
+    if not ov:
+        ov = STOP_OVERRIDES.get(f"{key}|mixed")
+        
     if ov:
-        # Zkontroluj mode match, pokud se neshoduje a existuje alternativa v GTFS, pouzij GTFS (zamezi michani)
-        ov_mode = ov.get("mode", "bus")
-        if bus_mode and ov_mode != "mixed" and ov_mode != bus_mode:
-            # Ignorovat manualni override s jinym modem (např. vlak na bus zastavce),
-            # pokud nepotvrdime presnou shodu. Spis proste prejdeme na GTFS.
-            pass
-        else:
-            return (ov["lat"], ov["lng"]), "manual"
+        return (ov["lat"], ov["lng"]), "manual"
 
     if not GTFS_STOPS:
         return None, None
@@ -3792,9 +3794,12 @@ def _bbox_stops(south, west, north, east, max_cells=20000, max_stops=1500):
             existing["lines"] = merged
 
     # Pridej rucne vytvorene zastavky bez GTFS protejsku (nove pres NT +)
-    gtfs_keys = {r["key"] for r in results}
-    for key, ov in STOP_OVERRIDES.items():
-        if key in gtfs_keys:
+    gtfs_dedup_keys = {(r["key"], r["mode"] or "bus") for r in results}
+    for comp_key, ov in STOP_OVERRIDES.items():
+        parts = comp_key.split('|', 1)
+        base_key = parts[0]
+        mode = parts[1] if len(parts) > 1 else ov.get("mode", "bus")
+        if (base_key, mode) in gtfs_dedup_keys:
             continue  # uz pokryto pres GTFS zaznam vyse (override se aplikuje pozdeji v endpointu)
         la, lo = ov.get("lat"), ov.get("lng")
         if la is None or lo is None:
@@ -3802,8 +3807,8 @@ def _bbox_stops(south, west, north, east, max_cells=20000, max_stops=1500):
         if not (south <= la <= north and west <= lo <= east):
             continue
         results.append({
-            "key": key, "name": ov.get("name") or key, "lat": la, "lng": lo,
-            "mode": None, "lines": ov.get("custom_lines") or [],
+            "key": base_key, "name": ov.get("name") or base_key, "lat": la, "lng": lo,
+            "mode": mode, "lines": ov.get("custom_lines") or [],
         })
 
     if len(results) > max_stops:
@@ -3885,7 +3890,9 @@ def api_stops_near():
                 if d > radius_m:
                     continue
                 key = _norm_txt(name)
-                ov = STOP_OVERRIDES.get(key)
+                m = GTFS_MODES[idx] if idx < len(GTFS_MODES) else None
+                m_str = m or "bus"
+                ov = STOP_OVERRIDES.get(f"{key}|{m_str}") or STOP_OVERRIDES.get(f"{key}|mixed")
                 eff_lat = ov["lat"] if ov else la
                 eff_lng = ov["lng"] if ov else lo
                 if key not in seen or d < seen[key]["_d"]:
@@ -3919,7 +3926,8 @@ def api_stops_in_view():
     stops_out = []
     for s in items:
         key = s["key"]
-        ov = STOP_OVERRIDES.get(key)
+        m_str = s.get("mode") or "bus"
+        ov = STOP_OVERRIDES.get(f"{key}|{m_str}") or STOP_OVERRIDES.get(f"{key}|mixed")
         eff_lat = ov["lat"] if ov else s["lat"]
         eff_lng = ov["lng"] if ov else s["lng"]
         eff_lines = ov["custom_lines"] if (ov and ov.get("custom_lines") is not None) else s.get("lines", [])
@@ -4001,7 +4009,8 @@ def api_admin_save_stop_override():
     if not name:
         return jsonify({"status": "error", "message": "Chyb\u00ed n\u00e1zev zast\u00e1vky"}), 400
 
-    key = _norm_txt(name)
+    mode = str(data.get("mode", "bus")).strip()
+    key = f"{_norm_txt(name)}|{mode}"
     existing = STOP_OVERRIDES.get(key, {})
 
     # Souradnice - povinne jen pokud zaznam jeste neexistuje
@@ -4027,7 +4036,7 @@ def api_admin_save_stop_override():
     else:
         custom_lines = existing.get("custom_lines")
         
-    mode = str(data["mode"]).strip() if "mode" in data else existing.get("mode", "bus")
+    # mode uz mame vyse
 
     STOP_OVERRIDES[key] = {
         "lat": lat, "lng": lng, "name": name,
@@ -4048,7 +4057,7 @@ def api_admin_save_stop_override():
                 "custom_lines": json.dumps(custom_lines, ensure_ascii=False) if custom_lines is not None else None,
                 "mode": mode,
                 "updated_at": get_prague_time().isoformat(),
-            }, on_conflict="stop_name").execute()
+            }).execute()
         except Exception as e:
             print(f"[NT] Chyba ukl\u00e1d\u00e1n\u00ed do DB: {e}", flush=True)
 
@@ -4062,14 +4071,15 @@ def api_admin_delete_stop_override():
         return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()
+    mode = str(data.get("mode", "bus")).strip()
     if not name:
         return jsonify({"status": "error", "message": "Chyb\u00ed n\u00e1zev zast\u00e1vky"}), 400
-    key = _norm_txt(name)
+    key = f"{_norm_txt(name)}|{mode}"
     STOP_OVERRIDES.pop(key, None)
     db = get_db_client()
     if db:
         try:
-            db.table("stop_overrides").delete().eq("stop_name", name).execute()
+            db.table("stop_overrides").delete().eq("stop_name", name).eq("mode", mode).execute()
         except Exception as e:
             print(f"[NT] Chyba maz\u00e1n\u00ed z DB: {e}", flush=True)
     return jsonify({"status": "success"})
@@ -4087,10 +4097,11 @@ def api_admin_assign_line_to_stop():
     stop_name = str(data.get("stop_name", "")).strip()
     line_str = str(data.get("line", "")).strip()
     remove = bool(data.get("remove", False))
+    mode = str(data.get("mode", "bus")).strip()
     if not stop_name or not line_str:
         return jsonify({"status": "error", "message": "Chyb\u00ed n\u00e1zev zast\u00e1vky nebo linky"}), 400
 
-    key = _norm_txt(stop_name)
+    key = f"{_norm_txt(stop_name)}|{mode}"
     ov = STOP_OVERRIDES.get(key)
 
     # Ziskej souradnice - z override nebo z GTFS
@@ -4147,7 +4158,7 @@ def api_admin_assign_line_to_stop():
                 "custom_lines": json.dumps(cur_lines, ensure_ascii=False),
                 "mode": mode,
                 "updated_at": get_prague_time().isoformat(),
-            }, on_conflict="stop_name").execute()
+            }).execute()
         except Exception as e:
             print(f"[NT] Chyba ukl\u00e1d\u00e1n\u00ed linky: {e}", flush=True)
 
@@ -4205,7 +4216,10 @@ def api_lines_map():
         if not ln_list:
             continue
         name, la, lo = GTFS_STOPS[idx]
-        ov = STOP_OVERRIDES.get(_norm_txt(name))
+        key = _norm_txt(name)
+        m = GTFS_MODES[idx] if idx < len(GTFS_MODES) else None
+        m_str = m or "bus"
+        ov = STOP_OVERRIDES.get(f"{key}|{m_str}") or STOP_OVERRIDES.get(f"{key}|mixed")
         eff_lat = ov['lat'] if ov else la
         eff_lng = ov['lng'] if ov else lo
         disp = (ov.get('display_name') or '') if ov else ''
@@ -4309,7 +4323,9 @@ def api_admin_line_stops():
             continue
         name, la, lo = GTFS_STOPS[idx]
         key = _norm_txt(name)
-        ov = STOP_OVERRIDES.get(key)
+        m = GTFS_MODES[idx] if idx < len(GTFS_MODES) else None
+        m_str = m or "bus"
+        ov = STOP_OVERRIDES.get(f"{key}|{m_str}") or STOP_OVERRIDES.get(f"{key}|mixed")
         eff_lat = ov["lat"] if ov else la
         eff_lng = ov["lng"] if ov else lo
         eff_lines = (ov.get("custom_lines") if ov and ov.get("custom_lines") is not None else ln_list) or []
@@ -4516,7 +4532,7 @@ def api_bus_route(bus_id):
         if coords:
             seen[name_c] = coords
             anchor = coords
-            ov = STOP_OVERRIDES.get(_norm_txt(name_c))
+            ov = STOP_OVERRIDES.get(f"{_norm_txt(name_c)}|{bus_mode}") or STOP_OVERRIDES.get(f"{_norm_txt(name_c)}|mixed")
             result[i] = {"name": name_c, "time": t, "lat": coords[0], "lng": coords[1],
                          "passed": i < current_idx, "confidence": conf,
                          "display_name": (ov.get("display_name") if ov else "") or ""}
@@ -4551,7 +4567,7 @@ def api_bus_route(bus_id):
         if not (s and s.get("name")):
             continue
         key = _norm_txt(s["name"])
-        ov = STOP_OVERRIDES.get(key)
+        ov = STOP_OVERRIDES.get(f"{key}|{bus_mode}") or STOP_OVERRIDES.get(f"{key}|mixed")
         s["approx"] = bool(ov and ov.get("approx"))
         s["substitute"] = bool(ov and ov.get("substitute"))
         if s.get("confidence") not in (None, "dup"):
