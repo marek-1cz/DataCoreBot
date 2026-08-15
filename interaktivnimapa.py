@@ -465,7 +465,7 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
   </div></div>
   <div id="close-route-btn" onclick="closeActiveRoute()"><i class="fas fa-times"></i> Zavřít trasu</div>
   <div id="edit-route-btn" onclick="startEditRouteRoads()" style="display:none;position:fixed;top:72px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#38bdf8;border:1.5px solid #38bdf8;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(56,189,248,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-edit"></i> Silnice</div>
-  <div id="save-route-btn" onclick="saveRouteRoads()" style="display:none;position:fixed;top:120px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#10b981;border:1.5px solid #10b981;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(16,185,129,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-save"></i> Uložit silnice</div>
+  <div id="save-route-btn" onclick="saveRouteRoads()" style="display:none;position:fixed;top:120px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(239,68,68,.92);color:white;border:1.5px solid #f87171;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(239,68,68,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-exclamation-triangle"></i> Režim úprav ZAPNUTÝ (tažením upravte) - ULOŽIT</div>
   <div id="hud">
     <div id="hf">
       <div class="hh"><span class="hl">📡 SLEDOVANI SPOJE</span><button class="hb-mn" onclick="minHud()">-</button></div>
@@ -1113,14 +1113,7 @@ function startEditRouteRoads() {
     }),
     routeWhileDragging: true,
     addWaypoints: true,
-    show: false,
-    lineOptions: {
-      addWaypoints: true,
-      styles: [
-        {color: 'black', opacity: 0.15, weight: 16},
-        {color: '#10b981', opacity: 0.8, weight: 6}
-      ]
-    }
+    show: false
   }).on('routesfound', function(e) {
     window.latestLRMRoute = e.routes[0];
   }).addTo(map);
