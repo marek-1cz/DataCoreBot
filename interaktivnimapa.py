@@ -245,26 +245,27 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 .n-warn{background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:bold;white-space:nowrap;flex-shrink:0;}
 .n-sp{flex:1;}
 .n-clock, #admin-mode-badge, #spz-search-inp {
-  background: rgba(15, 23, 42, 0.4) !important;
+  background: rgba(56, 189, 248, 0.15) !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  color: #f8fafc !important;
+  border: 1px solid rgba(56, 189, 248, 0.3) !important;
+  color: #0f172a !important;
   font-weight: 700 !important;
   border-radius: 10px !important;
-  box-shadow: inset 0 2px 5px rgba(0,0,0,0.4) !important;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.15) !important;
 }
-.n-clock{padding:4px 10px;white-space:nowrap;flex-shrink:0;color:#38bdf8 !important;}
+.n-clock{padding:4px 10px;white-space:nowrap;flex-shrink:0;color:#0f172a !important;}
+#spz-search-inp::placeholder { color: rgba(15, 23, 42, 0.5) !important; }
 .n-btn, #nav-pin-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #log-toggle-btn {
-  background: rgba(30, 41, 59, 0.5) !important;
+  background: rgba(56, 189, 248, 0.35) !important;
   backdrop-filter: blur(12px) saturate(160%);
   -webkit-backdrop-filter: blur(12px) saturate(160%);
-  color: #e2e8f0 !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: #0f172a !important;
+  border: 1px solid rgba(56, 189, 248, 0.5) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.4) !important;
   border-radius: 10px !important;
-  font-weight: 700 !important;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
+  font-weight: 800 !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
   padding: 6px 14px !important;
   font-size: 12px !important;
   cursor: pointer;
@@ -273,48 +274,50 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  text-shadow: 0 1px 1px rgba(255,255,255,0.2);
 }
 .n-btn:hover, #nav-pin-btn:hover, #nt-toggle-btn:hover, #nt-add-btn:hover, #le-toggle-btn:hover, #log-toggle-btn:hover {
-  background: rgba(56, 189, 248, 0.15) !important;
-  border: 1px solid rgba(56, 189, 248, 0.4) !important;
-  color: #38bdf8 !important;
-  box-shadow: 0 6px 20px rgba(56, 189, 248, 0.25), inset 0 0 12px rgba(56, 189, 248, 0.1) !important;
+  background: rgba(14, 165, 233, 0.5) !important;
+  border: 1px solid rgba(14, 165, 233, 0.6) !important;
+  color: #000000 !important;
+  box-shadow: 0 6px 20px rgba(14, 165, 233, 0.3), inset 0 0 12px rgba(255, 255, 255, 0.2) !important;
   transform: translateY(-2px);
 }
 /* Nav pin button pinned state */
 #nav-pin-btn.pinned {
-  background: rgba(245, 158, 11, 0.2) !important;
-  border: 1px solid rgba(245, 158, 11, 0.5) !important;
-  color: #f59e0b !important;
-  box-shadow: 0 0 15px rgba(245, 158, 11, 0.3), inset 0 0 8px rgba(245, 158, 11, 0.2) !important;
+  background: rgba(245, 158, 11, 0.4) !important;
+  border: 1px solid rgba(245, 158, 11, 0.6) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.4) !important;
+  color: #78350f !important;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.3), inset 0 0 8px rgba(255, 255, 255, 0.3) !important;
 }
 /* Lines overlay buttons in legend */
 #lines-legend>div:hover{background:rgba(56,189,248,.08);}
 /* Výrazné tlačítko "Zobrazit zastávky" - prominentní pro veřejnost */
 #pub-stops-btn {
-  background: rgba(14, 165, 233, 0.25) !important;
+  background: rgba(2, 132, 199, 0.45) !important;
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
-  border: 1px solid rgba(56, 189, 248, 0.5) !important;
-  border-top: 1px solid rgba(125, 211, 252, 0.6) !important;
-  color: #bae6fd !important;
+  border: 1px solid rgba(2, 132, 199, 0.6) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.5) !important;
+  color: #000000 !important;
   border-radius: 10px !important;
   font-weight: 800 !important;
   font-size: 13px !important;
   cursor: pointer;
   flex-shrink: 0;
   white-space: nowrap;
-  box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3), inset 0 2px 10px rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 4px 15px rgba(2, 132, 199, 0.3), inset 0 2px 10px rgba(255, 255, 255, 0.2) !important;
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   padding: 7px 15px !important;
 }
 #pub-stops-btn:hover {
-  background: rgba(14, 165, 233, 0.4) !important;
-  color: #ffffff !important;
-  box-shadow: 0 6px 24px rgba(14, 165, 233, 0.5), inset 0 0 16px rgba(56, 189, 248, 0.3) !important;
+  background: rgba(2, 132, 199, 0.6) !important;
+  color: #000000 !important;
+  box-shadow: 0 6px 24px rgba(2, 132, 199, 0.4), inset 0 0 16px rgba(255, 255, 255, 0.3) !important;
   transform: translateY(-2px);
 }
-#pub-stops-btn.active{background:rgba(245, 158, 11, 0.3) !important;color:#fcd34d !important;border-color:rgba(245, 158, 11, 0.6) !important;box-shadow:0 0 20px rgba(245, 158, 11, 0.4) !important;}
+#pub-stops-btn.active{background:rgba(245, 158, 11, 0.5) !important;color:#78350f !important;border-color:rgba(245, 158, 11, 0.8) !important;box-shadow:0 0 20px rgba(245, 158, 11, 0.4) !important;}
 #nav-handle{position:fixed;top:0;left:50%;transform:translateX(-50%);width:90px;height:7px;background:rgba(56,189,248,.55);border-radius:0 0 8px 8px;z-index:3001;cursor:pointer;transition:opacity .3s,background .2s,width .2s;}
 #nav-handle:hover{background:rgba(56,189,248,.95);width:130px;}
 #nav-handle.hid{opacity:0;pointer-events:none;}
