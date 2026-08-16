@@ -245,82 +245,78 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 .n-warn{background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:bold;white-space:nowrap;flex-shrink:0;}
 .n-sp{flex:1;}
 .n-clock, #admin-mode-badge, #spz-search-inp {
-  background: rgba(14, 165, 233, 0.35) !important;
-  backdrop-filter: blur(14px) saturate(200%);
-  -webkit-backdrop-filter: blur(14px) saturate(200%);
-  border: 1px solid rgba(14, 165, 233, 0.6) !important;
-  color: #000000 !important;
+  background: #e0f2fe !important;
+  border: 1px solid #bae6fd !important;
+  color: #0f172a !important;
   font-weight: 800 !important;
-  border-radius: 10px !important;
-  box-shadow: inset 0 2px 6px rgba(0,0,0,0.2), 0 2px 8px rgba(14, 165, 233, 0.3) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 .n-clock{padding:4px 10px;white-space:nowrap;flex-shrink:0;}
-#spz-search-inp::placeholder { color: rgba(0, 0, 0, 0.6) !important; }
+#spz-search-inp::placeholder { color: #64748b !important; }
 .n-btn, #nav-pin-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #log-toggle-btn {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.65), rgba(14, 165, 233, 0.75)) !important;
-  backdrop-filter: blur(14px) saturate(200%);
-  -webkit-backdrop-filter: blur(14px) saturate(200%);
-  color: #000000 !important;
-  border: 1px solid rgba(2, 132, 199, 0.6) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.6) !important;
-  border-bottom: 1px solid rgba(2, 132, 199, 0.9) !important;
-  border-radius: 10px !important;
+  background: #38bdf8 !important;
+  color: #0f172a !important;
+  border: none !important;
+  border-radius: 8px !important;
   font-weight: 800 !important;
-  box-shadow: 0 4px 16px rgba(14, 165, 233, 0.4), inset 0 1px 4px rgba(255,255,255,0.4) !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
   padding: 6px 14px !important;
   font-size: 12px !important;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: all 0.2s ease;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  text-shadow: 0 1px 2px rgba(255,255,255,0.4);
+  text-decoration: none !important;
+  text-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 .n-btn:hover, #nav-pin-btn:hover, #nt-toggle-btn:hover, #nt-add-btn:hover, #le-toggle-btn:hover, #log-toggle-btn:hover {
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.8), rgba(2, 132, 199, 0.9)) !important;
-  border: 1px solid rgba(2, 132, 199, 0.8) !important;
-  color: #000000 !important;
-  box-shadow: 0 8px 24px rgba(2, 132, 199, 0.6), inset 0 0 12px rgba(255, 255, 255, 0.3) !important;
-  transform: translateY(-2px);
+  background: #0ea5e9 !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
+  transform: translateY(-1px);
+  border: none !important;
 }
 /* Nav pin button pinned state */
 #nav-pin-btn.pinned {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.7), rgba(217, 119, 6, 0.8)) !important;
-  border: 1px solid rgba(217, 119, 6, 0.8) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.6) !important;
-  color: #451a03 !important;
-  box-shadow: 0 0 20px rgba(245, 158, 11, 0.5), inset 0 0 10px rgba(255, 255, 255, 0.4) !important;
+  background: #f59e0b !important;
+  color: #0f172a !important;
+  border: none !important;
 }
 /* Lines overlay buttons in legend */
 #lines-legend>div:hover{background:rgba(56,189,248,.08);}
 /* Výrazné tlačítko "Zobrazit zastávky" - prominentní pro veřejnost */
 #pub-stops-btn {
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.85), rgba(2, 132, 199, 0.95)) !important;
-  backdrop-filter: blur(14px) saturate(220%);
-  -webkit-backdrop-filter: blur(14px) saturate(220%);
-  border: 1px solid rgba(2, 132, 199, 0.8) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.6) !important;
-  border-bottom: 1px solid rgba(3, 105, 161, 0.9) !important;
-  color: #000000 !important;
-  text-shadow: 0 1px 2px rgba(255,255,255,0.4);
-  border-radius: 10px !important;
+  background: #0ea5e9 !important;
+  color: #0f172a !important;
+  border: none !important;
+  border-radius: 8px !important;
   font-weight: 800 !important;
   font-size: 13px !important;
   cursor: pointer;
   flex-shrink: 0;
   white-space: nowrap;
-  box-shadow: 0 6px 20px rgba(2, 132, 199, 0.5), inset 0 2px 10px rgba(255, 255, 255, 0.3) !important;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3) !important;
+  transition: all 0.2s ease;
   padding: 7px 15px !important;
+  text-decoration: none !important;
+  text-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 #pub-stops-btn:hover {
-  background: linear-gradient(135deg, rgba(2, 132, 199, 0.95), rgba(3, 105, 161, 1)) !important;
-  color: #000000 !important;
-  box-shadow: 0 8px 28px rgba(3, 105, 161, 0.7), inset 0 0 16px rgba(255, 255, 255, 0.4) !important;
-  transform: translateY(-2px);
+  background: #0284c7 !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.4) !important;
+  transform: translateY(-1px);
 }
-#pub-stops-btn.active{background:rgba(245, 158, 11, 0.8) !important;color:#451a03 !important;border-color:rgba(217, 119, 6, 0.9) !important;box-shadow:0 0 20px rgba(245, 158, 11, 0.6) !important;}
+#pub-stops-btn.active{background:#f59e0b !important;color:#0f172a !important;border:none !important;box-shadow:none !important;}
 #nav-handle{position:fixed;top:0;left:50%;transform:translateX(-50%);width:90px;height:7px;background:rgba(56,189,248,.55);border-radius:0 0 8px 8px;z-index:3001;cursor:pointer;transition:opacity .3s,background .2s,width .2s;}
 #nav-handle:hover{background:rgba(56,189,248,.95);width:130px;}
 #nav-handle.hid{opacity:0;pointer-events:none;}
