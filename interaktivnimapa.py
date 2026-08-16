@@ -1112,7 +1112,26 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain){
   return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
 }
 
-// === ROUTE DISPLAY ===
+window.onLineClick = function(lat, lng, wpIndex, segId) {
+  let isStraight = window.segmentModes && window.segmentModes[segId] === 'straight';
+  let content = `
+    <div style="font-size:13px; font-weight:bold; color:#0f172a; text-align:center; margin-bottom:8px;">Možnosti úseku</div>
+    <button onclick="window.addWaypointAt(${lat}, ${lng}, ${wpIndex + 1})" style="width:100%; margin-bottom:6px; background:#38bdf8; color:#0f172a; border:none; padding:6px; border-radius:4px; font-size:12px; cursor:pointer;"><b>+</b> Vytvořit průjezdní bod</button>
+    <button onclick="toggleSegmentMode('${segId}'); map.closePopup();" style="width:100%; background:#10b981; color:white; border:none; padding:6px; border-radius:4px; font-size:12px; cursor:pointer;">${isStraight ? 'Změnit na: Silnice' : 'Změnit na: Vzdušná čára'}</button>
+  `;
+  L.popup().setLatLng([lat, lng]).setContent(content).openOn(map);
+};
+
+window.addWaypointAt = function(lat, lng, spliceIndex) {
+  if (window.routeRoutingControl) {
+    let wps = window.routeRoutingControl.getWaypoints();
+    let newWp = L.Routing.waypoint(L.latLng(lat, lng), 'wp_' + Math.random().toString(36).substr(2, 9));
+    wps.splice(spliceIndex, 0, newWp);
+    window.routeRoutingControl.setWaypoints(wps);
+    map.closePopup();
+  }
+};
+
 function toggleSegmentMode(stopName) {
   window.segmentModes = window.segmentModes || {};
   window.segmentModes[stopName] = window.segmentModes[stopName] === 'straight' ? 'driving' : 'straight';
@@ -1213,7 +1232,32 @@ function startEditRouteRoads() {
       router: routerObj,
       routeWhileDragging: true,
       addWaypoints: true,
-      show: false
+      show: false,
+      routeLine: function(route, options) {
+        let line = L.Routing.line(route, options);
+        line.eachLayer(function(l) {
+          l.on('click', function(e) {
+            let minD = Infinity;
+            let minIdx = -1;
+            route.coordinates.forEach((c, i) => {
+              let d = e.latlng.distanceTo(L.latLng(c));
+              if (d < minD) { minD = d; minIdx = i; }
+            });
+            let wpIndex = 0;
+            for (let i = 0; i < route.waypointIndices.length - 1; i++) {
+              if (minIdx >= route.waypointIndices[i] && minIdx <= route.waypointIndices[i+1]) {
+                wpIndex = i;
+                break;
+              }
+            }
+            let wps = window.routeRoutingControl.getWaypoints();
+            if (!wps[wpIndex].name) wps[wpIndex].name = 'wp_' + Math.random().toString(36).substr(2, 9);
+            window.onLineClick(e.latlng.lat, e.latlng.lng, wpIndex, wps[wpIndex].name);
+            L.DomEvent.stop(e);
+          });
+        });
+        return line;
+      }
     }).on('routesfound', function(e) {
       window.latestLRMRoute = e.routes[0];
     }).addTo(map);
@@ -1226,7 +1270,7 @@ function startEditRouteRoads() {
     let m = L.marker([stop.lat, stop.lng], {icon: icon, draggable: true, zIndexOffset: 2000}).addTo(routeLayer);
     
     let isStraight = window.segmentModes && window.segmentModes[stop.name] === 'straight';
-    let pBtn = idx < pts.length - 1 && !isTrain ? `<br><button onclick="toggleSegmentMode('${stop.name.replace(/'/g, "\\'")}')" style="margin-top:6px; background:#10b981; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">${isStraight ? 'Tento úsek: Vzdušně (přepnout)' : 'Tento úsek: Silnice (přepnout)'}</button>` : '';
+    let pBtn = idx < pts.length - 1 && !isTrain ? `<br><span style="font-size:10px; color:#64748b; font-weight:normal;">Úsek začíná zde</span>` : '';
     m.bindPopup(`<div style="font-size:12px; font-weight:bold; color:#0f172a; text-align:center;">${stop.name}${pBtn}</div>`);
     m.bindTooltip(`Posunout <b>${stop.name}</b> (pro celý směr trasy)`, {direction: 'top'});
     m.on('dragend', async function(e) {
