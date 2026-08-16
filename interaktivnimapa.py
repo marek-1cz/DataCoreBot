@@ -2640,7 +2640,7 @@ def _load_custom_routes(db):
         loaded = {}
         for row in (res.data or []):
             try:
-                loaded[row["route_key"]] = row["points"] if isinstance(row["points"], list) else json.loads(row["points"])
+                loaded[row["route_key"]] = json.loads(row["points"]) if isinstance(row["points"], str) else row["points"]
             except Exception:
                 pass
         CUSTOM_ROUTES = loaded
