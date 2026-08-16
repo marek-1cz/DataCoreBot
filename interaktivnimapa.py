@@ -1159,12 +1159,14 @@ function startEditRouteRoads() {
   } else {
     let routerObj = window.manualRoutingMode ? {
       route: function(wps, cb, context) {
-        let res = [{
-          name: "Manual", summary: {totalDistance: 0, totalTime: 0},
-          coordinates: wps.map(w => w.latLng).filter(l => l), 
-          waypoints: wps, inputWaypoints: wps, instructions: []
-        }];
-        if (context) cb.call(context, null, res); else cb(null, res);
+        setTimeout(function() {
+          let res = [{
+            name: "Manual", summary: {totalDistance: 0, totalTime: 0},
+            coordinates: wps.map(w => w.latLng).filter(l => l), 
+            waypoints: wps, inputWaypoints: wps, instructions: []
+          }];
+          if (context) cb.call(context, null, res); else cb(null, res);
+        }, 10);
       }
     } : L.Routing.osrmv1({
       serviceUrl: 'https://router.project-osrm.org/route/v1',
@@ -1434,12 +1436,14 @@ function _renderRoute(busId,data,btn){
       } else {
         let routerObj = window.manualRoutingMode ? {
           route: function(wps, cb, context) {
-            let res = [{
-              name: "Manual", summary: {totalDistance: 0, totalTime: 0},
-              coordinates: wps.map(w => w.latLng).filter(l => l), 
-              waypoints: wps, inputWaypoints: wps, instructions: []
-            }];
-            if (context) cb.call(context, null, res); else cb(null, res);
+            setTimeout(function() {
+              let res = [{
+                name: "Manual", summary: {totalDistance: 0, totalTime: 0},
+                coordinates: wps.map(w => w.latLng).filter(l => l), 
+                waypoints: wps, inputWaypoints: wps, instructions: []
+              }];
+              if (context) cb.call(context, null, res); else cb(null, res);
+            }, 10);
           }
         } : L.Routing.osrmv1({
           serviceUrl: 'https://router.project-osrm.org/route/v1',
