@@ -236,14 +236,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 #map-wrap{position:fixed;top:0;left:0;width:100vw;height:100vh;}
 #map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;}
 #panel-zone{position:fixed;top:0;left:0;right:0;height:40px;z-index:3000;pointer-events:none;}
-#top-nav{position:fixed;top:-72px;left:0;right:0;min-height:58px;background:rgba(8,16,30,0.97);border-bottom:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:2999;transition:top 0.3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;padding:6px 14px;gap:6px;box-shadow:0 4px 24px rgba(0,0,0,0.7);flex-wrap:wrap;}
-#top-nav.vis{top:0;}
-.n-logo{display:flex;align-items:center;justify-content:center;text-decoration:none;flex-shrink:0;background:#020617;border:1px solid #1e293b;border-radius:10px;padding:4px 10px;height:32px;box-shadow:inset 0 2px 8px rgba(0,0,0,0.8);box-sizing:border-box;}
-.n-logo img{height:100%;width:auto;filter:drop-shadow(0 0 8px rgba(56,189,248,0.8));transition:transform .2s;object-fit:contain;}
+#top-nav{position:fixed;top:-80px;left:50%;transform:translateX(-50%);width:96%;max-width:1400px;min-height:52px;background:rgba(8,16,30,0.95);border:1px solid rgba(255,255,255,0.08);border-radius:16px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:2999;transition:top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);display:flex;align-items:center;justify-content:center;padding:6px 14px;gap:8px;box-shadow:0 10px 30px rgba(0,0,0,0.8);flex-wrap:wrap;}
+#top-nav.vis{top:12px;}
+.n-logo{display:flex;align-items:center;justify-content:center;text-decoration:none;flex-shrink:0;background:rgba(248,250,252,0.9);border:1px solid #94a3b8;border-radius:10px;padding:2px 8px;height:32px;box-shadow:0 2px 6px rgba(0,0,0,0.4);box-sizing:border-box;}
+.n-logo img{height:100%;width:auto;transition:transform .2s;object-fit:contain;}
 .n-logo:hover img{transform:scale(1.05);}
 .n-title{flex-shrink:0;line-height:1.2;}.n-title .a{color:#38bdf8;font-size:14px;font-weight:800;}.n-title .b{color:#64748b;font-size:10px;}
 .n-warn{background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:bold;white-space:nowrap;flex-shrink:0;}
-.n-sp{flex:1;}
+.n-sp{width:16px;flex:0 0 auto;}
 .n-clock, #admin-mode-badge, #spz-search-inp {
   background: #020617 !important;
   border: 1px solid #1e293b !important;
