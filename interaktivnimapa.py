@@ -239,7 +239,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 #top-nav{position:fixed;top:-72px;left:0;right:0;min-height:58px;background:rgba(8,16,30,0.97);border-bottom:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:2999;transition:top 0.3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;padding:6px 14px;gap:6px;box-shadow:0 4px 24px rgba(0,0,0,0.7);flex-wrap:wrap;}
 #top-nav.vis{top:0;}
 .n-logo{display:flex;align-items:center;text-decoration:none;flex-shrink:0;}
-.n-logo img{height:40px;width:auto;filter:drop-shadow(0 0 10px rgba(56,189,248,.8));transition:transform .2s;}
+.n-logo img{height:40px;width:auto;filter:drop-shadow(0 0 10px rgba(56,189,248,0.8)) drop-shadow(0 0 4px rgba(0,0,0,0.9));background:rgba(8,16,30,0.6);border-radius:12px;padding:2px 8px;transition:transform .2s;}
 .n-logo img:hover{transform:scale(1.05);}
 .n-title{flex-shrink:0;line-height:1.2;}.n-title .a{color:#38bdf8;font-size:14px;font-weight:800;}.n-title .b{color:#64748b;font-size:10px;}
 .n-warn{background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:bold;white-space:nowrap;flex-shrink:0;}
@@ -260,7 +260,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 /* The Gradient Border Buttons */
 .n-btn, #nav-pin-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #log-toggle-btn {
   background: linear-gradient(#08101e, #08101e) padding-box,
-              linear-gradient(135deg, rgba(56,189,248,0.6), rgba(168,85,247,0.6)) border-box !important;
+              linear-gradient(135deg, rgba(56,189,248,0.6), rgba(2,132,199,0.8)) border-box !important;
   color: #e2e8f0 !important;
   border: 1px solid transparent !important;
   border-radius: 10px !important;
@@ -280,10 +280,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 }
 
 .n-btn:hover, #nav-pin-btn:hover, #nt-toggle-btn:hover, #nt-add-btn:hover, #le-toggle-btn:hover, #log-toggle-btn:hover {
-  background: linear-gradient(rgba(56,189,248,0.1), rgba(168,85,247,0.1)) padding-box,
-              linear-gradient(135deg, #38bdf8, #a855f7) border-box !important;
+  background: linear-gradient(rgba(56,189,248,0.1), rgba(2,132,199,0.15)) padding-box,
+              linear-gradient(135deg, #38bdf8, #0284c7) border-box !important;
   color: #ffffff !important;
-  box-shadow: 0 0 16px rgba(168,85,247,0.3), 0 4px 12px rgba(0,0,0,0.6) !important;
+  box-shadow: 0 0 16px rgba(2,132,199,0.4), 0 4px 12px rgba(0,0,0,0.6) !important;
   transform: translateY(-2px);
 }
 
@@ -297,9 +297,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 
 /* Lines overlay buttons in legend */
 #lines-legend>div:hover{background:rgba(56,189,248,.08);}
+
+@keyframes pulseAttention {
+  0%, 100% { box-shadow: 0 4px 15px rgba(2, 132, 199, 0.4) !important; }
+  50% { box-shadow: 0 0 25px 10px rgba(56, 189, 248, 0.9) !important; }
+}
+
 /* Výrazné tlačítko "Zobrazit zastávky" - prominentní pro veřejnost */
 #pub-stops-btn {
-  background: linear-gradient(135deg, #38bdf8, #a855f7) !important;
+  background: linear-gradient(135deg, #38bdf8, #0369a1) !important;
   color: #ffffff !important;
   border: none !important;
   border-radius: 10px !important;
@@ -308,17 +314,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
   cursor: pointer;
   flex-shrink: 0;
   white-space: nowrap;
-  box-shadow: 0 4px 15px rgba(168,85,247,0.3) !important;
+  box-shadow: 0 4px 15px rgba(2,132,199,0.3) !important;
   transition: all 0.3s ease;
   padding: 7px 15px !important;
   text-decoration: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  animation: pulseAttention 1s ease-in-out 5s 5;
 }
 
 #pub-stops-btn:hover {
-  background: linear-gradient(135deg, #0ea5e9, #9333ea) !important;
-  box-shadow: 0 6px 20px rgba(168,85,247,0.5) !important;
+  background: linear-gradient(135deg, #0ea5e9, #075985) !important;
+  box-shadow: 0 6px 20px rgba(2,132,199,0.5) !important;
   transform: translateY(-2px);
 }
 #pub-stops-btn.active{background:linear-gradient(135deg, #f59e0b, #ef4444) !important;}
@@ -483,13 +490,11 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
     <a href="https://datacorebot.koyeb.app/" class="n-logo">
       <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png" alt="OIS IDPK">
     </a>
-    <!-- Výrazné tlačítko Zobrazit zastávky - první, pro veřejnost -->
-    <button id="pub-stops-btn" onclick="togglePubStops()"><i class="fas fa-bus"></i> Zastávky</button>
-    <button id="lines-overlay-btn-pub" onclick="toggleLinesPanel()" class="n-btn" style="background:rgba(56,189,248,.1);color:#38bdf8;border:1px solid rgba(56,189,248,.25);font-size:12px;padding:5px 11px;"><i class="fas fa-route"></i> Linky</button>
-    <a href="/provoz-idpk" class="n-btn n-provoz"><i class="fas fa-ticket-alt"></i> IDPK</a>
     <a href="https://datacorebot.koyeb.app/" class="n-btn n-home"><i class="fas fa-home"></i> Domů</a>
+    <button id="lines-overlay-btn-pub" onclick="toggleLinesPanel()" class="n-btn"><i class="fas fa-route"></i> Linky</button>
+    <button id="pub-stops-btn" onclick="togglePubStops()"><i class="fas fa-bus"></i> Zastávky</button>
+    <a href="/provoz-idpk" class="n-btn n-provoz"><i class="fas fa-ticket-alt"></i> IDPK</a>
     <button id="nav-pin-btn" onclick="toggleNavPin()" title="Uzamknout lištu"><i class="fas fa-thumbtack"></i></button>
-    <div class="n-sp"></div>
     <div id="admin-mode-badge" style="display:none;background:rgba(56,189,248,0.15);color:#38bdf8;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:bold;border:1px solid rgba(56,189,248,0.3);flex-shrink:0;">Admin</div>
     <div class="n-clock"><span id="systemTimeClock">--:--:--</span></div>
     <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
