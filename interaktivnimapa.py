@@ -383,8 +383,13 @@ body.nt-add-active #map{cursor:crosshair !important;}
 }
 @keyframes routeDraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0;}}
 /* Floating close-route button */
-#close-route-btn{display:none;position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#ef4444;border:1.5px solid #ef4444;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(239,68,68,.35);transition:all .2s;letter-spacing:.3px;}
-#close-route-btn:hover{background:#ef4444;color:#fff;box-shadow:0 4px 28px rgba(239,68,68,.6);}
+#close-route-btn, #edit-route-btn, #save-route-btn { display:none; position:fixed; z-index:4200; border-radius:24px; padding:8px 22px; font-size:13px; font-weight:700; cursor:pointer; backdrop-filter:blur(8px); transition:all .2s; letter-spacing:.3px; }
+#close-route-btn { top: 75px; left: calc(50% - 80px); transform:translateX(-50%); background:rgba(15,23,42,.92); color:#ef4444; border:1.5px solid #ef4444; box-shadow:0 4px 20px rgba(239,68,68,.35); }
+#close-route-btn:hover { background:#ef4444; color:#fff; box-shadow:0 4px 28px rgba(239,68,68,.6); }
+#edit-route-btn { top: 75px; left: calc(50% + 80px); transform:translateX(-50%); background:rgba(15,23,42,.92); color:#38bdf8; border:1.5px solid #38bdf8; box-shadow:0 4px 20px rgba(56,189,248,.35); }
+#edit-route-btn:hover { background:#38bdf8; color:#fff; box-shadow:0 4px 28px rgba(56,189,248,.6); }
+#save-route-btn { top: 75px; left: calc(50% + 80px); transform:translateX(-50%); background:rgba(239,68,68,.92); color:white; border:1.5px solid #f87171; box-shadow:0 4px 20px rgba(239,68,68,.35); }
+#save-route-btn:hover { background:#ef4444; color:#fff; box-shadow:0 4px 28px rgba(239,68,68,.6); }
 /* Leaflet popup fade-in */
 .leaflet-popup{animation:popupIn .22s cubic-bezier(.34,1.56,.64,1);}
 @keyframes popupIn{from{opacity:0;transform:translateY(10px) scale(.96);}to{opacity:1;transform:translateY(0) scale(1);}}
@@ -427,7 +432,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
   #spz-search-inp{width:80px;font-size:11px;}
   #hf{width:200px;}
   .dark-popup .leaflet-popup-content{width:240px!important;}
-  #log-panel{bottom:auto;top:56px;right:4px;left:4px;width:auto;max-width:100vw;}
+  #log-panel{bottom:auto;top:130px;right:4px;left:4px;width:auto;max-width:100vw;}
   #log-body,#log-errors-body,#log-spz-body,#log-missing-body,#log-report-body,#log-approx-body{max-height:160px;}
   #nt-edit-pop{left:4px;right:4px;bottom:10px;width:auto;max-height:80vh;overflow-y:auto;}
   #stop-info-pop{left:4px;right:4px;bottom:10px;width:auto;}
@@ -436,6 +441,9 @@ body.nt-add-active #map{cursor:crosshair !important;}
   .lp-h div button{font-size:10px;padding:2px 5px;}
   #nt-add-bar{left:4px;right:4px;transform:none;flex-wrap:wrap;gap:5px;}
   #idos-modal-box{width:100% !important;height:100% !important;max-width:none !important;border:none !important;border-radius:0 !important;}
+  #hud { top: 130px !important; left: 10px !important; right: 10px !important; bottom: auto !important; }
+  #close-route-btn { top: auto !important; bottom: 140px !important; left: 50% !important; transform: translateX(-50%) !important; }
+  #edit-route-btn, #save-route-btn { top: auto !important; bottom: 190px !important; left: 50% !important; transform: translateX(-50%) !important; }
 }
 @media(max-width:420px){
   .n-provoz{display:none;}
@@ -529,8 +537,8 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <div id="ttc" style="color:white;">Načítám…</div>
   </div></div>
   <div id="close-route-btn" onclick="closeActiveRoute()"><i class="fas fa-times"></i> Zavřít trasu</div>
-  <div id="edit-route-btn" onclick="startEditRouteRoads()" style="display:none;position:fixed;top:72px;left:53%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#38bdf8;border:1.5px solid #38bdf8;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(56,189,248,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-edit"></i> Silnice</div>
-  <div id="save-route-btn" onclick="saveRouteRoads()" style="display:none;position:fixed;top:120px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(239,68,68,.92);color:white;border:1.5px solid #f87171;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(239,68,68,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-save"></i> ULOŽIT (Táhni modrou čáru = trasu, červený bod = zastávku)</div>
+  <div id="edit-route-btn" onclick="startEditRouteRoads()"><i class="fas fa-edit"></i> Silnice</div>
+  <div id="save-route-btn" onclick="saveRouteRoads()"><i class="fas fa-save"></i> ULOŽIT TRASU</div>
   <div id="hud">
     <div id="hf">
       <div class="hh"><span class="hl">📡 SLEDOVANI SPOJE</span><button class="hb-mn" onclick="minHud()">-</button></div>
