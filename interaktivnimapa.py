@@ -256,6 +256,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 }
 .n-clock{padding:4px 10px;white-space:nowrap;flex-shrink:0;color:#ffffff !important;}
 #spz-search-inp::placeholder { color: #475569 !important; }
+#spz-results:empty { display: none !important; }
 
 /* The Gradient Border Buttons */
 .n-btn, #nav-pin-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #log-toggle-btn {
