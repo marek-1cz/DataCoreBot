@@ -465,7 +465,7 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
   </div></div>
   <div id="close-route-btn" onclick="closeActiveRoute()"><i class="fas fa-times"></i> Zavřít trasu</div>
   <div id="edit-route-btn" onclick="startEditRouteRoads()" style="display:none;position:fixed;top:72px;left:53%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#38bdf8;border:1.5px solid #38bdf8;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(56,189,248,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-edit"></i> Silnice</div>
-  <div id="edit-route-manual-btn" onclick="window.manualRoutingMode=!window.manualRoutingMode;this.innerHTML=window.manualRoutingMode?'<i class=\'fas fa-draw-polygon\'></i> Manuál: ZAP':'<i class=\'fas fa-draw-polygon\'></i> Manuál: VYP';this.style.background=window.manualRoutingMode?'rgba(16,185,129,.92)':'rgba(15,23,42,.92)';" style="display:none;position:fixed;top:72px;left:66%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#10b981;border:1.5px solid #10b981;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(16,185,129,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-draw-polygon"></i> Manuál: VYP</div>
+  <div id="edit-route-manual-btn" onclick="toggleManualRouting(this)" style="display:none;position:fixed;top:72px;left:66%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#10b981;border:1.5px solid #10b981;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(16,185,129,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-draw-polygon"></i> Manuál: VYP</div>
   <div id="save-route-btn" onclick="saveRouteRoads()" style="display:none;position:fixed;top:120px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(239,68,68,.92);color:white;border:1.5px solid #f87171;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(239,68,68,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-save"></i> ULOŽIT (Táhni modrou čáru = trasu, červený bod = zastávku)</div>
   <div id="hud">
     <div id="hf">
@@ -1114,6 +1114,21 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain){
 }
 
 // === ROUTE DISPLAY ===
+function toggleManualRouting(btn) {
+  window.manualRoutingMode = !window.manualRoutingMode;
+  btn.innerHTML = window.manualRoutingMode ? '<i class="fas fa-draw-polygon"></i> Manuál: ZAP' : '<i class="fas fa-draw-polygon"></i> Manuál: VYP';
+  btn.style.background = window.manualRoutingMode ? 'rgba(16,185,129,.92)' : 'rgba(15,23,42,.92)';
+  
+  if (window.routeRoutingControl || window.autoRoutingControl) {
+    let sBtn = document.getElementById('save-route-btn');
+    if (sBtn && sBtn.style.display !== 'none') {
+      startEditRouteRoads();
+    } else {
+      if (activeRouteId) refreshActiveRoute();
+    }
+  }
+}
+
 function startEditRouteRoads() {
   if(!window.currentRouteData || !window.currentRouteData.stops) return;
   
