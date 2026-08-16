@@ -1158,7 +1158,18 @@ function startEditRouteRoads() {
   }
 
   let pts = window.currentRouteData.stops.filter(s=>s.lat&&s.lng);
-  let waypoints = pts.map(s => L.Routing.waypoint(L.latLng(s.lat, s.lng), s.name, {isStop: true}));
+  
+  let savedWps = window.currentRouteData.custom_shape_full && window.currentRouteData.custom_shape_full.waypoints;
+  let waypoints = [];
+  
+  if (savedWps && savedWps.length > 0) {
+    waypoints = savedWps.map(w => L.Routing.waypoint(L.latLng(w.lat, w.lng), w.name, {isStop: w.isStop}));
+    window.segmentModes = window.currentRouteData.custom_shape_full.segmentModes || {};
+  } else {
+    waypoints = pts.map(s => L.Routing.waypoint(L.latLng(s.lat, s.lng), s.name, {isStop: true}));
+    window.segmentModes = {};
+  }
+  
   if(waypoints.length < 2) return;
   routeLayer.clearLayers();
   document.getElementById('edit-route-btn').style.display = 'none';
@@ -1241,7 +1252,7 @@ function startEditRouteRoads() {
       waypoints: waypoints,
       router: routerObj,
       routeWhileDragging: true,
-      addWaypoints: true,
+      addWaypoints: false,
       show: false,
       createMarker: function(i, wp, nWps) {
         if (wp.options && wp.options.isStop) return null;
@@ -1336,6 +1347,14 @@ async function saveRouteRoads() {
   let route = window.latestLRMRoute;
   
   let coords = route.coordinates.map(c => [c.lat, c.lng]);
+  let wps = window.routeRoutingControl.getWaypoints().map(w => ({
+    lat: w.latLng.lat,
+    lng: w.latLng.lng,
+    name: w.name || '',
+    isStop: w.options && w.options.isStop ? true : false
+  }));
+  let smodes = window.segmentModes || {};
+  
   let rk = window.currentRouteData.route_key;
   if(!rk) { showAdminToast('Chybí route_key', false); return; }
   
@@ -1344,7 +1363,7 @@ async function saveRouteRoads() {
     let r = await fetch('/api/admin/save_custom_route', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({route_key: rk, points: coords})
+      body: JSON.stringify({route_key: rk, points: coords, waypoints: wps, segmentModes: smodes})
     });
     let rd = await r.json();
     if(rd.status === 'success') {
@@ -4085,14 +4104,14 @@ def api_admin_save_custom_route():
     points = data.get("points")
     if not route_key or not isinstance(points, list):
         return jsonify({"status": "error", "message": "Chybná data"}), 400
-    CUSTOM_ROUTES[route_key] = points
+    CUSTOM_ROUTES[route_key] = {"coords": points, "waypoints": data.get("waypoints"), "segmentModes": data.get("segmentModes")} if data.get("waypoints") else points
     
     db = get_db_client()
     if db:
         try:
             db.table("custom_routes").upsert({
                 "route_key": route_key,
-                "points": json.dumps(points, ensure_ascii=False),
+                "points": json.dumps(CUSTOM_ROUTES[route_key], ensure_ascii=False),
                 "updated_at": get_prague_time().isoformat(),
             }, on_conflict="route_key").execute()
             return jsonify({"status": "success", "message": "Trasa uložena do Supabase"})
@@ -4715,11 +4734,18 @@ def api_bus_route(bus_id):
           f"(presne:{gtfs_hits} fuzzy:{fuzzy_hits} nominatim:{nominatim_hits})", flush=True)
 
     custom_shape = None
+    custom_shape_full = None
     route_key = None
     if result and c.get('line'):
         route_key = f"{c.get('line')}_{result[0]['name']}_{result[-1]['name']}"
         if route_key in CUSTOM_ROUTES:
-            custom_shape = CUSTOM_ROUTES[route_key]
+            raw_shape = CUSTOM_ROUTES[route_key]
+            if isinstance(raw_shape, dict):
+                custom_shape_full = raw_shape
+                custom_shape = raw_shape.get("coords", [])
+            else:
+                custom_shape = raw_shape
+                custom_shape_full = {"coords": raw_shape, "waypoints": [], "segmentModes": {}}
         for i, s in enumerate(result):
             if not (s and s.get("name")):
                 continue
@@ -4740,5 +4766,6 @@ def api_bus_route(bus_id):
         "fuzzy_hits": fuzzy_hits,
         "nominatim_hits": nominatim_hits,
         "custom_shape": custom_shape,
+        "custom_shape_full": custom_shape_full,
         "route_key": route_key if result and c.get('line') else None
     })
