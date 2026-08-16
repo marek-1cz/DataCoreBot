@@ -465,7 +465,6 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
   </div></div>
   <div id="close-route-btn" onclick="closeActiveRoute()"><i class="fas fa-times"></i> Zavřít trasu</div>
   <div id="edit-route-btn" onclick="startEditRouteRoads()" style="display:none;position:fixed;top:72px;left:53%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#38bdf8;border:1.5px solid #38bdf8;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(56,189,248,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-edit"></i> Silnice</div>
-  <div id="edit-route-manual-btn" onclick="toggleManualRouting(this)" style="display:none;position:fixed;top:72px;left:66%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#10b981;border:1.5px solid #10b981;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(16,185,129,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-draw-polygon"></i> Manuál: VYP</div>
   <div id="save-route-btn" onclick="saveRouteRoads()" style="display:none;position:fixed;top:120px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(239,68,68,.92);color:white;border:1.5px solid #f87171;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(239,68,68,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-save"></i> ULOŽIT (Táhni modrou čáru = trasu, červený bod = zastávku)</div>
   <div id="hud">
     <div id="hf">
@@ -1114,11 +1113,9 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain){
 }
 
 // === ROUTE DISPLAY ===
-function toggleManualRouting(btn) {
-  window.manualRoutingMode = !window.manualRoutingMode;
-  btn.innerHTML = window.manualRoutingMode ? '<i class="fas fa-draw-polygon"></i> Manuál: ZAP' : '<i class="fas fa-draw-polygon"></i> Manuál: VYP';
-  btn.style.background = window.manualRoutingMode ? 'rgba(16,185,129,.92)' : 'rgba(15,23,42,.92)';
-  
+function toggleSegmentMode(stopName) {
+  window.segmentModes = window.segmentModes || {};
+  window.segmentModes[stopName] = window.segmentModes[stopName] === 'straight' ? 'driving' : 'straight';
   if (window.routeRoutingControl || window.autoRoutingControl) {
     let sBtn = document.getElementById('save-route-btn');
     if (sBtn && sBtn.style.display !== 'none') {
@@ -1142,7 +1139,7 @@ function startEditRouteRoads() {
   }
 
   let pts = window.currentRouteData.stops.filter(s=>s.lat&&s.lng);
-  let waypoints = pts.map(s=>L.latLng(s.lat, s.lng));
+  let waypoints = pts.map(s => L.Routing.waypoint(L.latLng(s.lat, s.lng), s.name, {isStop: true}));
   if(waypoints.length < 2) return;
   routeLayer.clearLayers();
   document.getElementById('edit-route-btn').style.display = 'none';
@@ -1157,22 +1154,59 @@ function startEditRouteRoads() {
     let shapePoly = L.polyline(routeCoords, {color: '#f59e0b', weight: 6, opacity: 0.8});
     routeLayer.addLayer(shapePoly);
   } else {
-    let routerObj = window.manualRoutingMode ? {
-      route: function(wps, cb, context) {
-        setTimeout(function() {
-          let res = [{
-            name: "Manual", summary: {totalDistance: 0, totalTime: 0},
-            coordinates: wps.map(w => w.latLng).filter(l => l), 
-            waypoints: wps, inputWaypoints: wps, instructions: []
-          }];
-          if (context) cb.call(context, null, res); else cb(null, res);
-        }, 10);
-      }
-    } : L.Routing.osrmv1({
+    let osrmRouter = L.Routing.osrmv1({
       serviceUrl: 'https://router.project-osrm.org/route/v1',
       profile: 'driving',
       useHints: false
     });
+
+    let routerObj = {
+      route: function(wps, cb, context) {
+        window.segmentModes = window.segmentModes || {};
+        let hasStraight = false;
+        for (let i = 0; i < wps.length - 1; i++) {
+          if (wps[i].name && window.segmentModes[wps[i].name] === 'straight') hasStraight = true;
+        }
+
+        if (!hasStraight) {
+          osrmRouter.route(wps, cb, context);
+          return;
+        }
+
+        osrmRouter.route(wps, function(err, routes) {
+          if (err || !routes || !routes.length) {
+            cb.call(context, err, routes);
+            return;
+          }
+          let route = routes[0];
+          if (route.waypointIndices) {
+            let newCoords = [];
+            let newIndices = [];
+            for (let i = 0; i < wps.length - 1; i++) {
+              newIndices.push(newCoords.length);
+              let startIdx = route.waypointIndices[i];
+              let endIdx = route.waypointIndices[i+1];
+              let isStraight = wps[i].name && window.segmentModes[wps[i].name] === 'straight';
+              
+              if (isStraight) {
+                 newCoords.push(wps[i].latLng);
+              } else {
+                 for (let j = startIdx; j < endIdx; j++) {
+                   newCoords.push(route.coordinates[j]);
+                 }
+              }
+            }
+            newIndices.push(newCoords.length);
+            let lastIdx = route.waypointIndices[wps.length - 1];
+            newCoords.push(route.coordinates[lastIdx]);
+            
+            route.coordinates = newCoords;
+            route.waypointIndices = newIndices;
+          }
+          cb.call(context, err, routes);
+        }, context);
+      }
+    };
 
     window.routeRoutingControl = L.Routing.control({
       waypoints: waypoints,
@@ -1190,6 +1224,10 @@ function startEditRouteRoads() {
     let baseCls = isTrain ? 'pub-dot pub-dot-train' : 'pub-dot';
     let icon = L.divIcon({className:'',html:`<div class="${baseCls}" style="width:12px;height:12px;border:3px solid red;background:#fff;"></div>`,iconSize:[12,12],iconAnchor:[6,6]});
     let m = L.marker([stop.lat, stop.lng], {icon: icon, draggable: true, zIndexOffset: 2000}).addTo(routeLayer);
+    
+    let isStraight = window.segmentModes && window.segmentModes[stop.name] === 'straight';
+    let pBtn = idx < pts.length - 1 && !isTrain ? `<br><button onclick="toggleSegmentMode('${stop.name.replace(/'/g, "\\'")}')" style="margin-top:6px; background:#10b981; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">${isStraight ? 'Tento úsek: Vzdušně (přepnout)' : 'Tento úsek: Silnice (přepnout)'}</button>` : '';
+    m.bindPopup(`<div style="font-size:12px; font-weight:bold; color:#0f172a; text-align:center;">${stop.name}${pBtn}</div>`);
     m.bindTooltip(`Posunout <b>${stop.name}</b> (pro celý směr trasy)`, {direction: 'top'});
     m.on('dragend', async function(e) {
       let pos = e.target.getLatLng();
@@ -1265,7 +1303,6 @@ function closeActiveRoute(){
   if(activeRouteId){let btn=document.getElementById('route-btn-'+activeRouteId);if(btn){btn.textContent='🗺️ Zobrazit trasu';btn.style.background='#334155';}}
   activeRouteId=null;
   let eBtn=document.getElementById('edit-route-btn');if(eBtn)eBtn.style.display='none';
-  let mBtn=document.getElementById('edit-route-manual-btn');if(mBtn)mBtn.style.display='none';
   let sBtn=document.getElementById('save-route-btn');if(sBtn)sBtn.style.display='none';
   let crb=document.getElementById('close-route-btn');if(crb)crb.style.display='none';
 }
@@ -1434,26 +1471,13 @@ function _renderRoute(busId,data,btn){
         }
         routeLayer.addLayer(shapePoly);
       } else {
-        let routerObj = window.manualRoutingMode ? {
-          route: function(wps, cb, context) {
-            setTimeout(function() {
-              let res = [{
-                name: "Manual", summary: {totalDistance: 0, totalTime: 0},
-                coordinates: wps.map(w => w.latLng).filter(l => l), 
-                waypoints: wps, inputWaypoints: wps, instructions: []
-              }];
-              if (context) cb.call(context, null, res); else cb(null, res);
-            }, 10);
-          }
-        } : L.Routing.osrmv1({
-          serviceUrl: 'https://router.project-osrm.org/route/v1',
-          profile: 'driving',
-          useHints: false
-        });
-
         let tempControl = L.Routing.control({
           waypoints: waypoints,
-          router: routerObj,
+          router: L.Routing.osrmv1({
+            serviceUrl: 'https://router.project-osrm.org/route/v1',
+            profile: 'driving',
+            useHints: false
+          }),
           routeWhileDragging: false,
           addWaypoints: false,
           show: false,
@@ -1528,9 +1552,7 @@ function _renderRoute(busId,data,btn){
       data.route_key = bus.line + '_' + pts[0].name + '_' + pts[pts.length-1].name;
     }
     let erb = document.getElementById('edit-route-btn');
-    let mrb = document.getElementById('edit-route-manual-btn');
     if(erb) erb.style.display = 'block';
-    if(mrb) mrb.style.display = 'block';
   }
 }
 
