@@ -726,10 +726,10 @@ window.adminSaveAll=(id,permanent)=>{
 };
 
 // === NAV ===
-const nav=document.getElementById('top-nav'),handle=document.getElementById('nav-handle');
+const nav=document.getElementById('top-nav');
 let hideT=null;
-function showNav(dur){clearTimeout(hideT);nav.classList.add('vis');handle.classList.add('hid');if(dur)hideT=setTimeout(hideNav,dur);}
-function hideNav(){nav.classList.remove('vis');handle.classList.remove('hid');}
+function showNav(dur){clearTimeout(hideT);nav.classList.add('vis');if(dur)hideT=setTimeout(hideNav,dur);}
+function hideNav(){nav.classList.remove('vis');}
 let navPinned=false;
 function toggleNavPin(){
   navPinned=!navPinned;
@@ -737,7 +737,6 @@ function toggleNavPin(){
   if(navPinned){btn.classList.add('pinned');showNav(0);}
   else{btn.classList.remove('pinned');hideT=setTimeout(hideNav,1500);}
 }
-handle.addEventListener('click',()=>showNav(5000));
 document.addEventListener('mousemove',e=>{if(e.clientY<6)showNav();},{passive:true});
 nav.addEventListener('mouseenter',()=>clearTimeout(hideT));
 nav.addEventListener('mouseleave',()=>{if(!navPinned)hideT=setTimeout(hideNav,600);});
