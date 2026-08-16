@@ -236,11 +236,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 #map-wrap{position:fixed;top:0;left:0;width:100vw;height:100vh;}
 #map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;}
 #panel-zone{position:fixed;top:0;left:0;right:0;height:40px;z-index:3000;pointer-events:none;}
-#top-nav{position:fixed;top:-80px;left:50%;transform:translateX(-50%);width:auto;max-width:98%;min-height:44px;background:rgba(8,16,30,0.95);border:1px solid rgba(255,255,255,0.08);border-radius:16px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:2999;transition:top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);display:flex;align-items:center;justify-content:center;padding:4px 8px;gap:6px;box-shadow:0 10px 30px rgba(0,0,0,0.8);flex-wrap:nowrap;}
-#top-nav.vis{top:12px;}
-.n-logo{display:flex;align-items:center;justify-content:center;text-decoration:none;flex-shrink:0;background:transparent;border:none;padding:0;box-shadow:none;height:34px;}
-.n-logo img{height:50px;width:auto;margin:-4px 10px -12px -5px;filter:drop-shadow(0 0 10px rgba(56,189,248,0.9)) drop-shadow(0 0 2px rgba(255,255,255,0.4));transition:transform .2s;}
-.n-logo:hover img{transform:scale(1.05);}
+#top-nav{position:fixed;top:-72px;left:0;right:0;min-height:58px;background:rgba(8,16,30,0.97);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:2999;transition:top 0.3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;justify-content:center;padding:6px 14px;gap:6px;box-shadow:0 4px 24px rgba(0,0,0,0.7);flex-wrap:wrap;}
+#top-nav.vis{top:0;}
+.n-logo{position:relative;display:block;flex-shrink:0;background:transparent;border:none;padding:0;box-shadow:none;height:34px;width:44px;margin-right:12px;}
+.n-logo img{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:50px;width:auto;filter:drop-shadow(0 0 10px rgba(56,189,248,0.9)) drop-shadow(0 0 2px rgba(255,255,255,0.4));transition:transform .2s;}
+.n-logo:hover img{transform:translate(-50%,-50%) scale(1.05);}
 .n-title{flex-shrink:0;line-height:1.2;}.n-title .a{color:#38bdf8;font-size:14px;font-weight:800;}.n-title .b{color:#64748b;font-size:10px;}
 .n-warn{background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:bold;white-space:nowrap;flex-shrink:0;}
 .n-sp{width:80px;flex:0 0 auto;}
@@ -467,12 +467,12 @@ body.dark-map #settings-toggle-btn:hover, body.bw-dark-map #settings-toggle-btn:
 #settings-toggle-btn:hover .st-text{width:75px;opacity:1;margin-left:6px;}
 
 body.nav-static #top-nav { top: 0 !important; }
-body.nav-glass #top-nav { top: 15px !important; background: rgba(15, 23, 42, 0.25) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important; }
+body.nav-glass #top-nav { top: 15px !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; width: max-content !important; max-width: 98vw !important; border-radius: 16px !important; padding: 6px 12px !important; gap: 6px !important; flex-wrap: nowrap !important; background: rgba(15, 23, 42, 0.25) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important; }
 body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !important; }
 @media (max-width: 768px) {
   .n-sp { display: none !important; }
-  #top-nav { flex-wrap: wrap; height: auto; min-height: 50px; padding: 4px 6px; justify-content: center; gap: 4px; width: 98% !important; border-radius: 14px; top: 10px !important; }
-  body.nav-glass #top-nav { top: 10px !important; }
+  #top-nav { flex-wrap: wrap !important; height: auto; min-height: 50px; padding: 4px 6px; justify-content: center; gap: 4px; width: 100% !important; border-radius: 0; top: 0 !important; }
+  body.nav-glass #top-nav { width: 98% !important; border-radius: 14px !important; top: 10px !important; flex-wrap: wrap !important; left: 50% !important; transform: translateX(-50%) !important; }
   .n-warn, .n-clock, .n-title { display: none !important; }
   #spz-search-inp { width: 90px !important; }
 }
