@@ -1158,11 +1158,12 @@ function startEditRouteRoads() {
     routeLayer.addLayer(shapePoly);
   } else {
     let routerObj = window.manualRoutingMode ? {
-      route: function(wps, cb) {
-        cb(null, [{
+      route: function(wps, cb, context) {
+        let res = [{
           name: "Manual", summary: {totalDistance: 0, totalTime: 0},
-          coordinates: wps.map(w => w.latLng), waypoints: wps
-        }]);
+          coordinates: wps.map(w => w.latLng).filter(l => l), waypoints: wps
+        }];
+        if (context) cb.call(context, null, res); else cb(null, res);
       }
     } : L.Routing.osrmv1({
       serviceUrl: 'https://router.project-osrm.org/route/v1',
@@ -1431,11 +1432,12 @@ function _renderRoute(busId,data,btn){
         routeLayer.addLayer(shapePoly);
       } else {
         let routerObj = window.manualRoutingMode ? {
-          route: function(wps, cb) {
-            cb(null, [{
+          route: function(wps, cb, context) {
+            let res = [{
               name: "Manual", summary: {totalDistance: 0, totalTime: 0},
-              coordinates: wps.map(w => w.latLng), waypoints: wps
-            }]);
+              coordinates: wps.map(w => w.latLng).filter(l => l), waypoints: wps
+            }];
+            if (context) cb.call(context, null, res); else cb(null, res);
           }
         } : L.Routing.osrmv1({
           serviceUrl: 'https://router.project-osrm.org/route/v1',
