@@ -1161,7 +1161,8 @@ function startEditRouteRoads() {
       route: function(wps, cb, context) {
         let res = [{
           name: "Manual", summary: {totalDistance: 0, totalTime: 0},
-          coordinates: wps.map(w => w.latLng).filter(l => l), waypoints: wps
+          coordinates: wps.map(w => w.latLng).filter(l => l), 
+          waypoints: wps, inputWaypoints: wps, instructions: []
         }];
         if (context) cb.call(context, null, res); else cb(null, res);
       }
@@ -1435,7 +1436,8 @@ function _renderRoute(busId,data,btn){
           route: function(wps, cb, context) {
             let res = [{
               name: "Manual", summary: {totalDistance: 0, totalTime: 0},
-              coordinates: wps.map(w => w.latLng).filter(l => l), waypoints: wps
+              coordinates: wps.map(w => w.latLng).filter(l => l), 
+              waypoints: wps, inputWaypoints: wps, instructions: []
             }];
             if (context) cb.call(context, null, res); else cb(null, res);
           }
