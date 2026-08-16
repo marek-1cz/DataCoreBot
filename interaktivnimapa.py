@@ -296,7 +296,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 .hb{flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:bold;}
 .hb-jr{background:#38bdf8;color:#0f172a;}.hb-st{background:#ef4444;color:#fff;}
 .hb-mn{background:none;border:1px solid #334155;color:#94a3b8;padding:2px 7px;border-radius:4px;cursor:pointer;font-size:14px;}
-#sw{display:none;position:fixed;top:68px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#991b1b,#ef4444);color:#fff;padding:11px 18px;border-radius:10px;font-weight:bold;z-index:5000;text-align:center;max-width:92vw;width:410px;animation:swPulse 2s ease-in-out infinite alternate;}
+#sw{display:none;position:fixed;top:68px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#991b1b,#ef4444);color:#fff;padding:11px 18px;border-radius:10px;font-weight:bold;z-index:5000;text-align:center;max-width:92vw;width:410px;animation:swPulse 2.4s ease-in-out infinite alternate;}
 @keyframes swPulse{0%{box-shadow:0 4px 20px rgba(239,68,68,.4);}100%{box-shadow:0 4px 45px rgba(239,68,68,.9);}}
 #ttm{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.72);z-index:6000;align-items:center;justify-content:center;}
 #ttm.open{display:flex;}
@@ -304,9 +304,9 @@ body.nt-add-active #map{cursor:crosshair !important;}
 #ttc-btn{position:absolute;top:10px;right:10px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px;font-weight:bold;}
 #spz-results .sr-item{padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #334155;display:flex;align-items:center;gap:8px;}
 #spz-results .sr-item:hover{background:#334155;}
-.route-line-future{stroke-dasharray:14 10;animation:routeFlow 0.8s linear infinite;stroke-linecap:round;filter:drop-shadow(0 0 4px currentColor);}
+.route-line-future{stroke-dasharray:14 10;animation:routeFlow 0.96s linear infinite;stroke-linecap:round;filter:drop-shadow(0 0 4px currentColor);}
 .route-line-past{stroke-linecap:round;filter:drop-shadow(0 0 1px rgba(0,0,0,.5));}
-.route-line-draw{animation:routeDraw 1.2s ease-out forwards;}
+.route-line-draw{animation:routeDraw 1.44s ease-out forwards;}
 @keyframes routeFlow{to{stroke-dashoffset:-24;}}
 @keyframes routePulse{0%,100%{box-shadow:0 0 0 0 rgba(56,189,248,.8),0 2px 6px rgba(0,0,0,.5);}50%{box-shadow:0 0 0 10px rgba(56,189,248,0),0 2px 6px rgba(0,0,0,.5);}}
 @keyframes routeDrawLoop {
@@ -325,7 +325,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 .nt-dot{width:14px;height:14px;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.6);cursor:grab;box-sizing:border-box;}
 .nt-dot-normal{background:#38bdf8;border:2px solid white;}
 .nt-dot-manual{background:#10b981;border:2px solid white;}
-.nt-dot-flagged{background:#f59e0b;border:2px solid #fff;animation:ntPulse 1.2s ease-in-out infinite;}
+.nt-dot-flagged{background:#f59e0b;border:2px solid #fff;animation:ntPulse 1.44s ease-in-out infinite;}
 .nt-dot-saving{background:#a855f7;border:2px solid white;opacity:.7;}
 @keyframes ntPulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.7);}50%{box-shadow:0 0 0 7px rgba(245,158,11,0);}}
 .pub-dot{width:9px;height:9px;border-radius:50%;background:#38bdf8;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.5);}
@@ -464,7 +464,8 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
     <div id="ttc" style="color:white;">Načítám…</div>
   </div></div>
   <div id="close-route-btn" onclick="closeActiveRoute()"><i class="fas fa-times"></i> Zavřít trasu</div>
-  <div id="edit-route-btn" onclick="startEditRouteRoads()" style="display:none;position:fixed;top:72px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#38bdf8;border:1.5px solid #38bdf8;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(56,189,248,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-edit"></i> Silnice</div>
+  <div id="edit-route-btn" onclick="startEditRouteRoads()" style="display:none;position:fixed;top:72px;left:53%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#38bdf8;border:1.5px solid #38bdf8;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(56,189,248,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-edit"></i> Silnice</div>
+  <div id="edit-route-manual-btn" onclick="window.manualRoutingMode=!window.manualRoutingMode;this.innerHTML=window.manualRoutingMode?'<i class=\'fas fa-draw-polygon\'></i> Manuál: ZAP':'<i class=\'fas fa-draw-polygon\'></i> Manuál: VYP';this.style.background=window.manualRoutingMode?'rgba(16,185,129,.92)':'rgba(15,23,42,.92)';" style="display:none;position:fixed;top:72px;left:66%;transform:translateX(-50%);z-index:4200;background:rgba(15,23,42,.92);color:#10b981;border:1.5px solid #10b981;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(16,185,129,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-draw-polygon"></i> Manuál: VYP</div>
   <div id="save-route-btn" onclick="saveRouteRoads()" style="display:none;position:fixed;top:120px;left:60%;transform:translateX(-50%);z-index:4200;background:rgba(239,68,68,.92);color:white;border:1.5px solid #f87171;border-radius:24px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(239,68,68,.35);transition:all .2s;letter-spacing:.3px;"><i class="fas fa-save"></i> ULOŽIT (Táhni modrou čáru = trasu, červený bod = zastávku)</div>
   <div id="hud">
     <div id="hf">
@@ -1141,13 +1142,22 @@ function startEditRouteRoads() {
     let shapePoly = L.polyline(routeCoords, {color: '#f59e0b', weight: 6, opacity: 0.8});
     routeLayer.addLayer(shapePoly);
   } else {
+    let routerObj = window.manualRoutingMode ? {
+      route: function(wps, cb) {
+        cb(null, [{
+          name: "Manual", summary: {totalDistance: 0, totalTime: 0},
+          coordinates: wps.map(w => w.latLng), waypoints: wps
+        }]);
+      }
+    } : L.Routing.osrmv1({
+      serviceUrl: 'https://router.project-osrm.org/route/v1',
+      profile: 'driving',
+      useHints: false
+    });
+
     window.routeRoutingControl = L.Routing.control({
       waypoints: waypoints,
-      router: L.Routing.osrmv1({
-        serviceUrl: 'https://router.project-osrm.org/route/v1',
-        profile: 'driving',
-        useHints: false
-      }),
+      router: routerObj,
       routeWhileDragging: true,
       addWaypoints: true,
       show: false
@@ -1236,10 +1246,9 @@ function closeActiveRoute(){
   if(activeRouteId){let btn=document.getElementById('route-btn-'+activeRouteId);if(btn){btn.textContent='🗺️ Zobrazit trasu';btn.style.background='#334155';}}
   activeRouteId=null;
   let eBtn=document.getElementById('edit-route-btn');if(eBtn)eBtn.style.display='none';
+  let mBtn=document.getElementById('edit-route-manual-btn');if(mBtn)mBtn.style.display='none';
   let sBtn=document.getElementById('save-route-btn');if(sBtn)sBtn.style.display='none';
   let crb=document.getElementById('close-route-btn');if(crb)crb.style.display='none';
-  let erb=document.getElementById('edit-route-btn');if(erb)erb.style.display='none';
-  let srb=document.getElementById('save-route-btn');if(srb)srb.style.display='none';
 }
 async function toggleRoute(busId){
   if(activeRouteId===busId){
@@ -1391,7 +1400,7 @@ function _renderRoute(busId,data,btn){
   if(data.custom_shape && data.custom_shape.length > 0) {
     let shapePoly = L.polyline(data.custom_shape, {color: futColor, weight: 7, opacity: futFgOp, lineCap: 'round', lineJoin: 'round', className: 'route-line-past'});
     if(!isBug && !isFinished) {
-      shapePoly.on('add', function() { animFn(this.getElement(), 400, data.custom_shape); });
+      shapePoly.on('add', function() { animFn(this.getElement(), 320, data.custom_shape); });
     }
     routeLayer.addLayer(shapePoly);
   } else {
@@ -1402,17 +1411,26 @@ function _renderRoute(busId,data,btn){
         routeLayer.addLayer(L.polyline(routeCoords,{color:futColor,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
         let shapePoly = L.polyline(routeCoords, {color: futColor, weight: 7, opacity: futFgOp, lineCap: 'round', lineJoin: 'round', className: 'route-line-past'});
         if(!isBug && !isFinished) {
-          shapePoly.on('add', function() { animFn(this.getElement(), 400, routeCoords); });
+          shapePoly.on('add', function() { animFn(this.getElement(), 320, routeCoords); });
         }
         routeLayer.addLayer(shapePoly);
       } else {
+        let routerObj = window.manualRoutingMode ? {
+          route: function(wps, cb) {
+            cb(null, [{
+              name: "Manual", summary: {totalDistance: 0, totalTime: 0},
+              coordinates: wps.map(w => w.latLng), waypoints: wps
+            }]);
+          }
+        } : L.Routing.osrmv1({
+          serviceUrl: 'https://router.project-osrm.org/route/v1',
+          profile: 'driving',
+          useHints: false
+        });
+
         let tempControl = L.Routing.control({
           waypoints: waypoints,
-          router: L.Routing.osrmv1({
-            serviceUrl: 'https://router.project-osrm.org/route/v1',
-            profile: 'driving',
-            useHints: false
-          }),
+          router: routerObj,
           routeWhileDragging: false,
           addWaypoints: false,
           show: false,
@@ -1423,7 +1441,7 @@ function _renderRoute(busId,data,btn){
           routeLayer.addLayer(L.polyline(routeCoords,{color:futColor,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
           let shapePoly = L.polyline(routeCoords, {color: futColor, weight: 7, opacity: futFgOp, lineCap: 'round', lineJoin: 'round', className: 'route-line-past'});
           if(!isBug && !isFinished) {
-            shapePoly.on('add', function() { animFn(this.getElement(), 400, routeCoords); });
+            shapePoly.on('add', function() { animFn(this.getElement(), 320, routeCoords); });
           }
           routeLayer.addLayer(shapePoly);
         }).addTo(map);
@@ -1449,7 +1467,7 @@ function _renderRoute(busId,data,btn){
       let fc=isFinished?'#a855f7':futColor;
       icon=L.divIcon({className:'',iconSize:[24,24],iconAnchor:[12,12],html:'<div style="width:22px;height:22px;background:'+fc+';border:3px solid #fff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 0 12px '+fc+',0 2px 8px rgba(0,0,0,.8);">🏁</div>'});
     } else if(isNext){
-      icon=L.divIcon({className:'',iconSize:[22,22],iconAnchor:[11,11],html:'<div style="width:18px;height:18px;border-radius:'+br+';background:'+futColor+';border:3px solid #fff;box-shadow:0 0 14px '+futColor+',0 2px 6px rgba(0,0,0,.6);animation:routePulse 1.1s ease-in-out infinite;"></div>'});
+      icon=L.divIcon({className:'',iconSize:[22,22],iconAnchor:[11,11],html:'<div style="width:18px;height:18px;border-radius:'+br+';background:'+futColor+';border:3px solid #fff;box-shadow:0 0 14px '+futColor+',0 2px 6px rgba(0,0,0,.6);animation:routePulse 1.32s ease-in-out infinite;"></div>'});
     } else if(isBusPos){
       icon=L.divIcon({className:'',iconSize:[16,16],iconAnchor:[8,8],html:'<div style="width:12px;height:12px;border-radius:'+br+';background:#fff;border:3px solid '+futColor+';box-shadow:0 0 10px '+futColor+',0 2px 6px rgba(0,0,0,.5);"></div>'});
     } else if(isPast || isFinished){
@@ -1487,7 +1505,9 @@ function _renderRoute(busId,data,btn){
       data.route_key = bus.line + '_' + pts[0].name + '_' + pts[pts.length-1].name;
     }
     let erb = document.getElementById('edit-route-btn');
+    let mrb = document.getElementById('edit-route-manual-btn');
     if(erb) erb.style.display = 'block';
+    if(mrb) mrb.style.display = 'block';
   }
 }
 
@@ -2437,7 +2457,9 @@ def _load_stop_overrides(db):
                 cl = json.loads(row["custom_lines"]) if row.get("custom_lines") else None
             except Exception:
                 cl = None
-            loaded[_norm_txt(nm)] = {
+            
+            mode = row.get("mode") or "bus"
+            loaded[f"{_norm_txt(nm)}|{mode}"] = {
                 "lat": row["lat"], "lng": row["lng"], "name": nm,
                 "approx": bool(row.get("approx", False)),
                 "substitute": bool(row.get("substitute", False)),
