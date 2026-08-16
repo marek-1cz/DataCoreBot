@@ -238,9 +238,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 #panel-zone{position:fixed;top:0;left:0;right:0;height:40px;z-index:3000;pointer-events:none;}
 #top-nav{position:fixed;top:-72px;left:0;right:0;min-height:58px;background:rgba(8,16,30,0.97);border-bottom:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:2999;transition:top 0.3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;padding:6px 14px;gap:6px;box-shadow:0 4px 24px rgba(0,0,0,0.7);flex-wrap:wrap;}
 #top-nav.vis{top:0;}
-.n-logo{display:flex;align-items:center;text-decoration:none;flex-shrink:0;}
-.n-logo img{height:40px;width:auto;filter:drop-shadow(0 0 10px rgba(56,189,248,0.8)) drop-shadow(0 0 4px rgba(0,0,0,0.9));background:rgba(8,16,30,0.6);border-radius:12px;padding:2px 8px;transition:transform .2s;}
-.n-logo img:hover{transform:scale(1.05);}
+.n-logo{display:flex;align-items:center;justify-content:center;text-decoration:none;flex-shrink:0;background:#020617;border:1px solid #1e293b;border-radius:10px;padding:4px 10px;height:32px;box-shadow:inset 0 2px 8px rgba(0,0,0,0.8);box-sizing:border-box;}
+.n-logo img{height:100%;width:auto;filter:drop-shadow(0 0 8px rgba(56,189,248,0.8));transition:transform .2s;object-fit:contain;}
+.n-logo:hover img{transform:scale(1.05);}
 .n-title{flex-shrink:0;line-height:1.2;}.n-title .a{color:#38bdf8;font-size:14px;font-weight:800;}.n-title .b{color:#64748b;font-size:10px;}
 .n-warn{background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:bold;white-space:nowrap;flex-shrink:0;}
 .n-sp{flex:1;}
@@ -254,7 +254,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.n-clock{padding:4px 10px;white-space:nowrap;flex-shrink:0;color:#818cf8 !important;}
+.n-clock{padding:4px 10px;white-space:nowrap;flex-shrink:0;color:#ffffff !important;}
 #spz-search-inp::placeholder { color: #475569 !important; }
 
 /* The Gradient Border Buttons */
@@ -329,9 +329,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
   transform: translateY(-2px);
 }
 #pub-stops-btn.active{background:linear-gradient(135deg, #f59e0b, #ef4444) !important;}
-#nav-handle{position:fixed;top:0;left:50%;transform:translateX(-50%);width:90px;height:7px;background:rgba(56,189,248,.55);border-radius:0 0 8px 8px;z-index:3001;cursor:pointer;transition:opacity .3s,background .2s,width .2s;}
-#nav-handle:hover{background:rgba(56,189,248,.95);width:130px;}
-#nav-handle.hid{opacity:0;pointer-events:none;}
 /* Kurzor kříže v NT add mode */
 body.nt-add-active{cursor:crosshair !important;}
 body.nt-add-active #map{cursor:crosshair !important;}
@@ -470,12 +467,10 @@ body.dark-map #settings-toggle-btn:hover, body.bw-dark-map #settings-toggle-btn:
 #settings-toggle-btn:hover .st-text{width:75px;opacity:1;margin-left:6px;}
 
 body.nav-static #top-nav { top: 0 !important; }
-body.nav-static #nav-handle { display: none !important; }
 body.nav-glass #top-nav { top: 15px !important; left: 50% !important; transform: translateX(-50%); width: 96%; max-width: 1000px; border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.15); background: rgba(15, 23, 42, 0.25); backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35); height: auto !important; min-height: 58px; flex-wrap: wrap; gap: 6px; padding: 10px 14px; justify-content: center; }
-body.nav-glass #nav-handle { display: none !important; }
 body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !important; }
-
 @media (max-width: 768px) {
+  .n-sp { display: none !important; }
   #top-nav { flex-wrap: wrap; height: auto; min-height: 50px; padding: 4px 6px; justify-content: center; gap: 4px; }
   body.nav-glass #top-nav { width: 98%; border-radius: 14px; top: 10px !important; }
   .n-warn, .n-clock, .n-title { display: none !important; }
@@ -485,17 +480,13 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
 
 <div id="map-wrap">
   <div id="panel-zone"></div>
-  <div id="nav-handle" title="Klikni pro zobrazeni navigace"></div>
   <nav id="top-nav">
     <a href="https://datacorebot.koyeb.app/" class="n-logo">
       <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png" alt="OIS IDPK">
     </a>
-    <a href="https://datacorebot.koyeb.app/" class="n-btn n-home"><i class="fas fa-home"></i> Domů</a>
-    <button id="lines-overlay-btn-pub" onclick="toggleLinesPanel()" class="n-btn"><i class="fas fa-route"></i> Linky</button>
     <button id="pub-stops-btn" onclick="togglePubStops()"><i class="fas fa-bus"></i> Zastávky</button>
-    <a href="/provoz-idpk" class="n-btn n-provoz"><i class="fas fa-ticket-alt"></i> IDPK</a>
-    <button id="nav-pin-btn" onclick="toggleNavPin()" title="Uzamknout lištu"><i class="fas fa-thumbtack"></i></button>
-    <div id="admin-mode-badge" style="display:none;background:rgba(56,189,248,0.15);color:#38bdf8;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:bold;border:1px solid rgba(56,189,248,0.3);flex-shrink:0;">Admin</div>
+    <div class="n-sp"></div>
+    <button id="lines-overlay-btn-pub" onclick="toggleLinesPanel()" class="n-btn"><i class="fas fa-route"></i> Linky</button>
     <div class="n-clock"><span id="systemTimeClock">--:--:--</span></div>
     <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
       <input id="spz-search-inp" type="text" placeholder="🔍 SPZ..."
@@ -503,6 +494,8 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
         oninput="spzSearch(this.value)" onblur="setTimeout(()=>document.getElementById('spz-results').innerHTML='',200)">
       <div id="spz-results" style="position:absolute;top:34px;right:0;background:#1e293b;border:1px solid #334155;border-radius:8px;min-width:220px;z-index:4000;box-shadow:0 8px 20px rgba(0,0,0,.7);max-height:220px;overflow-y:auto;"></div>
     </div>
+    <div id="admin-mode-badge" style="display:none;background:rgba(56,189,248,0.15);color:#38bdf8;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:bold;border:1px solid rgba(56,189,248,0.3);flex-shrink:0;">Admin</div>
+    <button id="nav-pin-btn" onclick="toggleNavPin()" title="Uzamknout lištu"><i class="fas fa-thumbtack"></i></button>
 
     <!-- Admin nástroje – skryté pro veřejnost -->
     <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
