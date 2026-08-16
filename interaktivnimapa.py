@@ -1138,7 +1138,7 @@ function toggleSegmentMode(stopName) {
   if (window.routeRoutingControl || window.autoRoutingControl) {
     let sBtn = document.getElementById('save-route-btn');
     if (sBtn && sBtn.style.display !== 'none') {
-      startEditRouteRoads();
+      if (window.routeRoutingControl) window.routeRoutingControl.route();
     } else {
       if (activeRouteId) refreshActiveRoute();
     }
