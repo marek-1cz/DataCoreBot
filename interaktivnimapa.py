@@ -140,7 +140,7 @@ async function loadIndex(){
     allData.forEach(row=>{
       const d=new Date(row.created_at),dayStr=d.toLocaleDateString('cs-CZ');
       const spz=row.spz||'Neznama',linka=row.linka||'---';
-      const lb=String(linka).replace(/\/.*/,'').trim().replace(/[^0-9]/g,'');
+      const lb=String(linka).replace(/\\/.*/,'').trim().replace(/[^0-9]/g,'');
       const rc=row.run_count||freq[spz+'_'+lb]||0;
       let spzB=spz==='Neznama'?`<span style="background:#334155;color:#94a3b8;padding:3px 8px;border-radius:4px;font-size:12px;">Neznama</span>`:
                row.status?.includes('Falesny')?`<span style="background:#ef4444;color:white;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:bold;">${spz} X</span>`:
