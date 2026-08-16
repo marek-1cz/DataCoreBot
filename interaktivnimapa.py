@@ -467,12 +467,12 @@ body.dark-map #settings-toggle-btn:hover, body.bw-dark-map #settings-toggle-btn:
 #settings-toggle-btn:hover .st-text{width:75px;opacity:1;margin-left:6px;}
 
 body.nav-static #top-nav { top: 0 !important; }
-body.nav-glass #top-nav { top: 15px !important; left: 50% !important; transform: translateX(-50%); width: 96%; max-width: 1000px; border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.15); background: rgba(15, 23, 42, 0.25); backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35); height: auto !important; min-height: 58px; flex-wrap: wrap; gap: 6px; padding: 10px 14px; justify-content: center; }
+body.nav-glass #top-nav { top: 15px !important; background: rgba(15, 23, 42, 0.25) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important; }
 body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !important; }
 @media (max-width: 768px) {
   .n-sp { display: none !important; }
-  #top-nav { flex-wrap: wrap; height: auto; min-height: 50px; padding: 4px 6px; justify-content: center; gap: 4px; }
-  body.nav-glass #top-nav { width: 98%; border-radius: 14px; top: 10px !important; }
+  #top-nav { flex-wrap: wrap; height: auto; min-height: 50px; padding: 4px 6px; justify-content: center; gap: 4px; width: 98% !important; border-radius: 14px; top: 10px !important; }
+  body.nav-glass #top-nav { top: 10px !important; }
   .n-warn, .n-clock, .n-title { display: none !important; }
   #spz-search-inp { width: 90px !important; }
 }
