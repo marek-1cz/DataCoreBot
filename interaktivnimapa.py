@@ -1183,8 +1183,18 @@ function startEditRouteRoads() {
       route: function(wps, cb, context) {
         window.segmentModes = window.segmentModes || {};
         let hasStraight = false;
+        
+        for (let i = 0; i < wps.length; i++) {
+          if (!wps[i].name) {
+            wps[i].name = 'wp_' + Math.random().toString(36).substr(2, 9);
+            if (i > 0 && wps[i-1].name && window.segmentModes[wps[i-1].name] === 'straight') {
+              window.segmentModes[wps[i].name] = 'straight';
+            }
+          }
+        }
+        
         for (let i = 0; i < wps.length - 1; i++) {
-          if (wps[i].name && window.segmentModes[wps[i].name] === 'straight') hasStraight = true;
+          if (window.segmentModes[wps[i].name] === 'straight') hasStraight = true;
         }
 
         if (!hasStraight) {
@@ -1233,6 +1243,23 @@ function startEditRouteRoads() {
       routeWhileDragging: true,
       addWaypoints: true,
       show: false,
+      createMarker: function(i, wp, nWps) {
+        if (wp.options && wp.options.isStop) return null;
+        let m = L.marker(wp.latLng, {
+          draggable: true,
+          icon: L.divIcon({className: '', html: '<div style="width:14px;height:14px;background:white;border:3px solid #38bdf8;border-radius:50%;cursor:pointer;box-shadow:0 0 3px rgba(0,0,0,0.5);"></div>', iconSize: [14, 14], iconAnchor: [7, 7]})
+        });
+        m.bindTooltip('Kliknutím odstraníš bod', {direction: 'top'});
+        m.on('click', function() {
+          let wps = window.routeRoutingControl.getWaypoints();
+          let idx = wps.findIndex(w => w.name === wp.name);
+          if (idx !== -1) {
+            wps.splice(idx, 1);
+            window.routeRoutingControl.setWaypoints(wps);
+          }
+        });
+        return m;
+      },
       routeLine: function(route, options) {
         let line = L.Routing.line(route, options);
         line.eachLayer(function(l) {
