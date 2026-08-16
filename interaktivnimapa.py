@@ -239,11 +239,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 #top-nav{position:fixed;top:-80px;left:50%;transform:translateX(-50%);width:max-content;max-width:98%;min-height:44px;background:rgba(8,16,30,0.95);border:1px solid rgba(255,255,255,0.08);border-radius:16px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:2999;transition:top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);display:flex;align-items:center;justify-content:center;padding:4px 8px;gap:6px;box-shadow:0 10px 30px rgba(0,0,0,0.8);flex-wrap:nowrap;}
 #top-nav.vis{top:12px;}
 .n-logo{display:flex;align-items:center;justify-content:center;text-decoration:none;flex-shrink:0;background:transparent;border:none;padding:0;box-shadow:none;height:34px;}
-.n-logo img{height:75px;width:auto;margin:-20px 0;filter:drop-shadow(0 0 10px rgba(56,189,248,0.9)) drop-shadow(0 0 2px rgba(255,255,255,0.4));transition:transform .2s;}
+.n-logo img{height:75px;width:auto;margin:-10px -30px -30px -30px;filter:drop-shadow(0 0 10px rgba(56,189,248,0.9)) drop-shadow(0 0 2px rgba(255,255,255,0.4));transition:transform .2s;}
 .n-logo:hover img{transform:scale(1.05);}
 .n-title{flex-shrink:0;line-height:1.2;}.n-title .a{color:#38bdf8;font-size:14px;font-weight:800;}.n-title .b{color:#64748b;font-size:10px;}
 .n-warn{background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:bold;white-space:nowrap;flex-shrink:0;}
-.n-sp{width:28px;flex:0 0 auto;}
+.n-sp{width:60px;flex:0 0 auto;}
 .n-clock, #admin-mode-badge, #spz-search-inp {
   background: #020617 !important;
   border: 1px solid #1e293b !important;
@@ -485,8 +485,8 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
       <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png" alt="OIS IDPK">
     </a>
     <button id="pub-stops-btn" onclick="togglePubStops()"><i class="fas fa-bus"></i> Zastávky</button>
-    <div class="n-sp"></div>
     <button id="lines-overlay-btn-pub" onclick="toggleLinesPanel()" class="n-btn"><i class="fas fa-route"></i> Linky</button>
+    <div class="n-sp"></div>
     <div class="n-clock"><span id="systemTimeClock">--:--:--</span></div>
     <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
       <input id="spz-search-inp" type="text" placeholder="🔍 SPZ..."
