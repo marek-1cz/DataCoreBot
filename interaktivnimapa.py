@@ -245,45 +245,76 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 .n-warn{background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:bold;white-space:nowrap;flex-shrink:0;}
 .n-sp{flex:1;}
 .n-clock, #admin-mode-badge, #spz-search-inp {
-  background: #f8fafc !important;
-  color: #0f172a !important;
-  border: 1px solid #cbd5e1 !important;
-  font-weight: 800 !important;
-  border-radius: 8px !important;
+  background: rgba(15, 23, 42, 0.4) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #f8fafc !important;
+  font-weight: 700 !important;
+  border-radius: 10px !important;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.4) !important;
 }
-.n-clock{padding:4px 8px;white-space:nowrap;flex-shrink:0;}
+.n-clock{padding:4px 10px;white-space:nowrap;flex-shrink:0;color:#38bdf8 !important;}
 .n-btn, #nav-pin-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #log-toggle-btn {
-  background: linear-gradient(135deg,#0ea5e9,#38bdf8) !important;
-  color: #0f172a !important;
-  border: none !important;
-  border-radius: 8px !important;
-  font-weight: 800 !important;
-  box-shadow: 0 2px 8px rgba(56,189,248,.4) !important;
-  padding: 6px 13px !important;
+  background: rgba(30, 41, 59, 0.5) !important;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  color: #e2e8f0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
+  padding: 6px 14px !important;
   font-size: 12px !important;
   cursor: pointer;
-  transition: all .2s;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 .n-btn:hover, #nav-pin-btn:hover, #nt-toggle-btn:hover, #nt-add-btn:hover, #le-toggle-btn:hover, #log-toggle-btn:hover {
-  background: linear-gradient(135deg,#0284c7,#0ea5e9) !important;
-  box-shadow: 0 3px 14px rgba(56,189,248,.6) !important;
-  transform: translateY(-1px);
+  background: rgba(56, 189, 248, 0.15) !important;
+  border: 1px solid rgba(56, 189, 248, 0.4) !important;
+  color: #38bdf8 !important;
+  box-shadow: 0 6px 20px rgba(56, 189, 248, 0.25), inset 0 0 12px rgba(56, 189, 248, 0.1) !important;
+  transform: translateY(-2px);
 }
 /* Nav pin button pinned state */
 #nav-pin-btn.pinned {
-  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
-  color: white !important;
+  background: rgba(245, 158, 11, 0.2) !important;
+  border: 1px solid rgba(245, 158, 11, 0.5) !important;
+  color: #f59e0b !important;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.3), inset 0 0 8px rgba(245, 158, 11, 0.2) !important;
 }
 /* Lines overlay buttons in legend */
 #lines-legend>div:hover{background:rgba(56,189,248,.08);}
 /* Výrazné tlačítko "Zobrazit zastávky" - prominentní pro veřejnost */
-#pub-stops-btn{background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#0f172a;border:none;padding:7px 14px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;flex-shrink:0;white-space:nowrap;box-shadow:0 2px 8px rgba(56,189,248,.4);transition:.2s;}
-#pub-stops-btn:hover{background:linear-gradient(135deg,#0284c7,#0ea5e9);box-shadow:0 3px 14px rgba(56,189,248,.6);}
-#pub-stops-btn.active{background:#f59e0b;color:#0f172a;box-shadow:0 2px 8px rgba(245,158,11,.5);}
+#pub-stops-btn {
+  background: rgba(14, 165, 233, 0.25) !important;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid rgba(56, 189, 248, 0.5) !important;
+  border-top: 1px solid rgba(125, 211, 252, 0.6) !important;
+  color: #bae6fd !important;
+  border-radius: 10px !important;
+  font-weight: 800 !important;
+  font-size: 13px !important;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+  box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3), inset 0 2px 10px rgba(255, 255, 255, 0.1) !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  padding: 7px 15px !important;
+}
+#pub-stops-btn:hover {
+  background: rgba(14, 165, 233, 0.4) !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 24px rgba(14, 165, 233, 0.5), inset 0 0 16px rgba(56, 189, 248, 0.3) !important;
+  transform: translateY(-2px);
+}
+#pub-stops-btn.active{background:rgba(245, 158, 11, 0.3) !important;color:#fcd34d !important;border-color:rgba(245, 158, 11, 0.6) !important;box-shadow:0 0 20px rgba(245, 158, 11, 0.4) !important;}
 #nav-handle{position:fixed;top:0;left:50%;transform:translateX(-50%);width:90px;height:7px;background:rgba(56,189,248,.55);border-radius:0 0 8px 8px;z-index:3001;cursor:pointer;transition:opacity .3s,background .2s,width .2s;}
 #nav-handle:hover{background:rgba(56,189,248,.95);width:130px;}
 #nav-handle.hid{opacity:0;pointer-events:none;}
