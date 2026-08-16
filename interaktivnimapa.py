@@ -1125,7 +1125,14 @@ window.onLineClick = function(lat, lng, wpIndex, segId) {
 window.addWaypointAt = function(lat, lng, spliceIndex) {
   if (window.routeRoutingControl) {
     let wps = window.routeRoutingControl.getWaypoints();
-    let newWp = L.Routing.waypoint(L.latLng(lat, lng), 'wp_' + Math.random().toString(36).substr(2, 9));
+    let newName = 'wp_' + Math.random().toString(36).substr(2, 9);
+    let newWp = L.Routing.waypoint(L.latLng(lat, lng), newName);
+    if (spliceIndex > 0) {
+      let prevName = wps[spliceIndex - 1].name;
+      if (window.segmentModes && window.segmentModes[prevName] === 'straight') {
+        window.segmentModes[newName] = 'straight';
+      }
+    }
     wps.splice(spliceIndex, 0, newWp);
     window.routeRoutingControl.setWaypoints(wps);
     map.closePopup();
@@ -1275,17 +1282,20 @@ function startEditRouteRoads() {
         let line = L.Routing.line(route, options);
         line.eachLayer(function(l) {
           l.on('click', function(e) {
-            let minD = Infinity;
-            let minIdx = -1;
-            route.coordinates.forEach((c, i) => {
-              let d = e.latlng.distanceTo(L.latLng(c));
-              if (d < minD) { minD = d; minIdx = i; }
-            });
+            let minDist = Infinity;
             let wpIndex = 0;
             for (let i = 0; i < route.waypointIndices.length - 1; i++) {
-              if (minIdx >= route.waypointIndices[i] && minIdx <= route.waypointIndices[i+1]) {
-                wpIndex = i;
-                break;
+              let startIdx = route.waypointIndices[i];
+              let endIdx = route.waypointIndices[i+1];
+              for (let j = startIdx; j < endIdx; j++) {
+                let p1 = map.latLngToLayerPoint(route.coordinates[j]);
+                let p2 = map.latLngToLayerPoint(route.coordinates[j+1]);
+                let p = map.latLngToLayerPoint(e.latlng);
+                let d = L.LineUtil.pointToSegmentDistance(p, p1, p2);
+                if (d < minDist) {
+                  minDist = d;
+                  wpIndex = i;
+                }
               }
             }
             let wps = window.routeRoutingControl.getWaypoints();
