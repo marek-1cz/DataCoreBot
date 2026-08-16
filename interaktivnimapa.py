@@ -238,6 +238,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0f172a;}
 #panel-zone{position:fixed;top:0;left:0;right:0;height:40px;z-index:3000;pointer-events:none;}
 #top-nav{position:fixed;top:-72px;left:0;right:0;min-height:58px;background:rgba(8,16,30,0.97);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:2999;transition:top 0.3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;justify-content:center;padding:6px 14px;gap:6px;box-shadow:0 4px 24px rgba(0,0,0,0.7);flex-wrap:wrap;}
 #top-nav.vis{top:0;}
+#nav-handle{position:fixed;top:0;left:50%;transform:translateX(-50%);width:90px;height:7px;background:rgba(56,189,248,.55);border-radius:0 0 8px 8px;z-index:3001;cursor:pointer;transition:opacity .3s,background .2s,width .2s;}
+#nav-handle:hover{background:rgba(56,189,248,.95);width:130px;}
+#nav-handle.hid{opacity:0;pointer-events:none;}
+body.nav-static #nav-handle{display:none!important;}
 .n-logo{position:relative;display:block;flex-shrink:0;background:transparent;border:none;padding:0;box-shadow:none;height:34px;width:44px;margin-right:12px;}
 .n-logo img{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:50px;width:auto;filter:drop-shadow(0 0 10px rgba(56,189,248,0.9)) drop-shadow(0 0 2px rgba(255,255,255,0.4));transition:transform .2s;}
 .n-logo:hover img{transform:translate(-50%,-50%) scale(1.05);}
@@ -462,18 +466,20 @@ body.low-graphics .leaflet-marker-icon div {
 }
 #settings-toggle-btn{background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid #334155;color:#cbd5e1;border-radius:30px;height:42px;padding:0 14px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 15px rgba(0,0,0,0.4);transition:all 0.4s cubic-bezier(.34,1.56,.64,1);overflow:hidden;position:relative;}
 #settings-toggle-btn:hover{transform:scale(1.05);box-shadow:0 6px 20px rgba(0,0,0,0.6);background:rgba(15,23,42,0.95);color:#38bdf8;border-color:#38bdf8;}
-body.dark-map #settings-toggle-btn, body.bw-dark-map #settings-toggle-btn, body.traffic-dark-map #settings-toggle-btn {background:rgba(56,189,248,0.2);border:1px solid rgba(56,189,248,0.6);color:#38bdf8;box-shadow:0 0 20px rgba(56,189,248,0.3), inset 0 0 12px rgba(56,189,248,0.2);}
-body.dark-map #settings-toggle-btn:hover, body.bw-dark-map #settings-toggle-btn:hover, body.traffic-dark-map #settings-toggle-btn:hover {background:rgba(56,189,248,0.3);box-shadow:0 0 30px rgba(56,189,248,0.5), inset 0 0 20px rgba(56,189,248,0.4);}
+body.dark-map #settings-toggle-btn {background:rgba(56,189,248,0.2);border:1px solid rgba(56,189,248,0.6);color:#38bdf8;box-shadow:0 0 20px rgba(56,189,248,0.3), inset 0 0 12px rgba(56,189,248,0.2);}
+body.dark-map #settings-toggle-btn:hover {background:rgba(56,189,248,0.3);box-shadow:0 0 30px rgba(56,189,248,0.5), inset 0 0 20px rgba(56,189,248,0.4);}
 #settings-toggle-btn .st-text{font-size:13px;font-weight:700;width:0px;opacity:0;transition:all 0.4s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;overflow:hidden;margin-left:0px;}
 #settings-toggle-btn:hover .st-text{width:75px;opacity:1;margin-left:6px;}
 
 body.nav-static #top-nav { top: 0 !important; }
-body.nav-glass #top-nav { top: 15px !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; width: max-content !important; max-width: 98vw !important; border-radius: 16px !important; padding: 6px 12px !important; gap: 6px !important; flex-wrap: nowrap !important; background: rgba(15, 23, 42, 0.25) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important; }
+body.nav-glass #top-nav { top: -100px !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; width: max-content !important; max-width: 98vw !important; border-radius: 16px !important; padding: 6px 12px !important; gap: 6px !important; flex-wrap: nowrap !important; background: rgba(15, 23, 42, 0.25) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important; }
+body.nav-glass #top-nav.vis { top: 15px !important; }
 body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !important; }
 @media (max-width: 768px) {
   .n-sp { display: none !important; }
-  #top-nav { flex-wrap: wrap !important; height: auto; min-height: 50px; padding: 4px 6px; justify-content: center; gap: 4px; width: 100% !important; border-radius: 0; top: 0 !important; }
-  body.nav-glass #top-nav { width: 98% !important; border-radius: 14px !important; top: 10px !important; flex-wrap: wrap !important; left: 50% !important; transform: translateX(-50%) !important; }
+  #top-nav { flex-wrap: wrap !important; height: auto; min-height: 50px; padding: 4px 6px; justify-content: center; gap: 4px; width: 100% !important; border-radius: 0; }
+  body.nav-glass #top-nav { width: 98% !important; border-radius: 14px !important; flex-wrap: wrap !important; left: 50% !important; transform: translateX(-50%) !important; }
+  body.nav-glass #top-nav.vis { top: 10px !important; }
   .n-warn, .n-clock, .n-title { display: none !important; }
   #spz-search-inp { width: 90px !important; }
 }
@@ -481,6 +487,7 @@ body.nav-static #nav-pin-btn, body.nav-glass #nav-pin-btn { display: none !impor
 
 <div id="map-wrap">
   <div id="panel-zone"></div>
+  <div id="nav-handle" title="Klikni pro zobrazeni navigace"></div>
   <nav id="top-nav">
     <a href="https://datacorebot.koyeb.app/" class="n-logo">
       <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png" alt="OIS IDPK">
@@ -729,8 +736,10 @@ window.adminSaveAll=(id,permanent)=>{
 // === NAV ===
 const nav=document.getElementById('top-nav');
 let hideT=null;
-function showNav(dur){clearTimeout(hideT);nav.classList.add('vis');if(dur)hideT=setTimeout(hideNav,dur);}
-function hideNav(){nav.classList.remove('vis');}
+let handle=document.getElementById('nav-handle');
+function showNav(dur){clearTimeout(hideT);nav.classList.add('vis');if(handle)handle.classList.add('hid');if(dur)hideT=setTimeout(hideNav,dur);}
+function hideNav(){nav.classList.remove('vis');if(handle)handle.classList.remove('hid');}
+if(handle)handle.addEventListener('click',()=>showNav(5000));
 let navPinned=false;
 function toggleNavPin(){
   navPinned=!navPinned;
