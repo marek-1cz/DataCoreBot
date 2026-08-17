@@ -27,12 +27,14 @@ mapa_bp = Blueprint('mapa_bp', __name__)
 SPZ_HOLD_MINUTES      = 8
 SPZ_STABLE_TICKS      = 2
 SPZ_HIGH_CONFIDENCE_DIST_M = 300  # 3-faktor match = okamzita fajfka (zadne cekani na 2. tik)
-SPZ_REAUDIT_INTERVAL_SEC = 60      # jak casto preverovat UZ overenou (fajfka) SPZ
+SPZ_REAUDIT_INTERVAL_SEC = 30      # jak casto preverovat UZ overenou (fajfka) SPZ (snizeno pro rychlejsi korekci)
 SPZ_AUTO_REFRESH_MIN     = 8       # kazdych N minut proved plny refresh SPZ u vsech aktivnich busu
                                    # (ekvivalent knofliku "Najit SPZ" ale pro vsechny najednou)
+SPZ_BEARING_MAX_DIFF     = 75      # max rozdil smer (deg) pro bearing bonus faktor SPZ
 GHOST_MAX_OFFLINE_MIN = 20
 GHOST_DIST_STRICT     = 0.010
 DUPLICATE_GRACE_SEC   = 120
+DEPOT_CHECK_INTERVAL_SEC = 20  # jak casto kontrolovat vjezd busu do vozovny
 
 # Cesta k GTFS db relativne k tomuto souboru (spolehlivejsi nez working dir)
 GTFS_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gtfs_stops.db")
@@ -520,6 +522,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
     <button id="nt-add-btn" onclick="startNtAdd()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:14px;flex-shrink:0;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;" title="Přidat zastávku">＋</button>
     <button id="le-toggle-btn" onclick="toggleLineEditor()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #a855f7;background:transparent;color:#a855f7;cursor:pointer;" title="Editor linek"><i class="fas fa-edit"></i> Edit</button>
+    <button id="depot-toggle-btn" onclick="document.getElementById('depot-admin-panel').style.display=document.getElementById('depot-admin-panel').style.display==='none'?'block':'none'" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #b45309;background:transparent;color:#fcd34d;cursor:pointer;" title="Správa vozoven">🏭 Vozovny</button>
     <!-- lines-overlay-btn-pub is already in nav for everyone -->
     <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋</button>
     __AD_BTN__
@@ -1168,7 +1171,7 @@ function checkSW(uptimeSec){
 
 // === SVG MARKER ===
 function buildMarkerSvg(mc,bearing,lineText,isTrain){
-  const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-bug':'#374151'};
+  const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151'};
   const bgC=cM[mc]||'#64748b',tF=(mc==='bg-orange')?'#0f172a':'#fff';
   let lC=String(lineText||'').split('/')[0].trim().replace(/[^0-9]/g,'');
   let lD=lC.length>=4?lC.slice(-3):lC;
@@ -2260,7 +2263,7 @@ function spzSearch(val){
   if(val.length<2){box.innerHTML='';return;}
   let matches=lastArr.filter(b=>b.spz&&b.spz!=='Neznama'&&b.spz.toUpperCase().includes(val));
   if(matches.length===0){box.innerHTML='<div style="padding:10px;color:#64748b;font-size:12px;text-align:center;">Zadne vysledky</div>';return;}
-  const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-bug':'#374151'};
+  const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151'};
   box.innerHTML=matches.slice(0,8).map(b=>`<div class="sr-item" onclick="zoomToSpz(${b.lat},${b.lng},'${b.id}')"><div style="width:10px;height:10px;border-radius:50%;background:${cM[b.color_class]||'#64748b'};flex-shrink:0;"></div><div><strong style="color:#f59e0b;">${b.spz}</strong><span style="color:#94a3b8;margin-left:5px;">L${b.line||'?'}</span><br><span style="color:#64748b;font-size:10px;">${b.status||''}</span></div></div>`).join('');
 }
 function zoomToSpz(lat,lng,busId){
@@ -2322,13 +2325,17 @@ async function fetchBuses(){
       if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#3f0000;border:2px solid #ef4444;border-radius:5px;padding:8px;margin:5px 0;font-size:11px;text-align:center;"><b style="color:#ef4444;font-size:13px;letter-spacing:.5px;">\u26d4 NEN\u00cd RE\u00c1LN\u00c1 POLOHA</b><br><span style="color:#fca5a5;font-weight:bold;">PRAVD\u011aPODOBN\u011a BUG NEBO POSLEDN\u00cd ZN\u00c1M\u00c1 POZICE</span><br><span style="color:#94a3b8;font-size:10px;">Pravd\u011bpodobn\u011b SPZ <b style="color:#fbbf24;">${bS}</b> \u2013 pozice nemus\u00ed odpov\u00eddat realit\u011b</span></div>`;}
       let orangeW='';
       if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>🔍 Vyzkum - bus byl zasekly, nyni jede</b></div>`;
+      let depotW='';
+      if(mc==='bg-yellow'||bus.status?.startsWith('Vozovna'))depotW=`<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🏭 ${bus.status||'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny &mdash; SPZ uložena</span></div>`;
       let sc='#10b981';
       if(mc==='bg-bug')sc='#6b7280';else if(mc==='bg-orange')sc='#f59e0b';
+      else if(mc==='bg-yellow')sc='#facc15';
       else if(bus.status?.includes('prilis'))sc='#94a3b8';else if(bus.status?.includes('Stoji'))sc='#ef4444';
       else if(bus.status?.includes('Konečná')||bus.status?.includes('Ztrata'))sc='#a855f7';
       else if(bus.status?.includes('Ceka')||bus.status?.includes('Zacatek'))sc='#3b82f6';
       else if(bus.status?.includes('Odstaven')||bus.status?.includes('signal'))sc='#94a3b8';
       else if(bus.status?.includes('Naskok'))sc='#60a5fa';
+      else if(bus.status?.includes('Vozovna'))sc='#facc15';
       let fTxt=(followId===bus.id)?'✖️ Zrusit sledovani':'📡 Sledovat';
       let fSt=(followId===bus.id)?'background:#ef4444;color:#fff;':'background:#3b82f6;color:#fff;';
       let afH=bus.admin_flag?'<span style="background:#1e40af;color:#93c5fd;padding:2px 7px;border-radius:10px;font-size:10px;margin-left:6px;font-weight:bold;">Admin uprava</span>':'';
@@ -2339,7 +2346,7 @@ async function fetchBuses(){
           <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}${mc==='bg-orange'?'color:#f59e0b;':''}">Linka ${bus.line}${afH}</h3>
         </div>
         <div class="pb">
-          ${bugW}${orangeW}
+          ${bugW}${orangeW}${depotW}
           ${bus.admin_note?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
           <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination||'Neznamy'}</span></div>
           ${spzH}${invTxt}
@@ -2448,6 +2455,181 @@ async function fetchBuses(){
 }
 fetchBuses();
 setInterval(fetchBuses,10000);
+
+// ═══════════════════════════════════════════════════════════
+// VOZOVNY (DEPOT ZONES) — admin draw + public garage icons
+// ═══════════════════════════════════════════════════════════
+let depotZones=[], depotLayer=L.layerGroup().addTo(map), depotDrawMode=false, depotPoints=[], depotDrawPolyline=null, depotEditId=null;
+const DEPOT_ICON=L.divIcon({className:'',html:`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 3px #000);" title="Vozovna">🏭</div>`,iconSize:[28,28],iconAnchor:[14,14]});
+
+// Načti a zobraz vozovny (volá se při startu + po každé změně)
+async function loadDepotZones(){
+  try{
+    let r=await fetch('/api/depot_zones'),d=await r.json();
+    if(d.status!=='success')return;
+    depotZones=d.zones;
+    renderDepotZones();
+    if(IS_ADMIN)renderDepotList();
+  }catch(e){console.error('[DEPOT]',e);}
+}
+
+function renderDepotZones(){
+  depotLayer.clearLayers();
+  depotZones.forEach(z=>{
+    if(!z.polygon||z.polygon.length<3)return;
+    let poly=L.polygon(z.polygon,{
+      color:z.color||'#facc15',fillColor:z.color||'#facc15',
+      fillOpacity:0.12,weight:2,dashArray:'6,4',opacity:0.7,
+    });
+    // Střed polygonu pro ikonu garáže
+    let bounds=poly.getBounds(),center=bounds.getCenter();
+    let busList=z.buses&&z.buses.length?z.buses.map(b=>`<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;"><span style="color:#facc15;font-weight:bold;">${b.spz||'?'}</span><span style="color:#64748b;font-size:11px;">L${b.line||'?'}</span>${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}</div>`).join(''):
+      '<div style="color:#64748b;font-size:11px;text-align:center;padding:4px;">Žádný bus v depu</div>';
+    let popHtml=`<div style="background:#0f172a;color:white;padding:10px 14px;min-width:160px;">
+      <div style="color:#facc15;font-weight:bold;font-size:13px;margin-bottom:8px;">🏭 ${z.name}</div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:6px;">${z.bus_count||0} bus${(z.bus_count===1)?'':'ů'} v depu</div>
+      ${busList}
+    </div>`;
+    let mk=L.marker(center,{icon:DEPOT_ICON,zIndexOffset:500});
+    mk.bindPopup(popHtml,{className:'dark-popup',maxWidth:220});
+    depotLayer.addLayer(poly);
+    depotLayer.addLayer(mk);
+  });
+}
+
+function renderDepotList(){
+  let el=document.getElementById('depot-zone-list');
+  if(!el)return;
+  if(depotZones.length===0){el.innerHTML='<div style="color:#64748b;font-size:12px;text-align:center;padding:8px;">Žádné vozovny</div>';return;}
+  el.innerHTML=depotZones.map(z=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #1e293b;">
+      <div style="width:10px;height:10px;border-radius:2px;background:${z.color||'#facc15'};flex-shrink:0;"></div>
+      <span style="flex:1;font-size:12px;color:#e2e8f0;">${z.name}</span>
+      <button onclick="depotEditZone('${z.id}')" style="background:#1e40af;color:#93c5fd;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">✏️ Edit</button>
+      <button onclick="depotDeleteZone('${z.id}','${z.name.replace(/'/g,"\\'")}'')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">🗑️</button>
+    </div>`).join('');
+}
+
+async function depotDeleteZone(id,name){
+  if(!confirm('Smazat vozovnu "'+name+'"?'))return;
+  let r=await fetch('/api/admin/delete_depot_zone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+  let d=await r.json();
+  if(d.status==='success'){appLog('Vozovna smazána','ok');await loadDepotZones();}
+  else appLog('Chyba: '+d.message,'error');
+}
+
+function depotEditZone(id){
+  let z=depotZones.find(x=>x.id===id);
+  if(!z)return;
+  document.getElementById('depot-name-inp').value=z.name;
+  document.getElementById('depot-color-inp').value=z.color||'#facc15';
+  depotEditId=id;
+  depotPoints=z.polygon.map(p=>L.latLng(p[0],p[1]));
+  depotDrawMode=true;
+  updateDepotDrawPreview();
+  document.getElementById('depot-draw-panel').style.display='block';
+  appLog('Editujete vozovnu "'+z.name+'" — přidejte body nebo uložte','info');
+}
+
+function startDepotDraw(){
+  depotDrawMode=true;depotPoints=[];depotEditId=null;
+  document.getElementById('depot-name-inp').value='';
+  document.getElementById('depot-color-inp').value='#facc15';
+  if(depotDrawPolyline){depotLayer.removeLayer(depotDrawPolyline);depotDrawPolyline=null;}
+  document.getElementById('depot-draw-panel').style.display='block';
+  appLog('Klikej na mapu pro přidání bodů vozovny. Double-click = uložit.','info');
+}
+
+function updateDepotDrawPreview(){
+  if(depotDrawPolyline)depotLayer.removeLayer(depotDrawPolyline);
+  if(depotPoints.length<2)return;
+  depotDrawPolyline=L.polygon(depotPoints,{color:'#facc15',fillOpacity:0.15,dashArray:'4,3',weight:2}).addTo(depotLayer);
+}
+
+map.on('click',function(e){
+  if(!depotDrawMode||!IS_ADMIN)return;
+  depotPoints.push(e.latlng);
+  updateDepotDrawPreview();
+  appLog('Bod '+depotPoints.length+' přidán ('+e.latlng.lat.toFixed(5)+','+e.latlng.lng.toFixed(5)+')','info');
+});
+map.on('dblclick',function(e){
+  if(!depotDrawMode||!IS_ADMIN)return;
+  L.DomEvent.stop(e);
+  depotSaveZone();
+});
+
+function depotUndoPoint(){
+  if(depotPoints.length===0)return;
+  depotPoints.pop();
+  updateDepotDrawPreview();
+}
+
+async function depotSaveZone(){
+  let name=document.getElementById('depot-name-inp').value.trim();
+  let color=document.getElementById('depot-color-inp').value||'#facc15';
+  if(!name){alert('Zadej název vozovny!');return;}
+  if(depotPoints.length<3){alert('Polygon musí mít aspoň 3 body!');return;}
+  let polygon=depotPoints.map(p=>[p.lat,p.lng]);
+  let body={name,polygon,color};
+  if(depotEditId)body.id=depotEditId;
+  let r=await fetch('/api/admin/save_depot_zone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  let d=await r.json();
+  if(d.status==='success'){
+    appLog('Vozovna "'+name+'" uložena ✅','ok');
+    depotDrawMode=false;depotPoints=[];depotEditId=null;
+    if(depotDrawPolyline){depotLayer.removeLayer(depotDrawPolyline);depotDrawPolyline=null;}
+    document.getElementById('depot-draw-panel').style.display='none';
+    await loadDepotZones();
+  }else appLog('Chyba ukládání: '+d.message,'error');
+}
+
+function depotCancelDraw(){
+  depotDrawMode=false;depotPoints=[];depotEditId=null;
+  if(depotDrawPolyline){depotLayer.removeLayer(depotDrawPolyline);depotDrawPolyline=null;}
+  document.getElementById('depot-draw-panel').style.display='none';
+}
+
+// Admin button pro vozovny - vloží se do admin toolbaru pokud existuje
+if(IS_ADMIN){
+  // Přidej tlačítko Vozovny do admin nav
+  let adminNav=document.getElementById('admin-side-btns');
+  if(adminNav){
+    let depotBtn=document.createElement('button');
+    depotBtn.className='n-btn';depotBtn.style.cssText='background:#78350f;color:#fcd34d;border:1px solid #b45309;';
+    depotBtn.innerHTML='🏭 Vozovny';
+    depotBtn.onclick=()=>{
+      let p=document.getElementById('depot-admin-panel');
+      if(p)p.style.display=p.style.display==='none'?'block':'none';
+    };
+    adminNav.appendChild(depotBtn);
+  }
+  // Injektuj admin panel pro vozovny do DOM
+  let depotPanel=document.createElement('div');
+  depotPanel.id='depot-admin-panel';
+  depotPanel.style.cssText='display:none;position:fixed;top:120px;right:10px;width:260px;background:#0f172a;border:1px solid #b45309;border-radius:10px;z-index:2000;box-shadow:0 8px 32px rgba(0,0,0,.7);padding:14px;';
+  depotPanel.innerHTML=`
+    <div style="color:#facc15;font-weight:bold;font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:6px;">🏭 Správa Vozoven <button onclick="document.getElementById('depot-admin-panel').style.display='none'" style="margin-left:auto;background:none;border:none;color:#64748b;cursor:pointer;font-size:16px;">✕</button></div>
+    <div id="depot-zone-list" style="max-height:180px;overflow-y:auto;margin-bottom:10px;"></div>
+    <button onclick="startDepotDraw()" style="width:100%;background:#b45309;color:#fcd34d;border:none;border-radius:6px;padding:9px;font-weight:bold;cursor:pointer;font-size:13px;">➕ Nová vozovna</button>
+    <div id="depot-draw-panel" style="display:none;margin-top:10px;border-top:1px solid #1e293b;padding-top:10px;">
+      <div style="color:#94a3b8;font-size:11px;margin-bottom:6px;">🖱️ Klikej na mapu pro body, dbl-click = uložit</div>
+      <input id="depot-name-inp" type="text" placeholder="Název vozovny..." style="width:100%;box-sizing:border-box;background:#1e293b;color:white;border:1px solid #334155;border-radius:5px;padding:7px;font-size:12px;margin-bottom:6px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <label style="color:#94a3b8;font-size:11px;">Barva:</label>
+        <input id="depot-color-inp" type="color" value="#facc15" style="width:40px;height:28px;border:none;cursor:pointer;background:none;">
+      </div>
+      <div style="display:flex;gap:5px;">
+        <button onclick="depotUndoPoint()" style="flex:1;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;padding:6px;font-size:11px;cursor:pointer;">↩️ Vrátit</button>
+        <button onclick="depotSaveZone()" style="flex:2;background:#10b981;color:white;border:none;border-radius:5px;padding:6px;font-weight:bold;font-size:12px;cursor:pointer;">💾 Uložit</button>
+        <button onclick="depotCancelDraw()" style="flex:1;background:#7f1d1d;color:#fca5a5;border:none;border-radius:5px;padding:6px;font-size:11px;cursor:pointer;">✕ Zrušit</button>
+      </div>
+    </div>`;
+  document.body.appendChild(depotPanel);
+}
+
+// Automaticky načti vozovny při startu
+loadDepotZones();
+setInterval(loadDepotZones,60000); // refresh každou minutu
 </script>
 """
 
@@ -2459,6 +2641,7 @@ WORKER_START_TIME   = None
 ADMIN_DELETED_BUSES = {}
 CUSTOM_ROUTES = {}
 ROUTE_STOP_OVERRIDES = {}
+DEPOT_ZONES = []  # list dict: {id, name, polygon [[lat,lng],...], color}
 
 _stop_geo_cache     = {}
 _last_spz_auto_refresh = None   # kdy byl naposledy proveden automaticky reset SPZ u vsech busu
@@ -2710,6 +2893,62 @@ def _load_stop_overrides(db):
         print(f"[NT] Nacteno {len(loaded)} rucnich oprav poloh zastavek.", flush=True)
     except Exception as e:
         print(f"[NT] Tabulka stop_overrides nedostupna (OK pokud NT jeste nebyl pouzit): {e}", flush=True)
+
+def _load_depot_zones(db):
+    """Nacte vozovny (depot zones) ze Supabase do pameti."""
+    global DEPOT_ZONES
+    if not db:
+        return
+    try:
+        res = db.table("depot_zones").select("*").execute()
+        loaded = []
+        for row in (res.data or []):
+            poly = row.get("polygon")
+            if not poly or len(poly) < 3:
+                continue
+            loaded.append({
+                "id": row.get("id"),
+                "name": row.get("name", "Vozovna"),
+                "polygon": poly,
+                "color": row.get("color") or "#facc15",
+            })
+        DEPOT_ZONES = loaded
+        print(f"[DEPOT] Nacteno {len(loaded)} vozoven.", flush=True)
+    except Exception as e:
+        print(f"[DEPOT] Tabulka depot_zones nedostupna: {e}", flush=True)
+
+
+def _point_in_polygon(lat, lng, polygon):
+    """Ray-casting algoritmus: je bod (lat, lng) uvnitr polygonu?
+    polygon = [[lat, lng], [lat, lng], ...]"""
+    n = len(polygon)
+    inside = False
+    j = n - 1
+    for i in range(n):
+        xi, yi = polygon[i][1], polygon[i][0]  # lng, lat
+        xj, yj = polygon[j][1], polygon[j][0]
+        if ((yi > lng) != (yj > lng)) and (lat < (xj - xi) * (lng - yi) / (yj - yi) + xi):
+            inside = not inside
+        j = i
+    return inside
+
+
+def _check_depot_zones(lat, lng):
+    """Zkontroluj zda je bod (lat, lng) uvnitr nektere vozovny.
+    Vraci nazev vozovny nebo None."""
+    for zone in DEPOT_ZONES:
+        if _point_in_polygon(lat, lng, zone["polygon"]):
+            return zone["name"]
+    return None
+
+
+def _bearing_diff(b1, b2):
+    """Kruhovy rozdil dvou smerovych uhlu (0-360 deg). Vzdy vrati 0-180."""
+    if b1 is None or b2 is None:
+        return 0
+    diff = abs(int(b1) - int(b2)) % 360
+    return min(diff, 360 - diff)
+
 
 def _load_route_stop_overrides(db):
     global ROUTE_STOP_OVERRIDES
@@ -3108,6 +3347,7 @@ def background_map_worker():
         _load_stop_overrides(db_client)
         _load_route_stop_overrides(db_client)
         _load_custom_routes(db_client)
+        _load_depot_zones(db_client)
 
     url_inflow_base = "https://pvvd.idpk.cz/Ajax/GetPoints"
     url_arriva = "https://www.arriva.cz/api/graphql"
@@ -3517,7 +3757,7 @@ def background_map_worker():
                             continue
                         if b_spz not in gate_pass or dist_m < gate_pass[b_spz]:
                             gate_pass[b_spz] = dist_m
-                        # Faktor 3: cil + posledni zastavka
+                        # Faktor 3: cil + posledni zastavka + bonus: smer (bearing)
                         ok_dir = True
                         a_dest_norm = _norm_txt(b_a.get("destinationName", ""))
                         if d1_norm and a_dest_norm:
@@ -3527,7 +3767,15 @@ def background_map_worker():
                             a_stop_norm = _norm_txt(b_a.get("lastStopName", ""))
                             if a_stop_norm:
                                 ok_stop = (near_stop_norm in a_stop_norm or a_stop_norm in near_stop_norm)
-                        if ok_dir and ok_stop:
+                        # Bonus faktor: bearing (smer jizdy) - pokud mame oba szmery,
+                        # kandidat jedouci OPACNYM smerem dostane penalizaci (ne plnou zamitnutí,
+                        # protoze PVVD a Arriva nemaji vzdy sync bearing)
+                        ok_bearing = True
+                        a_angle = b_a.get("angle")
+                        if c.get("bearing") is not None and a_angle is not None:
+                            bdiff = _bearing_diff(c["bearing"], a_angle)
+                            ok_bearing = (bdiff <= SPZ_BEARING_MAX_DIFF)
+                        if ok_dir and ok_stop and ok_bearing:
                             gate_3f.add(b_spz)
 
                     if gate_3f:
@@ -3591,45 +3839,81 @@ def background_map_worker():
                                 if best_spz in gate_3f and not oth_c.get("spz_3factor"):
                                     oth_c["spz_conflict_warn"] = True
 
-                    current_spz = c.get("spz")
-                    was_locked = bool(c.get("spz_locked"))
-                    if was_locked and (not current_spz or current_spz == "Nezn\u00e1m\u00e1"):
-                        was_locked = False
-                        c["spz_locked"] = False
-
-                    # Re-audit periodicky
+                    # Re-audit: spust cely match algoritmus, ne jen listingovou kontrolu.
+                    # Pokud best_spz z re-auditu je JINA nez aktualni SPZ (nebo zadna),
+                    # okamzite uvolni lock - bus byl spatne pripojen.
                     if was_locked and current_spz and current_spz != "Nezn\u00e1m\u00e1":
                         last_audit = c.get("spz_last_audit_check")
                         due = (not last_audit) or (now - last_audit).total_seconds() >= SPZ_REAUDIT_INTERVAL_SEC
                         if due:
                             c["spz_last_audit_check"] = now
-                            if current_spz in gate_pass or current_spz in gate_3f:
+                            # Audit: je aktualni SPZ stale nejlepsi kandidat?
+                            if current_spz in gate_3f:
+                                # Stale nejlepsi (3-faktor) - potvrd a pokracuj
                                 c["spz_last_verified"] = now
-                                if current_spz in gate_3f:
-                                    c["spz_verified"] = True
-                                    c["spz_3factor"] = True
+                                c["spz_verified"] = True
+                                c["spz_3factor"] = True
+                            elif current_spz in gate_pass:
+                                # Stale v dosahu (1-2 faktor) - potvrd bez 3f
+                                c["spz_last_verified"] = now
                             else:
+                                # Aktualni SPZ neni v arriva datech VUBEC
                                 still_listed = any((ba.get("spz") or "").strip() == current_spz for ba in data_arriva)
                                 last_v = c.get("spz_last_verified")
                                 stale = (not last_v) or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60
-                                if still_listed or stale:
-                                    _report_situace("SPZ_RESET", f"SPZ {current_spz} uvolnena u busu {bus_id}",
-                                                    bus=bus_id, spz=current_spz,
-                                                    reason="not_in_arriva" if not still_listed else "stale")
-                                    print(f"[SPZ] Uvolnuji {current_spz} u busu {bus_id}", flush=True)
-                                    if c.get("spz_verified") and db_client:
-                                        try:
-                                            db_client.table("bus_history").update({
-                                                "status": "Fale\u0161n\u00fd z\u00e1znam (SPZ opravena)",
-                                                "spz_verified": False
-                                            }).eq("trip_id", c["trip_id"]).execute()
-                                        except Exception:
-                                            pass
-                                    c["spz_verified"] = False
-                                    c["spz_locked"] = False
-                                    c["spz_3factor"] = False
-                                    c["spz_stable_ticks"] = 0
-                                    was_locked = False
+                                if not still_listed or stale:
+                                    # SPZ zmizela z Arrivy a ceka prilis dlouho -
+                                    # zkontroluj zda existuje lepsi kandidat na trase
+                                    new_candidate = None
+                                    if gate_3f:
+                                        new_candidate = min(gate_3f, key=lambda s: gate_pass.get(s, 9999))
+                                    elif gate_pass:
+                                        new_candidate = min(gate_pass, key=gate_pass.get)
+                                    if new_candidate and new_candidate != current_spz:
+                                        # Existuje jiny kandidat na trase - uvolni lock
+                                        _report_situace("SPZ_RESET",
+                                            f"SPZ {current_spz} nahrazena {new_candidate} u busu {bus_id}",
+                                            bus=bus_id, old_spz=current_spz, new_spz=new_candidate,
+                                            reason="better_candidate_found")
+                                        print(f"[SPZ] REAUDIT: {current_spz} -> {new_candidate} u busu {bus_id}", flush=True)
+                                        if c.get("spz_verified") and db_client:
+                                            try:
+                                                db_client.table("bus_history").update({
+                                                    "status": "Fale\u0161n\u00fd z\u00e1znam (SPZ opravena re-auditem)",
+                                                    "spz_verified": False
+                                                }).eq("trip_id", c["trip_id"]).execute()
+                                            except Exception:
+                                                pass
+                                        c["spz_verified"] = False
+                                        c["spz_locked"] = False
+                                        c["spz_3factor"] = False
+                                        c["spz_stable_ticks"] = 0
+                                        was_locked = False
+                                    elif stale:
+                                        # Zadny lepsi kandidat, ale SPZ je davno neoverena
+                                        _report_situace("SPZ_RESET",
+                                            f"SPZ {current_spz} uvolnena (stale) u busu {bus_id}",
+                                            bus=bus_id, spz=current_spz, reason="stale")
+                                        print(f"[SPZ] Uvolnuji {current_spz} u busu {bus_id} (stale)", flush=True)
+                                        if c.get("spz_verified") and db_client:
+                                            try:
+                                                db_client.table("bus_history").update({
+                                                    "status": "Fale\u0161n\u00fd z\u00e1znam (SPZ opravena)",
+                                                    "spz_verified": False
+                                                }).eq("trip_id", c["trip_id"]).execute()
+                                            except Exception:
+                                                pass
+                                        c["spz_verified"] = False
+                                        c["spz_locked"] = False
+                                        c["spz_3factor"] = False
+                                        c["spz_stable_ticks"] = 0
+                                        was_locked = False
+
+                    current_spz = c.get("spz")
+                    was_locked = bool(c.get("spz_locked"))
+                    if was_locked and (not current_spz or current_spz == "Nezn\u00e1m\u00e1"):
+                        was_locked = False
+                        c["spz_locked"] = False
 
                     # Prirazeni noveho kandidata
                     if not was_locked:
@@ -3673,6 +3957,38 @@ def background_map_worker():
                                 c["spz_locked"] = False
                                 c["spz_3factor"] = False
 
+                # ── Vozovna check ────────────────────────────────────────────────────────
+                # Zkontroluj zda je bus uvnitr nejake vozovny (depot zone).
+                # Kontrola probiha jen kazdych DEPOT_CHECK_INTERVAL_SEC sekund
+                # aby se neskenoval polygon pri kazdem tiku (10s).
+                if DEPOT_ZONES and not is_train and not c.get("admin_lock_display"):
+                    last_depot_check = c.get("_last_depot_check")
+                    depot_due = (not last_depot_check or
+                                 (now - last_depot_check).total_seconds() >= DEPOT_CHECK_INTERVAL_SEC)
+                    if depot_due:
+                        c["_last_depot_check"] = now
+                        depot_name = _check_depot_zones(lat1, lng1)
+                        if depot_name:
+                            if not c.get("_in_depot"):
+                                c["_in_depot"] = True
+                                c["_depot_name"] = depot_name
+                                # Zamraz SPZ - bus parkuje, nema smysl re-auditovat
+                                if c.get("spz") and c["spz"] != "Nezn\u00e1m\u00e1":
+                                    c["spz_frozen"] = True
+                                    c["spz_locked"] = True
+                                print(f"[DEPOT] Bus {bus_id} ({c.get('spz','?')}) vjel do vozovny '{depot_name}'", flush=True)
+                        else:
+                            if c.get("_in_depot"):
+                                c["_in_depot"] = False
+                                c["_depot_name"] = None
+                                # Odemkni SPZ - bus opustil vozovnu, muzeme hledat znovu
+                                if not c.get("manual_spz") and not c.get("bug_locked"):
+                                    c["spz_frozen"] = False
+                                    c["spz_locked"] = False
+                                    c["spz_verified"] = False
+                                    c["spz_stable_ticks"] = 0
+                                print(f"[DEPOT] Bus {bus_id} opustil vozovnu", flush=True)
+
                 # ── JR fetch ──────────────────────────────────────────────────────────────
                 if not is_train:
                     tt_age = (now - c["tt_last_fetch"]).total_seconds() if c.get("tt_last_fetch") else 9999
@@ -3695,6 +4011,11 @@ def background_map_worker():
                     if is_moving:
                         c["color_class"] = "bg-orange"
                         c["status"] = "V\u00fdzkum \u2013 Reaktivace (byl zaseknut\u00fd)"
+                elif c.get("_in_depot"):
+                    # Vozovna: pevna barva + status, prepise vsechny ostatni
+                    depot_name = c.get("_depot_name", "Vozovna")
+                    c["color_class"] = "bg-yellow"
+                    c["status"] = f"Vozovna: {depot_name}"
                 else:
                     is_before_departure = False
                     time_to_dep = 0
@@ -4920,3 +5241,101 @@ def api_bus_route(bus_id):
         "custom_shape_full": custom_shape_full,
         "route_key": route_key if result and c.get('line') else None
     })
+
+
+# === VOZOVNY (DEPOT ZONES) ===
+
+@mapa_bp.route('/api/depot_zones')
+def api_depot_zones():
+    """Verejny endpoint: vrati vsechny vozovny (polygon, nazev, barva)
+    + aktualni pocet busu v kazde vozovne."""
+    zones_out = []
+    for zone in DEPOT_ZONES:
+        # Spocitej busy v teto vozovne
+        buses_in = []
+        for bid, bc in GLOBAL_BUS_CACHE.items():
+            if bc.get("_in_depot") and bc.get("_depot_name") == zone["name"] and not bc.get("is_offline"):
+                buses_in.append({
+                    "id": bid,
+                    "spz": bc.get("spz") or "Neznámá",
+                    "line": bc.get("line") or "",
+                    "spz_verified": bc.get("spz_verified", False),
+                })
+        zones_out.append({
+            "id": zone["id"],
+            "name": zone["name"],
+            "polygon": zone["polygon"],
+            "color": zone.get("color", "#facc15"),
+            "bus_count": len(buses_in),
+            "buses": buses_in,
+        })
+    return jsonify({"status": "success", "zones": zones_out, "count": len(zones_out)})
+
+
+@mapa_bp.route('/api/admin/save_depot_zone', methods=['POST'])
+def api_admin_save_depot_zone():
+    """Admin: ulozi nebo aktualizuje vozovnu (depot zone)."""
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizováno"}), 401
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name", "")).strip()
+    polygon = data.get("polygon")
+    color = str(data.get("color", "#facc15")).strip()
+    zone_id = data.get("id")
+
+    if not name:
+        return jsonify({"status": "error", "message": "Chybí název vozovny"}), 400
+    if not polygon or not isinstance(polygon, list) or len(polygon) < 3:
+        return jsonify({"status": "error", "message": "Polygon musí mít aspoň 3 body"}), 400
+
+    db = get_db_client()
+    if not db:
+        return jsonify({"status": "error", "message": "DB nedostupná"}), 500
+    try:
+        row = {
+            "name": name,
+            "polygon": polygon,
+            "color": color,
+            "updated_at": get_prague_time().isoformat(),
+        }
+        if zone_id:
+            row["id"] = zone_id
+            db.table("depot_zones").upsert(row, on_conflict="id").execute()
+            # Aktualizuj v pameti
+            for z in DEPOT_ZONES:
+                if z["id"] == zone_id:
+                    z["name"] = name
+                    z["polygon"] = polygon
+                    z["color"] = color
+                    break
+            else:
+                DEPOT_ZONES.append({"id": zone_id, "name": name, "polygon": polygon, "color": color})
+        else:
+            res = db.table("depot_zones").insert(row).execute()
+            new_id = res.data[0]["id"] if res.data else None
+            DEPOT_ZONES.append({"id": new_id, "name": name, "polygon": polygon, "color": color})
+        print(f"[DEPOT] Ulozena vozovna '{name}' ({len(polygon)} bodu)", flush=True)
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@mapa_bp.route('/api/admin/delete_depot_zone', methods=['POST'])
+def api_admin_delete_depot_zone():
+    """Admin: smaze vozovnu podle id."""
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizováno"}), 401
+    data = request.get_json(silent=True) or {}
+    zone_id = data.get("id")
+    if not zone_id:
+        return jsonify({"status": "error", "message": "Chybí id vozovny"}), 400
+    db = get_db_client()
+    if db:
+        try:
+            db.table("depot_zones").delete().eq("id", zone_id).execute()
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+    global DEPOT_ZONES
+    DEPOT_ZONES = [z for z in DEPOT_ZONES if z["id"] != zone_id]
+    print(f"[DEPOT] Smazana vozovna id={zone_id}", flush=True)
+    return jsonify({"status": "success"})
