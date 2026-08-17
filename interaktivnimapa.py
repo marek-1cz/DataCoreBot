@@ -3833,17 +3833,20 @@ def background_map_worker():
                                 print(f"[DEPOT] Bus {bus_id} opustil vozovnu", flush=True)
 
                 if c.get("is_offline"):
-                    fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c["is_train"] else "Nezn\u00e1m\u00e1")
+                    fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c.get("is_train") else "Nezn\u00e1m\u00e1")
                     new_live_data.append({
-                        "id": bus_id, "trip_id": c["trip_id"], "lat": c["lat"], "lng": c["lng"],
+                        "id": bus_id, "trip_id": c.get("trip_id"), "lat": c.get("lat"), "lng": c.get("lng"),
                         "bearing": c.get("bearing"), "line": fld, "delay": 0,
-                        "destination": c["destination"], "spz": c["spz"] or "Nezn\u00e1m\u00e1",
-                        "spz_verified": c.get("spz_verified", False), "is_train": c["is_train"],
-                        "status": c["status"], "color_class": c["color_class"],
+                        "destination": c.get("destination"), "spz": c.get("spz") or "Nezn\u00e1m\u00e1",
+                        "spz_verified": c.get("spz_verified", False), "is_train": c.get("is_train"),
+                        "status": c.get("status"), "color_class": c.get("color_class"),
                         "inactive_minutes": inact,
-                        "last_updated": c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A",
+                        "last_updated": c["last_moved"].strftime("%H:%M:%S") if c.get("last_moved") else "N/A",
                         "investigating": False, "investigation_spz": "",
                         "admin_flag": c.get("admin_flag", False), "admin_note": c.get("admin_note", ""),
+                        "in_depot": c.get("_in_depot", False),
+                        "depot_name": c.get("_depot_name"),
+                        "depot_color": c.get("_depot_color")
                     })
                     continue
 
