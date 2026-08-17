@@ -3438,6 +3438,8 @@ def background_map_worker():
                 }
 
             current_inflow_ids = set()
+            new_live_data = []
+
 
             if isinstance(data_inflow, list):
                 for bus1 in data_inflow:
