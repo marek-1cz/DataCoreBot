@@ -537,7 +537,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
     <button id="nt-add-btn" onclick="startNtAdd()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:14px;flex-shrink:0;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;" title="Přidat zastávku">＋</button>
     <button id="le-toggle-btn" onclick="toggleLineEditor()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #a855f7;background:transparent;color:#a855f7;cursor:pointer;" title="Editor linek"><i class="fas fa-edit"></i> Edit</button>
-    <button id="depot-toggle-btn" onclick="document.getElementById('depot-admin-panel').style.display=document.getElementById('depot-admin-panel').style.display==='none'?'block':'none'" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #b45309;background:transparent;color:#fcd34d;cursor:pointer;" title="Správa vozoven">🏭 Vozovny</button>
+    <button id="depot-toggle-btn" onclick="document.getElementById('depot-admin-panel').style.display=document.getElementById('depot-admin-panel').style.display==='none'?'block':'none'" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #b45309;background:transparent;color:#fcd34d;cursor:pointer;" title="Správa vozoven">🅿️ Vozovny</button>
     <!-- lines-overlay-btn-pub is already in nav for everyone -->
     <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋</button>
     __AD_BTN__
@@ -1210,7 +1210,7 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain){
     // Bus v depu: plny kruh s barvou zony + tlustsi border
     si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${bgC}" stroke="white" stroke-width="2.5" opacity="0.9"/>`;
     // Mala ikona garáže uvnitř (H symbol)
-    si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="rgba(0,0,0,0.5)" font-size="10" font-family="sans-serif">🏭</text>`;
+    si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="rgba(0,0,0,0.5)" font-size="10" font-family="sans-serif">🅿️</text>`;
   }
   else{const ds=mc==='bg-bug'?'stroke-dasharray="3,2"':'';si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${bgC}" stroke="white" stroke-width="2" ${ds} opacity="${mc==='bg-bug'?0.7:1}"/>`;}
   if(lD&&!isTrain&&mc!=='bg-bug'&&!isDepot){
@@ -2359,8 +2359,8 @@ async function fetchBuses(){
       if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>🔍 Vyzkum - bus byl zasekly, nyni jede</b></div>`;
       let depotW='';
       function hexToRgb(hex){let r=0,g=0,b=0;if(hex.length==4){r="0x"+hex[1]+hex[1];g="0x"+hex[2]+hex[2];b="0x"+hex[3]+hex[3];}else if(hex.length==7){r="0x"+hex[1]+hex[2];g="0x"+hex[3]+hex[4];b="0x"+hex[5]+hex[6];}return +r+","+ +g+","+ +b;}
-      if(bus.in_depot&&bus.depot_name){let dCol=bus.depot_color||'#facc15';depotW=`<div style="background:rgba(${hexToRgb(dCol)},0.12);border:1px solid ${dCol};border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:${dCol};"><b>🏭 ${bus.depot_name}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny &mdash; SPZ uložena</span></div>`;}
-      else if(mc==='bg-yellow'||bus.status?.startsWith('Vozovna'))depotW=`<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🏭 ${bus.status||'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny &mdash; SPZ uložena</span></div>`;
+      if(bus.in_depot&&bus.depot_name){let dCol=bus.depot_color||'#facc15';depotW=`<div style="background:rgba(${hexToRgb(dCol)},0.12);border:1px solid ${dCol};border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:${dCol};"><b>🅿️ ${bus.depot_name}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny &mdash; SPZ uložena</span></div>`;}
+      else if(mc==='bg-yellow'||bus.status?.startsWith('Vozovna'))depotW=`<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🅿️ ${bus.status||'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny &mdash; SPZ uložena</span></div>`;
       let sc='#10b981';
       if(mc==='bg-bug')sc='#6b7280';else if(mc==='bg-orange')sc='#f59e0b';
       else if(mc==='bg-yellow')sc='#facc15';
@@ -2494,7 +2494,7 @@ setInterval(fetchBuses,10000);
 // VOZOVNY (DEPOT ZONES) — admin draw + public garage icons
 // ═══════════════════════════════════════════════════════════
 let depotZones=[], depotLayer=L.layerGroup().addTo(map), depotDrawMode=false, depotPoints=[], depotDrawPolyline=null, depotEditId=null;
-const DEPOT_ICON=L.divIcon({className:'',html:`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 3px #000);" title="Vozovna">🏭</div>`,iconSize:[28,28],iconAnchor:[14,14]});
+const DEPOT_ICON=L.divIcon({className:'',html:`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 3px #000);" title="Vozovna">🅿️</div>`,iconSize:[28,28],iconAnchor:[14,14]});
 
 // Načti a zobraz vozovny (volá se při startu + po každé změně)
 async function loadDepotZones(){
@@ -2523,7 +2523,7 @@ function renderDepotZones(){
     // Střed polygonu pro ikonu garáže
     let bounds=poly.getBounds(),center=bounds.getCenter();
     // Ikona vozovny: emoji s barvou zóny ve stínu
-    let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🏭</div>`;
+    let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🅿️</div>`;
     let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
     let busList=z.buses&&z.buses.length?z.buses.map(b=>`<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;"><span style="color:${zColor};font-weight:bold;">${b.spz||'?'}</span><span style="color:#64748b;font-size:11px;">L${b.line||'?'}</span>${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}</div>`).join(''):
       '<div style="color:#64748b;font-size:11px;text-align:center;padding:4px;">Žádný bus v depu</div>';
@@ -2532,7 +2532,7 @@ function renderDepotZones(){
     let diagM=map.distance(ne,sw);
     let radiusM=Math.max(diagM/2,50);
     let popHtml=`<div style="background:#0f172a;color:white;padding:10px 14px;min-width:180px;">
-      <div style="color:${zColor};font-weight:bold;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">🏭 ${z.name}</div>
+      <div style="color:${zColor};font-weight:bold;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">🅿️ ${z.name}</div>
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
         <div style="width:12px;height:12px;border-radius:3px;background:${zColor};border:1px solid rgba(255,255,255,0.3);"></div>
         <span style="font-size:11px;color:#64748b;">${z.bus_count||0} bus${(z.bus_count===1)?'':'ů'} v depu</span>
@@ -2681,7 +2681,7 @@ if(IS_ADMIN){
   if(adminNav){
     let depotBtn=document.createElement('button');
     depotBtn.className='n-btn';depotBtn.style.cssText='background:#78350f;color:#fcd34d;border:1px solid #b45309;';
-    depotBtn.innerHTML='🏭 Vozovny';
+    depotBtn.innerHTML='🅿️ Vozovny';
     depotBtn.onclick=()=>{
       let p=document.getElementById('depot-admin-panel');
       if(p)p.style.display=p.style.display==='none'?'block':'none';
@@ -5505,7 +5505,7 @@ def api_depot_zones():
         # Spocitej busy v teto vozovne
         buses_in = []
         for bid, bc in GLOBAL_BUS_CACHE.items():
-            if bc.get("_in_depot") and bc.get("_depot_name") == zone["name"] and not bc.get("is_offline"):
+            if bc.get("_in_depot") and bc.get("_depot_name") == zone["name"]:
                 buses_in.append({
                     "id": bid,
                     "spz": bc.get("spz") or "Neznámá",
