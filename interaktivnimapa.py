@@ -265,7 +265,7 @@ body.nav-static #nav-handle, body.nav-glass:not(.nav-glass-hide) #nav-handle { d
 #spz-results:empty { display: none !important; }
 
 /* The Gradient Border Buttons */
-.n-btn, #nav-pin-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #log-toggle-btn {
+.n-btn, #nav-pin-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #log-toggle-btn, #depot-toggle-btn {
   background: linear-gradient(#08101e, #08101e) padding-box,
               linear-gradient(135deg, rgba(56,189,248,0.6), rgba(2,132,199,0.8)) border-box !important;
   color: #e2e8f0 !important;
@@ -286,7 +286,7 @@ body.nav-static #nav-handle, body.nav-glass:not(.nav-glass-hide) #nav-handle { d
   -webkit-backdrop-filter: none !important;
 }
 
-.n-btn:hover, #nav-pin-btn:hover, #nt-toggle-btn:hover, #nt-add-btn:hover, #le-toggle-btn:hover, #log-toggle-btn:hover {
+.n-btn:hover, #nav-pin-btn:hover, #nt-toggle-btn:hover, #nt-add-btn:hover, #le-toggle-btn:hover, #log-toggle-btn:hover, #depot-toggle-btn:hover {
   background: linear-gradient(rgba(56,189,248,0.1), rgba(2,132,199,0.15)) padding-box,
               linear-gradient(135deg, #38bdf8, #0284c7) border-box !important;
   color: #ffffff !important;
@@ -450,7 +450,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 @media(max-width:420px){
   .n-provoz{display:none;}
   #spz-search-inp{width:65px;font-size:10px;}
-  #nt-toggle-btn,#nt-add-btn,#log-toggle-btn{font-size:11px;padding:4px 6px;}
+  #nt-toggle-btn,#nt-add-btn,#log-toggle-btn,#depot-toggle-btn{font-size:11px;padding:4px 6px;}
   #pub-stops-btn{font-size:10px;padding:4px 9px;}
 }
 
@@ -768,7 +768,7 @@ nav.addEventListener('mouseleave',()=>{if(!navPinned)hideT=setTimeout(hideNav,60
 document.addEventListener('touchstart',e=>{if(e.touches[0].clientY<35){showNav(4500);}else if(!nav.contains(e.target)&&!navPinned){clearTimeout(hideT);hideT=setTimeout(hideNav,400);}},{passive:true});
 showNav(4000);
 // Smart pan handlers registered after map init below
-if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let leb=document.getElementById('le-toggle-btn');if(leb)leb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
+if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let leb=document.getElementById('le-toggle-btn');if(leb)leb.style.display='inline-block';let dtb=document.getElementById('depot-toggle-btn');if(dtb)dtb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
 
 // === MAP ===
 var dLat=49.7384,dLng=13.3736,dZoom=12;
