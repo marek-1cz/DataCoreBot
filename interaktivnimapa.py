@@ -2629,7 +2629,7 @@ async function depotSaveZone(){
     let color=document.getElementById('depot-color-inp').value||'#facc15';
     if(!name){alert('Chyba: Zadej název vozovny!');return;}
     if(depotPoints.length<3){
-      alert('Chyba: Polygon musí mít aspoň 3 body!\n\nMusíš nejprve klikat myší do mapy a ohraničit tak areál vozovny. Až naklikáš aspoň 3 body, klikni znovu na Uložit.');
+      alert(`Chyba: Polygon musí mít aspoň 3 body!\n\nMusíš nejprve klikat myší do mapy a ohraničit tak areál vozovny. Až naklikáš aspoň 3 body, klikni znovu na Uložit.`);
       return;
     }
     let polygon=depotPoints.map(p=>[p.lat,p.lng]);
@@ -2645,7 +2645,7 @@ async function depotSaveZone(){
     try {
         d = JSON.parse(text);
     } catch(e) {
-        alert("Kritická chyba serveru: Backend nevrátil JSON data.\nOdpověď: " + text.substring(0, 150));
+        alert(`Kritická chyba serveru: Backend nevrátil JSON data.\nOdpověď: ` + text.substring(0, 150));
         if(btn) btn.innerHTML='💾 Uložit';
         return;
     }
@@ -2658,11 +2658,11 @@ async function depotSaveZone(){
       await loadDepotZones();
     }else {
       appLog('Chyba ukládání: '+d.message,'error');
-      alert('Nepodařilo se uložit vozovnu:\n' + d.message);
+      alert(`Nepodařilo se uložit vozovnu:\n` + d.message);
     }
     if(btn) btn.innerHTML='💾 Uložit';
   } catch(err) {
-      alert("Neočekávaná chyba v prohlížeči:\n" + err.message);
+      alert(`Neočekávaná chyba v prohlížeči:\n` + err.message);
       let btn=document.querySelector('button[onclick="depotSaveZone()"]');
       if(btn) btn.innerHTML='💾 Uložit';
   }
