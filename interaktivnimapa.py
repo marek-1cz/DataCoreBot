@@ -3844,6 +3844,8 @@ def background_map_worker():
                     # Re-audit: spust cely match algoritmus, ne jen listingovou kontrolu.
                     # Pokud best_spz z re-auditu je JINA nez aktualni SPZ (nebo zadna),
                     # okamzite uvolni lock - bus byl spatne pripojen.
+                    current_spz = c.get("spz")
+                    was_locked = bool(c.get("spz_locked"))
                     if was_locked and current_spz and current_spz != "Nezn\u00e1m\u00e1":
                         last_audit = c.get("spz_last_audit_check")
                         due = (not last_audit) or (now - last_audit).total_seconds() >= SPZ_REAUDIT_INTERVAL_SEC
@@ -3911,8 +3913,6 @@ def background_map_worker():
                                         c["spz_stable_ticks"] = 0
                                         was_locked = False
 
-                    current_spz = c.get("spz")
-                    was_locked = bool(c.get("spz_locked"))
                     if was_locked and (not current_spz or current_spz == "Nezn\u00e1m\u00e1"):
                         was_locked = False
                         c["spz_locked"] = False
