@@ -1187,12 +1187,15 @@ function checkSW(uptimeSec){
 // === SVG MARKER ===
 function buildMarkerSvg(mc,bearing,lineText,isTrain){
   const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151'};
-  const bgC=cM[mc]||'#64748b',tF=(mc==='bg-orange')?'#0f172a':'#fff';
+  // Podpora pro bg-depot:HEX format (bus v depu s barvou zony)
+  let isDepot=mc&&mc.startsWith('bg-depot:');
+  let bgC=isDepot?mc.substring(9):(cM[mc]||'#64748b');
+  const tF=(mc==='bg-orange'||mc==='bg-yellow')?'#0f172a':'#fff';
   let lC=String(lineText||'').split('/')[0].trim().replace(/[^0-9]/g,'');
   let lD=lC.length>=4?lC.slice(-3):lC;
   const cx=18,cy=18,r=isTrain?10:12;
   let si='';
-  const hB=bearing!==null&&bearing!==undefined&&!['bg-gray','bg-purple','bg-bug'].includes(mc)&&!isTrain;
+  const hB=bearing!==null&&bearing!==undefined&&!['bg-gray','bg-purple','bg-bug'].includes(mc)&&!isTrain&&!isDepot;
   if(hB){
     const rad=(bearing*Math.PI)/180;
     const tX=+(cx+Math.sin(rad)*(r+10)).toFixed(2),tY=+(cy-Math.cos(rad)*(r+10)).toFixed(2);
@@ -1203,13 +1206,20 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain){
   }
   si+=`<circle cx="${cx+1}" cy="${cy+1}" r="${r}" fill="rgba(0,0,0,0.3)"/>`;
   if(isTrain)si+=`<rect x="${cx-r}" y="${cy-r}" width="${r*2}" height="${r*2}" rx="3" fill="${bgC}" stroke="white" stroke-width="2"/>`;
+  else if(isDepot){
+    // Bus v depu: plny kruh s barvou zony + tlustsi border
+    si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${bgC}" stroke="white" stroke-width="2.5" opacity="0.9"/>`;
+    // Mala ikona garáže uvnitř (H symbol)
+    si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="rgba(0,0,0,0.5)" font-size="10" font-family="sans-serif">🏭</text>`;
+  }
   else{const ds=mc==='bg-bug'?'stroke-dasharray="3,2"':'';si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${bgC}" stroke="white" stroke-width="2" ${ds} opacity="${mc==='bg-bug'?0.7:1}"/>`;}
-  if(lD&&!isTrain&&mc!=='bg-bug'){
+  if(lD&&!isTrain&&mc!=='bg-bug'&&!isDepot){
     if(lD.length>3){si+=`<text x="${cx}" y="${cy-2.5}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(0,3)}</text>`;si+=`<text x="${cx}" y="${cy+5.5}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="6" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(3)}</text>`;}
     else si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="8" font-family="'Segoe UI',system-ui,sans-serif">${lD}</text>`;
   }
   return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
 }
+
 
 window.onLineClick = function(lat, lng, wpIndex, segId) {
   let isStraight = window.segmentModes && window.segmentModes[segId] === 'straight';
@@ -2318,7 +2328,14 @@ async function fetchBuses(){
       else if(dv>=5)dTxt=`<span style="color:#ef4444;">Zpozdeni ${dv} min</span>`;
       else dTxt=`<span style="color:#10b981;">+${dv} min</span>`;
 
-      let icon=L.divIcon({className:'',html:buildMarkerSvg(mc,bus.bearing,bus.line,bus.is_train),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
+      // Barveni markeru: depot_color ma prednost pred color_class
+      let markerColor=mc;
+      if(bus.in_depot&&bus.depot_color){
+        // Bus v vozovne: pouzij barvu zony (HEX) pro marker
+        // Preved na interni format: ulozi se jako special 'bg-depot-hex'
+        markerColor='bg-depot:'+bus.depot_color;
+      }
+      let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,bus.is_train),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
       let marker=L.marker([bus.lat,bus.lng],{icon,zIndexOffset:1000});
       marker._busId=bus.id;
       marker.on('popupopen',()=>{openPopupBusId=bus.id;});
@@ -2341,7 +2358,9 @@ async function fetchBuses(){
       let orangeW='';
       if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>🔍 Vyzkum - bus byl zasekly, nyni jede</b></div>`;
       let depotW='';
-      if(mc==='bg-yellow'||bus.status?.startsWith('Vozovna'))depotW=`<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🏭 ${bus.status||'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny &mdash; SPZ uložena</span></div>`;
+      function hexToRgb(hex){let r=0,g=0,b=0;if(hex.length==4){r="0x"+hex[1]+hex[1];g="0x"+hex[2]+hex[2];b="0x"+hex[3]+hex[3];}else if(hex.length==7){r="0x"+hex[1]+hex[2];g="0x"+hex[3]+hex[4];b="0x"+hex[5]+hex[6];}return +r+","+ +g+","+ +b;}
+      if(bus.in_depot&&bus.depot_name){let dCol=bus.depot_color||'#facc15';depotW=`<div style="background:rgba(${hexToRgb(dCol)},0.12);border:1px solid ${dCol};border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:${dCol};"><b>🏭 ${bus.depot_name}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny &mdash; SPZ uložena</span></div>`;}
+      else if(mc==='bg-yellow'||bus.status?.startsWith('Vozovna'))depotW=`<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🏭 ${bus.status||'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny &mdash; SPZ uložena</span></div>`;
       let sc='#10b981';
       if(mc==='bg-bug')sc='#6b7280';else if(mc==='bg-orange')sc='#f59e0b';
       else if(mc==='bg-yellow')sc='#facc15';
@@ -2490,23 +2509,48 @@ async function loadDepotZones(){
 
 function renderDepotZones(){
   depotLayer.clearLayers();
+  // Smaz stare radius circles
+  if(window._depotRadiusCircles){window._depotRadiusCircles.forEach(c=>depotLayer.removeLayer(c));}
+  window._depotRadiusCircles=[];
+  window._depotActiveRadius=null;
   depotZones.forEach(z=>{
     if(!z.polygon||z.polygon.length<3)return;
+    let zColor=z.color||'#facc15';
     let poly=L.polygon(z.polygon,{
-      color:z.color||'#facc15',fillColor:z.color||'#facc15',
-      fillOpacity:0.12,weight:2,dashArray:'6,4',opacity:0.7,
+      color:zColor,fillColor:zColor,
+      fillOpacity:0.13,weight:2,dashArray:'6,4',opacity:0.7,
     });
     // Střed polygonu pro ikonu garáže
     let bounds=poly.getBounds(),center=bounds.getCenter();
-    let busList=z.buses&&z.buses.length?z.buses.map(b=>`<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;"><span style="color:#facc15;font-weight:bold;">${b.spz||'?'}</span><span style="color:#64748b;font-size:11px;">L${b.line||'?'}</span>${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}</div>`).join(''):
+    // Ikona vozovny: emoji s barvou zóny ve stínu
+    let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🏭</div>`;
+    let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
+    let busList=z.buses&&z.buses.length?z.buses.map(b=>`<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;"><span style="color:${zColor};font-weight:bold;">${b.spz||'?'}</span><span style="color:#64748b;font-size:11px;">L${b.line||'?'}</span>${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}</div>`).join(''):
       '<div style="color:#64748b;font-size:11px;text-align:center;padding:4px;">Žádný bus v depu</div>';
-    let popHtml=`<div style="background:#0f172a;color:white;padding:10px 14px;min-width:160px;">
-      <div style="color:#facc15;font-weight:bold;font-size:13px;margin-bottom:8px;">🏭 ${z.name}</div>
-      <div style="font-size:11px;color:#64748b;margin-bottom:6px;">${z.bus_count||0} bus${(z.bus_count===1)?'':'ů'} v depu</div>
+    // Vypocti polomer z bounds (prumerna polovina sirky+vysky polygonu)
+    let ne=bounds.getNorthEast(),sw=bounds.getSouthWest();
+    let diagM=map.distance(ne,sw);
+    let radiusM=Math.max(diagM/2,50);
+    let popHtml=`<div style="background:#0f172a;color:white;padding:10px 14px;min-width:180px;">
+      <div style="color:${zColor};font-weight:bold;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">🏭 ${z.name}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <div style="width:12px;height:12px;border-radius:3px;background:${zColor};border:1px solid rgba(255,255,255,0.3);"></div>
+        <span style="font-size:11px;color:#64748b;">${z.bus_count||0} bus${(z.bus_count===1)?'':'ů'} v depu</span>
+      </div>
       ${busList}
     </div>`;
-    let mk=L.marker(center,{icon:DEPOT_ICON,zIndexOffset:500});
-    mk.bindPopup(popHtml,{className:'dark-popup',maxWidth:220});
+    let mk=L.marker(center,{icon:depotIcon,zIndexOffset:500});
+    mk.bindPopup(popHtml,{className:'dark-popup',maxWidth:240});
+    // Klik na ikonu: zobraz animovany radius circle
+    mk.on('click',function(){
+      // Smaz predchozi radius
+      if(window._depotActiveRadius){depotLayer.removeLayer(window._depotActiveRadius);window._depotActiveRadius=null;}
+      let rc=L.circle(center,{radius:radiusM,color:zColor,fillColor:zColor,fillOpacity:0.08,weight:2,dashArray:'8,5',opacity:0.6});
+      rc.addTo(depotLayer);
+      window._depotActiveRadius=rc;
+      // Auto-smaz po 5 sekundach
+      setTimeout(()=>{if(window._depotActiveRadius===rc){depotLayer.removeLayer(rc);window._depotActiveRadius=null;}},5000);
+    });
     depotLayer.addLayer(poly);
     depotLayer.addLayer(mk);
   });
@@ -2956,11 +3000,11 @@ def _point_in_polygon(lat, lng, polygon):
 
 def _check_depot_zones(lat, lng):
     """Zkontroluj zda je bod (lat, lng) uvnitr nektere vozovny.
-    Vraci nazev vozovny nebo None."""
+    Vraci tuple (nazev, barva) nebo (None, None)."""
     for zone in DEPOT_ZONES:
         if _point_in_polygon(lat, lng, zone["polygon"]):
-            return zone["name"]
-    return None
+            return zone["name"], zone.get("color", "#facc15")
+    return None, None
 
 
 def _bearing_diff(b1, b2):
@@ -4085,20 +4129,25 @@ def background_map_worker():
                                  (now - last_depot_check).total_seconds() >= DEPOT_CHECK_INTERVAL_SEC)
                     if depot_due:
                         c["_last_depot_check"] = now
-                        depot_name = _check_depot_zones(lat1, lng1)
+                        depot_name, depot_color = _check_depot_zones(lat1, lng1)
                         if depot_name:
                             if not c.get("_in_depot"):
                                 c["_in_depot"] = True
                                 c["_depot_name"] = depot_name
+                                c["_depot_color"] = depot_color or "#facc15"
                                 # Zamraz SPZ - bus parkuje, nema smysl re-auditovat
                                 if c.get("spz") and c["spz"] != "Nezn\u00e1m\u00e1":
                                     c["spz_frozen"] = True
                                     c["spz_locked"] = True
                                 print(f"[DEPOT] Bus {bus_id} ({c.get('spz','?')}) vjel do vozovny '{depot_name}'", flush=True)
+                            else:
+                                # Aktualizuj barvu i kdyz uz je v depu (mohla se zmenit)
+                                c["_depot_color"] = depot_color or "#facc15"
                         else:
                             if c.get("_in_depot"):
                                 c["_in_depot"] = False
                                 c["_depot_name"] = None
+                                c["_depot_color"] = None
                                 # Odemkni SPZ - bus opustil vozovnu, muzeme hledat znovu
                                 if not c.get("manual_spz") and not c.get("bug_locked"):
                                     c["spz_frozen"] = False
