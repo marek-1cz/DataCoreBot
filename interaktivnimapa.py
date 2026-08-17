@@ -62,6 +62,21 @@ def _report_situace(typ, zprava, **data):
         _REPORT_SITUACE.pop(0)
     print(f"[REPORT] {typ}: {zprava} | {data}", flush=True)
 
+
+def _spz_debug_log(bus_id, event, spz=None, detail=None, **extra):
+    """Zapise podrobny SPZ event do debug bufferu. Neloguje se na stdout pri bezne operaci."""
+    entry = {
+        "ts": datetime.now().isoformat(timespec='seconds'),
+        "bus_id": bus_id,
+        "spz": spz,
+        "event": event,
+        "detail": detail,
+    }
+    entry.update(extra)
+    _SPZ_DEBUG_LOG.append(entry)
+    if len(_SPZ_DEBUG_LOG) > _SPZ_DEBUG_LOG_MAX:
+        _SPZ_DEBUG_LOG.pop(0)
+
 # === HTML SABLONY ===
 
 HTML_HISTORIE_INDEX = """
@@ -2643,6 +2658,12 @@ CUSTOM_ROUTES = {}
 ROUTE_STOP_OVERRIDES = {}
 DEPOT_ZONES = []  # list dict: {id, name, polygon [[lat,lng],...], color}
 
+# === SPZ DEBUG LOG: podrobný rotující buffer pro diagnostiku SPZ matching ===
+# Každý záznam: {ts, bus_id, spz, event, detail, gate_3f_cnt, gate_pass_cnt}
+_SPZ_DEBUG_LOG = []
+_SPZ_DEBUG_LOG_MAX = 500
+_arriva_fetch_stats = {"ok": 0, "fail": 0, "empty": 0, "last_fail_reason": None, "last_ok_cnt": 0}
+
 _stop_geo_cache     = {}
 _last_spz_auto_refresh = None   # kdy byl naposledy proveden automaticky reset SPZ u vsech busu
 
@@ -3314,16 +3335,33 @@ def upsert_to_history(db, c):
         return
     TRACKED_SPZS.add(spz)
     jr_l = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={c['inflow_id']}&currentStopId=0"
+    payload_full = {
+        "trip_id": c["trip_id"], "spz": spz, "spz_verified": c.get("spz_verified", False),
+        "spz_3factor": c.get("spz_3factor", False), "spz_conflict_warn": c.get("spz_conflict_warn", False),
+        "linka": final_linka, "jr_link": jr_l, "start_scheduled": c.get("first_dep_time"),
+        "start_actual": c.get("actual_start_time"), "end_actual": c.get("actual_end_time"),
+        "last_lat": c.get("lat"), "last_lng": c.get("lng"), "status": c.get("status"),
+        "created_at": c["created_at"].isoformat(), "updated_at": get_prague_time().isoformat(),
+    }
     try:
-        db.table("bus_history").upsert({
-            "trip_id": c["trip_id"], "spz": spz, "spz_verified": c.get("spz_verified", False), "spz_3factor": c.get("spz_3factor", False), "spz_conflict_warn": c.get("spz_conflict_warn", False),
-            "linka": final_linka, "jr_link": jr_l, "start_scheduled": c.get("first_dep_time"),
-            "start_actual": c.get("actual_start_time"), "end_actual": c.get("actual_end_time"),
-            "last_lat": c.get("lat"), "last_lng": c.get("lng"), "status": c.get("status"),
-            "created_at": c["created_at"].isoformat(), "updated_at": get_prague_time().isoformat(),
-        }).execute()
+        db.table("bus_history").upsert(payload_full).execute()
     except Exception as e:
-        print(f"[MAPA-DB CHYBA] {spz}: {e}")
+        err_str = str(e)
+        # Graceful fallback: pokud DB nema sloupec spz_3factor nebo spz_conflict_warn
+        # (PGRST204 = neznamy sloupec v schema cache), zkus bez tech sloupcu
+        if "PGRST204" in err_str or "spz_3factor" in err_str or "spz_conflict_warn" in err_str:
+            payload_fallback = {k: v for k, v in payload_full.items()
+                                if k not in ("spz_3factor", "spz_conflict_warn")}
+            try:
+                db.table("bus_history").upsert(payload_fallback).execute()
+                # Jen jednou za cas upozornit ze fallback je aktivni
+                print(f"[MAPA-DB WARN] {spz}: spz_3factor/spz_conflict_warn sloupec chybi v DB "
+                      f"- pridat SQL: ALTER TABLE bus_history ADD COLUMN spz_3factor BOOLEAN DEFAULT FALSE; "
+                      f"ADD COLUMN spz_conflict_warn BOOLEAN DEFAULT FALSE;", flush=True)
+            except Exception as e2:
+                print(f"[MAPA-DB CHYBA] {spz}: {e2}", flush=True)
+        else:
+            print(f"[MAPA-DB CHYBA] {spz}: {e}", flush=True)
 
 
 def background_map_worker():
@@ -3414,8 +3452,25 @@ def background_map_worker():
                     data_arriva = resp2[0].get("data", {}).get("busesCurrentLocations", [])
                 elif isinstance(resp2, dict):
                     data_arriva = resp2.get("data", {}).get("busesCurrentLocations", [])
-            except Exception:
-                pass
+                # Arriva fetch stats
+                if data_arriva:
+                    _arriva_fetch_stats["ok"] += 1
+                    _arriva_fetch_stats["last_ok_cnt"] = len(data_arriva)
+                else:
+                    _arriva_fetch_stats["empty"] += 1
+                    print(f"[ARRIVA-WARN] Prazdna odpoved z Arriva API (resp keys: {list(resp2.keys()) if isinstance(resp2, dict) else type(resp2).__name__})", flush=True)
+            except urllib.error.HTTPError as e_http:
+                _arriva_fetch_stats["fail"] += 1
+                _arriva_fetch_stats["last_fail_reason"] = f"HTTP {e_http.code}: {e_http.reason}"
+                print(f"[ARRIVA-ERR] HTTP chyba: {e_http.code} {e_http.reason} - Arriva API blokuje?", flush=True)
+            except urllib.error.URLError as e_url:
+                _arriva_fetch_stats["fail"] += 1
+                _arriva_fetch_stats["last_fail_reason"] = str(e_url.reason)
+                print(f"[ARRIVA-ERR] URL chyba: {e_url.reason}", flush=True)
+            except Exception as e_gen:
+                _arriva_fetch_stats["fail"] += 1
+                _arriva_fetch_stats["last_fail_reason"] = str(e_gen)
+                print(f"[ARRIVA-ERR] Neocekavana chyba: {e_gen}", flush=True)
 
             # === SPZ MEMORY UPDATE: uloz pozice z Arriva pro kazdou SPZ ===
             # To nam umozni matchovat SPZ i kdyz Arriva bus momentalne nevidí
@@ -3820,26 +3875,86 @@ def background_map_worker():
 
                     # REPORT SITUACE: duplicitni SPZ
                     if best_spz:
-                        for oth_id, oth_c in GLOBAL_BUS_CACHE.items():
+                        for oth_id, oth_c in list(GLOBAL_BUS_CACHE.items()):
                             if oth_id == bus_id:
                                 continue
                             if (oth_c.get("spz") == best_spz
                                     and oth_c.get("spz_verified")
                                     and not oth_c.get("is_offline")):
+                                oth_line = oth_c.get("line", "")
+                                oth_lat = oth_c.get("lat") or 0
+                                oth_lng = oth_c.get("lng") or 0
+                                dist_between = round(haversine_m(lat1, lng1, oth_lat, oth_lng))
+                                lines_differ = not is_same_line(line, oth_line)
+                                is_3f_winner = (best_spz in gate_3f)
                                 _report_situace(
                                     "DUP_SPZ",
-                                    f"SPZ {best_spz} pouziva aktivni bus {oth_id} (L{oth_c.get('line')})"
+                                    f"SPZ {best_spz} pouziva aktivni bus {oth_id} (L{oth_line})"
                                     f" a take bus {bus_id} (L{line})",
                                     spz=best_spz,
                                     bus_a=bus_id, line_a=line, lat_a=lat1, lon_a=lng1,
-                                    bus_b=oth_id, line_b=oth_c.get("line"),
-                                    lat_b=oth_c.get("lat"), lon_b=oth_c.get("lng"),
-                                    dist_between=round(haversine_m(
-                                        lat1, lng1, oth_c.get("lat") or 0, oth_c.get("lng") or 0)),
-                                    is_3factor=(best_spz in gate_3f),
+                                    bus_b=oth_id, line_b=oth_line,
+                                    lat_b=oth_lat, lon_b=oth_lng,
+                                    dist_between=dist_between,
+                                    is_3factor=is_3f_winner,
+                                    lines_differ=lines_differ,
                                 )
-                                if best_spz in gate_3f and not oth_c.get("spz_3factor"):
+                                _spz_debug_log(
+                                    bus_id, "DUP_SPZ_DETECTED",
+                                    spz=best_spz,
+                                    detail=f"Konflikt s busem {oth_id} (L{oth_line}), dist={dist_between}m, ruzne_linky={lines_differ}",
+                                    is_3f=is_3f_winner,
+                                )
+                                # STREDNI AGRESIVITA: pokud maji ruzne linky -> jasna chyba
+                                # Okamzite odebrat SPZ starsimu (mene verifikovanimu) busu
+                                if lines_differ and not oth_c.get("manual_spz") and not oth_c.get("bug_locked"):
+                                    print(f"[SPZ-CONFLICT] SPZ {best_spz}: bus {bus_id} (L{line}) vs "
+                                          f"bus {oth_id} (L{oth_line}) - RUZNE LINKY, dist={dist_between}m "
+                                          f"-> uvolnuji SPZ u busu {oth_id}", flush=True)
+                                    _spz_debug_log(
+                                        oth_id, "SPZ_REMOVED_DIFF_LINE",
+                                        spz=best_spz,
+                                        detail=f"Odebrana SPZ kvuli konfliktu s busem {bus_id} (L{line}), ruzne linky",
+                                    )
+                                    if oth_c.get("spz_verified") and db_client:
+                                        try:
+                                            db_client.table("bus_history").update({
+                                                "status": "Falešný záznam (SPZ odebrána - konflikt různé linky)",
+                                                "spz_verified": False,
+                                            }).eq("trip_id", oth_c["trip_id"]).execute()
+                                        except Exception:
+                                            pass
+                                    oth_c["spz_verified"] = False
+                                    oth_c["spz_locked"] = False
+                                    oth_c["spz_3factor"] = False
+                                    oth_c["spz_stable_ticks"] = 0
                                     oth_c["spz_conflict_warn"] = True
+                                elif is_3f_winner and not oth_c.get("spz_3factor"):
+                                    # Nas kandidat je 3-faktor, ostatni neni -> jen conflict_warn
+                                    oth_c["spz_conflict_warn"] = True
+
+                    # SPZ DEBUG LOG: zaznamenej matching decision pro kazdy bus
+                    if best_spz:
+                        _spz_debug_log(
+                            bus_id, "SPZ_MATCH",
+                            spz=best_spz,
+                            detail=f"gate_3f={len(gate_3f)}, gate_pass={len(gate_pass)}, "
+                                   f"gate_partial={len(gate_partial)}, "
+                                   f"is_3f={best_spz in gate_3f}, "
+                                   f"dist={gate_pass.get(best_spz) or gate_partial.get(best_spz, '?'):.0f}m "
+                                   f"inact={inact:.1f}min",
+                            line=line, dest=dest1,
+                            gate_3f_cnt=len(gate_3f),
+                            gate_pass_cnt=len(gate_pass),
+                        )
+                    elif not has_valid_spz and not c.get("spz_frozen"):
+                        _spz_debug_log(
+                            bus_id, "SPZ_NO_MATCH",
+                            detail=f"Zadny kandidat: gate_3f={len(gate_3f)}, gate_pass={len(gate_pass)}, "
+                                   f"gate_partial={len(gate_partial)}, arriva_total={len(data_arriva)}, "
+                                   f"inact={inact:.1f}min",
+                            line=line,
+                        )
 
                     # Re-audit: spust cely match algoritmus, ne jen listingovou kontrolu.
                     # Pokud best_spz z re-auditu je JINA nez aktualni SPZ (nebo zadna),
@@ -4913,6 +5028,64 @@ def api_admin_report_situace():
         "status": "success",
         "entries": list(reversed(_REPORT_SITUACE[-limit:])),
         "total": len(_REPORT_SITUACE),
+    })
+
+
+@mapa_bp.route('/api/admin/spz_debug')
+def api_admin_spz_debug():
+    """Vrati podrobny SPZ matching log (posledni zaznamy z _SPZ_DEBUG_LOG).
+    Parametry:
+      ?limit=N   - max pocet zaznamu (default 200, max 500)
+      ?bus_id=X  - filtr na konkretni bus_id
+      ?event=X   - filtr na typ eventu (napr. DUP_SPZ_DETECTED, SPZ_NO_MATCH, ...)
+      ?spz=X     - filtr na konkretni SPZ
+    """
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizováno"}), 401
+    limit = min(int(request.args.get("limit", 200)), 500)
+    bus_id_filter = request.args.get("bus_id", "").strip()
+    event_filter = request.args.get("event", "").strip().upper()
+    spz_filter = request.args.get("spz", "").strip().upper()
+    entries = list(reversed(_SPZ_DEBUG_LOG))
+    if bus_id_filter:
+        entries = [e for e in entries if str(e.get("bus_id", "")) == bus_id_filter]
+    if event_filter:
+        entries = [e for e in entries if event_filter in (e.get("event") or "").upper()]
+    if spz_filter:
+        entries = [e for e in entries if spz_filter in (e.get("spz") or "").upper()]
+    return jsonify({
+        "status": "success",
+        "entries": entries[:limit],
+        "total_in_buffer": len(_SPZ_DEBUG_LOG),
+        "filters_applied": {
+            "bus_id": bus_id_filter or None,
+            "event": event_filter or None,
+            "spz": spz_filter or None,
+        },
+    })
+
+
+@mapa_bp.route('/api/admin/arriva_stats')
+def api_admin_arriva_stats():
+    """Vrati statistiky Arriva API fetche (OK/fail/empty pocty, posledni chyba).
+    Pomaha zjistit zda Arriva API blokuje nebo vraci prazdne odpovedi."""
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizováno"}), 401
+    total = _arriva_fetch_stats["ok"] + _arriva_fetch_stats["fail"] + _arriva_fetch_stats["empty"]
+    ok_pct = round(_arriva_fetch_stats["ok"] / total * 100, 1) if total > 0 else 0
+    return jsonify({
+        "status": "success",
+        "stats": {
+            "ok": _arriva_fetch_stats["ok"],
+            "fail": _arriva_fetch_stats["fail"],
+            "empty": _arriva_fetch_stats["empty"],
+            "total": total,
+            "ok_percent": ok_pct,
+            "last_fail_reason": _arriva_fetch_stats.get("last_fail_reason"),
+            "last_ok_bus_count": _arriva_fetch_stats.get("last_ok_cnt", 0),
+        },
+        "spz_debug_buffer_size": len(_SPZ_DEBUG_LOG),
+        "active_buses": len(GLOBAL_BUS_CACHE),
     })
 
 
