@@ -2624,22 +2624,48 @@ function depotUndoPoint(){
 }
 
 async function depotSaveZone(){
-  let name=document.getElementById('depot-name-inp').value.trim();
-  let color=document.getElementById('depot-color-inp').value||'#facc15';
-  if(!name){alert('Zadej název vozovny!');return;}
-  if(depotPoints.length<3){alert('Polygon musí mít aspoň 3 body!');return;}
-  let polygon=depotPoints.map(p=>[p.lat,p.lng]);
-  let body={name,polygon,color};
-  if(depotEditId)body.id=depotEditId;
-  let r=await fetch('/api/admin/save_depot_zone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  let d=await r.json();
-  if(d.status==='success'){
-    appLog('Vozovna "'+name+'" uložena ✅','ok');
-    depotDrawMode=false;depotPoints=[];depotEditId=null;
-    if(depotDrawPolyline){depotLayer.removeLayer(depotDrawPolyline);depotDrawPolyline=null;}
-    document.getElementById('depot-draw-panel').style.display='none';
-    await loadDepotZones();
-  }else appLog('Chyba ukládání: '+d.message,'error');
+  try {
+    let name=document.getElementById('depot-name-inp').value.trim();
+    let color=document.getElementById('depot-color-inp').value||'#facc15';
+    if(!name){alert('Chyba: Zadej název vozovny!');return;}
+    if(depotPoints.length<3){
+      alert('Chyba: Polygon musí mít aspoň 3 body!\n\nMusíš nejprve klikat myší do mapy a ohraničit tak areál vozovny. Až naklikáš aspoň 3 body, klikni znovu na Uložit.');
+      return;
+    }
+    let polygon=depotPoints.map(p=>[p.lat,p.lng]);
+    let body={name,polygon,color};
+    if(depotEditId)body.id=depotEditId;
+    
+    let btn=document.querySelector('button[onclick="depotSaveZone()"]');
+    if(btn) btn.innerText='Ukládám...';
+    
+    let r=await fetch('/api/admin/save_depot_zone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    let text = await r.text();
+    let d;
+    try {
+        d = JSON.parse(text);
+    } catch(e) {
+        alert("Kritická chyba serveru: Backend nevrátil JSON data.\nOdpověď: " + text.substring(0, 150));
+        if(btn) btn.innerHTML='💾 Uložit';
+        return;
+    }
+    
+    if(d.status==='success'){
+      appLog('Vozovna "'+name+'" uložena ✅','ok');
+      depotDrawMode=false;depotPoints=[];depotEditId=null;
+      if(depotDrawPolyline){depotLayer.removeLayer(depotDrawPolyline);depotDrawPolyline=null;}
+      document.getElementById('depot-draw-panel').style.display='none';
+      await loadDepotZones();
+    }else {
+      appLog('Chyba ukládání: '+d.message,'error');
+      alert('Nepodařilo se uložit vozovnu:\n' + d.message);
+    }
+    if(btn) btn.innerHTML='💾 Uložit';
+  } catch(err) {
+      alert("Neočekávaná chyba v prohlížeči:\n" + err.message);
+      let btn=document.querySelector('button[onclick="depotSaveZone()"]');
+      if(btn) btn.innerHTML='💾 Uložit';
+  }
 }
 
 function depotCancelDraw(){
