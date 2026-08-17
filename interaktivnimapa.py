@@ -2527,10 +2527,6 @@ function renderDepotZones(){
     let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
     let busList=z.buses&&z.buses.length?z.buses.map(b=>`<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;"><span style="color:${zColor};font-weight:bold;">${b.spz||'?'}</span><span style="color:#64748b;font-size:11px;">L${b.line||'?'}</span>${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}</div>`).join(''):
       '<div style="color:#64748b;font-size:11px;text-align:center;padding:4px;">Žádný bus v depu</div>';
-    // Vypocti polomer z bounds (prumerna polovina sirky+vysky polygonu)
-    let ne=bounds.getNorthEast(),sw=bounds.getSouthWest();
-    let diagM=map.distance(ne,sw);
-    let radiusM=Math.max(diagM/2,50);
     let popHtml=`<div style="background:#0f172a;color:white;padding:10px 14px;min-width:180px;">
       <div style="color:${zColor};font-weight:bold;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">🅿️ ${z.name}</div>
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
@@ -3799,6 +3795,43 @@ def background_map_worker():
             tt_ftick = 0
             for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
                 inact = (now - c["last_moved"]).total_seconds() / 60.0
+                # ── Vozovna check ────────────────────────────────────────────────────────
+                # Zkontroluj zda je bus uvnitr nejake vozovny (depot zone).
+                # Kontrola probiha jen kazdych DEPOT_CHECK_INTERVAL_SEC sekund
+                # aby se neskenoval polygon pri kazdem tiku (10s).
+                if DEPOT_ZONES and not c.get("is_train") and not c.get("admin_lock_display"):
+                    last_depot_check = c.get("_last_depot_check")
+                    depot_due = (not last_depot_check or
+                                 (now - last_depot_check).total_seconds() >= DEPOT_CHECK_INTERVAL_SEC)
+                    if depot_due:
+                        c["_last_depot_check"] = now
+                        depot_name, depot_color = _check_depot_zones(c.get("lat"), c.get("lng"))
+                        if depot_name:
+                            if not c.get("_in_depot"):
+                                c["_in_depot"] = True
+                                c["_depot_name"] = depot_name
+                                c["_depot_color"] = depot_color or "#facc15"
+                                # Zamraz SPZ - bus parkuje, nema smysl re-auditovat
+                                if c.get("spz") and c["spz"] != "Nezn\u00e1m\u00e1":
+                                    c["spz_frozen"] = True
+                                    c["spz_locked"] = True
+                                print(f"[DEPOT] Bus {bus_id} ({c.get('spz','?')}) vjel do vozovny '{depot_name}'", flush=True)
+                            else:
+                                # Aktualizuj barvu i kdyz uz je v depu (mohla se zmenit)
+                                c["_depot_color"] = depot_color or "#facc15"
+                        else:
+                            if c.get("_in_depot"):
+                                c["_in_depot"] = False
+                                c["_depot_name"] = None
+                                c["_depot_color"] = None
+                                # Odemkni SPZ - bus opustil vozovnu, muzeme hledat znovu
+                                if not c.get("manual_spz") and not c.get("bug_locked"):
+                                    c["spz_frozen"] = False
+                                    c["spz_locked"] = False
+                                    c["spz_verified"] = False
+                                    c["spz_stable_ticks"] = 0
+                                print(f"[DEPOT] Bus {bus_id} opustil vozovnu", flush=True)
+
                 if c.get("is_offline"):
                     fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c["is_train"] else "Nezn\u00e1m\u00e1")
                     new_live_data.append({
@@ -4145,42 +4178,6 @@ def background_map_worker():
                                 c["spz_locked"] = False
                                 c["spz_3factor"] = False
 
-                # ── Vozovna check ────────────────────────────────────────────────────────
-                # Zkontroluj zda je bus uvnitr nejake vozovny (depot zone).
-                # Kontrola probiha jen kazdych DEPOT_CHECK_INTERVAL_SEC sekund
-                # aby se neskenoval polygon pri kazdem tiku (10s).
-                if DEPOT_ZONES and not is_train and not c.get("admin_lock_display"):
-                    last_depot_check = c.get("_last_depot_check")
-                    depot_due = (not last_depot_check or
-                                 (now - last_depot_check).total_seconds() >= DEPOT_CHECK_INTERVAL_SEC)
-                    if depot_due:
-                        c["_last_depot_check"] = now
-                        depot_name, depot_color = _check_depot_zones(lat1, lng1)
-                        if depot_name:
-                            if not c.get("_in_depot"):
-                                c["_in_depot"] = True
-                                c["_depot_name"] = depot_name
-                                c["_depot_color"] = depot_color or "#facc15"
-                                # Zamraz SPZ - bus parkuje, nema smysl re-auditovat
-                                if c.get("spz") and c["spz"] != "Nezn\u00e1m\u00e1":
-                                    c["spz_frozen"] = True
-                                    c["spz_locked"] = True
-                                print(f"[DEPOT] Bus {bus_id} ({c.get('spz','?')}) vjel do vozovny '{depot_name}'", flush=True)
-                            else:
-                                # Aktualizuj barvu i kdyz uz je v depu (mohla se zmenit)
-                                c["_depot_color"] = depot_color or "#facc15"
-                        else:
-                            if c.get("_in_depot"):
-                                c["_in_depot"] = False
-                                c["_depot_name"] = None
-                                c["_depot_color"] = None
-                                # Odemkni SPZ - bus opustil vozovnu, muzeme hledat znovu
-                                if not c.get("manual_spz") and not c.get("bug_locked"):
-                                    c["spz_frozen"] = False
-                                    c["spz_locked"] = False
-                                    c["spz_verified"] = False
-                                    c["spz_stable_ticks"] = 0
-                                print(f"[DEPOT] Bus {bus_id} opustil vozovnu", flush=True)
 
                 # ── JR fetch ──────────────────────────────────────────────────────────────
                 if not is_train:
