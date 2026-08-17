@@ -2180,11 +2180,21 @@ function showStopInfo(s){
 
   let idosBtn=document.getElementById('sip-idos-btn');
   if(idosBtn){
-    let btnIcon = s.mode === 'train' ? '🚂' : '🚌';
-    let btnText = s.mode === 'train' ? ' Odjezdy vlaků' : ' Odjezdy autobusů';
+    // Rozlišení IDOS URL podle typu zastávky: bus, vlak, nebo smíšená
+    let btnIcon, btnText, idosSection;
+    if(s.mode === 'train') {
+      btnIcon = '🚂'; btnText = ' Odjezdy vlaků'; idosSection = 'vlaky';
+    } else if(s.mode === 'mixed') {
+      btnIcon = '🚌🚂'; btnText = ' Odjezdy (Bus + Vlak)'; idosSection = 'vlakyautobusymhdvse';
+    } else {
+      btnIcon = '🚌'; btnText = ' Odjezdy autobusů'; idosSection = 'autobusy';
+    }
     idosBtn.textContent = btnIcon + btnText;
     idosBtn.onclick = function() {
-      let url = `https://idos.idnes.cz/vlakyautobusymhdvse/odjezdy/vysledky/?f=${encodeURIComponent(s.name)}`;
+      // Použít systémový název (s.name) pro správné vyhledávání v IDOS
+      // — display_name je jen pro zobrazení na mapě, v JŘ je evidován systémový
+      let searchName = s.name;
+      let url = `https://idos.idnes.cz/${idosSection}/odjezdy/vysledky/?f=${encodeURIComponent(searchName)}`;
       document.getElementById('idos-iframe').src = url;
       let modalHeader = document.querySelector('#idos-modal-box span');
       if (modalHeader) modalHeader.textContent = btnIcon + btnText;
@@ -2197,11 +2207,14 @@ function showStopInfo(s){
 }
 
 function pubStopIcon(s){
+  // Čtverec = vlak, kruh = autobus (i zastávky kopírují tvar markerů vozidel)
   let isTrain=s.mode==='train';
+  let isMixed=s.mode==='mixed';
   let base=s.substitute?'pub-dot-substitute':s.approx?'pub-dot-approx':'';
-  let trainCls=isTrain?' pub-dot-train':'';
-  let size=isTrain?12:10; // trochu větší pro lepší touch
-  return L.divIcon({className:'',html:`<div class="pub-dot ${base}${trainCls}" style="width:${size}px;height:${size}px;"></div>`,iconSize:[size,size],iconAnchor:[size>>1,size>>1]});
+  let trainCls=(isTrain||isMixed)?' pub-dot-train':'';
+  let size=isTrain?12:10;
+  // Přidej rozlišovací tooltip prefix
+  return L.divIcon({className:'',html:`<div class="pub-dot ${base}${trainCls}" style="width:${size}px;height:${size}px;" title="${isTrain?'Vlak':isMixed?'Bus+Vlak':'Bus'}"></div>`,iconSize:[size,size],iconAnchor:[size>>1,size>>1]});
 }
 
 async function loadPubStops(){
@@ -2791,13 +2804,16 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000, bus_mode=Non
     if not target_mode:
         wants_train = _name_suggests_train(name)
         target_mode = 'train' if wants_train else 'bus'
+    # Pokud nazev obsahuje hint na vlak, vzdy preferuj train rezim
+    elif bus_mode == 'bus' and _name_suggests_train(name):
+        target_mode = 'train'
 
     # 0) Rucni oprava z NT rezimu ma VZDY prednost - admin uz to jednou
     # rucne overil a ulozil, takze se uz znovu nehleda v GTFS/Nominatim.
     ov = STOP_OVERRIDES.get(f"{key}|{target_mode}")
     if not ov:
         ov = STOP_OVERRIDES.get(f"{key}|mixed")
-        
+
     if ov:
         return (ov["lat"], ov["lng"]), "manual"
 
@@ -2808,20 +2824,35 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000, bus_mode=Non
         m = GTFS_MODES[idx] if idx < len(GTFS_MODES) else None
         return (not m) or (m == 'mixed') or (m == target_mode)
 
-    def pick_best(idxs):
+    def pick_best(idxs, strict_mode=True):
+        """Vybere nejlepsiho kandidata z idxs.
+        strict_mode=True: pokud existuje spravny rezim, NIKDY nepouzij spatny
+        (toto zabraňuje prirazeni vlakove stanice k bus zastavce se stejnym nazvem).
+        strict_mode=False: povoluje fallback na spatny rezim kdyz spravny neni.
+        """
         if not idxs:
             return None
-        # Mezi kandidaty preferuj spravny rezim dopravy (bus/train) - pokud
-        # aspon jeden vyhovuje, omez se na ne; jinak pouzij vsechny (radsi
-        # nepresny rezim nez nic).
         preferred = [i for i in idxs if mode_ok(i)]
-        pool = preferred if preferred else idxs
-        if not anchor or len(pool) == 1:
+        # KLIC: pokud existuje aspon jeden kandidat spravneho rezimu,
+        # IGNORUJ vsechny ostatniho rezimu - nepovoluj fallback na spatny typ.
+        # Toto je hlavni oprava: 'Svojšín' (bus) uz nebude pouzit vlakova stanice
+        # jen proto, ze je v GTFS jako jedina/prvni shoda.
+        if preferred:
+            pool = preferred
+        elif strict_mode:
+            # Spravny rezim vubec neni k dispozici - radsi None nez spatny typ
+            return None
+        else:
+            pool = idxs
+        if not anchor:
+            # Bez anchoru: vrat prvni preferovany (nelze geograficky vybrat)
             _, la, lo = GTFS_STOPS[pool[0]]
-            if anchor:
-                d = haversine_m(anchor[0], anchor[1], la, lo)
-                if d > max_anchor_dist_m:
-                    return None
+            return (la, lo)
+        if len(pool) == 1:
+            _, la, lo = GTFS_STOPS[pool[0]]
+            d = haversine_m(anchor[0], anchor[1], la, lo)
+            if d > max_anchor_dist_m:
+                return None
             return (la, lo)
         best_coords, best_d = None, None
         for idx in pool:
@@ -2838,10 +2869,14 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000, bus_mode=Non
 
     # 1) Presna shoda normalizovaneho nazvu
     exact_idxs = GTFS_NAME_IDX.get(key, [])
-    if exact_idxs and idxs_have_mode_ok(exact_idxs):
-        result = pick_best(exact_idxs)
-        if result:
-            return result, "exact"
+    if exact_idxs:
+        if idxs_have_mode_ok(exact_idxs):
+            result = pick_best(exact_idxs, strict_mode=True)
+            if result:
+                return result, "exact"
+        # Mame presnou shodu, ale pouze spatneho rezimu - zkus pridat fuzzy
+        # kandidaty spravneho rezimu z okoli pred definitivnim vzdanim se
+        # (zpracuje se nize v kroku 3)
 
     # 2) Fuzzy: Jaccard prekryv slov (prunik/sjednoceni, ne jen prunik/min)
     # >= 70 %, hledano jen mezi kandidaty z invertovaneho indexu (sdileji
@@ -2872,12 +2907,12 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000, bus_mode=Non
             elif score == best_score:
                 fuzzy_matches.append(idx)
         if fuzzy_matches and idxs_have_mode_ok(fuzzy_matches):
-            result = pick_best(fuzzy_matches)
+            result = pick_best(fuzzy_matches, strict_mode=True)
             if result:
                 return result, "fuzzy"
 
     # 3) "Zachranny" krok: presna/fuzzy shoda existuje, ale JEN spatneho
-    # rezimu (typicky: hledas bus zastavku, ale jedine co se nase\u0161lo pod
+    # rezimu (typicky: hledas bus zastavku, ale jedine co se naslo pod
     # timhle jmenem je vlakova stanice). Zkus jeste volnejsi shodu (Jaccard
     # >= 0.4) MEZI KANDIDATY CO MAJI ASPON JEDNO SPOLECNE SLOVO, ale jen
     # pokud jsou opravdu blizko (do 3 km) te spatne-rezimove shody - tim se
@@ -2885,9 +2920,8 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000, bus_mode=Non
     # kousek od vlakove stanice "Trpisty", i kdyz se presne nazvy neshoduji.
     fallback_idxs = exact_idxs or fuzzy_matches
     if fallback_idxs and not idxs_have_mode_ok(fallback_idxs):
-        wrong_mode_coords = pick_best(fallback_idxs)  # bez mode filtru by tohle vratilo spatny rezim, ale souradnice potrebujeme jako kotvu
-        # pick_best uz mode-preferuje, takze pro ziskani SAMOTNE spatne-rezimove
-        # kotvy pouzijeme primy vypocet bez filtru:
+        # Pouzij prvni kandidat spatneho rezimu jako geografickou kotvu pro
+        # hledani blizke bus zastavky (spatny-rezimova kotva)
         _, la0, lo0 = GTFS_STOPS[fallback_idxs[0]]
         rescue_anchor = (la0, lo0)
         if search_tokens and candidate_idxs:
@@ -2910,18 +2944,26 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000, bus_mode=Non
                 elif score == best_rescue_score:
                     rescue.append(idx)
             if rescue:
-                result = pick_best(rescue)
+                result = pick_best(rescue, strict_mode=True)
                 if result:
                     return result, "fuzzy"
-        # Zachranny krok nic nenasel - radsi puvodni (spatneho rezimu) shoda nez nic
-        if exact_idxs:
-            result = pick_best(exact_idxs)
-            if result:
-                return result, "exact"
-        if fuzzy_matches:
-            result = pick_best(fuzzy_matches)
-            if result:
-                return result, "fuzzy"
+        # Zachranny krok nic nenasel.
+        # DULEZITE: pokud hledame bus a nasli jsme POUZE vlak - vrat None!
+        # Je lepsi mit chybejici tecku v trase (cervene ?, NT log) nez
+        # spatne umistit autobus na vlakove nadrazi.
+        # VYJIMKA: pokud neni zadny anchor (zacatek trasy), radsi akceptuj
+        # spatny rezim nez nic - admin to muze opravit v NT.
+        if anchor is None:
+            if exact_idxs:
+                result = pick_best(exact_idxs, strict_mode=False)
+                if result:
+                    return result, "exact"
+            if fuzzy_matches:
+                result = pick_best(fuzzy_matches, strict_mode=False)
+                if result:
+                    return result, "fuzzy"
+        # S anchorem: radsi None nez spatny rezim
+        return None, None
 
     return None, None
 
@@ -4084,18 +4126,25 @@ def api_admin_route_stops():
     stops_out = []
     for s in items:
         key = s["key"]
-        ov = STOP_OVERRIDES.get(key)
+        gtfs_mode = s.get("mode")
+        m_str = gtfs_mode or "bus"
+        # OPRAVA: pouzij composite key s modem pro spravne rozliseni
+        # bus vs train zastavky se stejnym nazvem
+        ov = STOP_OVERRIDES.get(f"{key}|{m_str}")
+        if not ov and m_str != "mixed":
+            ov = STOP_OVERRIDES.get(f"{key}|mixed")
         eff_lat = ov["lat"] if ov else s["lat"]
         eff_lng = ov["lng"] if ov else s["lng"]
         # Linky: custom_lines (rucne nastavene) maji prednost pred GTFS
         eff_lines = ov["custom_lines"] if (ov and ov.get("custom_lines") is not None) else s.get("lines", [])
+        eff_mode = (ov.get("mode") if ov else None) or gtfs_mode
         flag = CONFIDENCE_LOG.get(key)
         flagged = bool(flag and flag.get("confidence") in ("fuzzy", "geocoded", "none"))
         stops_out.append({
             "name": s["name"],
             "display_name": (ov.get("display_name") or "") if ov else "",
             "lat": eff_lat, "lng": eff_lng,
-            "mode": s.get("mode"), "lines": eff_lines,
+            "mode": eff_mode, "lines": eff_lines,
             "manual": bool(ov), "flagged": flagged,
             "approx": bool(ov and ov.get("approx")),
             "substitute": bool(ov and ov.get("substitute")),
@@ -4159,7 +4208,9 @@ def api_stops_near():
 
 @mapa_bp.route('/api/stops_in_view')
 def api_stops_in_view():
-    """Verejny endpoint pro 'Zobrazit zastavky' + klik na zastávku = linky."""
+    """Verejny endpoint pro 'Zobrazit zastavky' + klik na zastávku = linky.
+    DULEZITE: bus a vlak zastavky se stejnym nazvem jsou vráceny jako DVA
+    separatni zaznamy (ruzna mista, ruzny mode) - nesmejí se mergeovat."""
     bbox = _parse_bbox_args()
     if not bbox:
         return jsonify({"status": "error", "message": "Chyb\u00ed/\u0161patn\u00e9 sou\u0159adnice v\u00fdezu"}), 400
@@ -4170,16 +4221,25 @@ def api_stops_in_view():
     stops_out = []
     for s in items:
         key = s["key"]
-        m_str = s.get("mode") or "bus"
-        ov = STOP_OVERRIDES.get(f"{key}|{m_str}") or STOP_OVERRIDES.get(f"{key}|mixed")
+        # OPRAVA: pouzit mode z konkretniho zaznamu (bus NEBO train), ne fallback
+        # na "bus" - jinak se bus a train zastavka se stejnym nazvem slouci do jedne
+        gtfs_mode = s.get("mode")  # muze byt None, 'bus', 'train', 'mixed'
+        m_str = gtfs_mode or "bus"
+        # Hledej NT override pro TENTO konkretni rezim dopravy:
+        ov = STOP_OVERRIDES.get(f"{key}|{m_str}")
+        if not ov and m_str != "mixed":
+            ov = STOP_OVERRIDES.get(f"{key}|mixed")
         eff_lat = ov["lat"] if ov else s["lat"]
         eff_lng = ov["lng"] if ov else s["lng"]
         eff_lines = ov["custom_lines"] if (ov and ov.get("custom_lines") is not None) else s.get("lines", [])
+        # Efektivni mode: override muze menit mode (napr. bylo 'bus', admin
+        # opravil na 'train') - pouzij override mode pokud existuje
+        eff_mode = (ov.get("mode") if ov else None) or gtfs_mode
         stops_out.append({
             "name": s["name"],
             "display_name": (ov.get("display_name") or "") if ov else "",
             "lat": eff_lat, "lng": eff_lng,
-            "mode": s.get("mode"), "lines": eff_lines,
+            "mode": eff_mode, "lines": eff_lines,
             "approx": bool(ov and ov.get("approx")),
             "substitute": bool(ov and ov.get("substitute")),
         })
