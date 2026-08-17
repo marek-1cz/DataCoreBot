@@ -3935,14 +3935,15 @@ def background_map_worker():
 
                     # SPZ DEBUG LOG: zaznamenej matching decision pro kazdy bus
                     if best_spz:
+                        _dist_raw = gate_pass.get(best_spz) or gate_partial.get(best_spz)
+                        _dist_str = f"{_dist_raw:.0f}m" if isinstance(_dist_raw, (int, float)) else "?m"
                         _spz_debug_log(
                             bus_id, "SPZ_MATCH",
                             spz=best_spz,
                             detail=f"gate_3f={len(gate_3f)}, gate_pass={len(gate_pass)}, "
                                    f"gate_partial={len(gate_partial)}, "
                                    f"is_3f={best_spz in gate_3f}, "
-                                   f"dist={gate_pass.get(best_spz) or gate_partial.get(best_spz, '?'):.0f}m "
-                                   f"inact={inact:.1f}min",
+                                   f"dist={_dist_str} inact={inact:.1f}min",
                             line=line, dest=dest1,
                             gate_3f_cnt=len(gate_3f),
                             gate_pass_cnt=len(gate_pass),
