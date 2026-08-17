@@ -5523,22 +5523,36 @@ def api_admin_save_depot_zone():
             "color": color,
             "updated_at": get_prague_time().isoformat(),
         }
-        if zone_id:
-            row["id"] = zone_id
-            db.table("depot_zones").upsert(row, on_conflict="id").execute()
-            # Aktualizuj v pameti
-            for z in DEPOT_ZONES:
-                if z["id"] == zone_id:
-                    z["name"] = name
-                    z["polygon"] = polygon
-                    z["color"] = color
-                    break
+        try:
+            if zone_id:
+                row["id"] = zone_id
+                db.table("depot_zones").upsert(row, on_conflict="id").execute()
             else:
-                DEPOT_ZONES.append({"id": zone_id, "name": name, "polygon": polygon, "color": color})
+                res = db.table("depot_zones").insert(row).execute()
+                zone_id = res.data[0]["id"] if res.data else None
+        except Exception as e:
+            err_str = str(e)
+            if "color" in err_str or "PGRST204" in err_str:
+                print(f"[DEPOT WARN] Sloupec 'color' asi chybí v DB. Přidej: ALTER TABLE depot_zones ADD COLUMN color TEXT DEFAULT '#facc15'; Ukladam bez barvy.", flush=True)
+                row_fallback = {k: v for k, v in row.items() if k != "color"}
+                if zone_id:
+                    db.table("depot_zones").upsert(row_fallback, on_conflict="id").execute()
+                else:
+                    res = db.table("depot_zones").insert(row_fallback).execute()
+                    zone_id = res.data[0]["id"] if res.data else None
+            else:
+                raise e
+
+        # Aktualizuj v pameti
+        for z in DEPOT_ZONES:
+            if z["id"] == zone_id:
+                z["name"] = name
+                z["polygon"] = polygon
+                z["color"] = color
+                break
         else:
-            res = db.table("depot_zones").insert(row).execute()
-            new_id = res.data[0]["id"] if res.data else None
-            DEPOT_ZONES.append({"id": new_id, "name": name, "polygon": polygon, "color": color})
+            DEPOT_ZONES.append({"id": zone_id, "name": name, "polygon": polygon, "color": color})
+
         print(f"[DEPOT] Ulozena vozovna '{name}' ({len(polygon)} bodu)", flush=True)
         return jsonify({"status": "success"})
     except Exception as e:
