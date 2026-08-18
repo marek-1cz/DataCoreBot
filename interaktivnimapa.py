@@ -2541,7 +2541,8 @@ function renderDepotZones(){
     mk.on('click',function(){
       // Smaz predchozi radius
       if(window._depotActiveRadius){depotLayer.removeLayer(window._depotActiveRadius);window._depotActiveRadius=null;}
-      let rc=L.circle(center,{radius:radiusM,color:zColor,fillColor:zColor,fillOpacity:0.08,weight:2,dashArray:'8,5',opacity:0.6});
+      let dynRadius = Math.max(100, center.distanceTo(bounds.getNorthEast()));
+      let rc=L.circle(center,{radius:dynRadius,color:zColor,fillColor:zColor,fillOpacity:0.08,weight:2,dashArray:'8,5',opacity:0.6});
       rc.addTo(depotLayer);
       window._depotActiveRadius=rc;
       // Auto-smaz po 5 sekundach
@@ -3014,7 +3015,7 @@ def _point_in_polygon(lat, lng, polygon):
     for i in range(n):
         xi, yi = polygon[i][1], polygon[i][0]  # lng, lat
         xj, yj = polygon[j][1], polygon[j][0]
-        if ((yi > lng) != (yj > lng)) and (lat < (xj - xi) * (lng - yi) / (yj - yi) + xi):
+        if ((yi > lat) != (yj > lat)) and (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi):
             inside = not inside
         j = i
     return inside
