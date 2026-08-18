@@ -482,7 +482,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 #log-panel .lp-h{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #334155;}
 #log-panel .lp-h span{color:#94a3b8;font-size:12px;font-weight:bold;}
 #log-panel .lp-h button{background:none;border:1px solid #475569;color:#94a3b8;border-radius:4px;font-size:10px;padding:3px 7px;cursor:pointer;margin-left:5px;}
-#log-body{max-height:240px;overflow-y:auto;padding:8px 12px;font-family:monospace;font-size:10.5px;color:#94a3b8;line-height:1.5;}
+#log-body{max-height:240px;overflow-y:auto;padding:8px 12px;font-family:monospace;font-size:10.5px;color:#94a3b8;line-height:1.5;user-select:text !important;-webkit-user-select:text !important;}
 #log-body .lg-err{color:#f87171;}
 #log-body .lg-warn{color:#fbbf24;}
 #log-body .lg-ok{color:#34d399;}
@@ -496,7 +496,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
   #hf{width:200px;}
   .dark-popup .leaflet-popup-content{width:240px!important;}
   #log-panel{bottom:auto;top:130px;right:4px;left:4px;width:auto;max-width:100vw;}
-  #log-body,#log-errors-body,#log-spz-body,#log-missing-body,#log-report-body,#log-approx-body{max-height:160px;}
+  #log-body,#log-errors-body,#log-spz-body,#log-missing-body,#log-report-body,#log-approx-body{max-height:160px;user-select:text !important;-webkit-user-select:text !important;}
   #nt-edit-pop{left:4px;right:4px;bottom:10px;width:auto;max-height:80vh;overflow-y:auto;}
   #stop-info-pop{left:4px;right:4px;bottom:10px;width:auto;}
   .sip-lines{flex-wrap:wrap;gap:3px;}
@@ -2858,7 +2858,7 @@ if(IS_ADMIN){
 
 // Automaticky načti vozovny při startu
 loadDepotZones();
-setInterval(loadDepotZones,60000); // refresh každou minutu
+setInterval(loadDepotZones,20000); // refresh kazdych 20 sekund
 </script>
 """
 
@@ -5759,15 +5759,6 @@ def api_bus_route(bus_id):
 def api_depot_zones():
     """Verejny endpoint: vrati vsechny vozovny (polygon, nazev, barva)
     + aktualni pocet busu v kazde vozovne."""
-    bug_spzs = set()
-    for bid, bc in GLOBAL_BUS_CACHE.items():
-        spz = bc.get("spz")
-        if not spz or spz in ("Nezn\u00e1m\u00e1", "Neznámá"):
-            continue
-        c_class = bc.get("color_class", "")
-        if c_class == "bg-bug":
-            bug_spzs.add(spz)
-
     zones_out = []
     for zone in DEPOT_ZONES:
         # Spocitej busy v teto vozovne
@@ -5775,7 +5766,7 @@ def api_depot_zones():
         for bid, bc in GLOBAL_BUS_CACHE.items():
             if bc.get("_in_depot") and bc.get("_depot_name") == zone["name"]:
                 spz = bc.get("spz") or "Neznámá"
-                if spz in bug_spzs or bc.get("color_class") == "bg-bug":
+                if bc.get("color_class") == "bg-bug":
                     continue
                 dict_key = bid if spz in ("Nezn\u00e1m\u00e1", "Neznámá") else spz
                 if dict_key not in buses_in_dict:
