@@ -34,6 +34,10 @@ SPZ_REAUDIT_INTERVAL_SEC = 30      # jak casto preverovat UZ overenou (fajfka) S
 SPZ_AUTO_REFRESH_MIN     = 8       # kazdych N minut proved plny refresh SPZ u vsech aktivnich busu
                                    # (ekvivalent knofliku "Najit SPZ" ale pro vsechny najednou)
 SPZ_BEARING_MAX_DIFF     = 75      # max rozdil smer (deg) pro bearing bonus faktor SPZ
+SPZ_MIN_MOVE_MINUTES     = 2       # bus musi jet alespon N minut nez se provede prvni SPZ parovani
+SPZ_CACHE_FLUSH_SEC      = 60      # jak casto zapisovat spz_cache do Supabase (sekundy)
+# Stavy (color_class), pri kterych se ZAKAZUJE hledani nove SPZ z Arrivy
+SPZ_BLOCKED_COLORS = frozenset({'bg-bug', 'bg-blue', 'bg-purple', 'bg-gray'})
 GHOST_MAX_OFFLINE_MIN = 20
 GHOST_DIST_STRICT     = 0.010
 DUPLICATE_GRACE_SEC   = 120
@@ -2472,6 +2476,9 @@ async function fetchBuses(){
               <input type="text" id="adm_spz_${bus.id}" value="${cSpz}" data-orig="${oSpz}" placeholder="SPZ" class="adm-inp" style="flex:2;margin-top:0;">
               <button onclick="adminSetSPZ('${bus.id}')" style="flex:1;background:#10b981;color:white;border:none;border-radius:5px;font-size:13px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">💾 Uložit</button>
             </div>
+            ${bus.spz&&bus.spz!=='Neznama'?`
+            <button onclick="adminAction(bus.admin_spz_verified?'admin_unverify_spz':'admin_verify_spz','${bus.id}')" style="width:100%;margin-top:6px;padding:9px;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;touch-action:manipulation;background:${bus.admin_spz_verified?'#1e40af':'#334155'};color:${bus.admin_spz_verified?'#93c5fd':'#94a3b8'};border:1px solid ${bus.admin_spz_verified?'#3b82f6':'#475569'};">${bus.admin_spz_verified?'🔒 SPZ ověřena adminem (klikni pro odemčení)':'🔓 Ověřit SPZ adminem (Admin Lock)'}</button>
+            `:''}
             <div style="display:flex;gap:6px;margin-top:6px;">
               <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔍 Hledat</button>
               <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🗑️ Smazat</button>
@@ -3482,7 +3489,7 @@ def get_db_client():
 
 
 def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
-                     ghost_spz=None, ghost_verified=False):
+                     ghost_spz=None, ghost_verified=False, admin_verified=False):
     return {
         "trip_id": trip_id, "inflow_id": bus_id, "lat": lat, "lng": lng, "bearing": None,
         "line": line, "real_linka_spoj": None, "destination": dest, "is_train": is_train,
@@ -3499,6 +3506,12 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "admin_color_override": None, "admin_status_override": None, "admin_flag": False,
         "bug_locked": False, "admin_lock_display": False, "admin_lock_permanent": False,
         "admin_note": "",
+        # admin_spz_verified: absolutni admin lock - automatikaprestane hledat jinou SPZ.
+        # Nastavuje se tlacitkem 'Overit SPZ adminem' v Admin Panelu.
+        "admin_spz_verified": admin_verified,
+        # _first_move_time: kdy se bus poprve fyzicky pohnul (pro SPZ_MIN_MOVE_MINUTES).
+        # SPZ se nezacne hledat dokud bus nejede alespon SPZ_MIN_MOVE_MINUTES minut.
+        "_first_move_time": None,
         # spz_frozen: tvrdy zamek SPZ kdyz bus dojede na konecnou / do depa -
         # narozdil od beznych spz_locked/spz_verified (ktere se behem jizdy
         # porad prubezne re-auditujeji kvuli samoopravnosti) tohle uz system
@@ -3628,6 +3641,47 @@ def background_map_worker():
         _load_depot_zones(db_client)
         _load_depot_active_sessions(db_client)
 
+        # === SPZ CACHE RESTORE: Obnov SPZ z predchoziho behu (zachrani data po restartu/deployi) ===
+        try:
+            _now_restore = get_prague_time()
+            cache_res = db_client.table("spz_cache").select("*").execute()
+            restored = 0
+            for row in (cache_res.data or []):
+                bid = row.get("bus_id")
+                spz = row.get("spz")
+                if not bid or not spz or spz == "Nezn\u00e1m\u00e1":
+                    continue
+                if bid in GLOBAL_BUS_CACHE:
+                    continue  # bus uz je zivý, cache ho neprepis
+                # Vytvor ghost zaznam s SPZ z predchoziho behu
+                ghost_entry = new_cache_entry(
+                    bid, row.get("trip_id") or f"RESTORED-{bid}",
+                    row.get("lat") or 0, row.get("lng") or 0,
+                    row.get("linka") or "", "", False, 0, _now_restore,
+                    ghost_spz=spz, ghost_verified=row.get("spz_verified", False),
+                    admin_verified=row.get("admin_verified", False)
+                )
+                ghost_entry["is_offline"] = True
+                ghost_entry["color_class"] = row.get("color_class") or "bg-gray"
+                ghost_entry["status"] = row.get("status_text") or "Obnoven po restartu"
+                ghost_entry["spz_frozen"] = True  # zamkni - je z cache, nechceme okamzite prepsat
+                ghost_entry["spz_locked"] = True
+                if ghost_entry["admin_spz_verified"]:
+                    ghost_entry["manual_spz"] = True
+                GLOBAL_BUS_CACHE[bid] = ghost_entry
+                SPZ_MEMORY[spz] = {
+                    "last_arriva_lat": row.get("lat") or 0,
+                    "last_arriva_lng": row.get("lng") or 0,
+                    "last_arriva_time": _now_restore,
+                    "line": row.get("linka") or "",
+                    "destination": "",
+                    "verified": row.get("spz_verified", False),
+                }
+                restored += 1
+            print(f"[SPZ CACHE] Obnoveno {restored} zaznamu z predchoziho behu.", flush=True)
+        except Exception as e_cache:
+            print(f"[SPZ CACHE] Chyba pri obnove: {e_cache}", flush=True)
+
     url_inflow_base = "https://pvvd.idpk.cz/Ajax/GetPoints"
     url_arriva = "https://www.arriva.cz/api/graphql"
     inflow_headers = {
@@ -3642,6 +3696,7 @@ def background_map_worker():
 
     last_db_cleanup = get_prague_time()
     last_spz_memory_cleanup = get_prague_time()
+    last_spz_cache_flush = get_prague_time()
     TRIP_COUNTER = int(time.time())
 
     while True:
@@ -4017,7 +4072,39 @@ def background_map_worker():
                                 if spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá"):
                                     c["spz_frozen"] = True
                                     c["spz_locked"] = True
-                                    
+
+                                # === DETEKCE DUPLICITY VOZOVNA vs. AKTIVNI MAPA ===
+                                # Pokud stejná SPZ jede zároveň na aktivní mapě (jiný bus_id),
+                                # vozovnový záznam označíme jako BUG a zapíšeme do logu.
+                                if spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá"):
+                                    for oth_id, oth_c in list(GLOBAL_BUS_CACHE.items()):
+                                        if oth_id == bus_id:
+                                            continue
+                                        if (oth_c.get("spz") == spz_val
+                                                and not oth_c.get("is_offline")
+                                                and not oth_c.get("bug_locked")):
+                                            # Duplicita! Vozovnový bus dostane BUG.
+                                            c["color_class"] = "bg-bug"
+                                            c["status"] = "BUG \u2013 Syst\u00e9m rozpoznal duplicitu SPZ"
+                                            c["bug_locked"] = True
+                                            c["spz_frozen"] = True
+                                            dup_msg = (f"Syst\u00e9m rozpoznal duplicitu v {now.strftime('%H:%M %d.%m.%Y')}: "
+                                                       f"SPZ {spz_val} v\u00edz\u00ed tak\u00e9 aktivn\u011b bus_id={oth_id} "
+                                                       f"(L{oth_c.get('line','?')})")
+                                            _report_situace("DUP_DEPOT", dup_msg,
+                                                            spz=spz_val, depot_bus=bus_id, active_bus=oth_id)
+                                            # Zapis do depot_history jako poznamka
+                                            if db_client and bus_id in DEPOT_ACTIVE_SESSIONS:
+                                                try:
+                                                    db_client.table("depot_history").update({
+                                                        "spz": f"[BUG-DUP] {spz_val}",
+                                                    }).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
+                                                except Exception:
+                                                    pass
+                                            print(f"[DEPOT-DUP] SPZ {spz_val}: bus {bus_id} ve vozovne "
+                                                  f"+ bus {oth_id} aktivni na mape -> BUG", flush=True)
+                                            break
+
                                 if bus_id not in DEPOT_ACTIVE_SESSIONS:
                                     is_imprecise = (now - SCRIPT_START_TIME).total_seconds() < 120
                                     try:
@@ -4026,14 +4113,14 @@ def background_map_worker():
                                             "spz": eff_spz,
                                             "bus_id": bus_id,
                                             "depot_name": depot_name,
-                                            "arrived_at": now.isoformat(),
+                                            "arrived_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
                                             "is_imprecise": is_imprecise
                                         }).execute()
                                         if resp.data:
                                             DEPOT_ACTIVE_SESSIONS[bus_id] = {
                                                 "id": resp.data[0]["id"],
                                                 "depot_name": depot_name,
-                                                "arrived_at": now.isoformat(),
+                                                "arrived_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
                                                 "is_imprecise": is_imprecise,
                                                 "spz": eff_spz
                                             }
@@ -4129,18 +4216,46 @@ def background_map_worker():
                 # - Bus nemá SPZ vůbec (vždy hledej bez ohledu na inact)
                 # - Bus má SPZ ale není frozen (hledej/reaudituj při jízdě)
                 # Přeskočí jen: manual_spz, bug_locked, investigating, vlak,
+                #               admin_spz_verified (absolutni admin lock),
+                #               blokované barvy (bg-bug/blue/purple/gray) bez admin_verified,
                 #               nebo spz_frozen s platnou SPZ (po dojeti na konečnou)
+
+                # Sleduj první pohyb (pro SPZ_MIN_MOVE_MINUTES)
+                if is_moving and not c.get("_first_move_time"):
+                    c["_first_move_time"] = now
+
                 has_valid_spz = bool(c.get("spz") and c.get("spz") != "Nezn\u00e1m\u00e1")
                 if c.get("spz_frozen") and not has_valid_spz:
                     c["spz_frozen"] = False
-                force_search = (not has_valid_spz and not c.get("spz_frozen")
-                                and not c.get("manual_spz") and not c.get("bug_locked")
-                                and not is_train and inact <= 120)
-                skip_spz = (is_train or c.get("investigating") or c.get("manual_spz")
-                            or c.get("bug_locked")
-                            or (c.get("spz_frozen") and has_valid_spz and inact > 2))
-                if force_search:
-                    skip_spz = False
+
+                # Pokud ma admin_spz_verified, SPZ je absolutne zamcena - skip vse
+                if c.get("admin_spz_verified") and has_valid_spz:
+                    skip_spz = True
+                else:
+                    force_search = (not has_valid_spz and not c.get("spz_frozen")
+                                    and not c.get("manual_spz") and not c.get("bug_locked")
+                                    and not is_train and inact <= 120)
+                    skip_spz = (is_train or c.get("investigating") or c.get("manual_spz")
+                                or c.get("bug_locked")
+                                or (c.get("spz_frozen") and has_valid_spz and inact > 2))
+
+                    # Blokuj SPZ parovani pri blokovanych stavech (nematchuj kdyz bus neni fyzicky na trase)
+                    if not c.get("admin_spz_verified"):
+                        if c.get("color_class") in SPZ_BLOCKED_COLORS and has_valid_spz:
+                            skip_spz = True  # Ma SPZ - nech ji zamrzenou, ale nehledej novou
+                        elif c.get("color_class") in SPZ_BLOCKED_COLORS and not has_valid_spz:
+                            # Nema SPZ + je v blokovane barve = nehledej (nema smysl, Arriva ho nevidí)
+                            skip_spz = True
+
+                    # Minimalni pohyb pred prvnim SPZ parovanim
+                    if not has_valid_spz and not skip_spz:
+                        first_move = c.get("_first_move_time")
+                        if not first_move or (now - first_move).total_seconds() < SPZ_MIN_MOVE_MINUTES * 60:
+                            skip_spz = True  # Bus jede prilis kratce, pockat na potvrzeni pohybu
+
+                    if force_search and not c.get("color_class") in SPZ_BLOCKED_COLORS:
+                        skip_spz = False
+
                 if not skip_spz:
                     d1_norm = _norm_txt(dest1)
                     near_stop = _nearest_stop_name(lat1, lng1, ARRIVA_STOP_MATCH_M) if GTFS_LOADED else None
@@ -4562,6 +4677,7 @@ def background_map_worker():
                     "investigating": c.get("investigating", False),
                     "investigation_spz": c.get("investigation_spz", ""),
                     "admin_flag": c.get("admin_flag", False), "admin_note": c.get("admin_note", ""),
+                    "admin_spz_verified": c.get("admin_spz_verified", False),
                 })
 
             global LIVE_BUSES_DATA, _last_spz_auto_refresh
@@ -4578,7 +4694,8 @@ def background_map_worker():
                 refreshed = 0
                 for bid, bc in GLOBAL_BUS_CACHE.items():
                     if (bc.get("is_offline") or bc.get("manual_spz") or
-                            bc.get("spz_frozen") or bc.get("bug_locked") or bc.get("is_train")):
+                            bc.get("spz_frozen") or bc.get("bug_locked") or bc.get("is_train")
+                            or bc.get("admin_spz_verified")):
                         continue
                     if bc.get("spz_locked"):
                         bc["spz_locked"] = False
@@ -4589,6 +4706,40 @@ def background_map_worker():
                         refreshed += 1
                 if refreshed:
                     print(f"[SPZ AUTO-REFRESH] Reset SPZ zamku u {refreshed} busu -> dalsi tik opatri cerstve parovani", flush=True)
+
+            # ── SPZ CACHE FLUSH do Supabase (kazdych SPZ_CACHE_FLUSH_SEC sekund) ─────────
+            if db_client and (now - last_spz_cache_flush).total_seconds() >= SPZ_CACHE_FLUSH_SEC:
+                last_spz_cache_flush = now
+                cache_rows = []
+                for bid, bc in list(GLOBAL_BUS_CACHE.items()):
+                    spz_v = bc.get("spz")
+                    if not spz_v or spz_v in ("Nezn\u00e1m\u00e1", "Neznámá"):
+                        continue
+                    cache_rows.append({
+                        "bus_id": bid,
+                        "spz": spz_v,
+                        "linka": bc.get("line") or "",
+                        "lat": bc.get("lat"),
+                        "lng": bc.get("lng"),
+                        "spz_verified": bc.get("spz_verified", False),
+                        "admin_verified": bc.get("admin_spz_verified", False),
+                        "trip_id": bc.get("trip_id"),
+                        "color_class": bc.get("color_class"),
+                        "status_text": bc.get("status"),
+                        "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
+                    })
+                if cache_rows:
+                    try:
+                        db_client.table("spz_cache").upsert(cache_rows).execute()
+                    except Exception as e_flush:
+                        print(f"[SPZ CACHE] Chyba pri zapisu: {e_flush}", flush=True)
+                # Smaz zaznamy ktere uz nejsou aktivni
+                active_ids = list(GLOBAL_BUS_CACHE.keys())
+                if active_ids:
+                    try:
+                        db_client.table("spz_cache").delete().not_.in_("bus_id", active_ids).execute()
+                    except Exception:
+                        pass
 
             time.sleep(10)
 
@@ -4750,8 +4901,51 @@ def api_admin_map_action():
         c["spz_frozen"] = True  # zamraz SPZ aby se nesmazala
         c["spz_conflict_warn"] = False  # admin to vedome oznacil, uz neni potreba duplikat alert
 
+    elif action == "admin_verify_spz":
+        # Absolutni admin lock - SPZ je overena adminem, automatikata prestane hledat
+        if c.get("spz") and c["spz"] not in ("Nezn\u00e1m\u00e1", "Neznámá"):
+            c["admin_spz_verified"] = True
+            c["spz_locked"] = True
+            c["spz_frozen"] = True
+            c["manual_spz"] = True
+            c["spz_verified"] = True
+            c["investigating"] = False
+            c["bug_locked"] = False
+            # Okamzite zapsat do spz_cache s admin_verified=True
+            try:
+                _db_av = get_db_client()
+                if _db_av:
+                    _db_av.table("spz_cache").upsert({
+                        "bus_id": bus_id,
+                        "spz": c["spz"],
+                        "linka": c.get("line") or "",
+                        "lat": c.get("lat"),
+                        "lng": c.get("lng"),
+                        "spz_verified": True,
+                        "admin_verified": True,
+                        "trip_id": c.get("trip_id"),
+                        "color_class": c.get("color_class"),
+                        "status_text": c.get("status"),
+                        "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
+                    }).execute()
+            except Exception as e_av:
+                print(f"[ADMIN-VERIFY] Chyba zapisu spz_cache: {e_av}", flush=True)
+            print(f"[ADMIN-VERIFY] Bus {bus_id}: SPZ {c['spz']} overena adminem (absolutni lock)", flush=True)
+        else:
+            return jsonify({"status": "error", "message": "Nejdrive prirad SPZ, pak ji lze overit"})
+
+    elif action == "admin_unverify_spz":
+        # Odebrani admin locku - automatikata muze opet hledat
+        c["admin_spz_verified"] = False
+        c["manual_spz"] = False
+        c["spz_frozen"] = False
+        c["spz_locked"] = False
+        c["spz_stable_ticks"] = 0
+        print(f"[ADMIN-VERIFY] Bus {bus_id}: Admin lock SPZ odebran", flush=True)
+
     elif action == "reset_admin":
         c["manual_spz"] = False
+        c["admin_spz_verified"] = False
         c["spz_locked"] = False
         c["spz_verified"] = False
         c["spz_stable_ticks"] = 0
