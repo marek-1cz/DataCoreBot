@@ -2579,16 +2579,20 @@ function renderDepotZones(){
     let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🅿️</div>`;
     let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
     let popId = 'depot_pop_' + Math.random().toString(36).substr(2,9);
-    let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:10px;min-width:260px;font-family:sans-serif;max-height:400px;overflow-y:auto;overflow-x:hidden;">
-        <div style="color:${zColor};font-weight:bold;font-size:15px;margin-bottom:8px;border-bottom:1px solid #1e293b;padding-bottom:5px;">🅿️ ${z.name}</div>
-        <div style="margin-bottom:8px;font-size:12px;color:#94a3b8;">Nyní parkuje: <b style="color:white;">${z.bus_count||0}</b> vozů</div>
+    let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:10px;min-width:280px;font-family:sans-serif;max-height:65vh;overflow-y:auto;overflow-x:hidden;">
+        <div style="font-weight:bold;font-size:15px;margin-bottom:8px;color:${zColor};display:flex;align-items:center;gap:6px;">
+            <span>🅿️ Vozovna: ${z.name}</span>
+        </div>
+        <div style="font-size:12px;margin-bottom:12px;background:rgba(0,0,0,0.2);padding:6px;border-radius:6px;border:1px solid #334155;">
+            <div>Aktuálně parkuje: <b style="color:white;">${z.bus_count||0}</b> busů</div>
+        </div>
         <div id="${popId}_active">Načítám...</div>
         <div style="margin-top:12px;border-top:1px dashed #334155;padding-top:8px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                 <span style="font-size:12px;color:#cbd5e1;font-weight:bold;">Historie odjezdů</span>
                 <input type="text" id="${popId}_search" placeholder="Hledat SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;width:110px;">
             </div>
-            <div id="${popId}_hist" style="font-size:11px;color:#94a3b8;max-height:200px;overflow-y:auto;padding-right:4px;">Načítám historii...</div>
+            <div id="${popId}_hist" style="font-size:11px;color:#94a3b8;max-height:400px;overflow-y:auto;padding-right:4px;">Načítám historii...</div>
         </div>
     </div>`;
 
@@ -2603,7 +2607,8 @@ function renderDepotZones(){
                     let adminDel = IS_ADMIN && b.session_id ? `<button onclick="deleteDepotRecord('${b.session_id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;margin-left:auto;padding:2px 4px;" title="Smazat">❌</button>` : '';
                     let arrHtml = '';
                     if (b.arrived_at) {
-                        let ad = new Date(b.arrived_at).toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
+                        let tParts = b.arrived_at.split('T');
+                        let ad = tParts.length > 1 ? tParts[1].substring(0,5) : b.arrived_at;
                         arrHtml = `<br><span style="color:#64748b;font-size:10px;">Od: ${ad} ${b.is_imprecise?'(RESET MAPY)':''}</span>`;
                     }
                     return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #1e293b;flex-wrap:wrap;">
@@ -2630,8 +2635,16 @@ function renderDepotZones(){
                 let d = await r.json();
                 if(d.status==='success' && d.data && d.data.length>0) {
                     histDiv.innerHTML = d.data.map(h=>{
-                        let lTime = h.left_at ? new Date(h.left_at).toLocaleString('cs-CZ') : '<span style="color:#10b981;font-weight:bold;">Nyní parkuje</span>';
-                        let aTime = h.arrived_at ? new Date(h.arrived_at).toLocaleString('cs-CZ') : 'Neznámý (Před úpravou)';
+                        let fmtT = (iso) => {
+                            if(!iso) return '';
+                            let p = iso.split('T');
+                            if(p.length<2) return iso;
+                            let dp = p[0].split('-');
+                            let tp = p[1].split('+')[0].split('.')[0];
+                            return `${dp[2]}. ${dp[1]}. ${dp[0]} ${tp}`;
+                        };
+                        let lTime = h.left_at ? fmtT(h.left_at) : '<span style="color:#10b981;font-weight:bold;">Nyní parkuje</span>';
+                        let aTime = h.arrived_at ? fmtT(h.arrived_at) : 'Neznámý (Před úpravou)';
                         let impr = h.is_imprecise ? ' <span title="Reset mapy - nepřesný čas" style="color:#facc15;font-size:9px;">(RESET MAPY)</span>' : '';
                         let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${h.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;margin-left:auto;padding:2px 4px;" title="Smazat ze záznamu">❌</button>` : '';
                         return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #1e293b;">
@@ -3959,6 +3972,9 @@ def background_map_worker():
                     if depot_due:
                         c["_last_depot_check"] = now
                         depot_name, depot_color = _check_depot_zones(c.get("lat"), c.get("lng"))
+                        if c.get("color_class") == "bg-bug":
+                            depot_name = None
+                        
                         if depot_name:
                             if not c.get("_in_depot"):
                                 c["_in_depot"] = True
