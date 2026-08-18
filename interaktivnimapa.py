@@ -3147,7 +3147,8 @@ def _load_depot_zones(db):
                 "polygon": poly,
                 "color": row.get("color") or "#facc15",
             })
-        DEPOT_ZONES = loaded
+        DEPOT_ZONES.clear()
+        DEPOT_ZONES.extend(loaded)
         print(f"[DEPOT] Nacteno {len(loaded)} vozoven.", flush=True)
     except Exception as e:
         print(f"[DEPOT] Tabulka depot_zones nedostupna: {e}", flush=True)
@@ -5927,6 +5928,6 @@ def api_admin_delete_depot_zone():
         except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 500
     global DEPOT_ZONES
-    DEPOT_ZONES = [z for z in DEPOT_ZONES if z["id"] != zone_id]
+    DEPOT_ZONES[:] = [z for z in DEPOT_ZONES if z["id"] != zone_id]
     print(f"[DEPOT] Smazana vozovna id={zone_id}", flush=True)
     return jsonify({"status": "success"})
