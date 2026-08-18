@@ -2457,49 +2457,54 @@ async function fetchBuses(){
         let cSpz=restoreAdminInput(bus.id,'spz')??oSpz;
         let cSt=restoreAdminInput(bus.id,'st')??bus.status;
         let cNote=restoreAdminInput(bus.id,'note')??(bus.admin_note||'');
-        popH+=`<style>.adm-inp{width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:5px;padding:7px 8px;font-size:12px;margin-top:4px;}.adm-inp:focus{outline:none;border-color:#38bdf8;}.adm-btn{width:100%;padding:11px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;touch-action:manipulation;}
+        popH+=`<style>.adm-inp{width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:5px;padding:9px;font-size:13px;margin-top:4px;}.adm-inp:focus{outline:none;border-color:#38bdf8;}.adm-btn{width:100%;padding:11px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;touch-action:manipulation;}.adm-toggle-btn{width:100%;padding:9px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;font-size:12px;cursor:pointer;margin-top:8px;touch-action:manipulation;}
 @keyframes routeDrawLoop {
   0% { stroke-dashoffset: var(--r-len); }
   65% { stroke-dashoffset: 0; }
   100% { stroke-dashoffset: 0; }
 }
 </style>
-          <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;">
-            <strong style="color:#38bdf8;font-size:11px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
-            <div style="display:flex;gap:5px;margin-top:8px;">
-              <input type="text" id="adm_spz_${bus.id}" value="${cSpz}" data-orig="${oSpz}" placeholder="SPZ" class="adm-inp" style="width:55%;margin-top:0;">
-              <button onclick="adminSetSPZ('${bus.id}')" style="width:45%;background:#10b981;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">💾 Ulozit</button>
+          <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;border-radius: 0 0 5px 5px;">
+            <strong style="color:#38bdf8;font-size:12px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
+            <div style="color:#94a3b8;font-size:10px;margin-top:2px;font-family:monospace;word-break:break-all;">ID vozu: ${bus.id}</div>
+            
+            <div style="display:flex;gap:6px;margin-top:8px;">
+              <input type="text" id="adm_spz_${bus.id}" value="${cSpz}" data-orig="${oSpz}" placeholder="SPZ" class="adm-inp" style="flex:2;margin-top:0;">
+              <button onclick="adminSetSPZ('${bus.id}')" style="flex:1;background:#10b981;color:white;border:none;border-radius:5px;font-size:13px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">💾 Uložit</button>
             </div>
-            <div style="display:flex;gap:5px;margin-top:5px;">
-              <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">🔍 Hledat SPZ</button>
-              <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">🗑️ Smazat</button>
+            <div style="display:flex;gap:6px;margin-top:6px;">
+              <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔍 Hledat</button>
+              <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🗑️ Smazat</button>
             </div>
-            <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
+            
+            <button class="adm-toggle-btn" onclick="let el=document.getElementById('adm_grafika_${bus.id}'); if(el.style.display==='none'){el.style.display='block';this.innerText='🔼 Skrýt vzhled a úpravy';}else{el.style.display='none';this.innerText='🎨 Vzhled a další úpravy';}">🎨 Vzhled a další úpravy</button>
+            
+            <div id="adm_grafika_${bus.id}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
               <input type="text" id="adm_st_${bus.id}" value="${cSt}" data-orig="${bus.status}" placeholder="Status text..." class="adm-inp">
-              <select id="adm_col_${bus.id}" class="adm-inp" style="margin-top:4px;">
-                <option value="">-- barva --</option>
-                <option value="bg-gray" ${bus.color_class==='bg-gray'?'selected':''}>Seda</option>
-                <option value="bg-blue" ${bus.color_class==='bg-blue'?'selected':''}>Svetle modra</option>
-                <option value="bg-darkblue" ${bus.color_class==='bg-darkblue'?'selected':''}>Tmave modra</option>
-                <option value="bg-green" ${bus.color_class==='bg-green'?'selected':''}>Zelena</option>
-                <option value="bg-red" ${bus.color_class==='bg-red'?'selected':''}>Cervena</option>
-                <option value="bg-purple" ${bus.color_class==='bg-purple'?'selected':''}>Fialova</option>
-                <option value="bg-orange" ${bus.color_class==='bg-orange'?'selected':''}>Oranzova</option>
-                <option value="bg-bug" ${bus.color_class==='bg-bug'?'selected':''}>Bug</option>
+              <select id="adm_col_${bus.id}" class="adm-inp" style="margin-top:6px;">
+                <option value="">-- Výchozí barva --</option>
+                <option value="bg-gray" ${bus.color_class==='bg-gray'?'selected':''}>Šedá</option>
+                <option value="bg-blue" ${bus.color_class==='bg-blue'?'selected':''}>Světle modrá</option>
+                <option value="bg-darkblue" ${bus.color_class==='bg-darkblue'?'selected':''}>Tmavě modrá</option>
+                <option value="bg-green" ${bus.color_class==='bg-green'?'selected':''}>Zelená</option>
+                <option value="bg-red" ${bus.color_class==='bg-red'?'selected':''}>Červená</option>
+                <option value="bg-purple" ${bus.color_class==='bg-purple'?'selected':''}>Fialová</option>
+                <option value="bg-orange" ${bus.color_class==='bg-orange'?'selected':''}>Oranžová</option>
+                <option value="bg-bug" ${bus.color_class==='bg-bug'?'selected':''}>Označeno jako BUG</option>
               </select>
-              <input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznamka..." class="adm-inp" style="margin-top:4px;">
-              <div style="display:flex;gap:5px;margin-top:6px;">
-                <button onclick="adminSaveAll('${bus.id}',true)" class="adm-btn" style="flex:1;background:#1e40af;color:white;">📌 Trvala</button>
-                <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏱️ Docasna</button>
+              <input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznámka..." class="adm-inp" style="margin-top:6px;">
+              <div style="display:flex;gap:6px;margin-top:8px;">
+                <button onclick="adminSaveAll('${bus.id}',true)" class="adm-btn" style="flex:1;background:#1e40af;color:white;">📌 Uložit natrvalo</button>
+                <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏱️ Dočasně</button>
               </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:7px;padding-top:6px;border-top:1px solid #1e293b;">
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#93c5fd;flex:1;touch-action:manipulation;">
-                <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:16px;height:16px;cursor:pointer;">
-                Admin uprava
-              </label>
-              <button onclick="adminAction('mark_bug','${bus.id}')" style="background:#3f0000;color:#fca5a5;border:1px solid #ef4444;border-radius:5px;font-size:11px;cursor:pointer;padding:5px 10px;touch-action:manipulation;font-weight:bold;">⛔ Označit BUG</button>
-              <button onclick="adminAction('reset_admin','${bus.id}')" style="background:transparent;color:#64748b;border:1px solid #334155;border-radius:5px;font-size:11px;cursor:pointer;padding:5px 10px;touch-action:manipulation;">🔄 Reset</button>
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid #1e293b;">
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:#93c5fd;flex:1;min-width:100px;touch-action:manipulation;">
+                  <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:18px;height:18px;cursor:pointer;">
+                  Admin úprava
+                </label>
+                <button onclick="adminAction('mark_bug','${bus.id}')" style="flex:1;background:#3f0000;color:#fca5a5;border:1px solid #ef4444;border-radius:5px;font-size:11px;cursor:pointer;padding:7px;touch-action:manipulation;font-weight:bold;">⛔ BUG</button>
+                <button onclick="adminAction('reset_admin','${bus.id}')" style="flex:1;background:transparent;color:#94a3b8;border:1px solid #334155;border-radius:5px;font-size:11px;cursor:pointer;padding:7px;touch-action:manipulation;">🔄 Reset</button>
+              </div>
             </div>
           </div>`;
       }
