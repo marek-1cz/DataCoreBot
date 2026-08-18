@@ -2589,7 +2589,7 @@ function renderDepotZones(){
         <div id="${popId}_active">Načítám...</div>
         <div style="margin-top:12px;border-top:1px dashed #334155;padding-top:8px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                <span style="font-size:12px;color:#cbd5e1;font-weight:bold;">Historie odjezdů</span>
+                <span style="font-size:12px;color:#cbd5e1;font-weight:bold;">Historie odjezdů a příjezdů</span>
                 <input type="text" id="${popId}_search" placeholder="Hledat SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;width:110px;">
             </div>
             <div id="${popId}_hist" style="font-size:11px;color:#94a3b8;max-height:400px;overflow-y:auto;padding-right:4px;">Načítám historii...</div>
@@ -5722,15 +5722,12 @@ def api_bus_route(bus_id):
 def api_depot_zones():
     """Verejny endpoint: vrati vsechny vozovny (polygon, nazev, barva)
     + aktualni pocet busu v kazde vozovne."""
-    active_spzs = set()
     bug_spzs = set()
     for bid, bc in GLOBAL_BUS_CACHE.items():
         spz = bc.get("spz")
         if not spz or spz in ("Nezn\u00e1m\u00e1", "Neznámá"):
             continue
         c_class = bc.get("color_class", "")
-        if c_class in ("bg-green", "bg-red", "bg-orange"):
-            active_spzs.add(spz)
         if c_class == "bg-bug":
             bug_spzs.add(spz)
 
@@ -5742,8 +5739,6 @@ def api_depot_zones():
             if bc.get("_in_depot") and bc.get("_depot_name") == zone["name"]:
                 spz = bc.get("spz") or "Neznámá"
                 if spz in bug_spzs or bc.get("color_class") == "bg-bug":
-                    continue
-                if spz not in ("Nezn\u00e1m\u00e1", "Neznámá") and spz in active_spzs:
                     continue
                 dict_key = bid if spz in ("Nezn\u00e1m\u00e1", "Neznámá") else spz
                 if dict_key not in buses_in_dict:
