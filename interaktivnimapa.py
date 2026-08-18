@@ -2412,7 +2412,11 @@ async function fetchBuses(){
       if(!bus.is_train){
         if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
         else if(bus.spz&&bus.spz!=='Neznama'){
-          if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;}
+          if(bus.admin_spz_verified){
+            // Dvojita fajfka = admin lock
+            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#1e40af;border-color:#3b82f6;" title="Ověřená SPZ správci systému">${bus.spz} <i class="fas fa-check-double" style="color:#93c5fd;"></i></span></div>`;
+            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;
+          } else if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" title="SPZ ověřena systémem">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;}
           else{spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#f97316;color:#fff;border-color:#c2410c;">${bus.spz} <i class="fas fa-clock"></i></span></div>`;}
         }
         else spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Ceka na overeni</span></div>`;
@@ -2461,6 +2465,14 @@ async function fetchBuses(){
         let cSpz=restoreAdminInput(bus.id,'spz')??oSpz;
         let cSt=restoreAdminInput(bus.id,'st')??bus.status;
         let cNote=restoreAdminInput(bus.id,'note')??(bus.admin_note||'');
+        // Predpocitane promenne pro admin lock tlacitko (reseni 'bus is not defined' pri onclick)
+        let adminIsVerified=bus.admin_spz_verified===true;
+        let adminVerifyAction=adminIsVerified?'admin_unverify_spz':'admin_verify_spz';
+        let adminVerifyBg=adminIsVerified?'#1d4ed8':'#1e293b';
+        let adminVerifyColor=adminIsVerified?'#bfdbfe':'#94a3b8';
+        let adminVerifyBorder=adminIsVerified?'#3b82f6':'#334155';
+        let adminVerifyText=adminIsVerified?'🔒 SPZ UZAMČENA ADMINEM (klikni pro odemčení)':'🔓 Ověřit SPZ adminem (Admin Lock)';
+        let hasSPZ=bus.spz&&bus.spz!=='Neznama';
         popH+=`<style>.adm-inp{width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:5px;padding:9px;font-size:13px;margin-top:4px;}.adm-inp:focus{outline:none;border-color:#38bdf8;}.adm-btn{width:100%;padding:11px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;touch-action:manipulation;}.adm-toggle-btn{width:100%;padding:9px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;font-size:12px;cursor:pointer;margin-top:8px;touch-action:manipulation;}
 @keyframes routeDrawLoop {
   0% { stroke-dashoffset: var(--r-len); }
@@ -2476,9 +2488,16 @@ async function fetchBuses(){
               <input type="text" id="adm_spz_${bus.id}" value="${cSpz}" data-orig="${oSpz}" placeholder="SPZ" class="adm-inp" style="flex:2;margin-top:0;">
               <button onclick="adminSetSPZ('${bus.id}')" style="flex:1;background:#10b981;color:white;border:none;border-radius:5px;font-size:13px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">💾 Uložit</button>
             </div>
-            ${bus.spz&&bus.spz!=='Neznama'?`
-            <button onclick="adminAction(bus.admin_spz_verified?'admin_unverify_spz':'admin_verify_spz','${bus.id}')" style="width:100%;margin-top:6px;padding:9px;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;touch-action:manipulation;background:${bus.admin_spz_verified?'#1e40af':'#334155'};color:${bus.admin_spz_verified?'#93c5fd':'#94a3b8'};border:1px solid ${bus.admin_spz_verified?'#3b82f6':'#475569'};">${bus.admin_spz_verified?'🔒 SPZ ověřena adminem (klikni pro odemčení)':'🔓 Ověřit SPZ adminem (Admin Lock)'}</button>
-            `:''}
+            ${hasSPZ?`<button id="adm_lock_${bus.id}" onclick="
+              let btn=document.getElementById('adm_lock_${bus.id}');
+              adminAction('${adminVerifyAction}','${bus.id}');
+              if('${adminVerifyAction}'==='admin_verify_spz'){
+                btn.style.background='#1d4ed8';btn.style.color='#bfdbfe';btn.style.borderColor='#3b82f6';
+                btn.textContent='🔒 SPZ UZAMČENA ADMINEM';
+              } else {
+                btn.style.background='#1e293b';btn.style.color='#94a3b8';btn.style.borderColor='#334155';
+                btn.textContent='🔓 Ověřit SPZ adminem (Admin Lock)';
+              }" style="width:100%;margin-top:6px;padding:9px;border:1px solid ${adminVerifyBorder};border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;touch-action:manipulation;background:${adminVerifyBg};color:${adminVerifyColor};transition:all .2s;">${adminVerifyText}</button>`:''}
             <div style="display:flex;gap:6px;margin-top:6px;">
               <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔍 Hledat</button>
               <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🗑️ Smazat</button>
