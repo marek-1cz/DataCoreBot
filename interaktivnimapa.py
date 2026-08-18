@@ -5536,8 +5536,9 @@ def api_depot_zones():
                     continue
                 if spz not in ("Nezn\u00e1m\u00e1", "Neznámá") and spz in active_spzs:
                     continue
-                if spz not in buses_in_dict:
-                    buses_in_dict[spz] = {
+                dict_key = bid if spz in ("Nezn\u00e1m\u00e1", "Neznámá") else spz
+                if dict_key not in buses_in_dict:
+                    buses_in_dict[dict_key] = {
                         "id": bid,
                         "spz": spz,
                         "line": bc.get("line") or "",
