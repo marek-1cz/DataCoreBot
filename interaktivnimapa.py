@@ -5,6 +5,9 @@ import urllib.request
 import urllib.error
 import urllib.parse as _uparse
 import threading
+import queue
+
+DEPOT_DISCORD_QUEUE = queue.Queue()
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, Response, request, session, redirect
 from zoneinfo import ZoneInfo
@@ -3961,6 +3964,17 @@ def background_map_worker():
             tt_ftick = 0
             for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
                 inact = (now - c["last_moved"]).total_seconds() / 60.0
+                
+                # ── Retroaktivni uprava SPZ vozovny ──────────────────────────────────────
+                if c.get("spz") and c["spz"] not in ("Nezn\u00e1m\u00e1", "Neznámá") and not c.get("_depot_retro_updated"):
+                    if db_client:
+                        try:
+                            # Prepis ID na SPZ zpetne
+                            db_client.table("depot_history").update({"spz": c["spz"]}).eq("bus_id", bus_id).like("spz", "[ID:%").execute()
+                            c["_depot_retro_updated"] = True
+                            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
+                        except Exception: pass
+                        
                 # ── Vozovna check ────────────────────────────────────────────────────────
                 # Zkontroluj zda je bus uvnitr nejake vozovny (depot zone).
                 # Kontrola probiha jen kazdych DEPOT_CHECK_INTERVAL_SEC sekund
@@ -3989,8 +4003,9 @@ def background_map_worker():
                                 if bus_id not in DEPOT_ACTIVE_SESSIONS:
                                     is_imprecise = (now - SCRIPT_START_TIME).total_seconds() < 120
                                     try:
+                                        eff_spz = spz_val if spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá") else f"[ID: {bus_id}]"
                                         resp = db_client.table("depot_history").insert({
-                                            "spz": spz_val or "Nezn\u00e1m\u00e1",
+                                            "spz": eff_spz,
                                             "bus_id": bus_id,
                                             "depot_name": depot_name,
                                             "arrived_at": now.isoformat(),
@@ -4002,8 +4017,9 @@ def background_map_worker():
                                                 "depot_name": depot_name,
                                                 "arrived_at": now.isoformat(),
                                                 "is_imprecise": is_imprecise,
-                                                "spz": spz_val or "Nezn\u00e1m\u00e1"
+                                                "spz": eff_spz
                                             }
+                                            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
                                     except Exception as e:
                                         print(f"[DEPOT] Chyba zapisu DB prijezdu pro bus_id={bus_id}: {e}")
                                 print(f"[DEPOT] Bus {bus_id} ({c.get('spz','?')}) vjel do vozovny '{depot_name}'", flush=True)
@@ -4018,6 +4034,7 @@ def background_map_worker():
                                         DEPOT_ACTIVE_SESSIONS[bus_id]["spz"] = curr_spz
                                         try:
                                             db_client.table("depot_history").update({"spz": curr_spz}).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
+                                            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
                                         except Exception:
                                             pass
                         else:
@@ -4032,6 +4049,7 @@ def background_map_worker():
                                     except Exception as e:
                                         print(f"[DEPOT] Chyba zapisu DB odjezdu: {e}")
                                     del DEPOT_ACTIVE_SESSIONS[bus_id]
+                                    DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
                                 c["_in_depot"] = False
                                 c["_depot_name"] = None
                                 c["_depot_color"] = None
