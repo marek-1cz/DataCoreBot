@@ -2471,8 +2471,26 @@ async function fetchBuses(){
         let adminVerifyBg=adminIsVerified?'#1d4ed8':'#1e293b';
         let adminVerifyColor=adminIsVerified?'#bfdbfe':'#94a3b8';
         let adminVerifyBorder=adminIsVerified?'#3b82f6':'#334155';
-        let adminVerifyText=adminIsVerified?'🔒 SPZ UZAMČENA ADMINEM (klikni pro odemčení)':'🔓 Ověřit SPZ adminem (Admin Lock)';
+        let adminVerifyText=adminIsVerified?'\uD83D\uDD12 SPZ UZAM\u010cENA ADMINEM (klikni pro odem\u010den\u00ed)':'\uD83D\uDD13 Ov\u011b\u0159it SPZ adminem (Admin Lock)';
         let hasSPZ=bus.spz&&bus.spz!=='Neznama';
+        // Predstav tlacitko jako hotovy HTML string (bez vnorenych backticks - JS to neumi parsovat)
+        let adminLockBtn='';
+        if(hasSPZ){
+          adminLockBtn='<button id="adm_lock_'+bus.id+'" '
+            +'onclick="let b=document.getElementById(\'adm_lock_'+bus.id+'\');'
+            +'adminAction(\''+adminVerifyAction+'\',\''+bus.id+'\');'
+            +'if(\''+adminVerifyAction+'\'===\'admin_verify_spz\'){'
+            +'b.style.background=\'#1d4ed8\';b.style.color=\'#bfdbfe\';b.style.borderColor=\'#3b82f6\';'
+            +'b.textContent=\'\uD83D\uDD12 SPZ UZAM\u010cENA ADMINEM\';'
+            +'}else{'
+            +'b.style.background=\'#1e293b\';b.style.color=\'#94a3b8\';b.style.borderColor=\'#334155\';'
+            +'b.textContent=\'\uD83D\uDD13 Ov\u011b\u0159it SPZ adminem (Admin Lock)\';'
+            +'}" '
+            +'style="width:100%;margin-top:6px;padding:9px;border:1px solid '+adminVerifyBorder+';border-radius:5px;'
+            +'font-size:12px;cursor:pointer;font-weight:bold;touch-action:manipulation;'
+            +'background:'+adminVerifyBg+';color:'+adminVerifyColor+';transition:all .2s;">'
+            +adminVerifyText+'</button>';
+        }
         popH+=`<style>.adm-inp{width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:5px;padding:9px;font-size:13px;margin-top:4px;}.adm-inp:focus{outline:none;border-color:#38bdf8;}.adm-btn{width:100%;padding:11px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;touch-action:manipulation;}.adm-toggle-btn{width:100%;padding:9px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;font-size:12px;cursor:pointer;margin-top:8px;touch-action:manipulation;}
 @keyframes routeDrawLoop {
   0% { stroke-dashoffset: var(--r-len); }
@@ -2488,16 +2506,7 @@ async function fetchBuses(){
               <input type="text" id="adm_spz_${bus.id}" value="${cSpz}" data-orig="${oSpz}" placeholder="SPZ" class="adm-inp" style="flex:2;margin-top:0;">
               <button onclick="adminSetSPZ('${bus.id}')" style="flex:1;background:#10b981;color:white;border:none;border-radius:5px;font-size:13px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">💾 Uložit</button>
             </div>
-            ${hasSPZ?`<button id="adm_lock_${bus.id}" onclick="
-              let btn=document.getElementById('adm_lock_${bus.id}');
-              adminAction('${adminVerifyAction}','${bus.id}');
-              if('${adminVerifyAction}'==='admin_verify_spz'){
-                btn.style.background='#1d4ed8';btn.style.color='#bfdbfe';btn.style.borderColor='#3b82f6';
-                btn.textContent='🔒 SPZ UZAMČENA ADMINEM';
-              } else {
-                btn.style.background='#1e293b';btn.style.color='#94a3b8';btn.style.borderColor='#334155';
-                btn.textContent='🔓 Ověřit SPZ adminem (Admin Lock)';
-              }" style="width:100%;margin-top:6px;padding:9px;border:1px solid ${adminVerifyBorder};border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;touch-action:manipulation;background:${adminVerifyBg};color:${adminVerifyColor};transition:all .2s;">${adminVerifyText}</button>`:''}
+            ${adminLockBtn}
             <div style="display:flex;gap:6px;margin-top:6px;">
               <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔍 Hledat</button>
               <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🗑️ Smazat</button>
