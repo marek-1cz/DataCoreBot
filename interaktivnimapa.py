@@ -2574,7 +2574,7 @@ function renderDepotZones(){
         if(activeDiv) {
             if(z.buses && z.buses.length) {
                 activeDiv.innerHTML = z.buses.map(b=>{
-                    let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${b.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;margin-left:auto;padding:2px 4px;" title="Smazat">❌</button>` : '';
+                    let adminDel = IS_ADMIN && b.session_id ? `<button onclick="deleteDepotRecord('${b.session_id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;margin-left:auto;padding:2px 4px;" title="Smazat">❌</button>` : '';
                     let arrHtml = '';
                     if (b.arrived_at) {
                         let ad = new Date(b.arrived_at).toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
@@ -3115,11 +3115,13 @@ def _load_depot_active_sessions(db):
         res = db.table("depot_history").select("*").is_("left_at", "null").execute()
         loaded = {}
         for row in (res.data or []):
-            loaded[row["spz"]] = {
+            bid = row.get("bus_id") or f"unknown_{row['id']}"
+            loaded[bid] = {
                 "id": row["id"],
                 "depot_name": row["depot_name"],
                 "arrived_at": row["arrived_at"],
-                "is_imprecise": row.get("is_imprecise", False)
+                "is_imprecise": row.get("is_imprecise", False),
+                "spz": row.get("spz")
             }
         DEPOT_ACTIVE_SESSIONS = loaded
         print(f"[DEPOT] Nacteno {len(loaded)} aktivnich navstev ve vozovnach.", flush=True)
@@ -3938,42 +3940,53 @@ def background_map_worker():
                                 if spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá"):
                                     c["spz_frozen"] = True
                                     c["spz_locked"] = True
-                                    if spz_val not in DEPOT_ACTIVE_SESSIONS:
-                                        is_imprecise = (now - SCRIPT_START_TIME).total_seconds() < 120
-                                        try:
-                                            resp = db_client.table("depot_history").insert({
-                                                "spz": spz_val,
+                                    
+                                if bus_id not in DEPOT_ACTIVE_SESSIONS:
+                                    is_imprecise = (now - SCRIPT_START_TIME).total_seconds() < 120
+                                    try:
+                                        resp = db_client.table("depot_history").insert({
+                                            "spz": spz_val or "Nezn\u00e1m\u00e1",
+                                            "bus_id": bus_id,
+                                            "depot_name": depot_name,
+                                            "arrived_at": now.isoformat(),
+                                            "is_imprecise": is_imprecise
+                                        }).execute()
+                                        if resp.data:
+                                            DEPOT_ACTIVE_SESSIONS[bus_id] = {
+                                                "id": resp.data[0]["id"],
                                                 "depot_name": depot_name,
                                                 "arrived_at": now.isoformat(),
-                                                "is_imprecise": is_imprecise
-                                            }).execute()
-                                            if resp.data:
-                                                DEPOT_ACTIVE_SESSIONS[spz_val] = {
-                                                    "id": resp.data[0]["id"],
-                                                    "depot_name": depot_name,
-                                                    "arrived_at": now.isoformat(),
-                                                    "is_imprecise": is_imprecise
-                                                }
-                                        except Exception as e:
-                                            print(f"[DEPOT] Chyba zapisu DB prijezdu: {e}")
+                                                "is_imprecise": is_imprecise,
+                                                "spz": spz_val or "Nezn\u00e1m\u00e1"
+                                            }
+                                    except Exception as e:
+                                        print(f"[DEPOT] Chyba zapisu DB prijezdu pro bus_id={bus_id}: {e}")
                                 print(f"[DEPOT] Bus {bus_id} ({c.get('spz','?')}) vjel do vozovny '{depot_name}'", flush=True)
                             else:
                                 # Aktualizuj barvu i kdyz uz je v depu (mohla se zmenit)
                                 c["_depot_color"] = depot_color or "#facc15"
+                                # Update zpetne SPZ pokud ji najdeme
+                                if bus_id in DEPOT_ACTIVE_SESSIONS:
+                                    sess_spz = DEPOT_ACTIVE_SESSIONS[bus_id].get("spz")
+                                    curr_spz = c.get("spz")
+                                    if curr_spz and curr_spz not in ("Nezn\u00e1m\u00e1", "Neznámá") and curr_spz != sess_spz:
+                                        DEPOT_ACTIVE_SESSIONS[bus_id]["spz"] = curr_spz
+                                        try:
+                                            db_client.table("depot_history").update({"spz": curr_spz}).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
+                                        except Exception:
+                                            pass
                         else:
                             if c.get("_in_depot"):
                                 old_depot_name = c.get("_depot_name")
-                                spz_val = c.get("spz")
-                                if old_depot_name and spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá"):
-                                    if spz_val in DEPOT_ACTIVE_SESSIONS:
-                                        session_id = DEPOT_ACTIVE_SESSIONS[spz_val]["id"]
-                                        try:
-                                            db_client.table("depot_history").update({
-                                                "left_at": now.isoformat()
-                                            }).eq("id", session_id).execute()
-                                        except Exception as e:
-                                            print(f"[DEPOT] Chyba zapisu DB odjezdu: {e}")
-                                        del DEPOT_ACTIVE_SESSIONS[spz_val]
+                                if bus_id in DEPOT_ACTIVE_SESSIONS:
+                                    session_id = DEPOT_ACTIVE_SESSIONS[bus_id]["id"]
+                                    try:
+                                        db_client.table("depot_history").update({
+                                            "left_at": now.isoformat()
+                                        }).eq("id", session_id).execute()
+                                    except Exception as e:
+                                        print(f"[DEPOT] Chyba zapisu DB odjezdu: {e}")
+                                    del DEPOT_ACTIVE_SESSIONS[bus_id]
                                 c["_in_depot"] = False
                                 c["_depot_name"] = None
                                 c["_depot_color"] = None
@@ -5681,12 +5694,15 @@ def api_depot_zones():
                 if dict_key not in buses_in_dict:
                     arrived_at = None
                     is_imprecise = False
-                    if spz in DEPOT_ACTIVE_SESSIONS:
-                        arrived_at = DEPOT_ACTIVE_SESSIONS[spz]["arrived_at"]
-                        is_imprecise = DEPOT_ACTIVE_SESSIONS[spz]["is_imprecise"]
+                    session_id = None
+                    if bid in DEPOT_ACTIVE_SESSIONS:
+                        arrived_at = DEPOT_ACTIVE_SESSIONS[bid]["arrived_at"]
+                        is_imprecise = DEPOT_ACTIVE_SESSIONS[bid]["is_imprecise"]
+                        session_id = DEPOT_ACTIVE_SESSIONS[bid]["id"]
                         
                     buses_in_dict[dict_key] = {
                         "id": bid,
+                        "session_id": session_id,
                         "spz": spz,
                         "line": bc.get("line") or "",
                         "spz_verified": bc.get("spz_verified", False),
