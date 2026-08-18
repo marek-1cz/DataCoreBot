@@ -3692,6 +3692,10 @@ def background_map_worker():
                 ghost_entry["is_offline"] = True
                 ghost_entry["color_class"] = row.get("color_class") or "bg-gray"
                 ghost_entry["status"] = row.get("status_text") or "Obnoven po restartu"
+                ghost_entry["admin_note"] = row.get("admin_note") or ""
+                ghost_entry["admin_flag"] = row.get("admin_flag", False)
+                if row.get("manual_spz"):
+                    ghost_entry["manual_spz"] = True
                 ghost_entry["spz_frozen"] = True  # zamkni - je z cache, nechceme okamzite prepsat
                 ghost_entry["spz_locked"] = True
                 if ghost_entry["admin_spz_verified"]:
@@ -3866,12 +3870,30 @@ def background_map_worker():
                                 if is_same_line(line, best_gc["line"]):
                                     ghost_trip_id = best_gc["trip_id"]
                                     ghost_verified = best_gc.get("spz_verified", False)
+                                    ghost_admin_verified = best_gc.get("admin_spz_verified", False)
+                                    ghost_admin_note = best_gc.get("admin_note", "")
+                                    ghost_admin_flag = best_gc.get("admin_flag", False)
+                                    ghost_color_class = best_gc.get("color_class")
+                                    ghost_status = best_gc.get("status")
+                                    ghost_manual_spz = best_gc.get("manual_spz", False)
                                 del GLOBAL_BUS_CACHE[best_gid]
-                                if db_client and ghost_spz and ghost_spz != "Nezn\u00e1m\u00e1":
+                                if db_client and ghost_spz and ghost_spz != "Neznámá":
                                     close_previous_trips(db_client, ghost_spz, ghost_trip_id, now.strftime('%H:%M'))
-                            GLOBAL_BUS_CACHE[bus_id] = new_cache_entry(
+                            
+                            nb = new_cache_entry(
                                 bus_id, ghost_trip_id, lat1, lng1, line, dest1, is_train, delay, now,
-                                ghost_spz, ghost_verified)
+                                ghost_spz, ghost_verified, ghost_admin_verified if 'ghost_admin_verified' in locals() else False)
+                            
+                            if 'ghost_admin_note' in locals():
+                                nb["admin_note"] = ghost_admin_note
+                                nb["admin_flag"] = ghost_admin_flag
+                                nb["manual_spz"] = ghost_manual_spz
+                                if ghost_color_class and ghost_color_class != "bg-gray":
+                                    nb["color_class"] = ghost_color_class
+                                if ghost_status and ghost_status != "Načítání...":
+                                    nb["status"] = ghost_status
+                            
+                            GLOBAL_BUS_CACHE[bus_id] = nb
 
                         else:
                             c = GLOBAL_BUS_CACHE[bus_id]
@@ -4754,6 +4776,9 @@ def background_map_worker():
                         "trip_id": bc.get("trip_id"),
                         "color_class": bc.get("color_class"),
                         "status_text": bc.get("status"),
+                        "admin_note": bc.get("admin_note", ""),
+                        "admin_flag": bc.get("admin_flag", False),
+                        "manual_spz": bc.get("manual_spz", False),
                         "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
                     })
                 if cache_rows:
