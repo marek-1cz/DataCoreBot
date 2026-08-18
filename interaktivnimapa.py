@@ -35,7 +35,8 @@ GHOST_MAX_OFFLINE_MIN = 20
 GHOST_DIST_STRICT     = 0.010
 DUPLICATE_GRACE_SEC   = 120
 DEPOT_CHECK_INTERVAL_SEC = 20  # jak casto kontrolovat vjezd busu do vozovny
-DEPOT_HISTORY = {}  # uchovava {spz: {"depot_name": str, "left_at": str}} pro busy co nedavno odjely
+DEPOT_ACTIVE_SESSIONS = {}  # {spz: {"id": uuid, "depot_name": str, "arrived_at": str, "is_imprecise": bool}}
+SCRIPT_START_TIME = datetime.now(ZoneInfo("Europe/Prague"))
 
 # Cesta k GTFS db relativne k tomuto souboru (spolehlivejsi nez working dir)
 GTFS_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gtfs_stops.db")
@@ -203,6 +204,18 @@ HTML_HISTORIE_DETAIL = """
   <h2 style="color:white;margin:0 0 10px 0;font-size:28px;">🚌 Autobus SPZ: <span style="color:#f59e0b;">__SPZ__</span></h2>
   <div id="absoluteLastPos"><span style="color:#38bdf8;"><i class="fas fa-spinner fa-spin"></i> Načítám…</span></div>
 </div>
+<h3 style="color:#38bdf8;margin-bottom:15px;margin-top:20px;"><i class="fas fa-warehouse"></i> 🅿️ Pobyty ve vozovnách</h3>
+<div style="background:#0f172a;border-radius:10px;border:1px solid #334155;overflow-x:auto;margin-bottom:20px;">
+  <table style="width:100%;border-collapse:collapse;color:#cbd5e1;">
+    <thead><tr style="background:#1e293b;">
+      <th style="color:#38bdf8;padding:12px;border-color:#334155;text-align:left;">Vozovna</th>
+      <th style="color:#38bdf8;padding:12px;border-color:#334155;text-align:left;">Příjezd</th>
+      <th style="color:#38bdf8;padding:12px;border-color:#334155;text-align:left;">Odjezd</th>
+    </tr></thead>
+    <tbody id="depotTableBody"><tr><td colspan="3" style="text-align:center;padding:15px;color:#64748b;">Načítám...</td></tr></tbody>
+  </table>
+</div>
+
 <h3 style="color:#38bdf8;margin-bottom:15px;"><i class="fas fa-route"></i> 🚌 Odjete spoje</h3>
 <div style="background:#0f172a;border-radius:10px;border:1px solid #334155;overflow-x:auto;">
   <table style="width:100%;border-collapse:collapse;color:#cbd5e1;">
@@ -238,6 +251,23 @@ async function loadDetail(){
       html+=`<tr style="border-color:#334155;"><td style="border-color:#334155;padding:12px;color:#cbd5e1;">${dayStr}<br><span style="font-size:10px;color:#64748b;">${trip.trip_id.substring(0,8)}...</span></td><td style="border-color:#334155;padding:12px;font-weight:bold;color:white;">${trip.linka}${trip.jr_link?`<br><a href="${trip.jr_link}" target="_blank" style="font-size:11px;color:#38bdf8;">JR <i class="fas fa-external-link-alt"></i></a>`:''}</td><td style="border-color:#334155;padding:12px;color:#10b981;">${ss}</td><td style="border-color:#334155;padding:12px;color:#ef4444;">${es}</td><td style="border-color:#334155;padding:12px;text-align:center;"><a href="/mapa#${trip.last_lat},${trip.last_lng}" style="background:transparent;color:#cbd5e1;border:1px solid #4b5563;padding:5px 10px;border-radius:4px;text-decoration:none;font-size:12px;"><i class="fas fa-map-marker-alt"></i></a></td></tr>`;
     });
     tbody.innerHTML=html;
+
+    const depotTbody = document.getElementById('depotTableBody');
+    const dVisits = result.depot_visits || [];
+    if(dVisits.length === 0) {
+      depotTbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:15px;color:#64748b;">Zatím nebyl ve vozovně.</td></tr>';
+    } else {
+      let dHtml = '';
+      dVisits.forEach(v => {
+        let arr = new Date(v.arrived_at).toLocaleString('cs-CZ');
+        let lft = v.left_at ? new Date(v.left_at).toLocaleString('cs-CZ') : '<span style="color:#10b981;font-weight:bold;">Nyní zaparkován</span>';
+        let arrHtml = arr;
+        if(v.is_imprecise) arrHtml += ' <span style="font-size:11px;color:#f59e0b;">(RESET MAPY NEPŘESNÝ ČAS)</span>';
+        dHtml += `<tr style="border-bottom:1px solid #1e293b;"><td style="padding:10px;color:white;font-weight:bold;">${v.depot_name}</td><td style="padding:10px;color:#94a3b8;">${arrHtml}</td><td style="padding:10px;color:#94a3b8;">${lft}</td></tr>`;
+      });
+      depotTbody.innerHTML = dHtml;
+    }
+
   }catch(e){console.error(e);}
 }
 loadDetail();setInterval(loadDetail,10000);
@@ -2510,10 +2540,6 @@ async function loadDepotZones(){
 
 function renderDepotZones(){
   depotLayer.clearLayers();
-  // Smaz stare radius circles
-  if(window._depotRadiusCircles){window._depotRadiusCircles.forEach(c=>depotLayer.removeLayer(c));}
-  window._depotRadiusCircles=[];
-  window._depotActiveRadius=null;
   depotZones.forEach(z=>{
     if(!z.polygon||z.polygon.length<3)return;
     let zColor=z.color||'#facc15';
@@ -2526,37 +2552,108 @@ function renderDepotZones(){
     // Ikona vozovny: emoji s barvou zóny ve stínu
     let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🅿️</div>`;
     let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
-    let busList=z.buses&&z.buses.length?z.buses.map(b=>`<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;"><span style="color:${zColor};font-weight:bold;">${b.spz||'?'}</span><span style="color:#64748b;font-size:11px;">L${b.line||'?'}</span>${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}</div>`).join(''):
-      '<div style="color:#64748b;font-size:11px;text-align:center;padding:4px;">Žádný bus v depu</div>';
-    let leftBusList=z.left_buses&&z.left_buses.length?z.left_buses.map(b=>`<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;opacity:0.8;"><span style="color:#f59e0b;font-weight:bold;">${b.spz}</span><span style="color:#64748b;font-size:11px;">(Mimo: od ${b.left_at})</span></div>`).join(''):'';
-    if(leftBusList) leftBusList = `<div style="margin-top:8px;font-size:11px;color:#94a3b8;border-top:1px dashed #334155;padding-top:4px;">Mimo vozovnu (nedávno):</div>` + leftBusList;
-    
-    let popHtml=`<div style="background:#0f172a;color:white;padding:10px 14px;min-width:180px;">
-      <div style="color:${zColor};font-weight:bold;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">🅿️ ${z.name}</div>
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-        <div style="width:12px;height:12px;border-radius:3px;background:${zColor};border:1px solid rgba(255,255,255,0.3);"></div>
-        <span style="font-size:11px;color:#64748b;">${z.bus_count||0} bus${(z.bus_count===1)?'':'ů'} v depu</span>
-      </div>
-      ${busList}
-      ${leftBusList}
+    let popId = 'depot_pop_' + Math.random().toString(36).substr(2,9);
+    let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:10px;min-width:260px;font-family:sans-serif;max-height:400px;overflow-y:auto;overflow-x:hidden;">
+        <div style="color:${zColor};font-weight:bold;font-size:15px;margin-bottom:8px;border-bottom:1px solid #1e293b;padding-bottom:5px;">🅿️ ${z.name}</div>
+        <div style="margin-bottom:8px;font-size:12px;color:#94a3b8;">Nyní parkuje: <b style="color:white;">${z.bus_count||0}</b> vozů</div>
+        <div id="${popId}_active">Načítám...</div>
+        <div style="margin-top:12px;border-top:1px dashed #334155;padding-top:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-size:12px;color:#cbd5e1;font-weight:bold;">Historie odjezdů</span>
+                <input type="text" id="${popId}_search" placeholder="Hledat SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;width:110px;">
+            </div>
+            <div id="${popId}_hist" style="font-size:11px;color:#94a3b8;max-height:200px;overflow-y:auto;padding-right:4px;">Načítám historii...</div>
+        </div>
     </div>`;
+
     let mk=L.marker(center,{icon:depotIcon,zIndexOffset:500});
-    mk.bindPopup(popHtml,{className:'dark-popup',maxWidth:240});
-    // Klik na ikonu: zobraz animovany radius circle
-    mk.on('click',function(){
-      // Smaz predchozi radius
-      if(window._depotActiveRadius){depotLayer.removeLayer(window._depotActiveRadius);window._depotActiveRadius=null;}
-      let dynRadius = Math.max(100, center.distanceTo(bounds.getNorthEast()));
-      let rc=L.circle(center,{radius:dynRadius,color:zColor,fillColor:zColor,fillOpacity:0.08,weight:2,dashArray:'8,5',opacity:0.6});
-      rc.addTo(depotLayer);
-      window._depotActiveRadius=rc;
-      // Auto-smaz po 5 sekundach
-      setTimeout(()=>{if(window._depotActiveRadius===rc){depotLayer.removeLayer(rc);window._depotActiveRadius=null;}},5000);
+    mk.bindPopup(popHtml,{className:'dark-popup',maxWidth:340, minWidth:260});
+    
+    mk.on('popupopen', function() {
+        let activeDiv = document.getElementById(popId+'_active');
+        if(activeDiv) {
+            if(z.buses && z.buses.length) {
+                activeDiv.innerHTML = z.buses.map(b=>{
+                    let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${b.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;margin-left:auto;padding:2px 4px;" title="Smazat">❌</button>` : '';
+                    let arrHtml = '';
+                    if (b.arrived_at) {
+                        let ad = new Date(b.arrived_at).toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
+                        arrHtml = `<br><span style="color:#64748b;font-size:10px;">Od: ${ad} ${b.is_imprecise?'(RESET MAPY)':''}</span>`;
+                    }
+                    return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #1e293b;flex-wrap:wrap;">
+                        <span style="color:${zColor};font-weight:bold;min-width:65px;">${b.spz||'?'}</span>
+                        <span style="color:#cbd5e1;font-size:11px;">L${b.line||'?'}</span>
+                        ${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}
+                        ${adminDel}
+                        <div style="width:100%;margin-top:-3px;">${arrHtml}</div>
+                    </div>`;
+                }).join('');
+            } else {
+                activeDiv.innerHTML = '<div style="color:#64748b;font-size:11px;text-align:center;padding:4px;">Žádný bus v depu</div>';
+            }
+        }
+        
+        let histDiv = document.getElementById(popId+'_hist');
+        let searchInp = document.getElementById(popId+'_search');
+        
+        async function fetchHist(q='') {
+            if(!histDiv) return;
+            histDiv.innerHTML = '<div style="text-align:center;padding:10px;"><i class="fas fa-spinner fa-spin"></i></div>';
+            try {
+                let r = await fetch('/api/depot_history?depot_name='+encodeURIComponent(z.name)+'&q='+encodeURIComponent(q));
+                let d = await r.json();
+                if(d.status==='success' && d.data && d.data.length>0) {
+                    histDiv.innerHTML = d.data.map(h=>{
+                        let lTime = new Date(h.left_at).toLocaleString('cs-CZ');
+                        let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${h.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;margin-left:auto;padding:2px 4px;" title="Smazat ze záznamu">❌</button>` : '';
+                        return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #1e293b;">
+                            <span style="color:#f59e0b;font-weight:bold;min-width:65px;">${h.spz}</span>
+                            <div style="display:flex;flex-direction:column;font-size:10px;">
+                                <span>Odjezd: ${lTime}</span>
+                            </div>
+                            ${adminDel}
+                        </div>`;
+                    }).join('');
+                } else {
+                    histDiv.innerHTML = '<div style="text-align:center;padding:10px;">Žádná historie nalezena</div>';
+                }
+            } catch(e) {
+                histDiv.innerHTML = '<div style="color:#ef4444;padding:10px;">Chyba načítání</div>';
+            }
+        }
+        
+        fetchHist();
+        
+        if(searchInp) {
+            let debounce = null;
+            searchInp.addEventListener('input', (e)=>{
+                clearTimeout(debounce);
+                debounce = setTimeout(()=>{ fetchHist(e.target.value); }, 400);
+            });
+            searchInp.addEventListener('keydown', e => e.stopPropagation());
+            searchInp.addEventListener('keyup', e => e.stopPropagation());
+            searchInp.addEventListener('keypress', e => e.stopPropagation());
+        }
     });
+
     depotLayer.addLayer(poly);
     depotLayer.addLayer(mk);
   });
 }
+
+window.deleteDepotRecord = async function(id, depotName) {
+    if(!confirm("Opravdu smazat záznam z historie vozovny " + depotName + "? (pokud je vůz aktivní uvnitř, zmizí ihned)")) return;
+    try {
+        let r = await fetch('/api/admin/delete_depot_history', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})});
+        let d = await r.json();
+        if(d.status==='success') {
+            appLog('Záznam z depa smazán', 'ok');
+            loadDepotZones();
+        } else {
+            appLog('Chyba mazání: '+d.message, 'error');
+        }
+    } catch(e) { appLog('Chyba komunikace při mazání z depa', 'error'); }
+};
 
 function renderDepotList(){
   let el=document.getElementById('depot-zone-list');
@@ -3010,6 +3107,24 @@ def _load_depot_zones(db):
     except Exception as e:
         print(f"[DEPOT] Tabulka depot_zones nedostupna: {e}", flush=True)
 
+def _load_depot_active_sessions(db):
+    global DEPOT_ACTIVE_SESSIONS
+    if not db:
+        return
+    try:
+        res = db.table("depot_history").select("*").is_("left_at", "null").execute()
+        loaded = {}
+        for row in (res.data or []):
+            loaded[row["spz"]] = {
+                "id": row["id"],
+                "depot_name": row["depot_name"],
+                "arrived_at": row["arrived_at"],
+                "is_imprecise": row.get("is_imprecise", False)
+            }
+        DEPOT_ACTIVE_SESSIONS = loaded
+        print(f"[DEPOT] Nacteno {len(loaded)} aktivnich navstev ve vozovnach.", flush=True)
+    except Exception as e:
+        print(f"[DEPOT] Tabulka depot_history nedostupna: {e}", flush=True)
 
 def _point_in_polygon(lat, lng, polygon):
     """Ray-casting algoritmus: je bod (lat, lng) uvnitr polygonu?
@@ -3458,6 +3573,7 @@ def background_map_worker():
         _load_route_stop_overrides(db_client)
         _load_custom_routes(db_client)
         _load_depot_zones(db_client)
+        _load_depot_active_sessions(db_client)
 
     url_inflow_base = "https://pvvd.idpk.cz/Ajax/GetPoints"
     url_arriva = "https://www.arriva.cz/api/graphql"
@@ -3818,9 +3934,28 @@ def background_map_worker():
                                 c["_depot_name"] = depot_name
                                 c["_depot_color"] = depot_color or "#facc15"
                                 # Zamraz SPZ - bus parkuje, nema smysl re-auditovat
-                                if c.get("spz") and c["spz"] != "Nezn\u00e1m\u00e1":
+                                spz_val = c.get("spz")
+                                if spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá"):
                                     c["spz_frozen"] = True
                                     c["spz_locked"] = True
+                                    if spz_val not in DEPOT_ACTIVE_SESSIONS:
+                                        is_imprecise = (now - SCRIPT_START_TIME).total_seconds() < 120
+                                        try:
+                                            resp = db_client.table("depot_history").insert({
+                                                "spz": spz_val,
+                                                "depot_name": depot_name,
+                                                "arrived_at": now.isoformat(),
+                                                "is_imprecise": is_imprecise
+                                            }).execute()
+                                            if resp.data:
+                                                DEPOT_ACTIVE_SESSIONS[spz_val] = {
+                                                    "id": resp.data[0]["id"],
+                                                    "depot_name": depot_name,
+                                                    "arrived_at": now.isoformat(),
+                                                    "is_imprecise": is_imprecise
+                                                }
+                                        except Exception as e:
+                                            print(f"[DEPOT] Chyba zapisu DB prijezdu: {e}")
                                 print(f"[DEPOT] Bus {bus_id} ({c.get('spz','?')}) vjel do vozovny '{depot_name}'", flush=True)
                             else:
                                 # Aktualizuj barvu i kdyz uz je v depu (mohla se zmenit)
@@ -3829,11 +3964,16 @@ def background_map_worker():
                             if c.get("_in_depot"):
                                 old_depot_name = c.get("_depot_name")
                                 spz_val = c.get("spz")
-                                if old_depot_name and spz_val and spz_val != "Nezn\u00e1m\u00e1" and spz_val != "Neznámá":
-                                    DEPOT_HISTORY[spz_val] = {
-                                        "depot_name": old_depot_name,
-                                        "left_at": now.strftime("%d.%m. %H:%M")
-                                    }
+                                if old_depot_name and spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá"):
+                                    if spz_val in DEPOT_ACTIVE_SESSIONS:
+                                        session_id = DEPOT_ACTIVE_SESSIONS[spz_val]["id"]
+                                        try:
+                                            db_client.table("depot_history").update({
+                                                "left_at": now.isoformat()
+                                            }).eq("id", session_id).execute()
+                                        except Exception as e:
+                                            print(f"[DEPOT] Chyba zapisu DB odjezdu: {e}")
+                                        del DEPOT_ACTIVE_SESSIONS[spz_val]
                                 c["_in_depot"] = False
                                 c["_depot_name"] = None
                                 c["_depot_color"] = None
@@ -5286,12 +5426,13 @@ def api_history_full():
 def api_history_spz(spz):
     db = get_db_client()
     if not db:
-        return jsonify({"data": [], "error": "DB nedostupn\u00e1"})
+        return jsonify({"data": [], "depot_visits": [], "error": "DB nedostupna"})
     try:
         res = db.table("bus_history").select("*").eq("spz", spz).order("created_at", desc=True).limit(100).execute()
-        return jsonify({"data": res.data})
+        depot_res = db.table("depot_history").select("*").eq("spz", spz).order("arrived_at", desc=True).limit(50).execute()
+        return jsonify({"data": res.data, "depot_visits": depot_res.data or []})
     except Exception as e:
-        return jsonify({"data": [], "error": str(e)})
+        return jsonify({"data": [], "depot_visits": [], "error": str(e)})
 
 # === ROUTE BACKEND (GTFS in-memory + Nominatim fallback per zastavku) ===
 
@@ -5538,24 +5679,21 @@ def api_depot_zones():
                     continue
                 dict_key = bid if spz in ("Nezn\u00e1m\u00e1", "Neznámá") else spz
                 if dict_key not in buses_in_dict:
+                    arrived_at = None
+                    is_imprecise = False
+                    if spz in DEPOT_ACTIVE_SESSIONS:
+                        arrived_at = DEPOT_ACTIVE_SESSIONS[spz]["arrived_at"]
+                        is_imprecise = DEPOT_ACTIVE_SESSIONS[spz]["is_imprecise"]
+                        
                     buses_in_dict[dict_key] = {
                         "id": bid,
                         "spz": spz,
                         "line": bc.get("line") or "",
                         "spz_verified": bc.get("spz_verified", False),
+                        "arrived_at": arrived_at,
+                        "is_imprecise": is_imprecise
                     }
         
-        left_buses = []
-        for spz, hist in list(DEPOT_HISTORY.items()):
-            if spz in buses_in_dict:
-                del DEPOT_HISTORY[spz]
-                continue
-            if hist["depot_name"] == zone["name"]:
-                left_buses.append({
-                    "spz": spz,
-                    "left_at": hist["left_at"]
-                })
-
         buses_in = list(buses_in_dict.values())
         zones_out.append({
             "id": zone["id"],
@@ -5564,9 +5702,49 @@ def api_depot_zones():
             "color": zone.get("color", "#facc15"),
             "bus_count": len(buses_in),
             "buses": buses_in,
-            "left_buses": left_buses
         })
     return jsonify({"status": "success", "zones": zones_out, "count": len(zones_out)})
+
+@mapa_bp.route('/api/depot_history')
+def api_depot_history():
+    """Vrati historii odjetych busu z vozovny."""
+    depot_name = request.args.get('depot_name')
+    search_q = request.args.get('q', '').strip().lower()
+    
+    db = get_db_client()
+    if not db:
+        return jsonify({"status": "error", "message": "DB nedostupna"})
+        
+    query = db.table("depot_history").select("*").eq("depot_name", depot_name).not_.is_("left_at", "null")
+    if search_q:
+        query = query.ilike("spz", f"%{search_q}%")
+        
+    res = query.order("left_at", desc=True).limit(500).execute()
+    return jsonify({"status": "success", "data": res.data or []})
+
+@mapa_bp.route('/api/admin/delete_depot_history', methods=['POST'])
+def api_admin_delete_depot_history():
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neautorizovano"}), 401
+    
+    data = request.get_json(silent=True) or {}
+    record_id = data.get("id")
+    if not record_id:
+        return jsonify({"status": "error", "message": "Chybi ID"}), 400
+        
+    db = get_db_client()
+    if not db:
+        return jsonify({"status": "error", "message": "DB nedostupna"}), 500
+        
+    try:
+        db.table("depot_history").delete().eq("id", record_id).execute()
+        # Take to zmaz z pameti pokud je to aktivni
+        for s_spz, s_data in list(DEPOT_ACTIVE_SESSIONS.items()):
+            if s_data["id"] == record_id:
+                del DEPOT_ACTIVE_SESSIONS[s_spz]
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @mapa_bp.route('/api/admin/save_depot_zone', methods=['POST'])
