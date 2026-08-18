@@ -35,6 +35,7 @@ GHOST_MAX_OFFLINE_MIN = 20
 GHOST_DIST_STRICT     = 0.010
 DUPLICATE_GRACE_SEC   = 120
 DEPOT_CHECK_INTERVAL_SEC = 20  # jak casto kontrolovat vjezd busu do vozovny
+DEPOT_HISTORY = {}  # uchovava {spz: {"depot_name": str, "left_at": str}} pro busy co nedavno odjely
 
 # Cesta k GTFS db relativne k tomuto souboru (spolehlivejsi nez working dir)
 GTFS_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gtfs_stops.db")
@@ -2527,6 +2528,9 @@ function renderDepotZones(){
     let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
     let busList=z.buses&&z.buses.length?z.buses.map(b=>`<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;"><span style="color:${zColor};font-weight:bold;">${b.spz||'?'}</span><span style="color:#64748b;font-size:11px;">L${b.line||'?'}</span>${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}</div>`).join(''):
       '<div style="color:#64748b;font-size:11px;text-align:center;padding:4px;">Žádný bus v depu</div>';
+    let leftBusList=z.left_buses&&z.left_buses.length?z.left_buses.map(b=>`<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;opacity:0.8;"><span style="color:#f59e0b;font-weight:bold;">${b.spz}</span><span style="color:#64748b;font-size:11px;">(Mimo: od ${b.left_at})</span></div>`).join(''):'';
+    if(leftBusList) leftBusList = `<div style="margin-top:8px;font-size:11px;color:#94a3b8;border-top:1px dashed #334155;padding-top:4px;">Mimo vozovnu (nedávno):</div>` + leftBusList;
+    
     let popHtml=`<div style="background:#0f172a;color:white;padding:10px 14px;min-width:180px;">
       <div style="color:${zColor};font-weight:bold;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">🅿️ ${z.name}</div>
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
@@ -2534,6 +2538,7 @@ function renderDepotZones(){
         <span style="font-size:11px;color:#64748b;">${z.bus_count||0} bus${(z.bus_count===1)?'':'ů'} v depu</span>
       </div>
       ${busList}
+      ${leftBusList}
     </div>`;
     let mk=L.marker(center,{icon:depotIcon,zIndexOffset:500});
     mk.bindPopup(popHtml,{className:'dark-popup',maxWidth:240});
@@ -3822,6 +3827,13 @@ def background_map_worker():
                                 c["_depot_color"] = depot_color or "#facc15"
                         else:
                             if c.get("_in_depot"):
+                                old_depot_name = c.get("_depot_name")
+                                spz_val = c.get("spz")
+                                if old_depot_name and spz_val and spz_val != "Nezn\u00e1m\u00e1" and spz_val != "Neznámá":
+                                    DEPOT_HISTORY[spz_val] = {
+                                        "depot_name": old_depot_name,
+                                        "left_at": now.strftime("%d.%m. %H:%M")
+                                    }
                                 c["_in_depot"] = False
                                 c["_depot_name"] = None
                                 c["_depot_color"] = None
@@ -5501,18 +5513,49 @@ def api_bus_route(bus_id):
 def api_depot_zones():
     """Verejny endpoint: vrati vsechny vozovny (polygon, nazev, barva)
     + aktualni pocet busu v kazde vozovne."""
+    active_spzs = set()
+    bug_spzs = set()
+    for bid, bc in GLOBAL_BUS_CACHE.items():
+        spz = bc.get("spz")
+        if not spz or spz in ("Nezn\u00e1m\u00e1", "Neznámá"):
+            continue
+        c_class = bc.get("color_class", "")
+        if c_class in ("bg-green", "bg-red", "bg-orange"):
+            active_spzs.add(spz)
+        if c_class == "bg-bug":
+            bug_spzs.add(spz)
+
     zones_out = []
     for zone in DEPOT_ZONES:
         # Spocitej busy v teto vozovne
-        buses_in = []
+        buses_in_dict = {}
         for bid, bc in GLOBAL_BUS_CACHE.items():
             if bc.get("_in_depot") and bc.get("_depot_name") == zone["name"]:
-                buses_in.append({
-                    "id": bid,
-                    "spz": bc.get("spz") or "Neznámá",
-                    "line": bc.get("line") or "",
-                    "spz_verified": bc.get("spz_verified", False),
+                spz = bc.get("spz") or "Neznámá"
+                if spz in bug_spzs or bc.get("color_class") == "bg-bug":
+                    continue
+                if spz not in ("Nezn\u00e1m\u00e1", "Neznámá") and spz in active_spzs:
+                    continue
+                if spz not in buses_in_dict:
+                    buses_in_dict[spz] = {
+                        "id": bid,
+                        "spz": spz,
+                        "line": bc.get("line") or "",
+                        "spz_verified": bc.get("spz_verified", False),
+                    }
+        
+        left_buses = []
+        for spz, hist in list(DEPOT_HISTORY.items()):
+            if spz in buses_in_dict:
+                del DEPOT_HISTORY[spz]
+                continue
+            if hist["depot_name"] == zone["name"]:
+                left_buses.append({
+                    "spz": spz,
+                    "left_at": hist["left_at"]
                 })
+
+        buses_in = list(buses_in_dict.values())
         zones_out.append({
             "id": zone["id"],
             "name": zone["name"],
@@ -5520,6 +5563,7 @@ def api_depot_zones():
             "color": zone.get("color", "#facc15"),
             "bus_count": len(buses_in),
             "buses": buses_in,
+            "left_buses": left_buses
         })
     return jsonify({"status": "success", "zones": zones_out, "count": len(zones_out)})
 
