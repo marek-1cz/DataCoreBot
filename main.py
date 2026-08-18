@@ -2304,6 +2304,36 @@ async def sm(ctx, member: discord.Member):
         await member.add_roles(role)
         await ctx.send(f"➕ Role **SM** přidělena.")
 
+@bot.command()
+async def aktulizace(ctx):
+    db = get_db()
+    if not db: return
+    user_data = db.table("users").select("role").eq("discord_id", str(ctx.author.id)).execute().data
+    if not user_data or user_data[0].get("role") not in ["SA", "DEV"]:
+        return
+        
+    bot.aktualizace_mode = getattr(bot, 'aktualizace_mode', False)
+    bot.aktualizace_mode = not bot.aktualizace_mode
+    
+    if bot.aktualizace_mode:
+        msg = await ctx.send("ON")
+        await asyncio.sleep(2)
+        try:
+            await msg.delete()
+            await ctx.message.delete()
+        except: pass
+        now = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
+        try:
+            await ctx.author.send(f"✅ **Aktualizace proběhla v pořádku!**\n\n🔄 Vše se resetovalo.\n✨ Nové funkce byly přidány.\n🕒 Čas: {now}")
+        except: pass
+    else:
+        msg = await ctx.send("OFF")
+        await asyncio.sleep(2)
+        try:
+            await msg.delete()
+            await ctx.message.delete()
+        except: pass
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STARTUP
