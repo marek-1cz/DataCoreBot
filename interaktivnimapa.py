@@ -36,7 +36,7 @@ GHOST_DIST_STRICT     = 0.010
 DUPLICATE_GRACE_SEC   = 120
 DEPOT_CHECK_INTERVAL_SEC = 20  # jak casto kontrolovat vjezd busu do vozovny
 DEPOT_ACTIVE_SESSIONS = {}  # {spz: {"id": uuid, "depot_name": str, "arrived_at": str, "is_imprecise": bool}}
-SCRIPT_START_TIME = datetime.now(ZoneInfo("Europe/Prague"))
+SCRIPT_START_TIME = datetime.now(ZoneInfo("Europe/Prague")).replace(tzinfo=None)
 
 # Cesta k GTFS db relativne k tomuto souboru (spolehlivejsi nez working dir)
 GTFS_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gtfs_stops.db")
