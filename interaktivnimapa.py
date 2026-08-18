@@ -3918,11 +3918,23 @@ def background_map_worker():
                     c["status"] = "Timeout"
                     c["color_class"] = "bg-gray"
                     upsert_to_history(db_client, c)
+                    if bus_id in DEPOT_ACTIVE_SESSIONS:
+                        try:
+                            db_client.table("depot_history").update({"left_at": now.isoformat()}).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
+                        except: pass
+                        del DEPOT_ACTIVE_SESSIONS[bus_id]
+                        DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
                     del GLOBAL_BUS_CACHE[bus_id]
                     continue
                 if bus_id not in current_inflow_ids:
                     if om > 1080:
                         upsert_to_history(db_client, c)
+                        if bus_id in DEPOT_ACTIVE_SESSIONS:
+                            try:
+                                db_client.table("depot_history").update({"left_at": now.isoformat()}).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
+                            except: pass
+                            del DEPOT_ACTIVE_SESSIONS[bus_id]
+                            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
                         del GLOBAL_BUS_CACHE[bus_id]
                         continue
                     c["is_offline"] = True
@@ -4663,6 +4675,12 @@ def api_admin_map_action():
 
     if action == "delete":
         ADMIN_DELETED_BUSES[bus_id] = c.get("line", "")
+        if bus_id in DEPOT_ACTIVE_SESSIONS:
+            try:
+                get_db_client().table("depot_history").update({"left_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat()}).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
+            except: pass
+            del DEPOT_ACTIVE_SESSIONS[bus_id]
+            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
         del GLOBAL_BUS_CACHE[bus_id]
 
     elif action == "edit_spz":
