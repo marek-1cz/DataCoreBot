@@ -2471,7 +2471,7 @@ async function fetchBuses(){
         let adminVerifyBg=adminIsVerified?'#1d4ed8':'#1e293b';
         let adminVerifyColor=adminIsVerified?'#bfdbfe':'#94a3b8';
         let adminVerifyBorder=adminIsVerified?'#3b82f6':'#334155';
-        let adminVerifyText=adminIsVerified?'\uD83D\uDD12 SPZ UZAM\u010cENA ADMINEM (klikni pro odem\u010den\u00ed)':'\uD83D\uDD13 Ov\u011b\u0159it SPZ adminem (Admin Lock)';
+        let adminVerifyText=adminIsVerified?'🔒 SPZ UZAMČENA ADMINEM (klikni pro odemčení)':'🔓 Ověřit SPZ adminem (Admin Lock)';
         let hasSPZ=bus.spz&&bus.spz!=='Neznama';
         // Predstav tlacitko jako hotovy HTML string (bez vnorenych backticks - JS to neumi parsovat)
         let adminLockBtn='';
@@ -2481,10 +2481,10 @@ async function fetchBuses(){
             +'adminAction(\''+adminVerifyAction+'\',\''+bus.id+'\');'
             +'if(\''+adminVerifyAction+'\'===\'admin_verify_spz\'){'
             +'b.style.background=\'#1d4ed8\';b.style.color=\'#bfdbfe\';b.style.borderColor=\'#3b82f6\';'
-            +'b.textContent=\'\uD83D\uDD12 SPZ UZAM\u010cENA ADMINEM\';'
+            +'b.textContent=\'🔒 SPZ UZAMČENA ADMINEM\';'
             +'}else{'
             +'b.style.background=\'#1e293b\';b.style.color=\'#94a3b8\';b.style.borderColor=\'#334155\';'
-            +'b.textContent=\'\uD83D\uDD13 Ov\u011b\u0159it SPZ adminem (Admin Lock)\';'
+            +'b.textContent=\'🔓 Ověřit SPZ adminem (Admin Lock)\';'
             +'}" '
             +'style="width:100%;margin-top:6px;padding:9px;border:1px solid '+adminVerifyBorder+';border-radius:5px;'
             +'font-size:12px;cursor:pointer;font-weight:bold;touch-action:manipulation;'
