@@ -2323,8 +2323,17 @@ async def aktulizace(ctx):
             await ctx.message.delete()
         except: pass
         now = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
+        commit_msg = "Neznámý build"
         try:
-            await ctx.author.send(f"✅ **Aktualizace proběhla v pořádku!**\n\n🔄 Vše se resetovalo.\n✨ Nové funkce byly přidány.\n🕒 Čas: {now}")
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://api.github.com/repos/marek-1cz/DataCoreBot/commits/main") as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        commit_msg = data.get("commit", {}).get("message", "Neznámý build").split("\n")[0]
+        except Exception: pass
+        try:
+            await ctx.author.send(f"✅ **Aktualizace proběhla v pořádku!**\n\n🔄 Vše se resetovalo.\n✨ **Build:** `{commit_msg}`\n🕒 Čas: {now}")
         except: pass
     else:
         msg = await ctx.send("OFF")
