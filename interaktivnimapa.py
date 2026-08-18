@@ -2630,7 +2630,7 @@ function renderDepotZones(){
                 let d = await r.json();
                 if(d.status==='success' && d.data && d.data.length>0) {
                     histDiv.innerHTML = d.data.map(h=>{
-                        let lTime = new Date(h.left_at).toLocaleString('cs-CZ');
+                        let lTime = h.left_at ? new Date(h.left_at).toLocaleString('cs-CZ') : '<span style="color:#10b981;font-weight:bold;">Nyní parkuje</span>';
                         let aTime = h.arrived_at ? new Date(h.arrived_at).toLocaleString('cs-CZ') : 'Neznámý (Před úpravou)';
                         let impr = h.is_imprecise ? ' <span title="Reset mapy - nepřesný čas" style="color:#facc15;font-size:9px;">(RESET MAPY)</span>' : '';
                         let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${h.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;margin-left:auto;padding:2px 4px;" title="Smazat ze záznamu">❌</button>` : '';
@@ -5770,11 +5770,11 @@ def api_depot_history():
     if not db:
         return jsonify({"status": "error", "message": "DB nedostupna"})
         
-    query = db.table("depot_history").select("*").eq("depot_name", depot_name).not_.is_("left_at", "null")
+    query = db.table("depot_history").select("*").eq("depot_name", depot_name)
     if search_q:
         query = query.ilike("spz", f"%{search_q}%")
         
-    res = query.order("left_at", desc=True).limit(500).execute()
+    res = query.order("arrived_at", desc=True).limit(500).execute()
     return jsonify({"status": "success", "data": res.data or []})
 
 @mapa_bp.route('/api/admin/delete_depot_history', methods=['POST'])
