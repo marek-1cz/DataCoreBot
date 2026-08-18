@@ -62,7 +62,19 @@ def _report_situace(typ, zprava, **data):
     _REPORT_SITUACE.append(entry)
     if len(_REPORT_SITUACE) > _REPORT_SITUACE_MAX:
         _REPORT_SITUACE.pop(0)
-    print(f"[REPORT] {typ}: {zprava} | {data}", flush=True)
+    sys_log(f"REPORT {typ}: {zprava} | {data}")
+
+import collections
+SYSTEM_LOGS = collections.deque(maxlen=300)
+
+def sys_log(msg):
+    try:
+        ts = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M:%S")
+    except Exception:
+        ts = datetime.now().strftime("%H:%M:%S")
+    entry = f"[{ts}] {msg}"
+    SYSTEM_LOGS.append(entry)
+    print(entry, flush=True)
 
 
 def _spz_debug_log(bus_id, event, spz=None, detail=None, **extra):
@@ -104,7 +116,7 @@ HTML_HISTORIE_INDEX = """
       <option value="">Vsechny linky</option><option value="490">Linka 490</option><option value="496">Linka 496</option>
     </select>
     <select id="filterStatus" style="background:#1e293b;color:white;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;">
-      <option value="">Vsechny stavy</option><option value="Probiha">Probiha</option><option value="depo">V depu</option><option value="Ukonceno">Ukonceno</option>
+      <option value="">Vsechny stavy</option><option value="Probiha">Probiha</option><option value="depo">V garáži</option><option value="Ukonceno">Ukonceno</option>
     </select>
     <input id="historySearch" type="text" placeholder="🔍 Hledat SPZ, linku..." style="background:#1e293b;color:white;border:1px solid #334155;border-radius:6px;padding:7px 12px;font-size:13px;min-width:200px;">
   </div>
@@ -133,7 +145,7 @@ function renderStats(data){
     <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#38bdf8;font-size:22px;font-weight:900;">${total}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">📋 Zaznamu</div></div>
     <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#f59e0b;font-size:22px;font-weight:900;">${ss.size}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">🚌 Unikatnich SPZ</div></div>
     <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#10b981;font-size:22px;font-weight:900;">${active}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">📡 Probiha</div></div>
-    <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#64748b;font-size:22px;font-weight:900;">${depot}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">🏢 V depu</div></div>`;
+    <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#64748b;font-size:22px;font-weight:900;">${depot}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">🏢 V garáži</div></div>`;
 }
 function applyFilters(){
   const s=document.getElementById('historySearch').value.toLowerCase().trim();
@@ -695,6 +707,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
         <button onclick="setLogTab('missing')" id="log-tab-missing">📍 Chybí</button>
         <button onclick="setLogTab('report')" id="log-tab-report">🔴 REPORT</button>
         <button onclick="setLogTab('approx')" id="log-tab-approx">⚠️ Přibliž.</button>
+        <button onclick="setLogTab('system')" id="log-tab-system">🛠️ Systém</button>
         <button onclick="copyLog()">Kopír.</button>
         <button onclick="clearLog()">Smaž</button>
         <button onclick="document.getElementById('log-panel').style.display='none'">X</button>
@@ -706,6 +719,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <div id="log-missing-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-size:11px;"></div>
     <div id="log-report-body" style="display:none;max-height:240px;overflow-y:auto;padding:6px 12px;"></div>
     <div id="log-approx-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-size:11px;"></div>
+    <div id="log-system-body" style="display:none;max-height:240px;overflow-y:auto;padding:6px 12px;font-family:monospace;font-size:11px;color:#94a3b8;white-space:pre-wrap;"></div>
   </div>
   <div id="nt-add-bar" style="display:none;position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:5000;background:#1e293b;border:2px solid #f59e0b;border-radius:8px;padding:8px 14px;display:none;align-items:center;gap:8px;box-shadow:0 4px 20px rgba(0,0,0,.7);">
     <span style="color:#f59e0b;font-size:12px;font-weight:bold;">🚏 Klikni na mapu kde je zastávka</span>
@@ -1030,9 +1044,9 @@ async function _saveMissingFix(missingName, lat, lng, sourceName){
 
 function setLogTab(tab){
   logCurrentTab=tab;
-  let tabIds=['all','err','spz','missing','report','approx'];
+  let tabIds=['all','err','spz','missing','report','approx','system'];
   tabIds.forEach(id=>{
-    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':id==='spz'?'log-spz-body':id==='missing'?'log-missing-body':id==='report'?'log-report-body':'log-approx-body');
+    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':id==='spz'?'log-spz-body':id==='missing'?'log-missing-body':id==='report'?'log-report-body':id==='system'?'log-system-body':'log-approx-body');
     if(body)body.style.display=(tab===id?'':'none');
     let btn=document.getElementById(`log-tab-${id}`);
     if(btn){btn.style.background=(tab===id?'#334155':'transparent');btn.style.color='';}
@@ -1042,6 +1056,18 @@ function setLogTab(tab){
   if(tab==='missing')renderMissingLog();
   if(tab==='report')loadReportSituace();
   if(tab==='approx')renderApproxLog();
+  if(tab==='system')loadSystemLogs();
+}
+async function loadSystemLogs(){
+  let b=document.getElementById('log-system-body');if(!b)return;
+  b.innerHTML='<div style="text-align:center;padding:10px;"><i class="fas fa-spinner fa-spin"></i> Načítám...</div>';
+  try{
+    let r=await fetch('/api/admin/system_logs');let d=await r.json();
+    if(d.logs&&d.logs.length>0){
+      b.innerHTML=d.logs.map(l=>`<div style="margin-bottom:4px;padding-bottom:4px;border-bottom:1px solid #1e293b;">${l}</div>`).join('');
+    }else{b.innerHTML='<div style="text-align:center;padding:10px;">Zatím žádné systémové chyby.</div>';}
+    b.scrollTop=b.scrollHeight;
+  }catch(e){b.innerHTML='Chyba načítání systémových logů.';}
 }
 function toggleLogPanel(){let p=document.getElementById('log-panel');if(p)p.style.display=p.style.display==='block'?'none':'block';}
 function copyLog(){
@@ -2390,8 +2416,8 @@ async function fetchBuses(){
       if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>🔍 Vyzkum - bus byl zasekly, nyni jede</b></div>`;
       let depotW='';
       function hexToRgb(hex){let r=0,g=0,b=0;if(hex.length==4){r="0x"+hex[1]+hex[1];g="0x"+hex[2]+hex[2];b="0x"+hex[3]+hex[3];}else if(hex.length==7){r="0x"+hex[1]+hex[2];g="0x"+hex[3]+hex[4];b="0x"+hex[5]+hex[6];}return +r+","+ +g+","+ +b;}
-      if(bus.in_depot&&bus.depot_name){let dCol=bus.depot_color||'#facc15';depotW=`<div style="background:rgba(${hexToRgb(dCol)},0.12);border:1px solid ${dCol};border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:${dCol};"><b>🅿️ ${bus.depot_name}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny &mdash; SPZ uložena</span></div>`;}
-      else if(mc==='bg-yellow'||bus.status?.startsWith('Vozovna'))depotW=`<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🅿️ ${bus.status||'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny &mdash; SPZ uložena</span></div>`;
+      if(bus.in_depot&&bus.depot_name){let dCol=bus.depot_color||'#facc15';depotW=`<div style="background:rgba(${hexToRgb(dCol)},0.12);border:1px solid ${dCol};border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:${dCol};"><b>🅿️ ${bus.depot_name}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny</span></div>`;}
+      else if(mc==='bg-yellow'||bus.status?.startsWith('Vozovna'))depotW=`<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🅿️ ${bus.status||'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny</span></div>`;
       let sc='#10b981';
       if(mc==='bg-bug')sc='#6b7280';else if(mc==='bg-orange')sc='#f59e0b';
       else if(mc==='bg-yellow')sc='#facc15';
@@ -4515,7 +4541,12 @@ def background_map_worker():
             time.sleep(10)
 
         except Exception as crash_error:
-            print(f"[MAPA CRITICAL] {crash_error}", flush=True)
+            import traceback
+            err_str = f"Hlavni smycka selhala: {crash_error}\n{traceback.format_exc()}"
+            try:
+                sys_log(err_str)
+            except Exception:
+                print(f"[MAPA CRITICAL] {err_str}", flush=True)
             time.sleep(10)
 
 
@@ -5275,6 +5306,11 @@ def api_admin_report_situace():
         "total": len(_REPORT_SITUACE),
     })
 
+
+@mapa_bp.route('/api/admin/system_logs')
+def api_admin_system_logs():
+    """Vrati zaznamy o kritickych chybach a padech ze systemu."""
+    return jsonify({"status": "success", "logs": list(SYSTEM_LOGS)})
 
 @mapa_bp.route('/api/admin/spz_debug')
 def api_admin_spz_debug():
