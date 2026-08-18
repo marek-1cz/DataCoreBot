@@ -20,7 +20,7 @@ import logging
 import io
 from werkzeug.exceptions import HTTPException
 
-from interaktivnimapa import mapa_bp, start_map_background_task
+from interaktivnimapa import mapa_bp, start_map_background_task, DEPOT_DISCORD_QUEUE, DEPOT_ZONES
 
 try:
     from html_templates import *
@@ -1912,6 +1912,92 @@ def check_sm_role():
         return False
     return commands.check(predicate)
 
+@tasks.loop(seconds=5)
+async def check_depot_queue():
+    try:
+        updated = False
+        while not DEPOT_DISCORD_QUEUE.empty():
+            msg = DEPOT_DISCORD_QUEUE.get_nowait()
+            if msg.get("type") == "update_all":
+                updated = True
+        if updated:
+            await update_depot_discord_messages()
+    except Exception as e:
+        print(f"[DEPOT DISCORD] Chyba: {e}", flush=True)
+
+async def update_depot_discord_messages():
+    channel = None
+    for guild in bot.guilds:
+        channel = discord.utils.find(lambda c: "vozovna" in c.name.lower(), guild.text_channels)
+        if channel: break
+        
+    if not channel: 
+        print("[DEPOT DISCORD] Nenalezen kanal obsahujici 'vozovna'", flush=True)
+        return
+        
+    db = get_db()
+    if not db: 
+        print("[DEPOT DISCORD] Databaze neni dostupna", flush=True)
+        return
+
+    if not DEPOT_ZONES:
+        print("[DEPOT DISCORD] DEPOT_ZONES je prazdny seznam", flush=True)
+
+    for zone in DEPOT_ZONES:
+        depot_name = zone["name"]
+        
+        all_records = db.table("depot_history").select("*").eq("depot_name", depot_name).order("arrived_at", desc=True).limit(100).execute().data
+        active = [r for r in all_records if not r.get("left_at")]
+        recent = [r for r in all_records if r.get("left_at")][:5]
+        
+        embed = discord.Embed(title=f"🅿️ Vozovna: {depot_name}", color=0xf59e0b)
+        
+        active_str = ""
+        if active:
+            for a in active:
+                spz = a.get("spz", "Neznámá")
+                arr = a.get("arrived_at", "")
+                if arr: 
+                    p = arr.split('T')
+                    if len(p) > 1: arr = p[1][:5]
+                active_str += f"**{spz}** - Přijel: `{arr}`\n"
+        else:
+            active_str = "*Prázdno*"
+            
+        embed.add_field(name="🟢 Aktuálně parkuje", value=active_str, inline=False)
+        
+        recent_str = ""
+        if recent:
+            for r in recent:
+                spz = r.get("spz", "Neznámá")
+                left = r.get("left_at", "")
+                if left: 
+                    p = left.split('T')
+                    if len(p) > 1: left = p[1][:5]
+                recent_str += f"**{spz}** - Odjel: `{left}`\n"
+        else:
+            recent_str = "*Žádné nedávné odjezdy*"
+            
+        embed.add_field(name="🔴 Nedávné odjezdy", value=recent_str, inline=False)
+        embed.set_footer(text="Automaticky aktualizováno")
+        
+        history = [m async for m in channel.history(limit=50)]
+        target_msg = None
+        for m in history:
+            if m.author == bot.user and m.embeds and m.embeds[0].title == f"🅿️ Vozovna: {depot_name}":
+                target_msg = m
+                break
+                
+        try:
+            if target_msg:
+                await target_msg.edit(embed=embed)
+                print(f"[DEPOT DISCORD] Aktualizovana zprava pro: {depot_name}", flush=True)
+            else:
+                await channel.send(embed=embed)
+                print(f"[DEPOT DISCORD] Odeslana nova zprava pro: {depot_name}", flush=True)
+        except Exception as e:
+            print(f"[DEPOT DISCORD] Chyba pri odesilani/editaci zpravy pro {depot_name}: {e}", flush=True)
+
 @tasks.loop(minutes=5)
 async def keepalive_ping():
     try:
@@ -1935,6 +2021,16 @@ async def on_ready():
     except: pass
     trigger_setup_messages_update()
     if not keepalive_ping.is_running(): keepalive_ping.start()
+    if not check_depot_queue.is_running(): check_depot_queue.start()
+    import asyncio
+    async def initial_depot_update():
+        for _ in range(15):
+            if DEPOT_ZONES: break
+            await asyncio.sleep(1)
+        try: await update_depot_discord_messages()
+        except Exception as e: print(f"Chyba pri initial depot update: {e}", flush=True)
+    
+    bot.loop.create_task(initial_depot_update())
 
 @bot.event
 async def on_message(message):
@@ -1950,6 +2046,46 @@ async def on_message(message):
                 except: pass
                 break
     await bot.process_commands(message)
+
+@bot.command(name="debugvozovna")
+@check_web_sa()
+async def cmd_debugvozovna(ctx):
+    try:
+        await ctx.send("Spouštím diagnostiku vozoven...")
+        
+        channel = discord.utils.find(lambda c: "vozovna" in c.name.lower(), ctx.guild.text_channels)
+        if not channel:
+            await ctx.send("❌ Nenalezen žádný textový kanál obsahující slovo 'vozovna'.")
+            return
+        await ctx.send(f"✅ Nalezen kanál: {channel.mention} (ID: {channel.id})")
+        
+        db = get_db()
+        if not db:
+            await ctx.send("❌ Připojení k databázi (Supabase) selhalo.")
+            return
+        await ctx.send("✅ Připojení k DB v pořádku.")
+        
+        if not DEPOT_ZONES:
+            await ctx.send("❌ Proměnná DEPOT_ZONES je prázdná. Vozovny se ještě nenačetly z databáze nebo neexistují.")
+            return
+        await ctx.send(f"✅ Načteno {len(DEPOT_ZONES)} vozoven z paměti: {', '.join(z['name'] for z in DEPOT_ZONES)}")
+        
+        await ctx.send(f"Testuji práva kanálu {channel.mention}...")
+        try:
+            history = [m async for m in channel.history(limit=5)]
+            await ctx.send(f"✅ Čtení historie funguje (nalezeno {len(history)} zpráv).")
+        except Exception as e:
+            await ctx.send(f"❌ Chyba čtení historie kanálu (chybí právo Číst historii zpráv?): {e}")
+            return
+            
+        await ctx.send("Volám hlavní funkci update_depot_discord_messages()...")
+        await update_depot_discord_messages()
+        await ctx.send("✅ Hlavní funkce proběhla bez pádu.")
+        
+    except Exception as e:
+        await ctx.send(f"❌ Neočekávaná chyba při diagnostice: {e}")
+
+bot.remove_command("help")
 
 @bot.event
 async def on_member_join(member):
