@@ -2605,10 +2605,13 @@ function renderDepotZones(){
                 if(d.status==='success' && d.data && d.data.length>0) {
                     histDiv.innerHTML = d.data.map(h=>{
                         let lTime = new Date(h.left_at).toLocaleString('cs-CZ');
+                        let aTime = h.arrived_at ? new Date(h.arrived_at).toLocaleString('cs-CZ') : 'Neznámý (Před úpravou)';
+                        let impr = h.is_imprecise ? ' <span title="Reset mapy - nepřesný čas" style="color:#facc15;font-size:9px;">(RESET MAPY)</span>' : '';
                         let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${h.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;margin-left:auto;padding:2px 4px;" title="Smazat ze záznamu">❌</button>` : '';
                         return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #1e293b;">
                             <span style="color:#f59e0b;font-weight:bold;min-width:65px;">${h.spz}</span>
                             <div style="display:flex;flex-direction:column;font-size:10px;">
+                                <span>Příjezd: ${aTime}${impr}</span>
                                 <span>Odjezd: ${lTime}</span>
                             </div>
                             ${adminDel}
