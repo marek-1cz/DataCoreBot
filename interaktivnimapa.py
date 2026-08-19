@@ -712,6 +712,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
         <button onclick="setLogTab('err')" id="log-tab-err">⚠️ Chyby</button>
         <button onclick="setLogTab('spz')" id="log-tab-spz">🚌 SPZ</button>
         <button onclick="setLogTab('missing')" id="log-tab-missing">📍 Chybí</button>
+        <button onclick="setLogTab('conflict')" id="log-tab-conflict">⚔️ Konflikt</button>
         <button onclick="setLogTab('report')" id="log-tab-report">🔴 REPORT</button>
         <button onclick="setLogTab('approx')" id="log-tab-approx">⚠️ Přibliž.</button>
         <button onclick="setLogTab('system')" id="log-tab-system">🛠️ Systém</button>
@@ -724,6 +725,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <div id="log-errors-body" style="display:none;"></div>
     <div id="log-spz-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-family:monospace;font-size:10.5px;color:#94a3b8;"></div>
     <div id="log-missing-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-size:11px;"></div>
+    <div id="log-conflict-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-size:11px;"></div>
     <div id="log-report-body" style="display:none;max-height:240px;overflow-y:auto;padding:6px 12px;"></div>
     <div id="log-approx-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-size:11px;"></div>
     <div id="log-system-body" style="display:none;max-height:240px;overflow-y:auto;padding:6px 12px;font-family:monospace;font-size:11px;color:#94a3b8;white-space:pre-wrap;"></div>
@@ -4098,6 +4100,14 @@ def background_map_worker():
                             bc["status"] = "V\u00fdzkum – Duplitn\u00ed SPZ"
                         else:
                             # Tecka se zasekla, SPZ jede jinde -> BUG lock NAVZDY
+                            if bc.get("admin_spz_verified"):
+                                print(f"[ADMIN-VERIFY] status odebrán admin potvrzením a přesunut", flush=True)
+                                bc["admin_spz_verified"] = False
+                                bc["admin_spz_bug"] = True
+                                for mb_id in mb:
+                                    GLOBAL_BUS_CACHE[mb_id]["admin_spz_conflict"] = True
+                                    GLOBAL_BUS_CACHE[mb_id]["spz_verified"] = True
+
                             bc["status"] = "BUG - NEAKTU\u00c1LN\u00cd M\u00cdSTO"
                             bc["color_class"] = "bg-bug"
                             bc["spz_locked"] = True
@@ -4247,6 +4257,13 @@ def background_map_worker():
                                                 and not oth_c.get("is_offline")
                                                 and not oth_c.get("bug_locked")):
                                             # Duplicita! Vozovnový bus dostane BUG.
+                                            if c.get("admin_spz_verified"):
+                                                print(f"[ADMIN-VERIFY] status odebrán admin potvrzením a přesunut", flush=True)
+                                                c["admin_spz_verified"] = False
+                                                c["admin_spz_bug"] = True
+                                                oth_c["admin_spz_conflict"] = True
+                                                oth_c["spz_verified"] = True
+                                                
                                             c["color_class"] = "bg-bug"
                                             c["status"] = "BUG \u2013 Syst\u00e9m rozpoznal duplicitu SPZ"
                                             c["bug_locked"] = True
@@ -4841,6 +4858,8 @@ def background_map_worker():
                     "investigation_spz": c.get("investigation_spz", ""),
                     "admin_flag": c.get("admin_flag", False), "admin_note": c.get("admin_note", ""),
                     "admin_spz_verified": c.get("admin_spz_verified", False),
+                    "admin_spz_bug": c.get("admin_spz_bug", False),
+                    "admin_spz_conflict": c.get("admin_spz_conflict", False)
                 })
 
             global LIVE_BUSES_DATA, _last_spz_auto_refresh
@@ -5135,8 +5154,64 @@ def api_admin_map_action():
         c["admin_note"] = ""
         c["color_class"] = "bg-gray"
         c["status"] = "Na\u010d\u00edt\u00e1n\u00ed..."
+        c["admin_spz_bug"] = False
+        c["admin_spz_conflict"] = False
 
     return jsonify({"status": "success"})
+
+
+@mapa_bp.route('/api/admin/approve_conflict_spz', methods=['POST'])
+def api_admin_approve_conflict_spz():
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Neopravneny pristup"}), 401
+        
+    data = request.json or {}
+    bus_id = data.get("bus_id")
+    if not bus_id or bus_id not in GLOBAL_BUS_CACHE:
+        return jsonify({"status": "error", "message": "Bus nenalezen"})
+        
+    c = GLOBAL_BUS_CACHE[bus_id]
+    
+    c["admin_spz_conflict"] = False
+    c["admin_spz_verified"] = True
+    c["manual_spz"] = True
+    c["spz_locked"] = True
+    c["spz_frozen"] = True
+    c["admin_flag"] = True
+    c["spz_verified"] = True
+    
+    # Save lock persistently
+    spz = c.get("spz")
+    ADMIN_SPZ_LOCKS[bus_id] = {
+        "spz": spz,
+        "color_class": c.get("color_class", "bg-darkblue"),
+        "timestamp": get_prague_time(),
+        "admin_note": c.get("admin_note", "")
+    }
+    
+    # Okamzite zapsat do spz_cache s admin_verified=True
+    try:
+        _db_av = get_db_client()
+        if _db_av:
+            _db_av.table("spz_cache").upsert({
+                "bus_id": bus_id,
+                "spz": c.get("spz"),
+                "linka": c.get("line") or "",
+                "lat": c.get("lat"),
+                "lng": c.get("lng"),
+                "spz_verified": True,
+                "admin_verified": True,
+                "trip_id": c.get("trip_id"),
+                "color_class": c.get("color_class"),
+                "status_text": c.get("status"),
+                "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
+            }).execute()
+    except Exception as e_av:
+        print(f"[ADMIN-VERIFY] Chyba zapisu spz_cache: {e_av}", flush=True)
+
+    print(f"[ADMIN-VERIFY] Konflikt vyresen, Bus {bus_id} dostal SPZ lock", flush=True)
+    return jsonify({"status": "success"})
+
 
 
 @mapa_bp.route('/historie')

@@ -1,5 +1,5 @@
-
-const IS_ADMIN=__IS_ADMIN__;
+const window = {localStorage: {getItem: () => null, setItem: () => {}}}; const document = {getElementById: () => ({addEventListener: () => {}, classList: {add: () => {}, remove: () => {}}, style: {}}), querySelectorAll: () => [], createElement: () => ({style:{}}), body: {appendChild: () => {}}}; const L = {map: () => ({setView: () => ({on: () => {}}), on: () => {}}), tileLayer: () => ({addTo: () => {}}), marker: () => ({bindPopup: () => {}, on: () => {}}), divIcon: () => {}, polygon: () => ({addTo: () => ({}), getBounds: () => ({getCenter: () => {}})}), latLng: () => {}, layerGroup: () => ({addTo: () => ({clearLayers: () => {}, addLayer: () => {}, removeLayer: () => {}, eachLayer: () => {}})}), DomEvent: {stopPropagation: () => {}, stop: () => {}}}; const fetch = async () => ({json: async () => ({}), text: async () => ''}); const alert = () => {}; const confirm = () => true; const setTimeout = (fn) => {}; const setInterval = () => {}; 
+const IS_ADMIN=false;
 
 // === ADMIN ===
 let adminInputCache={};
@@ -56,7 +56,7 @@ nav.addEventListener('mouseleave',()=>{if(!navPinned)hideT=setTimeout(hideNav,60
 document.addEventListener('touchstart',e=>{if(e.touches[0].clientY<35){showNav(4500);}else if(!nav.contains(e.target)&&!navPinned){clearTimeout(hideT);hideT=setTimeout(hideNav,400);}},{passive:true});
 showNav(4000);
 // Smart pan handlers registered after map init below
-if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let leb=document.getElementById('le-toggle-btn');if(leb)leb.style.display='inline-block';let dtb=document.getElementById('depot-toggle-btn');if(dtb)dtb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
+if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let leb=document.getElementById('le-toggle-btn');if(leb)leb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
 
 // === MAP ===
 var dLat=49.7384,dLng=13.3736,dZoom=12;
@@ -295,9 +295,9 @@ async function _saveMissingFix(missingName, lat, lng, sourceName){
 
 function setLogTab(tab){
   logCurrentTab=tab;
-  let tabIds=['all','err','spz','missing','conflict','report','approx','system'];
+  let tabIds=['all','err','spz','missing','report','approx'];
   tabIds.forEach(id=>{
-    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':id==='spz'?'log-spz-body':id==='missing'?'log-missing-body':id==='conflict'?'log-conflict-body':id==='report'?'log-report-body':id==='system'?'log-system-body':'log-approx-body');
+    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':id==='spz'?'log-spz-body':id==='missing'?'log-missing-body':id==='report'?'log-report-body':'log-approx-body');
     if(body)body.style.display=(tab===id?'':'none');
     let btn=document.getElementById(`log-tab-${id}`);
     if(btn){btn.style.background=(tab===id?'#334155':'transparent');btn.style.color='';}
@@ -308,18 +308,6 @@ function setLogTab(tab){
   if(tab==='conflict')renderConflictLog();
   if(tab==='report')loadReportSituace();
   if(tab==='approx')renderApproxLog();
-  if(tab==='system')loadSystemLogs();
-}
-async function loadSystemLogs(){
-  let b=document.getElementById('log-system-body');if(!b)return;
-  b.innerHTML='<div style="text-align:center;padding:10px;"><i class="fas fa-spinner fa-spin"></i> Načítám...</div>';
-  try{
-    let r=await fetch('/api/admin/system_logs');let d=await r.json();
-    if(d.logs&&d.logs.length>0){
-      b.innerHTML=d.logs.map(l=>`<div style="margin-bottom:4px;padding-bottom:4px;border-bottom:1px solid #1e293b;">${l}</div>`).join('');
-    }else{b.innerHTML='<div style="text-align:center;padding:10px;">Zatím žádné systémové chyby.</div>';}
-    b.scrollTop=b.scrollHeight;
-  }catch(e){b.innerHTML='Chyba načítání systémových logů.';}
 }
 function toggleLogPanel(){let p=document.getElementById('log-panel');if(p)p.style.display=p.style.display==='block'?'none':'block';}
 function copyLog(){
@@ -496,15 +484,12 @@ function checkSW(uptimeSec){
 // === SVG MARKER ===
 function buildMarkerSvg(mc,bearing,lineText,isTrain){
   const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151'};
-  // Podpora pro bg-depot:HEX format (bus v depu s barvou zony)
-  let isDepot=mc&&mc.startsWith('bg-depot:');
-  let bgC=isDepot?mc.substring(9):(cM[mc]||'#64748b');
-  const tF=(mc==='bg-orange'||mc==='bg-yellow')?'#0f172a':'#fff';
+  const bgC=cM[mc]||'#64748b',tF=(mc==='bg-orange')?'#0f172a':'#fff';
   let lC=String(lineText||'').split('/')[0].trim().replace(/[^0-9]/g,'');
   let lD=lC.length>=4?lC.slice(-3):lC;
   const cx=18,cy=18,r=isTrain?10:12;
   let si='';
-  const hB=bearing!==null&&bearing!==undefined&&!['bg-gray','bg-purple','bg-bug'].includes(mc)&&!isTrain&&!isDepot;
+  const hB=bearing!==null&&bearing!==undefined&&!['bg-gray','bg-purple','bg-bug'].includes(mc)&&!isTrain;
   if(hB){
     const rad=(bearing*Math.PI)/180;
     const tX=+(cx+Math.sin(rad)*(r+10)).toFixed(2),tY=+(cy-Math.cos(rad)*(r+10)).toFixed(2);
@@ -515,20 +500,13 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain){
   }
   si+=`<circle cx="${cx+1}" cy="${cy+1}" r="${r}" fill="rgba(0,0,0,0.3)"/>`;
   if(isTrain)si+=`<rect x="${cx-r}" y="${cy-r}" width="${r*2}" height="${r*2}" rx="3" fill="${bgC}" stroke="white" stroke-width="2"/>`;
-  else if(isDepot){
-    // Bus v depu: plny kruh s barvou zony + tlustsi border
-    si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${bgC}" stroke="white" stroke-width="2.5" opacity="0.9"/>`;
-    // Mala ikona garáže uvnitř (H symbol)
-    si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="rgba(0,0,0,0.5)" font-size="10" font-family="sans-serif">🅿️</text>`;
-  }
   else{const ds=mc==='bg-bug'?'stroke-dasharray="3,2"':'';si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${bgC}" stroke="white" stroke-width="2" ${ds} opacity="${mc==='bg-bug'?0.7:1}"/>`;}
-  if(lD&&!isTrain&&mc!=='bg-bug'&&!isDepot){
+  if(lD&&!isTrain&&mc!=='bg-bug'){
     if(lD.length>3){si+=`<text x="${cx}" y="${cy-2.5}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(0,3)}</text>`;si+=`<text x="${cx}" y="${cy+5.5}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="6" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(3)}</text>`;}
     else si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="8" font-family="'Segoe UI',system-ui,sans-serif">${lD}</text>`;
   }
   return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
 }
-
 
 window.onLineClick = function(lat, lng, wpIndex, segId) {
   let isStraight = window.segmentModes && window.segmentModes[segId] === 'straight';
@@ -1637,14 +1615,7 @@ async function fetchBuses(){
       else if(dv>=5)dTxt=`<span style="color:#ef4444;">Zpozdeni ${dv} min</span>`;
       else dTxt=`<span style="color:#10b981;">+${dv} min</span>`;
 
-      // Barveni markeru: depot_color ma prednost pred color_class
-      let markerColor=mc;
-      if(bus.in_depot&&bus.depot_color){
-        // Bus v vozovne: pouzij barvu zony (HEX) pro marker
-        // Preved na interni format: ulozi se jako special 'bg-depot-hex'
-        markerColor='bg-depot:'+bus.depot_color;
-      }
-      let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,bus.is_train),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
+      let icon=L.divIcon({className:'',html:buildMarkerSvg(mc,bus.bearing,bus.line,bus.is_train),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
       let marker=L.marker([bus.lat,bus.lng],{icon,zIndexOffset:1000});
       marker._busId=bus.id;
       marker.on('popupopen',()=>{openPopupBusId=bus.id;});
@@ -1657,17 +1628,7 @@ async function fetchBuses(){
       if(!bus.is_train){
         if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
         else if(bus.spz&&bus.spz!=='Neznama'){
-          if(bus.admin_spz_bug){
-            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#10b981;border-color:#059669;" title="Pravděpodobně zaseknutý bus">${bus.spz} <i class="fas fa-question" style="color:#d1fae5;"></i></span></div>`;
-            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;
-          } else if(bus.admin_spz_conflict){
-            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#8b5cf6;border-color:#7c3aed;" title="Ověřeno, neschváleno">${bus.spz} <i class="fas fa-check" style="color:#ddd6fe;"></i></span></div>`;
-            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;
-          } else if(bus.admin_spz_verified){
-            // Dvojita fajfka = admin lock
-            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#1e40af;border-color:#3b82f6;" title="Ověřená SPZ správci systému">${bus.spz} <i class="fas fa-check-double" style="color:#93c5fd;"></i></span></div>`;
-            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;
-          } else if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" title="SPZ ověřena systémem">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;}
+          if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;}
           else{spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#f97316;color:#fff;border-color:#c2410c;">${bus.spz} <i class="fas fa-clock"></i></span></div>`;}
         }
         else spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Ceka na overeni</span></div>`;
@@ -1677,9 +1638,7 @@ async function fetchBuses(){
       let orangeW='';
       if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>🔍 Vyzkum - bus byl zasekly, nyni jede</b></div>`;
       let depotW='';
-      function hexToRgb(hex){let r=0,g=0,b=0;if(hex.length==4){r="0x"+hex[1]+hex[1];g="0x"+hex[2]+hex[2];b="0x"+hex[3]+hex[3];}else if(hex.length==7){r="0x"+hex[1]+hex[2];g="0x"+hex[3]+hex[4];b="0x"+hex[5]+hex[6];}return +r+","+ +g+","+ +b;}
-      if(bus.in_depot&&bus.depot_name){let dCol=bus.depot_color||'#facc15';depotW=`<div style="background:rgba(${hexToRgb(dCol)},0.12);border:1px solid ${dCol};border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:${dCol};"><b>🅿️ ${bus.depot_name}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny</span></div>`;}
-      else if(mc==='bg-yellow'||bus.status?.startsWith('Vozovna'))depotW=`<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🅿️ ${bus.status||'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny</span></div>`;
+      if(mc==='bg-yellow'||bus.status?.startsWith('Vozovna'))depotW=`<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🏭 ${bus.status||'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny &mdash; SPZ uložena</span></div>`;
       let sc='#10b981';
       if(mc==='bg-bug')sc='#6b7280';else if(mc==='bg-orange')sc='#f59e0b';
       else if(mc==='bg-yellow')sc='#facc15';
@@ -1716,81 +1675,49 @@ async function fetchBuses(){
         let cSpz=restoreAdminInput(bus.id,'spz')??oSpz;
         let cSt=restoreAdminInput(bus.id,'st')??bus.status;
         let cNote=restoreAdminInput(bus.id,'note')??(bus.admin_note||'');
-        // Predpocitane promenne pro admin lock tlacitko (reseni 'bus is not defined' pri onclick)
-        let adminIsVerified=bus.admin_spz_verified===true;
-        let adminVerifyAction=adminIsVerified?'admin_unverify_spz':'admin_verify_spz';
-        let adminVerifyBg=adminIsVerified?'#1d4ed8':'#1e293b';
-        let adminVerifyColor=adminIsVerified?'#bfdbfe':'#94a3b8';
-        let adminVerifyBorder=adminIsVerified?'#3b82f6':'#334155';
-        let adminVerifyText=adminIsVerified?'🔒 SPZ UZAMČENA ADMINEM (klikni pro odemčení)':'🔓 Ověřit SPZ adminem (Admin Lock)';
-        let hasSPZ=bus.spz&&bus.spz!=='Neznama';
-        // Predstav tlacitko jako hotovy HTML string (bez vnorenych backticks - JS to neumi parsovat)
-        let adminLockBtn='';
-        if(hasSPZ){
-          adminLockBtn='<button id="adm_lock_'+bus.id+'" '
-            +'onclick="let b=document.getElementById(\'adm_lock_'+bus.id+'\');'
-            +'adminAction(\''+adminVerifyAction+'\',\''+bus.id+'\');'
-            +'if(\''+adminVerifyAction+'\'===\'admin_verify_spz\'){'
-            +'b.style.background=\'#1d4ed8\';b.style.color=\'#bfdbfe\';b.style.borderColor=\'#3b82f6\';'
-            +'b.textContent=\'🔒 SPZ UZAMČENA ADMINEM\';'
-            +'}else{'
-            +'b.style.background=\'#1e293b\';b.style.color=\'#94a3b8\';b.style.borderColor=\'#334155\';'
-            +'b.textContent=\'🔓 Ověřit SPZ adminem (Admin Lock)\';'
-            +'}" '
-            +'style="width:100%;margin-top:6px;padding:9px;border:1px solid '+adminVerifyBorder+';border-radius:5px;'
-            +'font-size:12px;cursor:pointer;font-weight:bold;touch-action:manipulation;'
-            +'background:'+adminVerifyBg+';color:'+adminVerifyColor+';transition:all .2s;">'
-            +adminVerifyText+'</button>';
-        }
-        popH+=`<style>.adm-inp{width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:5px;padding:9px;font-size:13px;margin-top:4px;}.adm-inp:focus{outline:none;border-color:#38bdf8;}.adm-btn{width:100%;padding:11px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;touch-action:manipulation;}.adm-toggle-btn{width:100%;padding:9px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;font-size:12px;cursor:pointer;margin-top:8px;touch-action:manipulation;}
+        popH+=`<style>.adm-inp{width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:5px;padding:7px 8px;font-size:12px;margin-top:4px;}.adm-inp:focus{outline:none;border-color:#38bdf8;}.adm-btn{width:100%;padding:11px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;touch-action:manipulation;}
 @keyframes routeDrawLoop {
   0% { stroke-dashoffset: var(--r-len); }
   65% { stroke-dashoffset: 0; }
   100% { stroke-dashoffset: 0; }
 }
 </style>
-          <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;border-radius: 0 0 5px 5px;">
-            <strong style="color:#38bdf8;font-size:12px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
-            <div style="color:#94a3b8;font-size:10px;margin-top:2px;font-family:monospace;word-break:break-all;">ID vozu: ${bus.id}</div>
-            
-            <div style="display:flex;gap:6px;margin-top:8px;">
-              <input type="text" id="adm_spz_${bus.id}" value="${cSpz}" data-orig="${oSpz}" placeholder="SPZ" class="adm-inp" style="flex:2;margin-top:0;">
-              <button onclick="adminSetSPZ('${bus.id}')" style="flex:1;background:#10b981;color:white;border:none;border-radius:5px;font-size:13px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">💾 Uložit</button>
+          <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;">
+            <strong style="color:#38bdf8;font-size:11px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
+            <div style="display:flex;gap:5px;margin-top:8px;">
+              <input type="text" id="adm_spz_${bus.id}" value="${cSpz}" data-orig="${oSpz}" placeholder="SPZ" class="adm-inp" style="width:55%;margin-top:0;">
+              <button onclick="adminSetSPZ('${bus.id}')" style="width:45%;background:#10b981;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">💾 Ulozit</button>
             </div>
-            ${adminLockBtn}
-            <div style="display:flex;gap:6px;margin-top:6px;">
-              <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔍 Hledat</button>
-              <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🗑️ Smazat</button>
+            <div style="display:flex;gap:5px;margin-top:5px;">
+              <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">🔍 Hledat SPZ</button>
+              <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:7px;touch-action:manipulation;">🗑️ Smazat</button>
             </div>
-            
-            <button class="adm-toggle-btn" onclick="let el=document.getElementById('adm_grafika_${bus.id}'); if(el.style.display==='none'){el.style.display='block';this.innerText='🔼 Skrýt vzhled a úpravy';}else{el.style.display='none';this.innerText='🎨 Vzhled a další úpravy';}">🎨 Vzhled a další úpravy</button>
-            
-            <div id="adm_grafika_${bus.id}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
+            <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
               <input type="text" id="adm_st_${bus.id}" value="${cSt}" data-orig="${bus.status}" placeholder="Status text..." class="adm-inp">
-              <select id="adm_col_${bus.id}" class="adm-inp" style="margin-top:6px;">
-                <option value="">-- Výchozí barva --</option>
-                <option value="bg-gray" ${bus.color_class==='bg-gray'?'selected':''}>Šedá</option>
-                <option value="bg-blue" ${bus.color_class==='bg-blue'?'selected':''}>Světle modrá</option>
-                <option value="bg-darkblue" ${bus.color_class==='bg-darkblue'?'selected':''}>Tmavě modrá</option>
-                <option value="bg-green" ${bus.color_class==='bg-green'?'selected':''}>Zelená</option>
-                <option value="bg-red" ${bus.color_class==='bg-red'?'selected':''}>Červená</option>
-                <option value="bg-purple" ${bus.color_class==='bg-purple'?'selected':''}>Fialová</option>
-                <option value="bg-orange" ${bus.color_class==='bg-orange'?'selected':''}>Oranžová</option>
-                <option value="bg-bug" ${bus.color_class==='bg-bug'?'selected':''}>Označeno jako BUG</option>
+              <select id="adm_col_${bus.id}" class="adm-inp" style="margin-top:4px;">
+                <option value="">-- barva --</option>
+                <option value="bg-gray" ${bus.color_class==='bg-gray'?'selected':''}>Seda</option>
+                <option value="bg-blue" ${bus.color_class==='bg-blue'?'selected':''}>Svetle modra</option>
+                <option value="bg-darkblue" ${bus.color_class==='bg-darkblue'?'selected':''}>Tmave modra</option>
+                <option value="bg-green" ${bus.color_class==='bg-green'?'selected':''}>Zelena</option>
+                <option value="bg-red" ${bus.color_class==='bg-red'?'selected':''}>Cervena</option>
+                <option value="bg-purple" ${bus.color_class==='bg-purple'?'selected':''}>Fialova</option>
+                <option value="bg-orange" ${bus.color_class==='bg-orange'?'selected':''}>Oranzova</option>
+                <option value="bg-bug" ${bus.color_class==='bg-bug'?'selected':''}>Bug</option>
               </select>
-              <input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznámka..." class="adm-inp" style="margin-top:6px;">
-              <div style="display:flex;gap:6px;margin-top:8px;">
-                <button onclick="adminSaveAll('${bus.id}',true)" class="adm-btn" style="flex:1;background:#1e40af;color:white;">📌 Uložit natrvalo</button>
-                <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏱️ Dočasně</button>
+              <input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznamka..." class="adm-inp" style="margin-top:4px;">
+              <div style="display:flex;gap:5px;margin-top:6px;">
+                <button onclick="adminSaveAll('${bus.id}',true)" class="adm-btn" style="flex:1;background:#1e40af;color:white;">📌 Trvala</button>
+                <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏱️ Docasna</button>
               </div>
-              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid #1e293b;">
-                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:#93c5fd;flex:1;min-width:100px;touch-action:manipulation;">
-                  <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:18px;height:18px;cursor:pointer;">
-                  Admin úprava
-                </label>
-                <button onclick="adminAction('mark_bug','${bus.id}')" style="flex:1;background:#3f0000;color:#fca5a5;border:1px solid #ef4444;border-radius:5px;font-size:11px;cursor:pointer;padding:7px;touch-action:manipulation;font-weight:bold;">⛔ BUG</button>
-                <button onclick="adminAction('reset_admin','${bus.id}')" style="flex:1;background:transparent;color:#94a3b8;border:1px solid #334155;border-radius:5px;font-size:11px;cursor:pointer;padding:7px;touch-action:manipulation;">🔄 Reset</button>
-              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:7px;padding-top:6px;border-top:1px solid #1e293b;">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#93c5fd;flex:1;touch-action:manipulation;">
+                <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:16px;height:16px;cursor:pointer;">
+                Admin uprava
+              </label>
+              <button onclick="adminAction('mark_bug','${bus.id}')" style="background:#3f0000;color:#fca5a5;border:1px solid #ef4444;border-radius:5px;font-size:11px;cursor:pointer;padding:5px 10px;touch-action:manipulation;font-weight:bold;">⛔ Označit BUG</button>
+              <button onclick="adminAction('reset_admin','${bus.id}')" style="background:transparent;color:#64748b;border:1px solid #334155;border-radius:5px;font-size:11px;cursor:pointer;padding:5px 10px;touch-action:manipulation;">🔄 Reset</button>
             </div>
           </div>`;
       }
@@ -1845,7 +1772,7 @@ setInterval(fetchBuses,10000);
 // VOZOVNY (DEPOT ZONES) — admin draw + public garage icons
 // ═══════════════════════════════════════════════════════════
 let depotZones=[], depotLayer=L.layerGroup().addTo(map), depotDrawMode=false, depotPoints=[], depotDrawPolyline=null, depotEditId=null;
-const DEPOT_ICON=L.divIcon({className:'',html:`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 3px #000);" title="Vozovna">🅿️</div>`,iconSize:[28,28],iconAnchor:[14,14]});
+const DEPOT_ICON=L.divIcon({className:'',html:`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 3px #000);" title="Vozovna">🏭</div>`,iconSize:[28,28],iconAnchor:[14,14]});
 
 // Načti a zobraz vozovny (volá se při startu + po každé změně)
 async function loadDepotZones(){
@@ -1862,161 +1789,25 @@ function renderDepotZones(){
   depotLayer.clearLayers();
   depotZones.forEach(z=>{
     if(!z.polygon||z.polygon.length<3)return;
-    let zColor=z.color||'#facc15';
     let poly=L.polygon(z.polygon,{
-      color:zColor,fillColor:zColor,
-      fillOpacity:0.13,weight:2,dashArray:'6,4',opacity:0.7,
+      color:z.color||'#facc15',fillColor:z.color||'#facc15',
+      fillOpacity:0.12,weight:2,dashArray:'6,4',opacity:0.7,
     });
     // Střed polygonu pro ikonu garáže
     let bounds=poly.getBounds(),center=bounds.getCenter();
-    // Ikona vozovny: emoji s barvou zóny ve stínu
-    let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🅿️</div>`;
-    let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
-    let popId = 'depot_pop_' + Math.random().toString(36).substr(2,9);
-    let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:15px;min-width:380px;font-family:sans-serif;max-height:85vh;overflow-y:auto;overflow-x:hidden;">
-        <div style="font-weight:bold;font-size:16px;margin-bottom:12px;color:${zColor};display:flex;align-items:center;gap:6px;">
-            <span>🅿️ Vozovna: ${z.name}</span>
-        </div>
-        <div style="font-weight:bold;font-size:13px;color:#cbd5e1;margin-bottom:6px;">VOZIDLA VE VOZOVNĚ:</div>
-        <div id="${popId}_active" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;">Načítám...</div>
-        <div style="margin-top:16px;border-top:1px dashed #334155;padding-top:12px;">
-            <div style="font-size:13px;color:#cbd5e1;font-weight:bold;margin-bottom:10px;">Historie odjezdů a příjezdů</div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center;">
-                <input type="text" id="${popId}_search" placeholder="🔍 SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;width:100px;">
-                <input type="datetime-local" id="${popId}_dtFrom" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;" title="Od">
-                <span style="color:#64748b;font-size:11px;">-</span>
-                <input type="datetime-local" id="${popId}_dtTo" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;" title="Do">
-            </div>
-            <div id="${popId}_hist" style="font-size:12px;color:#94a3b8;width:100%;">Načítám historii...</div>
-        </div>
+    let busList=z.buses&&z.buses.length?z.buses.map(b=>`<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;"><span style="color:#facc15;font-weight:bold;">${b.spz||'?'}</span><span style="color:#64748b;font-size:11px;">L${b.line||'?'}</span>${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}</div>`).join(''):
+      '<div style="color:#64748b;font-size:11px;text-align:center;padding:4px;">Žádný bus v depu</div>';
+    let popHtml=`<div style="background:#0f172a;color:white;padding:10px 14px;min-width:160px;">
+      <div style="color:#facc15;font-weight:bold;font-size:13px;margin-bottom:8px;">🏭 ${z.name}</div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:6px;">${z.bus_count||0} bus${(z.bus_count===1)?'':'ů'} v depu</div>
+      ${busList}
     </div>`;
-
-    let mk=L.marker(center,{icon:depotIcon,zIndexOffset:500});
-    mk.bindPopup(popHtml,{className:'dark-popup',maxWidth:340, minWidth:260});
-    
-    mk.on('popupopen', function() {
-        let activeDiv = document.getElementById(popId+'_active');
-        if(activeDiv) {
-            if(z.buses && z.buses.length) {
-                let seenSpz = new Set();
-                let uniqueBuses = [];
-                for(let b of z.buses) {
-                    let spzKey = b.spz || '?';
-                    if(!seenSpz.has(spzKey)) {
-                        seenSpz.add(spzKey);
-                        uniqueBuses.push(b);
-                    }
-                }
-                activeDiv.innerHTML = uniqueBuses.map(b=>{
-                    let adminDel = IS_ADMIN && b.session_id ? `<button onclick="deleteDepotRecord('${b.session_id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:0 2px;margin-left:4px;" title="Smazat">❌</button>` : '';
-                    return `<span style="background:rgba(255,255,255,0.05);border:1px solid #334155;color:${zColor};padding:4px 8px;border-radius:6px;font-weight:bold;font-size:13px;display:inline-flex;align-items:center;gap:4px;">
-                        ${b.spz||'?'}
-                        <span style="color:#64748b;font-size:10px;font-weight:normal;">L${b.line||'?'}</span>
-                        ${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}
-                        ${adminDel}
-                    </span>`;
-                }).join('');
-            } else {
-                activeDiv.innerHTML = '<span style="color:#64748b;font-size:12px;padding:4px;">Žádný bus v depu</span>';
-            }
-        }
-        
-        let histDiv = document.getElementById(popId+'_hist');
-        let searchInp = document.getElementById(popId+'_search');
-        let dtFrom = document.getElementById(popId+'_dtFrom');
-        let dtTo = document.getElementById(popId+'_dtTo');
-        
-        async function fetchHist() {
-            if(!histDiv) return;
-            histDiv.innerHTML = '<div style="text-align:center;padding:10px;"><i class="fas fa-spinner fa-spin"></i> Načítám...</div>';
-            try {
-                let q = searchInp ? searchInp.value : '';
-                let dF = dtFrom && dtFrom.value ? new Date(dtFrom.value).toISOString() : '';
-                let dT = dtTo && dtTo.value ? new Date(dtTo.value).toISOString() : '';
-                let url = '/api/depot_history?depot_name='+encodeURIComponent(z.name)+'&q='+encodeURIComponent(q);
-                if(dF) url += '&dt_from='+encodeURIComponent(dF);
-                if(dT) url += '&dt_to='+encodeURIComponent(dT);
-                let r = await fetch(url);
-                let d = await r.json();
-                if(d.status==='success' && d.data && d.data.length>0) {
-                    let hMap = new Map();
-                    for(let h of d.data) {
-                        let k = h.spz + '_' + h.arrived_at;
-                        if(!hMap.has(k)) hMap.set(k, h);
-                    }
-                    let uniqueHist = Array.from(hMap.values());
-                    
-                    let tableRows = uniqueHist.map(h=>{
-                        let fmtT = (iso) => {
-                            if(!iso) return '';
-                            let d = new Date(iso);
-                            if(isNaN(d)) return iso;
-                            return d.toLocaleString('cs-CZ', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'});
-                        };
-                        let lTime = h.left_at ? fmtT(h.left_at) : '<span style="color:#10b981;font-weight:bold;">Nyní parkuje</span>';
-                        let aTime = h.arrived_at ? fmtT(h.arrived_at) : 'Neznámý (Před úpravou)';
-                        let impr = h.is_imprecise ? ' <span title="Reset mapy - nepřesný čas" style="color:#facc15;font-size:9px;">(RESET MAPY)</span>' : '';
-                        let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${h.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:2px 4px;" title="Smazat ze záznamu">❌</button>` : '';
-                        return `<tr style="border-bottom:1px solid #1e293b;">
-                            <td style="padding:6px;color:#f59e0b;font-weight:bold;">${h.spz}</td>
-                            <td style="padding:6px;font-size:11px;">${aTime}${impr}</td>
-                            <td style="padding:6px;font-size:11px;">${lTime}</td>
-                            <td style="padding:6px;text-align:right;">${adminDel}</td>
-                        </tr>`;
-                    }).join('');
-                    histDiv.innerHTML = `<table style="width:100%;border-collapse:collapse;color:#cbd5e1;">
-                        <thead><tr style="background:#1e293b;text-align:left;">
-                            <th style="padding:6px;color:#38bdf8;font-weight:bold;">SPZ</th>
-                            <th style="padding:6px;color:#38bdf8;font-weight:bold;">Příjezd</th>
-                            <th style="padding:6px;color:#38bdf8;font-weight:bold;">Odjezd</th>
-                            <th style="padding:6px;"></th>
-                        </tr></thead>
-                        <tbody>${tableRows}</tbody>
-                    </table>`;
-                } else {
-                    histDiv.innerHTML = '<div style="text-align:center;padding:10px;">Žádná historie nalezena</div>';
-                }
-            } catch(e) {
-                histDiv.innerHTML = '<div style="color:#ef4444;padding:10px;">Chyba načítání</div>';
-            }
-        }
-        
-        fetchHist();
-        
-        let debounce = null;
-        let attachEv = (el) => {
-            if(!el) return;
-            el.addEventListener('input', ()=>{
-                clearTimeout(debounce);
-                debounce = setTimeout(fetchHist, 400);
-            });
-            el.addEventListener('keydown', e => e.stopPropagation());
-            el.addEventListener('keyup', e => e.stopPropagation());
-            el.addEventListener('keypress', e => e.stopPropagation());
-        };
-        attachEv(searchInp);
-        attachEv(dtFrom);
-        attachEv(dtTo);
-    });
-
+    let mk=L.marker(center,{icon:DEPOT_ICON,zIndexOffset:500});
+    mk.bindPopup(popHtml,{className:'dark-popup',maxWidth:220});
     depotLayer.addLayer(poly);
     depotLayer.addLayer(mk);
   });
 }
-
-window.deleteDepotRecord = async function(id, depotName) {
-    if(!confirm("Opravdu smazat záznam z historie vozovny " + depotName + "? (pokud je vůz aktivní uvnitř, zmizí ihned)")) return;
-    try {
-        let r = await fetch('/api/admin/delete_depot_history', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})});
-        let d = await r.json();
-        if(d.status==='success') {
-            appLog('Záznam z depa smazán', 'ok');
-            loadDepotZones();
-        } else {
-            appLog('Chyba mazání: '+d.message, 'error');
-        }
-    } catch(e) { appLog('Chyba komunikace při mazání z depa', 'error'); }
-};
 
 function renderDepotList(){
   let el=document.getElementById('depot-zone-list');
@@ -2086,48 +1877,22 @@ function depotUndoPoint(){
 }
 
 async function depotSaveZone(){
-  try {
-    let name=document.getElementById('depot-name-inp').value.trim();
-    let color=document.getElementById('depot-color-inp').value||'#facc15';
-    if(!name){alert('Chyba: Zadej název vozovny!');return;}
-    if(depotPoints.length<3){
-      alert(`Chyba: Polygon musí mít aspoň 3 body!\n\nMusíš nejprve klikat myší do mapy a ohraničit tak areál vozovny. Až naklikáš aspoň 3 body, klikni znovu na Uložit.`);
-      return;
-    }
-    let polygon=depotPoints.map(p=>[p.lat,p.lng]);
-    let body={name,polygon,color};
-    if(depotEditId)body.id=depotEditId;
-    
-    let btn=document.querySelector('button[onclick="depotSaveZone()"]');
-    if(btn) btn.innerText='Ukládám...';
-    
-    let r=await fetch('/api/admin/save_depot_zone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    let text = await r.text();
-    let d;
-    try {
-        d = JSON.parse(text);
-    } catch(e) {
-        alert(`Kritická chyba serveru: Backend nevrátil JSON data.\nOdpověď: ` + text.substring(0, 150));
-        if(btn) btn.innerHTML='💾 Uložit';
-        return;
-    }
-    
-    if(d.status==='success'){
-      appLog('Vozovna "'+name+'" uložena ✅','ok');
-      depotDrawMode=false;depotPoints=[];depotEditId=null;
-      if(depotDrawPolyline){depotLayer.removeLayer(depotDrawPolyline);depotDrawPolyline=null;}
-      document.getElementById('depot-draw-panel').style.display='none';
-      await loadDepotZones();
-    }else {
-      appLog('Chyba ukládání: '+d.message,'error');
-      alert(`Nepodařilo se uložit vozovnu:\n` + d.message);
-    }
-    if(btn) btn.innerHTML='💾 Uložit';
-  } catch(err) {
-      alert(`Neočekávaná chyba v prohlížeči:\n` + err.message);
-      let btn=document.querySelector('button[onclick="depotSaveZone()"]');
-      if(btn) btn.innerHTML='💾 Uložit';
-  }
+  let name=document.getElementById('depot-name-inp').value.trim();
+  let color=document.getElementById('depot-color-inp').value||'#facc15';
+  if(!name){alert('Zadej název vozovny!');return;}
+  if(depotPoints.length<3){alert('Polygon musí mít aspoň 3 body!');return;}
+  let polygon=depotPoints.map(p=>[p.lat,p.lng]);
+  let body={name,polygon,color};
+  if(depotEditId)body.id=depotEditId;
+  let r=await fetch('/api/admin/save_depot_zone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  let d=await r.json();
+  if(d.status==='success'){
+    appLog('Vozovna "'+name+'" uložena ✅','ok');
+    depotDrawMode=false;depotPoints=[];depotEditId=null;
+    if(depotDrawPolyline){depotLayer.removeLayer(depotDrawPolyline);depotDrawPolyline=null;}
+    document.getElementById('depot-draw-panel').style.display='none';
+    await loadDepotZones();
+  }else appLog('Chyba ukládání: '+d.message,'error');
 }
 
 function depotCancelDraw(){
@@ -2143,7 +1908,7 @@ if(IS_ADMIN){
   if(adminNav){
     let depotBtn=document.createElement('button');
     depotBtn.className='n-btn';depotBtn.style.cssText='background:#78350f;color:#fcd34d;border:1px solid #b45309;';
-    depotBtn.innerHTML='🅿️ Vozovny';
+    depotBtn.innerHTML='🏭 Vozovny';
     depotBtn.onclick=()=>{
       let p=document.getElementById('depot-admin-panel');
       if(p)p.style.display=p.style.display==='none'?'block':'none';
@@ -2176,4 +1941,5 @@ if(IS_ADMIN){
 
 // Automaticky načti vozovny při startu
 loadDepotZones();
-setInterval(loadDepotZones,20000); // refresh kazdych 20 sekund
+setInterval(loadDepotZones,60000); // refresh každou minutu
+

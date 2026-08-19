@@ -188,6 +188,29 @@ function renderSpzLog(){
     body.appendChild(line);
   });
 }
+
+function renderConflictLog(){
+  let body=document.getElementById('log-conflict-body');
+  if(!body)return;
+  body.innerHTML='';
+  let hasConflicts = false;
+  if(window.liveBuses){
+    window.liveBuses.forEach(bus=>{
+      if(bus.admin_spz_conflict){
+        hasConflicts = true;
+        let div=document.createElement('div');
+        div.style.cssText='padding:8px 0;border-bottom:1px solid #3b82f6;';
+        div.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="color:#a78bfa;font-size:13px;font-weight:bold;">⚔️ SPZ ${bus.spz} (Bus ${bus.id})</span>
+          <span style="color:#94a3b8;font-size:11px;">Linka ${bus.line}</span>
+        </div>
+        <button onclick="fetch('/api/admin/approve_conflict_spz',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bus_id:'${bus.id}'})}).then(r=>r.json()).then(r=>{if(r.status==='success'){setLogTab('conflict');setTimeout(()=>fetchLiveBuses(),1000);}});" style="width:100%;background:#8b5cf6;color:white;border:none;border-radius:4px;padding:5px 0;font-size:11px;font-weight:bold;cursor:pointer;">✔️ Schválit</button>`;
+        body.appendChild(div);
+      }
+    });
+  }
+  if(!hasConflicts){body.innerHTML='<div style="color:#64748b;padding:8px;">Žádné SPZ konflikty</div>';}
+}
 function renderMissingLog(){
   let body=document.getElementById('log-missing-body');
   if(!body)return;
@@ -272,9 +295,9 @@ async function _saveMissingFix(missingName, lat, lng, sourceName){
 
 function setLogTab(tab){
   logCurrentTab=tab;
-  let tabIds=['all','err','spz','missing','report','approx','system'];
+  let tabIds=['all','err','spz','missing','conflict','report','approx','system'];
   tabIds.forEach(id=>{
-    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':id==='spz'?'log-spz-body':id==='missing'?'log-missing-body':id==='report'?'log-report-body':id==='system'?'log-system-body':'log-approx-body');
+    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':id==='spz'?'log-spz-body':id==='missing'?'log-missing-body':id==='conflict'?'log-conflict-body':id==='report'?'log-report-body':id==='system'?'log-system-body':'log-approx-body');
     if(body)body.style.display=(tab===id?'':'none');
     let btn=document.getElementById(`log-tab-${id}`);
     if(btn){btn.style.background=(tab===id?'#334155':'transparent');btn.style.color='';}
@@ -282,6 +305,7 @@ function setLogTab(tab){
   if(tab==='err'){let b=document.getElementById('log-errors-body');b.innerHTML='';logErrEntries.forEach(e=>{let l=document.createElement('div');l.className='lg-err';l.textContent=`[${e.t}] ${e.msg}`;b.appendChild(l);});b.scrollTop=b.scrollHeight;}
   if(tab==='spz')renderSpzLog();
   if(tab==='missing')renderMissingLog();
+  if(tab==='conflict')renderConflictLog();
   if(tab==='report')loadReportSituace();
   if(tab==='approx')renderApproxLog();
   if(tab==='system')loadSystemLogs();
@@ -1602,7 +1626,7 @@ async function fetchBuses(){
     isRefreshing=true;
     ml.clearLayers();
 
-    data.buses.forEach(bus=>{
+    window.liveBuses=data.buses; data.buses.forEach(bus=>{
       if(!bus.lat||!bus.lng)return;
       let mc=bus.color_class,dv=parseInt(bus.delay),dTxt='';
       if(mc==='bg-gray'||mc==='bg-bug')dTxt='<span style="color:#94a3b8;">N/A</span>';
@@ -1633,7 +1657,13 @@ async function fetchBuses(){
       if(!bus.is_train){
         if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
         else if(bus.spz&&bus.spz!=='Neznama'){
-          if(bus.admin_spz_verified){
+          if(bus.admin_spz_bug){
+            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#10b981;border-color:#059669;" title="Pravděpodobně zaseknutý bus">${bus.spz} <i class="fas fa-question" style="color:#d1fae5;"></i></span></div>`;
+            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;
+          } else if(bus.admin_spz_conflict){
+            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#8b5cf6;border-color:#7c3aed;" title="Ověřeno, neschváleno">${bus.spz} <i class="fas fa-check" style="color:#ddd6fe;"></i></span></div>`;
+            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;
+          } else if(bus.admin_spz_verified){
             // Dvojita fajfka = admin lock
             spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#1e40af;border-color:#3b82f6;" title="Ověřená SPZ správci systému">${bus.spz} <i class="fas fa-check-double" style="color:#93c5fd;"></i></span></div>`;
             histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;

@@ -1873,21 +1873,20 @@ function renderDepotZones(){
     let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🅿️</div>`;
     let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
     let popId = 'depot_pop_' + Math.random().toString(36).substr(2,9);
-    let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:15px;min-width:380px;font-family:sans-serif;max-height:85vh;overflow-y:auto;overflow-x:hidden;">
-        <div style="font-weight:bold;font-size:16px;margin-bottom:12px;color:${zColor};display:flex;align-items:center;gap:6px;">
+    let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:10px;min-width:280px;font-family:sans-serif;max-height:65vh;overflow-y:auto;overflow-x:hidden;">
+        <div style="font-weight:bold;font-size:15px;margin-bottom:8px;color:${zColor};display:flex;align-items:center;gap:6px;">
             <span>🅿️ Vozovna: ${z.name}</span>
         </div>
-        <div style="font-weight:bold;font-size:13px;color:#cbd5e1;margin-bottom:6px;">VOZIDLA VE VOZOVNĚ:</div>
-        <div id="${popId}_active" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;">Načítám...</div>
-        <div style="margin-top:16px;border-top:1px dashed #334155;padding-top:12px;">
-            <div style="font-size:13px;color:#cbd5e1;font-weight:bold;margin-bottom:10px;">Historie odjezdů a příjezdů</div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center;">
-                <input type="text" id="${popId}_search" placeholder="🔍 SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;width:100px;">
-                <input type="datetime-local" id="${popId}_dtFrom" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;" title="Od">
-                <span style="color:#64748b;font-size:11px;">-</span>
-                <input type="datetime-local" id="${popId}_dtTo" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;" title="Do">
+        <div style="font-size:12px;margin-bottom:12px;background:rgba(0,0,0,0.2);padding:6px;border-radius:6px;border:1px solid #334155;">
+            <div>Aktuálně parkuje: <b style="color:white;">${z.bus_count||0}</b> busů</div>
+        </div>
+        <div id="${popId}_active">Načítám...</div>
+        <div style="margin-top:12px;border-top:1px dashed #334155;padding-top:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-size:12px;color:#cbd5e1;font-weight:bold;">Historie odjezdů a příjezdů</span>
+                <input type="text" id="${popId}_search" placeholder="Hledat SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;width:110px;">
             </div>
-            <div id="${popId}_hist" style="font-size:12px;color:#94a3b8;width:100%;">Načítám historii...</div>
+            <div id="${popId}_hist" style="font-size:11px;color:#94a3b8;max-height:400px;overflow-y:auto;padding-right:4px;">Načítám historii...</div>
         </div>
     </div>`;
 
@@ -1898,81 +1897,59 @@ function renderDepotZones(){
         let activeDiv = document.getElementById(popId+'_active');
         if(activeDiv) {
             if(z.buses && z.buses.length) {
-                let seenSpz = new Set();
-                let uniqueBuses = [];
-                for(let b of z.buses) {
-                    let spzKey = b.spz || '?';
-                    if(!seenSpz.has(spzKey)) {
-                        seenSpz.add(spzKey);
-                        uniqueBuses.push(b);
+                activeDiv.innerHTML = z.buses.map(b=>{
+                    let adminDel = IS_ADMIN && b.session_id ? `<button onclick="deleteDepotRecord('${b.session_id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;margin-left:auto;padding:2px 4px;" title="Smazat">❌</button>` : '';
+                    let arrHtml = '';
+                    if (b.arrived_at) {
+                        let tParts = b.arrived_at.split('T');
+                        let ad = tParts.length > 1 ? tParts[1].substring(0,5) : b.arrived_at;
+                        arrHtml = `<br><span style="color:#64748b;font-size:10px;">Od: ${ad} ${b.is_imprecise?'(RESET MAPY)':''}</span>`;
                     }
-                }
-                activeDiv.innerHTML = uniqueBuses.map(b=>{
-                    let adminDel = IS_ADMIN && b.session_id ? `<button onclick="deleteDepotRecord('${b.session_id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:0 2px;margin-left:4px;" title="Smazat">❌</button>` : '';
-                    return `<span style="background:rgba(255,255,255,0.05);border:1px solid #334155;color:${zColor};padding:4px 8px;border-radius:6px;font-weight:bold;font-size:13px;display:inline-flex;align-items:center;gap:4px;">
-                        ${b.spz||'?'}
-                        <span style="color:#64748b;font-size:10px;font-weight:normal;">L${b.line||'?'}</span>
+                    return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #1e293b;flex-wrap:wrap;">
+                        <span style="color:${zColor};font-weight:bold;min-width:65px;">${b.spz||'?'}</span>
+                        <span style="color:#cbd5e1;font-size:11px;">L${b.line||'?'}</span>
                         ${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}
                         ${adminDel}
-                    </span>`;
+                        <div style="width:100%;margin-top:-3px;">${arrHtml}</div>
+                    </div>`;
                 }).join('');
             } else {
-                activeDiv.innerHTML = '<span style="color:#64748b;font-size:12px;padding:4px;">Žádný bus v depu</span>';
+                activeDiv.innerHTML = '<div style="color:#64748b;font-size:11px;text-align:center;padding:4px;">Žádný bus v depu</div>';
             }
         }
         
         let histDiv = document.getElementById(popId+'_hist');
         let searchInp = document.getElementById(popId+'_search');
-        let dtFrom = document.getElementById(popId+'_dtFrom');
-        let dtTo = document.getElementById(popId+'_dtTo');
         
-        async function fetchHist() {
+        async function fetchHist(q='') {
             if(!histDiv) return;
-            histDiv.innerHTML = '<div style="text-align:center;padding:10px;"><i class="fas fa-spinner fa-spin"></i> Načítám...</div>';
+            histDiv.innerHTML = '<div style="text-align:center;padding:10px;"><i class="fas fa-spinner fa-spin"></i></div>';
             try {
-                let q = searchInp ? searchInp.value : '';
-                let dF = dtFrom && dtFrom.value ? new Date(dtFrom.value).toISOString() : '';
-                let dT = dtTo && dtTo.value ? new Date(dtTo.value).toISOString() : '';
-                let url = '/api/depot_history?depot_name='+encodeURIComponent(z.name)+'&q='+encodeURIComponent(q);
-                if(dF) url += '&dt_from='+encodeURIComponent(dF);
-                if(dT) url += '&dt_to='+encodeURIComponent(dT);
-                let r = await fetch(url);
+                let r = await fetch('/api/depot_history?depot_name='+encodeURIComponent(z.name)+'&q='+encodeURIComponent(q));
                 let d = await r.json();
                 if(d.status==='success' && d.data && d.data.length>0) {
-                    let hMap = new Map();
-                    for(let h of d.data) {
-                        let k = h.spz + '_' + h.arrived_at;
-                        if(!hMap.has(k)) hMap.set(k, h);
-                    }
-                    let uniqueHist = Array.from(hMap.values());
-                    
-                    let tableRows = uniqueHist.map(h=>{
+                    histDiv.innerHTML = d.data.map(h=>{
                         let fmtT = (iso) => {
                             if(!iso) return '';
-                            let d = new Date(iso);
-                            if(isNaN(d)) return iso;
-                            return d.toLocaleString('cs-CZ', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+                            let p = iso.split('T');
+                            if(p.length<2) return iso;
+                            let dp = p[0].split('-');
+                            let tp = p[1].split('+')[0].split('.')[0];
+                            return `${dp[2]}. ${dp[1]}. ${dp[0]} ${tp}`;
                         };
                         let lTime = h.left_at ? fmtT(h.left_at) : '<span style="color:#10b981;font-weight:bold;">Nyní parkuje</span>';
                         let aTime = h.arrived_at ? fmtT(h.arrived_at) : 'Neznámý (Před úpravou)';
                         let impr = h.is_imprecise ? ' <span title="Reset mapy - nepřesný čas" style="color:#facc15;font-size:9px;">(RESET MAPY)</span>' : '';
-                        let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${h.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:2px 4px;" title="Smazat ze záznamu">❌</button>` : '';
-                        return `<tr style="border-bottom:1px solid #1e293b;">
-                            <td style="padding:6px;color:#f59e0b;font-weight:bold;">${h.spz}</td>
-                            <td style="padding:6px;font-size:11px;">${aTime}${impr}</td>
-                            <td style="padding:6px;font-size:11px;">${lTime}</td>
-                            <td style="padding:6px;text-align:right;">${adminDel}</td>
-                        </tr>`;
+                        let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${h.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;margin-left:auto;padding:2px 4px;" title="Smazat ze záznamu">❌</button>` : '';
+                        return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #1e293b;">
+                            <span style="color:#f59e0b;font-weight:bold;min-width:65px;">${h.spz}</span>
+                            <div style="display:flex;flex-direction:column;font-size:10px;">
+                                <span>Příjezd: ${aTime}${impr}</span>
+                                <span>Odjezd: ${lTime}</span>
+                            </div>
+                            ${adminDel}
+                        </div>`;
                     }).join('');
-                    histDiv.innerHTML = `<table style="width:100%;border-collapse:collapse;color:#cbd5e1;">
-                        <thead><tr style="background:#1e293b;text-align:left;">
-                            <th style="padding:6px;color:#38bdf8;font-weight:bold;">SPZ</th>
-                            <th style="padding:6px;color:#38bdf8;font-weight:bold;">Příjezd</th>
-                            <th style="padding:6px;color:#38bdf8;font-weight:bold;">Odjezd</th>
-                            <th style="padding:6px;"></th>
-                        </tr></thead>
-                        <tbody>${tableRows}</tbody>
-                    </table>`;
                 } else {
                     histDiv.innerHTML = '<div style="text-align:center;padding:10px;">Žádná historie nalezena</div>';
                 }
@@ -1983,20 +1960,16 @@ function renderDepotZones(){
         
         fetchHist();
         
-        let debounce = null;
-        let attachEv = (el) => {
-            if(!el) return;
-            el.addEventListener('input', ()=>{
+        if(searchInp) {
+            let debounce = null;
+            searchInp.addEventListener('input', (e)=>{
                 clearTimeout(debounce);
-                debounce = setTimeout(fetchHist, 400);
+                debounce = setTimeout(()=>{ fetchHist(e.target.value); }, 400);
             });
-            el.addEventListener('keydown', e => e.stopPropagation());
-            el.addEventListener('keyup', e => e.stopPropagation());
-            el.addEventListener('keypress', e => e.stopPropagation());
-        };
-        attachEv(searchInp);
-        attachEv(dtFrom);
-        attachEv(dtTo);
+            searchInp.addEventListener('keydown', e => e.stopPropagation());
+            searchInp.addEventListener('keyup', e => e.stopPropagation());
+            searchInp.addEventListener('keypress', e => e.stopPropagation());
+        }
     });
 
     depotLayer.addLayer(poly);
