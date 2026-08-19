@@ -451,7 +451,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 @keyframes routeDraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0;}}
 /* Floating close-route button */
 #close-route-btn, #edit-route-btn, #save-route-btn { display:none; position:fixed; z-index:4200; border-radius:24px; padding:8px 22px; font-size:13px; font-weight:700; cursor:pointer; backdrop-filter:blur(8px); transition:all .2s; letter-spacing:.3px; }
-#close-route-btn { top: 75px; left: calc(50% - 80px); transform:translateX(-50%); background:rgba(15,23,42,.92); color:#ef4444; border:1.5px solid #ef4444; box-shadow:0 4px 20px rgba(239,68,68,.35); }
+#close-route-btn { top: 75px; left: 50%; transform:translateX(-50%); background:rgba(15,23,42,.92); color:#ef4444; border:1.5px solid #ef4444; box-shadow:0 4px 20px rgba(239,68,68,.35); }
 #close-route-btn:hover { background:#ef4444; color:#fff; box-shadow:0 4px 28px rgba(239,68,68,.6); }
 #edit-route-btn { top: 75px; left: calc(50% + 80px); transform:translateX(-50%); background:rgba(15,23,42,.92); color:#38bdf8; border:1.5px solid #38bdf8; box-shadow:0 4px 20px rgba(56,189,248,.35); }
 #edit-route-btn:hover { background:#38bdf8; color:#fff; box-shadow:0 4px 28px rgba(56,189,248,.6); }
@@ -502,7 +502,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
   #log-panel{bottom:auto;top:130px;right:4px;left:4px;width:auto;max-width:100vw;}
   #log-body,#log-errors-body,#log-spz-body,#log-missing-body,#log-report-body,#log-approx-body{max-height:160px;user-select:text !important;-webkit-user-select:text !important;}
   #nt-edit-pop{left:4px;right:4px;bottom:10px;width:auto;max-height:80vh;overflow-y:auto;}
-  #stop-info-pop{left:4px;right:4px;bottom:10px;width:auto;}
+  #bus-detail-pop, #stop-info-pop { width: 92% !important; left: 4% !important; bottom: 20px !important; top: auto !important; transform: none !important; }
   .sip-lines{flex-wrap:wrap;gap:3px;}
   .lp-h div{gap:2px;flex-wrap:wrap;}
   .lp-h div button{font-size:10px;padding:2px 5px;}
@@ -1194,7 +1194,6 @@ function togglePin(){
 }
 function minHud(){hudMin=true;document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';}
 function maxHud(){hudMin=false;document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';}
-function _hudShowRoute(){if(followId)toggleRoute(followId);}
 window.toggleFollow=function(busId,inflowId){
   if(followId===busId){stopFollow();return;}
   followId=busId;followInflowId=inflowId||busId;
@@ -1836,7 +1835,7 @@ function _renderRoute(busId,data,btn){
 let leLayer=null,leStops=[],leLineName='',leAddActive=false;
 function leInit(){if(!leLayer)leLayer=L.layerGroup().addTo(map);}
 function lineEditorOff(){if(leLayer)leLayer.clearLayers();leAddActive=false;document.body.classList.remove('nt-add-active');let b=document.getElementById('le-add-btn');if(b){b.style.background='#334155';b.style.color='#a855f7';}}
-function toggleLineEditor(){leInit();let p=document.getElementById('line-editor-panel');if(!p)return;p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='none')lineEditorOff();}
+function toggleLineEditor(){leInit();let p=document.getElementById('le-editor-panel');if(!p)return;p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='none')lineEditorOff();}
 async function leLoadLine(){
   leInit();leLayer.clearLayers();leStops=[];
   let inp=document.getElementById('le-line-inp');
@@ -1857,7 +1856,7 @@ function leRender(){
   let listEl=document.getElementById('le-stops');if(listEl)listEl.innerHTML='';
   if(leStops.length>=2){
     let coords=leStops.map(s=>[s.lat,s.lng]);
-    leLayer.addLayer(L.polyline(coords,{color:'#a855f7',weight:6,opacity:0.85,dashArray:'8,4',lineCap:'round'}));
+    leLayer.addLayer(L.polyline(coords,{color:'#a855f7',weight:6,opacity:0.85,dashArray:'8,4',lineCap:'round',lineJoin:'round'}));
   }
   leStops.forEach((s,i)=>{
     let col=s._moved?'#f59e0b':'#a855f7';
@@ -1897,7 +1896,7 @@ async function leSave(){
 // === NT (Nastaveni tras) - rucni kalibrace poloh zastavek ===
 let ntMode=false,ntMoveTimer=null,currentNtEdit=null,ntAddMode=false,ntAddName='';
 function stopDisplayName(s){
-  // Zobrazovany nazev ma prednost pred systemovym (pouzitym jen pro vyhledavani v JR)
+  // Zobrazovany nazev ma prednost pred systemovym (pouzitym jen pro vyhledavani v JŘ)
   return (s.display_name&&s.display_name.trim())?s.display_name.trim():s.name;
 }
 function ntDotIcon(cls){return L.divIcon({className:'',html:`<div class="nt-dot ${cls}"></div>`,iconSize:[14,14],iconAnchor:[7,7]});}
@@ -2412,11 +2411,10 @@ async function fetchBuses(){
       if(!bus.is_train){
         if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
         else if(bus.spz&&bus.spz!=='Neznama'){
-          if(bus.admin_spz_verified){
-            // Dvojita fajfka = admin lock
-            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#1e40af;border-color:#3b82f6;" title="Ověřená SPZ správci systému">${bus.spz} <i class="fas fa-check-double" style="color:#93c5fd;"></i></span></div>`;
+          if(bus.admin_flag){
+            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#60a5fa;color:#0f172a;border-color:#3b82f6;font-weight:bold;" title="Ověřená SPZ správci systému">${bus.spz} <i class="fas fa-check-double" style="color:#0f172a;"></i></span></div>`;
             histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;
-          } else if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" title="SPZ ověřena systémem">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;}
+          } else if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#93c5fd;color:#0f172a;border-color:#60a5fa;font-weight:bold;" title="SPZ ověřena systémem">${bus.spz} <i class="fas fa-check" style="color:#0f172a;"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;}
           else{spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#f97316;color:#fff;border-color:#c2410c;">${bus.spz} <i class="fas fa-clock"></i></span></div>`;}
         }
         else spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Ceka na overeni</span></div>`;
