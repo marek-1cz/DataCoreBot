@@ -6249,7 +6249,8 @@ def api_bus_route(bus_id):
 
 @mapa_bp.route('/api/seznam_autobusu')
 def api_seznam_autobusu():
-    import requests
+    import urllib.request
+    import urllib.parse
     spz = request.args.get('spz', '')
     if not spz:
         return redirect('https://seznam-autobusu.cz/')
@@ -6260,15 +6261,21 @@ def api_seznam_autobusu():
         formatted_spz = s[:-4] + ' ' + s[-4:]
         
     try:
-        session_req = requests.Session()
-        session_req.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
-        data = {
+        data = urllib.parse.urlencode({
             'search': formatted_spz,
             '_submit': 'vyhledat',
             '_do': 'header-combinedSearch-search-submit'
-        }
-        r = session_req.post('https://seznam-autobusu.cz/', data=data, allow_redirects=True, timeout=10)
-        return redirect(r.url)
+        }).encode('utf-8')
+        
+        req = urllib.request.Request(
+            'https://seznam-autobusu.cz/', 
+            data=data, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        )
+        
+        with urllib.request.urlopen(req, timeout=10) as response:
+            final_url = response.geturl()
+            return redirect(final_url)
     except Exception as e:
         print(f"Error checking seznam autobusu: {e}")
         return redirect('https://seznam-autobusu.cz/')
