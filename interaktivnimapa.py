@@ -2573,105 +2573,122 @@ async function fetchBuses(){
         if(prev!==cur){
           window._spzPrev[b.id]=cur;
           if(b.spz&&b.spz!=='Neznama'){
-            appLogSpz(b.id,b.spz,b.spz_verified?'ok':'pending',b.spz_verified?`✅ Ověřeno (L${b.line})`:`⏳ Čeká na ověření (L${b.line})`);
-          }else{
-            appLogSpz(b.id,'Neznámá','err',`❓ Bez SPZ (L${b.line}, stav: ${b.status})`);
-          }
-        }
-      });
-    }
-
-  }catch(e){
-    console.error(e);
-    isRefreshing=false;
-    appLog('fetchBuses chyba: '+e.message,'error');
-  }
-}
-fetchBuses();
-setInterval(fetchBuses,10000);
-
-// ═══════════════════════════════════════════════════════════
-// VOZOVNY (DEPOT ZONES) — admin draw + public garage icons
-// ═══════════════════════════════════════════════════════════
-let depotZones=[], depotLayer=L.layerGroup().addTo(map), depotDrawMode=false, depotPoints=[], depotDrawPolyline=null, depotEditId=null;
-const DEPOT_ICON=L.divIcon({className:'',html:`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 3px #000);" title="Vozovna">🅿️</div>`,iconSize:[28,28],iconAnchor:[14,14]});
-
-// Načti a zobraz vozovny (volá se při startu + po každé změně)
-async function loadDepotZones(){
-  try{
-    let r=await fetch('/api/depot_zones'),d=await r.json();
-    if(d.status!=='success')return;
-    depotZones=d.zones;
-    renderDepotZones();
-    if(IS_ADMIN)renderDepotList();
-  }catch(e){console.error('[DEPOT]',e);}
-}
-
-function renderDepotZones(){
-  depotLayer.clearLayers();
-  depotZones.forEach(z=>{
-    if(!z.polygon||z.polygon.length<3)return;
-    let zColor=z.color||'#facc15';
-    let poly=L.polygon(z.polygon,{
-      color:zColor,fillColor:zColor,
-      fillOpacity:0.13,weight:2,dashArray:'6,4',opacity:0.7,
-    });
-    // Střed polygonu pro ikonu garáže
-    let bounds=poly.getBounds(),center=bounds.getCenter();
-    // Ikona vozovny: emoji s barvou zóny ve stínu
-    let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🅿️</div>`;
-    let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
-    let popId = 'depot_pop_' + Math.random().toString(36).substr(2,9);
-    let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:15px;width:400px;font-family:sans-serif;max-height:85vh;overflow-y:auto;overflow-x:hidden;">
-        <div style="font-weight:bold;font-size:16px;margin-bottom:12px;color:${zColor};display:flex;align-items:center;gap:6px;">
-            <span>🅿️ Vozovna: ${z.name}</span>
-        </div>
-        <div style="font-weight:bold;font-size:13px;color:#cbd5e1;margin-bottom:6px;">VOZIDLA VE VOZOVNĚ:</div>
-        <div id="${popId}_active" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;">Načítám...</div>
-        <div style="margin-top:16px;border-top:1px dashed #334155;padding-top:12px;">
-            <div style="font-size:13px;color:#cbd5e1;font-weight:bold;margin-bottom:10px;">Historie odjezdů a příjezdů</div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center;">
-                <input type="text" id="${popId}_search" placeholder="🔍 SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;width:100px;">
-                <select id="${popId}_sort" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;">
-                    <option value="desc">Nejnovější</option>
-                    <option value="asc">Nejstarší</option>
-                </select>
-            </div>
-            <div id="${popId}_hist" style="font-size:12px;color:#94a3b8;width:100%;">Načítám historii...</div>
-        </div>
-    </div>`;
-
-    let mk=L.marker(center,{icon:depotIcon,zIndexOffset:500});
-    mk.bindPopup(popHtml,{className:'dark-popup', maxWidth:450, minWidth:400});
+            appLogSpz(b.id,b.spz,b.spz_verified?'ok':'pending',b.spz_verified?`✅ Ověřeno (L${b.line})`:`⏳ Čeká na ověřenfunction renderDepotZones(){
+    if(!window._depotMarkersMap) { window._depotMarkersMap = new Map(); window._depotPolysMap = new Map(); }
+    let currentNames = new Set(depotZones.map(z => z.name));
     
-    mk.on('popupopen', function() {
-        let activeDiv = document.getElementById(popId+'_active');
-        if(activeDiv) {
-            if(z.buses && z.buses.length) {
-                let seenSpz = new Set();
-                let uniqueBuses = [];
-                for(let b of z.buses) {
-                    let spzKey = b.spz || '?';
-                    if(!seenSpz.has(spzKey)) {
-                        seenSpz.add(spzKey);
-                        uniqueBuses.push(b);
-                    }
-                }
-                activeDiv.innerHTML = uniqueBuses.map(b=>{
-                    let adminDel = IS_ADMIN && b.session_id ? `<button onclick="deleteDepotRecord('${b.session_id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:0 2px;margin-left:4px;" title="Smazat">❌</button>` : '';
-                    return `<span style="background:rgba(255,255,255,0.05);border:1px solid #334155;color:${zColor};padding:4px 8px;border-radius:6px;font-weight:bold;font-size:13px;display:inline-flex;align-items:center;gap:4px;">
-                        ${b.spz||'?'}
-                        <span style="color:#64748b;font-size:10px;font-weight:normal;">L${b.line||'?'}</span>
-                        ${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}
-                        ${adminDel}
-                    </span>`;
-                }).join('');
-            } else {
-                activeDiv.innerHTML = '<span style="color:#64748b;font-size:12px;padding:4px;">Žádný bus v depu</span>';
-            }
+    // Odstranění starých vozoven
+    for(let [name, mk] of window._depotMarkersMap.entries()) {
+        if(!currentNames.has(name)) {
+            depotLayer.removeLayer(mk);
+            let poly = window._depotPolysMap.get(name);
+            if(poly) depotLayer.removeLayer(poly);
+            window._depotMarkersMap.delete(name);
+            window._depotPolysMap.delete(name);
+        }
+    }
+    
+    depotZones.forEach(z=>{
+        if(!z.polygon||z.polygon.length<3)return;
+        let zColor=z.color||'#facc15';
+        
+        let poly = window._depotPolysMap.get(z.name);
+        if(!poly) {
+            poly=L.polygon(z.polygon,{
+                color:zColor,fillColor:zColor,
+                fillOpacity:0.13,weight:2,dashArray:'6,4',opacity:0.7,
+            });
+            window._depotPolysMap.set(z.name, poly);
+            depotLayer.addLayer(poly);
+        } else {
+            poly.setLatLngs(z.polygon);
         }
         
-        let histDiv = document.getElementById(popId+'_hist');
+        let center = poly.getBounds().getCenter();
+        let mk = window._depotMarkersMap.get(z.name);
+        if(!mk) {
+            let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🅿️</div>`;
+            let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
+            mk=L.marker(center,{icon:depotIcon,zIndexOffset:500});
+            window._depotMarkersMap.set(z.name, mk);
+            
+            let popId = 'depot_pop_' + Math.random().toString(36).substr(2,9);
+            mk._popId = popId;
+            mk._zName = z.name;
+            
+            let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:15px;width:100%;box-sizing:border-box;font-family:sans-serif;max-height:85vh;overflow-y:auto;overflow-x:hidden;">
+                <div style="font-weight:bold;font-size:16px;margin-bottom:12px;color:${zColor};display:flex;align-items:center;gap:6px;">
+                    <span>🅿️ Vozovna: ${z.name}</span>
+                </div>
+                <div style="font-weight:bold;font-size:13px;color:#cbd5e1;margin-bottom:6px;">VOZIDLA VE VOZOVNĚ:</div>
+                <div id="${popId}_active" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;">Načítám...</div>
+                <div style="margin-top:16px;border-top:1px dashed #334155;padding-top:12px;">
+                    <div style="font-size:13px;color:#cbd5e1;font-weight:bold;margin-bottom:10px;">Historie odjezdů a příjezdů</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center;">
+                        <input type="text" id="${popId}_search" placeholder="🔍 SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;width:100px;">
+                        <select id="${popId}_sort" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;">
+                            <option value="desc">Nejnovější</option>
+                            <option value="asc">Nejstarší</option>
+                        </select>
+                    </div>
+                    <div id="${popId}_hist" style="font-size:12px;color:#94a3b8;width:100%;overflow-x:auto;">Načítám historii...</div>
+                </div>
+            </div>`;
+            mk.bindPopup(popHtml,{className:'dark-popup', maxWidth:500, minWidth:460});
+            
+            mk.on('popupopen', function() {
+                window._activeDepotPopId = mk._popId;
+                window._activeDepotName = mk._zName;
+                if(window.updateActiveDepotPopup) window.updateActiveDepotPopup();
+            });
+            mk.on('popupclose', function() {
+                window._activeDepotPopId = null;
+                window._activeDepotName = null;
+            });
+            
+            depotLayer.addLayer(mk);
+        }
+    });
+    
+    // Aktualizuj otevřené popup okno bez refreshování celé mapy
+    if(window.updateActiveDepotPopup) window.updateActiveDepotPopup();
+}
+
+window.updateActiveDepotPopup = function() {
+    let zName = window._activeDepotName;
+    let popId = window._activeDepotPopId;
+    if(!zName || !popId) return;
+    
+    let z = depotZones.find(dz => dz.name === zName);
+    if(!z) return;
+    
+    let activeDiv = document.getElementById(popId+'_active');
+    if(activeDiv) {
+        if(z.buses && z.buses.length) {
+            let seenSpz = new Set();
+            let uniqueBuses = [];
+            for(let b of z.buses) {
+                let spzKey = b.spz || '?';
+                if(!seenSpz.has(spzKey)) { seenSpz.add(spzKey); uniqueBuses.push(b); }
+            }
+            let zColor = z.color || '#facc15';
+            activeDiv.innerHTML = uniqueBuses.map(b=>{
+                let adminDel = IS_ADMIN && b.session_id ? `<button onclick="deleteDepotRecord('${b.session_id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:0 2px;margin-left:4px;" title="Smazat">❌</button>` : '';
+                return `<span style="background:rgba(255,255,255,0.05);border:1px solid #334155;color:${zColor};padding:4px 8px;border-radius:6px;font-weight:bold;font-size:13px;display:inline-flex;align-items:center;gap:4px;">
+                    ${b.spz||'?'}
+                    <span style="color:#64748b;font-size:10px;font-weight:normal;">L${b.line||'?'}</span>
+                    ${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}
+                    ${adminDel}
+                </span>`;
+            }).join('');
+        } else {
+            activeDiv.innerHTML = '<span style="color:#64748b;font-size:12px;padding:4px;">Žádný bus v depu</span>';
+        }
+    }
+    
+    let histDiv = document.getElementById(popId+'_hist');
+    if(histDiv && !histDiv._eventsAttached) {
+        histDiv._eventsAttached = true;
         let searchInp = document.getElementById(popId+'_search');
         let sortSel = document.getElementById(popId+'_sort');
         
@@ -2695,27 +2712,28 @@ function renderDepotZones(){
                     let tableRows = uniqueHist.map(h=>{
                         let fmtT = (iso) => {
                             if(!iso) return '';
-                            let d = new Date(iso);
-                            if(isNaN(d)) return iso;
-                            return d.toLocaleString('cs-CZ', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+                            let dt = new Date(iso);
+                            if(isNaN(dt)) return iso;
+                            // Krátký formát, např. "19. 8. 08:06"
+                            return dt.toLocaleString('cs-CZ', {day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit'});
                         };
                         let lTime = h.left_at ? fmtT(h.left_at) : '<span style="color:#10b981;font-weight:bold;">Nyní parkuje</span>';
-                        let aTime = h.arrived_at ? fmtT(h.arrived_at) : 'Neznámý (Před úpravou)';
-                        let impr = h.is_imprecise ? ' <span title="Reset mapy - nepřesný čas" style="color:#facc15;font-size:9px;">(RESET MAPY)</span>' : '';
+                        let aTime = h.arrived_at ? fmtT(h.arrived_at) : 'Neznámý';
+                        let impr = h.is_imprecise ? ' <span title="Nepřesný čas (Reset mapy)" style="color:#facc15;font-size:10px;">⚠️</span>' : '';
                         let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${h.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:2px 4px;" title="Smazat ze záznamu">❌</button>` : '';
                         return `<tr style="border-bottom:1px solid #1e293b;">
-                            <td style="padding:6px;color:#f59e0b;font-weight:bold;">${h.spz}</td>
-                            <td style="padding:6px;font-size:11px;">${aTime}${impr}</td>
-                            <td style="padding:6px;font-size:11px;">${lTime}</td>
-                            <td style="padding:6px;text-align:right;">${adminDel}</td>
+                            <td style="padding:4px;color:#f59e0b;font-weight:bold;white-space:nowrap;">${h.spz}</td>
+                            <td style="padding:4px;font-size:11px;white-space:nowrap;">${aTime}${impr}</td>
+                            <td style="padding:4px;font-size:11px;white-space:nowrap;">${lTime}</td>
+                            <td style="padding:4px;text-align:right;">${adminDel}</td>
                         </tr>`;
                     }).join('');
-                    histDiv.innerHTML = `<table style="width:100%;border-collapse:collapse;color:#cbd5e1;">
+                    histDiv.innerHTML = `<table style="width:100%;border-collapse:collapse;color:#cbd5e1;table-layout:auto;">
                         <thead><tr style="background:#1e293b;text-align:left;">
-                            <th style="padding:6px;color:#38bdf8;font-weight:bold;">SPZ</th>
-                            <th style="padding:6px;color:#38bdf8;font-weight:bold;">Příjezd</th>
-                            <th style="padding:6px;color:#38bdf8;font-weight:bold;">Odjezd</th>
-                            <th style="padding:6px;"></th>
+                            <th style="padding:4px;color:#38bdf8;font-weight:bold;">SPZ</th>
+                            <th style="padding:4px;color:#38bdf8;font-weight:bold;">Příjezd</th>
+                            <th style="padding:4px;color:#38bdf8;font-weight:bold;">Odjezd</th>
+                            <th style="padding:4px;"></th>
                         </tr></thead>
                         <tbody>${tableRows}</tbody>
                     </table>`;
@@ -2744,11 +2762,7 @@ function renderDepotZones(){
         };
         attachEv(searchInp, 'input');
         attachEv(sortSel, 'change');
-    });
-
-    depotLayer.addLayer(poly);
-    depotLayer.addLayer(mk);
-  });
+    }
 }
 
 window.deleteDepotRecord = async function(id, depotName) {
