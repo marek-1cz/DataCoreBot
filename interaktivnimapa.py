@@ -817,6 +817,27 @@ window.adminSaveAll=(id,permanent)=>{
   adminAction('edit_all',id,{status:st,color_class:col,note,permanent});
 };
 
+window.openSeznamAutobusu = function(rawSpz) {
+    let s = rawSpz.replace(/[^a-zA-Z0-9]/g, '');
+    let formattedSpz = rawSpz;
+    if (s.length > 4) {
+        formattedSpz = s.substring(0, s.length - 4) + ' ' + s.substring(s.length - 4);
+    }
+    let form = document.createElement('form');
+    form.method = 'POST';
+    form.action = 'https://seznam-autobusu.cz/';
+    form.target = '_blank';
+    
+    let p1 = document.createElement('input'); p1.type = 'hidden'; p1.name = 'search'; p1.value = formattedSpz;
+    let p2 = document.createElement('input'); p2.type = 'hidden'; p2.name = '_submit'; p2.value = 'vyhledat';
+    let p3 = document.createElement('input'); p3.type = 'hidden'; p3.name = '_do'; p3.value = 'header-combinedSearch-search-submit';
+    
+    form.appendChild(p1); form.appendChild(p2); form.appendChild(p3);
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+};
+
 // === NAV ===
 const nav=document.getElementById('top-nav');
 let hideT=null;
@@ -2413,10 +2434,15 @@ async function fetchBuses(){
       if(!bus.is_train){
         if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
         else if(bus.spz&&bus.spz!=='Neznama'){
+          let seznamBtn = '';
+          if (bus.spz_verified || bus.admin_flag) {
+              seznamBtn = `<a href="javascript:void(0)" onclick="openSeznamAutobusu('${bus.spz}')" class="pa pa-d" style="margin-top:5px; background: #2563eb; color: #fff; border-color: #1d4ed8;">🚌 Fotografie a informace o vozu</a>`;
+          }
+
           if(bus.admin_flag){
             spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#60a5fa;color:#0f172a;border-color:#3b82f6;font-weight:bold;" title="Ověřená SPZ správci systému">${bus.spz} <i class="fas fa-check-double" style="color:#0f172a;"></i></span></div>`;
-            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;
-          } else if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" title="SPZ ověřena systémem">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;}
+            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>${seznamBtn}`;
+          } else if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" title="SPZ ověřena systémem">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>${seznamBtn}`;}
           else{spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#f97316;color:#fff;border-color:#c2410c;">${bus.spz} <i class="fas fa-clock"></i></span></div>`;}
         }
         else spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Ceka na overeni</span></div>`;
