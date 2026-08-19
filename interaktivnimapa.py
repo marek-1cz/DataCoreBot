@@ -818,7 +818,12 @@ window.adminSaveAll=(id,permanent)=>{
 };
 
 window.openSeznamAutobusu = function(rawSpz) {
-    window.open('/api/seznam_autobusu?spz=' + encodeURIComponent(rawSpz), '_blank');
+    let s = rawSpz.replace(/[^a-zA-Z0-9]/g, '');
+    let formattedSpz = rawSpz;
+    if (s.length > 4) {
+        formattedSpz = s.substring(0, s.length - 4) + ' ' + s.substring(s.length - 4);
+    }
+    window.open('https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz), '_blank');
 };
 
 // === NAV ===
@@ -6246,47 +6251,6 @@ def api_bus_route(bus_id):
         "custom_shape_full": custom_shape_full,
         "route_key": route_key if result and c.get('line') else None
     })
-
-@mapa_bp.route('/api/seznam_autobusu')
-def api_seznam_autobusu():
-    import urllib.request
-    import urllib.parse
-    import http.cookiejar
-    spz = request.args.get('spz', '')
-    if not spz:
-        return redirect('https://seznam-autobusu.cz/')
-    
-    s = re.sub(r'[^a-zA-Z0-9]', '', spz)
-    formatted_spz = spz
-    if len(s) > 4:
-        formatted_spz = s[:-4] + ' ' + s[-4:]
-        
-    try:
-        cj = http.cookiejar.CookieJar()
-        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
-        opener.addheaders = [('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')]
-        
-        # 1) Acquire session cookie
-        try:
-            opener.open('https://seznam-autobusu.cz/', timeout=5)
-        except Exception:
-            pass
-
-        # 2) Perform search
-        data = urllib.parse.urlencode({
-            'search': formatted_spz,
-            '_submit': 'vyhledat',
-            '_do': 'header-combinedSearch-search-submit'
-        }).encode('utf-8')
-        
-        req = urllib.request.Request('https://seznam-autobusu.cz/', data=data)
-        
-        with opener.open(req, timeout=10) as response:
-            final_url = response.geturl()
-            return redirect(final_url)
-    except Exception as e:
-        print(f"Error checking seznam autobusu: {e}")
-        return redirect('https://seznam-autobusu.cz/')
 
 
 
