@@ -508,7 +508,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
   .lp-h div button{font-size:10px;padding:2px 5px;}
   #nt-add-bar{left:4px;right:4px;transform:none;flex-wrap:wrap;gap:5px;}
   #idos-modal-box{width:100% !important;height:100% !important;max-width:none !important;border:none !important;border-radius:0 !important;}
-  #hud { top: 130px !important; left: 10px !important; right: 10px !important; bottom: auto !important; }
+  #hud { top: auto !important; left: 10px !important; right: auto !important; bottom: 30px !important; }
   #close-route-btn { top: auto !important; bottom: 140px !important; left: 50% !important; transform: translateX(-50%) !important; }
   #edit-route-btn, #save-route-btn { top: auto !important; bottom: 190px !important; left: 50% !important; transform: translateX(-50%) !important; }
 }
@@ -611,7 +611,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
   <div id="save-route-btn" onclick="saveRouteRoads()"><i class="fas fa-save"></i> ULOŽIT TRASU</div>
   <div id="hud">
     <div id="hf">
-      <div class="hh"><span class="hl">📡 SLEDOVANI SPOJE</span><button class="hb-mn" onclick="minHud()">-</button></div>
+      <div class="hh" id="hud-drag-handle" style="cursor: move;" title="Táhněte pro přesun"><span class="hl">📡 SLEDOVANI SPOJE (táhni)</span><button class="hb-mn" onclick="minHud()">-</button></div>
       <div id="h-trip" class="ht">Spoj: -</div>
       <div id="h-dest" class="hd">Načítám…</div>
       <div class="hr"><span style="color:#94a3b8;">SPZ:</span><span id="h-spz">-</span></div>
@@ -838,10 +838,10 @@ window.openSeznamAutobusu = function(rawSpz) {
         </head>
         <body style="background:#0f172a; color:white; font-family:sans-serif; display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh; margin:0;">
             <i class="fas fa-circle-notch fa-spin" style="font-size:3rem; color:#38bdf8; margin-bottom:20px;"></i>
-            <h2 style="margin:0;">Otevírám seznam-autobusu.cz...</h2>
+            <h2 style="margin:0;">Otevírám databázi vozidel...</h2>
             <p style="color:#94a3b8; margin-top:15px; text-align:center; max-width: 400px; line-height:1.5;">
-                Vyhledávám vůz <b>${formattedSpz}</b>.<br>
-                Server seznam-autobusu.cz může být občas pomalejší, prosím o strpení (cca 5 sekund).
+                Vyhledávám vůz <b>${formattedSpz}</b> v externím systému.<br>
+                Prosím o strpení, navazuji spojení s cílovým serverem (cca 5 sekund)...
             </p>
         </body>
         </html>
@@ -1229,8 +1229,42 @@ function togglePin(){
   if(btn){btn.style.background=pinMode?'#f59e0b':'#334155';btn.style.color=pinMode?'#0f172a':'#94a3b8';}
   if(pinMode&&followId){let b=lastArr.find(x=>x.id===followId);if(b&&b.lat)map.setView([b.lat,b.lng]);}
 }
-function minHud(){hudMin=true;document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';}
-function maxHud(){hudMin=false;document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';}
+function minHud(){hudMin=true;document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';document.getElementById('hud').style.transform='none';}
+function maxHud(){hudMin=false;document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';document.getElementById('hud').style.transform=\`translate3d(\${hudX}px, \${hudY}px, 0)\`;}
+
+let hudX=0, hudY=0, isHudDragging=false, hudStartX, hudStartY;
+document.addEventListener('DOMContentLoaded', () => {
+    let hudHandle = document.getElementById('hud-drag-handle');
+    let hudEl = document.getElementById('hud');
+    if (hudHandle) {
+        hudHandle.addEventListener('mousedown', hudDragStart);
+        hudHandle.addEventListener('touchstart', hudDragStart, {passive: false});
+        document.addEventListener('mousemove', hudDragMove);
+        document.addEventListener('touchmove', hudDragMove, {passive: false});
+        document.addEventListener('mouseup', hudDragEnd);
+        document.addEventListener('touchend', hudDragEnd);
+    }
+    function hudDragStart(e) {
+        if(e.target.tagName === 'BUTTON' || hudMin) return;
+        isHudDragging = true;
+        let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        hudStartX = clientX - hudX;
+        hudStartY = clientY - hudY;
+    }
+    function hudDragMove(e) {
+        if(!isHudDragging) return;
+        e.preventDefault();
+        let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        hudX = clientX - hudStartX;
+        hudY = clientY - hudStartY;
+        hudEl.style.transform = \`translate3d(\${hudX}px, \${hudY}px, 0)\`;
+    }
+    function hudDragEnd(e) {
+        isHudDragging = false;
+    }
+});
 window.toggleFollow=function(busId,inflowId){
   if(followId===busId){stopFollow();return;}
   followId=busId;followInflowId=inflowId||busId;
