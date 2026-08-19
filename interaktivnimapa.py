@@ -4031,7 +4031,7 @@ def background_map_worker():
                     upsert_to_history(db_client, c)
                     if bus_id in DEPOT_ACTIVE_SESSIONS:
                         try:
-                            db_client.table("depot_history").update({"left_at": now.isoformat()}).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
+                            db_client.table("depot_history").update({"left_at": datetime.now(ZoneInfo('Europe/Prague')).isoformat()}).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
                         except: pass
                         del DEPOT_ACTIVE_SESSIONS[bus_id]
                         DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
@@ -4042,7 +4042,7 @@ def background_map_worker():
                         upsert_to_history(db_client, c)
                         if bus_id in DEPOT_ACTIVE_SESSIONS:
                             try:
-                                db_client.table("depot_history").update({"left_at": now.isoformat()}).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
+                                db_client.table("depot_history").update({"left_at": datetime.now(ZoneInfo('Europe/Prague')).isoformat()}).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
                             except: pass
                             del DEPOT_ACTIVE_SESSIONS[bus_id]
                             DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
@@ -4199,7 +4199,7 @@ def background_map_worker():
                                     session_id = DEPOT_ACTIVE_SESSIONS[bus_id]["id"]
                                     try:
                                         db_client.table("depot_history").update({
-                                            "left_at": now.isoformat()
+                                            "left_at": datetime.now(ZoneInfo('Europe/Prague')).isoformat()
                                         }).eq("id", session_id).execute()
                                     except Exception as e:
                                         print(f"[DEPOT] Chyba zapisu DB odjezdu: {e}")
@@ -6056,6 +6056,8 @@ def api_depot_history():
     """Vrati historii odjetych busu z vozovny."""
     depot_name = request.args.get('depot_name')
     search_q = request.args.get('q', '').strip().lower()
+    dt_from = request.args.get('dt_from', '').strip()
+    dt_to = request.args.get('dt_to', '').strip()
     
     db = get_db_client()
     if not db:
@@ -6064,6 +6066,10 @@ def api_depot_history():
     query = db.table("depot_history").select("*").eq("depot_name", depot_name)
     if search_q:
         query = query.ilike("spz", f"%{search_q}%")
+    if dt_from:
+        query = query.gte("arrived_at", dt_from)
+    if dt_to:
+        query = query.lte("arrived_at", dt_to)
         
     res = query.order("arrived_at", desc=True).limit(500).execute()
     return jsonify({"status": "success", "data": res.data or []})
