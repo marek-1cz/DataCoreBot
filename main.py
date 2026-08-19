@@ -1,4 +1,9 @@
 import os
+import sys
+import time
+import signal
+import atexit
+from datetime import datetime
 import time
 import discord
 from discord.ext import commands, tasks
@@ -2382,6 +2387,51 @@ def run_web():
     port = int(os.environ.get("PORT", 8080))
     from werkzeug.serving import run_simple
     run_simple('0.0.0.0', port, app, use_reloader=False)
+
+
+def exit_handler():
+    try:
+        from interaktivnimapa import GLOBAL_BUS_CACHE, db_client
+        from zoneinfo import ZoneInfo
+        if db_client:
+            now = datetime.now(ZoneInfo("Europe/Prague"))
+            cache_rows = []
+            for bid, bc in list(GLOBAL_BUS_CACHE.items()):
+                spz_v = bc.get("spz")
+                if not spz_v or spz_v in ("Nezn\u00e1m\u00e1", "Neznámá"):
+                    continue
+                cache_rows.append({
+                    "bus_id": bid,
+                    "spz": spz_v,
+                    "linka": bc.get("line") or "",
+                    "lat": bc.get("lat"),
+                    "lng": bc.get("lng"),
+                    "spz_verified": bc.get("spz_verified", False),
+                    "admin_verified": bc.get("admin_spz_verified", False),
+                    "trip_id": bc.get("trip_id"),
+                    "color_class": bc.get("color_class"),
+                    "status_text": bc.get("status"),
+                    "admin_note": bc.get("admin_note", ""),
+                    "admin_flag": bc.get("admin_flag", False),
+                    "manual_spz": bc.get("manual_spz", False),
+                    "updated_at": now.isoformat(),
+                })
+            if cache_rows:
+                db_client.table("spz_cache").upsert(cache_rows).execute()
+                print("==> SPZ CACHE FLUSH na exit_handler USPESNY", flush=True)
+    except Exception as e:
+        print(f"Chyba pri exit flush SPZ: {e}", flush=True)
+
+def sigterm_handler(signum, frame):
+    print("==> Přijat SIGTERM (redeploy). Ukládám cache...", flush=True)
+    exit_handler()
+    sys.exit(0)
+
+atexit.register(exit_handler)
+try:
+    signal.signal(signal.SIGTERM, sigterm_handler)
+except Exception:
+    pass
 
 if __name__ == "__main__":
     token = os.environ.get("DISCORD_TOKEN")

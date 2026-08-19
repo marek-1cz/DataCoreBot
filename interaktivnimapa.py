@@ -2414,7 +2414,7 @@ async function fetchBuses(){
           if(bus.admin_flag){
             spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#60a5fa;color:#0f172a;border-color:#3b82f6;font-weight:bold;" title="Ověřená SPZ správci systému">${bus.spz} <i class="fas fa-check-double" style="color:#0f172a;"></i></span></div>`;
             histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;
-          } else if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#93c5fd;color:#0f172a;border-color:#60a5fa;font-weight:bold;" title="SPZ ověřena systémem">${bus.spz} <i class="fas fa-check" style="color:#0f172a;"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;}
+          } else if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" title="SPZ ověřena systémem">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;}
           else{spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#f97316;color:#fff;border-color:#c2410c;">${bus.spz} <i class="fas fa-clock"></i></span></div>`;}
         }
         else spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Ceka na overeni</span></div>`;
@@ -3768,6 +3768,7 @@ def background_map_worker():
                 if row.get("manual_spz"):
                     ghost_entry["manual_spz"] = True
                 ghost_entry["spz_frozen"] = True  # zamkni - je z cache, nechceme okamzite prepsat
+                ghost_entry["_is_restored"] = True
                 ghost_entry["spz_locked"] = True
                 if ghost_entry["admin_spz_verified"]:
                     ghost_entry["manual_spz"] = True
@@ -3973,6 +3974,11 @@ def background_map_worker():
                             c["raw_delay"] = delay
                             c["is_train"] = is_train
                             dm = math.hypot(lat1 - c["lat"], lng1 - c["lng"])
+                            
+                            is_restored = c.pop("_is_restored", False)
+                            if is_restored:
+                                c["line"] = line
+                                # Ignoruj prni nesoulad linky pri nacteni z db
 
                             if not is_same_line(c["line"], line) and line and c["line"] != "Nezn\u00e1m\u00e1":
                                 if not c["actual_end_time"]:
