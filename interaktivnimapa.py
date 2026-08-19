@@ -5135,8 +5135,16 @@ def api_admin_map_action():
         c["manual_spz"] = False
         c["spz_frozen"] = False
         c["spz_locked"] = False
+        c["spz_verified"] = False
+        c["spz_3factor"] = False
+        c["admin_flag"] = False
         c["spz_stable_ticks"] = 0
+        
         ADMIN_SPZ_LOCKS.pop(bus_id, None)
+        try:
+            ADMIN_SPZ_LOCKS.pop(int(bus_id), None)
+        except ValueError:
+            pass
         try:
             _db_av = get_db_client()
             if _db_av:
