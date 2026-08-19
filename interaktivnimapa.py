@@ -1230,7 +1230,7 @@ function togglePin(){
   if(pinMode&&followId){let b=lastArr.find(x=>x.id===followId);if(b&&b.lat)map.setView([b.lat,b.lng]);}
 }
 function minHud(){hudMin=true;document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';document.getElementById('hud').style.transform='none';}
-function maxHud(){hudMin=false;document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';document.getElementById('hud').style.transform=\`translate3d(\${hudX}px, \${hudY}px, 0)\`;}
+function maxHud(){hudMin=false;document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';document.getElementById('hud').style.transform='translate3d(' + hudX + 'px, ' + hudY + 'px, 0)';}
 
 let hudX=0, hudY=0, isHudDragging=false, hudStartX, hudStartY;
 document.addEventListener('DOMContentLoaded', () => {
@@ -1259,7 +1259,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let clientY = e.touches ? e.touches[0].clientY : e.clientY;
         hudX = clientX - hudStartX;
         hudY = clientY - hudStartY;
-        hudEl.style.transform = \`translate3d(\${hudX}px, \${hudY}px, 0)\`;
+        hudEl.style.transform = 'translate3d(' + hudX + 'px, ' + hudY + 'px, 0)';
     }
     function hudDragEnd(e) {
         isHudDragging = false;

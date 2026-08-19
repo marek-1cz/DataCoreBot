@@ -36,6 +36,41 @@ window.adminSaveAll=(id,permanent)=>{
   adminAction('edit_all',id,{status:st,color_class:col,note,permanent});
 };
 
+window.openSeznamAutobusu = function(rawSpz) {
+    let s = rawSpz.replace(/[^a-zA-Z0-9]/g, '');
+    let formattedSpz = rawSpz;
+    if (s.length > 4) {
+        formattedSpz = s.substring(0, s.length - 4) + ' ' + s.substring(s.length - 4);
+    }
+    
+    // Synchronously open a new tab to avoid popup blockers
+    let newTab = window.open('about:blank', '_blank');
+    
+    // Inject a nice loading screen into the new tab
+    newTab.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Načítám seznam autobusů...</title>
+            <meta charset="utf-8">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+        </head>
+        <body style="background:#0f172a; color:white; font-family:sans-serif; display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh; margin:0;">
+            <i class="fas fa-circle-notch fa-spin" style="font-size:3rem; color:#38bdf8; margin-bottom:20px;"></i>
+            <h2 style="margin:0;">Otevírám databázi vozidel...</h2>
+            <p style="color:#94a3b8; margin-top:15px; text-align:center; max-width: 400px; line-height:1.5;">
+                Vyhledávám vůz <b>${formattedSpz}</b> v externím systému.<br>
+                Prosím o strpení, navazuji spojení s cílovým serverem (cca 5 sekund)...
+            </p>
+        </body>
+        </html>
+    `);
+    newTab.document.close();
+    
+    // Redirect the new tab to the target URL
+    newTab.location.href = 'https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz);
+};
+
 // === NAV ===
 const nav=document.getElementById('top-nav');
 let hideT=null;
@@ -188,29 +223,6 @@ function renderSpzLog(){
     body.appendChild(line);
   });
 }
-
-function renderConflictLog(){
-  let body=document.getElementById('log-conflict-body');
-  if(!body)return;
-  body.innerHTML='';
-  let hasConflicts = false;
-  if(window.liveBuses){
-    window.liveBuses.forEach(bus=>{
-      if(bus.admin_spz_conflict){
-        hasConflicts = true;
-        let div=document.createElement('div');
-        div.style.cssText='padding:8px 0;border-bottom:1px solid #3b82f6;';
-        div.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-          <span style="color:#a78bfa;font-size:13px;font-weight:bold;">⚔️ SPZ ${bus.spz} (Bus ${bus.id})</span>
-          <span style="color:#94a3b8;font-size:11px;">Linka ${bus.line}</span>
-        </div>
-        <button onclick="fetch('/api/admin/approve_conflict_spz',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bus_id:'${bus.id}'})}).then(r=>r.json()).then(r=>{if(r.status==='success'){setLogTab('conflict');setTimeout(()=>fetchLiveBuses(),1000);}});" style="width:100%;background:#8b5cf6;color:white;border:none;border-radius:4px;padding:5px 0;font-size:11px;font-weight:bold;cursor:pointer;">✔️ Schválit</button>`;
-        body.appendChild(div);
-      }
-    });
-  }
-  if(!hasConflicts){body.innerHTML='<div style="color:#64748b;padding:8px;">Žádné SPZ konflikty</div>';}
-}
 function renderMissingLog(){
   let body=document.getElementById('log-missing-body');
   if(!body)return;
@@ -295,9 +307,9 @@ async function _saveMissingFix(missingName, lat, lng, sourceName){
 
 function setLogTab(tab){
   logCurrentTab=tab;
-  let tabIds=['all','err','spz','missing','conflict','report','approx','system'];
+  let tabIds=['all','err','spz','missing','report','approx','system'];
   tabIds.forEach(id=>{
-    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':id==='spz'?'log-spz-body':id==='missing'?'log-missing-body':id==='conflict'?'log-conflict-body':id==='report'?'log-report-body':id==='system'?'log-system-body':'log-approx-body');
+    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':id==='spz'?'log-spz-body':id==='missing'?'log-missing-body':id==='report'?'log-report-body':id==='system'?'log-system-body':'log-approx-body');
     if(body)body.style.display=(tab===id?'':'none');
     let btn=document.getElementById(`log-tab-${id}`);
     if(btn){btn.style.background=(tab===id?'#334155':'transparent');btn.style.color='';}
@@ -305,7 +317,6 @@ function setLogTab(tab){
   if(tab==='err'){let b=document.getElementById('log-errors-body');b.innerHTML='';logErrEntries.forEach(e=>{let l=document.createElement('div');l.className='lg-err';l.textContent=`[${e.t}] ${e.msg}`;b.appendChild(l);});b.scrollTop=b.scrollHeight;}
   if(tab==='spz')renderSpzLog();
   if(tab==='missing')renderMissingLog();
-  if(tab==='conflict')renderConflictLog();
   if(tab==='report')loadReportSituace();
   if(tab==='approx')renderApproxLog();
   if(tab==='system')loadSystemLogs();
@@ -437,9 +448,42 @@ function togglePin(){
   if(btn){btn.style.background=pinMode?'#f59e0b':'#334155';btn.style.color=pinMode?'#0f172a':'#94a3b8';}
   if(pinMode&&followId){let b=lastArr.find(x=>x.id===followId);if(b&&b.lat)map.setView([b.lat,b.lng]);}
 }
-function minHud(){hudMin=true;document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';}
-function maxHud(){hudMin=false;document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';}
-function _hudShowRoute(){if(followId)toggleRoute(followId);}
+function minHud(){hudMin=true;document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';document.getElementById('hud').style.transform='none';}
+function maxHud(){hudMin=false;document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';document.getElementById('hud').style.transform='translate3d(' + hudX + 'px, ' + hudY + 'px, 0)';}
+
+let hudX=0, hudY=0, isHudDragging=false, hudStartX, hudStartY;
+document.addEventListener('DOMContentLoaded', () => {
+    let hudHandle = document.getElementById('hud-drag-handle');
+    let hudEl = document.getElementById('hud');
+    if (hudHandle) {
+        hudHandle.addEventListener('mousedown', hudDragStart);
+        hudHandle.addEventListener('touchstart', hudDragStart, {passive: false});
+        document.addEventListener('mousemove', hudDragMove);
+        document.addEventListener('touchmove', hudDragMove, {passive: false});
+        document.addEventListener('mouseup', hudDragEnd);
+        document.addEventListener('touchend', hudDragEnd);
+    }
+    function hudDragStart(e) {
+        if(e.target.tagName === 'BUTTON' || hudMin) return;
+        isHudDragging = true;
+        let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        hudStartX = clientX - hudX;
+        hudStartY = clientY - hudY;
+    }
+    function hudDragMove(e) {
+        if(!isHudDragging) return;
+        e.preventDefault();
+        let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        hudX = clientX - hudStartX;
+        hudY = clientY - hudStartY;
+        hudEl.style.transform = 'translate3d(' + hudX + 'px, ' + hudY + 'px, 0)';
+    }
+    function hudDragEnd(e) {
+        isHudDragging = false;
+    }
+});
 window.toggleFollow=function(busId,inflowId){
   if(followId===busId){stopFollow();return;}
   followId=busId;followInflowId=inflowId||busId;
@@ -1081,7 +1125,7 @@ function _renderRoute(busId,data,btn){
 let leLayer=null,leStops=[],leLineName='',leAddActive=false;
 function leInit(){if(!leLayer)leLayer=L.layerGroup().addTo(map);}
 function lineEditorOff(){if(leLayer)leLayer.clearLayers();leAddActive=false;document.body.classList.remove('nt-add-active');let b=document.getElementById('le-add-btn');if(b){b.style.background='#334155';b.style.color='#a855f7';}}
-function toggleLineEditor(){leInit();let p=document.getElementById('line-editor-panel');if(!p)return;p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='none')lineEditorOff();}
+function toggleLineEditor(){leInit();let p=document.getElementById('le-editor-panel');if(!p)return;p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='none')lineEditorOff();}
 async function leLoadLine(){
   leInit();leLayer.clearLayers();leStops=[];
   let inp=document.getElementById('le-line-inp');
@@ -1102,7 +1146,7 @@ function leRender(){
   let listEl=document.getElementById('le-stops');if(listEl)listEl.innerHTML='';
   if(leStops.length>=2){
     let coords=leStops.map(s=>[s.lat,s.lng]);
-    leLayer.addLayer(L.polyline(coords,{color:'#a855f7',weight:6,opacity:0.85,dashArray:'8,4',lineCap:'round'}));
+    leLayer.addLayer(L.polyline(coords,{color:'#a855f7',weight:6,opacity:0.85,dashArray:'8,4',lineCap:'round',lineJoin:'round'}));
   }
   leStops.forEach((s,i)=>{
     let col=s._moved?'#f59e0b':'#a855f7';
@@ -1142,7 +1186,7 @@ async function leSave(){
 // === NT (Nastaveni tras) - rucni kalibrace poloh zastavek ===
 let ntMode=false,ntMoveTimer=null,currentNtEdit=null,ntAddMode=false,ntAddName='';
 function stopDisplayName(s){
-  // Zobrazovany nazev ma prednost pred systemovym (pouzitym jen pro vyhledavani v JR)
+  // Zobrazovany nazev ma prednost pred systemovym (pouzitym jen pro vyhledavani v JŘ)
   return (s.display_name&&s.display_name.trim())?s.display_name.trim():s.name;
 }
 function ntDotIcon(cls){return L.divIcon({className:'',html:`<div class="nt-dot ${cls}"></div>`,iconSize:[14,14],iconAnchor:[7,7]});}
@@ -1626,7 +1670,7 @@ async function fetchBuses(){
     isRefreshing=true;
     ml.clearLayers();
 
-    window.liveBuses=data.buses; data.buses.forEach(bus=>{
+    data.buses.forEach(bus=>{
       if(!bus.lat||!bus.lng)return;
       let mc=bus.color_class,dv=parseInt(bus.delay),dTxt='';
       if(mc==='bg-gray'||mc==='bg-bug')dTxt='<span style="color:#94a3b8;">N/A</span>';
@@ -1657,17 +1701,15 @@ async function fetchBuses(){
       if(!bus.is_train){
         if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
         else if(bus.spz&&bus.spz!=='Neznama'){
-          if(bus.admin_spz_bug){
-            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#10b981;border-color:#059669;" title="Pravděpodobně zaseknutý bus">${bus.spz} <i class="fas fa-question" style="color:#d1fae5;"></i></span></div>`;
-            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;
-          } else if(bus.admin_spz_conflict){
-            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#8b5cf6;border-color:#7c3aed;" title="Ověřeno, neschváleno">${bus.spz} <i class="fas fa-check" style="color:#ddd6fe;"></i></span></div>`;
-            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;
-          } else if(bus.admin_spz_verified){
-            // Dvojita fajfka = admin lock
-            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#1e40af;border-color:#3b82f6;" title="Ověřená SPZ správci systému">${bus.spz} <i class="fas fa-check-double" style="color:#93c5fd;"></i></span></div>`;
-            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;
-          } else if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" title="SPZ ověřena systémem">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>`;}
+          let seznamBtn = '';
+          if (bus.spz_verified || bus.admin_flag) {
+              seznamBtn = `<a href="javascript:void(0)" onclick="openSeznamAutobusu('${bus.spz}')" class="pa pa-d" style="margin-top:5px; background: #2563eb; color: #fff; border-color: #1d4ed8;">🚌 Fotografie a informace o vozu</a>`;
+          }
+
+          if(bus.admin_flag){
+            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#60a5fa;color:#0f172a;border-color:#3b82f6;font-weight:bold;" title="Ověřená SPZ správci systému">${bus.spz} <i class="fas fa-check-double" style="color:#0f172a;"></i></span></div>`;
+            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>${seznamBtn}`;
+          } else if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" title="SPZ ověřena systémem">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>${seznamBtn}`;}
           else{spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#f97316;color:#fff;border-color:#c2410c;">${bus.spz} <i class="fas fa-clock"></i></span></div>`;}
         }
         else spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Ceka na overeni</span></div>`;
@@ -1728,14 +1770,14 @@ async function fetchBuses(){
         let adminLockBtn='';
         if(hasSPZ){
           adminLockBtn='<button id="adm_lock_'+bus.id+'" '
-            +'onclick="let b=document.getElementById(\'adm_lock_'+bus.id+'\');'
-            +'adminAction(\''+adminVerifyAction+'\',\''+bus.id+'\');'
-            +'if(\''+adminVerifyAction+'\'===\'admin_verify_spz\'){'
-            +'b.style.background=\'#1d4ed8\';b.style.color=\'#bfdbfe\';b.style.borderColor=\'#3b82f6\';'
-            +'b.textContent=\'🔒 SPZ UZAMČENA ADMINEM\';'
+            +'onclick="let b=document.getElementById(\\\'adm_lock_'+bus.id+'\\\');'
+            +'adminAction(\\\''+adminVerifyAction+'\\\',\\\''+bus.id+'\\\');'
+            +'if(\\\''+adminVerifyAction+'\\\'===\\\'admin_verify_spz\\\'){'
+            +'b.style.background=\\\'#1d4ed8\\\';b.style.color=\\\'#bfdbfe\\\';b.style.borderColor=\\\'#3b82f6\\\';'
+            +'b.textContent=\\\'🔒 SPZ UZAMČENA ADMINEM\\\';'
             +'}else{'
-            +'b.style.background=\'#1e293b\';b.style.color=\'#94a3b8\';b.style.borderColor=\'#334155\';'
-            +'b.textContent=\'🔓 Ověřit SPZ adminem (Admin Lock)\';'
+            +'b.style.background=\\\'#1e293b\\\';b.style.color=\\\'#94a3b8\\\';b.style.borderColor=\\\'#334155\\\';'
+            +'b.textContent=\\\'🔓 Ověřit SPZ adminem (Admin Lock)\\\';'
             +'}" '
             +'style="width:100%;margin-top:6px;padding:9px;border:1px solid '+adminVerifyBorder+';border-radius:5px;'
             +'font-size:12px;cursor:pointer;font-weight:bold;touch-action:manipulation;'
@@ -1859,97 +1901,169 @@ async function loadDepotZones(){
 }
 
 function renderDepotZones(){
-  depotLayer.clearLayers();
-  depotZones.forEach(z=>{
-    if(!z.polygon||z.polygon.length<3)return;
-    let zColor=z.color||'#facc15';
-    let poly=L.polygon(z.polygon,{
-      color:zColor,fillColor:zColor,
-      fillOpacity:0.13,weight:2,dashArray:'6,4',opacity:0.7,
-    });
-    // Střed polygonu pro ikonu garáže
-    let bounds=poly.getBounds(),center=bounds.getCenter();
-    // Ikona vozovny: emoji s barvou zóny ve stínu
-    let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🅿️</div>`;
-    let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
-    let popId = 'depot_pop_' + Math.random().toString(36).substr(2,9);
-    let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:10px;min-width:280px;font-family:sans-serif;max-height:65vh;overflow-y:auto;overflow-x:hidden;">
-        <div style="font-weight:bold;font-size:15px;margin-bottom:8px;color:${zColor};display:flex;align-items:center;gap:6px;">
-            <span>🅿️ Vozovna: ${z.name}</span>
-        </div>
-        <div style="font-size:12px;margin-bottom:12px;background:rgba(0,0,0,0.2);padding:6px;border-radius:6px;border:1px solid #334155;">
-            <div>Aktuálně parkuje: <b style="color:white;">${z.bus_count||0}</b> busů</div>
-        </div>
-        <div id="${popId}_active">Načítám...</div>
-        <div style="margin-top:12px;border-top:1px dashed #334155;padding-top:8px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                <span style="font-size:12px;color:#cbd5e1;font-weight:bold;">Historie odjezdů a příjezdů</span>
-                <input type="text" id="${popId}_search" placeholder="Hledat SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;width:110px;">
-            </div>
-            <div id="${popId}_hist" style="font-size:11px;color:#94a3b8;max-height:400px;overflow-y:auto;padding-right:4px;">Načítám historii...</div>
-        </div>
-    </div>`;
-
-    let mk=L.marker(center,{icon:depotIcon,zIndexOffset:500});
-    mk.bindPopup(popHtml,{className:'dark-popup',maxWidth:340, minWidth:260});
+    if(!window._depotMarkersMap) { window._depotMarkersMap = new Map(); window._depotPolysMap = new Map(); }
+    let currentNames = new Set(depotZones.map(z => z.name));
     
-    mk.on('popupopen', function() {
-        let activeDiv = document.getElementById(popId+'_active');
-        if(activeDiv) {
-            if(z.buses && z.buses.length) {
-                activeDiv.innerHTML = z.buses.map(b=>{
-                    let adminDel = IS_ADMIN && b.session_id ? `<button onclick="deleteDepotRecord('${b.session_id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;margin-left:auto;padding:2px 4px;" title="Smazat">❌</button>` : '';
-                    let arrHtml = '';
-                    if (b.arrived_at) {
-                        let tParts = b.arrived_at.split('T');
-                        let ad = tParts.length > 1 ? tParts[1].substring(0,5) : b.arrived_at;
-                        arrHtml = `<br><span style="color:#64748b;font-size:10px;">Od: ${ad} ${b.is_imprecise?'(RESET MAPY)':''}</span>`;
-                    }
-                    return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #1e293b;flex-wrap:wrap;">
-                        <span style="color:${zColor};font-weight:bold;min-width:65px;">${b.spz||'?'}</span>
-                        <span style="color:#cbd5e1;font-size:11px;">L${b.line||'?'}</span>
-                        ${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}
-                        ${adminDel}
-                        <div style="width:100%;margin-top:-3px;">${arrHtml}</div>
-                    </div>`;
-                }).join('');
-            } else {
-                activeDiv.innerHTML = '<div style="color:#64748b;font-size:11px;text-align:center;padding:4px;">Žádný bus v depu</div>';
-            }
+    // Odstranění starých vozoven
+    for(let [name, mk] of window._depotMarkersMap.entries()) {
+        if(!currentNames.has(name)) {
+            depotLayer.removeLayer(mk);
+            let poly = window._depotPolysMap.get(name);
+            if(poly) depotLayer.removeLayer(poly);
+            window._depotMarkersMap.delete(name);
+            window._depotPolysMap.delete(name);
+        }
+    }
+    
+    depotZones.forEach(z=>{
+        if(!z.polygon||z.polygon.length<3)return;
+        let zColor=z.color||'#facc15';
+        
+        let poly = window._depotPolysMap.get(z.name);
+        if(!poly) {
+            poly=L.polygon(z.polygon,{
+                color:zColor,fillColor:zColor,
+                fillOpacity:0.13,weight:2,dashArray:'6,4',opacity:0.7,
+            });
+            window._depotPolysMap.set(z.name, poly);
+            depotLayer.addLayer(poly);
+        } else {
+            poly.setLatLngs(z.polygon);
         }
         
-        let histDiv = document.getElementById(popId+'_hist');
+        let center = poly.getBounds().getCenter();
+        let mk = window._depotMarkersMap.get(z.name);
+        if(!mk) {
+            let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🅿️</div>`;
+            let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
+            mk=L.marker(center,{icon:depotIcon,zIndexOffset:500});
+            window._depotMarkersMap.set(z.name, mk);
+            
+            let popId = 'depot_pop_' + Math.random().toString(36).substr(2,9);
+            mk._popId = popId;
+            mk._zName = z.name;
+            
+            let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:15px;width:100%;box-sizing:border-box;font-family:sans-serif;max-height:85vh;overflow-y:auto;overflow-x:hidden;">
+                <div style="font-weight:bold;font-size:16px;margin-bottom:12px;color:${zColor};display:flex;align-items:center;gap:6px;">
+                    <span>🅿️ Vozovna: ${z.name}</span>
+                </div>
+                <div style="font-weight:bold;font-size:13px;color:#cbd5e1;margin-bottom:6px;">VOZIDLA VE VOZOVNĚ:</div>
+                <div id="${popId}_active" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;">Načítám...</div>
+                <div style="margin-top:16px;border-top:1px dashed #334155;padding-top:12px;">
+                    <div style="font-size:13px;color:#cbd5e1;font-weight:bold;margin-bottom:10px;">Historie odjezdů a příjezdů</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center;">
+                        <input type="text" id="${popId}_search" placeholder="🔍 SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;width:100px;">
+                        <select id="${popId}_sort" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;">
+                            <option value="desc">Nejnovější</option>
+                            <option value="asc">Nejstarší</option>
+                        </select>
+                    </div>
+                    <div id="${popId}_hist" style="font-size:12px;color:#94a3b8;width:100%;overflow-x:auto;">Načítám historii...</div>
+                </div>
+            </div>`;
+            mk.bindPopup(popHtml,{className:'dark-popup', maxWidth:500, minWidth:460});
+            
+            mk.on('popupopen', function() {
+                window._activeDepotPopId = mk._popId;
+                window._activeDepotName = mk._zName;
+                if(window.updateActiveDepotPopup) window.updateActiveDepotPopup();
+            });
+            mk.on('popupclose', function() {
+                window._activeDepotPopId = null;
+                window._activeDepotName = null;
+            });
+            
+            depotLayer.addLayer(mk);
+        }
+    });
+    
+    // Aktualizuj otevřené popup okno bez refreshování celé mapy
+    if(window.updateActiveDepotPopup) window.updateActiveDepotPopup();
+}
+
+window.updateActiveDepotPopup = function() {
+    let zName = window._activeDepotName;
+    let popId = window._activeDepotPopId;
+    if(!zName || !popId) return;
+    
+    let z = depotZones.find(dz => dz.name === zName);
+    if(!z) return;
+    
+    let activeDiv = document.getElementById(popId+'_active');
+    if(activeDiv) {
+        if(z.buses && z.buses.length) {
+            let seenSpz = new Set();
+            let uniqueBuses = [];
+            for(let b of z.buses) {
+                let spzKey = b.spz || '?';
+                if(!seenSpz.has(spzKey)) { seenSpz.add(spzKey); uniqueBuses.push(b); }
+            }
+            let zColor = z.color || '#facc15';
+            activeDiv.innerHTML = uniqueBuses.map(b=>{
+                let adminDel = IS_ADMIN && b.session_id ? `<button onclick="deleteDepotRecord('${b.session_id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:0 2px;margin-left:4px;" title="Smazat">❌</button>` : '';
+                return `<span style="background:rgba(255,255,255,0.05);border:1px solid #334155;color:${zColor};padding:4px 8px;border-radius:6px;font-weight:bold;font-size:13px;display:inline-flex;align-items:center;gap:4px;">
+                    ${b.spz||'?'}
+                    <span style="color:#64748b;font-size:10px;font-weight:normal;">L${b.line||'?'}</span>
+                    ${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}
+                    ${adminDel}
+                </span>`;
+            }).join('');
+        } else {
+            activeDiv.innerHTML = '<span style="color:#64748b;font-size:12px;padding:4px;">Žádný bus v depu</span>';
+        }
+    }
+    
+    let histDiv = document.getElementById(popId+'_hist');
+    if(histDiv && !histDiv._eventsAttached) {
+        histDiv._eventsAttached = true;
         let searchInp = document.getElementById(popId+'_search');
+        let sortSel = document.getElementById(popId+'_sort');
         
-        async function fetchHist(q='') {
+        async function fetchHist() {
             if(!histDiv) return;
-            histDiv.innerHTML = '<div style="text-align:center;padding:10px;"><i class="fas fa-spinner fa-spin"></i></div>';
+            histDiv.innerHTML = '<div style="text-align:center;padding:10px;"><i class="fas fa-spinner fa-spin"></i> Načítám...</div>';
             try {
-                let r = await fetch('/api/depot_history?depot_name='+encodeURIComponent(z.name)+'&q='+encodeURIComponent(q));
+                let q = searchInp ? searchInp.value : '';
+                let sDir = sortSel ? sortSel.value : 'desc';
+                let url = '/api/depot_history?depot_name='+encodeURIComponent(z.name)+'&q='+encodeURIComponent(q)+'&sort='+encodeURIComponent(sDir);
+                let r = await fetch(url);
                 let d = await r.json();
                 if(d.status==='success' && d.data && d.data.length>0) {
-                    histDiv.innerHTML = d.data.map(h=>{
+                    let hMap = new Map();
+                    for(let h of d.data) {
+                        let k = h.spz; // Sjednotíme podle SPZ - zobrazí se pouze poslední (nejnovější/nejstarší podle řazení) návštěva dané SPZ
+                        if(!hMap.has(k)) hMap.set(k, h);
+                    }
+                    let uniqueHist = Array.from(hMap.values());
+                    
+                    let tableRows = uniqueHist.map(h=>{
                         let fmtT = (iso) => {
                             if(!iso) return '';
-                            let p = iso.split('T');
-                            if(p.length<2) return iso;
-                            let dp = p[0].split('-');
-                            let tp = p[1].split('+')[0].split('.')[0];
-                            return `${dp[2]}. ${dp[1]}. ${dp[0]} ${tp}`;
+                            let dt = new Date(iso);
+                            if(isNaN(dt)) return iso;
+                            // Krátký formát, např. "19. 8. 08:06"
+                            return dt.toLocaleString('cs-CZ', {day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit'});
                         };
                         let lTime = h.left_at ? fmtT(h.left_at) : '<span style="color:#10b981;font-weight:bold;">Nyní parkuje</span>';
-                        let aTime = h.arrived_at ? fmtT(h.arrived_at) : 'Neznámý (Před úpravou)';
-                        let impr = h.is_imprecise ? ' <span title="Reset mapy - nepřesný čas" style="color:#facc15;font-size:9px;">(RESET MAPY)</span>' : '';
-                        let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${h.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;margin-left:auto;padding:2px 4px;" title="Smazat ze záznamu">❌</button>` : '';
-                        return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #1e293b;">
-                            <span style="color:#f59e0b;font-weight:bold;min-width:65px;">${h.spz}</span>
-                            <div style="display:flex;flex-direction:column;font-size:10px;">
-                                <span>Příjezd: ${aTime}${impr}</span>
-                                <span>Odjezd: ${lTime}</span>
-                            </div>
-                            ${adminDel}
-                        </div>`;
+                        let aTime = h.arrived_at ? fmtT(h.arrived_at) : 'Neznámý';
+                        let impr = h.is_imprecise ? ' <span title="Nepřesný čas (Reset mapy)" style="color:#facc15;font-size:10px;">⚠️</span>' : '';
+                        let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${h.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:2px 4px;" title="Smazat ze záznamu">❌</button>` : '';
+                        return `<tr style="border-bottom:1px solid #1e293b;">
+                            <td style="padding:4px;color:#f59e0b;font-weight:bold;white-space:nowrap;">${h.spz}</td>
+                            <td style="padding:4px;font-size:11px;white-space:nowrap;">${aTime}${impr}</td>
+                            <td style="padding:4px;font-size:11px;white-space:nowrap;">${lTime}</td>
+                            <td style="padding:4px;text-align:right;">${adminDel}</td>
+                        </tr>`;
                     }).join('');
+                    histDiv.innerHTML = `<table style="width:100%;border-collapse:collapse;color:#cbd5e1;table-layout:auto;">
+                        <thead><tr style="background:#1e293b;text-align:left;">
+                            <th style="padding:4px;color:#38bdf8;font-weight:bold;">SPZ</th>
+                            <th style="padding:4px;color:#38bdf8;font-weight:bold;">Příjezd</th>
+                            <th style="padding:4px;color:#38bdf8;font-weight:bold;">Odjezd</th>
+                            <th style="padding:4px;"></th>
+                        </tr></thead>
+                        <tbody>${tableRows}</tbody>
+                    </table>`;
                 } else {
                     histDiv.innerHTML = '<div style="text-align:center;padding:10px;">Žádná historie nalezena</div>';
                 }
@@ -1960,21 +2074,22 @@ function renderDepotZones(){
         
         fetchHist();
         
-        if(searchInp) {
-            let debounce = null;
-            searchInp.addEventListener('input', (e)=>{
+        let debounce = null;
+        let attachEv = (el, type='input') => {
+            if(!el) return;
+            el.addEventListener(type, ()=>{
                 clearTimeout(debounce);
-                debounce = setTimeout(()=>{ fetchHist(e.target.value); }, 400);
+                debounce = setTimeout(fetchHist, 400);
             });
-            searchInp.addEventListener('keydown', e => e.stopPropagation());
-            searchInp.addEventListener('keyup', e => e.stopPropagation());
-            searchInp.addEventListener('keypress', e => e.stopPropagation());
-        }
-    });
-
-    depotLayer.addLayer(poly);
-    depotLayer.addLayer(mk);
-  });
+            if(type==='input') {
+                el.addEventListener('keydown', e => e.stopPropagation());
+                el.addEventListener('keyup', e => e.stopPropagation());
+                el.addEventListener('keypress', e => e.stopPropagation());
+            }
+        };
+        attachEv(searchInp, 'input');
+        attachEv(sortSel, 'change');
+    }
 }
 
 window.deleteDepotRecord = async function(id, depotName) {
