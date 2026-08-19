@@ -2573,7 +2573,41 @@ async function fetchBuses(){
         if(prev!==cur){
           window._spzPrev[b.id]=cur;
           if(b.spz&&b.spz!=='Neznama'){
-            appLogSpz(b.id,b.spz,b.spz_verified?'ok':'pending',b.spz_verified?`✅ Ověřeno (L${b.line})`:`⏳ Čeká na ověřenfunction renderDepotZones(){
+            appLogSpz(b.id,b.spz,b.spz_verified?'ok':'pending',b.spz_verified?`✅ Ověřeno (L${b.line})`:`⏳ Čeká na ověření (L${b.line})`);
+          }else{
+            appLogSpz(b.id,'Neznámá','err',`❓ Bez SPZ (L${b.line}, stav: ${b.status})`);
+          }
+        }
+      });
+    }
+
+  }catch(e){
+    console.error(e);
+    isRefreshing=false;
+    appLog('fetchBuses chyba: '+e.message,'error');
+  }
+}
+fetchBuses();
+setInterval(fetchBuses,10000);
+
+// ═══════════════════════════════════════════════════════════
+// VOZOVNY (DEPOT ZONES) — admin draw + public garage icons
+// ═══════════════════════════════════════════════════════════
+let depotZones=[], depotLayer=L.layerGroup().addTo(map), depotDrawMode=false, depotPoints=[], depotDrawPolyline=null, depotEditId=null;
+const DEPOT_ICON=L.divIcon({className:'',html:`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 3px #000);" title="Vozovna">🅿️</div>`,iconSize:[28,28],iconAnchor:[14,14]});
+
+// Načti a zobraz vozovny (volá se při startu + po každé změně)
+async function loadDepotZones(){
+  try{
+    let r=await fetch('/api/depot_zones'),d=await r.json();
+    if(d.status!=='success')return;
+    depotZones=d.zones;
+    renderDepotZones();
+    if(IS_ADMIN)renderDepotList();
+  }catch(e){console.error('[DEPOT]',e);}
+}
+
+function renderDepotZones(){
     if(!window._depotMarkersMap) { window._depotMarkersMap = new Map(); window._depotPolysMap = new Map(); }
     let currentNames = new Set(depotZones.map(z => z.name));
     
