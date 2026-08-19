@@ -6251,6 +6251,7 @@ def api_bus_route(bus_id):
 def api_seznam_autobusu():
     import urllib.request
     import urllib.parse
+    import http.cookiejar
     spz = request.args.get('spz', '')
     if not spz:
         return redirect('https://seznam-autobusu.cz/')
@@ -6261,24 +6262,32 @@ def api_seznam_autobusu():
         formatted_spz = s[:-4] + ' ' + s[-4:]
         
     try:
+        cj = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+        opener.addheaders = [('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')]
+        
+        # 1) Acquire session cookie
+        try:
+            opener.open('https://seznam-autobusu.cz/', timeout=5)
+        except Exception:
+            pass
+
+        # 2) Perform search
         data = urllib.parse.urlencode({
             'search': formatted_spz,
             '_submit': 'vyhledat',
             '_do': 'header-combinedSearch-search-submit'
         }).encode('utf-8')
         
-        req = urllib.request.Request(
-            'https://seznam-autobusu.cz/', 
-            data=data, 
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        )
+        req = urllib.request.Request('https://seznam-autobusu.cz/', data=data)
         
-        with urllib.request.urlopen(req, timeout=10) as response:
+        with opener.open(req, timeout=10) as response:
             final_url = response.geturl()
             return redirect(final_url)
     except Exception as e:
         print(f"Error checking seznam autobusu: {e}")
         return redirect('https://seznam-autobusu.cz/')
+
 
 
 # === VOZOVNY (DEPOT ZONES) ===
