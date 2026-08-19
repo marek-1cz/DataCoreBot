@@ -5085,6 +5085,10 @@ def api_admin_map_action():
         c["status"] = "BUG / Nerealna poloha (oznaceno adminem)"
         c["spz_frozen"] = True  # zamraz SPZ aby se nesmazala
         c["spz_conflict_warn"] = False  # admin to vedome oznacil, uz neni potreba duplikat alert
+        if c.get("admin_spz_verified") or bus_id in ADMIN_SPZ_LOCKS:
+            c["admin_spz_verified"] = False
+            c["admin_spz_bug"] = True
+            ADMIN_SPZ_LOCKS.pop(bus_id, None)
 
     elif action == "admin_verify_spz":
         # Absolutni admin lock - SPZ je overena adminem, automatikata prestane hledat
@@ -5132,6 +5136,13 @@ def api_admin_map_action():
         c["spz_frozen"] = False
         c["spz_locked"] = False
         c["spz_stable_ticks"] = 0
+        ADMIN_SPZ_LOCKS.pop(bus_id, None)
+        try:
+            _db_av = get_db_client()
+            if _db_av:
+                _db_av.table("spz_cache").update({"admin_verified": False}).eq("bus_id", bus_id).execute()
+        except Exception as e_av:
+            pass
         print(f"[ADMIN-VERIFY] Bus {bus_id}: Admin lock SPZ odebran", flush=True)
 
     elif action == "reset_admin":
@@ -5156,6 +5167,13 @@ def api_admin_map_action():
         c["status"] = "Na\u010d\u00edt\u00e1n\u00ed..."
         c["admin_spz_bug"] = False
         c["admin_spz_conflict"] = False
+        ADMIN_SPZ_LOCKS.pop(bus_id, None)
+        try:
+            _db_av = get_db_client()
+            if _db_av:
+                _db_av.table("spz_cache").update({"admin_verified": False}).eq("bus_id", bus_id).execute()
+        except Exception as e_av:
+            pass
 
     return jsonify({"status": "success"})
 
