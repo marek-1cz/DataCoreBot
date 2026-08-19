@@ -2975,6 +2975,7 @@ setInterval(loadDepotZones,20000); // refresh kazdych 20 sekund
 
 # === GLOBALNI STAV ===
 GLOBAL_BUS_CACHE    = {}
+ADMIN_SPZ_LOCKS     = {}
 LIVE_BUSES_DATA     = []
 TRACKED_SPZS        = set()
 WORKER_START_TIME   = None
@@ -3748,6 +3749,15 @@ def background_map_worker():
             for row in (cache_res.data or []):
                 bid = row.get("bus_id")
                 spz = row.get("spz")
+                
+                # Uloz admin verified do pameti natrvalo
+                if row.get("admin_verified") and bid and spz:
+                    ADMIN_SPZ_LOCKS[bid] = {
+                        "spz": spz,
+                        "admin_note": row.get("admin_note", ""),
+                        "color_class": row.get("color_class", "bg-darkblue")
+                    }
+                    
                 if not bid or not spz or spz == "Nezn\u00e1m\u00e1":
                     continue
                 if bid in GLOBAL_BUS_CACHE:
@@ -3965,6 +3975,19 @@ def background_map_worker():
                                 if ghost_status and ghost_status != "Načítání...":
                                     nb["status"] = ghost_status
                             
+                            if bus_id in ADMIN_SPZ_LOCKS:
+                                lock = ADMIN_SPZ_LOCKS[bus_id]
+                                nb["spz"] = lock["spz"]
+                                nb["admin_spz_verified"] = True
+                                nb["admin_flag"] = True
+                                nb["spz_verified"] = True
+                                nb["manual_spz"] = True
+                                nb["spz_locked"] = True
+                                nb["spz_frozen"] = True
+                                nb["color_class"] = lock.get("color_class", "bg-darkblue")
+                                if lock.get("admin_note"):
+                                    nb["admin_note"] = lock["admin_note"]
+                            
                             GLOBAL_BUS_CACHE[bus_id] = nb
 
                         else:
@@ -3979,6 +4002,19 @@ def background_map_worker():
                             if is_restored:
                                 c["line"] = line
                                 # Ignoruj prni nesoulad linky pri nacteni z db
+
+                            if bus_id in ADMIN_SPZ_LOCKS:
+                                lock = ADMIN_SPZ_LOCKS[bus_id]
+                                c["spz"] = lock["spz"]
+                                c["admin_spz_verified"] = True
+                                c["admin_flag"] = True
+                                c["spz_verified"] = True
+                                c["manual_spz"] = True
+                                c["spz_locked"] = True
+                                c["spz_frozen"] = True
+                                c["color_class"] = lock.get("color_class", "bg-darkblue")
+                                if lock.get("admin_note"):
+                                    c["admin_note"] = lock["admin_note"]
 
                             if not is_same_line(c["line"], line) and line and c["line"] != "Nezn\u00e1m\u00e1":
                                 if not c["actual_end_time"]:
@@ -4867,7 +4903,7 @@ def background_map_worker():
                 active_ids = list(GLOBAL_BUS_CACHE.keys())
                 if active_ids:
                     try:
-                        db_client.table("spz_cache").delete().not_.in_("bus_id", active_ids).execute()
+                        db_client.table("spz_cache").delete().not_.in_("bus_id", active_ids).eq("admin_verified", False).execute()
                     except Exception:
                         pass
 
@@ -5035,12 +5071,18 @@ def api_admin_map_action():
         # Absolutni admin lock - SPZ je overena adminem, automatikata prestane hledat
         if c.get("spz") and c["spz"] not in ("Nezn\u00e1m\u00e1", "Neznámá"):
             c["admin_spz_verified"] = True
+            c["admin_flag"] = True
             c["spz_locked"] = True
             c["spz_frozen"] = True
             c["manual_spz"] = True
             c["spz_verified"] = True
             c["investigating"] = False
             c["bug_locked"] = False
+            ADMIN_SPZ_LOCKS[bus_id] = {
+                "spz": c["spz"],
+                "admin_note": c.get("admin_note", ""),
+                "color_class": c.get("color_class", "bg-darkblue")
+            }
             # Okamzite zapsat do spz_cache s admin_verified=True
             try:
                 _db_av = get_db_client()
