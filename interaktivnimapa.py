@@ -818,24 +818,7 @@ window.adminSaveAll=(id,permanent)=>{
 };
 
 window.openSeznamAutobusu = function(rawSpz) {
-    let s = rawSpz.replace(/[^a-zA-Z0-9]/g, '');
-    let formattedSpz = rawSpz;
-    if (s.length > 4) {
-        formattedSpz = s.substring(0, s.length - 4) + ' ' + s.substring(s.length - 4);
-    }
-    let form = document.createElement('form');
-    form.method = 'POST';
-    form.action = 'https://seznam-autobusu.cz/';
-    form.target = '_blank';
-    
-    let p1 = document.createElement('input'); p1.type = 'hidden'; p1.name = 'search'; p1.value = formattedSpz;
-    let p2 = document.createElement('input'); p2.type = 'hidden'; p2.name = '_submit'; p2.value = 'vyhledat';
-    let p3 = document.createElement('input'); p3.type = 'hidden'; p3.name = '_do'; p3.value = 'header-combinedSearch-search-submit';
-    
-    form.appendChild(p1); form.appendChild(p2); form.appendChild(p3);
-    document.body.appendChild(form);
-    form.submit();
-    document.body.removeChild(form);
+    window.open('/api/seznam_autobusu?spz=' + encodeURIComponent(rawSpz), '_blank');
 };
 
 // === NAV ===
@@ -6263,6 +6246,32 @@ def api_bus_route(bus_id):
         "custom_shape_full": custom_shape_full,
         "route_key": route_key if result and c.get('line') else None
     })
+
+@mapa_bp.route('/api/seznam_autobusu')
+def api_seznam_autobusu():
+    import requests
+    spz = request.args.get('spz', '')
+    if not spz:
+        return redirect('https://seznam-autobusu.cz/')
+    
+    s = re.sub(r'[^a-zA-Z0-9]', '', spz)
+    formatted_spz = spz
+    if len(s) > 4:
+        formatted_spz = s[:-4] + ' ' + s[-4:]
+        
+    try:
+        session_req = requests.Session()
+        session_req.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+        data = {
+            'search': formatted_spz,
+            '_submit': 'vyhledat',
+            '_do': 'header-combinedSearch-search-submit'
+        }
+        r = session_req.post('https://seznam-autobusu.cz/', data=data, allow_redirects=True, timeout=10)
+        return redirect(r.url)
+    except Exception as e:
+        print(f"Error checking seznam autobusu: {e}")
+        return redirect('https://seznam-autobusu.cz/')
 
 
 # === VOZOVNY (DEPOT ZONES) ===
