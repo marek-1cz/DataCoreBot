@@ -2622,7 +2622,7 @@ function renderDepotZones(){
     let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🅿️</div>`;
     let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
     let popId = 'depot_pop_' + Math.random().toString(36).substr(2,9);
-    let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:15px;min-width:380px;font-family:sans-serif;max-height:85vh;overflow-y:auto;overflow-x:hidden;">
+    let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:15px;width:400px;font-family:sans-serif;max-height:85vh;overflow-y:auto;overflow-x:hidden;">
         <div style="font-weight:bold;font-size:16px;margin-bottom:12px;color:${zColor};display:flex;align-items:center;gap:6px;">
             <span>🅿️ Vozovna: ${z.name}</span>
         </div>
@@ -2632,16 +2632,17 @@ function renderDepotZones(){
             <div style="font-size:13px;color:#cbd5e1;font-weight:bold;margin-bottom:10px;">Historie odjezdů a příjezdů</div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center;">
                 <input type="text" id="${popId}_search" placeholder="🔍 SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;width:100px;">
-                <input type="datetime-local" id="${popId}_dtFrom" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;" title="Od">
-                <span style="color:#64748b;font-size:11px;">-</span>
-                <input type="datetime-local" id="${popId}_dtTo" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;" title="Do">
+                <select id="${popId}_sort" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;">
+                    <option value="desc">Nejnovější</option>
+                    <option value="asc">Nejstarší</option>
+                </select>
             </div>
             <div id="${popId}_hist" style="font-size:12px;color:#94a3b8;width:100%;">Načítám historii...</div>
         </div>
     </div>`;
 
     let mk=L.marker(center,{icon:depotIcon,zIndexOffset:500});
-    mk.bindPopup(popHtml,{className:'dark-popup',maxWidth:340, minWidth:260});
+    mk.bindPopup(popHtml,{className:'dark-popup', maxWidth:450, minWidth:400});
     
     mk.on('popupopen', function() {
         let activeDiv = document.getElementById(popId+'_active');
@@ -2672,19 +2673,15 @@ function renderDepotZones(){
         
         let histDiv = document.getElementById(popId+'_hist');
         let searchInp = document.getElementById(popId+'_search');
-        let dtFrom = document.getElementById(popId+'_dtFrom');
-        let dtTo = document.getElementById(popId+'_dtTo');
+        let sortSel = document.getElementById(popId+'_sort');
         
         async function fetchHist() {
             if(!histDiv) return;
             histDiv.innerHTML = '<div style="text-align:center;padding:10px;"><i class="fas fa-spinner fa-spin"></i> Načítám...</div>';
             try {
                 let q = searchInp ? searchInp.value : '';
-                let dF = dtFrom && dtFrom.value ? new Date(dtFrom.value).toISOString() : '';
-                let dT = dtTo && dtTo.value ? new Date(dtTo.value).toISOString() : '';
-                let url = '/api/depot_history?depot_name='+encodeURIComponent(z.name)+'&q='+encodeURIComponent(q);
-                if(dF) url += '&dt_from='+encodeURIComponent(dF);
-                if(dT) url += '&dt_to='+encodeURIComponent(dT);
+                let sDir = sortSel ? sortSel.value : 'desc';
+                let url = '/api/depot_history?depot_name='+encodeURIComponent(z.name)+'&q='+encodeURIComponent(q)+'&sort='+encodeURIComponent(sDir);
                 let r = await fetch(url);
                 let d = await r.json();
                 if(d.status==='success' && d.data && d.data.length>0) {
@@ -2733,19 +2730,20 @@ function renderDepotZones(){
         fetchHist();
         
         let debounce = null;
-        let attachEv = (el) => {
+        let attachEv = (el, type='input') => {
             if(!el) return;
-            el.addEventListener('input', ()=>{
+            el.addEventListener(type, ()=>{
                 clearTimeout(debounce);
                 debounce = setTimeout(fetchHist, 400);
             });
-            el.addEventListener('keydown', e => e.stopPropagation());
-            el.addEventListener('keyup', e => e.stopPropagation());
-            el.addEventListener('keypress', e => e.stopPropagation());
+            if(type==='input') {
+                el.addEventListener('keydown', e => e.stopPropagation());
+                el.addEventListener('keyup', e => e.stopPropagation());
+                el.addEventListener('keypress', e => e.stopPropagation());
+            }
         };
-        attachEv(searchInp);
-        attachEv(dtFrom);
-        attachEv(dtTo);
+        attachEv(searchInp, 'input');
+        attachEv(sortSel, 'change');
     });
 
     depotLayer.addLayer(poly);
@@ -6083,8 +6081,7 @@ def api_depot_history():
     """Vrati historii odjetych busu z vozovny."""
     depot_name = request.args.get('depot_name')
     search_q = request.args.get('q', '').strip().lower()
-    dt_from = request.args.get('dt_from', '').strip()
-    dt_to = request.args.get('dt_to', '').strip()
+    sort_dir = request.args.get('sort', 'desc').strip()
     
     db = get_db_client()
     if not db:
@@ -6093,12 +6090,9 @@ def api_depot_history():
     query = db.table("depot_history").select("*").eq("depot_name", depot_name)
     if search_q:
         query = query.ilike("spz", f"%{search_q}%")
-    if dt_from:
-        query = query.gte("arrived_at", dt_from)
-    if dt_to:
-        query = query.lte("arrived_at", dt_to)
         
-    res = query.order("arrived_at", desc=True).limit(500).execute()
+    is_desc = sort_dir == 'desc'
+    res = query.order("arrived_at", desc=is_desc).limit(500).execute()
     return jsonify({"status": "success", "data": res.data or []})
 
 @mapa_bp.route('/api/admin/delete_depot_history', methods=['POST'])

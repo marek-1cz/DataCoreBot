@@ -2009,7 +2009,27 @@ async def keepalive_ping():
 @bot.event
 async def on_ready():
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
-    send_log("🔄 Systém Online", "Bot byl úspěšně restartován a běží.", 0x10b981)
+    build_name = os.environ.get("KOYEB_APP_NAME", os.environ.get("KOYEB_SERVICE_NAME", "Neznámý (Lokální build)"))
+    start_msg = f"BUILD: \"{build_name}\"\nBot byl úspěšně restartován a běží."
+    send_log("🔄 Systém Online", start_msg, 0x10b981)
+    
+    # DM Notifikace uživatelům se zapnutým !aktulizace
+    async def send_startup_dms():
+        try:
+            db = get_db()
+            if db:
+                res = db.table("bot_settings").select("discord_id").eq("dm_updates", "true").execute()
+                for row in (res.data or []):
+                    try:
+                        uid = int(row["discord_id"])
+                        user = bot.get_user(uid) or await bot.fetch_user(uid)
+                        if user:
+                            now = get_prague_time().strftime("%H:%M")
+                            await user.send(f"🔄 **Systém Online**\n\n**BUILD:** \"{build_name}\"\nBot byl úspěšně restartován a běží.\nDnes v {now}")
+                    except Exception: pass
+        except Exception as e: print(f"Chyba pri posilani DM start zpráv: {e}", flush=True)
+        
+    bot.loop.create_task(send_startup_dms())
     try: bot.add_view(DynamicDownloadView())
     except: pass
     try: bot.add_view(AppAuthView())
@@ -2312,36 +2332,24 @@ async def aktulizace(ctx):
     if not user_data or user_data[0].get("role") not in ["SA", "DEV"]:
         return
         
-    bot.aktualizace_mode = getattr(bot, 'aktualizace_mode', False)
-    bot.aktualizace_mode = not bot.aktualizace_mode
+    res = db.table("bot_settings").select("dm_updates").eq("discord_id", str(ctx.author.id)).execute()
+    current_state = False
+    if res.data:
+        current_state = res.data[0].get("dm_updates", False)
+        
+    new_state = not current_state
+    db.table("bot_settings").upsert({"discord_id": str(ctx.author.id), "dm_updates": new_state}).execute()
     
-    if bot.aktualizace_mode:
-        msg = await ctx.send("ON")
-        await asyncio.sleep(2)
-        try:
-            await msg.delete()
-            await ctx.message.delete()
-        except: pass
-        now = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
-        commit_msg = "Neznámý build"
-        try:
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.get("https://api.github.com/repos/marek-1cz/DataCoreBot/commits/main") as r:
-                    if r.status == 200:
-                        data = await r.json()
-                        commit_msg = data.get("commit", {}).get("message", "Neznámý build").split("\n")[0]
-        except Exception: pass
-        try:
-            await ctx.author.send(f"✅ **Aktualizace proběhla v pořádku!**\n\n🔄 Vše se resetovalo.\n✨ **Build:** `{commit_msg}`\n🕒 Čas: {now}")
-        except: pass
+    if new_state:
+        msg = await ctx.send("🔔 DM upozornění na aktualizace a restarty: **ZAPNUTO**")
     else:
-        msg = await ctx.send("OFF")
-        await asyncio.sleep(2)
-        try:
-            await msg.delete()
-            await ctx.message.delete()
-        except: pass
+        msg = await ctx.send("🔕 DM upozornění na aktualizace a restarty: **VYPNUTO**")
+        
+    await asyncio.sleep(3)
+    try:
+        await msg.delete()
+        await ctx.message.delete()
+    except: pass
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
