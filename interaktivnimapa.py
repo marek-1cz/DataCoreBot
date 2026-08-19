@@ -817,13 +817,46 @@ window.adminSaveAll=(id,permanent)=>{
   adminAction('edit_all',id,{status:st,color_class:col,note,permanent});
 };
 
-window.openSeznamAutobusu = function(rawSpz) {
+window.openSeznamAutobusu = async function(rawSpz) {
     let s = rawSpz.replace(/[^a-zA-Z0-9]/g, '');
     let formattedSpz = rawSpz;
     if (s.length > 4) {
         formattedSpz = s.substring(0, s.length - 4) + ' ' + s.substring(s.length - 4);
     }
-    window.open('https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz), '_blank');
+    
+    let overlay = document.createElement('div');
+    overlay.id = 'seznam-loading-overlay';
+    overlay.innerHTML = `
+        <div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.9);z-index:99999;display:flex;flex-direction:column;justify-content:center;align-items:center;color:white;font-family:sans-serif;">
+            <i class="fas fa-circle-notch fa-spin" style="font-size:3rem;color:#38bdf8;margin-bottom:20px;"></i>
+            <h2 style="margin:0;">Získávám data ze seznam-autobusu...</h2>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    try {
+        let res = await fetch('/api/check_seznam_autobusu?spz=' + encodeURIComponent(formattedSpz));
+        let data = await res.json();
+        
+        if (data.found && data.url) {
+            document.body.removeChild(overlay);
+            window.open(data.url, '_blank');
+        } else {
+            overlay.innerHTML = `
+                <div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.95);z-index:99999;display:flex;flex-direction:column;justify-content:center;align-items:center;color:white;font-family:sans-serif;text-align:center;padding:20px;">
+                    <i class="fas fa-exclamation-triangle" style="font-size:4rem;color:#ef4444;margin-bottom:20px;"></i>
+                    <h2 style="margin-bottom:10px;">Vůz nebyl nalezen</h2>
+                    <p style="color:#94a3b8;margin-bottom:30px;">Tento vůz (${formattedSpz}) nebyl nalezen v databázi seznam-autobusu.cz</p>
+                    <button onclick="document.body.removeChild(document.getElementById('seznam-loading-overlay'))" style="background:#38bdf8;color:black;border:none;padding:12px 24px;font-size:16px;border-radius:6px;cursor:pointer;font-weight:bold;">
+                        <i class="fas fa-arrow-left"></i> Vrátit zpět
+                    </button>
+                </div>
+            `;
+        }
+    } catch (e) {
+        document.body.removeChild(overlay);
+        alert('Chyba při komunikaci se serverem.');
+    }
 };
 
 // === NAV ===
@@ -6251,6 +6284,27 @@ def api_bus_route(bus_id):
         "custom_shape_full": custom_shape_full,
         "route_key": route_key if result and c.get('line') else None
     })
+
+@mapa_bp.route('/api/check_seznam_autobusu')
+def api_check_seznam_autobusu():
+    import urllib.request
+    import urllib.parse
+    spz = request.args.get('spz', '')
+    if not spz:
+        return jsonify({"found": False})
+    
+    try:
+        url = 'https://seznam-autobusu.cz/seznam?evcspz=' + urllib.parse.quote(spz)
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            final_url = response.geturl()
+            if '/vuz/' in final_url:
+                return jsonify({"found": True, "url": final_url})
+            else:
+                return jsonify({"found": False})
+    except Exception as e:
+        print(f"Error checking seznam autobusu: {e}")
+        return jsonify({"found": False})
 
 
 
