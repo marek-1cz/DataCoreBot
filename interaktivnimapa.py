@@ -824,22 +824,32 @@ window.openSeznamAutobusu = function(rawSpz) {
         formattedSpz = s.substring(0, s.length - 4) + ' ' + s.substring(s.length - 4);
     }
     
-    let overlay = document.createElement('div');
-    overlay.id = 'seznam-loading-overlay';
-    overlay.innerHTML = `
-        <div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.9);z-index:99999;display:flex;flex-direction:column;justify-content:center;align-items:center;color:white;font-family:sans-serif;">
-            <i class="fas fa-circle-notch fa-spin" style="font-size:3rem;color:#38bdf8;margin-bottom:20px;"></i>
-            <h2 style="margin:0;">Otevírám seznam-autobusu...</h2>
-        </div>
-    `;
-    document.body.appendChild(overlay);
-
-    setTimeout(() => {
-        if(document.getElementById('seznam-loading-overlay')) {
-            document.body.removeChild(overlay);
-        }
-        window.open('https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz), '_blank');
-    }, 1000);
+    // Synchronously open a new tab to avoid popup blockers
+    let newTab = window.open('about:blank', '_blank');
+    
+    // Inject a nice loading screen into the new tab
+    newTab.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Načítám seznam autobusů...</title>
+            <meta charset="utf-8">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+        </head>
+        <body style="background:#0f172a; color:white; font-family:sans-serif; display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh; margin:0;">
+            <i class="fas fa-circle-notch fa-spin" style="font-size:3rem; color:#38bdf8; margin-bottom:20px;"></i>
+            <h2 style="margin:0;">Otevírám seznam-autobusu.cz...</h2>
+            <p style="color:#94a3b8; margin-top:15px; text-align:center; max-width: 400px; line-height:1.5;">
+                Vyhledávám vůz <b>${formattedSpz}</b>.<br>
+                Server seznam-autobusu.cz může být občas pomalejší, prosím o strpení (cca 5 sekund).
+            </p>
+        </body>
+        </html>
+    `);
+    newTab.document.close();
+    
+    // Redirect the new tab to the target URL
+    newTab.location.href = 'https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz);
 };
 
 // === NAV ===
