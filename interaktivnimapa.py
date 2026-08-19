@@ -3043,6 +3043,20 @@ def get_prague_time():
     except Exception:
         return datetime.now()
 
+def get_internet_prague_time():
+    """Ziska presny cas z internetu, fallback na lokalni po 2s timeoutu."""
+    try:
+        import urllib.request
+        import json
+        req = urllib.request.Request("http://worldtimeapi.org/api/timezone/Europe/Prague", headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=2.0) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            if "datetime" in data:
+                return data["datetime"]
+    except Exception as e:
+        print(f"[TIME API ERROR] Nelze ziskat cas z internetu: {e}")
+    return datetime.now(ZoneInfo('Europe/Prague')).isoformat()
+
 
 def is_same_line(l1, l2):
     if not l1 or not l2 or l1 == "Nezn\u00e1m\u00e1" or l2 == "Nezn\u00e1m\u00e1":
@@ -4293,14 +4307,14 @@ def background_map_worker():
                                             "spz": eff_spz,
                                             "bus_id": bus_id,
                                             "depot_name": depot_name,
-                                            "arrived_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
+                                            "arrived_at": get_internet_prague_time(),
                                             "is_imprecise": is_imprecise
                                         }).execute()
                                         if resp.data:
                                             DEPOT_ACTIVE_SESSIONS[bus_id] = {
                                                 "id": resp.data[0]["id"],
                                                 "depot_name": depot_name,
-                                                "arrived_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
+                                                "arrived_at": get_internet_prague_time(),
                                                 "is_imprecise": is_imprecise,
                                                 "spz": eff_spz
                                             }
@@ -4329,7 +4343,7 @@ def background_map_worker():
                                     session_id = DEPOT_ACTIVE_SESSIONS[bus_id]["id"]
                                     try:
                                         db_client.table("depot_history").update({
-                                            "left_at": datetime.now(ZoneInfo('Europe/Prague')).isoformat()
+                                            "left_at": get_internet_prague_time()
                                         }).eq("id", session_id).execute()
                                     except Exception as e:
                                         print(f"[DEPOT] Chyba zapisu DB odjezdu: {e}")
