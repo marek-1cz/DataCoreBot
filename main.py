@@ -2009,8 +2009,19 @@ async def keepalive_ping():
 @bot.event
 async def on_ready():
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
-    build_name = os.environ.get("KOYEB_APP_NAME", os.environ.get("KOYEB_SERVICE_NAME", "Neznámý (Lokální build)"))
-    start_msg = f"BUILD: \"{build_name}\"\nBot byl úspěšně restartován a běží."
+    
+    commit_msg = os.environ.get("KOYEB_APP_NAME", "Neznámý build")
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://api.github.com/repos/marek-1cz/DataCoreBot/commits/main") as r:
+                if r.status == 200:
+                    data = await r.json()
+                    commit_msg = data.get("commit", {}).get("message", "Neznámý build").split("\n")[0]
+    except Exception:
+        pass
+        
+    start_msg = f"**BUILD:** {commit_msg}\nBot byl úspěšně restartován a běží."
     send_log("🔄 Systém Online", start_msg, 0x10b981)
     
     # DM Notifikace uživatelům se zapnutým !aktulizace
@@ -2025,7 +2036,7 @@ async def on_ready():
                         user = bot.get_user(uid) or await bot.fetch_user(uid)
                         if user:
                             now = get_prague_time().strftime("%H:%M")
-                            await user.send(f"🔄 **Systém Online**\n\n**BUILD:** \"{build_name}\"\nBot byl úspěšně restartován a běží.\nDnes v {now}")
+                            await user.send(f"🔄 **Systém Online**\n\n**BUILD:** {commit_msg}\nBot byl úspěšně restartován a běží.\nDnes v {now}")
                     except Exception: pass
         except Exception as e: print(f"Chyba pri posilani DM start zpráv: {e}", flush=True)
         

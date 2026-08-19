@@ -2738,7 +2738,7 @@ window.updateActiveDepotPopup = function() {
                 if(d.status==='success' && d.data && d.data.length>0) {
                     let hMap = new Map();
                     for(let h of d.data) {
-                        let k = h.spz + '_' + h.arrived_at;
+                        let k = h.spz; // Sjednotíme podle SPZ - zobrazí se pouze poslední (nejnovější/nejstarší podle řazení) návštěva dané SPZ
                         if(!hMap.has(k)) hMap.set(k, h);
                     }
                     let uniqueHist = Array.from(hMap.values());
