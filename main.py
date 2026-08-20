@@ -467,6 +467,7 @@ def _get_avatar_html(req):
                 avatar_src = u.get('avatar_url')
                 img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>'
                 display_name = u.get('nick') or u.get('email') or 'Uživatel'
+                discord_id_text = f"<br>Discord ID: {u.get('discord_id')}" if u.get('discord_id') else ""
                 
                 return f"""
                 <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onclick="document.getElementById('user-dropdown').style.display=document.getElementById('user-dropdown').style.display==='none'?'block':'none'" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
@@ -477,9 +478,9 @@ def _get_avatar_html(req):
                   
                   <div id="user-dropdown" style="display:none; position:absolute; top:calc(100% + 10px); right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left; box-sizing:border-box;">
                     <div style="color:white; font-size:14px; font-weight:bold; margin-bottom:5px;">{display_name}</div>
-                    <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{u.get('email') or 'Discord uživatel'}</div>
-                    <a href="/ucet" style="display:block; width:100%; background:#38bdf8; color:black; text-align:center; padding:8px; border-radius:6px; text-decoration:none; font-weight:bold; margin-bottom:8px; box-sizing:border-box;"><i class="fas fa-cog"></i> Můj Účet</a>
-                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="width:100%; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold; transition:0.2s; box-sizing:border-box;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.2)'; this.style.color='#ef4444';"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
+                    <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{u.get('email') or 'Neznámý e-mail'}{discord_id_text}</div>
+                    <a href="/ucet" style="display:block; background:#38bdf8; color:black; text-align:center; padding:8px; border-radius:6px; text-decoration:none; font-weight:bold; margin-bottom:8px;"><i class="fas fa-cog"></i> Můj Účet</a>
+                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="display:block; width:100%; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold; transition:0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.2)'; this.style.color='#ef4444';"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
                   </div>
                 </div>
                 """
@@ -1682,10 +1683,7 @@ def stranka_ucet():
     nick = u.get('nick') or ""
     avatar_url = u.get('avatar_url') or ""
     
-    # Rozhodnuti o nacteni avatara pro nahled
-    if not avatar_url and u.get('discord_id'):
-        avatar_img_html = f'<img src="https://cdn.discordapp.com/avatars/{u["discord_id"]}/">'
-    elif avatar_url:
+    if avatar_url:
         avatar_img_html = f'<img src="{avatar_url}">'
     else:
         avatar_img_html = '<i class="fas fa-user-circle"></i>'
