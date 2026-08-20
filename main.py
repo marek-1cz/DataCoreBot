@@ -458,7 +458,7 @@ def _cors_jsonify(data):
 
 def _get_avatar_html(req):
     cookie_token = req.cookies.get('web_session_token')
-    if cookie_token and HAS_SUPABASE:
+    if cookie_token:
         try:
             db = get_db()
             user = db.table("users").select("discord_id, email, nick, avatar_url").eq("web_session_token", cookie_token).execute().data
