@@ -542,7 +542,7 @@ body.dark-map #settings-toggle-btn:hover, body.bw-dark-map #settings-toggle-btn:
 
 body.nav-static #top-nav { top: 0 !important; }
 body.nav-glass #top-nav { top: 15px !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; width: max-content !important; max-width: 98vw !important; border-radius: 16px !important; padding: 6px 12px !important; gap: 6px !important; flex-wrap: nowrap !important; background: rgba(15, 23, 42, 0.25) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important; }
-body.nav-glass-hide #top-nav { top: -100px !important; }
+body.nav-glass-hide #top-nav { top: -150px !important; }
 body.nav-glass-hide #top-nav.vis { top: 15px !important; }
 body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn { display: none !important; }
 @media (max-width: 768px) {
@@ -796,12 +796,21 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <div id="sw-step-2" class="sw-step" style="display:none;">
       <h3 style="color:white;margin-bottom:10px;">Krok 2: Vzhled mapy</h3>
       <p style="color:#94a3b8;font-size:13px;margin-bottom:20px;">Jaký podklad mapy se vám nejvíce líbí?</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
-         <button onclick="setBaseMap('dark');swNext(3)" style="background:#1e293b;border:1px solid #38bdf8;color:white;padding:12px;border-radius:8px;cursor:pointer;font-weight:bold;box-shadow:0 4px 10px rgba(0,0,0,0.5);">🌙 Tmavá</button>
-         <button onclick="setBaseMap('osm');swNext(3)" style="background:#1e293b;border:1px solid #38bdf8;color:white;padding:12px;border-radius:8px;cursor:pointer;font-weight:bold;box-shadow:0 4px 10px rgba(0,0,0,0.5);">🗺️ Výchozí</button>
-         <button onclick="setBaseMap('transport_dark');swNext(3)" style="background:#1e293b;border:1px solid #38bdf8;color:white;padding:12px;border-radius:8px;cursor:pointer;font-weight:bold;box-shadow:0 4px 10px rgba(0,0,0,0.5);">🌃 Dopravní tmavá</button>
-         <button onclick="setBaseMap('satellite');swNext(3)" style="background:#1e293b;border:1px solid #38bdf8;color:white;padding:12px;border-radius:8px;cursor:pointer;font-weight:bold;box-shadow:0 4px 10px rgba(0,0,0,0.5);">🛰️ Satelit</button>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">
+         <button id="sw-bm-dark" onclick="selectSwTheme('dark')" style="background:#1e293b;border:2px solid #38bdf8;color:white;padding:15px;border-radius:12px;cursor:pointer;font-weight:bold;font-size:16px;box-shadow:0 4px 15px rgba(56,189,248,0.3);">🌙 Tmavá</button>
+         <button id="sw-bm-osm" onclick="selectSwTheme('osm')" style="background:#1e293b;border:2px solid #334155;color:#cbd5e1;padding:15px;border-radius:12px;cursor:pointer;font-weight:bold;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.5);">🗺️ Výchozí</button>
       </div>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px;">
+         <button id="sw-bm-transport_dark" onclick="selectSwTheme('transport_dark')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:10px;border-radius:8px;cursor:pointer;font-weight:bold;font-size:12px;">🌃 Dopravní</button>
+         <button id="sw-bm-bw" onclick="selectSwTheme('bw')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:10px;border-radius:8px;cursor:pointer;font-weight:bold;font-size:12px;">⚪ Černobílá</button>
+         <button id="sw-bm-satellite" onclick="selectSwTheme('satellite')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:10px;border-radius:8px;cursor:pointer;font-weight:bold;font-size:12px;">🛰️ Satelit</button>
+      </div>
+
+      <div id="sw-theme-preview" style="width:100%;height:140px;border-radius:12px;margin-bottom:20px;border:2px solid #334155;background-image:url('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/12/2199/1393.png');background-size:cover;background-position:center;transition:background-image 0.3s ease;"></div>
+      
+      <button onclick="swNext(3)" style="background:#10b981;color:white;border:none;padding:12px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:15px;box-shadow:0 4px 15px rgba(16,185,129,0.4);">Použít tento motiv ➔</button>
     </div>
     
     <div id="sw-step-3" class="sw-step" style="display:none;">
@@ -829,6 +838,30 @@ function updateGfxDesc(val, descEl) {
   else if(val==3) txt="Vysoké – Doporučeno pro standardně výkonné počítače";
   else if(val==4) txt="Ultra – Doporučeno pro výkonné počítače";
   if(descEl) descEl.textContent = txt;
+}
+
+function selectSwTheme(type) {
+  setBaseMap(type);
+  document.querySelectorAll('[id^="sw-bm-"]').forEach(b => {
+    b.style.borderColor = '#334155';
+    b.style.color = '#cbd5e1';
+    b.style.boxShadow = '0 4px 10px rgba(0,0,0,0.5)';
+  });
+  let activeBtn = document.getElementById('sw-bm-' + type);
+  if(activeBtn) {
+    activeBtn.style.borderColor = '#38bdf8';
+    activeBtn.style.color = 'white';
+    activeBtn.style.boxShadow = '0 4px 15px rgba(56,189,248,0.3)';
+  }
+  let prevImg = document.getElementById('sw-theme-preview');
+  let urls = {
+    dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/12/2199/1393.png',
+    osm: 'https://a.tile.openstreetmap.org/12/2199/1393.png',
+    transport_dark: 'https://a.tile.thunderforest.com/transport-dark/12/2199/1393.png?apikey=086ca59fb24640be82e5259e96c7a0cb',
+    bw: 'https://a.basemaps.cartocdn.com/light_all/12/2199/1393.png',
+    satellite: 'https://mt1.google.com/vt/lyrs=s&x=2199&y=1393&z=12'
+  };
+  if(prevImg && urls[type]) prevImg.style.backgroundImage = "url('"+urls[type]+"')";
 }
 
 function setGraphicsLevel(level, isInit=false) {
@@ -980,7 +1013,7 @@ window.mapLayers = {
   osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
   dark: L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=68be98ba-5497-41e4-b14e-0aaa9649aafd',{maxZoom:20,attribution:'&copy; Stadia Maps'}),
   bw: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
-  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'}),
+  satellite: L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:21,attribution:'&copy; Google Maps'}),
   transport_dark: L.tileLayer('https://{s}.tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png?apikey=086ca59fb24640be82e5259e96c7a0cb',{maxZoom:22,attribution:'&copy; Thunderforest'}),
   transport: L.tileLayer('https://{s}.tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=086ca59fb24640be82e5259e96c7a0cb',{maxZoom:22,attribution:'&copy; Thunderforest'})
 };
