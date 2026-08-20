@@ -777,6 +777,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
 <script>
@@ -933,10 +934,28 @@ setTimeout(() => {
   window.setNavDesign(savedNav);
 }, 100);
 setTimeout(()=>map.invalidateSize(),300);
-var ml=L.layerGroup().addTo(map);
+var ml = L.markerClusterGroup({
+  disableClusteringAtZoom: 16,
+  maxClusterRadius: (window.innerWidth < 768) ? 45 : 35,
+  spiderfyOnMaxZoom: true,
+  showCoverageOnHover: false,
+  zoomToBoundsOnClick: true
+}).addTo(map);
+
 var routeLayer=L.layerGroup().addTo(map);
 var ntLayer=L.layerGroup().addTo(map);
 var pubStopsLayer=L.layerGroup().addTo(map);
+
+// Auto-detekce mobilu pro usporu baterie a CPU ve spicce (jen poprve, kdyz uzivatel nema nastaveno jinak)
+let savedLg = localStorage.getItem('low_graphics_mode');
+if(savedLg === null && (window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent))){
+    document.body.classList.add('low-graphics');
+    localStorage.setItem('low_graphics_mode', 'true');
+    setTimeout(() => {
+        let lgCb = document.getElementById('settings-low-graphics');
+        if(lgCb) lgCb.checked = true;
+    }, 500);
+}
 // Smart pan during tracking: allow user to pan, return to bus 1.5s after release
 let _panReturnTimer=null;
 map.on('mousedown touchstart',()=>{if(followId&&pinMode)clearTimeout(_panReturnTimer);});
@@ -5053,6 +5072,8 @@ def _full_page(title, body_html, is_map=False):
     if is_map:
         map_head = """
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"/>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
   <style>
