@@ -908,14 +908,14 @@ HTML_PROVOZ_IDPK = """
 </div>
 """
 
-HTML_REGISTER = BASE_HTML + """
+HTML_REGISTER = """
 <style>
-  body { background: url('https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/bg-map.jpg') no-repeat center center fixed; background-size: cover; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-  .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 20px; padding: 40px; width: 100%; max-width: 400px; box-shadow: 0 0 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(56, 189, 248, 0.2); text-align: center; }
+  .register-wrapper { background: url('https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/bg-map.jpg') no-repeat center center fixed; background-size: cover; display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 60px); margin: -20px; padding: 20px; position: relative; }
+  .glass-card { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 20px; padding: 40px; width: 100%; max-width: 400px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.2); text-align: center; position: relative; z-index: 10; }
   .glass-card h2 { color: var(--blue-main); margin-bottom: 30px; font-size: 28px; margin-top: 0; }
   .input-group { margin-bottom: 20px; text-align: left; }
   .input-group label { display: block; margin-bottom: 8px; font-size: 13px; color: var(--text-muted); font-weight: bold; }
-  .input-group input { width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.5); border: 1px solid #334155; border-radius: 8px; color: white; font-size: 15px; outline: none; transition: border 0.3s, box-shadow 0.3s; margin: 0; }
+  .input-group input { width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.5); border: 1px solid #334155; border-radius: 8px; color: white; font-size: 15px; outline: none; transition: border 0.3s, box-shadow 0.3s; margin: 0; box-sizing: border-box; }
   .input-group input:focus { border-color: var(--blue-main); box-shadow: 0 0 8px rgba(56, 189, 248, 0.5); }
   .btn-submit { width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
   .btn-discord { background: #5865F2; color: white; margin-bottom: 15px; }
@@ -930,9 +930,10 @@ HTML_REGISTER = BASE_HTML + """
   .status-msg { margin-top: 15px; font-size: 14px; font-weight: bold; min-height: 20px; display: none; }
   .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; vertical-align: middle; margin-right: 8px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .back-btn { position: absolute; top: 20px; left: 20px; color: var(--text-muted); text-decoration: none; font-weight: bold; display: flex; align-items: center; gap: 5px; transition: color 0.3s; }
-  .back-btn:hover { color: var(--blue-main); }
+  .back-btn { position: absolute; top: 20px; left: 20px; color: var(--text-muted); text-decoration: none; font-weight: bold; display: flex; align-items: center; gap: 5px; transition: color 0.3s; z-index: 20; background: rgba(15,23,42,0.8); padding: 8px 12px; border-radius: 8px; border: 1px solid #334155; }
+  .back-btn:hover { color: var(--blue-main); border-color: var(--blue-main); }
 </style>
+<div class="register-wrapper">
 <a href="/" class="back-btn"><i class="fas fa-arrow-left"></i> Zpět na mapu</a>
 <div class="glass-card">
   <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png" style="width:60px; height:60px; border-radius:12px; margin-bottom:15px; box-shadow: 0 0 15px rgba(56,189,248,0.5);">
@@ -960,6 +961,7 @@ HTML_REGISTER = BASE_HTML + """
     <div id="status-text" style="color: var(--blue-main); font-size: 15px; font-weight: bold; display: inline-block;">Čekám na potvrzení...</div>
     <div id="status-desc" style="color: var(--text-muted); font-size: 13px; margin-top: 15px; line-height: 1.5;"></div>
   </div>
+</div>
 </div>
 <script>
 let checkInterval = null;

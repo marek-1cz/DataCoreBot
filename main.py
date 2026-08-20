@@ -773,7 +773,7 @@ def home():
     ip = request.headers.get('X-Forwarded-For', request.remote_addr)
     country = request.headers.get('CF-IPCountry', 'Neznámá')
     Thread(target=log_visit, args=(ip, country)).start()
-    return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', HTML_HOME)), statuses=get_system_statuses())
+    return render_public(HTML_HOME)
 
 
 @app.route('/provoz-idpk')
