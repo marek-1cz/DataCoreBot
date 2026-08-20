@@ -840,7 +840,7 @@ window.openSeznamAutobusu = function(rawSpz) {
             <i class="fas fa-circle-notch fa-spin" style="font-size:3rem; color:#38bdf8; margin-bottom:20px;"></i>
             <h2 style="margin:0;">Otevírám databázi vozidel...</h2>
             <p style="color:#94a3b8; margin-top:15px; text-align:center; max-width: 400px; line-height:1.5;">
-                Vyhledávám vůz <b>${formattedSpz}</b> v externím systému.<br>
+                Vyhledávám vůz <b>${formattedSpz}</b> na stránce https://seznam-autobusu.cz/<br>
                 Prosím o strpení, navazuji spojení s cílovým serverem (cca 5 sekund)...
             </p>
         </body>
@@ -1216,6 +1216,7 @@ window.addEventListener('unhandledrejection',e=>{appLog('Promise chyba: '+(e.rea
 
 // === HUD + KAMERA + ŠPENDLÍK ===
 let pinMode=false;
+function _hudShowRoute(){ if(followId) toggleRoute(followId); }
 function stopFollow(){
   followId=null;followInflowId=null;hudMin=false;pinMode=false;
   document.getElementById('hud').style.display='none';
