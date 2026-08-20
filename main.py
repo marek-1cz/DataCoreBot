@@ -463,8 +463,7 @@ def _get_avatar_html(req):
             user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
             if user:
                 u = user[0]
-                if not u.get("nick") and req.path not in ['/ucet', '/api/auth/logout'] and not req.path.startswith('/api/'):
-                    return "<script>window.location.href='/ucet';</script>"
+
                 avatar_src = u.get('avatar_url')
                 img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>'
                 display_name = u.get('nick') or u.get('email') or 'Uživatel'
