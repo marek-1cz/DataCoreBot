@@ -862,10 +862,10 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
   </div>
   <div id="tut-step-3" class="tut-box" style="display:none;position:absolute;bottom:100px;right:20px;width:90%;max-width:350px;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.8);color:white;text-align:center;">
     <div class="tut-arrow-down" style="position:absolute;bottom:-15px;right:20px;width:0;height:0;border-left:15px solid transparent;border-right:15px solid transparent;border-top:15px solid #38bdf8;"></div>
-    <h3 style="margin-bottom:15px;color:#38bdf8;">Nastavení a budoucnost</h3>
+    <h3 style="margin-bottom:15px;color:#38bdf8;">Nastavení aplikace</h3>
     <div style="font-size:13px;color:#cbd5e1;text-align:left;line-height:1.6;margin-bottom:20px;">
-      V pravém dolním rohu najdete tlačítko <b>Nastavení</b>. Zde můžete kdykoliv měnit grafické detaily a vzhled mapy.<br><br>
-      <i>Do budoucna:</i> Připravujeme funkci uživatelských účtů a chytrá oznámení!
+      Nyní jsme vám automaticky otevřeli <b>Nastavení</b>. Zde můžete měnit základní mapu a grafické detaily.<br><br>
+      Kromě toho si můžete přizpůsobit i <b>Design navigace</b> (horního panelu).
     </div>
     <button onclick="tutNext(4)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další ➔</button>
   </div>
@@ -886,6 +886,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
 <script>
 window.swPreviewMap = null;
 window.swPreviewLayer = null;
+window.busMarkersMap = new Map();
 
 const IS_ADMIN=__IS_ADMIN__;
 
@@ -1056,13 +1057,37 @@ function startTutorial() {
 
 function tutNext(step) {
   document.querySelectorAll('.tut-box').forEach(e => e.style.display='none');
+  
+  let nav = document.getElementById('top-nav');
+  if (nav) { nav.style.zIndex = ''; nav.style.position = ''; nav.style.pointerEvents = ''; }
+  let setBtn = document.getElementById('settings-btn-wrap');
+  if (setBtn) { setBtn.style.zIndex = ''; setBtn.style.pointerEvents = ''; }
+  let setPan = document.getElementById('settings-panel');
+  if (setPan) { setPan.style.zIndex = ''; setPan.classList.remove('open'); setPan.style.display='none'; }
+
   let s = document.getElementById('tut-step-'+step);
   if(s) s.style.display='block';
+  
+  if (step === 2) {
+    if (nav) {
+      nav.style.zIndex = '10001';
+      if (window.getComputedStyle(nav).position === 'static') nav.style.position = 'relative';
+      nav.style.pointerEvents = 'none';
+    }
+  } else if (step === 3) {
+    if (setBtn) { setBtn.style.zIndex = '10001'; setBtn.style.pointerEvents = 'none'; }
+    if (setPan) {
+      setPan.style.zIndex = '10001';
+      setPan.style.display = 'block';
+      setTimeout(() => setPan.classList.add('open'), 10);
+    }
+  }
 }
 
 function tutFinish() {
   localStorage.setItem('setup_wizard_done', 'true');
   document.getElementById('tutorial-overlay').style.display='none';
+  tutNext(-1); // Cleanup highlights
 }
 
 // === ADMIN ===
