@@ -791,7 +791,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
       
       <div id="sw-gfx-desc" style="color:#fbbf24;font-size:12px;margin-bottom:15px;min-height:36px;">Vysoké: Výchozí, plné animace (Pro běžné PC)</div>
       
-      <div style="font-size:11px;color:#64748b;margin-bottom:20px;">ℹ️ Tato a další nastavení můžete kdykoliv změnit v levém bočním panelu přímo v mapě.</div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:20px;">ℹ️ Tato a další nastavení můžete kdykoliv změnit přímo v mapě.</div>
       
       <button onclick="swNext(2)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další krok ➔</button>
     </div>
@@ -811,7 +811,9 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
          <button id="sw-bm-satellite" onclick="selectSwTheme('satellite')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:10px;border-radius:8px;cursor:pointer;font-weight:bold;font-size:12px;">🛰️ Satelit</button>
       </div>
 
-      <div id="sw-theme-preview" style="width:100%;height:140px;border-radius:12px;margin-bottom:20px;border:2px solid #334155;background-image:url('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/14/8800/5578.png?api_key=68be98ba-5497-41e4-b14e-0aaa9649aafd');background-size:cover;background-position:center;transition:background-image 0.3s ease;"></div>
+      <div id="sw-theme-preview" style="width:100%;height:140px;border-radius:12px;margin-bottom:15px;border:2px solid #334155;overflow:hidden;position:relative;z-index:1;"></div>
+      
+      <div style="font-size:11px;color:#64748b;margin-bottom:15px;">ℹ️ Tato a další nastavení můžete kdykoliv změnit přímo v mapě.</div>
       
       <button onclick="swNext(3)" style="background:#10b981;color:white;border:none;padding:12px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:15px;box-shadow:0 4px 15px rgba(16,185,129,0.4);">Použít tento motiv ➔</button>
     </div>
@@ -831,6 +833,9 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
 <script>
+window.swPreviewMap = null;
+window.swPreviewLayer = null;
+
 const IS_ADMIN=__IS_ADMIN__;
 
 // === GRAFIKA A PRŮVODCE ===
@@ -856,15 +861,20 @@ function selectSwTheme(type) {
     activeBtn.style.color = 'white';
     activeBtn.style.boxShadow = '0 4px 15px rgba(56,189,248,0.3)';
   }
-  let prevImg = document.getElementById('sw-theme-preview');
+  
+  if (!window.swPreviewMap) return;
+  if (window.swPreviewLayer) { window.swPreviewMap.removeLayer(window.swPreviewLayer); }
+  
   let urls = {
-    dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/14/8800/5578.png?api_key=68be98ba-5497-41e4-b14e-0aaa9649aafd',
-    osm: 'https://a.tile.openstreetmap.org/14/8800/5578.png',
-    transport_dark: 'https://a.tile.thunderforest.com/transport-dark/14/8800/5578.png?apikey=086ca59fb24640be82e5259e96c7a0cb',
-    bw: 'https://a.basemaps.cartocdn.com/light_all/14/8800/5578.png',
-    satellite: 'https://mt1.google.com/vt/lyrs=s&x=8800&y=5578&z=14'
+    dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=68be98ba-5497-41e4-b14e-0aaa9649aafd',
+    osm: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    transport_dark: 'https://{s}.tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png?apikey=086ca59fb24640be82e5259e96c7a0cb',
+    bw: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    satellite: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
   };
-  if(prevImg && urls[type]) prevImg.style.backgroundImage = "url('"+urls[type]+"')";
+  if(urls[type]) {
+    window.swPreviewLayer = L.tileLayer(urls[type]).addTo(window.swPreviewMap);
+  }
 }
 
 function setGraphicsLevel(level, isInit=false) {
@@ -879,25 +889,27 @@ function setGraphicsLevel(level, isInit=false) {
   
   let sld1 = document.getElementById('settings-gfx-slider');
   let sld2 = document.getElementById('sw-gfx-slider');
-  if(sld1) sld1.value = level;
-  if(sld2) sld2.value = level;
+  if(sld1 && sld1.value != level) sld1.value = level;
+  if(sld2 && sld2.value != level) sld2.value = level;
   
   updateGfxDesc(level, document.getElementById('settings-gfx-desc'));
   updateGfxDesc(level, document.getElementById('sw-gfx-desc'));
 
-  let needsCluster = (level === 1);
-  let hasCluster = !!(window.ml && window.ml.refreshClusters);
-  
-  if (needsCluster !== hasCluster || isInit) {
-    if(window.ml && map.hasLayer(window.ml)) map.removeLayer(window.ml);
-    if (needsCluster) {
-      window.ml = L.markerClusterGroup({ disableClusteringAtZoom: 16, maxClusterRadius: (window.innerWidth < 768) ? 45 : 35, spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: true });
-    } else {
-      window.ml = L.layerGroup();
+  if(window.map && window.busMarkersMap) {
+    let needsCluster = (level === 1);
+    let hasCluster = !!(window.ml && window.ml.refreshClusters);
+    
+    if (needsCluster !== hasCluster || isInit) {
+      if(window.ml && map.hasLayer(window.ml)) map.removeLayer(window.ml);
+      if (needsCluster) {
+        window.ml = L.markerClusterGroup({ disableClusteringAtZoom: 16, maxClusterRadius: (window.innerWidth < 768) ? 45 : 35, spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: true });
+      } else {
+        window.ml = L.layerGroup();
+      }
+      window.ml.addTo(map);
+      window.busMarkersMap = new Map();
+      if(!isInit && typeof fetchBuses === 'function') fetchBuses();
     }
-    window.ml.addTo(map);
-    window.busMarkersMap = new Map();
-    if(!isInit && typeof fetchBuses === 'function') fetchBuses();
   }
 }
 
@@ -905,6 +917,20 @@ function swNext(step) {
   document.querySelectorAll('.sw-step').forEach(e=>e.style.display='none');
   let s = document.getElementById('sw-step-'+step);
   if(s) s.style.display='block';
+  
+  if(step === 2) {
+    if(!window.swPreviewMap) {
+      window.swPreviewMap = L.map('sw-theme-preview', {
+        zoomControl: false, dragging: false, scrollWheelZoom: false,
+        doubleClickZoom: false, keyboard: false, touchZoom: false, attributionControl: false
+      }).setView([49.7554, 13.3174], 14);
+    }
+    setTimeout(() => {
+      window.swPreviewMap.invalidateSize();
+      let current = window.currentBaseMap || 'osm';
+      selectSwTheme(current);
+    }, 150);
+  }
 }
 
 function swFinish() {
