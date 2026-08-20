@@ -533,8 +533,9 @@ body.medium-graphics .leaflet-marker-icon div, body.medium-graphics .leaflet-pop
 body.ultra-graphics .route-line-future { animation: routeFlow 0.5s linear infinite !important; }
 body.ultra-graphics .leaflet-marker-icon div { filter: drop-shadow(0 4px 10px rgba(0,0,0,0.95)) !important; }
 
-.gfx-slider { -webkit-appearance:none; width:100%; height:6px; border-radius:3px; outline:none; background:linear-gradient(to right, #38bdf8 66.6%, #334155 66.6%); transition:background 0.2s; cursor:pointer; margin-top:4px; }
-.gfx-slider::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 2px 6px rgba(0,0,0,0.5); transition:transform 0.2s; }
+.gfx-slider { -webkit-appearance:none; width:100%; height:6px; border-radius:3px; outline:none; background:linear-gradient(to right, #38bdf8 66.6%, #334155 66.6%); transition:background 0.2s; cursor:pointer; margin-top:4px; user-select:none; -webkit-user-select:none; }
+.gfx-slider::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 2px 6px rgba(0,0,0,0.5); transition:transform 0.2s; cursor:grab; }
+.gfx-slider::-webkit-slider-thumb:active { cursor:grabbing; }
 .gfx-slider::-webkit-slider-thumb:hover { transform:scale(1.2); }
 
 #settings-toggle-btn{background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid #334155;color:#cbd5e1;border-radius:30px;height:42px;padding:0 14px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 15px rgba(0,0,0,0.4);transition:all 0.4s cubic-bezier(.34,1.56,.64,1);overflow:hidden;position:relative;}
@@ -881,7 +882,10 @@ function selectSwTheme(type) {
   }
 }
 
+let sliderAnimId = null;
+
 function animateSliderTo(el, targetValue, descId) {
+  if (sliderAnimId) { cancelAnimationFrame(sliderAnimId); sliderAnimId = null; }
   let startVal = parseFloat(el.value);
   let endVal = targetValue;
   let duration = 600; // 0.6 seconds
@@ -895,20 +899,22 @@ function animateSliderTo(el, targetValue, descId) {
     let currentVal = startVal + (endVal - startVal) * ease;
     
     el.value = currentVal.toFixed(2);
-    gfxSliderInput(el, descId);
+    gfxSliderInput(el, descId, true);
     
     if (progress < 1) {
-      requestAnimationFrame(step);
+      sliderAnimId = requestAnimationFrame(step);
     } else {
+      sliderAnimId = null;
       el.value = endVal;
-      gfxSliderInput(el, descId);
+      gfxSliderInput(el, descId, true);
       setGraphicsLevel(endVal);
     }
   }
-  requestAnimationFrame(step);
+  sliderAnimId = requestAnimationFrame(step);
 }
 
-function gfxSliderInput(el, descId) {
+function gfxSliderInput(el, descId, isAnim=false) {
+  if (!isAnim && sliderAnimId) { cancelAnimationFrame(sliderAnimId); sliderAnimId = null; }
   let val = parseFloat(el.value);
   let rVal = Math.round(val);
   let pct = (val - 1) / 3 * 100;
@@ -977,7 +983,7 @@ function swNext(step) {
       window.swPreviewMap = L.map('sw-theme-preview', {
         zoomControl: false, dragging: false, scrollWheelZoom: false,
         doubleClickZoom: false, keyboard: false, touchZoom: false, attributionControl: false
-      }).setView([49.7510, 13.3050], 14);
+      }).setView([49.7535, 13.3050], 14);
     }
     setTimeout(() => {
       window.swPreviewMap.invalidateSize();
