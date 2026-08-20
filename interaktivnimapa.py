@@ -549,7 +549,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
   .n-sp { display: none !important; }
   #top-nav { flex-wrap: wrap !important; height: auto; min-height: 50px; padding: 4px 6px; justify-content: center; gap: 4px; width: 100% !important; border-radius: 0; }
   body.nav-glass #top-nav { width: 98% !important; border-radius: 14px !important; flex-wrap: wrap !important; left: 50% !important; transform: translateX(-50%) !important; top: 10px !important; }
-  body.nav-glass-hide #top-nav { top: -100px !important; }
+  body.nav-glass-hide #top-nav { top: -160px !important; }
   body.nav-glass-hide #top-nav.vis { top: 10px !important; }
   .n-warn, .n-clock, .n-title { display: none !important; }
   #spz-search-inp { width: 90px !important; }
@@ -789,7 +789,10 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
       </div>
       <input type="range" id="sw-gfx-slider" min="1" max="4" value="3" oninput="updateGfxDesc(this.value, document.getElementById('sw-gfx-desc'))" style="width:100%;margin-bottom:15px;accent-color:#38bdf8;cursor:pointer;">
       
-      <div id="sw-gfx-desc" style="color:#fbbf24;font-size:12px;margin-bottom:20px;min-height:36px;">Vysoké: Výchozí, plné animace (Pro běžné PC)</div>
+      <div id="sw-gfx-desc" style="color:#fbbf24;font-size:12px;margin-bottom:15px;min-height:36px;">Vysoké: Výchozí, plné animace (Pro běžné PC)</div>
+      
+      <div style="font-size:11px;color:#64748b;margin-bottom:20px;">ℹ️ Tato a další nastavení můžete kdykoliv změnit v levém bočním panelu přímo v mapě.</div>
+      
       <button onclick="swNext(2)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další krok ➔</button>
     </div>
     
@@ -808,7 +811,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
          <button id="sw-bm-satellite" onclick="selectSwTheme('satellite')" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:10px;border-radius:8px;cursor:pointer;font-weight:bold;font-size:12px;">🛰️ Satelit</button>
       </div>
 
-      <div id="sw-theme-preview" style="width:100%;height:140px;border-radius:12px;margin-bottom:20px;border:2px solid #334155;background-image:url('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/12/2199/1393.png');background-size:cover;background-position:center;transition:background-image 0.3s ease;"></div>
+      <div id="sw-theme-preview" style="width:100%;height:140px;border-radius:12px;margin-bottom:20px;border:2px solid #334155;background-image:url('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/14/8800/5578.png?api_key=68be98ba-5497-41e4-b14e-0aaa9649aafd');background-size:cover;background-position:center;transition:background-image 0.3s ease;"></div>
       
       <button onclick="swNext(3)" style="background:#10b981;color:white;border:none;padding:12px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:15px;box-shadow:0 4px 15px rgba(16,185,129,0.4);">Použít tento motiv ➔</button>
     </div>
@@ -855,11 +858,11 @@ function selectSwTheme(type) {
   }
   let prevImg = document.getElementById('sw-theme-preview');
   let urls = {
-    dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/12/2199/1393.png',
-    osm: 'https://a.tile.openstreetmap.org/12/2199/1393.png',
-    transport_dark: 'https://a.tile.thunderforest.com/transport-dark/12/2199/1393.png?apikey=086ca59fb24640be82e5259e96c7a0cb',
-    bw: 'https://a.basemaps.cartocdn.com/light_all/12/2199/1393.png',
-    satellite: 'https://mt1.google.com/vt/lyrs=s&x=2199&y=1393&z=12'
+    dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/14/8800/5578.png?api_key=68be98ba-5497-41e4-b14e-0aaa9649aafd',
+    osm: 'https://a.tile.openstreetmap.org/14/8800/5578.png',
+    transport_dark: 'https://a.tile.thunderforest.com/transport-dark/14/8800/5578.png?apikey=086ca59fb24640be82e5259e96c7a0cb',
+    bw: 'https://a.basemaps.cartocdn.com/light_all/14/8800/5578.png',
+    satellite: 'https://mt1.google.com/vt/lyrs=s&x=8800&y=5578&z=14'
   };
   if(prevImg && urls[type]) prevImg.style.backgroundImage = "url('"+urls[type]+"')";
 }
