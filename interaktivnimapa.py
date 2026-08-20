@@ -524,21 +524,16 @@ body.nt-add-active #map{cursor:crosshair !important;}
   65% { stroke-dashoffset: 0; }
   100% { stroke-dashoffset: 0; }
 }
-/* Low Graphics Mode overrides */
-body.low-graphics * {
-  box-shadow: none !important;
-  text-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  transition: none !important;
-  animation: none !important;
-  filter: none !important;
-}
-body.low-graphics .route-line-past,
-body.low-graphics path,
-body.low-graphics .leaflet-marker-icon div {
-  animation: none !important;
-}
+/* Graphics Mode overrides */
+body.low-graphics * { box-shadow: none !important; text-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; transition: none !important; animation: none !important; filter: none !important; }
+body.low-graphics .route-line-past, body.low-graphics path, body.low-graphics .leaflet-marker-icon div { animation: none !important; }
+
+body.medium-graphics * { box-shadow: none !important; transition: none !important; filter: none !important; }
+body.medium-graphics .route-line-past, body.medium-graphics path, body.medium-graphics .leaflet-marker-icon div { animation: none !important; }
+
+body.ultra-graphics .route-line-future { animation: routeFlow 0.5s linear infinite; }
+body.ultra-graphics .leaflet-marker-icon div { filter: drop-shadow(0 2px 5px rgba(0,0,0,0.8)); }
+
 #settings-toggle-btn{background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid #334155;color:#cbd5e1;border-radius:30px;height:42px;padding:0 14px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 15px rgba(0,0,0,0.4);transition:all 0.4s cubic-bezier(.34,1.56,.64,1);overflow:hidden;position:relative;}
 #settings-toggle-btn:hover{transform:scale(1.05);box-shadow:0 6px 20px rgba(0,0,0,0.6);background:rgba(15,23,42,0.95);color:#38bdf8;border-color:#38bdf8;}
 body.dark-map #settings-toggle-btn, body.bw-dark-map #settings-toggle-btn, body.traffic-dark-map #settings-toggle-btn { background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.6); color: #38bdf8; box-shadow: 0 0 20px rgba(56, 189, 248, 0.3), inset 0 0 12px rgba(56, 189, 248, 0.2); }
@@ -765,14 +760,58 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
       <option value="glass-hide" style="background:#0f172a;">Nový design (Glass - srolovací)</option>
     </select>
 
-    <div style="color:white;font-size:12px;font-weight:bold;margin-bottom:8px;padding-left:4px;">Výkon</div>
-    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:rgba(255,255,255,0.03);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);transition:0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
-      <div style="flex:1;">
-        <div style="color:white;font-size:13px;font-weight:bold;">Nízké detaily</div>
-        <div style="color:#94a3b8;font-size:11px;margin-top:4px;line-height:1.4;">Vypne plynulé animace.</div>
+    <div style="color:white;font-size:12px;font-weight:bold;margin-bottom:8px;padding-left:4px;">Výkon a Grafika</div>
+    <div style="background:rgba(255,255,255,0.03);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);">
+      <div style="display:flex;justify-content:space-between;color:#38bdf8;font-size:11px;font-weight:bold;margin-bottom:8px;">
+        <span title="Nejnižší zátěž, shlukování bodů">Nízké</span>
+        <span title="Střední zátěž, bez animací">Střední</span>
+        <span title="Standardní animace a stíny">Vysoké</span>
+        <span title="Pro silná PC, extra efekty">Ultra</span>
       </div>
-      <input type="checkbox" id="settings-low-graphics" onchange="toggleLowGraphics(this.checked)" style="transform:scale(1.2);margin-left:12px;accent-color:#38bdf8;">
-    </label>
+      <input type="range" id="settings-gfx-slider" min="1" max="4" value="3" onchange="setGraphicsLevel(this.value)" oninput="updateGfxDesc(this.value, document.getElementById('settings-gfx-desc'))" style="width:100%;accent-color:#38bdf8;margin-bottom:8px;cursor:pointer;">
+      <div id="settings-gfx-desc" style="color:#94a3b8;font-size:11px;text-align:center;">Vysoké: Výchozí, plné animace (Pro běžné PC)</div>
+    </div>
+  </div>
+</div>
+
+<div id="setup-wizard-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.95);z-index:9999;align-items:center;justify-content:center;flex-direction:column;backdrop-filter:blur(10px);">
+  <div style="background:#1e293b;border:2px solid #38bdf8;border-radius:16px;width:90%;max-width:500px;padding:30px;box-shadow:0 15px 50px rgba(0,0,0,0.8);text-align:center;">
+    <h2 id="sw-title" style="color:#38bdf8;margin-bottom:20px;font-size:24px;">Vítejte v Mapě</h2>
+    
+    <div id="sw-step-1" class="sw-step">
+      <h3 style="color:white;margin-bottom:10px;">Krok 1: Výkon a Detaily</h3>
+      <p style="color:#94a3b8;font-size:13px;margin-bottom:20px;">Zvolte si úroveň detailů podle výkonu vašeho zařízení.</p>
+      
+      <div style="display:flex;justify-content:space-between;color:#38bdf8;font-size:11px;font-weight:bold;margin-bottom:8px;">
+        <span title="Nejnižší zátěž, shlukování bodů">Nízké</span>
+        <span title="Střední zátěž, bez animací">Střední</span>
+        <span title="Standardní animace a stíny">Vysoké</span>
+        <span title="Pro silná PC, extra efekty">Ultra</span>
+      </div>
+      <input type="range" id="sw-gfx-slider" min="1" max="4" value="3" oninput="updateGfxDesc(this.value, document.getElementById('sw-gfx-desc'))" style="width:100%;margin-bottom:15px;accent-color:#38bdf8;cursor:pointer;">
+      
+      <div id="sw-gfx-desc" style="color:#fbbf24;font-size:12px;margin-bottom:20px;min-height:36px;">Vysoké: Výchozí, plné animace (Pro běžné PC)</div>
+      <button onclick="swNext(2)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další krok ➔</button>
+    </div>
+    
+    <div id="sw-step-2" class="sw-step" style="display:none;">
+      <h3 style="color:white;margin-bottom:10px;">Krok 2: Vzhled mapy</h3>
+      <p style="color:#94a3b8;font-size:13px;margin-bottom:20px;">Jaký podklad mapy se vám nejvíce líbí?</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+         <button onclick="setBaseMap('dark');swNext(3)" style="background:#1e293b;border:1px solid #38bdf8;color:white;padding:12px;border-radius:8px;cursor:pointer;font-weight:bold;box-shadow:0 4px 10px rgba(0,0,0,0.5);">🌙 Tmavá</button>
+         <button onclick="setBaseMap('osm');swNext(3)" style="background:#1e293b;border:1px solid #38bdf8;color:white;padding:12px;border-radius:8px;cursor:pointer;font-weight:bold;box-shadow:0 4px 10px rgba(0,0,0,0.5);">🗺️ Výchozí</button>
+         <button onclick="setBaseMap('transport_dark');swNext(3)" style="background:#1e293b;border:1px solid #38bdf8;color:white;padding:12px;border-radius:8px;cursor:pointer;font-weight:bold;box-shadow:0 4px 10px rgba(0,0,0,0.5);">🌃 Dopravní tmavá</button>
+         <button onclick="setBaseMap('satellite');swNext(3)" style="background:#1e293b;border:1px solid #38bdf8;color:white;padding:12px;border-radius:8px;cursor:pointer;font-weight:bold;box-shadow:0 4px 10px rgba(0,0,0,0.5);">🛰️ Satelit</button>
+      </div>
+    </div>
+    
+    <div id="sw-step-3" class="sw-step" style="display:none;">
+      <h3 style="color:white;margin-bottom:10px;">Krok 3: Návod k použití</h3>
+      <div style="color:#94a3b8;font-size:13px;margin-bottom:20px;text-align:left;background:#0f172a;padding:15px;border-radius:8px;border:1px solid #334155;line-height:1.6;">
+        Tento nástroj poskytuje reálný přehled autobusů. Brzy zde najdete plnohodnotný návod k obsluze.
+      </div>
+      <button onclick="swFinish()" style="background:#10b981;color:white;border:none;padding:12px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(16,185,129,0.4);">✅ Rozumím a chci začít!</button>
+    </div>
   </div>
 </div>
 
@@ -782,6 +821,63 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
 
 <script>
 const IS_ADMIN=__IS_ADMIN__;
+
+// === GRAFIKA A PRŮVODCE ===
+function updateGfxDesc(val, descEl) {
+  let txt = "";
+  if(val==1) txt="Nízké: Skupinové tečky, vypnuté animace (Max výkon)";
+  else if(val==2) txt="Střední: Všechny vozy, vypnuté animace (Pro slabší PC)";
+  else if(val==3) txt="Vysoké: Výchozí, plné animace (Pro běžné PC)";
+  else if(val==4) txt="Ultra: Detailnější efekty a plynulost (Silné PC)";
+  if(descEl) descEl.textContent = txt;
+}
+
+function setGraphicsLevel(level, isInit=false) {
+  level = parseInt(level);
+  localStorage.setItem('graphics_level', level);
+  document.body.classList.remove('low-graphics', 'medium-graphics', 'high-graphics', 'ultra-graphics');
+  
+  if(level===1) document.body.classList.add('low-graphics');
+  else if(level===2) document.body.classList.add('medium-graphics');
+  else if(level===3) document.body.classList.add('high-graphics');
+  else if(level===4) document.body.classList.add('ultra-graphics');
+  
+  let sld1 = document.getElementById('settings-gfx-slider');
+  let sld2 = document.getElementById('sw-gfx-slider');
+  if(sld1) sld1.value = level;
+  if(sld2) sld2.value = level;
+  
+  updateGfxDesc(level, document.getElementById('settings-gfx-desc'));
+  updateGfxDesc(level, document.getElementById('sw-gfx-desc'));
+
+  let needsCluster = (level === 1);
+  let hasCluster = !!(window.ml && window.ml.refreshClusters);
+  
+  if (needsCluster !== hasCluster || isInit) {
+    if(window.ml && map.hasLayer(window.ml)) map.removeLayer(window.ml);
+    if (needsCluster) {
+      window.ml = L.markerClusterGroup({ disableClusteringAtZoom: 16, maxClusterRadius: (window.innerWidth < 768) ? 45 : 35, spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: true });
+    } else {
+      window.ml = L.layerGroup();
+    }
+    window.ml.addTo(map);
+    window.busMarkersMap = new Map();
+    if(!isInit && typeof fetchBuses === 'function') fetchBuses();
+  }
+}
+
+function swNext(step) {
+  document.querySelectorAll('.sw-step').forEach(e=>e.style.display='none');
+  let s = document.getElementById('sw-step-'+step);
+  if(s) s.style.display='block';
+}
+
+function swFinish() {
+  localStorage.setItem('setup_wizard_done', 'true');
+  document.getElementById('setup-wizard-modal').style.display='none';
+  let gfx = document.getElementById('sw-gfx-slider').value;
+  setGraphicsLevel(gfx);
+}
 
 // === ADMIN ===
 let adminInputCache={};
@@ -934,28 +1030,25 @@ setTimeout(() => {
   window.setNavDesign(savedNav);
 }, 100);
 setTimeout(()=>map.invalidateSize(),300);
-var ml = L.markerClusterGroup({
-  disableClusteringAtZoom: 16,
-  maxClusterRadius: (window.innerWidth < 768) ? 45 : 35,
-  spiderfyOnMaxZoom: true,
-  showCoverageOnHover: false,
-  zoomToBoundsOnClick: true
-}).addTo(map);
-
+var ml;
 var routeLayer=L.layerGroup().addTo(map);
 var ntLayer=L.layerGroup().addTo(map);
 var pubStopsLayer=L.layerGroup().addTo(map);
 
-// Auto-detekce mobilu pro usporu baterie a CPU ve spicce (jen poprve, kdyz uzivatel nema nastaveno jinak)
-let savedLg = localStorage.getItem('low_graphics_mode');
-if(savedLg === null && (window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent))){
-    document.body.classList.add('low-graphics');
-    localStorage.setItem('low_graphics_mode', 'true');
-    setTimeout(() => {
-        let lgCb = document.getElementById('settings-low-graphics');
-        if(lgCb) lgCb.checked = true;
-    }, 500);
+// Inicializace grafiky a průvodce
+let setupWizardDone = localStorage.getItem('setup_wizard_done');
+let savedGfx = localStorage.getItem('graphics_level');
+
+if (setupWizardDone !== 'true') {
+  let sw = document.getElementById('setup-wizard-modal');
+  if(sw) sw.style.display = 'flex';
+  savedGfx = (window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent)) ? "1" : "3";
+} else if (!savedGfx) {
+  savedGfx = "3";
 }
+
+setGraphicsLevel(savedGfx, true);
+
 // Smart pan during tracking: allow user to pan, return to bus 1.5s after release
 let _panReturnTimer=null;
 map.on('mousedown touchstart',()=>{if(followId&&pinMode)clearTimeout(_panReturnTimer);});
