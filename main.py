@@ -1674,10 +1674,9 @@ def logout():
 @app.route('/ucet')
 def stranka_ucet():
     cookie_token = request.cookies.get('web_session_token')
-    if not cookie_token or not HAS_SUPABASE:
-        return redirect('/register')
-        
     db = get_db()
+    if not cookie_token or not db:
+        return redirect('/register')
     user_res = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
     if not user_res:
         resp = redirect('/register')
@@ -1771,7 +1770,8 @@ def stranka_ucet():
 @app.route('/api/ucet/update', methods=['POST'])
 def api_ucet_update():
     cookie_token = request.cookies.get('web_session_token')
-    if not cookie_token or not HAS_SUPABASE:
+    db = get_db()
+    if not cookie_token or not db:
         return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
         
     data = request.get_json(silent=True) or {}

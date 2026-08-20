@@ -1026,6 +1026,7 @@ function startPolling() {
             fetch('/api/auth/status?discord_id=' + currentDiscordId)
             .then(r=>r.json()).then(data => {
                 if(data.status === 'approved') {
+                    if (data.token) document.cookie = "web_session_token=" + data.token + "; path=/; max-age=" + (60*60*24*30);
                     clearInterval(checkInterval);
                     showStatus('Úspěšně přihlášeno!', 'Přesměrovávám do aplikace...', false);
                     setTimeout(() => window.location.href = '/ucet', 1500);
