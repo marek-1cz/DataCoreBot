@@ -459,7 +459,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 #save-route-btn:hover { background:#ef4444; color:#fff; box-shadow:0 4px 28px rgba(239,68,68,.6); }
 /* Leaflet popup fade-in */
 .leaflet-popup{animation:popupIn .22s cubic-bezier(.34,1.56,.64,1);}
-@keyframes popupIn{from{opacity:0;transform:translateY(10px) scale(.96);}to{opacity:1;transform:translateY(0) scale(1);}}
+@keyframes popupIn{from{opacity:0;}to{opacity:1;}}
 .route-line-past{stroke-linecap:round;}
 .nt-dot{width:14px;height:14px;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.6);cursor:grab;box-sizing:border-box;}
 .nt-dot-normal{background:#38bdf8;border:2px solid white;}
@@ -525,14 +525,13 @@ body.nt-add-active #map{cursor:crosshair !important;}
   100% { stroke-dashoffset: 0; }
 }
 /* Graphics Mode overrides */
-body.low-graphics * { box-shadow: none !important; text-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; transition: none !important; animation: none !important; filter: none !important; }
-body.low-graphics .route-line-past, body.low-graphics path, body.low-graphics .leaflet-marker-icon div { animation: none !important; }
+body.low-graphics .n-btn, body.low-graphics #top-nav, body.low-graphics .leaflet-popup-content-wrapper, body.low-graphics .leaflet-marker-icon div, body.low-graphics #settings-panel { box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; transition: none !important; animation: none !important; filter: none !important; }
+body.low-graphics .route-line-future, body.low-graphics .route-line-past { animation: none !important; }
 
-body.medium-graphics * { box-shadow: none !important; transition: none !important; filter: none !important; }
-body.medium-graphics .route-line-past, body.medium-graphics path, body.medium-graphics .leaflet-marker-icon div { animation: none !important; }
+body.medium-graphics .leaflet-marker-icon div, body.medium-graphics .leaflet-popup-content-wrapper { box-shadow: none !important; filter: none !important; }
 
-body.ultra-graphics .route-line-future { animation: routeFlow 0.5s linear infinite; }
-body.ultra-graphics .leaflet-marker-icon div { filter: drop-shadow(0 2px 5px rgba(0,0,0,0.8)); }
+body.ultra-graphics .route-line-future { animation: routeFlow 0.5s linear infinite !important; }
+body.ultra-graphics .leaflet-marker-icon div { filter: drop-shadow(0 4px 10px rgba(0,0,0,0.95)) !important; }
 
 #settings-toggle-btn{background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid #334155;color:#cbd5e1;border-radius:30px;height:42px;padding:0 14px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 15px rgba(0,0,0,0.4);transition:all 0.4s cubic-bezier(.34,1.56,.64,1);overflow:hidden;position:relative;}
 #settings-toggle-btn:hover{transform:scale(1.05);box-shadow:0 6px 20px rgba(0,0,0,0.6);background:rgba(15,23,42,0.95);color:#38bdf8;border-color:#38bdf8;}
@@ -776,11 +775,11 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
 
 <div id="setup-wizard-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.95);z-index:9999;align-items:center;justify-content:center;flex-direction:column;backdrop-filter:blur(10px);">
   <div style="background:#1e293b;border:2px solid #38bdf8;border-radius:16px;width:90%;max-width:500px;padding:30px;box-shadow:0 15px 50px rgba(0,0,0,0.8);text-align:center;">
-    <h2 id="sw-title" style="color:#38bdf8;margin-bottom:20px;font-size:24px;">Vítejte v Mapě</h2>
+    <h2 id="sw-title" style="color:#38bdf8;margin-bottom:20px;font-size:28px;line-height:1.2;">Vítejte v interaktivní mapě<br><span style="color:#94a3b8;font-size:13px;font-weight:normal;display:block;margin-top:8px;">Neoficiální interaktivní mapa příměstských autobusů Plzeňského kraje</span></h2>
     
     <div id="sw-step-1" class="sw-step">
-      <h3 style="color:white;margin-bottom:10px;">Krok 1: Výkon a Detaily</h3>
-      <p style="color:#94a3b8;font-size:13px;margin-bottom:20px;">Zvolte si úroveň detailů podle výkonu vašeho zařízení.</p>
+      <h3 style="color:white;margin-bottom:10px;">Krok 1: Nastavení zobrazení a výkonu</h3>
+      <p style="color:#94a3b8;font-size:13px;margin-bottom:20px;">Zvolte úroveň grafických detailů s ohledem na hardwarové možnosti vašeho zařízení.</p>
       
       <div style="display:flex;justify-content:space-between;color:#38bdf8;font-size:11px;font-weight:bold;margin-bottom:8px;">
         <span title="Nejnižší zátěž, shlukování bodů">Nízké</span>
@@ -825,10 +824,10 @@ const IS_ADMIN=__IS_ADMIN__;
 // === GRAFIKA A PRŮVODCE ===
 function updateGfxDesc(val, descEl) {
   let txt = "";
-  if(val==1) txt="Nízké: Skupinové tečky, vypnuté animace (Max výkon)";
-  else if(val==2) txt="Střední: Všechny vozy, vypnuté animace (Pro slabší PC)";
-  else if(val==3) txt="Vysoké: Výchozí, plné animace (Pro běžné PC)";
-  else if(val==4) txt="Ultra: Detailnější efekty a plynulost (Silné PC)";
+  if(val==1) txt="Nízké – Doporučeno pro slabší zařízení (např. běžné mobilní telefony)";
+  else if(val==2) txt="Střední – Doporučeno pro méně výkonné počítače a výkonnější mobily";
+  else if(val==3) txt="Vysoké – Doporučeno pro standardně výkonné počítače";
+  else if(val==4) txt="Ultra – Doporučeno pro výkonné počítače";
   if(descEl) descEl.textContent = txt;
 }
 
