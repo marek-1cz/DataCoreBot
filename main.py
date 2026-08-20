@@ -117,7 +117,7 @@ def send_magic_link_email(to_email, token):
         return False
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Přihlášení do OIS IDPK"
+        msg["Subject"] = "Přihlášení do aplikace OIS IDPK"
         msg["From"] = f"DataCore Bot <{SMTP_EMAIL}>"
         msg["To"] = to_email
 
@@ -127,12 +127,10 @@ def send_magic_link_email(to_email, token):
         html = f"""
         <html>
           <body style="background-color: #0f172a; color: white; font-family: sans-serif; padding: 40px; text-align: center;">
-            <h2 style="color: #38bdf8;">Ověření přihlášení</h2>
-            <p style="color: #cbd5e1; font-size: 16px;">Kliknutím na tlačítko níže se přihlásíte do aplikace OIS IDPK.</p>
-            <br>
-            <a href="{login_url}" style="background-color: #38bdf8; color: #0f172a; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Potvrdit přihlášení</a>
-            <br><br>
-            <p style="color: #64748b; font-size: 12px;">Pokud jste o toto přihlášení nežádali, můžete tento e-mail ignorovat.</p>
+            <p style="color: #cbd5e1; font-size: 16px; text-align: left; max-width: 500px; margin: 0 auto 20px auto;">Dobrý den,<br><br>posíláme odkaz pro přístup do aplikace OIS IDPK. Pro dokončení přihlášení stačí kliknout na tlačítko níže:</p>
+            <a href="{login_url}" style="display: inline-block; background-color: #38bdf8; color: #0f172a; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Potvrdit přihlášení</a>
+            <p style="color: #64748b; font-size: 14px; text-align: left; max-width: 500px; margin: 30px auto 10px auto;">Pokud se právě do aplikace nepřihlašujete, nic se neděje a e-mail můžete v klidu smazat. Váš účet je v bezpečí.</p>
+            <p style="color: #64748b; font-size: 14px; text-align: left; max-width: 500px; margin: 0 auto;">Hezký den přeje<br><br>Tým Projekt OIS IDPK</p>
           </body>
         </html>
         """
@@ -467,10 +465,7 @@ def _get_avatar_html(req):
                 if not u.get("nick") and req.path not in ['/ucet', '/api/auth/logout'] and not req.path.startswith('/api/'):
                     return "<script>window.location.href='/ucet';</script>"
                 avatar_src = u.get('avatar_url')
-                if not avatar_src and u.get('discord_id'):
-                    avatar_src = f"https://cdn.discordapp.com/avatars/{u['discord_id']}/" # Fallback if possible
-                
-                img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user" style="color:#38bdf8; font-size:18px;"></i>'
+                img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:42px; margin-top:5px;"></i>'
                 display_name = u.get('nick') or u.get('email') or 'Uživatel'
                 
                 return f"""
@@ -480,19 +475,19 @@ def _get_avatar_html(req):
                   </div>
                   <span style="color:white; font-weight:bold; font-size:14px; max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{display_name}</span>
                   
-                  <div id="user-dropdown" style="display:none; position:absolute; top:55px; right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left;">
+                  <div id="user-dropdown" style="display:none; position:absolute; top:55px; right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left; box-sizing:border-box;">
                     <div style="color:white; font-size:14px; font-weight:bold; margin-bottom:5px;">{display_name}</div>
                     <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{u.get('email') or 'Discord uživatel'}</div>
                     <a href="/ucet" style="display:block; width:100%; background:#38bdf8; color:black; text-align:center; padding:8px; border-radius:6px; text-decoration:none; font-weight:bold; margin-bottom:8px; box-sizing:border-box;"><i class="fas fa-cog"></i> Můj Účet</a>
-                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="width:100%; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold; transition:0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.2)'; this.style.color='#ef4444';"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
+                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="width:100%; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold; transition:0.2s; box-sizing:border-box;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.2)'; this.style.color='#ef4444';"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
                   </div>
                 </div>
                 """
         except: pass
     return """
     <a href="/register" class="user-avatar-wrap" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
-      <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:1px solid #94a3b8; display:flex; align-items:center; justify-content:center; transition:0.3s;">
-        <i class="fas fa-user" style="color:#94a3b8;"></i>
+      <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:1px solid #94a3b8; display:flex; align-items:center; justify-content:center; overflow:hidden; transition:0.3s;">
+        <i class="fas fa-user-circle" style="color:#94a3b8; font-size:42px; margin-top:5px;"></i>
       </div>
       <span style="color:#94a3b8; font-weight:bold; font-size:14px;">Přihlásit se</span>
     </a>
@@ -1860,14 +1855,14 @@ def dashboard_main():
 @app.route('/dashboard/edit_user', methods=['POST'])
 def edit_user():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db(); discord_id = request.form.get("discord_id"); action = request.form.get("action"); nick = request.form.get("nick")
+    db = get_db(); discord_id = request.form.get("discord_id"); action = request.form.get("action"); nick = request.form.get("nick"); email = request.form.get("email")
     if db and discord_id:
         try:
             if action == 'save':
                 r_str = ",".join(request.form.getlist("roles")) if request.form.getlist("roles") else "User"
                 new_hwid = request.form.get("hwid", "").strip()
                 new_ip = request.form.get("ip_address", "").strip()
-                updates = {"nick": nick, "role": r_str, "hwid": new_hwid, "ip_address": new_ip, "dashboard_access": True if request.form.get("dashboard_access") else False}
+                updates = {"nick": nick, "email": email, "role": r_str, "hwid": new_hwid, "ip_address": new_ip, "dashboard_access": True if request.form.get("dashboard_access") else False}
                 db.table("users").update(updates).eq("discord_id", discord_id).execute()
                 sync_roles_from_flask(discord_id, r_str)
                 flash('Údaje upraveny!', 'success')

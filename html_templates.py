@@ -144,6 +144,7 @@ DASHBOARD_LAYOUT = """
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
 <div>
 <label>Herní Nick:</label><input type="text" name="nick" id="modalNick" required>
+<label>E-mail:</label><input type="email" name="email" id="modalEmail" placeholder="Nevyplněno">
 <label>Zámek na PC (HWID a IP adresa):</label>
 <div style="display: flex; gap: 10px;">
 <input type="text" name="hwid" id="modalHwid" placeholder="Pro odblokování HWID smažte text" style="flex:1;">
@@ -167,6 +168,7 @@ function openModal(btn) {
         let discord_id = btn.getAttribute('data-discord-id') || "";
         document.getElementById('modalDiscordId').value = discord_id;
         document.getElementById('modalNick').value = btn.getAttribute('data-nick') || "";
+        document.getElementById('modalEmail').value = btn.getAttribute('data-email') || "";
         document.getElementById('modalHwid').value = (!btn.getAttribute('data-hwid') || btn.getAttribute('data-hwid') === 'None') ? '' : btn.getAttribute('data-hwid');
         document.getElementById('modalIp').value = (!btn.getAttribute('data-ip') || btn.getAttribute('data-ip') === 'None') ? '' : btn.getAttribute('data-ip');
         let registered_at = btn.getAttribute('data-reg-at');
@@ -779,17 +781,18 @@ HTML_DASHBOARD_MAIN = """
 </div>
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
     <table id="usersTable">
-        <thead><tr><th onclick="sortTable(0)">App ID ↕</th><th onclick="sortTable(1)">Nick ↕</th><th onclick="sortTable(2)">Stav ↕</th><th onclick="sortTable(3)">Role ↕</th><th onclick="sortTable(4)">Poslední Aktivita ↕</th><th>Akce</th></tr></thead>
+        <thead><tr><th onclick="sortTable(0)">App ID ↕</th><th onclick="sortTable(1)">Nick ↕</th><th onclick="sortTable(2)">E-mail ↕</th><th onclick="sortTable(3)">Stav ↕</th><th onclick="sortTable(4)">Role ↕</th><th onclick="sortTable(5)">Poslední Aktivita ↕</th><th>Akce</th></tr></thead>
         <tbody>
         {% for user in users %}
         <tr>
             <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
             <td><strong>{{ user.get('nick', '') }}</strong></td>
+            <td style="color: var(--text-muted); font-size: 13px;">{{ user.get('email', '') or '-' }}</td>
             <td>{% if user.get('is_banned') %}<span style="color: var(--danger); font-size: 11px; font-weight:bold; border:1px solid var(--danger); padding:2px 5px; border-radius:4px;">BANNED</span>{% elif user.get('is_deleted') %}<span style="color: var(--text-muted); font-size: 11px; font-weight:bold; border:1px solid var(--text-muted); padding:2px 5px; border-radius:4px;">DELETED</span>{% elif not user.get('hwid') or user.get('hwid') == 'None' or user.get('hwid') == '' %}<span style="color: var(--warning); font-size: 11px; font-weight:bold; border:1px solid var(--warning); padding:2px 5px; border-radius:4px;">NOT ACTIVATED</span>{% else %}<span style="color: var(--success); font-size: 11px; font-weight:bold; border:1px solid var(--success); padding:2px 5px; border-radius:4px;">ACTIVATED</span>{% endif %}</td>
             {% set role_weight = 1 %}{% if 'SA' in user.get('role', '') %}{% set role_weight = 4 %}{% elif 'DEV' in user.get('role', '') %}{% set role_weight = 3 %}{% elif 'BT' in user.get('role', '') %}{% set role_weight = 2 %}{% endif %}
             <td data-sort="{{ role_weight }}">{% set role_list = user.get('role', '').split(',') %}{% for r in role_list %}{% set r_clean = r.strip() %}{% if r_clean == 'SA' %}<span class="role-tag" style="background-color: #ef4444; color: white;">SA</span>{% elif r_clean == 'DEV' %}<span class="role-tag" style="background-color: #10b981; color: white;">DEV</span>{% elif r_clean == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BT</span>{% elif r_clean == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User</span>{% endif %}{% endfor %}{% if user.get('dashboard_access') %}<i class="fas fa-shield-alt" style="color:var(--blue-main); font-size:12px; margin-left:5px;"></i>{% endif %}</td>
             <td style="color: var(--text-muted); font-size: 13px;" data-sort="{{ '99999999999' if user.get('is_online') else user.get('last_active', '0') }}">{% if user.get('is_online') %}<span style="color: var(--success); font-weight: bold;">🟢 AKTIVNÍ</span>{% else %}{{ user.get('last_active', 'Nikdy nehrál') }}{% endif %}</td>
-            <td><button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" data-app-id="{{ user.get('app_id', '') }}" data-discord-id="{{ user.get('discord_id', '') }}" data-nick="{{ (user.get('nick') or '') | e }}" data-roles="{{ (user.get('role') or '') | e }}" data-hwid="{{ (user.get('hwid') or '') | e }}" data-ip="{{ (user.get('ip_address') or '') | e }}" data-banned="{{ user.get('is_banned', False) }}" data-deleted="{{ user.get('is_deleted', False) }}" data-db-access="{{ user.get('dashboard_access', False) }}" data-reg-at="{{ (user.get('registered_at') or '') | e }}" onclick="openModal(this)"><i class="fas fa-edit"></i> Upravit</button></td>
+            <td><button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" data-app-id="{{ user.get('app_id', '') }}" data-discord-id="{{ user.get('discord_id', '') }}" data-nick="{{ (user.get('nick') or '') | e }}" data-email="{{ (user.get('email') or '') | e }}" data-roles="{{ (user.get('role') or '') | e }}" data-hwid="{{ (user.get('hwid') or '') | e }}" data-ip="{{ (user.get('ip_address') or '') | e }}" data-banned="{{ user.get('is_banned', False) }}" data-deleted="{{ user.get('is_deleted', False) }}" data-db-access="{{ user.get('dashboard_access', False) }}" data-reg-at="{{ (user.get('registered_at') or '') | e }}" onclick="openModal(this)"><i class="fas fa-edit"></i> Upravit</button></td>
         </tr>
         {% else %}
         <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
@@ -802,7 +805,7 @@ HTML_DASHBOARD_MAIN = """
     setInterval(() => { if(timeLeft > 0){ timeLeft--; let s=document.getElementById('timer-sec'); if(s) s.innerText=timeLeft; } if(timeLeft===0){ timeLeft=-1; location.reload(); } }, 1000);
     let sortDir = {};
     function sortTable(n) { let table=document.getElementById("usersTable"),switching=true,dir=sortDir[n]==="asc"?"desc":"asc";sortDir[n]=dir;while(switching){switching=false;let rows=table.rows;for(let i=1;i<rows.length-1;i++){let x=rows[i].getElementsByTagName("TD")[n],y=rows[i+1].getElementsByTagName("TD")[n];let xC=x.hasAttribute("data-sort")?x.getAttribute("data-sort"):x.innerHTML.replace(/<[^>]*>?/gm,'').trim();let yC=y.hasAttribute("data-sort")?y.getAttribute("data-sort"):y.innerHTML.replace(/<[^>]*>?/gm,'').trim();if(!isNaN(xC)&&!isNaN(yC)){xC=parseFloat(xC);yC=parseFloat(yC);}else{xC=xC.toLowerCase();yC=yC.toLowerCase();}if(dir=="asc"&&xC>yC){rows[i].parentNode.insertBefore(rows[i+1],rows[i]);switching=true;break;}else if(dir=="desc"&&xC<yC){rows[i].parentNode.insertBefore(rows[i+1],rows[i]);switching=true;break;}}}}
-    function openModal(btn) { try { document.getElementById('editModal').style.display='flex'; document.getElementById('modalAppId').innerText="#"+(btn.getAttribute('data-app-id')||""); let discord_id=btn.getAttribute('data-discord-id')||""; document.getElementById('modalDiscordId').value=discord_id; document.getElementById('modalNick').value=btn.getAttribute('data-nick')||""; let hwid=btn.getAttribute('data-hwid'); document.getElementById('modalHwid').value=(!hwid||hwid==='None')?'':hwid; let ip=btn.getAttribute('data-ip'); document.getElementById('modalIp').value=(!ip||ip==='None')?'':ip; let reg=btn.getAttribute('data-reg-at'); document.getElementById('profRegistered').innerText=(reg&&reg!=='None')?reg:'Neznámé'; let da=btn.getAttribute('data-db-access'); document.getElementById('modalDashboardAccess').checked=(da==='True'); document.getElementById('profDbAccess').innerHTML=da==='True'?'<span style="color:var(--success);"><i class="fas fa-check-circle"></i> Povoleno</span>':'<span style="color:var(--danger);"><i class="fas fa-times-circle"></i> Zakázáno</span>'; document.querySelectorAll('input[name="roles"]').forEach(cb=>cb.checked=false); (btn.getAttribute('data-roles')||"").split(',').forEach(r=>{let el=document.querySelector(`input[name="roles"][value="${r.trim()}"]`);if(el)el.checked=true;}); let is_deleted=btn.getAttribute('data-deleted'); let is_banned=btn.getAttribute('data-banned'); if(is_deleted==='True'){document.getElementById('activeActions').style.display='none';document.getElementById('deletedActions').style.display='block';}else{document.getElementById('activeActions').style.display='block';document.getElementById('deletedActions').style.display='none';if(is_banned==='True'){document.getElementById('btnBan').style.display='none';document.getElementById('btnUnban').style.display='block';}else{document.getElementById('btnBan').style.display='block';document.getElementById('btnUnban').style.display='none';}} document.getElementById('profJoined').innerHTML='<i class="fas fa-spinner fa-spin"></i>'; document.getElementById('modalStatusDot').innerHTML=''; document.getElementById('profDownloads').innerHTML='<tr><td colspan="2" style="text-align:center;"><i class="fas fa-spinner fa-spin"></i></td></tr>'; document.getElementById('profSessions').innerHTML='<tr><td colspan="2" style="text-align:center;"><i class="fas fa-spinner fa-spin"></i></td></tr>'; document.getElementById('profAppStatus').innerHTML='<i class="fas fa-spinner fa-spin"></i>'; document.getElementById('profStats').innerHTML=''; if(!discord_id||discord_id.trim()===''||discord_id==='None'){document.getElementById('profJoined').innerText="Chybí ID";return;} fetch('/api/get_profile_data/'+discord_id).then(r=>r.json()).then(data=>{if(data.error){document.getElementById('profAppStatus').innerHTML="<span style='color:#ef4444;'>Chyba: "+data.error+"</span>";return;} document.getElementById('profJoined').innerText=data.joined_at||"Nenalezen"; document.getElementById('modalStatusDot').innerHTML=data.status||""; document.getElementById('profAppStatus').innerHTML=data.app_status||""; document.getElementById('profStats').innerHTML=data.stats||""; let dlHtml=""; if(data.downloads&&data.downloads.length>0){data.downloads.forEach(d=>{dlHtml+=`<tr><td style="color:var(--blue-main);"><b>${d.version_name}</b></td><td style="color:var(--text-muted);">${d.downloaded_at}</td></tr>`;});}else{dlHtml="<tr><td colspan='2' style='color:var(--text-muted);'>Nestáhl žádný soubor.</td></tr>";} document.getElementById('profDownloads').innerHTML=dlHtml; let sessHtml=""; if(data.sessions&&data.sessions.length>0){data.sessions.forEach(s=>{sessHtml+=`<tr><td style="color:var(--success);font-weight:bold;white-space:nowrap;">🟢 ${s.start_time.split(' ')[1]||s.start_time}</td><td style="color:var(--danger);font-weight:bold;white-space:nowrap;">🔴 ${s.end_time.split(' ')[1]||s.end_time}</td></tr><tr><td colspan="2" style="color:var(--text-muted);padding-top:0;padding-bottom:10px;border-bottom:1px solid #334155;text-align:center;">${s.start_time.split(' ')[0]}</td></tr>`;});}else{sessHtml="<tr><td colspan='2' style='color:var(--text-muted);'>Zatím žádná aktivita.</td></tr>";} document.getElementById('profSessions').innerHTML=sessHtml;}).catch(e=>{document.getElementById('profAppStatus').innerHTML="<span style='color:#ef4444;'>Spojení selhalo</span>";});} catch(e){alert("Chyba: "+e.message);}}
+    function openModal(btn) { try { document.getElementById('editModal').style.display='flex'; document.getElementById('modalAppId').innerText="#"+(btn.getAttribute('data-app-id')||""); let discord_id=btn.getAttribute('data-discord-id')||""; document.getElementById('modalDiscordId').value=discord_id; document.getElementById('modalNick').value=btn.getAttribute('data-nick')||""; let email=btn.getAttribute('data-email')||""; document.getElementById('modalEmail').value=email; let hwid=btn.getAttribute('data-hwid'); document.getElementById('modalHwid').value=(!hwid||hwid==='None')?'':hwid; let ip=btn.getAttribute('data-ip'); document.getElementById('modalIp').value=(!ip||ip==='None')?'':ip; let reg=btn.getAttribute('data-reg-at'); document.getElementById('profRegistered').innerText=(reg&&reg!=='None')?reg:'Neznámé'; let da=btn.getAttribute('data-db-access'); document.getElementById('modalDashboardAccess').checked=(da==='True'); document.getElementById('profDbAccess').innerHTML=da==='True'?'<span style="color:var(--success);"><i class="fas fa-check-circle"></i> Povoleno</span>':'<span style="color:var(--danger);"><i class="fas fa-times-circle"></i> Zakázáno</span>'; document.querySelectorAll('input[name="roles"]').forEach(cb=>cb.checked=false); (btn.getAttribute('data-roles')||"").split(',').forEach(r=>{let el=document.querySelector(`input[name="roles"][value="${r.trim()}"]`);if(el)el.checked=true;}); let is_deleted=btn.getAttribute('data-deleted'); let is_banned=btn.getAttribute('data-banned'); if(is_deleted==='True'){document.getElementById('activeActions').style.display='none';document.getElementById('deletedActions').style.display='block';}else{document.getElementById('activeActions').style.display='block';document.getElementById('deletedActions').style.display='none';if(is_banned==='True'){document.getElementById('btnBan').style.display='none';document.getElementById('btnUnban').style.display='block';}else{document.getElementById('btnBan').style.display='block';document.getElementById('btnUnban').style.display='none';}} document.getElementById('profJoined').innerHTML='<i class="fas fa-spinner fa-spin"></i>'; document.getElementById('modalStatusDot').innerHTML=''; document.getElementById('profDownloads').innerHTML='<tr><td colspan="2" style="text-align:center;"><i class="fas fa-spinner fa-spin"></i></td></tr>'; document.getElementById('profSessions').innerHTML='<tr><td colspan="2" style="text-align:center;"><i class="fas fa-spinner fa-spin"></i></td></tr>'; document.getElementById('profAppStatus').innerHTML='<i class="fas fa-spinner fa-spin"></i>'; document.getElementById('profStats').innerHTML=''; if(!discord_id||discord_id.trim()===''||discord_id==='None'){document.getElementById('profJoined').innerText="Chybí ID";return;} fetch('/api/get_profile_data/'+discord_id).then(r=>r.json()).then(data=>{if(data.error){document.getElementById('profAppStatus').innerHTML="<span style='color:#ef4444;'>Chyba: "+data.error+"</span>";return;} document.getElementById('profJoined').innerText=data.joined_at||"Nenalezen"; document.getElementById('modalStatusDot').innerHTML=data.status||""; document.getElementById('profAppStatus').innerHTML=data.app_status||""; document.getElementById('profStats').innerHTML=data.stats||""; let dlHtml=""; if(data.downloads&&data.downloads.length>0){data.downloads.forEach(d=>{dlHtml+=`<tr><td style="color:var(--blue-main);"><b>${d.version_name}</b></td><td style="color:var(--text-muted);">${d.downloaded_at}</td></tr>`;});}else{dlHtml="<tr><td colspan='2' style='color:var(--text-muted);'>Nestáhl žádný soubor.</td></tr>";} document.getElementById('profDownloads').innerHTML=dlHtml; let sessHtml=""; if(data.sessions&&data.sessions.length>0){data.sessions.forEach(s=>{sessHtml+=`<tr><td style="color:var(--success);font-weight:bold;white-space:nowrap;">🟢 ${s.start_time.split(' ')[1]||s.start_time}</td><td style="color:var(--danger);font-weight:bold;white-space:nowrap;">🔴 ${s.end_time.split(' ')[1]||s.end_time}</td></tr><tr><td colspan="2" style="color:var(--text-muted);padding-top:0;padding-bottom:10px;border-bottom:1px solid #334155;text-align:center;">${s.start_time.split(' ')[0]}</td></tr>`;});}else{sessHtml="<tr><td colspan='2' style='color:var(--text-muted);'>Zatím žádná aktivita.</td></tr>";} document.getElementById('profSessions').innerHTML=sessHtml;}).catch(e=>{document.getElementById('profAppStatus').innerHTML="<span style='color:#ef4444;'>Spojení selhalo</span>";});} catch(e){alert("Chyba: "+e.message);}}
     function closeModal(){document.getElementById('editModal').style.display='none';}
 </script>
 """
@@ -1092,8 +1095,8 @@ HTML_UCET = """
     </div>
 
     <div class="input-group">
-      <label>Odkaz na profilový obrázek (URL)</label>
-      <input type="text" id="avatar_url" value="__AVATAR_URL__" placeholder="https://..." onchange="document.getElementById('avatarPreview').innerHTML = this.value ? '<img src=\\''+this.value+'\\'>' : '<i class=\\'fas fa-user\\'></i>'">
+      <label>Profilový obrázek</label>
+      <input type="file" id="avatar_file" accept="image/png, image/jpeg, image/webp" onchange="previewAvatar(this)" style="padding: 9px; cursor: pointer;">
     </div>
 
     <button class="btn-save" onclick="saveProfile()"><i class="fas fa-save"></i> Uložit profil</button>
@@ -1128,9 +1131,34 @@ HTML_UCET = """
 </div>
 
 <script>
+let currentAvatarBase64 = "__AVATAR_URL__";
+
+function previewAvatar(input) {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                const MAX = 200;
+                let w = img.width, h = img.height;
+                if (w > h) { if (w > MAX) { h *= MAX / w; w = MAX; } }
+                else { if (h > MAX) { w *= MAX / h; h = MAX; } }
+                canvas.width = w; canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                currentAvatarBase64 = canvas.toDataURL('image/jpeg', 0.85);
+                document.getElementById('avatarPreview').innerHTML = '<img src="' + currentAvatarBase64 + '">';
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
 function saveProfile() {
     const nick = document.getElementById('nick').value.trim();
-    const avatar_url = document.getElementById('avatar_url').value.trim();
     const btn = document.querySelector('.btn-save');
     const status = document.getElementById('save-status');
     
@@ -1147,7 +1175,7 @@ function saveProfile() {
     fetch('/api/ucet/update', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ nick: nick, avatar_url: avatar_url })
+        body: JSON.stringify({ nick: nick, avatar_url: currentAvatarBase64 })
     }).then(r => r.json()).then(data => {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-save"></i> Uložit profil';
