@@ -1930,6 +1930,20 @@ async def check_depot_queue():
     except Exception as e:
         print(f"[DEPOT DISCORD] Chyba: {e}", flush=True)
 
+def format_prague_time(iso_str):
+    if not iso_str: return ""
+    try:
+        iso_str_clean = iso_str.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(iso_str_clean)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=ZoneInfo('UTC'))
+        dt = dt.astimezone(ZoneInfo('Europe/Prague'))
+        return dt.strftime('%H:%M')
+    except Exception as e:
+        p = iso_str.split('T')
+        if len(p) > 1: return p[1][:5]
+        return iso_str
+
 async def update_depot_discord_messages():
     channel = None
     for guild in bot.guilds:
@@ -1963,8 +1977,7 @@ async def update_depot_discord_messages():
                 spz = a.get("spz", "Neznámá")
                 arr = a.get("arrived_at", "")
                 if arr: 
-                    p = arr.split('T')
-                    if len(p) > 1: arr = p[1][:5]
+                    arr = format_prague_time(arr)
                 active_str += f"**{spz}** - Přijel: `{arr}`\n"
         else:
             active_str = "*Prázdno*"
@@ -1977,8 +1990,7 @@ async def update_depot_discord_messages():
                 spz = r.get("spz", "Neznámá")
                 left = r.get("left_at", "")
                 if left: 
-                    p = left.split('T')
-                    if len(p) > 1: left = p[1][:5]
+                    left = format_prague_time(left)
                 recent_str += f"**{spz}** - Odjel: `{left}`\n"
         else:
             recent_str = "*Žádné nedávné odjezdy*"
