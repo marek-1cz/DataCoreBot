@@ -128,7 +128,8 @@ def send_magic_link_email(to_email, token):
         <html>
           <body style="background-color: #ffffff; color: #000000; font-family: sans-serif; padding: 40px; text-align: center;">
             <p style="color: #000000; font-size: 16px; text-align: left; max-width: 500px; margin: 0 auto 20px auto;">Dobrý den,<br><br>posíláme odkaz pro přístup do aplikace OIS IDPK. Pro dokončení přihlášení stačí kliknout na tlačítko níže:</p>
-            <a href="{login_url}" style="display: inline-block; background-color: #38bdf8; color: #000000; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Potvrdit přihlášení</a>
+            <a href="{login_url}" style="display: inline-block; background-color: #38bdf8; color: #000000; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; margin-bottom: 20px;">Potvrdit přihlášení</a>
+            <p style="color: #000000; font-size: 16px; text-align: left; max-width: 500px; margin: 0 auto 20px auto;">Nebo můžete ručně zadat tento 5místný kód: <strong>{token}</strong></p>
             <p style="color: #000000; font-size: 14px; text-align: left; max-width: 500px; margin: 30px auto 10px auto;">Pokud se právě do aplikace nepřihlašujete, nic se neděje a e-mail můžete v klidu smazat. Váš účet je v bezpečí.</p>
             <p style="color: #000000; font-size: 14px; text-align: left; max-width: 500px; margin: 0 auto;">Hezký den přeje<br><br>Tým Projekt OIS IDPK</p>
           </body>
@@ -1575,7 +1576,7 @@ def web_auth_email_request():
         if not user:
             db.table("users").insert({"email": email, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M")}).execute()
         
-        token = str(uuid.uuid4())
+        import random; token = str(random.randint(10000, 99999))
         db.table("users").update({"login_token": token}).eq("email", email).execute()
         
         if send_magic_link_email(email, token):
@@ -1742,7 +1743,14 @@ def stranka_ucet():
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({email: e})
         }).then(r=>r.json()).then(data => {
-            if(data.status === 'success') alert('Odeslán e-mail s odkazem k propojení. Po kliknutí v e-mailu obnovte tuto stránku.');
+            if(data.status === 'success') {
+                const code = prompt('Odeslán e-mail s odkazem k propojení. Zadejte 5místný kód z e-mailu:');
+                if(code && code.trim().length === 5) {
+                    window.location.href = `/api/auth/finalize?token=${code.trim()}&type=email`;
+                } else if(code) {
+                    alert('Neplatný kód.');
+                }
+            }
             else alert('Chyba: ' + data.message);
         });
     }
