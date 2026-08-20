@@ -1137,9 +1137,12 @@ HTML_UCET = """
 let currentAvatarBase64 = "__AVATAR_URL__";
 
 function resetAvatar() {
-    currentAvatarBase64 = "";
-    document.getElementById('avatarPreview').innerHTML = '<i class="fas fa-user-circle"></i>';
-    document.getElementById('avatar_file').value = "";
+    if (confirm("Opravdu chcete smazat profilový obrázek?")) {
+        currentAvatarBase64 = "";
+        document.getElementById('avatarPreview').innerHTML = '<i class="fas fa-user-circle"></i>';
+        document.getElementById('avatar_file').value = "";
+        saveProfile();
+    }
 }
 
 function previewAvatar(input) {
