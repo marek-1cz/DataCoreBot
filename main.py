@@ -40,7 +40,7 @@ _template_names = [
     'HTML_TEAM', 'HTML_PUBLIC_STATS', 'HTML_CLAIM', 'HTML_STATS', 'HTML_APP_MANAGEMENT',
     'HTML_NOTIFICATIONS', 'HTML_DOWNLOADS_MGMT', 'HTML_PENDING_ROLES', 'HTML_TEAM_ADD',
     'HTML_IDS', 'HTML_DASHBOARD_MAIN', 'HTML_SUPPORTERS', 'HTML_SUPPORTERS_MGMT',
-    'HTML_FEEDBACK', 'HTML_WAIT_AUTH', 'HTML_LOGIN', 'HTML_PROVOZ_IDPK', 'HTML_REGISTER'
+    'HTML_FEEDBACK', 'HTML_WAIT_AUTH', 'HTML_LOGIN', 'HTML_PROVOZ_IDPK', 'HTML_REGISTER', 'HTML_UCET'
 ]
 for _name in _template_names:
     if _name not in globals():
@@ -460,25 +460,40 @@ def _get_avatar_html(req):
     if cookie_token and HAS_SUPABASE:
         try:
             db = get_db()
-            user = db.table("users").select("discord_id, email, nick").eq("web_session_token", cookie_token).execute().data
+            user = db.table("users").select("discord_id, email, nick, avatar_url").eq("web_session_token", cookie_token).execute().data
             if user:
                 u = user[0]
+                if not u.get("nick") and req.path not in ['/ucet', '/api/auth/logout'] and not req.path.startswith('/api/'):
+                    return "<script>window.location.href='/ucet';</script>"
+                avatar_src = u.get('avatar_url')
+                if not avatar_src and u.get('discord_id'):
+                    avatar_src = f"https://cdn.discordapp.com/avatars/{u['discord_id']}/" # Fallback if possible
+                
+                img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user" style="color:#38bdf8; font-size:18px;"></i>'
+                display_name = u.get('nick') or u.get('email') or 'Uživatel'
+                
                 return f"""
-                <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer;" onclick="document.getElementById('user-dropdown').style.display=document.getElementById('user-dropdown').style.display==='none'?'block':'none'">
-                  <div style="width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.1); border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow: 0 0 10px rgba(56,189,248,0.5);">
-                    <i class="fas fa-user" style="color:#38bdf8; font-size:16px;"></i>
+                <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onclick="document.getElementById('user-dropdown').style.display=document.getElementById('user-dropdown').style.display==='none'?'block':'none'" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
+                  <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow: 0 0 10px rgba(56,189,248,0.5);">
+                    {img_tag}
                   </div>
-                  <div id="user-dropdown" style="display:none; position:absolute; top:45px; right:0; background:rgba(15,23,42,0.9); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:200px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:10px; text-align:left;">
-                    <div style="color:white; font-size:13px; font-weight:bold; margin-bottom:5px;">Přihlášen jako:</div>
+                  <span style="color:white; font-weight:bold; font-size:14px; max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{display_name}</span>
+                  
+                  <div id="user-dropdown" style="display:none; position:absolute; top:55px; right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left;">
+                    <div style="color:white; font-size:14px; font-weight:bold; margin-bottom:5px;">{display_name}</div>
                     <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{u.get('email') or 'Discord uživatel'}</div>
-                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="width:100%; background:#ef4444; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold;"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
+                    <a href="/ucet" style="display:block; width:100%; background:#38bdf8; color:black; text-align:center; padding:8px; border-radius:6px; text-decoration:none; font-weight:bold; margin-bottom:8px; box-sizing:border-box;"><i class="fas fa-cog"></i> Můj Účet</a>
+                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="width:100%; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold; transition:0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.2)'; this.style.color='#ef4444';"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
                   </div>
                 </div>
                 """
         except: pass
     return """
-    <a href="/register" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.05); border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
-      <i class="fas fa-user" style="color:#94a3b8;"></i>
+    <a href="/register" class="user-avatar-wrap" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
+      <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:1px solid #94a3b8; display:flex; align-items:center; justify-content:center; transition:0.3s;">
+        <i class="fas fa-user" style="color:#94a3b8;"></i>
+      </div>
+      <span style="color:#94a3b8; font-weight:bold; font-size:14px;">Přihlásit se</span>
     </a>
     """
 
@@ -1576,12 +1591,24 @@ def web_auth_email_request():
 @app.route('/api/auth/status')
 def web_auth_status():
     discord_id = request.args.get('discord_id')
+    cookie_token = request.cookies.get('web_session_token')
     db = get_db()
     if db and discord_id:
-        user = db.table("users").select("login_token").eq("discord_id", discord_id).execute().data
+        user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
         if user:
-            t = user[0].get("login_token")
+            u = user[0]
+            t = u.get("login_token")
             if t == "approved": 
+                if cookie_token:
+                    # Link k aktualnimu uctu misto vytvoreni noveho
+                    curr_user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
+                    if curr_user and curr_user[0].get('id') != u.get('id'):
+                        # Smazat docasny ucet z requestu
+                        db.table("users").delete().eq("id", u.get("id")).execute()
+                        # Aktualizovat nas ucet
+                        db.table("users").update({"discord_id": discord_id}).eq("web_session_token", cookie_token).execute()
+                        return jsonify({"status": "approved", "linked": True})
+                        
                 # Create permanent token
                 perm_token = str(uuid.uuid4())
                 db.table("users").update({"login_token": "", "web_session_token": perm_token}).eq("discord_id", discord_id).execute()
@@ -1595,11 +1622,21 @@ def web_auth_status():
 def web_auth_finalize():
     token = request.args.get('token')
     auth_type = request.args.get('type')
+    cookie_token = request.cookies.get('web_session_token')
     db = get_db()
     if db and token and auth_type == "email":
-        user = db.table("users").select("email").eq("login_token", token).execute().data
+        user = db.table("users").select("*").eq("login_token", token).execute().data
         if user:
-            email = user[0].get("email")
+            u = user[0]
+            email = u.get("email")
+            
+            if cookie_token:
+                curr_user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
+                if curr_user and curr_user[0].get('id') != u.get('id'):
+                    db.table("users").delete().eq("id", u.get("id")).execute()
+                    db.table("users").update({"email": email}).eq("web_session_token", cookie_token).execute()
+                    return redirect('/ucet')
+                    
             perm_token = str(uuid.uuid4())
             db.table("users").update({"login_token": "", "web_session_token": perm_token}).eq("email", email).execute()
             
@@ -1632,6 +1669,123 @@ def web_auth_me():
 def logout():
     session.clear()
     return redirect(url_for('home'))
+
+@app.route('/ucet')
+def stranka_ucet():
+    cookie_token = request.cookies.get('web_session_token')
+    if not cookie_token or not HAS_SUPABASE:
+        return redirect('/register')
+        
+    db = get_db()
+    user_res = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
+    if not user_res:
+        resp = redirect('/register')
+        resp.delete_cookie('web_session_token')
+        return resp
+        
+    u = user_res[0]
+    nick = u.get('nick') or ""
+    avatar_url = u.get('avatar_url') or ""
+    
+    # Rozhodnuti o nacteni avatara pro nahled
+    if not avatar_url and u.get('discord_id'):
+        avatar_img_html = f'<img src="https://cdn.discordapp.com/avatars/{u["discord_id"]}/">'
+    elif avatar_url:
+        avatar_img_html = f'<img src="{avatar_url}">'
+    else:
+        avatar_img_html = '<i class="fas fa-user"></i>'
+        
+    has_discord = bool(u.get('discord_id'))
+    has_email = bool(u.get('email'))
+    
+    discord_status = '<div class="link-status status-yes"><i class="fas fa-check-circle"></i> Připojeno</div>' if has_discord else '<div class="link-status status-no"><i class="fas fa-times-circle"></i> Nepřipojeno</div>'
+    discord_btn = '' if has_discord else '<button class="btn-link btn-link-discord" onclick="reqDiscord()"><i class="fab fa-discord"></i> Propojit</button>'
+    
+    email_status = '<div class="link-status status-yes"><i class="fas fa-check-circle"></i> Připojeno</div>' if has_email else '<div class="link-status status-no"><i class="fas fa-times-circle"></i> Nepřipojeno</div>'
+    email_btn = '' if has_email else f'<button class="btn-link btn-link-email" onclick="reqEmail()"><i class="fas fa-envelope"></i> Propojit</button>'
+    
+    # Hack pro pouziti stavajicich js funkci v html_templates
+    link_scripts = """
+    <script>
+    let checkInterval = null;
+    function showStatus(text, desc, isError) {
+        alert(text + " - " + desc);
+    }
+    function startPolling(discord_id) {
+        if(checkInterval) clearInterval(checkInterval);
+        checkInterval = setInterval(() => {
+            fetch('/api/auth/status?discord_id=' + discord_id)
+            .then(r=>r.json()).then(data => {
+                if(data.status === 'approved' && data.linked) {
+                    clearInterval(checkInterval);
+                    alert('Discord úspěšně propojen!');
+                    location.reload();
+                } else if(data.status === 'rejected') {
+                    clearInterval(checkInterval);
+                    alert('Propojení zamítnuto v Discordu.');
+                }
+            });
+        }, 2000);
+    }
+    function reqDiscord() {
+        const d_id = prompt('Zadejte vaše Discord ID pro propojení:');
+        if(!d_id) return;
+        fetch('/api/auth/discord/request', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({discord_id: d_id})
+        }).then(r=>r.json()).then(data => {
+            if(data.status === 'success') {
+                alert('Byla vám zaslána zpráva na Discord pro potvrzení propojení. Přijměte ji a okno se automaticky obnoví.');
+                startPolling(d_id);
+            } else alert('Chyba: ' + data.message);
+        });
+    }
+    function reqEmail() {
+        const e = prompt('Zadejte váš E-mail pro propojení:');
+        if(!e || !e.includes('@')) return;
+        fetch('/api/auth/email/request', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({email: e})
+        }).then(r=>r.json()).then(data => {
+            if(data.status === 'success') alert('Odeslán e-mail s odkazem k propojení. Po kliknutí v e-mailu obnovte tuto stránku.');
+            else alert('Chyba: ' + data.message);
+        });
+    }
+    </script>
+    """
+    
+    html = HTML_UCET.replace('__AVATAR_IMG__', avatar_img_html)
+    html = html.replace('__NICK__', nick)
+    html = html.replace('__AVATAR_URL__', avatar_url)
+    html = html.replace('__DISCORD_STATUS__', discord_status)
+    html = html.replace('__DISCORD_BTN__', discord_btn)
+    html = html.replace('__EMAIL_STATUS__', email_status)
+    html = html.replace('__EMAIL_BTN__', email_btn)
+    html += link_scripts
+    
+    return render_public(html)
+
+@app.route('/api/ucet/update', methods=['POST'])
+def api_ucet_update():
+    cookie_token = request.cookies.get('web_session_token')
+    if not cookie_token or not HAS_SUPABASE:
+        return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
+        
+    data = request.get_json(silent=True) or {}
+    nick = data.get('nick', '').strip()
+    avatar_url = data.get('avatar_url', '').strip()
+    
+    if not nick:
+        return jsonify({"status": "error", "message": "Přezdívka nesmí být prázdná"})
+        
+    db = get_db()
+    try:
+        db.table("users").update({"nick": nick, "avatar_url": avatar_url}).eq("web_session_token", cookie_token).execute()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
 
 @app.route('/dashboard/stats', methods=['GET'], strict_slashes=False)
 def dashboard_stats():

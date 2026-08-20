@@ -569,6 +569,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <a href="https://datacorebot.koyeb.app/" class="n-logo">
       <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png" alt="OIS IDPK">
     </a>
+    __AD_BTN__
     <button id="pub-stops-btn" onclick="togglePubStops()"><i class="fas fa-bus"></i> Zastávky</button>
     <button id="lines-overlay-btn-pub" onclick="toggleLinesPanel()" class="n-btn"><i class="fas fa-route"></i> Linky</button>
     <div class="n-sp"></div>
@@ -590,7 +591,6 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <!-- lines-overlay-btn-pub is already in nav for everyone -->
     <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋</button>
     __AVATAR__
-    __AD_BTN__
   </nav>
   __ADMIN_BANNER__
 <div id="tutorial-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);">
@@ -5421,23 +5421,30 @@ def _get_avatar_html(req):
     if cookie_token and HAS_SUPABASE:
         try:
             db = get_db_client()
-            user = db.table("users").select("discord_id, email, nick").eq("web_session_token", cookie_token).execute().data
+            user = db.table("users").select("discord_id, email, nick, avatar_url").eq("web_session_token", cookie_token).execute().data
             if user:
                 u = user[0]
-                avatar_url = f"https://cdn.discordapp.com/avatars/{u['discord_id']}/" if u.get('discord_id') else "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png"
+                if not u.get("nick") and req.path not in ['/ucet', '/api/auth/logout'] and not req.path.startswith('/api/'):
+                    return "<script>window.location.href='/ucet';</script>"
+                avatar_src = u.get('avatar_url')
+                if not avatar_src and u.get('discord_id'):
+                    avatar_src = f"https://cdn.discordapp.com/avatars/{u['discord_id']}/" # Fallback if possible
                 
-                # Pokud by se to nepovedlo, Discord URL stejne nevíme hash avatara, 
-                # takže discord_id získáme avatar z robota pokud možno, jinak fallback.
-                # Pro jednoduchost použijeme default avatara, pokud ho nejde načíst
+                img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user" style="color:#38bdf8; font-size:18px;"></i>'
+                display_name = u.get('nick') or u.get('email') or 'Uživatel'
+                
                 return f"""
-                <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer;" onclick="document.getElementById('user-dropdown').style.display=document.getElementById('user-dropdown').style.display==='none'?'block':'none'">
-                  <div style="width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.1); border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow: 0 0 10px rgba(56,189,248,0.5);">
-                    <i class="fas fa-user" style="color:#38bdf8; font-size:16px;"></i>
+                <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onclick="document.getElementById('user-dropdown').style.display=document.getElementById('user-dropdown').style.display==='none'?'block':'none'" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
+                  <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow: 0 0 10px rgba(56,189,248,0.5);">
+                    {img_tag}
                   </div>
-                  <div id="user-dropdown" style="display:none; position:absolute; top:45px; right:0; background:rgba(15,23,42,0.9); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:200px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:10px;">
-                    <div style="color:white; font-size:13px; font-weight:bold; margin-bottom:5px;">Přihlášen jako:</div>
+                  <span style="color:white; font-weight:bold; font-size:14px; max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{display_name}</span>
+                  
+                  <div id="user-dropdown" style="display:none; position:absolute; top:55px; right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left;">
+                    <div style="color:white; font-size:14px; font-weight:bold; margin-bottom:5px;">{display_name}</div>
                     <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{u.get('email') or 'Discord uživatel'}</div>
-                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="width:100%; background:#ef4444; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold;"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
+                    <a href="/ucet" style="display:block; width:100%; background:#38bdf8; color:black; text-align:center; padding:8px; border-radius:6px; text-decoration:none; font-weight:bold; margin-bottom:8px; box-sizing:border-box;"><i class="fas fa-cog"></i> Můj Účet</a>
+                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="width:100%; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold; transition:0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.2)'; this.style.color='#ef4444';"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
                   </div>
                 </div>
                 """
@@ -5445,8 +5452,11 @@ def _get_avatar_html(req):
             pass
             
     return """
-    <a href="/register" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.05); border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
-      <i class="fas fa-user" style="color:#94a3b8;"></i>
+    <a href="/register" class="user-avatar-wrap" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
+      <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:1px solid #94a3b8; display:flex; align-items:center; justify-content:center; transition:0.3s;">
+        <i class="fas fa-user" style="color:#94a3b8;"></i>
+      </div>
+      <span style="color:#94a3b8; font-weight:bold; font-size:14px;">Přihlásit se</span>
     </a>
     """
 

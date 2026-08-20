@@ -84,11 +84,11 @@ PUBLIC_LAYOUT = """
 <nav class="top-nav">
 <a href="/" class="logo"><img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png" alt="Logo" style="height: 30px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 8px rgba(56, 189, 248, 0.6));">OIS IDPK</a>
 <div class="nav-links" style="display:flex; align-items:center;">
+<a href="/dashboard" class="admin-link">Dashboard 🔒</a>
 <a href="/">Domů</a><a href="/download">Download</a><a href="/team">Náš Tým</a><a href="/stats">Statistiky</a>
 <a href="/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-heart"></i> Podporovatelé</a>
 <a href="/provoz-idpk" style="color: #10b981; font-weight: bold;"><i class="fas fa-bus"></i> Provoz IDPK</a>
 <a href="/led-panel" style="color: #f59e0b; font-weight: bold;"><i class="fas fa-tv"></i> LED Panel Simulátor</a>
-<a href="/dashboard" class="admin-link">Dashboard 🔒</a>
 __AVATAR__
 </div>
 </nav>
@@ -1041,4 +1041,132 @@ function startPolling() {
 </script>
 </body>
 </html>
+"""
+
+HTML_UCET = """
+<style>
+  .ucet-wrapper { background: url('https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/bg-map.jpg') no-repeat center center fixed; background-size: cover; display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 60px); margin: -20px; padding: 20px; position: relative; }
+  .ucet-card { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 20px; padding: 40px; width: 100%; max-width: 500px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.2); position: relative; z-index: 10; }
+  .ucet-header { display: flex; align-items: center; gap: 20px; border-bottom: 1px solid #334155; padding-bottom: 20px; margin-bottom: 20px; }
+  .avatar-preview { width: 80px; height: 80px; border-radius: 50%; border: 3px solid #38bdf8; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 30px; color: #38bdf8; overflow: hidden; flex-shrink: 0; box-shadow: 0 0 15px rgba(56,189,248,0.5); }
+  .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
+  .ucet-title h2 { color: var(--blue-main); margin: 0 0 5px 0; font-size: 24px; }
+  .ucet-title p { color: #94a3b8; margin: 0; font-size: 13px; }
+  .input-group { margin-bottom: 20px; }
+  .input-group label { display: block; margin-bottom: 8px; font-size: 13px; color: var(--text-muted); font-weight: bold; }
+  .input-group input { width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.5); border: 1px solid #334155; border-radius: 8px; color: white; font-size: 15px; outline: none; transition: border 0.3s; box-sizing: border-box; }
+  .input-group input:focus { border-color: var(--blue-main); box-shadow: 0 0 8px rgba(56, 189, 248, 0.5); }
+  .btn-save { width: 100%; padding: 12px; background: #10b981; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+  .btn-save:hover { background: #059669; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+  .link-section { margin-top: 30px; background: rgba(0,0,0,0.3); border-radius: 12px; padding: 20px; border: 1px solid #334155; }
+  .link-section h3 { color: white; margin-top: 0; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+  .link-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #334155; }
+  .link-item:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+  .link-info { display: flex; align-items: center; gap: 10px; }
+  .link-info i { font-size: 20px; }
+  .link-status { font-size: 13px; font-weight: bold; }
+  .status-yes { color: #10b981; }
+  .status-no { color: #f59e0b; }
+  .btn-link { padding: 6px 12px; border-radius: 6px; border: none; font-size: 12px; font-weight: bold; cursor: pointer; transition: 0.2s; text-decoration: none; color: white; display: inline-block; }
+  .btn-link-discord { background: #5865F2; }
+  .btn-link-discord:hover { background: #4752C4; }
+  .btn-link-email { background: transparent; border: 1px solid var(--blue-main); color: var(--blue-main); }
+  .btn-link-email:hover { background: rgba(56, 189, 248, 0.1); }
+</style>
+<div class="ucet-wrapper">
+  <div class="ucet-card">
+    <div class="ucet-header">
+      <div class="avatar-preview" id="avatarPreview">
+        __AVATAR_IMG__
+      </div>
+      <div class="ucet-title">
+        <h2>Nastavení účtu</h2>
+        <p>Spravujte svůj profil a přihlášení</p>
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label>Přezdívka (Nickname)</label>
+      <input type="text" id="nick" value="__NICK__" placeholder="Vaše přezdívka">
+    </div>
+
+    <div class="input-group">
+      <label>Odkaz na profilový obrázek (URL)</label>
+      <input type="text" id="avatar_url" value="__AVATAR_URL__" placeholder="https://..." onchange="document.getElementById('avatarPreview').innerHTML = this.value ? '<img src=\\''+this.value+'\\'>' : '<i class=\\'fas fa-user\\'></i>'">
+    </div>
+
+    <button class="btn-save" onclick="saveProfile()"><i class="fas fa-save"></i> Uložit profil</button>
+    <div id="save-status" style="margin-top: 10px; font-size: 13px; text-align: center; font-weight: bold; display: none;"></div>
+
+    <div class="link-section">
+      <h3>Propojené metody přihlášení</h3>
+      
+      <div class="link-item">
+        <div class="link-info">
+          <i class="fab fa-discord" style="color: #5865F2;"></i>
+          <div>
+            <div style="color: white; font-size: 14px; font-weight: bold;">Discord</div>
+            __DISCORD_STATUS__
+          </div>
+        </div>
+        __DISCORD_BTN__
+      </div>
+
+      <div class="link-item">
+        <div class="link-info">
+          <i class="fas fa-envelope" style="color: var(--blue-main);"></i>
+          <div>
+            <div style="color: white; font-size: 14px; font-weight: bold;">E-mail</div>
+            __EMAIL_STATUS__
+          </div>
+        </div>
+        __EMAIL_BTN__
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function saveProfile() {
+    const nick = document.getElementById('nick').value.trim();
+    const avatar_url = document.getElementById('avatar_url').value.trim();
+    const btn = document.querySelector('.btn-save');
+    const status = document.getElementById('save-status');
+    
+    if(!nick) {
+        status.style.display = 'block';
+        status.style.color = '#ef4444';
+        status.innerText = 'Přezdívka nemůže být prázdná!';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ukládám...';
+    
+    fetch('/api/ucet/update', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ nick: nick, avatar_url: avatar_url })
+    }).then(r => r.json()).then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Uložit profil';
+        status.style.display = 'block';
+        if(data.status === 'success') {
+            status.style.color = '#10b981';
+            status.innerText = 'Profil úspěšně uložen!';
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            status.style.color = '#ef4444';
+            status.innerText = 'Chyba: ' + data.message;
+        }
+    }).catch(e => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Uložit profil';
+        status.style.display = 'block';
+        status.style.color = '#ef4444';
+        status.innerText = 'Chyba sítě!';
+    });
+}
+</script>
+"""
 """
