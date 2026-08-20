@@ -596,14 +596,17 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
   <div id="tut-step-1" class="tut-box" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:400px;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.8);color:white;text-align:center;">
     <h3 style="margin-bottom:15px;color:#38bdf8;">Vysvětlivky a Tipy</h3>
     <div style="font-size:13px;color:#cbd5e1;text-align:left;line-height:1.6;margin-bottom:20px;">
-      <b>Barvy vozidel na mapě:</b><br>
-      <span style="color:#10b981;">● Zelená:</span> Jede včas (nebo zpoždění do 5 min)<br>
-      <span style="color:#3b82f6;">● Modrá:</span> Náskok<br>
-      <span style="color:#ef4444;">● Červená:</span> Zpoždění 5 min a více<br>
-      <span style="color:#a855f7;">● Fialová:</span> Vozidlo na konečné (čeká na odjezd)<br>
-      <span style="color:#94a3b8;">● Šedá:</span> Data o čase nejsou dočasně dostupná<br><br>
-      <b>Tipy a triky:</b><br>
-      V okénku vozidla lze prokliknout na jeho kartu na <b>seznam-autobusu.cz</b>. Pokud by vás zajímalo dění v depech, náš komunitní <b>Discord</b> obsahuje speciální kanál s vypnutými vozy!
+      <b>Vysvětlivky k barvám vozidel na mapě:</b><br>
+      <span style="color:#10b981;">● Zelená:</span> Jede včas (zpoždění maximálně do 4 minut)<br>
+      <span style="color:#1e40af;">● Tmavě modrá:</span> Vozidlo má náskok oproti jízdnímu řádu<br>
+      <span style="color:#3b82f6;">● Modrá:</span> Čeká na napojení na linku<br>
+      <span style="color:#ef4444;">● Červená:</span> Zpoždění 5 minut a více<br>
+      <span style="color:#a855f7;">● Fialová:</span> Vozidlo dojelo na konečnou zastávku<br>
+      <span style="color:#94a3b8;">● Šedá:</span> Vozidlo je aktuálně odstaveno<br>
+      <span style="color:#facc15;">● Žlutá:</span> Vozidlo se nachází ve vozovně (depu)<br><br>
+      <b>Tipy a triky pro uživatele:</b><br>
+      V detailu každého vozidla (po kliknutí na jeho ikonu) naleznete přímý odkaz na jeho kartu na portálu <b>seznam-autobusu.cz</b>.<br><br>
+      Zajímá vás aktuální dění v depech? Připojte se na náš <b>Discord</b>, kde je vyhrazen speciální kanál.
     </div>
     <button onclick="tutNext(2)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další ➔</button>
   </div>
@@ -611,18 +614,19 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <div class="tut-arrow-up" style="position:absolute;top:-15px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:15px solid transparent;border-right:15px solid transparent;border-bottom:15px solid #38bdf8;"></div>
     <h3 style="margin-bottom:15px;color:#38bdf8;">Horní navigační panel</h3>
     <div style="font-size:13px;color:#cbd5e1;text-align:left;line-height:1.6;margin-bottom:20px;">
-      Tento panel slouží pro vyhledávání spojů a filtrování zastávek nebo linek na mapě.<br><br>
-      <b>Důležité:</b> Kliknutím na <b>logo IDPK</b> (vlevo na panelu) se můžete kdykoliv vrátit na hlavní domovskou stránku.
+      Tento panel slouží k rychlému <b>vyhledávání spojů</b> a zobrazení konkrétních <b>zastávek či linek</b> přímo na mapě.<br><br>
+      <b>Důležité upozornění:</b> Kliknutím na modré <b>logo</b> v levé části panelu se můžete kdykoliv bezpečně vrátit na hlavní domovskou stránku.
     </div>
     <button onclick="tutNext(3)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další ➔</button>
   </div>
-  <div id="tut-step-3" class="tut-box" style="display:none;position:absolute;top:75px;right:320px;width:90%;max-width:350px;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.8);color:white;text-align:center;">
-    <div class="tut-arrow-right" style="position:absolute;top:20px;right:-15px;width:0;height:0;border-top:15px solid transparent;border-bottom:15px solid transparent;border-left:15px solid #38bdf8;"></div>
+  <div id="tut-step-3" class="tut-box" style="display:none;position:absolute;top:220px;right:320px;width:90%;max-width:350px;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.8);color:white;text-align:center;">
+    <div class="tut-arrow-right" style="position:absolute;top:50%;transform:translateY(-50%);right:-15px;width:0;height:0;border-top:15px solid transparent;border-bottom:15px solid transparent;border-left:15px solid #38bdf8;"></div>
     <h3 style="margin-bottom:15px;color:#38bdf8;">Nastavení aplikace</h3>
     <div style="font-size:13px;color:#cbd5e1;text-align:left;line-height:1.6;margin-bottom:20px;">
-      <b>Základní mapa:</b> Přepínejte mezi světlým, tmavým a satelitním motivem podle libosti.<br><br>
-      <b>Design navigace:</b> Můžete si zde změnit i vzhled a chování horního panelu (např. moderní průhledný nebo klasický stálý).<br><br>
-      <b>Výkon a grafika:</b> Přizpůsobte si množství detailů a animací podle síly vašeho zařízení pro co nejplynulejší chod.
+      Přizpůsobte si mapu přesně podle svých potřeb:<br><br>
+      <b>Základní mapa:</b> Přepínejte mezi světlým, tmavým nebo satelitním motivem a objevujte další mapové podklady.<br><br>
+      <b>Design navigace:</b> Změňte si vzhled a chování horního panelu (na výběr je například moderní průhledný, nebo klasický plný vzhled).<br><br>
+      <b>Výkon a grafika:</b> Upravte si množství detailů a animací s ohledem na výkon vašeho zařízení, abyste zajistili co nejplynulejší chod aplikace.
     </div>
     <button onclick="tutNext(4)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další ➔</button>
   </div>
@@ -823,7 +827,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
 
 <div id="setup-wizard-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.95);z-index:9999;align-items:center;justify-content:center;flex-direction:column;backdrop-filter:blur(10px);">
   <div style="background:#1e293b;border:2px solid #38bdf8;border-radius:16px;width:90%;max-width:500px;padding:30px;box-shadow:0 15px 50px rgba(0,0,0,0.8);text-align:center;">
-    <h2 id="sw-title" style="color:#38bdf8;margin-bottom:20px;font-size:28px;line-height:1.2;">Vítejte v interaktivní mapě<br><span style="color:#94a3b8;font-size:13px;font-weight:normal;display:block;margin-top:8px;">Neoficiální interaktivní mapa příměstských autobusů Plzeňského kraje</span></h2>
+    <h2 id="sw-title" style="color:#38bdf8;margin-bottom:20px;font-size:28px;line-height:1.2;">Vítejte v interaktivní mapě<br><span style="color:#94a3b8;font-size:13px;font-weight:normal;display:block;margin-top:8px;">Neoficiální mapa příměstských autobusů Plzeňského kraje</span></h2>
     
     <div id="sw-step-1" class="sw-step">
       <h3 style="color:white;margin-bottom:10px;">Krok 1: Nastavení zobrazení a výkonu</h3>
