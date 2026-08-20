@@ -17,6 +17,9 @@ import uuid
 import urllib.request
 import http.cookiejar
 import json
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import traceback
 import re
 import gc
@@ -37,7 +40,7 @@ _template_names = [
     'HTML_TEAM', 'HTML_PUBLIC_STATS', 'HTML_CLAIM', 'HTML_STATS', 'HTML_APP_MANAGEMENT',
     'HTML_NOTIFICATIONS', 'HTML_DOWNLOADS_MGMT', 'HTML_PENDING_ROLES', 'HTML_TEAM_ADD',
     'HTML_IDS', 'HTML_DASHBOARD_MAIN', 'HTML_SUPPORTERS', 'HTML_SUPPORTERS_MGMT',
-    'HTML_FEEDBACK', 'HTML_WAIT_AUTH', 'HTML_LOGIN', 'HTML_PROVOZ_IDPK'
+    'HTML_FEEDBACK', 'HTML_WAIT_AUTH', 'HTML_LOGIN', 'HTML_PROVOZ_IDPK', 'HTML_REGISTER'
 ]
 for _name in _template_names:
     if _name not in globals():
@@ -83,6 +86,8 @@ def handle_exception(e):
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+SMTP_EMAIL = os.environ.get("SMTP_EMAIL")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
 _db_client = None
 
 def get_db():
@@ -105,6 +110,41 @@ def get_system_statuses():
     except:
         pass
     return {}
+
+def send_magic_link_email(to_email, token):
+    if not SMTP_EMAIL or not SMTP_PASSWORD:
+        print("[AUTH] SMTP není nastaveno!")
+        return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Přihlášení do OIS IDPK"
+        msg["From"] = f"DataCore Bot <{SMTP_EMAIL}>"
+        msg["To"] = to_email
+
+        login_url = f"https://ois-idpk.cz/api/auth/finalize?token={token}&type=email"
+        
+        html = f"""
+        <html>
+          <body style="background-color: #0f172a; color: white; font-family: sans-serif; padding: 40px; text-align: center;">
+            <h2 style="color: #38bdf8;">Ověření přihlášení</h2>
+            <p style="color: #cbd5e1; font-size: 16px;">Kliknutím na tlačítko níže se přihlásíte do aplikace OIS IDPK.</p>
+            <br>
+            <a href="{login_url}" style="background-color: #38bdf8; color: #0f172a; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Potvrdit přihlášení</a>
+            <br><br>
+            <p style="color: #64748b; font-size: 12px;">Pokud jste o toto přihlášení nežádali, můžete tento e-mail ignorovat.</p>
+          </body>
+        </html>
+        """
+        msg.attach(MIMEText(html, "html"))
+        
+        server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+        server.login(SMTP_EMAIL, SMTP_PASSWORD)
+        server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"[AUTH] Chyba odesílání e-mailu: {e}")
+        return False
 
 class AppAuthView(discord.ui.View):
     def __init__(self, token="", discord_id="", is_dm=True):
@@ -415,8 +455,36 @@ def send_log(title, description, color=0x38bdf8):
 def _cors_jsonify(data):
     return jsonify(data)
 
+def _get_avatar_html(req):
+    cookie_token = req.cookies.get('web_session_token')
+    if cookie_token and HAS_SUPABASE:
+        try:
+            db = get_db()
+            user = db.table("users").select("discord_id, email, nick").eq("web_session_token", cookie_token).execute().data
+            if user:
+                u = user[0]
+                return f"""
+                <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer;" onclick="document.getElementById('user-dropdown').style.display=document.getElementById('user-dropdown').style.display==='none'?'block':'none'">
+                  <div style="width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.1); border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow: 0 0 10px rgba(56,189,248,0.5);">
+                    <i class="fas fa-user" style="color:#38bdf8; font-size:16px;"></i>
+                  </div>
+                  <div id="user-dropdown" style="display:none; position:absolute; top:45px; right:0; background:rgba(15,23,42,0.9); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:200px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:10px; text-align:left;">
+                    <div style="color:white; font-size:13px; font-weight:bold; margin-bottom:5px;">Přihlášen jako:</div>
+                    <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{u.get('email') or 'Discord uživatel'}</div>
+                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="width:100%; background:#ef4444; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold;"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
+                  </div>
+                </div>
+                """
+        except: pass
+    return """
+    <a href="/register" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.05); border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
+      <i class="fas fa-user" style="color:#94a3b8;"></i>
+    </a>
+    """
+
 def render_public(template_string, **kwargs):
-    html = PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
+    avatar = _get_avatar_html(request)
+    html = PUBLIC_LAYOUT.replace('{% block content %}{% endblock %}', template_string).replace('__AVATAR__', avatar)
     if 'statuses' not in kwargs:
         kwargs['statuses'] = get_system_statuses()
     return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html), **kwargs)
@@ -1409,6 +1477,156 @@ def login_finalize():
             db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
             return redirect(url_for('dashboard_main'))
     return redirect(url_for('home'))
+
+class WebAuthView(discord.ui.View):
+    def __init__(self, token="", discord_id=""):
+        super().__init__(timeout=None)
+        self.token = token
+        self.discord_id = str(discord_id)
+
+    @discord.ui.button(label="Přihlásit se na Web", style=discord.ButtonStyle.success, emoji="✅", custom_id="web_auth_approve")
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
+        target_id = self.discord_id if self.discord_id else str(interaction.user.id)
+        if str(interaction.user.id) != target_id:
+            return await interaction.response.send_message("Toto ověření není pro tebe!", ephemeral=True)
+        db = get_db()
+        if db:
+            db.table("users").update({"login_token": "approved"}).eq("discord_id", target_id).execute()
+            await interaction.response.edit_message(content="✅ **Přihlášení na web OIS IDPK bylo úspěšné!** Můžete se vrátit do prohlížeče.", embed=None, view=None)
+
+    @discord.ui.button(label="Zamítnout", style=discord.ButtonStyle.danger, emoji="❌", custom_id="web_auth_reject")
+    async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
+        target_id = self.discord_id if self.discord_id else str(interaction.user.id)
+        if str(interaction.user.id) != target_id:
+            return await interaction.response.send_message("Toto ověření není pro tebe!", ephemeral=True)
+        db = get_db()
+        if db:
+            db.table("users").update({"login_token": "rejected"}).eq("discord_id", target_id).execute()
+            await interaction.response.edit_message(content="❌ **Přihlášení zrušeno.**", embed=None, view=None)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NOVÝ WEB AUTH SYSTÉM
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/register')
+@app.route('/login')
+def auth_pages():
+    # If user is already logged in with a cookie, redirect to home
+    cookie_token = request.cookies.get('web_session_token')
+    db = get_db()
+    if cookie_token and db:
+        user = db.table("users").select("id").eq("web_session_token", cookie_token).execute().data
+        if user:
+            return redirect(url_for('home'))
+    return render_public(HTML_REGISTER) # HTML_REGISTER used for both login and register since it's passwordless
+
+@app.route('/api/auth/discord/request', methods=['POST'])
+def web_auth_discord_request():
+    discord_id = request.json.get('discord_id')
+    db = get_db()
+    if not db or not discord_id:
+        return jsonify({"status": "error", "message": "Neplatný požadavek."})
+    
+    try:
+        user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+        if not user:
+            # Create user if it doesn't exist
+            db.table("users").insert({"discord_id": discord_id, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M")}).execute()
+        
+        token = str(uuid.uuid4())
+        db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
+        
+        async def send():
+            try:
+                u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+                if u: 
+                    await u.send(embed=discord.Embed(title="🔐 Webové ověření", description="Kliknutím na tlačítko níže se přihlásíte do interaktivní mapy OIS IDPK.", color=0x38bdf8), view=WebAuthView(token, discord_id))
+            except Exception as e:
+                print(f"[AUTH] Nelze odeslat DM: {e}")
+        
+        if bot.loop and bot.loop.is_running() and bot.is_ready(): 
+            asyncio.run_coroutine_threadsafe(send(), bot.loop)
+            
+        return jsonify({"status": "success", "discord_id": discord_id})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Došlo k chybě: {str(e)}"})
+
+@app.route('/api/auth/email/request', methods=['POST'])
+def web_auth_email_request():
+    email = request.json.get('email')
+    db = get_db()
+    if not db or not email:
+        return jsonify({"status": "error", "message": "Neplatný e-mail."})
+    
+    try:
+        user = db.table("users").select("*").eq("email", email).execute().data
+        if not user:
+            db.table("users").insert({"email": email, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M")}).execute()
+        
+        token = str(uuid.uuid4())
+        db.table("users").update({"login_token": token}).eq("email", email).execute()
+        
+        if send_magic_link_email(email, token):
+            return jsonify({"status": "success"})
+        else:
+            return jsonify({"status": "error", "message": "E-mail se nepodařilo odeslat. Máte nastavený SMTP?"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Došlo k chybě: {str(e)}"})
+
+@app.route('/api/auth/status')
+def web_auth_status():
+    discord_id = request.args.get('discord_id')
+    db = get_db()
+    if db and discord_id:
+        user = db.table("users").select("login_token").eq("discord_id", discord_id).execute().data
+        if user:
+            t = user[0].get("login_token")
+            if t == "approved": 
+                # Create permanent token
+                perm_token = str(uuid.uuid4())
+                db.table("users").update({"login_token": "", "web_session_token": perm_token}).eq("discord_id", discord_id).execute()
+                return jsonify({"status": "approved", "token": perm_token})
+            elif t == "rejected":
+                db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
+                return jsonify({"status": "rejected"})
+    return jsonify({"status": "waiting"})
+
+@app.route('/api/auth/finalize')
+def web_auth_finalize():
+    token = request.args.get('token')
+    auth_type = request.args.get('type')
+    db = get_db()
+    if db and token and auth_type == "email":
+        user = db.table("users").select("email").eq("login_token", token).execute().data
+        if user:
+            email = user[0].get("email")
+            perm_token = str(uuid.uuid4())
+            db.table("users").update({"login_token": "", "web_session_token": perm_token}).eq("email", email).execute()
+            
+            resp = redirect(url_for('home'))
+            resp.set_cookie('web_session_token', perm_token, max_age=60*60*24*30) # 30 days
+            return resp
+    return "Neplatný nebo expirovaný odkaz.", 400
+
+@app.route('/api/auth/logout', methods=['POST'])
+def web_auth_logout():
+    cookie_token = request.cookies.get('web_session_token')
+    db = get_db()
+    if cookie_token and db:
+        db.table("users").update({"web_session_token": ""}).eq("web_session_token", cookie_token).execute()
+    resp = jsonify({"status": "success"})
+    resp.set_cookie('web_session_token', '', expires=0)
+    return resp
+
+@app.route('/api/auth/me')
+def web_auth_me():
+    cookie_token = request.cookies.get('web_session_token')
+    db = get_db()
+    if cookie_token and db:
+        user = db.table("users").select("discord_id, email, nick").eq("web_session_token", cookie_token).execute().data
+        if user:
+            return jsonify({"status": "success", "user": user[0]})
+    return jsonify({"status": "unauthorized"}), 401
 
 @app.route('/logout')
 def logout():

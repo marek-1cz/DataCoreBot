@@ -83,12 +83,13 @@ tr:hover { background-color: #334155; }
 PUBLIC_LAYOUT = """
 <nav class="top-nav">
 <a href="/" class="logo"><img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png" alt="Logo" style="height: 30px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 8px rgba(56, 189, 248, 0.6));">OIS IDPK</a>
-<div class="nav-links">
+<div class="nav-links" style="display:flex; align-items:center;">
 <a href="/">Domů</a><a href="/download">Download</a><a href="/team">Náš Tým</a><a href="/stats">Statistiky</a>
 <a href="/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-heart"></i> Podporovatelé</a>
 <a href="/provoz-idpk" style="color: #10b981; font-weight: bold;"><i class="fas fa-bus"></i> Provoz IDPK</a>
 <a href="/led-panel" style="color: #f59e0b; font-weight: bold;"><i class="fas fa-tv"></i> LED Panel Simulátor</a>
 <a href="/dashboard" class="admin-link">Dashboard 🔒</a>
+__AVATAR__
 </div>
 </nav>
 <div class="container">
@@ -905,4 +906,137 @@ HTML_PROVOZ_IDPK = """
   </a>
   <a href="/" class="prov-back"><i class="fas fa-arrow-left"></i> Zpět na hlavní stránku</a>
 </div>
+"""
+
+HTML_REGISTER = BASE_HTML + """
+<style>
+  body { background: url('https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/bg-map.jpg') no-repeat center center fixed; background-size: cover; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+  .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 20px; padding: 40px; width: 100%; max-width: 400px; box-shadow: 0 0 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(56, 189, 248, 0.2); text-align: center; }
+  .glass-card h2 { color: var(--blue-main); margin-bottom: 30px; font-size: 28px; margin-top: 0; }
+  .input-group { margin-bottom: 20px; text-align: left; }
+  .input-group label { display: block; margin-bottom: 8px; font-size: 13px; color: var(--text-muted); font-weight: bold; }
+  .input-group input { width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.5); border: 1px solid #334155; border-radius: 8px; color: white; font-size: 15px; outline: none; transition: border 0.3s, box-shadow 0.3s; margin: 0; }
+  .input-group input:focus { border-color: var(--blue-main); box-shadow: 0 0 8px rgba(56, 189, 248, 0.5); }
+  .btn-submit { width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+  .btn-discord { background: #5865F2; color: white; margin-bottom: 15px; }
+  .btn-discord:hover { background: #4752C4; box-shadow: 0 0 15px rgba(88, 101, 242, 0.5); }
+  .btn-email { background: transparent; border: 1px solid var(--blue-main); color: var(--blue-main); }
+  .btn-email:hover { background: rgba(56, 189, 248, 0.1); box-shadow: 0 0 15px rgba(56, 189, 248, 0.3); }
+  .separator { display: flex; align-items: center; text-align: center; margin: 25px 0; color: #64748b; font-size: 13px; }
+  .separator::before, .separator::after { content: ''; flex: 1; border-bottom: 1px solid #334155; }
+  .separator:not(:empty)::before { margin-right: .5em; }
+  .separator:not(:empty)::after { margin-left: .5em; }
+  .discord-hint { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+  .status-msg { margin-top: 15px; font-size: 14px; font-weight: bold; min-height: 20px; display: none; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; vertical-align: middle; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .back-btn { position: absolute; top: 20px; left: 20px; color: var(--text-muted); text-decoration: none; font-weight: bold; display: flex; align-items: center; gap: 5px; transition: color 0.3s; }
+  .back-btn:hover { color: var(--blue-main); }
+</style>
+<a href="/" class="back-btn"><i class="fas fa-arrow-left"></i> Zpět na mapu</a>
+<div class="glass-card">
+  <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png" style="width:60px; height:60px; border-radius:12px; margin-bottom:15px; box-shadow: 0 0 15px rgba(56,189,248,0.5);">
+  <h2>Přihlášení</h2>
+  
+  <div id="login-container">
+    <div class="input-group">
+      <label>Discord ID</label>
+      <input type="text" id="discord_id" placeholder="Např. 123456789012345678">
+      <div class="discord-hint">Jak zjistit ID? Zapněte si Nastavení -> Pokročilé -> Vývojářský režim, klikněte pravým na svůj profil a dejte "Kopírovat ID uživatele". V případě potíží zkuste příkaz <code>!auth</code> na našem Discordu.</div>
+    </div>
+    <button class="btn-submit btn-discord" onclick="reqDiscord()"><i class="fab fa-discord"></i> Pokračovat přes Discord</button>
+    
+    <div class="separator">NEBO</div>
+    
+    <div class="input-group">
+      <label>E-mailová adresa</label>
+      <input type="email" id="email" placeholder="vas@email.cz">
+    </div>
+    <button class="btn-submit btn-email" onclick="reqEmail()"><i class="fas fa-envelope"></i> Pokračovat přes E-mail</button>
+  </div>
+  
+  <div id="status-container" style="display:none; padding: 20px 0;">
+    <div class="spinner" id="spinner"></div>
+    <div id="status-text" style="color: var(--blue-main); font-size: 15px; font-weight: bold; display: inline-block;">Čekám na potvrzení...</div>
+    <div id="status-desc" style="color: var(--text-muted); font-size: 13px; margin-top: 15px; line-height: 1.5;"></div>
+  </div>
+</div>
+<script>
+let checkInterval = null;
+let currentMethod = null;
+let currentDiscordId = null;
+
+function showStatus(text, desc, isError = false) {
+    document.getElementById('login-container').style.display = 'none';
+    const statusContainer = document.getElementById('status-container');
+    statusContainer.style.display = 'block';
+    
+    const statusText = document.getElementById('status-text');
+    statusText.innerText = text;
+    statusText.style.color = isError ? 'var(--danger)' : 'var(--blue-main)';
+    
+    document.getElementById('status-desc').innerHTML = desc;
+    document.getElementById('spinner').style.display = isError ? 'none' : 'inline-block';
+}
+
+function reqDiscord() {
+    const id = document.getElementById('discord_id').value.trim();
+    if(!id) return alert('Zadejte Discord ID.');
+    
+    fetch('/api/auth/discord/request', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({discord_id: id})
+    }).then(r=>r.json()).then(data => {
+        if(data.status === 'success') {
+            currentMethod = 'discord';
+            currentDiscordId = data.discord_id;
+            showStatus('Odesláno na Discord', `Otevřete si soukromé zprávy od DataCore Bota a klikněte na tlačítko <b>Přihlásit se na Web</b>.<br><br><i>Pokud vám zpráva nepřišla, zkontrolujte, zda máte povolené zprávy od členů serveru. Můžete také použít příkaz !auth na našem serveru.</i>`);
+            startPolling();
+        } else {
+            alert('Chyba: ' + data.message);
+        }
+    }).catch(e => alert('Chyba komunikace se serverem.'));
+}
+
+function reqEmail() {
+    const email = document.getElementById('email').value.trim();
+    if(!email || !email.includes('@')) return alert('Zadejte platný e-mail.');
+    
+    fetch('/api/auth/email/request', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email: email})
+    }).then(r=>r.json()).then(data => {
+        if(data.status === 'success') {
+            showStatus('E-mail odeslán', `Na adresu <b>${email}</b> jsme odeslali e-mail s odkazem pro přihlášení. Klikněte na tlačítko v e-mailu a budete automaticky přihlášeni.<br><br><i>Ověřte si složku Spam, pokud e-mail nedorazí do 2 minut.</i>`, false);
+            document.getElementById('spinner').style.display = 'none';
+        } else {
+            alert('Chyba: ' + data.message);
+        }
+    }).catch(e => alert('Chyba komunikace se serverem.'));
+}
+
+function startPolling() {
+    if(checkInterval) clearInterval(checkInterval);
+    checkInterval = setInterval(() => {
+        if(currentMethod === 'discord' && currentDiscordId) {
+            fetch('/api/auth/status?discord_id=' + currentDiscordId)
+            .then(r=>r.json()).then(data => {
+                if(data.status === 'approved') {
+                    clearInterval(checkInterval);
+                    showStatus('Úspěšně přihlášeno!', 'Přesměrovávám do aplikace...', false);
+                    setTimeout(() => window.location.href = '/', 1500);
+                } else if(data.status === 'rejected') {
+                    clearInterval(checkInterval);
+                    showStatus('Přihlášení zamítnuto', 'Požadavek byl zamítnut v Discordu.', true);
+                    setTimeout(() => location.reload(), 3000);
+                }
+            });
+        }
+    }, 2000);
+}
+</script>
+</body>
+</html>
 """

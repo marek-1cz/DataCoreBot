@@ -589,6 +589,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <button id="depot-toggle-btn" onclick="document.getElementById('depot-admin-panel').style.display=document.getElementById('depot-admin-panel').style.display==='none'?'block':'none'" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #b45309;background:transparent;color:#fcd34d;cursor:pointer;" title="Správa vozoven">🅿️ Vozovny</button>
     <!-- lines-overlay-btn-pub is already in nav for everyone -->
     <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋</button>
+    __AVATAR__
     __AD_BTN__
   </nav>
   __ADMIN_BANNER__
@@ -5415,9 +5416,44 @@ _AD_BTN_NORMAL = '<a href="/mapa_admin" class="n-btn n-ad">🔧 AD</a>'
 _AD_BTN_ADMIN  = '<a href="/mapa" class="n-btn n-back">⬅️ Zp\u011bt</a>'
 
 
+def _get_avatar_html(req):
+    cookie_token = req.cookies.get('web_session_token')
+    if cookie_token and HAS_SUPABASE:
+        try:
+            db = get_db_client()
+            user = db.table("users").select("discord_id, email, nick").eq("web_session_token", cookie_token).execute().data
+            if user:
+                u = user[0]
+                avatar_url = f"https://cdn.discordapp.com/avatars/{u['discord_id']}/" if u.get('discord_id') else "https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png"
+                
+                # Pokud by se to nepovedlo, Discord URL stejne nevíme hash avatara, 
+                # takže discord_id získáme avatar z robota pokud možno, jinak fallback.
+                # Pro jednoduchost použijeme default avatara, pokud ho nejde načíst
+                return f"""
+                <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer;" onclick="document.getElementById('user-dropdown').style.display=document.getElementById('user-dropdown').style.display==='none'?'block':'none'">
+                  <div style="width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.1); border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow: 0 0 10px rgba(56,189,248,0.5);">
+                    <i class="fas fa-user" style="color:#38bdf8; font-size:16px;"></i>
+                  </div>
+                  <div id="user-dropdown" style="display:none; position:absolute; top:45px; right:0; background:rgba(15,23,42,0.9); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:200px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:10px;">
+                    <div style="color:white; font-size:13px; font-weight:bold; margin-bottom:5px;">Přihlášen jako:</div>
+                    <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{u.get('email') or 'Discord uživatel'}</div>
+                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="width:100%; background:#ef4444; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold;"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
+                  </div>
+                </div>
+                """
+        except:
+            pass
+            
+    return """
+    <a href="/register" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.05); border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
+      <i class="fas fa-user" style="color:#94a3b8;"></i>
+    </a>
+    """
+
 @mapa_bp.route('/mapa')
 def stranka_mapa():
-    html = HTML_MAPA.replace('__ADMIN_BANNER__', '').replace('__IS_ADMIN__', 'false').replace('__AD_BTN__', _AD_BTN_NORMAL)
+    avatar_html = _get_avatar_html(request)
+    html = HTML_MAPA.replace('__ADMIN_BANNER__', '').replace('__IS_ADMIN__', 'false').replace('__AD_BTN__', _AD_BTN_NORMAL).replace('__AVATAR__', avatar_html)
     return _full_page("Mapa", html, is_map=True)
 
 
@@ -5431,7 +5467,8 @@ def stranka_mapa_admin():
         'padding:3px 14px;border-radius:20px;font-size:11px;font-weight:bold;'
         'border:1px solid rgba(56,189,248,0.3);">Admin mapa \u2014 moderace zapnut\u00e1</span></div>'
     )
-    html = HTML_MAPA.replace('__ADMIN_BANNER__', admin_banner).replace('__IS_ADMIN__', 'true').replace('__AD_BTN__', _AD_BTN_ADMIN)
+    avatar_html = _get_avatar_html(request)
+    html = HTML_MAPA.replace('__ADMIN_BANNER__', admin_banner).replace('__IS_ADMIN__', 'true').replace('__AD_BTN__', _AD_BTN_ADMIN).replace('__AVATAR__', avatar_html)
     return _full_page("Admin Mapa", html, is_map=True)
 
 
