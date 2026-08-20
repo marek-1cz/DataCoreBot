@@ -461,7 +461,7 @@ def _get_avatar_html(req):
     if cookie_token:
         try:
             db = get_db()
-            user = db.table("users").select("discord_id, email, nick, avatar_url").eq("web_session_token", cookie_token).execute().data
+            user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
             if user:
                 u = user[0]
                 if not u.get("nick") and req.path not in ['/ucet', '/api/auth/logout'] and not req.path.startswith('/api/'):
