@@ -2896,7 +2896,7 @@ function renderDepotList(){
       <div style="width:10px;height:10px;border-radius:2px;background:${z.color||'#facc15'};flex-shrink:0;"></div>
       <span style="flex:1;font-size:12px;color:#e2e8f0;">${z.name}</span>
       <button onclick="depotEditZone('${z.id}')" style="background:#1e40af;color:#93c5fd;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">✏️ Edit</button>
-      <button onclick="depotDeleteZone('${z.id}','${z.name.replace(/'/g,"\\'")}'')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">🗑️</button>
+      <button onclick="depotDeleteZone('${z.id}','${z.name.replace(/'/g,"\\'")}')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">🗑️</button>
     </div>`).join('');
 }
 
@@ -2909,7 +2909,7 @@ async function depotDeleteZone(id,name){
 }
 
 function depotEditZone(id){
-  let z=depotZones.find(x=>x.id===id);
+  let z=depotZones.find(x=>String(x.id)===String(id));
   if(!z)return;
   document.getElementById('depot-name-inp').value=z.name;
   document.getElementById('depot-color-inp').value=z.color||'#facc15';
@@ -6452,7 +6452,7 @@ def api_admin_save_depot_zone():
 
         # Aktualizuj v pameti
         for z in DEPOT_ZONES:
-            if z["id"] == zone_id:
+            if str(z["id"]) == str(zone_id):
                 z["name"] = name
                 z["polygon"] = polygon
                 z["color"] = color
@@ -6482,6 +6482,6 @@ def api_admin_delete_depot_zone():
         except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 500
     global DEPOT_ZONES
-    DEPOT_ZONES[:] = [z for z in DEPOT_ZONES if z["id"] != zone_id]
+    DEPOT_ZONES[:] = [z for z in DEPOT_ZONES if str(z["id"]) != str(zone_id)]
     print(f"[DEPOT] Smazana vozovna id={zone_id}", flush=True)
     return jsonify({"status": "success"})
