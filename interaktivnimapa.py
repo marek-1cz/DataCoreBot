@@ -881,6 +881,33 @@ function selectSwTheme(type) {
   }
 }
 
+function animateSliderTo(el, targetValue, descId) {
+  let startVal = parseFloat(el.value);
+  let endVal = targetValue;
+  let duration = 600; // 0.6 seconds
+  let startTime = null;
+  
+  function step(timestamp) {
+    if (!startTime) startTime = timestamp;
+    let progress = (timestamp - startTime) / duration;
+    if (progress > 1) progress = 1;
+    let ease = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+    let currentVal = startVal + (endVal - startVal) * ease;
+    
+    el.value = currentVal.toFixed(2);
+    gfxSliderInput(el, descId);
+    
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    } else {
+      el.value = endVal;
+      gfxSliderInput(el, descId);
+      setGraphicsLevel(endVal);
+    }
+  }
+  requestAnimationFrame(step);
+}
+
 function gfxSliderInput(el, descId) {
   let val = parseFloat(el.value);
   let rVal = Math.round(val);
@@ -888,7 +915,7 @@ function gfxSliderInput(el, descId) {
   let c = "#38bdf8";
   if(rVal === 1) c = "#10b981";
   else if(rVal === 2) c = "#fbbf24";
-  else if(rVal === 3) c = "#38bdf8";
+  else if(rVal === 3) c = "#ef4444";
   else if(rVal === 4) c = "#a855f7";
   el.style.background = `linear-gradient(to right, ${c} ${pct}%, #334155 ${pct}%)`;
   updateGfxDesc(rVal, document.getElementById(descId));
@@ -896,8 +923,8 @@ function gfxSliderInput(el, descId) {
 
 function gfxSliderChange(el) {
   let rVal = Math.round(parseFloat(el.value));
-  el.value = rVal;
-  setGraphicsLevel(rVal);
+  let descId = (el.id === 'sw-gfx-slider') ? 'sw-gfx-desc' : 'settings-gfx-desc';
+  animateSliderTo(el, rVal, descId);
 }
 
 function setGraphicsLevel(level, isInit=false) {
@@ -950,7 +977,7 @@ function swNext(step) {
       window.swPreviewMap = L.map('sw-theme-preview', {
         zoomControl: false, dragging: false, scrollWheelZoom: false,
         doubleClickZoom: false, keyboard: false, touchZoom: false, attributionControl: false
-      }).setView([49.7554, 13.3174], 14);
+      }).setView([49.7510, 13.3050], 14);
     }
     setTimeout(() => {
       window.swPreviewMap.invalidateSize();
