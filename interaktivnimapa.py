@@ -209,7 +209,7 @@ async function loadIndex(){
 document.getElementById('historySearch').addEventListener('input',applyFilters);
 document.getElementById('filterLine').addEventListener('change',applyFilters);
 document.getElementById('filterStatus').addEventListener('change',applyFilters);
-loadIndex();setInterval(loadIndex,10000);
+loadIndex();
 </script>
 </div>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
@@ -289,7 +289,7 @@ async function loadDetail(){
 
   }catch(e){console.error(e);}
 }
-loadDetail();setInterval(loadDetail,10000);
+loadDetail();
 </script>
 </div>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
@@ -2448,12 +2448,21 @@ async function fetchBuses(){
       } else document.getElementById('h-status').textContent='Ztráta signálu';
     }
     saveAdminInputs();
-    let savedOpenId=openPopupBusId;
+
+    // Ochrana pred ztratou fokusu pri psani v popupu
+    let isTyping = false;
+    let ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT') && ae.closest('.leaflet-popup')) {
+        isTyping = true;
+    }
+
+    if (!window.busMarkersMap) window.busMarkersMap = new Map();
+    let currentBusIds = new Set();
     isRefreshing=true;
-    ml.clearLayers();
 
     data.buses.forEach(bus=>{
       if(!bus.lat||!bus.lng)return;
+      currentBusIds.add(bus.id);
       let mc=bus.color_class,dv=parseInt(bus.delay),dTxt='';
       if(mc==='bg-gray'||mc==='bg-bug')dTxt='<span style="color:#94a3b8;">N/A</span>';
       else if(mc==='bg-purple')dTxt='<span style="color:#a855f7;">Konečná</span>';
@@ -2471,14 +2480,6 @@ async function fetchBuses(){
         markerColor='bg-depot:'+bus.depot_color;
       }
       let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,bus.is_train),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
-      let marker=L.marker([bus.lat,bus.lng],{icon,zIndexOffset:1000});
-      marker._busId=bus.id;
-      marker.on('popupopen',()=>{openPopupBusId=bus.id;});
-      marker.on('popupclose',()=>{
-        if(openPopupBusId===bus.id)openPopupBusId=null;
-        // Trasa NEZNIKNE po zavření popupu
-      });
-
       let spzH='',invTxt='',histBtn='';
       if(!bus.is_train){
         if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
@@ -2618,19 +2619,33 @@ async function fetchBuses(){
             </div>
           </div>`;
       }
-      marker.bindPopup(popH,{className:'dark-popup',maxWidth:300});
-      ml.addLayer(marker);
+      
+      let existingMarker = window.busMarkersMap.get(bus.id);
+      if (existingMarker) {
+          existingMarker.setLatLng([bus.lat, bus.lng]);
+          existingMarker.setIcon(icon);
+          if (!(isTyping && openPopupBusId === bus.id)) {
+              existingMarker.setPopupContent(popH);
+          }
+      } else {
+          let m = L.marker([bus.lat, bus.lng], {icon, zIndexOffset: 1000});
+          m.bindPopup(popH, {className:'dark-popup', maxWidth:300});
+          m._busId = bus.id;
+          m.on('popupopen', ()=>{openPopupBusId=bus.id;});
+          m.on('popupclose', ()=>{if(openPopupBusId===bus.id)openPopupBusId=null;});
+          m.addTo(ml);
+          window.busMarkersMap.set(bus.id, m);
+      }
     });
 
-    if(savedOpenId){
-      ml.eachLayer(layer=>{
-        if(layer._busId===savedOpenId){
-          setTimeout(()=>{layer.openPopup();isRefreshing=false;},30);
+    for (let [id, m] of window.busMarkersMap.entries()) {
+        if (!currentBusIds.has(id)) {
+            ml.removeLayer(m);
+            window.busMarkersMap.delete(id);
         }
-      });
-    }else{
-      setTimeout(()=>{isRefreshing=false;},50);
     }
+
+    setTimeout(()=>{isRefreshing=false;},50);
 
     // Komplexní logování stavu mapy
     if(IS_ADMIN){
