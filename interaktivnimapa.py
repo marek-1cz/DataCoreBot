@@ -533,6 +533,10 @@ body.medium-graphics .leaflet-marker-icon div, body.medium-graphics .leaflet-pop
 body.ultra-graphics .route-line-future { animation: routeFlow 0.5s linear infinite !important; }
 body.ultra-graphics .leaflet-marker-icon div { filter: drop-shadow(0 4px 10px rgba(0,0,0,0.95)) !important; }
 
+.gfx-slider { -webkit-appearance:none; width:100%; height:6px; border-radius:3px; outline:none; background:linear-gradient(to right, #38bdf8 66.6%, #334155 66.6%); transition:background 0.2s; cursor:pointer; margin-top:4px; }
+.gfx-slider::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 2px 6px rgba(0,0,0,0.5); transition:transform 0.2s; }
+.gfx-slider::-webkit-slider-thumb:hover { transform:scale(1.2); }
+
 #settings-toggle-btn{background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid #334155;color:#cbd5e1;border-radius:30px;height:42px;padding:0 14px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 15px rgba(0,0,0,0.4);transition:all 0.4s cubic-bezier(.34,1.56,.64,1);overflow:hidden;position:relative;}
 #settings-toggle-btn:hover{transform:scale(1.05);box-shadow:0 6px 20px rgba(0,0,0,0.6);background:rgba(15,23,42,0.95);color:#38bdf8;border-color:#38bdf8;}
 body.dark-map #settings-toggle-btn, body.bw-dark-map #settings-toggle-btn, body.traffic-dark-map #settings-toggle-btn { background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.6); color: #38bdf8; box-shadow: 0 0 20px rgba(56, 189, 248, 0.3), inset 0 0 12px rgba(56, 189, 248, 0.2); }
@@ -767,7 +771,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
         <span title="Standardní animace a stíny">Vysoké</span>
         <span title="Pro silná PC, extra efekty">Ultra</span>
       </div>
-      <input type="range" id="settings-gfx-slider" min="1" max="4" value="3" onchange="setGraphicsLevel(this.value)" oninput="updateGfxDesc(this.value, document.getElementById('settings-gfx-desc'))" style="width:100%;accent-color:#38bdf8;margin-bottom:8px;cursor:pointer;">
+      <input type="range" class="gfx-slider" id="settings-gfx-slider" min="1" max="4" step="0.01" value="3" onchange="gfxSliderChange(this)" oninput="gfxSliderInput(this, 'settings-gfx-desc')" style="margin-bottom:8px;">
       <div id="settings-gfx-desc" style="color:#94a3b8;font-size:11px;text-align:center;">Vysoké: Výchozí, plné animace (Pro běžné PC)</div>
     </div>
   </div>
@@ -787,7 +791,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
         <span title="Standardní animace a stíny">Vysoké</span>
         <span title="Pro silná PC, extra efekty">Ultra</span>
       </div>
-      <input type="range" id="sw-gfx-slider" min="1" max="4" value="3" oninput="updateGfxDesc(this.value, document.getElementById('sw-gfx-desc'))" style="width:100%;margin-bottom:15px;accent-color:#38bdf8;cursor:pointer;">
+      <input type="range" class="gfx-slider" id="sw-gfx-slider" min="1" max="4" step="0.01" value="3" onchange="gfxSliderChange(this)" oninput="gfxSliderInput(this, 'sw-gfx-desc')" style="margin-bottom:15px;">
       
       <div id="sw-gfx-desc" style="color:#fbbf24;font-size:12px;margin-bottom:15px;min-height:36px;">Vysoké: Výchozí, plné animace (Pro běžné PC)</div>
       
@@ -877,6 +881,25 @@ function selectSwTheme(type) {
   }
 }
 
+function gfxSliderInput(el, descId) {
+  let val = parseFloat(el.value);
+  let rVal = Math.round(val);
+  let pct = (val - 1) / 3 * 100;
+  let c = "#38bdf8";
+  if(rVal === 1) c = "#10b981";
+  else if(rVal === 2) c = "#fbbf24";
+  else if(rVal === 3) c = "#38bdf8";
+  else if(rVal === 4) c = "#a855f7";
+  el.style.background = `linear-gradient(to right, ${c} ${pct}%, #334155 ${pct}%)`;
+  updateGfxDesc(rVal, document.getElementById(descId));
+}
+
+function gfxSliderChange(el) {
+  let rVal = Math.round(parseFloat(el.value));
+  el.value = rVal;
+  setGraphicsLevel(rVal);
+}
+
 function setGraphicsLevel(level, isInit=false) {
   level = parseInt(level);
   localStorage.setItem('graphics_level', level);
@@ -889,8 +912,8 @@ function setGraphicsLevel(level, isInit=false) {
   
   let sld1 = document.getElementById('settings-gfx-slider');
   let sld2 = document.getElementById('sw-gfx-slider');
-  if(sld1 && sld1.value != level) sld1.value = level;
-  if(sld2 && sld2.value != level) sld2.value = level;
+  if(sld1 && Math.round(parseFloat(sld1.value)) !== level) { sld1.value = level; gfxSliderInput(sld1, 'settings-gfx-desc'); }
+  if(sld2 && Math.round(parseFloat(sld2.value)) !== level) { sld2.value = level; gfxSliderInput(sld2, 'sw-gfx-desc'); }
   
   updateGfxDesc(level, document.getElementById('settings-gfx-desc'));
   updateGfxDesc(level, document.getElementById('sw-gfx-desc'));
@@ -907,7 +930,11 @@ function setGraphicsLevel(level, isInit=false) {
         window.ml = L.layerGroup();
       }
       window.ml.addTo(map);
-      window.busMarkersMap = new Map();
+      
+      for (const marker of window.busMarkersMap.values()) {
+        window.ml.addLayer(marker);
+      }
+      
       if(!isInit && typeof fetchBuses === 'function') fetchBuses();
     }
   }
