@@ -599,14 +599,14 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
       <b>Vysvětlivky k barvám vozidel na mapě:</b><br>
       <span style="color:#10b981;">● Zelená:</span> Jede včas (zpoždění maximálně do 4 minut)<br>
       <span style="color:#1e40af;">● Tmavě modrá:</span> Vozidlo má náskok oproti jízdnímu řádu<br>
-      <span style="color:#3b82f6;">● Modrá:</span> Čeká na napojení na linku<br>
+      <span style="color:#3b82f6;">● Modrá:</span> Čeká na odjezd z první zastávky<br>
       <span style="color:#ef4444;">● Červená:</span> Zpoždění 5 minut a více<br>
       <span style="color:#a855f7;">● Fialová:</span> Vozidlo dojelo na konečnou zastávku<br>
       <span style="color:#94a3b8;">● Šedá:</span> Vozidlo je aktuálně odstaveno<br>
       <span style="color:#facc15;">● Žlutá:</span> Vozidlo se nachází ve vozovně (depu)<br><br>
       <b>Tipy a triky pro uživatele:</b><br>
-      V detailu každého vozidla (po kliknutí na jeho ikonu) naleznete přímý odkaz na jeho kartu na portálu <b>seznam-autobusu.cz</b>.<br><br>
-      Zajímá vás aktuální dění v depech? Připojte se na náš <b>Discord</b>, kde je vyhrazen speciální kanál.
+      V detailu každého vozidla (po kliknutí na jeho ikonu) naleznete přímý odkaz na jeho kartu na webu <b>seznam-autobusu.cz</b>.<br><br>
+      Zajímá vás aktuální dění ve vozovnách? Připojte se na náš <b>Discord</b>, kde je vyhrazen speciální kanál 🅿️・vozovna.
     </div>
     <button onclick="tutNext(2)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další ➔</button>
   </div>
@@ -615,7 +615,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <h3 style="margin-bottom:15px;color:#38bdf8;">Horní navigační panel</h3>
     <div style="font-size:13px;color:#cbd5e1;text-align:left;line-height:1.6;margin-bottom:20px;">
       Tento panel slouží k rychlému <b>vyhledávání spojů</b> a zobrazení konkrétních <b>zastávek či linek</b> přímo na mapě.<br><br>
-      <b>Důležité upozornění:</b> Kliknutím na modré <b>logo</b> v levé části panelu se můžete kdykoliv bezpečně vrátit na hlavní domovskou stránku.
+      <b>Důležité upozornění:</b> Kliknutím na modré <b>logo</b> v levé části panelu se můžete kdykoliv rychle vrátit na hlavní domovskou stránku.
     </div>
     <button onclick="tutNext(3)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další ➔</button>
   </div>
