@@ -465,7 +465,7 @@ def _get_avatar_html(req):
                 if not u.get("nick") and req.path not in ['/ucet', '/api/auth/logout'] and not req.path.startswith('/api/'):
                     return "<script>window.location.href='/ucet';</script>"
                 avatar_src = u.get('avatar_url')
-                img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:42px; margin-top:5px;"></i>'
+                img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>'
                 display_name = u.get('nick') or u.get('email') or 'Uživatel'
                 
                 return f"""
@@ -475,7 +475,7 @@ def _get_avatar_html(req):
                   </div>
                   <span style="color:white; font-weight:bold; font-size:14px; max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{display_name}</span>
                   
-                  <div id="user-dropdown" style="display:none; position:absolute; top:55px; right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left; box-sizing:border-box;">
+                  <div id="user-dropdown" style="display:none; position:absolute; top:calc(100% + 10px); right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left; box-sizing:border-box;">
                     <div style="color:white; font-size:14px; font-weight:bold; margin-bottom:5px;">{display_name}</div>
                     <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{u.get('email') or 'Discord uživatel'}</div>
                     <a href="/ucet" style="display:block; width:100%; background:#38bdf8; color:black; text-align:center; padding:8px; border-radius:6px; text-decoration:none; font-weight:bold; margin-bottom:8px; box-sizing:border-box;"><i class="fas fa-cog"></i> Můj Účet</a>
@@ -487,7 +487,7 @@ def _get_avatar_html(req):
     return """
     <a href="/register" class="user-avatar-wrap" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
       <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:1px solid #94a3b8; display:flex; align-items:center; justify-content:center; overflow:hidden; transition:0.3s;">
-        <i class="fas fa-user-circle" style="color:#94a3b8; font-size:42px; margin-top:5px;"></i>
+        <i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>
       </div>
       <span style="color:#94a3b8; font-weight:bold; font-size:14px;">Přihlásit se</span>
     </a>
@@ -1688,7 +1688,7 @@ def stranka_ucet():
     elif avatar_url:
         avatar_img_html = f'<img src="{avatar_url}">'
     else:
-        avatar_img_html = '<i class="fas fa-user"></i>'
+        avatar_img_html = '<i class="fas fa-user-circle"></i>'
         
     has_discord = bool(u.get('discord_id'))
     has_email = bool(u.get('email'))

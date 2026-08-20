@@ -1052,7 +1052,7 @@ HTML_UCET = """
   .ucet-wrapper { background: url('https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/bg-map.jpg') no-repeat center center fixed; background-size: cover; display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 60px); margin: -20px; padding: 20px; position: relative; }
   .ucet-card { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 20px; padding: 40px; width: 100%; max-width: 500px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.2); position: relative; z-index: 10; }
   .ucet-header { display: flex; align-items: center; gap: 20px; border-bottom: 1px solid #334155; padding-bottom: 20px; margin-bottom: 20px; }
-  .avatar-preview { width: 80px; height: 80px; border-radius: 50%; border: 3px solid #38bdf8; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 30px; color: #38bdf8; overflow: hidden; flex-shrink: 0; box-shadow: 0 0 15px rgba(56,189,248,0.5); }
+  .avatar-preview { width: 80px; height: 80px; border-radius: 50%; border: 3px solid #38bdf8; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 85px; color: #38bdf8; overflow: hidden; flex-shrink: 0; box-shadow: 0 0 15px rgba(56,189,248,0.5); }
   .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
   .ucet-title h2 { color: var(--blue-main); margin: 0 0 5px 0; font-size: 24px; }
   .ucet-title p { color: #94a3b8; margin: 0; font-size: 13px; }
@@ -1096,7 +1096,10 @@ HTML_UCET = """
 
     <div class="input-group">
       <label>Profilový obrázek</label>
-      <input type="file" id="avatar_file" accept="image/png, image/jpeg, image/webp" onchange="previewAvatar(this)" style="padding: 9px; cursor: pointer;">
+      <div style="display:flex; gap:10px;">
+        <input type="file" id="avatar_file" accept="image/png, image/jpeg, image/webp" onchange="previewAvatar(this)" style="padding: 9px; cursor: pointer; flex:1;">
+        <button onclick="resetAvatar()" type="button" style="background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid #ef4444; border-radius: 8px; padding: 0 15px; cursor: pointer; font-weight: bold;"><i class="fas fa-trash"></i> Smazat</button>
+      </div>
     </div>
 
     <button class="btn-save" onclick="saveProfile()"><i class="fas fa-save"></i> Uložit profil</button>
@@ -1132,6 +1135,12 @@ HTML_UCET = """
 
 <script>
 let currentAvatarBase64 = "__AVATAR_URL__";
+
+function resetAvatar() {
+    currentAvatarBase64 = "";
+    document.getElementById('avatarPreview').innerHTML = '<i class="fas fa-user-circle"></i>';
+    document.getElementById('avatar_file').value = "";
+}
 
 function previewAvatar(input) {
     if (input.files && input.files[0]) {
