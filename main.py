@@ -121,7 +121,8 @@ def send_magic_link_email(to_email, token):
         msg["From"] = f"DataCore Bot <{SMTP_EMAIL}>"
         msg["To"] = to_email
 
-        login_url = f"https://ois-idpk.cz/api/auth/finalize?token={token}&type=email"
+        base_url = request.url_root.rstrip('/')
+        login_url = f"{base_url}/api/auth/finalize?token={token}&type=email"
         
         html = f"""
         <html>
@@ -1640,7 +1641,7 @@ def web_auth_finalize():
             perm_token = str(uuid.uuid4())
             db.table("users").update({"login_token": "", "web_session_token": perm_token}).eq("email", email).execute()
             
-            resp = redirect(url_for('home'))
+            resp = redirect('/ucet')
             resp.set_cookie('web_session_token', perm_token, max_age=60*60*24*30) # 30 days
             return resp
     return "Neplatný nebo expirovaný odkaz.", 400

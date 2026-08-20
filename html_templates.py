@@ -934,7 +934,7 @@ HTML_REGISTER = """
   .back-btn:hover { color: var(--blue-main); border-color: var(--blue-main); }
 </style>
 <div class="register-wrapper">
-<a href="/" class="back-btn"><i class="fas fa-arrow-left"></i> Zpět na mapu</a>
+<a href="/" class="back-btn"><i class="fas fa-arrow-left"></i> Zpět</a>
 <div class="glass-card">
   <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png" style="width:60px; height:60px; border-radius:12px; margin-bottom:15px; box-shadow: 0 0 15px rgba(56,189,248,0.5);">
   <h2>Přihlášení</h2>
@@ -1028,7 +1028,7 @@ function startPolling() {
                 if(data.status === 'approved') {
                     clearInterval(checkInterval);
                     showStatus('Úspěšně přihlášeno!', 'Přesměrovávám do aplikace...', false);
-                    setTimeout(() => window.location.href = '/', 1500);
+                    setTimeout(() => window.location.href = '/ucet', 1500);
                 } else if(data.status === 'rejected') {
                     clearInterval(checkInterval);
                     showStatus('Přihlášení zamítnuto', 'Požadavek byl zamítnut v Discordu.', true);
