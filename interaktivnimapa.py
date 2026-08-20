@@ -592,6 +592,49 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     __AD_BTN__
   </nav>
   __ADMIN_BANNER__
+<div id="tutorial-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);">
+  <div id="tut-step-1" class="tut-box" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:400px;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.8);color:white;text-align:center;">
+    <h3 style="margin-bottom:15px;color:#38bdf8;">Vysvětlivky a Tipy</h3>
+    <div style="font-size:13px;color:#cbd5e1;text-align:left;line-height:1.6;margin-bottom:20px;">
+      <b>Barvy vozidel na mapě:</b><br>
+      <span style="color:#10b981;">● Zelená:</span> Jede včas (nebo zpoždění do 5 min)<br>
+      <span style="color:#3b82f6;">● Modrá:</span> Náskok<br>
+      <span style="color:#ef4444;">● Červená:</span> Zpoždění 5 min a více<br>
+      <span style="color:#a855f7;">● Fialová:</span> Vozidlo na konečné (čeká na odjezd)<br>
+      <span style="color:#94a3b8;">● Šedá:</span> Data o čase nejsou dočasně dostupná<br><br>
+      <b>Tipy a triky:</b><br>
+      V okénku vozidla lze prokliknout na jeho kartu na <b>seznam-autobusu.cz</b>. Pokud by vás zajímalo dění v depech, náš komunitní <b>Discord</b> obsahuje speciální kanál s vypnutými vozy!
+    </div>
+    <button onclick="tutNext(2)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další ➔</button>
+  </div>
+  <div id="tut-step-2" class="tut-box" style="display:none;position:absolute;top:90px;left:50%;transform:translateX(-50%);width:90%;max-width:400px;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.8);color:white;text-align:center;">
+    <div class="tut-arrow-up" style="position:absolute;top:-15px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:15px solid transparent;border-right:15px solid transparent;border-bottom:15px solid #38bdf8;"></div>
+    <h3 style="margin-bottom:15px;color:#38bdf8;">Horní navigační panel</h3>
+    <div style="font-size:13px;color:#cbd5e1;text-align:left;line-height:1.6;margin-bottom:20px;">
+      Tento panel slouží pro vyhledávání spojů a filtrování zastávek nebo linek na mapě.<br><br>
+      <b>Důležité:</b> Kliknutím na <b>logo IDPK</b> (vlevo na panelu) se můžete kdykoliv vrátit na hlavní domovskou stránku.
+    </div>
+    <button onclick="tutNext(3)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další ➔</button>
+  </div>
+  <div id="tut-step-3" class="tut-box" style="display:none;position:absolute;top:75px;right:320px;width:90%;max-width:350px;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.8);color:white;text-align:center;">
+    <div class="tut-arrow-right" style="position:absolute;top:20px;right:-15px;width:0;height:0;border-top:15px solid transparent;border-bottom:15px solid transparent;border-left:15px solid #38bdf8;"></div>
+    <h3 style="margin-bottom:15px;color:#38bdf8;">Nastavení aplikace</h3>
+    <div style="font-size:13px;color:#cbd5e1;text-align:left;line-height:1.6;margin-bottom:20px;">
+      <b>Základní mapa:</b> Přepínejte mezi světlým, tmavým a satelitním motivem podle libosti.<br><br>
+      <b>Design navigace:</b> Můžete si zde změnit i vzhled a chování horního panelu (např. moderní průhledný nebo klasický stálý).<br><br>
+      <b>Výkon a grafika:</b> Přizpůsobte si množství detailů a animací podle síly vašeho zařízení pro co nejplynulejší chod.
+    </div>
+    <button onclick="tutNext(4)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další ➔</button>
+  </div>
+  <div id="tut-step-4" class="tut-box" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:400px;background:#0f172a;border:1px solid #10b981;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.8);color:white;text-align:center;">
+    <h3 style="margin-bottom:15px;color:#10b981;">Podpora a Komunita</h3>
+    <div style="font-size:13px;color:#cbd5e1;text-align:center;line-height:1.6;margin-bottom:20px;">
+      To je z úvodu vše!<br><br>
+      Pokud máte jakékoliv dotazy, nápady na zlepšení nebo narazíte na chybu, neváhejte se připojit na náš <b>Discord</b>.
+    </div>
+    <button onclick="tutFinish()" style="background:#10b981;color:white;border:none;padding:12px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:15px;box-shadow:0 4px 15px rgba(16,185,129,0.4);">Ukončit tutoriál ✅</button>
+  </div>
+</div>
   <div id="map"></div>
   <div id="sw">
     <div style="font-size:17px;margin-bottom:3px;display:flex;justify-content:space-between;align-items:center;">
@@ -836,48 +879,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
   </div>
 </div>
 
-<div id="tutorial-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);">
-  <div id="tut-step-1" class="tut-box" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:400px;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.8);color:white;text-align:center;">
-    <h3 style="margin-bottom:15px;color:#38bdf8;">Vysvětlivky a Tipy</h3>
-    <div style="font-size:13px;color:#cbd5e1;text-align:left;line-height:1.6;margin-bottom:20px;">
-      <b>Barvy vozidel na mapě:</b><br>
-      <span style="color:#10b981;">● Zelená:</span> Jede včas (nebo zpoždění do 5 min)<br>
-      <span style="color:#3b82f6;">● Modrá:</span> Náskok<br>
-      <span style="color:#ef4444;">● Červená:</span> Zpoždění 5 min a více<br>
-      <span style="color:#a855f7;">● Fialová:</span> Vozidlo na konečné (čeká na odjezd)<br>
-      <span style="color:#94a3b8;">● Šedá:</span> Data o čase nejsou dočasně dostupná<br><br>
-      <b>Tipy a triky:</b><br>
-      V okénku vozidla lze prokliknout na jeho kartu na <b>seznam-autobusu.cz</b>. Pokud by vás zajímalo dění v depech, náš komunitní <b>Discord</b> obsahuje speciální kanál s vypnutými vozy!
-    </div>
-    <button onclick="tutNext(2)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další ➔</button>
-  </div>
-  <div id="tut-step-2" class="tut-box" style="display:none;position:absolute;top:90px;left:50%;transform:translateX(-50%);width:90%;max-width:400px;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.8);color:white;text-align:center;">
-    <div class="tut-arrow-up" style="position:absolute;top:-15px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:15px solid transparent;border-right:15px solid transparent;border-bottom:15px solid #38bdf8;"></div>
-    <h3 style="margin-bottom:15px;color:#38bdf8;">Horní navigační panel</h3>
-    <div style="font-size:13px;color:#cbd5e1;text-align:left;line-height:1.6;margin-bottom:20px;">
-      Tento panel slouží pro vyhledávání spojů a filtrování zastávek nebo linek na mapě.<br><br>
-      <b>Důležité:</b> Kliknutím na <b>logo IDPK</b> (vlevo na panelu) se můžete kdykoliv vrátit na hlavní domovskou stránku.
-    </div>
-    <button onclick="tutNext(3)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další ➔</button>
-  </div>
-  <div id="tut-step-3" class="tut-box" style="display:none;position:absolute;bottom:100px;right:20px;width:90%;max-width:350px;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.8);color:white;text-align:center;">
-    <div class="tut-arrow-down" style="position:absolute;bottom:-15px;right:20px;width:0;height:0;border-left:15px solid transparent;border-right:15px solid transparent;border-top:15px solid #38bdf8;"></div>
-    <h3 style="margin-bottom:15px;color:#38bdf8;">Nastavení aplikace</h3>
-    <div style="font-size:13px;color:#cbd5e1;text-align:left;line-height:1.6;margin-bottom:20px;">
-      Nyní jsme vám automaticky otevřeli <b>Nastavení</b>. Zde můžete měnit základní mapu a grafické detaily.<br><br>
-      Kromě toho si můžete přizpůsobit i <b>Design navigace</b> (horního panelu).
-    </div>
-    <button onclick="tutNext(4)" style="background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 15px rgba(56,189,248,0.4);">Další ➔</button>
-  </div>
-  <div id="tut-step-4" class="tut-box" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:400px;background:#0f172a;border:1px solid #10b981;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.8);color:white;text-align:center;">
-    <h3 style="margin-bottom:15px;color:#10b981;">Podpora a Komunita</h3>
-    <div style="font-size:13px;color:#cbd5e1;text-align:center;line-height:1.6;margin-bottom:20px;">
-      To je z úvodu vše!<br><br>
-      Pokud máte jakékoliv dotazy, nápady na zlepšení nebo narazíte na chybu, neváhejte se připojit na náš <b>Discord</b>.
-    </div>
-    <button onclick="tutFinish()" style="background:#10b981;color:white;border:none;padding:12px 20px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:15px;box-shadow:0 4px 15px rgba(16,185,129,0.4);">Ukončit tutoriál ✅</button>
-  </div>
-</div>
+
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
