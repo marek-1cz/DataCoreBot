@@ -2131,7 +2131,7 @@ def login_blocked_page():
 @app.route('/blocked')
 def blocked_page():
     from html_templates import HTML_BLOCKED
-    return HTML_BLOCKED, 503
+    return HTML_BLOCKED, 200
 
 @app.route('/api/admin/check')
 def api_admin_check():
