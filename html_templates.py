@@ -1325,7 +1325,7 @@ HTML_LOGIN_BLOCKED = """
   .status-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(245,158,11,0.15); border: 1px solid #f59e0b; border-radius: 30px; padding: 6px 18px; font-size: 13px; font-weight: bold; color: #f59e0b; margin-bottom: 25px; }
   h1 { font-size: clamp(28px, 6vw, 48px); font-weight: 900; line-height: 1.2; margin-bottom: 20px; color: white; }
   .subtitle { color: #94a3b8; font-size: 16px; line-height: 1.6; margin-bottom: 40px; }
-  .btn-back { display: inline-flex; align-items: center; gap: 14px; background: var(--blue-main); color: #000; padding: 18px 40px; border-radius: 14px; text-decoration: none; font-size: 20px; font-weight: 800; transition: all 0.3s ease; box-shadow: 0 8px 30px rgba(56,189,248,0.5); border: 2px solid rgba(255,255,255,0.2); position: relative; overflow: hidden; }
+  .btn-back { display: inline-flex; align-items: center; gap: 14px; background: var(--blue-main); color: white; padding: 18px 40px; border-radius: 14px; text-decoration: none; font-size: 20px; font-weight: 800; transition: all 0.3s ease; box-shadow: 0 8px 30px rgba(56,189,248,0.5); border: 2px solid rgba(255,255,255,0.2); position: relative; overflow: hidden; }
   .btn-back:hover { transform: translateY(-4px) scale(1.03); background: var(--blue-hover); color: white; }
   .btn-back i { font-size: 28px; }
   .wave { position: fixed; bottom: 0; left: 0; width: 100%; height: 200px; background: linear-gradient(180deg, transparent, rgba(56,189,248,0.03)); pointer-events: none; }
