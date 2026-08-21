@@ -530,12 +530,23 @@ def check_session_validity():
 
             maintenance = str(s_map.get('web_maintenance', 'False')).lower() == 'true'
             if maintenance and not is_maintenance_exempt():
-                return redirect('/blocked')
+                # Allow SM/SA/DEV admin bypass if logged in
+                role = ""
+                discord_id = session.get('discord_id')
+                if session.get('logged_in') and discord_id:
+                    u_data = db.table('users').select('role').eq('discord_id', discord_id).execute().data
+                    if u_data:
+                        role = u_data[0].get('role', '')
+                if not any(r in role for r in ['SM', 'SA', 'DEV']):
+                    return redirect('/blocked')
 
             web_login_enabled = str(s_map.get('web_login_enabled', 'True')).lower() != 'false'
             LOGIN_PATHS = ['/register', '/login', '/api/auth/discord/request', '/api/auth/email/request']
             if not web_login_enabled and path in LOGIN_PATHS:
-                return jsonify({'status': 'error', 'message': 'Přihlašování je momentálně zakázáno.'}), 503
+                if request.is_json or path.startswith('/api/'):
+                    return jsonify({'status': 'error', 'message': 'Přihlašování je z důvodu údržby dočasně nedostupné.'}), 503
+                else:
+                    return redirect('/blocked')
     except:
         pass
 
@@ -795,18 +806,25 @@ def home():
             existing = db.table("page_visits").select("visited_at").eq("ip", clean_ip).execute().data or []
             for record in existing:
                 if record.get("visited_at", "").startswith(today_str): return
+            if not cf_country or cf_country.lower() in ["neznámá", "unknown", "none"]: return
             country_name = cf_country; region = ""; country_code = ""
             try:
                 url = f"http://ip-api.com/json/{clean_ip}"
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=3) as response:
+                with urllib.request.urlopen(req, timeout=2) as response:
                     geo_data = json.loads(response.read().decode())
                     if geo_data.get("status") == "success":
                         country_name = geo_data.get("country", country_name)
                         region = geo_data.get("regionName", "")
                         country_code = geo_data.get("countryCode", "").lower()
             except: pass
-            if not country_code or country_code.lower() == 'us' or country_name.lower() in ["neznámá", "unknown", "none", "united states", "us"]: return
+            
+            # Use CF-IPCountry as a reliable fallback if ip-api fails or returns empty
+            if not country_code:
+                if cf_country.lower() != "neznámá":
+                    country_code = "us" if cf_country.lower() == "us" else "cz" # simplified
+            
+            if not country_code or country_code.lower() == 'us': return
             combined_location = f"{country_code}|{country_name}|{region}"
             db.table("page_visits").insert({"ip": clean_ip, "country": combined_location, "visited_at": now_str}).execute()
         except: pass
@@ -1674,9 +1692,10 @@ def web_auth_status():
                         db.table("users").update({"discord_id": discord_id}).eq("web_session_token", cookie_token).execute()
                         return jsonify({"status": "approved", "linked": True})
                         
-                # Create permanent token
+                # Create permanent token and update login time
                 perm_token = str(uuid.uuid4())
-                db.table("users").update({"login_token": "", "web_session_token": perm_token}).eq("discord_id", discord_id).execute()
+                login_time = get_prague_time().strftime("%d.%m.%Y %H:%M")
+                db.table("users").update({"login_token": "", "web_session_token": perm_token, "web_login_at": login_time}).eq("discord_id", discord_id).execute()
                 return jsonify({"status": "approved", "token": perm_token})
             elif t == "rejected":
                 db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
@@ -2658,9 +2677,13 @@ async def ping(ctx): await ctx.send(f"🏓 Pong! Odezva: **{round(bot.latency * 
 async def help(ctx):
     embed = discord.Embed(title="🤖 Nápověda - Projekt OIS IDPK", color=0x38bdf8)
     embed.add_field(name="🌍 Veřejné", value="`!auth`, `!ping`, `!verze`, `!help`, `!register`", inline=False)
-    embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]`, `!db [ID]`, `!ban`, `!unban`, `!delete`, `!perdelete`, `!dm @user [text]`", inline=False)
-    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download`, `!sm @uživatel`", inline=False)
+    embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]`, `!db [ID]`, `!ban`, `!unban`, `!delete`, `!perdelete`, `!dm @user`, `!message #channel`, `!website_block`, `!website_block_mapa`", inline=False)
+    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download`, `!sm @uživatel`, `!debugvozovna`, `!aktulizace`", inline=False)
     await ctx.send(embed=embed)
+
+@bot.command()
+async def cmds(ctx):
+    await help(ctx)
 
 @bot.command()
 async def auth(ctx):

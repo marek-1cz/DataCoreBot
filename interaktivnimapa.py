@@ -9,7 +9,7 @@ import queue
 
 DEPOT_DISCORD_QUEUE = queue.Queue()
 from datetime import datetime, timedelta
-from flask import Blueprint, jsonify, Response, request, session, redirect
+from flask import Blueprint, jsonify, Response, request, session, redirect, render_template_string
 from zoneinfo import ZoneInfo
 import math
 import re
@@ -5459,6 +5459,16 @@ def _get_avatar_html(req):
 
 @mapa_bp.route('/mapa')
 def stranka_mapa():
+    try:
+        from main import get_db
+        db = get_db()
+        if db:
+            s_data = db.table('settings').select('setting_value').eq('setting_key', 'map_enabled').execute().data
+            if s_data and str(s_data[0]['setting_value']).lower() == 'false':
+                from html_templates import HTML_MAP_OFFLINE
+                return render_template_string(HTML_MAP_OFFLINE)
+    except:
+        pass
     avatar_html = _get_avatar_html(request)
     html = HTML_MAPA.replace('__ADMIN_BANNER__', '').replace('__IS_ADMIN__', 'false').replace('__AD_BTN__', _AD_BTN_NORMAL).replace('__AVATAR__', avatar_html)
     return _full_page("Mapa", html, is_map=True)

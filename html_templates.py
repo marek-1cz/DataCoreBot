@@ -105,6 +105,7 @@ DASHBOARD_LAYOUT = """
 <div class="sidebar">
 <div class="sidebar-header"><a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;"><img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png" alt="Logo" style="height: 24px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 6px rgba(56, 189, 248, 0.6));">OIS IDPK</a><div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div></div>
 <div class="sidebar-menu">
+<a href="/" class="sidebar-link" style="color: #10b981; border-bottom: 1px solid #334155; margin-bottom: 5px;"><i class="fas fa-globe"></i> Veřejný Web (Bypass)</a>
 <a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a>
 <a href="/dashboard/stats" class="sidebar-link"><i class="fas fa-chart-bar"></i> Statistiky Webu</a>
 <a href="/dashboard/app_management" class="sidebar-link"><i class="fas fa-desktop"></i> Správa Aplikace</a>
@@ -855,13 +856,15 @@ HTML_DASHBOARD_MAIN = """
 </div>
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
     <table id="usersTable">
-        <thead><tr><th onclick="sortTable(0)">App ID ↕</th><th onclick="sortTable(1)">Nick ↕</th><th onclick="sortTable(2)">E-mail ↕</th><th onclick="sortTable(3)">Stav ↕</th><th onclick="sortTable(4)">Role ↕</th><th onclick="sortTable(5)">Poslední Aktivita ↕</th><th>Akce</th></tr></thead>
+        <thead><tr><th onclick="sortTable(0)">App ID ↕</th><th onclick="sortTable(1)">Nick ↕</th><th onclick="sortTable(2)">E-mail ↕</th><th onclick="sortTable(3)">Web Přihl. ↕</th><th onclick="sortTable(4)">Notify ↕</th><th onclick="sortTable(5)">Stav ↕</th><th onclick="sortTable(6)">Role ↕</th><th onclick="sortTable(7)">Poslední Aktivita ↕</th><th>Akce</th></tr></thead>
         <tbody>
         {% for user in users %}
         <tr>
             <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
             <td><strong>{{ user.get('nick', '') }}</strong></td>
             <td style="color: var(--text-muted); font-size: 13px;">{{ user.get('email', '') or '-' }}</td>
+            <td style="color: var(--text-muted); font-size: 13px;">{{ user.get('web_login_at', '') or '-' }}</td>
+            <td style="color: var(--text-muted); font-size: 13px;">-</td>
             <td>{% if user.get('is_banned') %}<span style="color: var(--danger); font-size: 11px; font-weight:bold; border:1px solid var(--danger); padding:2px 5px; border-radius:4px;">BANNED</span>{% elif user.get('is_deleted') %}<span style="color: var(--text-muted); font-size: 11px; font-weight:bold; border:1px solid var(--text-muted); padding:2px 5px; border-radius:4px;">DELETED</span>{% elif not user.get('hwid') or user.get('hwid') == 'None' or user.get('hwid') == '' %}<span style="color: var(--warning); font-size: 11px; font-weight:bold; border:1px solid var(--warning); padding:2px 5px; border-radius:4px;">NOT ACTIVATED</span>{% else %}<span style="color: var(--success); font-size: 11px; font-weight:bold; border:1px solid var(--success); padding:2px 5px; border-radius:4px;">ACTIVATED</span>{% endif %}</td>
             {% set role_weight = 1 %}{% if 'SA' in user.get('role', '') %}{% set role_weight = 4 %}{% elif 'DEV' in user.get('role', '') %}{% set role_weight = 3 %}{% elif 'BT' in user.get('role', '') %}{% set role_weight = 2 %}{% endif %}
             <td data-sort="{{ role_weight }}">{% set role_list = user.get('role', '').split(',') %}{% for r in role_list %}{% set r_clean = r.strip() %}{% if r_clean == 'SA' %}<span class="role-tag" style="background-color: #ef4444; color: white;">SA</span>{% elif r_clean == 'DEV' %}<span class="role-tag" style="background-color: #10b981; color: white;">DEV</span>{% elif r_clean == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BT</span>{% elif r_clean == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User</span>{% endif %}{% endfor %}{% if user.get('dashboard_access') %}<i class="fas fa-shield-alt" style="color:var(--blue-main); font-size:12px; margin-left:5px;"></i>{% endif %}</td>
@@ -1350,7 +1353,10 @@ HTML_BLOCKED = """
   </a>
 </div>
 <div class="wave"></div>
-<a href="/dashboard" class="admin-link"><i class="fas fa-lock"></i> Přihlášení do admin dashboardu</a>
+<div style="position: fixed; bottom: 20px; right: 20px; display: flex; gap: 10px;">
+    <a href="/dashboard" class="admin-link" style="position: relative; bottom: 0; right: 0;"><i class="fas fa-lock"></i> Přihlášení do admin dashboardu</a>
+    <a href="/" class="admin-link" style="position: relative; bottom: 0; right: 0; border-color: #10b981; color: #10b981;"><i class="fas fa-shield-alt"></i> Admin Bypass</a>
+</div>
 </body>
 </html>
 """
