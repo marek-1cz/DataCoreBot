@@ -511,6 +511,8 @@ def render_dashboard(template_string, **kwargs):
 
 @app.before_request
 def check_session_validity():
+    if request.headers.get('User-Agent', '').startswith('UptimeRobot'):
+        return "OK", 200
     path = request.path
     def is_maintenance_exempt():
         if path == '/blocked': return True
