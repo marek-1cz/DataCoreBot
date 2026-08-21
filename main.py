@@ -1195,6 +1195,8 @@ def api_app_login():
         discord_id = user.get("discord_id")
         if user.get("is_banned"):
             return _cors_jsonify({"status": "banned", "message": "Tento účet má BAN."})
+        if user.get("is_deleted"):
+            return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."})
         version_check = check_version_access(db, app_version, user)
         if not version_check["allowed"]:
             return _cors_jsonify({"status": "error", "message": version_check["msg"]})
