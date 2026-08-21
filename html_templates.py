@@ -71,6 +71,7 @@ tr:hover { background-color: #334155; }
 @keyframes glowNormal { 
     0% { box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); border-color: #0284c7; transform: scale(1); } 
     100% { box-shadow: 0 0 35px rgba(56, 189, 248, 0.6); border-color: #bae6fd; transform: scale(1.005); } 
+}
 @media (max-width: 768px) {
     .top-nav { flex-direction: column; padding: 15px 10px; gap: 10px; }
     .nav-links { flex-wrap: wrap; justify-content: center; gap: 10px; }

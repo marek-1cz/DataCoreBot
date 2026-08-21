@@ -5398,6 +5398,12 @@ def _full_page(title, body_html, is_map=False):
   65% { stroke-dashoffset: 0; }
   100% { stroke-dashoffset: 0; }
 }
+@media (max-width: 768px) {
+    .user-avatar-wrap { padding: 4px 10px 4px 4px !important; margin-left: 5px !important; }
+    .user-avatar-wrap span { font-size: 11px !important; max-width: 70px !important; }
+    .user-avatar-wrap .fa-user-circle { font-size: 30px !important; }
+    .user-avatar-wrap > div { width: 30px !important; height: 30px !important; }
+}
 </style>"""
     return Response(
         f"""<!DOCTYPE html>
