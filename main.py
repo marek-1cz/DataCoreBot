@@ -2010,6 +2010,53 @@ def dashboard_app_management():
     except: pass
     return render_dashboard(HTML_APP_MANAGEMENT, soft_enabled=soft_enabled, dl_enabled=dl_enabled, web_login_enabled=web_login_enabled, map_enabled=map_enabled, web_maintenance=web_maintenance, deploy_time=DEPLOY_TIME)
 
+async def _trigger_status_update():
+    try:
+        db = get_db()
+        if not db: return
+        s_resp = db.table("settings").select("*").in_("setting_key", ["software_enabled", "downloads_enabled", "web_login_enabled", "map_enabled", "web_maintenance"]).execute().data or []
+        settings = {}
+        for s in s_resp:
+            settings[s['setting_key']] = str(s['setting_value']).lower()
+            
+        soft_enabled = settings.get('software_enabled', 'true') != 'false'
+        dl_enabled = settings.get('downloads_enabled', 'true') != 'false'
+        web_login_enabled = settings.get('web_login_enabled', 'true') != 'false'
+        map_enabled = settings.get('map_enabled', 'true') != 'false'
+        web_maintenance = settings.get('web_maintenance', 'false') == 'true'
+
+        embed = discord.Embed(title="📡 Stav systémů OIS IDPK", description="Zde naleznete aktuální globální stavy všech služeb.\nTento panel se automaticky aktualizuje.", color=0x38bdf8, timestamp=get_prague_time())
+        
+        embed.add_field(name="🌍 Web (Údržba)", value="🔴 OFFLINE (Údržba)" if web_maintenance else "🟢 ONLINE", inline=False)
+        embed.add_field(name="💻 Herní Software", value="🟢 ONLINE" if soft_enabled else "🔴 OFFLINE", inline=False)
+        embed.add_field(name="📥 Stahování softwaru", value="🟢 POVOLENO" if dl_enabled else "🔴 ZAKÁZÁNO", inline=False)
+        embed.add_field(name="🔐 Přihlašování na web", value="🟢 POVOLENO" if web_login_enabled else "🔴 ZAKÁZÁNO", inline=False)
+        embed.add_field(name="🗺️ Interaktivní Mapa", value="🟢 ONLINE" if map_enabled else "🔴 OFFLINE", inline=False)
+        
+        embed.set_footer(text="Systémový Status")
+
+        status_channel = discord.utils.get(bot.get_all_channels(), name="🛜・status")
+        if not status_channel:
+            status_channel = discord.utils.get(bot.get_all_channels(), name="status")
+        
+        if status_channel:
+            bot_msg = None
+            async for msg in status_channel.history(limit=20):
+                if msg.author == bot.user and msg.embeds and "Stav systémů" in msg.embeds[0].title:
+                    bot_msg = msg
+                    break
+            
+            if bot_msg:
+                await bot_msg.edit(embed=embed)
+            else:
+                await status_channel.send(embed=embed)
+    except Exception as e:
+        print(f"Error updating status channel: {e}")
+
+def trigger_status_channel_update():
+    if bot.loop and bot.loop.is_running() and bot.is_ready():
+        asyncio.run_coroutine_threadsafe(_trigger_status_update(), bot.loop)
+
 @app.route('/dashboard/toggle_software', methods=['POST'])
 def toggle_software():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
@@ -2018,6 +2065,7 @@ def toggle_software():
     if db:
         db.table("settings").update({"setting_value": new_status}).eq("setting_key", "software_enabled").execute()
         flash(f'Stav softwaru: {"ZAPNUT" if new_status.lower() == "true" else "VYPNUT"}', 'success')
+        trigger_status_channel_update()
     return redirect(url_for('dashboard_app_management'))
 
 @app.route('/dashboard/toggle_downloads', methods=['POST'])
@@ -2029,6 +2077,7 @@ def toggle_downloads():
         db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute()
         flash(f'Stahování: {"POVOLENO" if new_status.lower() == "true" else "ZAKÁZÁNO"}', 'success')
         trigger_setup_messages_update()
+        trigger_status_channel_update()
     ret = request.form.get('return_to', 'app_management')
     return redirect(url_for('dashboard_downloads' if ret == 'downloads' else 'dashboard_app_management'))
 
@@ -2041,6 +2090,7 @@ def toggle_web_login():
         db.table("settings").update({"setting_value": new_status}).eq("setting_key", "web_login_enabled").execute()
         send_log("🔐 Přihlašování na Web", f"Přihlašování na web bylo **{'POVOLENO' if new_status.lower() == 'true' else 'ZABLOKOVANÉ'}** přes dashboard.", 0xf59e0b)
         flash(f'Přihlašování na web: {"POVOLENO" if new_status.lower() == "true" else "ZABLOKOVANÉ"}', 'success')
+        trigger_status_channel_update()
     return redirect(url_for('dashboard_app_management'))
 
 @app.route('/dashboard/toggle_map', methods=['POST'])
@@ -2052,6 +2102,7 @@ def toggle_map():
         db.table("settings").update({"setting_value": new_status}).eq("setting_key", "map_enabled").execute()
         send_log("🗺️ Interaktivní Mapa", f"Mapa byla **{'ZAPNUTA' if new_status.lower() == 'true' else 'VYPNUTA'}** přes dashboard.", 0x38bdf8)
         flash(f'Mapa: {"ZAPNUTA" if new_status.lower() == "true" else "VYPNUTA"}', 'success')
+        trigger_status_channel_update()
     return redirect(url_for('dashboard_app_management'))
 
 @app.route('/dashboard/toggle_maintenance', methods=['POST'])
@@ -2066,6 +2117,7 @@ def toggle_maintenance():
         else:
             send_log("✅ Maintenance Mode VYPNUT", "Web byl obnoven z maintenance módu.", 0x10b981)
         flash(f'Maintenance: {"ZAPNUT - WEB JE OFFLINE" if new_status.lower() == "true" else "VYPNUT - WEB JE ONLINE"}', 'success' if new_status.lower() == 'false' else 'warning')
+        trigger_status_channel_update()
     return redirect(url_for('dashboard_app_management'))
 
 @app.route('/login_blocked')
@@ -2563,6 +2615,7 @@ async def keepalive_ping():
 
 @bot.event
 async def on_ready():
+    await _trigger_status_update()
     print(f'[OK] Discord bot připraven: {bot.user}', flush=True)
     
     commit_msg = os.environ.get("KOYEB_APP_NAME", "Neznámý build")
@@ -2912,8 +2965,9 @@ async def cmd_website_block(ctx):
         else:
             embed = discord.Embed(title="✅ Maintenance Mode VYPNUT", description="Web byl **obnoven** z maintenance módu.\nNávštěvníci mají opět přístup.", color=0x10b981)
             send_log("✅ Maintenance Mode VYPNUT", f"Web byl obnoven příkazem !website_block od {ctx.author.display_name}.", 0x10b981)
-        embed.set_footer(text=f"Provečl: {ctx.author.display_name}")
+        embed.set_footer(text=f"Provedl: {ctx.author.display_name}")
         await ctx.send(embed=embed)
+        trigger_status_channel_update()
     except Exception as e:
         await ctx.send(f"❌ Chyba: `{e}`")
 
@@ -2935,8 +2989,9 @@ async def cmd_website_block_mapa(ctx):
         else:
             embed = discord.Embed(title="🗺️ Mapa ZAPNUTA", description="Interaktivní mapa byla **obnovena**.\nNávštěvníci mají opět přístup.", color=0x10b981)
             send_log("🗺️ Mapa ZAPNUTA", f"Mapa byla obnovena příkazem !website_block_mapa od {ctx.author.display_name}.", 0x10b981)
-        embed.set_footer(text=f"Provečl: {ctx.author.display_name}")
+        embed.set_footer(text=f"Provedl: {ctx.author.display_name}")
         await ctx.send(embed=embed)
+        trigger_status_channel_update()
     except Exception as e:
         await ctx.send(f"❌ Chyba: `{e}`")
 

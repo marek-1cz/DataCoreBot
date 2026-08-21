@@ -1,0 +1,241 @@
+50: from status_dashboard import HTML_STATUS_SECTION
+52: HTML_STATUS_SECTION = ""
+103: def get_system_statuses():
+107: s_resp = db.table("settings").select("setting_value").eq("setting_key", "system_statuses").execute().data
+164: await interaction.response.edit_message(content="✅ **Přihlášení úspěšně schváleno!**", embed=None, view=None)
+174: await interaction.response.edit_message(content="❌ **Přihlášení bylo zamítnuto.**", embed=None, view=None)
+190: await interaction.response.edit_message(content="✅ **Přístup na webový Dashboard byl schválen!**", embed=None, view=None)
+200: await interaction.response.edit_message(content="❌ **Přístup na Dashboard zamítnut.**", embed=None, view=None)
+292: def build_setup_embed(db):
+295: embed = discord.Embed(title="📥 Projekt OIS IDPK - Instalace", description="Vítejte v oficiálním instalačním průvodci.\n\nKliknutím na tlačítko níže zahájíte ověření účtu a stahování.", color=0x38bdf8)
+297: embed.color = 0xef4444
+298: embed.add_field(name="⛔ STAHOVÁNÍ JE NYNÍ VYPNUTO", value="Administrátor dočasně zakázal stahování.", inline=False)
+299: return embed
+317: if user_v: embed.add_field(name="🌍 Dostupné pro všechny (User)", value="\n".join(user_v), inline=False)
+318: if bt_v: embed.add_field(name="🛠️ Dostupné pro Beta Testery (BT)", value="\n".join(bt_v), inline=False)
+319: if not user_v and not bt_v: embed.add_field(name="Zatím nejsou dostupné žádné veřejné verze.", value="-", inline=False)
+320: embed.set_footer(text="Pokud máte BAN, systém vás ke stahování nepustí.")
+321: return embed
+329: embed = build_setup_embed(db)
+336: await msg.edit(embed=embed)
+397: await member.send(embed=discord.Embed(title=title, description=description, color=color))
+420: await member.send(embed=discord.Embed(title="🎉 Děkujeme za obrovskou podporu!", description=f"Byly ti přiděleny exkluzivní role:\n\n{roles_str}", color=0x38bdf8))
+434: embed = discord.Embed(title="🎉 MÁME NOVÉHO PODPOROVATELE!", description=f"Uživatel **{discord_nick}** právě podpořil náš projekt a získal exkluzivní role {roles_str}!", color=0xf59e0b)
+435: embed.add_field(name="💰 Výše podpory", value=f"**{amount_str}**", inline=False)
+436: if message and message.strip(): embed.add_field(name="📝 Vzkaz", value=f"*{message}*", inline=False)
+437: embed.set_footer(text="Obrovsky děkujeme za Vaši podporu! ❤️ Projekt OIS IDPK")
+438: try: await channel.send(embed=embed)
+447: try: await channel.send(embed=discord.Embed(title=title, description=description, color=color, timestamp=get_prague_time()))
+500: if 'statuses' not in kwargs:
+501: kwargs['statuses'] = get_system_statuses()
+506: if 'status_section' not in kwargs:
+507: kwargs['status_section'] = HTML_STATUS_SECTION
+508: if 'statuses' not in kwargs:
+509: kwargs['statuses'] = get_system_statuses()
+522: if path.startswith('/api/auth/status'): return True
+549: return jsonify({'status': 'error', 'message': 'Přihlašování je z bezpečnostních důvodů dočasně nedostupné.'}), 503
+748: embed = discord.Embed(title=f"⚠️ APLIKAČNÍ CHYBA: {error_type}", description=f"**Hráč:** {nick} (`{discord_id}`)\n**Chyba:**\n`{msg}`", color=0xef4444, timestamp=get_prague_time())
+749: try: await channel.send(embed=embed)
+753: return _cors_jsonify({"status": "success"})
+758: return _cors_jsonify({"status": "ok", "message": "Server is running"})
+768: if not db or not line: return _cors_jsonify({"status": "error"})
+789: return _cors_jsonify({"status": "success"})
+791: return _cors_jsonify({"status": "error", "message": str(e)})
+818: if geo_data.get("status") == "success":
+884: data = db.table("supporters").select("*").eq("status", "completed").execute().data or []
+972: supporters_data = db.table("supporters").select("id").eq("status", "completed").execute().data or []
+1037: data = db.table("supporters").select("name, amount, message, created_at").eq("status", "completed").execute().data or []
+1052: if any(r['status'] == 'completed' for r in all_records):
+1058: if r['status'] == 'pending': valid_records.append(r)
+1059: elif r['status'] == 'manual_review':
+1071: db.table("supporters").update({"status": "completed", "discord_nick": discord_nick, "sys_note": "Spárováno včas"}).eq("id", record['id']).execute()
+1074: db.table("supporters").update({"status": "manual_review", "discord_nick": discord_nick, "sys_note": "Účet nenalezen."}).eq("id", record['id']).execute()
+1077: db.table("supporters").insert({"name": bmac_name, "discord_nick": discord_nick, "amount": "Neznámá", "message": "", "sys_note": "Nezaznamenáno z BMAC.", "status": "manual_review", "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+1104: status = 'pending'; sys_note = "Čeká na spárování."
+1106: status = 'completed'; sys_note = "Automaticky spárováno."
+1107: db.table("supporters").insert({"name": str(name), "message": str(message), "amount": str(amount_str), "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "status": status, "sys_note": sys_note, "discord_nick": discord_identifier or ""}).execute()
+1108: send_log("🍕 Nová platba zaznamenána!", f"Uživatel **{name}** poslal **{amount_str}**.\nStatus: `{status}`", 0xF4CC17)
+1109: if status == 'completed' and bot.loop and bot.loop.is_running() and bot.is_ready():
+1113: return jsonify({"status": "success"}), 200
+1116: return jsonify({"status": "error", "message": str(e)}), 400
+1153: if (data.status === 'ok') {{
+1175: if not db: return jsonify({"status": "error", "message": "Chyba databáze."})
+1177: if not resp.data: return jsonify({"status": "error", "message": "Neplatný nebo vypršelý odkaz."})
+1179: if user.get("is_banned") or user.get("is_deleted"): return jsonify({"status": "error", "message": "Přístup zamítnut."})
+1182: if not v_resp.data: return jsonify({"status": "error", "message": "Tato verze již není k dispozici."})
+1190: if (now_prague - last_dt).total_seconds() < 30: return jsonify({"status": "error", "message": "Počkejte 30 vteřin před dalším stažením."})
+1192: return jsonify({"status": "ok"})
+1210: @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
+1211: def api_status():
+1217: return _cors_jsonify({"status": "disabled", "message": "OMLOUVÁME SE, SOFTWARE JE NYNÍ GLOBÁLNĚ VYPNUT."})
+1219: return _cors_jsonify({"status": "enabled"})
+1225: if not data: return _cors_jsonify({"status": "error", "message": "Chybí data."})
+1233: return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ VYPNUT."})
+1241: return _cors_jsonify({"status": "error", "message": "Uživatel nenalezen."})
+1245: return _cors_jsonify({"status": "banned", "message": "Tento účet má BAN."})
+1247: return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."})
+1250: return _cors_jsonify({"status": "error", "message": version_check["msg"]})
+1261: return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID: Váš počítač ani IP adresa nesouhlasí."})
+1270: if u: await u.send(embed=discord.Embed(title="🛡️ Ověření přihlášení", description=f"Pokus o spuštění softwaru.\n**Uživatel:** {user.get('nick')}\nPotvrďte přístup tlačkem níže.", color=0x38bdf8), view=AppAuthView(token, discord_id, is_dm=True))
+1273: return _cors_jsonify({"status": "waiting", "discord_id": discord_id})
+1274: except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
+1284: if not user_resp.data: return _cors_jsonify({"status": "error"})
+1288: return _cors_jsonify({"status": "success", "display_name": user.get("nick"), "app_id": str(user.get("app_id", ""))})
+1291: return _cors_jsonify({"status": "error", "message": "Přístup zamítnut uživatelem."})
+1292: return _cors_jsonify({"status": "pending"})
+1293: except: return _cors_jsonify({"status": "error"})
+1305: if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false': return _cors_jsonify({"status": "error", "message": "SOFTWARE JE NYNÍ VYPNUT."})
+1309: if not user_resp.data: return _cors_jsonify({"status": "error", "message": "Tento účet neexistuje."})
+1311: if user.get("is_banned"): return _cors_jsonify({"status": "error", "message": "Tento účet má BAN."})
+1312: if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."})
+1314: if not version_check["allowed"]: return _cors_jsonify({"status": "error", "message": version_check["msg"]})
+1320: return _cors_jsonify({"status": "success", "app_id": str(user.get("app_id", ""))})
+1321: return _cors_jsonify({"status": "error", "message": "ZÁMEK HWID: Chyba čtení PC."})
+1325: return _cors_jsonify({"status": "success", "app_id": str(user.get("app_id", ""))})
+1327: return _cors_jsonify({"status": "hwid_error", "message": "ZÁMEK HWID/IP: Nesouhlasí."})
+1331: return _cors_jsonify({"status": "success", "app_id": str(user.get("app_id", ""))})
+1332: except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
+1342: if not db: return _cors_jsonify({"status": "error"})
+1346: if not user_resp.data: return _cors_jsonify({"status": "error"})
+1353: return _cors_jsonify({"status": "ok", "session_id": new_session_id})
+1362: return _cors_jsonify({"status": "ok", "session_id": session_id})
+1363: except: return _cors_jsonify({"status": "error"})
+1374: stats = ""; app_status = "<span style='color: var(--text-muted);'>Neznámý</span>"
+1384: app_status = "<span style='color: var(--success); font-weight:bold;'><i class='fas fa-circle'></i> Nyní hraje</span>"
+1386: app_status = f"<span style='color: var(--text-muted);'><i class='fas fa-moon'></i> {u.get('last_active', 'Nikdy')}</span>"
+1398: return _cors_jsonify({"joined_at": joined_at, "status": "", "app_status": app_status, "stats": stats, "downloads": downloads, "sessions": sessions_data})
+1459: return _cors_jsonify({"status": "ok"})
+1466: if not db: return _cors_jsonify({"status": "error", "message": "DB Error"})
+1474: return _cors_jsonify({"status": "error", "message": "⚠️ OCHRANA: Napište prosím své číselné DISCORD ID přímo do textu žádosti!"})
+1476: db.table("feedback").insert({"discord_id": d_id, "nick": nick, "type": type_str, "message": msg, "status": "pending", "sys_note": "", "fcreated_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+1481: return _cors_jsonify({"status": "success"})
+1483: return _cors_jsonify({"status": "error", "message": str(e)})
+1527: if u: await u.send(embed=discord.Embed(title="🔐 Bezpečnostní ověření", description="Byl zaznamenán pokus o přihlášení do administračního panelu.", color=0x38bdf8), view=DashboardAuthView(token, discord_id))
+1545: if t == "approved": return {"status": "approved"}
+1548: return {"status": "rejected"}
+1550: return {"status": "waiting"}
+1580: await interaction.response.edit_message(content="✅ **Přihlášení na web OIS IDPK bylo úspěšné!** Můžete se vrátit do prohlížeče.", embed=None, view=None)
+1590: await interaction.response.edit_message(content="❌ **Přihlášení zrušeno.**", embed=None, view=None)
+1613: return jsonify({"status": "error", "message": "Neplatný požadavek."})
+1635: await u.send(embed=discord.Embed(title="🔐 Webové ověření", description="Kliknutím na tlačítko níže se přihlásíte do interaktivní mapy OIS IDPK.", color=0x38bdf8), view=WebAuthView(token, discord_id))
+1642: return jsonify({"status": "success", "discord_id": discord_id})
+1644: return jsonify({"status": "error", "message": f"Došlo k chybě: {str(e)}"})
+1651: return jsonify({"status": "error", "message": "Neplatný e-mail."})
+1670: return jsonify({"status": "success"})
+1672: return jsonify({"status": "error", "message": "E-mail se nepodařilo odeslat. Máte nastavený SMTP?"})
+1674: return jsonify({"status": "error", "message": f"Došlo k chybě: {str(e)}"})
+1676: @app.route('/api/auth/status')
+1677: def web_auth_status():
+1695: return jsonify({"status": "approved", "linked": True})
+1704: return jsonify({"status": "approved", "token": perm_token})
+1707: return jsonify({"status": "rejected"})
+1708: return jsonify({"status": "waiting"})
+1743: resp = jsonify({"status": "success"})
+1754: return jsonify({"status": "success", "user": user[0]})
+1755: return jsonify({"status": "unauthorized"}), 401
+1786: discord_status = '<div class="link-status status-yes"><i class="fas fa-check-circle"></i> Připojeno</div>' if has_discord else '<div class="link-status status-no"><i class="fas fa-times-circle"></i> Nepřipojeno</div>'
+1789: email_status = '<div class="link-status status-yes"><i class="fas fa-check-circle"></i> Připojeno</div>' if has_email else '<div class="link-status status-no"><i class="fas fa-times-circle"></i> Nepřipojeno</div>'
+1796: function showStatus(text, desc, isError) {
+1802: fetch('/api/auth/status?discord_id=' + discord_id)
+1804: if(data.status === 'approved' && data.linked) {
+1808: } else if(data.status === 'rejected') {
+1823: if(data.status === 'success') {
+1837: if(data.status === 'success') {
+1860: html = html.replace('__DISCORD_STATUS__', discord_status)
+1862: html = html.replace('__EMAIL_STATUS__', email_status)
+1874: return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
+1881: return jsonify({"status": "error", "message": "Přezdívka nesmí být prázdná"})
+1886: return jsonify({"status": "success"})
+1888: return jsonify({"status": "error", "message": str(e)})
+2016: new_status = request.form.get('new_status', 'True')
+2019: db.table("settings").update({"setting_value": new_status}).eq("setting_key", "software_enabled").execute()
+2020: flash(f'Stav softwaru: {"ZAPNUT" if new_status.lower() == "true" else "VYPNUT"}', 'success')
+2026: new_status = request.form.get('new_status', 'True')
+2029: db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute()
+2030: flash(f'Stahování: {"POVOLENO" if new_status.lower() == "true" else "ZAKÁZÁNO"}', 'success')
+2038: new_status = request.form.get('new_status', 'True')
+2041: db.table("settings").update({"setting_value": new_status}).eq("setting_key", "web_login_enabled").execute()
+2042: send_log("🔐 Přihlašování na Web", f"Přihlašování na web bylo **{'POVOLENO' if new_status.lower() == 'true' else 'ZABLOKOVANÉ'}** přes dashboard.", 0xf59e0b)
+2043: flash(f'Přihlašování na web: {"POVOLENO" if new_status.lower() == "true" else "ZABLOKOVANÉ"}', 'success')
+2049: new_status = request.form.get('new_status', 'True')
+2052: db.table("settings").update({"setting_value": new_status}).eq("setting_key", "map_enabled").execute()
+2053: send_log("🗺️ Interaktivní Mapa", f"Mapa byla **{'ZAPNUTA' if new_status.lower() == 'true' else 'VYPNUTA'}** přes dashboard.", 0x38bdf8)
+2054: flash(f'Mapa: {"ZAPNUTA" if new_status.lower() == "true" else "VYPNUTA"}', 'success')
+2060: new_status = request.form.get('new_status', 'False')
+2063: db.table("settings").update({"setting_value": new_status}).eq("setting_key", "web_maintenance").execute()
+2064: if new_status.lower() == 'true':
+2068: flash(f'Maintenance: {"ZAPNUT - WEB JE OFFLINE" if new_status.lower() == "true" else "VYPNUT - WEB JE ONLINE"}', 'success' if new_status.lower() == 'false' else 'warning')
+2271: pending_claims = db.table("supporters").select("*").eq("status", "manual_review").execute().data or []
+2272: supporters_history = process_supporters(db.table("supporters").select("*").in_("status", ["completed", "rejected"]).execute().data or [])
+2282: db.table("supporters").insert({"name": request.form.get("name"), "discord_nick": request.form.get("discord_nick", ""), "amount": request.form.get("amount"), "message": request.form.get("message", ""), "status": "completed", "sys_note": "Přidáno ručně", "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+2294: db.table("supporters").update({"status": "completed", "sys_note": "Ručně schváleno"}).eq("id", claim_id).execute()
+2307: db.table("supporters").update({"status": "rejected", "sys_note": request.form.get("sys_note", "Zamítnuto")}).eq("id", claim_id).execute()
+2330: if item.get('status') == 'pending':
+2346: db.table("feedback").update({"status": "resolved", "sys_note": f"HWID a IP resetovány [{now_str}]"}).eq("id", fb_id).execute()
+2358: db.table("feedback").update({"status": "resolved", "sys_note": f"Zamítnuto: {reason} [{now_str}]"}).eq("id", fb_id).execute()
+2370: db.table("feedback").update({"status": "resolved", "sys_note": f"Vyřešeno [{now_str}]"}).eq("id", fb_id).execute()
+2391: db.table("feedback").update({"status": "resolved", "sys_note": f"Odpověď: {msg} [{now_str}]"}).eq("id", fb_id).execute()
+2407: db.table("feedback").update({"status": "resolved", "sys_note": f"Bypass schválen [{now_str}]"}).eq("id", fb_id).execute()
+2419: db.table("feedback").update({"status": "resolved", "sys_note": f"Bypass zamítnut [{now_str}]"}).eq("id", fb_id).execute()
+2423: @app.route('/dashboard/update_statuses', methods=['POST'])
+2424: def update_statuses():
+2429: statuses = {}
+2431: if key.startswith('status_'): statuses[key.replace('status_', '')] = value
+2432: check = db.table("settings").select("*").eq("setting_key", "system_statuses").execute().data
+2433: if check: db.table("settings").update({"setting_value": json.dumps(statuses)}).eq("setting_key", "system_statuses").execute()
+2434: else: db.table("settings").insert({"setting_key": "system_statuses", "setting_value": json.dumps(statuses)}).execute()
+2435: flash('Statusy uloženy!', 'success')
+2510: embed = discord.Embed(title=f"🅿️ Vozovna: {depot_name}", color=0xf59e0b)
+2523: embed.add_field(name="🟢 Aktuálně parkuje", value=active_str, inline=False)
+2536: embed.add_field(name="🔴 Nedávné odjezdy", value=recent_str, inline=False)
+2537: embed.set_footer(text="Automaticky aktualizováno")
+2542: if m.author == bot.user and m.embeds and m.embeds[0].title == f"🅿️ Vozovna: {depot_name}":
+2548: await target_msg.edit(embed=embed)
+2551: await channel.send(embed=embed)
+2573: if r.status == 200:
+2628: embed = discord.Embed(title="📩 Nová zpráva do DM bota", description=message.content or "*[Žádný text]*", color=0xa855f7)
+2629: embed.set_author(name=f"{message.author.display_name} (@{message.author.name})", icon_url=message.author.display_avatar.url)
+2630: embed.set_footer(text=f"ID: {message.author.id}")
+2631: try: await channel.send(embed=embed)
+2691: embed = discord.Embed(title="🤖 Nápověda - Projekt OIS IDPK", color=0x38bdf8)
+2692: embed.add_field(name="🌍 Veřejné", value="`!auth`, `!ping`, `!verze`, `!help`, `!register`", inline=False)
+2693: embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]`, `!db [ID]`, `!ban`, `!unban`, `!delete`, `!perdelete`, `!dm @user`, `!message #channel`, `!website_block`, `!website_block_mapa`", inline=False)
+2694: embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download`, `!sm @uživatel`, `!debugvozovna`, `!aktulizace`", inline=False)
+2695: await ctx.send(embed=embed)
+2719: embed = discord.Embed(title="📦 Seznam verzí", color=0x38bdf8)
+2721: status = "✅ Aktivní" if str(v.get('is_active', 'True')).lower() == 'true' else "❌ Zablokováno"
+2722: embed.add_field(name=f"{v['version_name']} [{v.get('db_version', '')}]", value=f"Pro: `{v['target_role']}` | Stav: {status}", inline=False)
+2723: await ctx.send(embed=embed)
+2732: embed = discord.Embed(title=f"Uživatel: {u[0].get('nick')}", color=0x38bdf8)
+2733: embed.add_field(name="App ID", value=f"#{u[0].get('app_id')}", inline=True)
+2734: embed.add_field(name="Discord ID", value=u[0].get('discord_id'), inline=True)
+2735: embed.add_field(name="Role", value=u[0].get('role'), inline=True)
+2736: embed.add_field(name="Banned", value="Ano" if u[0].get('is_banned') else "Ne", inline=True)
+2737: await ctx.send(embed=embed)
+2764: new_status = not user_data[0].get("dashboard_access", False)
+2765: db_conn.table("users").update({"dashboard_access": new_status}).eq("discord_id", discord_id).execute()
+2766: await ctx.send(f"⚙️ Přístup do DB pro ID `{discord_id}`: **{'POVOLEN ✅' if new_status else 'ODEBRÁN ❌'}**.")
+2789: await interaction.edit_original_response(content=f"✅ Účet `{self.target_id}` byl PERMANENTNĚ smazán.", view=None, embed=None)
+2794: await interaction.response.edit_message(content="❌ Akce zrušena.", view=None, embed=None)
+2799: embed = discord.Embed(title="⚠️ Permanentní smazání", description=f"Opravdu smazat `{discord_id}` permanentně?", color=0xef4444)
+2800: await ctx.send(embed=embed, view=PerDeleteConfirm(discord_id, ctx.author.id))
+2834: embed = discord.Embed(title="📩 Zpráva od administrace", description=text, color=0x38bdf8)
+2835: embed.set_footer(text="Toto je automatická zpráva, na kterou lze odepsat.")
+2836: await user.send(embed=embed)
+2845: status_msg = await ctx.send("<a:loading:123> Načítám historii zpráv...")
+2851: if not messages: return await status_msg.edit(content=f"📭 DM s `{user.display_name}` je prázdné.")
+2860: await status_msg.delete()
+2862: except discord.NotFound: await status_msg.edit(content="❌ Uživatel nenalezen.")
+2863: except discord.Forbidden: await status_msg.edit(content="❌ Nemám oprávnění k DM.")
+2864: except Exception as e: await status_msg.edit(content=f"❌ Chyba: `{e}`")
+2879: embed = build_setup_embed(db)
+2880: msg = await ctx.send(embed=embed, view=DynamicDownloadView())
+2910: embed = discord.Embed(title="🚧 Maintenance Mode ZAPNUT", description="Web byl přepnut do **maintenance módu**.\nVšichni návštěvníci jsou přesměrováni na /blocked.", color=0xef4444)
+2913: embed = discord.Embed(title="✅ Maintenance Mode VYPNUT", description="Web byl **obnoven** z maintenance módu.\nNávštěvníci mají opět přístup.", color=0x10b981)
+2915: embed.set_footer(text=f"Provečl: {ctx.author.display_name}")
+2916: await ctx.send(embed=embed)
+2933: embed = discord.Embed(title="🗺️ Mapa VYPNUTA", description="Interaktivní mapa byla **vypnuta**.\nNávštěvníci vidí stránku \"mapa offline\" s odkazem na Discord.", color=0xef4444)
+2936: embed = discord.Embed(title="🗺️ Mapa ZAPNUTA", description="Interaktivní mapa byla **obnovena**.\nNávštěvníci mají opět přístup.", color=0x10b981)
+2938: embed.set_footer(text=f"Provečl: {ctx.author.display_name}")
+2939: await ctx.send(embed=embed)
+3013: "status_text": bc.get("status"),
