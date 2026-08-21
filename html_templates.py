@@ -656,18 +656,92 @@ HTML_STATS = """
 """
 
 HTML_APP_MANAGEMENT = """
-<h2 style="color: var(--blue-main);"><i class="fas fa-cogs"></i> Správa aplikace</h2>
-<div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
-    <div class="card" style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; flex: 1; min-width: 250px; text-align: center; border: 1px solid #334155;">
-        <div style="display: flex; justify-content: center; margin-bottom: 20px;">{% if soft_enabled %}<div style="width: 80px; height: 80px; border-radius: 50%; background-color: #10b981; box-shadow: 0 0 25px #10b981; display: flex; align-items: center; justify-content: center;"><i class="fas fa-globe" style="color: white; font-size: 35px;"></i></div>{% else %}<div style="width: 80px; height: 80px; border-radius: 50%; background-color: #ef4444; box-shadow: 0 0 25px #ef4444; display: flex; align-items: center; justify-content: center;"><i class="fas fa-power-off" style="color: white; font-size: 35px;"></i></div>{% endif %}</div>
-        <h3 style="color: white; margin-top: 0;">Globální stav softwaru</h3>
-        <form action="/dashboard/toggle_software" method="POST"><input type="hidden" name="new_status" value="{% if soft_enabled %}False{% else %}True{% endif %}">{% if soft_enabled %}<button type="submit" class="btn" style="background-color: #ef4444; color: white; border: none; padding: 12px 25px; border-radius: 50px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%;"><i class="fas fa-times-circle"></i> Vypnout software</button>{% else %}<button type="submit" class="btn" style="background-color: #10b981; color: white; border: none; padding: 12px 25px; border-radius: 50px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%;"><i class="fas fa-check-circle"></i> Zapnout software</button>{% endif %}</form>
-    </div>
-    <div class="card" style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; flex: 1; min-width: 250px; text-align: center; border: 1px solid #334155;">
-        <div style="display: flex; justify-content: center; margin-bottom: 20px;">{% if dl_enabled %}<div style="width: 80px; height: 80px; border-radius: 50%; background-color: #3b82f6; box-shadow: 0 0 25px #3b82f6; display: flex; align-items: center; justify-content: center;"><i class="fas fa-download" style="color: white; font-size: 35px;"></i></div>{% else %}<div style="width: 80px; height: 80px; border-radius: 50%; background-color: #ef4444; box-shadow: 0 0 25px #ef4444; display: flex; align-items: center; justify-content: center;"><i class="fas fa-times" style="color: white; font-size: 35px;"></i></div>{% endif %}</div>
-        <h3 style="color: white; margin-top: 0;">Stahování softwaru</h3>
-        <form action="/dashboard/toggle_downloads" method="POST"><input type="hidden" name="return_to" value="app_management"><input type="hidden" name="new_status" value="{% if dl_enabled %}False{% else %}True{% endif %}">{% if dl_enabled %}<button type="submit" class="btn" style="background-color: #ef4444; color: white; border: none; padding: 12px 25px; border-radius: 50px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%;"><i class="fas fa-times-circle"></i> Zakázat stahování</button>{% else %}<button type="submit" class="btn" style="background-color: #10b981; color: white; border: none; padding: 12px 25px; border-radius: 50px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%;"><i class="fas fa-check-circle"></i> Povolit stahování</button>{% endif %}</form>
-    </div>
+<style>
+.toggle-card { background: var(--bg-panel); border: 1px solid #334155; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; align-items: center; text-align: center; flex: 1; min-width: 220px; transition: all 0.3s ease; position: relative; overflow: hidden; }
+.toggle-card:hover { transform: translateY(-4px); box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
+.toggle-circle { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; transition: all 0.4s ease; }
+.toggle-on { background: #10b981; box-shadow: 0 0 30px rgba(16,185,129,0.6); }
+.toggle-off { background: #ef4444; box-shadow: 0 0 30px rgba(239,68,68,0.6); }
+.toggle-card h3 { color: white; margin: 0 0 6px 0; font-size: 16px; }
+.toggle-card p { color: #94a3b8; font-size: 12px; margin: 0 0 16px 0; line-height: 1.4; }
+.toggle-btn-on { background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 50px; font-size: 14px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.3s; }
+.toggle-btn-off { background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 50px; font-size: 14px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.3s; }
+.section-divider { width: 100%; border: none; border-top: 1px solid #334155; margin: 30px 0; }
+.section-title { color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+.section-title::after { content: ''; flex: 1; border-top: 1px solid #334155; }
+</style>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 15px;">
+  <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-cogs" style="color:var(--blue-main);"></i> Správa Aplikace</h2>
+</div>
+
+<div class="section-title"><i class="fas fa-gamepad" style="color:#38bdf8;"></i> Ovládání Softwaru</div>
+<div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 30px;">
+  <div class="toggle-card">
+    <div class="toggle-circle {% if soft_enabled %}toggle-on{% else %}toggle-off{% endif %}"><i class="fas {% if soft_enabled %}fa-globe{% else %}fa-power-off{% endif %}" style="color: white; font-size: 32px;"></i></div>
+    <h3>Globální Software</h3>
+    <p>Zapíná/vypíná přístup k aplikaci pro všechny uživatele.</p>
+    <form action="/dashboard/toggle_software" method="POST" style="width:100%;">
+      <input type="hidden" name="new_status" value="{% if soft_enabled %}False{% else %}True{% endif %}">
+      <button type="submit" class="{% if soft_enabled %}toggle-btn-on{% else %}toggle-btn-off{% endif %}"><i class="fas {% if soft_enabled %}fa-times-circle{% else %}fa-check-circle{% endif %}"></i> {% if soft_enabled %}Vypnout{% else %}Zapnout{% endif %}</button>
+    </form>
+  </div>
+  <div class="toggle-card">
+    <div class="toggle-circle {% if dl_enabled %}toggle-on{% else %}toggle-off{% endif %}" style="{% if dl_enabled %}background:#3b82f6; box-shadow: 0 0 30px rgba(59,130,246,0.6);{% endif %}"><i class="fas {% if dl_enabled %}fa-download{% else %}fa-times{% endif %}" style="color: white; font-size: 32px;"></i></div>
+    <h3>Stahování Softwaru</h3>
+    <p>Povoluje/zakazuje stahování přes Discord bot a web.</p>
+    <form action="/dashboard/toggle_downloads" method="POST" style="width:100%;">
+      <input type="hidden" name="return_to" value="app_management">
+      <input type="hidden" name="new_status" value="{% if dl_enabled %}False{% else %}True{% endif %}">
+      <button type="submit" class="{% if dl_enabled %}toggle-btn-on{% else %}toggle-btn-off{% endif %}"><i class="fas {% if dl_enabled %}fa-times-circle{% else %}fa-check-circle{% endif %}"></i> {% if dl_enabled %}Zakázat{% else %}Povolit{% endif %}</button>
+    </form>
+  </div>
+</div>
+
+<div class="section-title"><i class="fas fa-shield-alt" style="color:#ef4444;"></i> Bezpečnostní Vypínače Webu</div>
+<div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 30px;">
+  <div class="toggle-card" style="border-color: {% if web_login_enabled %}#334155{% else %}rgba(239,68,68,0.5){% endif %};">
+    <div class="toggle-circle {% if web_login_enabled %}toggle-on{% else %}toggle-off{% endif %}"><i class="fas {% if web_login_enabled %}fa-sign-in-alt{% else %}fa-ban{% endif %}" style="color: white; font-size: 32px;"></i></div>
+    <h3>Přihlašování na Web</h3>
+    <p>Vypnutím zabráníte novým přihlášením (prevence útoku). Přihlášení na /dashboard zůstane funkční.</p>
+    {% if web_login_enabled %}
+    <span style="font-size: 11px; font-weight: bold; color: #10b981; background: rgba(16,185,129,0.1); border: 1px solid #10b981; padding: 3px 10px; border-radius: 20px; margin-bottom: 12px;">🟢 POVOLENO</span>
+    {% else %}
+    <span style="font-size: 11px; font-weight: bold; color: #ef4444; background: rgba(239,68,68,0.1); border: 1px solid #ef4444; padding: 3px 10px; border-radius: 20px; margin-bottom: 12px;">🔴 BLOKOVÁNO</span>
+    {% endif %}
+    <form action="/dashboard/toggle_web_login" method="POST" style="width:100%;">
+      <input type="hidden" name="new_status" value="{% if web_login_enabled %}False{% else %}True{% endif %}">
+      <button type="submit" class="{% if web_login_enabled %}toggle-btn-on{% else %}toggle-btn-off{% endif %}"><i class="fas {% if web_login_enabled %}fa-lock{% else %}fa-unlock{% endif %}"></i> {% if web_login_enabled %}Zablokovat přihlášení{% else %}Povolit přihlášení{% endif %}</button>
+    </form>
+  </div>
+  <div class="toggle-card" style="border-color: {% if map_enabled %}#334155{% else %}rgba(239,68,68,0.5){% endif %};">
+    <div class="toggle-circle {% if map_enabled %}toggle-on{% else %}toggle-off{% endif %}"><i class="fas {% if map_enabled %}fa-map-marked-alt{% else %}fa-map{% endif %}" style="color: white; font-size: 32px;"></i></div>
+    <h3>Interaktivní Mapa</h3>
+    <p>Zapíná/vypíná /mapa. Při vypnutí se zobrazí stránka s informací a odkazem na Discord.</p>
+    {% if map_enabled %}
+    <span style="font-size: 11px; font-weight: bold; color: #10b981; background: rgba(16,185,129,0.1); border: 1px solid #10b981; padding: 3px 10px; border-radius: 20px; margin-bottom: 12px;">🟢 ONLINE</span>
+    {% else %}
+    <span style="font-size: 11px; font-weight: bold; color: #ef4444; background: rgba(239,68,68,0.1); border: 1px solid #ef4444; padding: 3px 10px; border-radius: 20px; margin-bottom: 12px;">🔴 OFFLINE</span>
+    {% endif %}
+    <form action="/dashboard/toggle_map" method="POST" style="width:100%;">
+      <input type="hidden" name="new_status" value="{% if map_enabled %}False{% else %}True{% endif %}">
+      <button type="submit" class="{% if map_enabled %}toggle-btn-on{% else %}toggle-btn-off{% endif %}"><i class="fas {% if map_enabled %}fa-eye-slash{% else %}fa-eye{% endif %}"></i> {% if map_enabled %}Vypnout mapu{% else %}Zapnout mapu{% endif %}</button>
+    </form>
+  </div>
+  <div class="toggle-card" style="border-color: {% if web_maintenance %}rgba(239,68,68,0.7){% else %}#334155{% endif %}; {% if web_maintenance %}background: rgba(239,68,68,0.05);{% endif %}">
+    <div class="toggle-circle {% if web_maintenance %}toggle-off{% else %}toggle-on{% endif %}"><i class="fas {% if web_maintenance %}fa-hard-hat{% else %}fa-check-double{% endif %}" style="color: white; font-size: 32px;"></i></div>
+    <h3>Globální Maintenance</h3>
+    <p>⚠️ Přesměruje VEŠKERÝ traffic na /blocked. Výjimka: /dashboard a admin přihlášení.</p>
+    {% if web_maintenance %}
+    <span style="font-size: 11px; font-weight: bold; color: #ef4444; background: rgba(239,68,68,0.1); border: 1px solid #ef4444; padding: 3px 10px; border-radius: 20px; margin-bottom: 12px; animation: pulse 1s infinite alternate;">🔴 WEB JE OFFLINE</span>
+    {% else %}
+    <span style="font-size: 11px; font-weight: bold; color: #10b981; background: rgba(16,185,129,0.1); border: 1px solid #10b981; padding: 3px 10px; border-radius: 20px; margin-bottom: 12px;">🟢 WEB BĚŽÍ</span>
+    {% endif %}
+    <form action="/dashboard/toggle_maintenance" method="POST" style="width:100%;">
+      <input type="hidden" name="new_status" value="{% if web_maintenance %}False{% else %}True{% endif %}">
+      <button type="submit" class="{% if web_maintenance %}toggle-btn-off{% else %}toggle-btn-on{% endif %}" {% if not web_maintenance %}onclick="return confirm('VAROVÁNÍ: Tím vypnete celý web pro všechny uživatele! Pokračovat?')"{% endif %}><i class="fas {% if web_maintenance %}fa-power-off{% else %}fa-hard-hat{% endif %}"></i> {% if web_maintenance %}Obnovit web{% else %}Spustit Maintenance{% endif %}</button>
+    </form>
+  </div>
 </div>
 """
 
@@ -1102,6 +1176,7 @@ HTML_UCET = """
       <div class="ucet-title">
         <h2>Nastavení účtu</h2>
         <p>Spravujte svůj profil a přihlášení</p>
+        __APP_ID_BADGE__
       </div>
     </div>
 
@@ -1225,4 +1300,114 @@ function saveProfile() {
     });
 }
 </script>
+"""
+
+HTML_BLOCKED = """
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web mimo provoz | OIS IDPK</title>
+<link rel="icon" type="image/png" href="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #f8fafc; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; overflow: hidden; }
+  .bg-particles { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+  .particle { position: absolute; border-radius: 50%; animation: float 15s infinite ease-in-out; opacity: 0.3; }
+  @keyframes float { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-30px) rotate(180deg); } }
+  .container { position: relative; z-index: 1; max-width: 600px; width: 100%; }
+  .logo-ring { width: 120px; height: 120px; border-radius: 50%; background: rgba(239,68,68,0.1); border: 3px solid rgba(239,68,68,0.5); display: flex; align-items: center; justify-content: center; margin: 0 auto 30px auto; animation: pulse-ring 2s infinite ease-in-out; }
+  @keyframes pulse-ring { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); } 50% { box-shadow: 0 0 0 20px rgba(239,68,68,0); } }
+  .status-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(239,68,68,0.15); border: 1px solid #ef4444; border-radius: 30px; padding: 6px 18px; font-size: 13px; font-weight: bold; color: #ef4444; margin-bottom: 25px; }
+  .blink { animation: blink 1s step-end infinite; } @keyframes blink { 50% { opacity: 0; } }
+  h1 { font-size: clamp(28px, 6vw, 48px); font-weight: 900; line-height: 1.2; margin-bottom: 20px; color: white; }
+  .subtitle { color: #94a3b8; font-size: 16px; line-height: 1.6; margin-bottom: 40px; }
+  .discord-btn { display: inline-flex; align-items: center; gap: 14px; background: #5865F2; color: white; padding: 18px 40px; border-radius: 14px; text-decoration: none; font-size: 20px; font-weight: 800; transition: all 0.3s ease; box-shadow: 0 8px 30px rgba(88,101,242,0.5); border: 2px solid rgba(255,255,255,0.2); position: relative; overflow: hidden; }
+  .discord-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent); transition: left 0.5s; }
+  .discord-btn:hover { transform: translateY(-4px) scale(1.03); box-shadow: 0 15px 45px rgba(88,101,242,0.7); }
+  .discord-btn:hover::before { left: 100%; }
+  .discord-btn i { font-size: 28px; }
+  .admin-link { position: fixed; bottom: 20px; right: 20px; color: #475569; font-size: 12px; text-decoration: none; opacity: 0.5; transition: opacity 0.3s; padding: 6px 12px; border: 1px solid #334155; border-radius: 6px; }
+  .admin-link:hover { opacity: 1; color: #94a3b8; }
+  .wave { position: fixed; bottom: 0; left: 0; width: 100%; height: 200px; background: linear-gradient(180deg, transparent, rgba(239,68,68,0.03)); pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="bg-particles">
+  <div class="particle" style="width:300px;height:300px;background:rgba(239,68,68,0.04);top:-100px;left:-100px;animation-duration:20s;"></div>
+  <div class="particle" style="width:200px;height:200px;background:rgba(239,68,68,0.06);bottom:-50px;right:-50px;animation-duration:17s;animation-delay:-5s;"></div>
+</div>
+<div class="container">
+  <div class="logo-ring"><i class="fas fa-hard-hat" style="font-size:50px;color:#ef4444;"></i></div>
+  <div class="status-badge"><span class="blink">●</span> PROBÍHÁ ÚDRŽBA</div>
+  <h1>Web je momentálně<br>mimo provoz</h1>
+  <p class="subtitle">Pracujeme na zlepšeních a brzy se vrátíme zpět.<br>Pro aktuální informace se připojte na náš Discord server.</p>
+  <a href="https://discord.gg/vmTagbC9mF" target="_blank" class="discord-btn">
+    <i class="fab fa-discord"></i>
+    Přejít na Discord
+  </a>
+</div>
+<div class="wave"></div>
+<a href="/dashboard" class="admin-link"><i class="fas fa-lock"></i> Přihlášení do admin dashboardu</a>
+</body>
+</html>
+"""
+
+HTML_MAP_OFFLINE = """
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa offline | OIS IDPK</title>
+<link rel="icon" type="image/png" href="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #f8fafc; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+  .container { max-width: 600px; width: 100%; }
+  .icon-wrap { width: 110px; height: 110px; border-radius: 50%; background: rgba(56,189,248,0.08); border: 3px solid rgba(56,189,248,0.3); display: flex; align-items: center; justify-content: center; margin: 0 auto 28px auto; }
+  h1 { font-size: clamp(24px, 5vw, 38px); font-weight: 900; margin-bottom: 16px; }
+  .subtitle { color: #94a3b8; font-size: 16px; line-height: 1.7; margin-bottom: 40px; max-width: 500px; margin-left: auto; margin-right: auto; }
+  .discord-btn { display: inline-flex; align-items: center; gap: 14px; background: #5865F2; color: white; padding: 18px 40px; border-radius: 14px; text-decoration: none; font-size: 20px; font-weight: 800; transition: all 0.3s ease; box-shadow: 0 8px 30px rgba(88,101,242,0.5); border: 2px solid rgba(255,255,255,0.2); position: relative; overflow: hidden; }
+  .discord-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent); transition: left 0.5s; }
+  .discord-btn:hover { transform: translateY(-4px) scale(1.03); box-shadow: 0 15px 45px rgba(88,101,242,0.7); }
+  .discord-btn:hover::before { left: 100%; }
+  .discord-btn i { font-size: 28px; }
+  .back-link { display: inline-block; margin-top: 20px; color: #64748b; font-size: 13px; text-decoration: none; padding: 6px 14px; border: 1px solid #334155; border-radius: 6px; transition: 0.2s; }
+  .back-link:hover { color: #94a3b8; border-color: #475569; }
+  .admin-link { position: fixed; bottom: 20px; right: 20px; color: #475569; font-size: 12px; text-decoration: none; opacity: 0.5; transition: opacity 0.3s; padding: 6px 12px; border: 1px solid #334155; border-radius: 6px; }
+  .admin-link:hover { opacity: 1; color: #94a3b8; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="icon-wrap"><i class="fas fa-map" style="font-size:50px;color:#38bdf8;"></i></div>
+  <h1>Interaktivní mapa<br>je momentálně mimo provoz</h1>
+  <p class="subtitle">Omlouváme se, ale aktuálně je interaktivní mapa mimo provoz.<br>Pro více informací se připojte na náš Discord.</p>
+  <a href="https://discord.gg/vmTagbC9mF" target="_blank" class="discord-btn">
+    <i class="fab fa-discord"></i>
+    Přejít na Discord
+  </a>
+  <br>
+  <a href="/" class="back-link"><i class="fas fa-arrow-left"></i> Zpět na hlavní stránku</a>
+</div>
+<a href="/dashboard" class="admin-link" id="admin-link-btn"><i class="fas fa-lock"></i> Přihlášení pro adminy</a>
+<script>
+// If admin is already logged in to dashboard, redirect /mapa link to /mapa_admin
+fetch('/api/admin/check').then(r=>r.json()).then(d=>{
+  if(d.logged_in) {
+    const a = document.getElementById('admin-link-btn');
+    a.href = '/mapa_admin';
+    a.innerHTML = '<i class="fas fa-map-marked-alt"></i> Přejít na Mapu (Admin)';
+    a.style.opacity = '0.8';
+    a.style.color = '#38bdf8';
+    a.style.borderColor = '#38bdf8';
+  }
+}).catch(()=>{});
+</script>
+</body>
+</html>
 """

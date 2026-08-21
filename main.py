@@ -511,9 +511,37 @@ def render_dashboard(template_string, **kwargs):
 
 @app.before_request
 def check_session_validity():
-    if request.path.startswith('/dashboard/') and request.path not in ['/dashboard/wait_auth', '/dashboard/login_finalize']:
+    path = request.path
+    def is_maintenance_exempt():
+        if path == '/blocked': return True
+        if path.startswith('/dashboard'): return True
+        if path.startswith('/api/keepalive'): return True
+        if path.startswith('/static'): return True
+        if path.startswith('/api/check_auth'): return True
+        if path.startswith('/api/admin/check'): return True
+        return False
+
+    try:
+        db = get_db()
+        if db:
+            settings_keys = ['web_maintenance', 'web_login_enabled']
+            s_data = db.table('settings').select('setting_key, setting_value').in_('setting_key', settings_keys).execute().data or []
+            s_map = {s['setting_key']: s['setting_value'] for s in s_data}
+
+            maintenance = str(s_map.get('web_maintenance', 'False')).lower() == 'true'
+            if maintenance and not is_maintenance_exempt():
+                return redirect('/blocked')
+
+            web_login_enabled = str(s_map.get('web_login_enabled', 'True')).lower() != 'false'
+            LOGIN_PATHS = ['/register', '/login', '/api/auth/discord/request', '/api/auth/email/request']
+            if not web_login_enabled and path in LOGIN_PATHS:
+                return jsonify({'status': 'error', 'message': 'Přihlašování je momentálně zakázáno.'}), 503
+    except:
+        pass
+
+    if path.startswith('/dashboard/') and path not in ['/dashboard/wait_auth', '/dashboard/login_finalize']:
         if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    if request.path.startswith('/dashboard') and request.path not in ['/dashboard/wait_auth', '/dashboard/login_finalize'] and session.get('logged_in'):
+    if path.startswith('/dashboard') and path not in ['/dashboard/wait_auth', '/dashboard/login_finalize'] and session.get('logged_in'):
         discord_id = session.get('discord_id')
         if discord_id:
             try:
@@ -1567,8 +1595,15 @@ def web_auth_discord_request():
     try:
         user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
         if not user:
-            # Create user if it doesn't exist
-            db.table("users").insert({"discord_id": discord_id, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M")}).execute()
+            # Auto-assign next app_id and set defaults for new web users
+            try:
+                highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
+                new_app_id = (highest[0]["app_id"] + 1) if (highest and highest[0].get("app_id")) else 1001
+            except:
+                new_app_id = None
+            insert_data = {"discord_id": discord_id, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": ""}
+            if new_app_id: insert_data["app_id"] = new_app_id
+            db.table("users").insert(insert_data).execute()
         
         token = str(uuid.uuid4())
         db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
@@ -1598,7 +1633,15 @@ def web_auth_email_request():
     try:
         user = db.table("users").select("*").eq("email", email).execute().data
         if not user:
-            db.table("users").insert({"email": email, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M")}).execute()
+            # Auto-assign next app_id and set defaults for new web users
+            try:
+                highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
+                new_app_id = (highest[0]["app_id"] + 1) if (highest and highest[0].get("app_id")) else 1001
+            except:
+                new_app_id = None
+            insert_data = {"email": email, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": ""}
+            if new_app_id: insert_data["app_id"] = new_app_id
+            db.table("users").insert(insert_data).execute()
         
         import random; token = str(random.randint(10000, 99999))
         db.table("users").update({"login_token": token}).eq("email", email).execute()
@@ -1781,6 +1824,12 @@ def stranka_ucet():
     </script>
     """
     
+    app_id = u.get('app_id')
+    if app_id:
+        app_id_badge = f'<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.4);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:bold;color:#38bdf8;margin-top:5px;"><i class="fas fa-id-badge"></i> App ID #{app_id}</div>'
+    else:
+        app_id_badge = '<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(100,116,139,0.1);border:1px solid #334155;border-radius:20px;padding:4px 12px;font-size:12px;color:#64748b;margin-top:5px;"><i class="fas fa-clock"></i> App ID přidělováno...</div>'
+
     html = HTML_UCET.replace('__AVATAR_IMG__', avatar_img_html)
     html = html.replace('__NICK__', nick)
     html = html.replace('__AVATAR_URL__', avatar_url)
@@ -1788,6 +1837,7 @@ def stranka_ucet():
     html = html.replace('__DISCORD_BTN__', discord_btn)
     html = html.replace('__EMAIL_STATUS__', email_status)
     html = html.replace('__EMAIL_BTN__', email_btn)
+    html = html.replace('__APP_ID_BADGE__', app_id_badge)
     html += link_scripts
     
     return render_public(html)
@@ -1862,10 +1912,10 @@ def dashboard_main():
         if db:
             query = db.table("users").select("*")
             f = request.args.get('filter')
-            if f == 'banned': query = query.eq("is_banned", True).eq("is_deleted", False)
+            if f == 'banned': query = query.eq("is_banned", True).neq("is_deleted", True)
             elif f == 'deleted': query = query.eq("is_deleted", True)
-            elif f: query = query.ilike("role", f"%{f}%").eq("is_deleted", False)
-            else: query = query.eq("is_deleted", False).order("app_id")
+            elif f: query = query.ilike("role", f"%{f}%").neq("is_deleted", True)
+            else: query = query.neq("is_deleted", True).order("app_id")
             users_data = query.execute().data or []
             now = get_prague_time().replace(tzinfo=None)
             for u in users_data:
@@ -1922,15 +1972,19 @@ def edit_user():
 @app.route('/dashboard/app_management', methods=['GET'], strict_slashes=False)
 def dashboard_app_management():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db(); soft_enabled = True; dl_enabled = True
+    db = get_db(); soft_enabled = True; dl_enabled = True; web_login_enabled = True; map_enabled = True; web_maintenance = False
     try:
         if db:
-            s_resp = db.table("settings").select("*").in_("setting_key", ["software_enabled", "downloads_enabled"]).execute().data or []
+            s_resp = db.table("settings").select("*").in_("setting_key", ["software_enabled", "downloads_enabled", "web_login_enabled", "map_enabled", "web_maintenance"]).execute().data or []
             for s in s_resp:
-                if s['setting_key'] == 'software_enabled': soft_enabled = str(s['setting_value']).lower() != 'false'
-                elif s['setting_key'] == 'downloads_enabled': dl_enabled = str(s['setting_value']).lower() != 'false'
+                k = s['setting_key']; v = str(s['setting_value']).lower()
+                if k == 'software_enabled': soft_enabled = v != 'false'
+                elif k == 'downloads_enabled': dl_enabled = v != 'false'
+                elif k == 'web_login_enabled': web_login_enabled = v != 'false'
+                elif k == 'map_enabled': map_enabled = v != 'false'
+                elif k == 'web_maintenance': web_maintenance = v == 'true'
     except: pass
-    return render_dashboard(HTML_APP_MANAGEMENT, soft_enabled=soft_enabled, dl_enabled=dl_enabled, deploy_time=DEPLOY_TIME)
+    return render_dashboard(HTML_APP_MANAGEMENT, soft_enabled=soft_enabled, dl_enabled=dl_enabled, web_login_enabled=web_login_enabled, map_enabled=map_enabled, web_maintenance=web_maintenance, deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/toggle_software', methods=['POST'])
 def toggle_software():
@@ -1953,6 +2007,60 @@ def toggle_downloads():
         trigger_setup_messages_update()
     ret = request.form.get('return_to', 'app_management')
     return redirect(url_for('dashboard_downloads' if ret == 'downloads' else 'dashboard_app_management'))
+
+@app.route('/dashboard/toggle_web_login', methods=['POST'])
+def toggle_web_login():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    new_status = request.form.get('new_status', 'True')
+    db = get_db()
+    if db:
+        db.table("settings").update({"setting_value": new_status}).eq("setting_key", "web_login_enabled").execute()
+        send_log("🔐 Přihlašování na Web", f"Přihlašování na web bylo **{'POVOLENO' if new_status.lower() == 'true' else 'ZABLOKOVANÉ'}** přes dashboard.", 0xf59e0b)
+        flash(f'Přihlašování na web: {"POVOLENO" if new_status.lower() == "true" else "ZABLOKOVANÉ"}', 'success')
+    return redirect(url_for('dashboard_app_management'))
+
+@app.route('/dashboard/toggle_map', methods=['POST'])
+def toggle_map():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    new_status = request.form.get('new_status', 'True')
+    db = get_db()
+    if db:
+        db.table("settings").update({"setting_value": new_status}).eq("setting_key", "map_enabled").execute()
+        send_log("🗺️ Interaktivní Mapa", f"Mapa byla **{'ZAPNUTA' if new_status.lower() == 'true' else 'VYPNUTA'}** přes dashboard.", 0x38bdf8)
+        flash(f'Mapa: {"ZAPNUTA" if new_status.lower() == "true" else "VYPNUTA"}', 'success')
+    return redirect(url_for('dashboard_app_management'))
+
+@app.route('/dashboard/toggle_maintenance', methods=['POST'])
+def toggle_maintenance():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    new_status = request.form.get('new_status', 'False')
+    db = get_db()
+    if db:
+        db.table("settings").update({"setting_value": new_status}).eq("setting_key", "web_maintenance").execute()
+        if new_status.lower() == 'true':
+            send_log("🚧 Maintenance Mode ZAPNUT", "Web byl přepnut do maintenance módu. Probíhá přesměrování všech návštěvníků na /blocked.", 0xef4444)
+        else:
+            send_log("✅ Maintenance Mode VYPNUT", "Web byl obnoven z maintenance módu.", 0x10b981)
+        flash(f'Maintenance: {"ZAPNUT - WEB JE OFFLINE" if new_status.lower() == "true" else "VYPNUT - WEB JE ONLINE"}', 'success' if new_status.lower() == 'false' else 'warning')
+    return redirect(url_for('dashboard_app_management'))
+
+@app.route('/blocked')
+def blocked_page():
+    from html_templates import HTML_BLOCKED
+    return HTML_BLOCKED, 503
+
+@app.route('/api/admin/check')
+def api_admin_check():
+    """Quick endpoint for frontend to check if admin dashboard session is active."""
+    return jsonify({"logged_in": bool(session.get('logged_in'))})
+
+@app.route('/mapa_admin')
+def mapa_admin_redirect():
+    """Admin map access — always available for logged-in dashboard users."""
+    if not session.get('logged_in'):
+        return redirect(url_for('dashboard_main'))
+    return redirect('/mapa')
+
 
 @app.route('/dashboard/notifications', methods=['GET'], strict_slashes=False)
 def dashboard_notifications():
@@ -2739,7 +2847,7 @@ async def setup_download(ctx):
     except: pass
 
 @bot.command()
-@check_web_sa()
+@check_sm_role()
 async def sm(ctx, member: discord.Member):
     role = discord.utils.get(ctx.guild.roles, name="SM")
     if not role: return await ctx.send("❌ Role `SM` neexistuje.")
@@ -2749,6 +2857,52 @@ async def sm(ctx, member: discord.Member):
     else:
         await member.add_roles(role)
         await ctx.send(f"➕ Role **SM** přidělena.")
+
+@bot.command(name="website_block")
+@check_sm_role()
+async def cmd_website_block(ctx):
+    """Toggle web_maintenance. Role SM required."""
+    db = get_db()
+    if not db:
+        return await ctx.send("❌ Databáze není dostupná.")
+    try:
+        s = db.table("settings").select("setting_value").eq("setting_key", "web_maintenance").execute().data
+        current = str(s[0]['setting_value']).lower() == 'true' if s else False
+        new_val = 'False' if current else 'True'
+        db.table("settings").update({"setting_value": new_val}).eq("setting_key", "web_maintenance").execute()
+        if new_val == 'True':
+            embed = discord.Embed(title="🚧 Maintenance Mode ZAPNUT", description="Web byl přepnut do **maintenance módu**.\nVšichni návštěvníci jsou přesměrováni na /blocked.", color=0xef4444)
+            send_log("🚧 Maintenance Mode ZAPNUT", f"Web byl zablokován příkazem !website_block od {ctx.author.display_name}.", 0xef4444)
+        else:
+            embed = discord.Embed(title="✅ Maintenance Mode VYPNUT", description="Web byl **obnoven** z maintenance módu.\nNávštěvníci mají opět přístup.", color=0x10b981)
+            send_log("✅ Maintenance Mode VYPNUT", f"Web byl obnoven příkazem !website_block od {ctx.author.display_name}.", 0x10b981)
+        embed.set_footer(text=f"Provečl: {ctx.author.display_name}")
+        await ctx.send(embed=embed)
+    except Exception as e:
+        await ctx.send(f"❌ Chyba: `{e}`")
+
+@bot.command(name="website_block_mapa")
+@check_sm_role()
+async def cmd_website_block_mapa(ctx):
+    """Toggle map_enabled. Role SM required."""
+    db = get_db()
+    if not db:
+        return await ctx.send("❌ Databáze není dostupná.")
+    try:
+        s = db.table("settings").select("setting_value").eq("setting_key", "map_enabled").execute().data
+        current = str(s[0]['setting_value']).lower() != 'false' if s else True
+        new_val = 'False' if current else 'True'
+        db.table("settings").update({"setting_value": new_val}).eq("setting_key", "map_enabled").execute()
+        if new_val == 'False':
+            embed = discord.Embed(title="🗺️ Mapa VYPNUTA", description="Interaktivní mapa byla **vypnuta**.\nNávštěvníci vidí stránku \"mapa offline\" s odkazem na Discord.", color=0xef4444)
+            send_log("🗺️ Mapa VYPNUTA", f"Mapa byla vypnuta příkazem !website_block_mapa od {ctx.author.display_name}.", 0xef4444)
+        else:
+            embed = discord.Embed(title="🗺️ Mapa ZAPNUTA", description="Interaktivní mapa byla **obnovena**.\nNávštěvníci mají opět přístup.", color=0x10b981)
+            send_log("🗺️ Mapa ZAPNUTA", f"Mapa byla obnovena příkazem !website_block_mapa od {ctx.author.display_name}.", 0x10b981)
+        embed.set_footer(text=f"Provečl: {ctx.author.display_name}")
+        await ctx.send(embed=embed)
+    except Exception as e:
+        await ctx.send(f"❌ Chyba: `{e}`")
 
 @bot.command()
 async def aktulizace(ctx):
