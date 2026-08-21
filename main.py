@@ -514,10 +514,12 @@ def check_session_validity():
     path = request.path
     def is_maintenance_exempt():
         if path == '/blocked': return True
+        if path == '/login_blocked': return True
         if path.startswith('/dashboard'): return True
         if path.startswith('/api/keepalive'): return True
         if path.startswith('/static'): return True
         if path.startswith('/api/check_auth'): return True
+        if path.startswith('/api/auth/status'): return True
         if path.startswith('/api/admin/check'): return True
         return False
 
@@ -544,9 +546,9 @@ def check_session_validity():
             LOGIN_PATHS = ['/register', '/login', '/api/auth/discord/request', '/api/auth/email/request']
             if not web_login_enabled and path in LOGIN_PATHS:
                 if request.is_json or path.startswith('/api/'):
-                    return jsonify({'status': 'error', 'message': 'Přihlašování je z důvodu údržby dočasně nedostupné.'}), 503
+                    return jsonify({'status': 'error', 'message': 'Přihlašování je z bezpečnostních důvodů dočasně nedostupné.'}), 503
                 else:
-                    return redirect('/blocked')
+                    return redirect('/login_blocked')
     except:
         pass
 
@@ -1695,7 +1697,10 @@ def web_auth_status():
                 # Create permanent token and update login time
                 perm_token = str(uuid.uuid4())
                 login_time = get_prague_time().strftime("%d.%m.%Y %H:%M")
-                db.table("users").update({"login_token": "", "web_session_token": perm_token, "web_login_at": login_time}).eq("discord_id", discord_id).execute()
+                try:
+                    db.table("users").update({"login_token": "", "web_session_token": perm_token, "web_login_at": login_time}).eq("discord_id", discord_id).execute()
+                except:
+                    db.table("users").update({"login_token": "", "web_session_token": perm_token}).eq("discord_id", discord_id).execute()
                 return jsonify({"status": "approved", "token": perm_token})
             elif t == "rejected":
                 db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
@@ -2062,6 +2067,14 @@ def toggle_maintenance():
             send_log("✅ Maintenance Mode VYPNUT", "Web byl obnoven z maintenance módu.", 0x10b981)
         flash(f'Maintenance: {"ZAPNUT - WEB JE OFFLINE" if new_status.lower() == "true" else "VYPNUT - WEB JE ONLINE"}', 'success' if new_status.lower() == 'false' else 'warning')
     return redirect(url_for('dashboard_app_management'))
+
+@app.route('/login_blocked')
+def login_blocked_page():
+    try:
+        from html_templates import HTML_LOGIN_BLOCKED
+        return render_template_string(HTML_LOGIN_BLOCKED)
+    except:
+        return "Přihlašování je momentálně vypnuté."
 
 @app.route('/blocked')
 def blocked_page():

@@ -1305,6 +1305,52 @@ function saveProfile() {
 </script>
 """
 
+HTML_LOGIN_BLOCKED = """
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Přihlašování vypnuto | OIS IDPK</title>
+<link rel="icon" type="image/png" href="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #f8fafc; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; overflow: hidden; }
+  .bg-particles { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+  .particle { position: absolute; border-radius: 50%; animation: float 15s infinite ease-in-out; opacity: 0.3; }
+  @keyframes float { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-30px) rotate(180deg); } }
+  .container { position: relative; z-index: 1; max-width: 600px; width: 100%; }
+  .logo-ring { width: 120px; height: 120px; border-radius: 50%; background: rgba(56,189,248,0.1); border: 3px solid rgba(56,189,248,0.5); display: flex; align-items: center; justify-content: center; margin: 0 auto 30px auto; }
+  .status-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(245,158,11,0.15); border: 1px solid #f59e0b; border-radius: 30px; padding: 6px 18px; font-size: 13px; font-weight: bold; color: #f59e0b; margin-bottom: 25px; }
+  h1 { font-size: clamp(28px, 6vw, 48px); font-weight: 900; line-height: 1.2; margin-bottom: 20px; color: white; }
+  .subtitle { color: #94a3b8; font-size: 16px; line-height: 1.6; margin-bottom: 40px; }
+  .btn-back { display: inline-flex; align-items: center; gap: 14px; background: var(--blue-main); color: #000; padding: 18px 40px; border-radius: 14px; text-decoration: none; font-size: 20px; font-weight: 800; transition: all 0.3s ease; box-shadow: 0 8px 30px rgba(56,189,248,0.5); border: 2px solid rgba(255,255,255,0.2); position: relative; overflow: hidden; }
+  .btn-back:hover { transform: translateY(-4px) scale(1.03); background: var(--blue-hover); color: white; }
+  .btn-back i { font-size: 28px; }
+  .wave { position: fixed; bottom: 0; left: 0; width: 100%; height: 200px; background: linear-gradient(180deg, transparent, rgba(56,189,248,0.03)); pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="bg-particles">
+  <div class="particle" style="width:300px;height:300px;background:rgba(56,189,248,0.04);top:-100px;left:-100px;animation-duration:20s;"></div>
+  <div class="particle" style="width:200px;height:200px;background:rgba(56,189,248,0.06);bottom:-50px;right:-50px;animation-duration:17s;animation-delay:-5s;"></div>
+</div>
+<div class="container">
+  <div class="logo-ring"><i class="fas fa-user-lock" style="font-size:50px;color:#38bdf8;"></i></div>
+  <div class="status-badge"><i class="fas fa-exclamation-triangle"></i> PŘIHLAŠOVÁNÍ VYPNUTO</div>
+  <h1>Přihlašování na web<br>je dočasně vypnuté</h1>
+  <p class="subtitle">Z bezpečnostních důvodů nebo údržby účtů je možnost se přihlásit zakázána.<br>Zbytek webu ale běží dál bez problémů.</p>
+  <a href="/" class="btn-back">
+    <i class="fas fa-arrow-left"></i>
+    Zpět na web
+  </a>
+</div>
+<div class="wave"></div>
+</body>
+</html>
+"""
+
 HTML_BLOCKED = """
 <!DOCTYPE html>
 <html lang="cs">
