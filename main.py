@@ -1452,18 +1452,32 @@ def login_request():
                     flash('Tento účet byl smazán.', 'error')
                 elif user_data.get("is_banned"):
                     flash('Tento účet byl zablokován (banned).', 'error')
-                elif user_data.get("dashboard_access") != True:
-                    flash('Tento účet nemá povolený přístup do administračního panelu (dashboard_access = false). Zkontrolujte oprávnění v databázi.', 'error')
                 else:
-                    token = str(uuid.uuid4())
-                    db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
-                    async def send():
+                    has_access = (user_data.get("dashboard_access") == True)
+                    if not has_access:
                         try:
-                            u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
-                            if u: await u.send(embed=discord.Embed(title="🔐 Bezpečnostní ověření", description="Byl zaznamenán pokus o přihlášení do administračního panelu.", color=0x38bdf8), view=DashboardAuthView(token, discord_id))
+                            uid = int(discord_id)
+                            for guild in bot.guilds:
+                                member = guild.get_member(uid)
+                                if member:
+                                    if discord.utils.get(member.roles, name="SM") or discord.utils.get(member.roles, name="web-sa") or member.guild_permissions.administrator:
+                                        has_access = True
+                                        db.table("users").update({"dashboard_access": True}).eq("discord_id", discord_id).execute()
+                                        break
                         except: pass
-                    if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
-                    return redirect(url_for('wait_auth', discord_id=discord_id))
+
+                    if not has_access:
+                        flash('Tento účet nemá povolený přístup do administračního panelu (chybí role SM/web-sa nebo dashboard_access v DB).', 'error')
+                    else:
+                        token = str(uuid.uuid4())
+                        db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
+                        async def send():
+                            try:
+                                u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+                                if u: await u.send(embed=discord.Embed(title="🔐 Bezpečnostní ověření", description="Byl zaznamenán pokus o přihlášení do administračního panelu.", color=0x38bdf8), view=DashboardAuthView(token, discord_id))
+                            except: pass
+                        if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
+                        return redirect(url_for('wait_auth', discord_id=discord_id))
         except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_main'))
 
