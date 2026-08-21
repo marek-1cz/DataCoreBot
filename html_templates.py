@@ -71,6 +71,21 @@ tr:hover { background-color: #334155; }
 @keyframes glowNormal { 
     0% { box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); border-color: #0284c7; transform: scale(1); } 
     100% { box-shadow: 0 0 35px rgba(56, 189, 248, 0.6); border-color: #bae6fd; transform: scale(1.005); } 
+@media (max-width: 768px) {
+    .top-nav { flex-direction: column; padding: 15px 10px; gap: 10px; }
+    .nav-links { flex-wrap: wrap; justify-content: center; gap: 10px; }
+    .nav-links a { margin-left: 0; font-size: 13px; }
+    .nav-links .admin-link { margin-left: 0; }
+    .user-avatar-wrap { margin-left: 0 !important; justify-content: center; width: 100%; box-sizing: border-box; }
+    #user-dropdown { right: auto; left: 50%; transform: translateX(-50%); width: 280px; max-width: 90vw; }
+    .container { margin: 20px auto; padding: 0 10px; }
+    h1 { font-size: 1.8em !important; line-height: 1.3; }
+    .screenshot-pair { flex-direction: column !important; }
+    .screenshot-pair img { width: 100% !important; margin-bottom: 0px; }
+    .btn { padding: 12px 20px; font-size: 16px !important; }
+    .home-wrap { padding: 30px 10px !important; }
+    .info-box { padding: 15px !important; }
+    .footer-box { padding: 20px !important; }
 }
 </style>
 </head>
@@ -215,9 +230,9 @@ function closeModal() { document.getElementById('editModal').style.display = 'no
 """
 
 HTML_HOME = """
-<div style="text-align: center; padding: 60px 20px; max-width: 800px; margin: 0 auto;">
+<div class="home-wrap" style="text-align: center; padding: 60px 20px; max-width: 800px; margin: 0 auto;">
     <h1 style="color: var(--blue-main); font-size: 2.5em; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">OFICIÁLNÍ STRÁNKA PROJEKTU OIS IDPK</h1>
-    <div style="font-size: 1.1em; color: var(--text-main); line-height: 1.6; margin-bottom: 40px; background: rgba(30, 41, 59, 0.5); padding: 25px; border-radius: 10px; border-left: 4px solid var(--blue-main); text-align: left;">
+    <div class="info-box" style="font-size: 1.1em; color: var(--text-main); line-height: 1.6; margin-bottom: 40px; background: rgba(30, 41, 59, 0.5); padding: 25px; border-radius: 10px; border-left: 4px solid var(--blue-main); text-align: left;">
         <p style="margin-top:0;">Projekt OIS IDPK je fanouškovský software inspirovaný skutečnými vnitřními informačními panely, které se používají v autobusech Plzeňského kraje. Cílem projektu je co nejvěrněji napodobit jejich vzhled i způsob fungování.</p>
         <p>Software simuluje zobrazování zastávek, průběh celé linky i další informace, které běžně vidí cestující během jízdy. Díky tomu si můžeš jednoduše vyzkoušet, jak se panel chová při jízdě po trase, jak se postupně mění zastávky nebo jak vypadají informace o aktuální části linky.</p>
         <p style="margin-bottom:0;">Celý projekt vznikl z nadšení pro dopravu, technologie a informační systems ve veřejné dopravě. Projekt není oficiálním produktem ani službou dopravců nebo organizací veřejné dopravy a nijak s nimi nespolupracuje. Jedná se čistě o fanouškovský projekt vytvořený pro zábavu, experimentování a zájem o dopravní technologie.</p>
@@ -230,14 +245,14 @@ HTML_HOME = """
             <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/sc/sc2.png" alt="Screenshot 2" style="width: 100%; max-width: 800px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
             <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/sc/sc3.png" alt="Screenshot 3" style="width: 100%; max-width: 800px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
             <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/sc/sc4.png" alt="Screenshot 4" style="width: 100%; max-width: 800px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
-            <div style="display: flex; justify-content: center; gap: 20px; width: 100%; max-width: 800px;">
+            <div class="screenshot-pair" style="display: flex; justify-content: center; gap: 20px; width: 100%; max-width: 800px;">
                 <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/sc/sc5.png" alt="Screenshot 5" style="width: 48%; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
                 <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/sc/sc6.png" alt="Screenshot 6" style="width: 48%; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
             </div>
         </div>
     </div>
     <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 60px 0;">
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; background: var(--bg-panel); padding: 40px; border-radius: 15px; border: 1px solid #334155;">
+    <div class="footer-box" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; background: var(--bg-panel); padding: 40px; border-radius: 15px; border: 1px solid #334155;">
         <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png" alt="DataCoreBot Logo" style="max-width: 250px; height: auto; filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.5)); margin-bottom: 10px;">
         <div style="text-align: center; max-width: 600px;">
             <h3 style="color: var(--warning); margin-top: 0; font-size: 1.6em; text-shadow: 0 0 5px rgba(245, 158, 11, 0.5);">Poháněno systémem DataCoreBot</h3>
