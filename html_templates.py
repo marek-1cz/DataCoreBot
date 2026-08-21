@@ -870,7 +870,14 @@ HTML_WAIT_AUTH = """
 HTML_LOGIN = """
 <div style="max-width: 400px; margin: 100px auto; background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border-top: 4px solid var(--blue-main);">
     <h2 style="color: var(--text-main); margin-top: 0;"><i class="fas fa-lock"></i> Administrace</h2>
-    <p style="color: var(--text-muted); margin-bottom: 30px; font-size: 14px;">Zadejte své Discord ID pro přihlášení.</p>
+    <p style="color: var(--text-muted); margin-bottom: 20px; font-size: 14px;">Zadejte své Discord ID pro přihlášení.</p>
+    
+    <!-- New Warning Box -->
+    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; border-radius: 8px; padding: 12px; margin-bottom: 25px; text-align: left;">
+        <p style="color: #ef4444; margin: 0; font-size: 13px; font-weight: bold; margin-bottom: 4px;"><i class="fas fa-exclamation-triangle"></i> Pouze pro administrátory</p>
+        <p style="color: #cbd5e1; margin: 0; font-size: 12px; line-height: 1.4;">Tato sekce je určena výhradně pro administrátory. Běžní uživatelé zde nemají přístup.</p>
+    </div>
+
     <form action="/login_request" method="POST">
         <input type="text" name="discord_id" placeholder="Vaše Discord ID (např. 1234567890)" required style="text-align: center; font-size: 16px;">
         <button type="submit" class="btn" style="width: 100%; font-size: 16px; margin-top: 10px;"><i class="fas fa-sign-in-alt"></i> Přihlásit se</button>

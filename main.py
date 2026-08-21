@@ -1444,17 +1444,26 @@ def login_request():
     if db and discord_id:
         try:
             user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
-            if user and user[0].get("dashboard_access") == True and not user[0].get("is_banned") and not user[0].get("is_deleted"):
-                token = str(uuid.uuid4())
-                db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
-                async def send():
-                    try:
-                        u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
-                        if u: await u.send(embed=discord.Embed(title="🔐 Bezpečnostní ověření", description="Byl zaznamenán pokus o přihlášení do administračního panelu.", color=0x38bdf8), view=DashboardAuthView(token, discord_id))
-                    except: pass
-                if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
-                return redirect(url_for('wait_auth', discord_id=discord_id))
-            else: flash('Účet neexistuje, nemá povolený přístup, nebo byl zablokován.', 'error')
+            if not user:
+                flash('Účet s tímto Discord ID neexistuje v databázi.', 'error')
+            else:
+                user_data = user[0]
+                if user_data.get("is_deleted"):
+                    flash('Tento účet byl smazán.', 'error')
+                elif user_data.get("is_banned"):
+                    flash('Tento účet byl zablokován (banned).', 'error')
+                elif user_data.get("dashboard_access") != True:
+                    flash('Tento účet nemá povolený přístup do administračního panelu (dashboard_access = false). Zkontrolujte oprávnění v databázi.', 'error')
+                else:
+                    token = str(uuid.uuid4())
+                    db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
+                    async def send():
+                        try:
+                            u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+                            if u: await u.send(embed=discord.Embed(title="🔐 Bezpečnostní ověření", description="Byl zaznamenán pokus o přihlášení do administračního panelu.", color=0x38bdf8), view=DashboardAuthView(token, discord_id))
+                        except: pass
+                    if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
+                    return redirect(url_for('wait_auth', discord_id=discord_id))
         except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_main'))
 
