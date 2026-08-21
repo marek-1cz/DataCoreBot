@@ -73,12 +73,18 @@ tr:hover { background-color: #334155; }
     100% { box-shadow: 0 0 35px rgba(56, 189, 248, 0.6); border-color: #bae6fd; transform: scale(1.005); } 
 }
 @media (max-width: 768px) {
-    .top-nav { flex-direction: column; padding: 15px 10px; gap: 10px; }
+    .nav-brand-mobile { justify-content: space-between !important; margin-bottom: 15px; }
+    .desktop-avatar-slot { display: none !important; }
+    .mobile-avatar-slot { display: block !important; }
+    .top-nav { flex-direction: column; padding: 15px 10px; gap: 5px; }
     .nav-links { flex-wrap: wrap; justify-content: center; gap: 10px; }
     .nav-links a { margin-left: 0; font-size: 13px; }
     .nav-links .admin-link { margin-left: 0; }
-    .user-avatar-wrap { margin-left: 0 !important; justify-content: center; width: 100%; box-sizing: border-box; }
-    #user-dropdown { right: auto; left: 50%; transform: translateX(-50%); width: 280px; max-width: 90vw; }
+    .user-avatar-wrap { padding: 6px 15px 6px 6px !important; margin-left: 0 !important; justify-content: center; width: auto !important; box-sizing: border-box; }
+    .user-avatar-wrap span { font-size: 12px !important; max-width: 80px !important; }
+    .user-avatar-wrap .fa-user-circle { font-size: 32px !important; }
+    .user-avatar-wrap > div { width: 34px !important; height: 34px !important; }
+    #user-dropdown { right: 0; left: auto; transform: none; width: 250px; max-width: 90vw; }
     .container { margin: 20px auto; padding: 0 10px; }
     h1 { font-size: 1.8em !important; line-height: 1.3; }
     .screenshot-pair { flex-direction: column !important; }
@@ -87,6 +93,15 @@ tr:hover { background-color: #334155; }
     .home-wrap { padding: 30px 10px !important; }
     .info-box { padding: 15px !important; }
     .footer-box { padding: 20px !important; }
+    
+    .dashboard-wrapper { flex-direction: column !important; }
+    .sidebar { width: 100% !important; border-right: none !important; border-bottom: 1px solid #334155; }
+    .sidebar-menu { display: flex; flex-wrap: wrap; padding: 10px !important; gap: 5px; justify-content: center; }
+    .sidebar-menu a { flex: 1 1 45%; font-size: 11px; padding: 10px !important; border-left: none !important; border-bottom: 3px solid transparent; text-align: center; }
+    .sidebar-menu a:hover, .sidebar-menu a.active { border-bottom-color: var(--blue-main) !important; border-left-color: transparent !important; background: rgba(56, 189, 248, 0.1); }
+    .dashboard-content { padding: 15px !important; }
+    table { display: block; overflow-x: auto; white-space: nowrap; }
+    .profile-grid { grid-template-columns: 1fr !important; }
 }
 </style>
 </head>
@@ -98,14 +113,17 @@ tr:hover { background-color: #334155; }
 
 PUBLIC_LAYOUT = """
 <nav class="top-nav">
+<div class="nav-brand-mobile" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
 <a href="/" class="logo"><img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png" alt="Logo" style="height: 30px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 8px rgba(56, 189, 248, 0.6));">OIS IDPK</a>
+<div class="mobile-avatar-slot" style="display:none;">__AVATAR__</div>
+</div>
 <div class="nav-links" style="display:flex; align-items:center;">
 <a href="/dashboard" class="admin-link">Dashboard 🔒</a>
 <a href="/">Domů</a><a href="/download">Download</a><a href="/team">Náš Tým</a><a href="/stats">Statistiky</a>
 <a href="/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-heart"></i> Podporovatelé</a>
 <a href="/provoz-idpk" style="color: #10b981; font-weight: bold;"><i class="fas fa-bus"></i> Provoz IDPK</a>
 <a href="/led-panel" style="color: #f59e0b; font-weight: bold;"><i class="fas fa-tv"></i> LED Panel Simulátor</a>
-__AVATAR__
+<div class="desktop-avatar-slot">__AVATAR__</div>
 </div>
 </nav>
 <div class="container">
@@ -582,6 +600,19 @@ HTML_SUPPORTERS = """
 .supp-date { color: #64748b; font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
 
 .tier-3-glow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; height: 100%; background: radial-gradient(circle, rgba(239, 68, 68, 0.15) 0%, transparent 70%); pointer-events: none; }
+@media (max-width: 768px) {
+  .supporters-hero { padding: 30px 10px; margin-bottom: 30px; }
+  .hero-title { font-size: 32px; }
+  .hero-desc { font-size: 16px; margin-bottom: 20px; }
+  .btn-premium { padding: 15px 25px; font-size: 16px; border-radius: 30px; }
+  .supp-card { padding: 20px; }
+  .tier-3 .supp-name { font-size: 28px; }
+  .tier-2 .supp-name { font-size: 24px; }
+  .tier-1 .supp-name { font-size: 20px; }
+  .supp-amount { font-size: 22px; padding: 10px 15px; }
+  .supp-msg { font-size: 14px; padding: 15px; }
+  .supporters-grid { padding: 0 10px 30px 10px; }
+}
 </style>
 
 <div class="supporters-hero">
@@ -987,8 +1018,14 @@ HTML_PROVOZ_IDPK = """
   .prov-card .cs { font-size:13px; font-weight:normal; opacity:.75; margin-top:5px; display:block; }
   .prov-back { color:#94a3b8; text-decoration:none; padding:9px 20px; border:1px solid #334155; border-radius:8px; font-size:14px; display:inline-block; margin-top:8px; transition:.2s; }
   .prov-back:hover { border-color:#38bdf8; color:#38bdf8; }
+  @media (max-width: 768px) {
+    .prov-wrap { padding: 30px 15px !important; }
+    .prov-card { padding: 20px !important; font-size: 16px !important; margin-bottom: 12px !important; }
+    .prov-card .ci { font-size: 30px !important; margin-bottom: 5px !important; }
+    .prov-wrap h1 { font-size: 26px !important; }
+  }
 </style>
-<div style="text-align:center; padding:50px 20px; max-width:620px; margin:0 auto;">
+<div class="prov-wrap" style="text-align:center; padding:50px 20px; max-width:620px; margin:0 auto;">
   <div style="background:rgba(239,68,68,.1); border:1px solid #ef4444; border-radius:10px; padding:18px 20px; margin-bottom:36px; text-align:left;">
     <h3 style="color:#ef4444; margin:0 0 8px 0; font-size:15px;"><i class="fas fa-exclamation-triangle"></i> Důležité upozornění</h3>
     <p style="color:#cbd5e1; margin:0; font-size:13px; line-height:1.65;">
