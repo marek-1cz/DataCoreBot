@@ -84,7 +84,7 @@ tr:hover { background-color: #334155; }
     .user-avatar-wrap span { font-size: 12px !important; max-width: 80px !important; }
     .user-avatar-wrap .fa-user-circle { font-size: 32px !important; }
     .user-avatar-wrap > div { width: 34px !important; height: 34px !important; }
-    #user-dropdown { right: 0; left: auto; transform: none; width: 250px; max-width: 90vw; }
+    .user-dropdown-menu { right: 0; left: auto; transform: none; width: 250px; max-width: 90vw; }
     .container { margin: 20px auto; padding: 0 10px; }
     h1 { font-size: 1.8em !important; line-height: 1.3; }
     .screenshot-pair { flex-direction: column !important; }
