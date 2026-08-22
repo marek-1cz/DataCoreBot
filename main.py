@@ -2097,7 +2097,7 @@ def dashboard_main():
     gc.collect()
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů", deploy_time=DEPLOY_TIME)
 
-@app.route('/dashboard/debug_log')
+@app.route('/debug_log')
 def view_debug_log():
     try:
         with open("debug_log.txt", "r") as f:
@@ -2148,7 +2148,13 @@ def edit_user():
                 if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🕊️ Účet odblokován", "Váš přístup do aplikace byl obnoven.", 0x10b981), bot.loop)
                 flash('BAN zrušen.', 'success')
             elif action == 'delete':
-                db.table("users").update({"is_deleted": True, "deleted_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                try:
+                    with open("debug_log.txt", "a") as f: f.write("executing delete query...\n")
+                except: pass
+                res = db.table("users").update({"is_deleted": True, "deleted_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                try:
+                    with open("debug_log.txt", "a") as f: f.write(f"delete result: {res.data}\n")
+                except: pass
                 flash('Účet smazán (Soft Delete).', 'danger')
                 if str(session.get('discord_id')) == str(discord_id): session.clear()
             elif action == 'restore':
