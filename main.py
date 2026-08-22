@@ -2097,10 +2097,28 @@ def dashboard_main():
     gc.collect()
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů", deploy_time=DEPLOY_TIME)
 
+@app.route('/dashboard/debug_log')
+def view_debug_log():
+    try:
+        with open("debug_log.txt", "r") as f:
+            return f"<pre>{f.read()}</pre>"
+    except Exception as e:
+        return str(e)
+
 @app.route('/dashboard/edit_user', methods=['POST'])
 @require_dash_level('admin')
 def edit_user():
     db = get_db(); discord_id = request.form.get("discord_id"); action = request.form.get("action"); nick = request.form.get("nick"); email = request.form.get("email")
+    if not discord_id:
+        flash(f"Chyba: Nebylo předáno discord_id! (Akce: {action})", "error")
+        return redirect(url_for('dashboard_main'))
+    if not action:
+        flash("Chyba: Nebyla předána žádná akce z tlačítka!", "error")
+        return redirect(url_for('dashboard_main'))
+        
+    try:
+        with open("debug_log.txt", "a") as f: f.write(f"edit_user called: discord_id={discord_id}, action={action}\n")
+    except: pass
     if db and discord_id:
         try:
             if action == 'save':
@@ -2108,11 +2126,20 @@ def edit_user():
                 new_hwid = request.form.get("hwid", "").strip()
                 new_ip = request.form.get("ip_address", "").strip()
                 updates = {"nick": nick, "email": email, "role": r_str, "hwid": new_hwid, "ip_address": new_ip, "dashboard_access": True if request.form.get("dashboard_access") else False}
-                db.table("users").update(updates).eq("discord_id", discord_id).execute()
+                res = db.table("users").update(updates).eq("discord_id", discord_id).execute()
+                try:
+                    with open("debug_log.txt", "a") as f: f.write(f"save result: {res.data}\n")
+                except: pass
                 sync_roles_from_flask(discord_id, r_str)
                 flash('Údaje upraveny!', 'success')
             elif action == 'ban':
-                db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                try:
+                    with open("debug_log.txt", "a") as f: f.write("executing ban query...\n")
+                except: pass
+                res = db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
+                try:
+                    with open("debug_log.txt", "a") as f: f.write(f"ban result: {res.data}\n")
+                except: pass
                 if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "🔨 Účet zablokován", "Váš přístup do aplikace byl zablokován.", 0xef4444), bot.loop)
                 flash('BAN udělen.', 'warning')
                 if str(session.get('discord_id')) == str(discord_id): session.clear()
