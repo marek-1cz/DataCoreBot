@@ -1780,7 +1780,7 @@ def stranka_ucet():
     if avatar_url:
         avatar_img_html = f'<img src="{avatar_url}">'
     else:
-        avatar_img_html = '<i class="fas fa-user-circle"></i>'
+        avatar_img_html = '<i class="fas fa-user-circle" style="color:#94a3b8;"></i>'
         
     has_discord = bool(u.get('discord_id'))
     has_email = bool(u.get('email'))
