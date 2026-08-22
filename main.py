@@ -2118,7 +2118,8 @@ def edit_user():
                 db.table("users").delete().eq("discord_id", discord_id).execute()
                 flash('Účet trvale smazán.', 'dark')
                 if str(session.get('discord_id')) == str(discord_id): session.clear()
-        except: pass
+        except Exception as e:
+            flash(f"Chyba při úpravě uživatele (akce {action}): {e}", "error")
     return redirect(url_for('dashboard_main'))
 
 @app.route('/dashboard/app_management', methods=['GET'], strict_slashes=False)
