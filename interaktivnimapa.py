@@ -451,7 +451,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 @keyframes routeDraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0;}}
 /* Floating close-route button */
 #close-route-btn, #edit-route-btn, #save-route-btn { display:none; position:fixed; z-index:4200; border-radius:24px; padding:8px 22px; font-size:13px; font-weight:700; cursor:pointer; backdrop-filter:blur(8px); transition:all .2s; letter-spacing:.3px; }
-#close-route-btn { bottom: 40px; left: calc(50% - 65px); transform:translateX(-50%); background:rgba(15,23,42,.92); color:#ef4444; border:1.5px solid #ef4444; box-shadow:0 4px 20px rgba(239,68,68,.35); }
+#close-route-btn { top: 90px; bottom: auto; left: 50%; padding: 12px 28px; font-size: 15px; transform:translateX(-50%); background:rgba(15,23,42,.92); color:#ef4444; border:1.5px solid #ef4444; box-shadow:0 4px 20px rgba(239,68,68,.35); }
 #close-route-btn:hover { background:#ef4444; color:#fff; box-shadow:0 4px 28px rgba(239,68,68,.6); }
 #edit-route-btn { bottom: 40px; left: calc(50% + 65px); transform:translateX(-50%); background:rgba(15,23,42,.92); color:#38bdf8; border:1.5px solid #38bdf8; box-shadow:0 4px 20px rgba(56,189,248,.35); }
 #edit-route-btn:hover { background:#38bdf8; color:#fff; box-shadow:0 4px 28px rgba(56,189,248,.6); }
@@ -541,7 +541,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
   /* HUD floating higher up to not collide with bottom popups */
   #hud { top: auto !important; left: 10px !important; right: auto !important; bottom: 100px !important; z-index: 4500 !important; }
   
-  #close-route-btn { top: auto !important; bottom: 70px !important; left: 50% !important; transform: translateX(-50%) !important; }
+  #close-route-btn { top: auto !important; bottom: 70px !important; left: 50% !important; transform: translateX(-50%) !important; padding: 8px 22px !important; font-size: 13px !important; }
   #edit-route-btn, #save-route-btn { top: auto !important; bottom: 110px !important; left: 50% !important; transform: translateX(-50%) !important; }
 
   /* Settings button top right below nav */
