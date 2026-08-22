@@ -491,26 +491,61 @@ body.nt-add-active #map{cursor:crosshair !important;}
 #log-body .lg-warn{color:#fbbf24;}
 #log-body .lg-ok{color:#34d399;}
 @media(max-width:768px){
-  #top-nav{gap:4px;padding:4px 5px;height:auto;min-height:50px;flex-wrap:wrap;justify-content:center;}
-  .n-title,.n-warn{display:none;}
-  .n-clock{font-size:10px;padding:3px 5px;}
+  #top-nav{gap:4px;padding:4px 5px;height:auto;min-height:50px;flex-wrap:wrap;justify-content:center;z-index:4800 !important;width: 100% !important; border-radius: 0;}
+  .n-title,.n-warn,.n-clock,.n-sp{display:none !important;}
   .n-btn{font-size:10px;padding:4px 7px;}
   #pub-stops-btn{font-size:11px;padding:5px 10px;}
-  #spz-search-inp{width:80px;font-size:11px;}
-  #hf{width:200px;}
+  #spz-search-inp{width:90px !important;font-size:11px;}
+  
+  body.nav-glass #top-nav { width: 98% !important; border-radius: 14px !important; left: 50% !important; transform: translateX(-50%) !important; top: 10px !important; }
+  body.nav-glass-hide #top-nav { top: -160px !important; }
+  body.nav-glass-hide #top-nav.vis { top: 10px !important; }
+
+  #hf{width:220px; padding: 10px;}
   .dark-popup .leaflet-popup-content{width:240px!important;}
-  #log-panel{bottom:auto;top:130px;right:4px;left:4px;width:auto;max-width:100vw;}
-  #log-body,#log-errors-body,#log-spz-body,#log-missing-body,#log-report-body,#log-approx-body{max-height:160px;user-select:text !important;-webkit-user-select:text !important;}
-  #nt-edit-pop{left:4px;right:4px;bottom:10px;width:auto;max-height:80vh;overflow-y:auto;}
-  #bus-detail-pop, #stop-info-pop { width: 92% !important; left: 4% !important; bottom: 20px !important; top: auto !important; transform: none !important; }
+  
+  /* Log and main popups - bottom sheet style */
+  #log-panel, #nt-edit-pop, #bus-detail-pop, #stop-info-pop {
+    top: auto !important;
+    bottom: 10px !important;
+    left: 10px !important;
+    right: 10px !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: 50vh !important;
+    overflow-y: auto !important;
+    transform: none !important;
+    z-index: 4600 !important;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.8) !important;
+  }
+  #log-body,#log-errors-body,#log-spz-body,#log-missing-body,#log-report-body,#log-approx-body{max-height:35vh;user-select:text !important;-webkit-user-select:text !important;}
+  
+  /* Top panels (lines, editors) */
+  #lines-overlay-panel, #line-editor-panel, #depot-admin-panel {
+    top: 75px !important;
+    left: 10px !important;
+    right: 10px !important;
+    width: auto !important;
+    max-height: calc(100vh - 90px) !important;
+    overflow-y: auto !important;
+    z-index: 4600 !important;
+  }
+
   .sip-lines{flex-wrap:wrap;gap:3px;}
   .lp-h div{gap:2px;flex-wrap:wrap;}
   .lp-h div button{font-size:10px;padding:2px 5px;}
-  #nt-add-bar{left:4px;right:4px;transform:none;flex-wrap:wrap;gap:5px;}
+  
+  #nt-add-bar{left:10px;right:10px;transform:none;flex-wrap:wrap;gap:5px;top:75px;}
   #idos-modal-box{width:100% !important;height:100% !important;max-width:none !important;border:none !important;border-radius:0 !important;}
-  #hud { top: auto !important; left: 10px !important; right: auto !important; bottom: 30px !important; }
-  #close-route-btn { top: auto !important; bottom: 140px !important; left: 50% !important; transform: translateX(-50%) !important; }
-  #edit-route-btn, #save-route-btn { top: auto !important; bottom: 190px !important; left: 50% !important; transform: translateX(-50%) !important; }
+  
+  /* HUD floating higher up to not collide with bottom popups */
+  #hud { top: auto !important; left: 10px !important; right: auto !important; bottom: 100px !important; z-index: 4500 !important; }
+  
+  #close-route-btn { top: auto !important; bottom: 70px !important; left: 50% !important; transform: translateX(-50%) !important; }
+  #edit-route-btn, #save-route-btn { top: auto !important; bottom: 110px !important; left: 50% !important; transform: translateX(-50%) !important; }
+
+  /* Settings button top right below nav */
+  #settings-btn-wrap { top: 70px !important; bottom: auto !important; right: 10px !important; z-index: 4800 !important; }
 }
 @media(max-width:420px){
   .n-provoz{display:none;}
@@ -550,16 +585,7 @@ body.nav-glass #top-nav { top: 15px !important; left: 50% !important; right: aut
 body.nav-glass-hide #top-nav { top: -150px !important; }
 body.nav-glass-hide #top-nav.vis { top: 15px !important; }
 body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn { display: none !important; }
-@media (max-width: 768px) {
-  .n-sp { display: none !important; }
-  #top-nav { flex-wrap: wrap !important; height: auto; min-height: 50px; padding: 4px 6px; justify-content: center; gap: 4px; width: 100% !important; border-radius: 0; }
-  body.nav-glass #top-nav { width: 98% !important; border-radius: 14px !important; flex-wrap: wrap !important; left: 50% !important; transform: translateX(-50%) !important; top: 10px !important; }
-  body.nav-glass-hide #top-nav { top: -160px !important; }
-  body.nav-glass-hide #top-nav.vis { top: 10px !important; }
-  .n-warn, .n-clock, .n-title { display: none !important; }
-  #spz-search-inp { width: 90px !important; }
-  #settings-btn-wrap { top: auto !important; bottom: 90px !important; right: 10px !important; }
-}
+
 </style>
 
 <div id="map-wrap">
