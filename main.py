@@ -60,18 +60,48 @@ except AttributeError:
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
+import secrets as _secrets
+import hmac as _hmac
+import hashlib as _hashlib
+from collections import defaultdict
+
 app = Flask(__name__)
-app.secret_key = "ois_idpk_super_tajny_klic"
+# ── Secret key MUSTÍ být nastaven jako env proměnná FLASK_SECRET_KEY ──
+_flask_secret = os.environ.get('FLASK_SECRET_KEY')
+if not _flask_secret:
+    # Fallback pro dev prostředí – v produkci VZDY nastav env!
+    _flask_secret = _secrets.token_hex(64)
+    print('[SECURITY] VAROVANI: FLASK_SECRET_KEY neni nastaven! Pouzivam nahodny klic (sessions se resetuji pri restartu).', flush=True)
+app.secret_key = _flask_secret
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = True  # Koyeb bezi na HTTPS
 
 app.register_blueprint(mapa_bp)
 
+# ── Whitelist povolených originů pro CORS ──
+_CORS_ORIGINS = {
+    'https://datacorebot.koyeb.app',
+    'https://ois-idpk.cz',
+    'https://www.ois-idpk.cz',
+}
+
 @app.after_request
-def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
+def add_security_headers(response):
+    # CORS – pouze whitelisted origins
+    origin = request.headers.get('Origin', '')
+    if origin in _CORS_ORIGINS:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Vary'] = 'Origin'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Range'
-    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
+    # Bezpečnostní hlavicky
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), camera=(), microphone=()'
     return response
 
 def get_prague_time():
@@ -83,13 +113,30 @@ DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
 def handle_exception(e):
     if isinstance(e, HTTPException):
         return f"<div style='background:#0f172a; color:#f59e0b; padding:40px; font-family:sans-serif; text-align:center; height:100vh; box-sizing:border-box;'><h2 style='font-size:40px;'>CHYBA {e.code}</h2><p style='font-size:18px; color:white;'>Stránka nebyla nalezena.</p><a href='/' style='display:inline-block; margin-top:20px; padding:10px 20px; background:#38bdf8; color:black; text-decoration:none; font-weight:bold; border-radius:5px;'>Zpět domů</a></div>", e.code
-    return f"<div style='background:#0f172a; color:#ef4444; padding:20px; font-family:monospace; border:2px solid #ef4444;'><h2>CHYBA (500)</h2><pre>{traceback.format_exc()}</pre></div>", 500
+    # 500 – NIKDY nezobrazovat traceback věřejnosti!
+    print('[ERROR 500]', traceback.format_exc(), flush=True)
+    return "<div style='background:#0f172a; color:#ef4444; padding:40px; font-family:sans-serif; text-align:center;'><h2>Došlo k interní chybě.</h2><p>Chyba byla zalogována. Kontaktujte administrátora.</p><a href='/' style='background:#334155;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;'>Zpět</a></div>", 500
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 SMTP_EMAIL = os.environ.get("SMTP_EMAIL")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
+BMAC_WEBHOOK_SECRET = os.environ.get("BMAC_WEBHOOK_SECRET", "")
 _db_client = None
+
+# ── In-memory rate limiter (jednoduchý, bez externí závislosti) ──
+_rl_store: dict = defaultdict(list)
+
+def _rate_limit_check(key: str, max_calls: int, window_seconds: int) -> bool:
+    """Vrátí True pokud je povolen průchod, False pokud je limit překročen."""
+    import time as _time
+    now = _time.monotonic()
+    window_start = now - window_seconds
+    _rl_store[key] = [t for t in _rl_store[key] if t > window_start]
+    if len(_rl_store[key]) >= max_calls:
+        return False
+    _rl_store[key].append(now)
+    return True
 
 def get_db():
     global _db_client
@@ -1129,14 +1176,17 @@ def claim_role():
         return redirect(url_for('claim_role'))
     return render_public(HTML_CLAIM)
 
-@app.route('/webhook/bmac', methods=['GET', 'POST', 'OPTIONS'])
+@app.route('/webhook/bmac', methods=['POST', 'OPTIONS'])
 def bmac_webhook():
     if request.method == 'OPTIONS': return _cors_jsonify({})
+    if BMAC_WEBHOOK_SECRET:
+        sig_header = request.headers.get('X-Signature-Sha256', '')
+        expected = 'sha256=' + _hmac.new(BMAC_WEBHOOK_SECRET.encode(), request.data, _hashlib.sha256).hexdigest()
+        if not _hmac.compare_digest(expected, sig_header):
+            return jsonify({'status': 'error', 'message': 'Invalid signature'}), 401
     try:
-        if request.method == 'POST':
-            payload = request.get_json(silent=True) or {}
-            data = payload.get('data', payload) if isinstance(payload, dict) else {}
-        else: data = request.args
+        payload = request.get_json(silent=True) or {}
+        data = payload.get('data', payload) if isinstance(payload, dict) else {}
         name = data.get('supporter_name') or data.get('payer_name') or data.get('name') or 'Anonymní dárce'
         message = data.get('support_note') or data.get('message') or ''
         amount_val = data.get('amount') or data.get('support_coffees') or 1
@@ -1539,7 +1589,16 @@ def api_submit_feedback():
 
 @app.route('/login_request', methods=['POST'])
 def login_request():
-    discord_id = request.form.get('discord_id')
+    # Rate limit: 5 pokusů / minutu na IP
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+    if not _rate_limit_check(f'dash_login:{client_ip}', 5, 60):
+        flash('Příliš mnoho pokusů o přihlášení. Zkuste to za minutu.', 'error')
+        return redirect(url_for('dashboard_main'))
+    discord_id = request.form.get('discord_id', '').strip()
+    # Validace – Discord ID musí být číselne
+    if not discord_id.isdigit():
+        flash('Neplatné Discord ID.', 'error')
+        return redirect(url_for('dashboard_main'))
     db = get_db()
     if db and discord_id:
         try:
@@ -1559,8 +1618,10 @@ def login_request():
                     if not has_access:
                         flash('Přístup zamítnut. Dashboard přístup musí být povolen ručně administrátorem.', 'error')
                     else:
-                        token = str(uuid.uuid4())
-                        db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
+                        import time as _t
+                        token = _secrets.token_hex(32)  # Kryptograficky bezpečný token
+                        token_expiry = int(_t.time()) + 600  # 10 minut expiry
+                        db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("discord_id", discord_id).execute()
                         async def send():
                             try:
                                 u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
@@ -1591,16 +1652,27 @@ def check_auth(discord_id):
 
 @app.route('/dashboard/login_finalize')
 def login_finalize():
-    discord_id = request.args.get('discord_id')
+    discord_id = request.args.get('discord_id', '').strip()
+    if not discord_id.isdigit():
+        return redirect(url_for('home'))
     db = get_db()
     if db and discord_id:
-        user = db.table("users").select("login_token").eq("discord_id", discord_id).execute().data
-        if user and user[0].get("login_token") == "approved":
-            session.permanent = True
-            session['logged_in'] = True
-            session['discord_id'] = discord_id
-            db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-            return redirect(url_for('dashboard_main'))
+        import time as _t
+        user = db.table("users").select("login_token, login_token_expires_at, dashboard_access").eq("discord_id", discord_id).execute().data
+        if user:
+            u = user[0]
+            # Ověřit: token, expiry a dashboard_access
+            token_exp = int(u.get('login_token_expires_at') or 0)
+            if (u.get("login_token") == "approved"
+                    and u.get("dashboard_access")
+                    and (token_exp == 0 or _t.time() <= token_exp)):
+                session.permanent = True
+                session['logged_in'] = True
+                session['discord_id'] = discord_id
+                db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("discord_id", discord_id).execute()
+                return redirect(url_for('dashboard_main'))
+            elif token_exp > 0 and _t.time() > token_exp:
+                db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("discord_id", discord_id).execute()
     return redirect(url_for('home'))
 
 class WebAuthView(discord.ui.View):
@@ -1647,9 +1719,13 @@ def auth_pages():
 
 @app.route('/api/auth/discord/request', methods=['POST'])
 def web_auth_discord_request():
-    discord_id = request.json.get('discord_id')
+    # Rate limit: 5 pokusu / 2 minuty na IP
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+    if not _rate_limit_check(f'auth_discord:{client_ip}', 5, 120):
+        return jsonify({'status': 'error', 'message': 'Příliš mnoho pokusů. Zkuste to za chvíli.'}), 429
+    discord_id = request.json.get('discord_id') if request.is_json else None
     db = get_db()
-    if not db or not discord_id:
+    if not db or not discord_id or not str(discord_id).isdigit():
         return jsonify({"status": "error", "message": "Neplatný požadavek."})
     
     try:
@@ -1685,9 +1761,13 @@ def web_auth_discord_request():
 
 @app.route('/api/auth/email/request', methods=['POST'])
 def web_auth_email_request():
-    email = request.json.get('email')
+    # Rate limit: 3 pokusu / 5 minut na IP
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+    if not _rate_limit_check(f'auth_email:{client_ip}', 3, 300):
+        return jsonify({'status': 'error', 'message': 'Příliš mnoho pokusů o zaslání e-mailu. Zkuste to za 5 minut.'}), 429
+    email = request.json.get('email') if request.is_json else None
     db = get_db()
-    if not db or not email:
+    if not db or not email or '@' not in email:
         return jsonify({"status": "error", "message": "Neplatný e-mail."})
     
     try:
@@ -1703,8 +1783,10 @@ def web_auth_email_request():
             if new_app_id: insert_data["app_id"] = new_app_id
             db.table("users").insert(insert_data).execute()
         
-        import random; token = str(random.randint(10000, 99999))
-        db.table("users").update({"login_token": token}).eq("email", email).execute()
+        import time as _t
+        token = _secrets.token_hex(16)  # 128-bit bezpečný token místo 5číselneho
+        token_expiry = int(_t.time()) + 900  # 15 minut
+        db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("email", email).execute()
         
         if send_magic_link_email(email, token):
             return jsonify({"status": "success"})
@@ -1754,23 +1836,27 @@ def web_auth_finalize():
     cookie_token = request.cookies.get('web_session_token')
     db = get_db()
     if db and token and auth_type == "email":
+        import time as _t
         user = db.table("users").select("*").eq("login_token", token).execute().data
         if user:
             u = user[0]
+            # Zkontrolovat expiraci tokenu (15 minut)
+            token_exp = int(u.get('login_token_expires_at') or 0)
+            if token_exp > 0 and _t.time() > token_exp:
+                db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+                return "Odkaz vypršel (platnost 15 minut). Požádejte o nový odkaz.", 400
             email = u.get("email")
-            
             if cookie_token:
                 curr_user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
                 if curr_user and curr_user[0].get('id') != u.get('id'):
                     db.table("users").delete().eq("id", u.get("id")).execute()
                     db.table("users").update({"email": email}).eq("web_session_token", cookie_token).execute()
                     return redirect('/ucet')
-                    
-            perm_token = str(uuid.uuid4())
-            db.table("users").update({"login_token": "", "web_session_token": perm_token}).eq("email", email).execute()
-            
+            perm_token = _secrets.token_hex(32)
+            db.table("users").update({"login_token": "", "login_token_expires_at": 0, "web_session_token": perm_token}).eq("email", email).execute()
             resp = redirect('/ucet')
-            resp.set_cookie('web_session_token', perm_token, max_age=60*60*24*30) # 30 days
+            resp.set_cookie('web_session_token', perm_token, max_age=60*60*24*30,
+                            secure=True, httponly=True, samesite='Strict')
             return resp
     return "Neplatný nebo expirovaný odkaz.", 400
 
@@ -1781,7 +1867,7 @@ def web_auth_logout():
     if cookie_token and db:
         db.table("users").update({"web_session_token": ""}).eq("web_session_token", cookie_token).execute()
     resp = jsonify({"status": "success"})
-    resp.set_cookie('web_session_token', '', expires=0)
+    resp.set_cookie('web_session_token', '', expires=0, secure=True, httponly=True, samesite='Strict')
     return resp
 
 @app.route('/api/auth/me')
@@ -2927,9 +3013,9 @@ async def ping(ctx): await ctx.send(f"🏓 Pong! Odezva: **{round(bot.latency * 
 @bot.command()
 async def help(ctx):
     embed = discord.Embed(title="🤖 Nápověda - Projekt OIS IDPK", color=0x38bdf8)
-    embed.add_field(name="🌍 Veřejné", value="`!auth`, `!ping`, `!verze`, `!help`, `!register`", inline=False)
+    embed.add_field(name="🌍 Veřejné", value="`!auth`, `!ping`, `!help`, `!register`", inline=False)
     embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]`, `!db [ID]`, `!ban`, `!unban`, `!delete`, `!perdelete`, `!dm @user`, `!message #channel`, `!website_block`, `!website_block_mapa`", inline=False)
-    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download`, `!sm @uživatel`, `!debugvozovna`, `!aktulizace`", inline=False)
+    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download`, `!sm @uživatel`, `!debugvozovna`, `!aktulizace`, `!dashadd [id] [viewer|admin|superadmin]`, `!dashremove [id]`", inline=False)
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -2961,7 +3047,9 @@ async def verze(ctx):
     await ctx.send(embed=embed)
 
 @bot.command()
+@check_sm_role()
 async def info(ctx, discord_id: str = None):
+    """Zobrazí info o uživateli. Vyžaduje roli SM."""
     if not discord_id: return await ctx.send("❌ Zadejte ID.")
     db = get_db()
     if not db: return
