@@ -670,13 +670,26 @@ def check_session_validity():
                 pass
 
 async def update_member_roles(member, role_string):
-    if not member or not role_string: return
+    if not member: return
     try:
-        roles_to_assign = [r.strip() for r in role_string.split(',') if r.strip()]
-        for r_name in roles_to_assign:
-            role = discord.utils.get(member.guild.roles, name=r_name)
+        role_map = {"SA": "web-sa", "DEV": "web-dev", "BT": "web-bt"}
+        roles_to_assign = [r.strip() for r in (role_string or "").split(',') if r.strip()]
+        
+        target_discord_roles = [role_map.get(r, r) for r in roles_to_assign]
+        
+        # Add roles they should have
+        for r_name in target_discord_roles:
+            role = discord.utils.find(lambda r: r.name.lower() == r_name.lower(), member.guild.roles)
             if role and role not in member.roles:
                 await member.add_roles(role)
+                
+        # Remove managed roles they shouldn't have anymore
+        for internal_name, discord_name in role_map.items():
+            if discord_name not in target_discord_roles:
+                role = discord.utils.find(lambda r: r.name.lower() == discord_name.lower(), member.guild.roles)
+                if role and role in member.roles:
+                    await member.remove_roles(role)
+                    
     except Exception as e:
         print(f"Chyba při updatu rolí: {e}", flush=True)
 
