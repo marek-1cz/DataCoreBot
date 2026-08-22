@@ -8,6 +8,7 @@ import time
 import discord
 from discord.ext import commands, tasks
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash, Response, stream_with_context, jsonify
+from functools import wraps
 from threading import Thread
 from supabase import create_client
 from datetime import datetime, timedelta
@@ -508,6 +509,53 @@ def render_dashboard(template_string, **kwargs):
     if 'statuses' not in kwargs:
         kwargs['statuses'] = get_system_statuses()
     return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html.replace('{{ deploy_time }}', DEPLOY_TIME)), **kwargs)
+
+# ─── Dashboard oprávnění ────────────────────────────────────────────────────
+# Úrovně: superadmin > admin > viewer
+# Nastavuje se sloupcem dashboard_level v tabulce users.
+# Pokud sloupec neexistuje, fallback = 'admin' pro starý dashboard_access=True.
+
+DASH_LEVEL_ORDER = {'superadmin': 3, 'admin': 2, 'viewer': 1}
+
+def _get_dash_level(discord_id: str) -> str:
+    """Vrátí dashboard_level uživatele nebo '' pokud nemá přístup."""
+    try:
+        db = get_db()
+        if not db or not discord_id:
+            return ''
+        user = db.table('users').select('dashboard_access, dashboard_level, is_banned, is_deleted').eq('discord_id', discord_id).execute().data
+        if not user:
+            return ''
+        u = user[0]
+        if u.get('is_banned') or u.get('is_deleted'):
+            return ''
+        if not u.get('dashboard_access'):
+            return ''
+        # Fallback: pokud nemá nastaven dashboard_level, považujeme ho za 'admin'
+        return str(u.get('dashboard_level') or 'admin').lower()
+    except:
+        return ''
+
+def require_dash_level(min_level: str = 'viewer'):
+    """Dekorátor – vyžaduje minimální dashboard_level. Přesměruje nebo vrátí 403."""
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not session.get('logged_in'):
+                return redirect(url_for('dashboard_main'))
+            discord_id = session.get('discord_id')
+            level = _get_dash_level(str(discord_id or ''))
+            if not level:
+                session.clear()
+                flash('Váš přístup byl zrušen.', 'error')
+                return redirect(url_for('dashboard_main'))
+            if DASH_LEVEL_ORDER.get(level, 0) < DASH_LEVEL_ORDER.get(min_level, 1):
+                flash(f'Tato akce vyžaduje oprávnění "{min_level}". Vaše úroveň: "{level}".', 'error')
+                return redirect(url_for('dashboard_main'))
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.before_request
 def check_session_validity():
@@ -1505,21 +1553,11 @@ def login_request():
                 elif user_data.get("is_banned"):
                     flash('Tento účet byl zablokován (banned).', 'error')
                 else:
+                    # ── Přístup POUZE dle záznamu v DB, bez Discord role check ──
                     has_access = (user_data.get("dashboard_access") == True)
-                    if not has_access:
-                        try:
-                            uid = int(discord_id)
-                            for guild in bot.guilds:
-                                member = guild.get_member(uid)
-                                if member:
-                                    if discord.utils.get(member.roles, name="SM") or discord.utils.get(member.roles, name="web-sa") or member.guild_permissions.administrator:
-                                        has_access = True
-                                        db.table("users").update({"dashboard_access": True}).eq("discord_id", discord_id).execute()
-                                        break
-                        except: pass
 
                     if not has_access:
-                        flash('Tento účet nemá povolený přístup do administračního panelu (chybí role SM/web-sa nebo dashboard_access v DB).', 'error')
+                        flash('Přístup zamítnut. Dashboard přístup musí být povolen ručně administrátorem.', 'error')
                     else:
                         token = str(uuid.uuid4())
                         db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
@@ -1959,8 +1997,8 @@ def dashboard_main():
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů", deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/edit_user', methods=['POST'])
+@require_dash_level('admin')
 def edit_user():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db(); discord_id = request.form.get("discord_id"); action = request.form.get("action"); nick = request.form.get("nick"); email = request.form.get("email")
     if db and discord_id:
         try:
@@ -2060,8 +2098,8 @@ def trigger_status_channel_update():
         asyncio.run_coroutine_threadsafe(_trigger_status_update(), bot.loop)
 
 @app.route('/dashboard/toggle_software', methods=['POST'])
+@require_dash_level('superadmin')
 def toggle_software():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     new_status = request.form.get('new_status', 'True')
     db = get_db()
     if db:
@@ -2071,8 +2109,8 @@ def toggle_software():
     return redirect(url_for('dashboard_app_management'))
 
 @app.route('/dashboard/toggle_downloads', methods=['POST'])
+@require_dash_level('superadmin')
 def toggle_downloads():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     new_status = request.form.get('new_status', 'True')
     db = get_db()
     if db:
@@ -2084,8 +2122,8 @@ def toggle_downloads():
     return redirect(url_for('dashboard_downloads' if ret == 'downloads' else 'dashboard_app_management'))
 
 @app.route('/dashboard/toggle_web_login', methods=['POST'])
+@require_dash_level('superadmin')
 def toggle_web_login():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     new_status = request.form.get('new_status', 'True')
     db = get_db()
     if db:
@@ -2096,8 +2134,8 @@ def toggle_web_login():
     return redirect(url_for('dashboard_app_management'))
 
 @app.route('/dashboard/toggle_map', methods=['POST'])
+@require_dash_level('superadmin')
 def toggle_map():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     new_status = request.form.get('new_status', 'True')
     db = get_db()
     if db:
@@ -2108,8 +2146,8 @@ def toggle_map():
     return redirect(url_for('dashboard_app_management'))
 
 @app.route('/dashboard/toggle_maintenance', methods=['POST'])
+@require_dash_level('superadmin')
 def toggle_maintenance():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     new_status = request.form.get('new_status', 'False')
     db = get_db()
     if db:
@@ -2216,8 +2254,8 @@ def dashboard_downloads():
     return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled, deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/add_version', methods=['POST'])
+@require_dash_level('superadmin')
 def add_version():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     try:
         get_db().table("software_versions").insert({"version_name": request.form.get("version_name"), "db_version": request.form.get("db_version"), "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role"), "is_active": True, "eol_date": ""}).execute()
         flash('Nová verze vydána!', 'success')
@@ -2226,8 +2264,8 @@ def add_version():
     return redirect(url_for('dashboard_downloads'))
 
 @app.route('/dashboard/edit_version', methods=['POST'])
+@require_dash_level('superadmin')
 def edit_version():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     try:
         get_db().table("software_versions").update({"version_name": request.form.get("version_name"), "db_version": request.form.get("db_version"), "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role"), "is_active": True if request.form.get("is_active") else False, "eol_date": request.form.get("eol_date", "")}).eq("id", request.form.get("version_id")).execute()
         flash('Verze upravena.', 'success')
@@ -2236,8 +2274,8 @@ def edit_version():
     return redirect(url_for('dashboard_downloads'))
 
 @app.route('/dashboard/delete_version', methods=['POST'])
+@require_dash_level('superadmin')
 def delete_version():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     try:
         get_db().table("software_versions").delete().eq("id", request.form.get("version_id")).execute()
         flash('Verze smazána.', 'success')
@@ -2328,8 +2366,8 @@ def dashboard_supporters():
     return render_dashboard(HTML_SUPPORTERS_MGMT, pending_claims=pending_claims, supporters_history=supporters_history, deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/add_supporter', methods=['POST'])
+@require_dash_level('admin')
 def add_supporter():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db()
     if db:
         try:
@@ -2339,8 +2377,8 @@ def add_supporter():
     return redirect(url_for('dashboard_supporters'))
 
 @app.route('/dashboard/approve_claim', methods=['POST'])
+@require_dash_level('admin')
 def approve_claim():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db(); claim_id = request.form.get("claim_id"); discord_nick = request.form.get("discord_nick", ""); amount = request.form.get("amount", "0")
     if db and claim_id:
         try:
@@ -2353,8 +2391,8 @@ def approve_claim():
     return redirect(url_for('dashboard_supporters'))
 
 @app.route('/dashboard/reject_claim', methods=['POST'])
+@require_dash_level('admin')
 def reject_claim():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db(); claim_id = request.form.get("claim_id")
     if db and claim_id:
         try:
@@ -2390,8 +2428,8 @@ def dashboard_feedback():
     return render_dashboard(HTML_FEEDBACK, hwid_pending=hwid_p, bypass_pending=bypass_p, general_pending=gen_p, resolved_all=res_all, deploy_time=DEPLOY_TIME)
 
 @app.route('/dashboard/feedback_reset_hwid', methods=['POST'])
+@require_dash_level('admin')
 def feedback_reset_hwid():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     fb_id = request.form.get("feedback_id"); d_id = request.form.get("discord_id")
     db = get_db()
     if db and fb_id and d_id:
@@ -2448,8 +2486,8 @@ def feedback_reply():
     return redirect(url_for('dashboard_feedback'))
 
 @app.route('/dashboard/bypass_approve', methods=['POST'])
+@require_dash_level('admin')
 def bypass_approve():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     fb_id = request.form.get("feedback_id")
     db = get_db()
     if db and fb_id:
@@ -2475,8 +2513,8 @@ def bypass_reject():
     return redirect(url_for('dashboard_feedback'))
 
 @app.route('/dashboard/update_statuses', methods=['POST'])
+@require_dash_level('superadmin')
 def update_statuses():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db()
     if db:
         try:
@@ -2490,6 +2528,151 @@ def update_statuses():
         except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_app_management'))
 
+
+# ─── Správa dashboard adminů ─────────────────────────────────────────────────
+
+@app.route('/dashboard/admins', methods=['GET'], strict_slashes=False)
+@require_dash_level('superadmin')
+def dashboard_admins():
+    admins = []
+    try:
+        db = get_db()
+        if db:
+            admins = db.table('users').select('discord_id, nick, dashboard_access, dashboard_level, role').eq('dashboard_access', True).order('nick').execute().data or []
+    except Exception as e:
+        flash(f'Chyba DB: {e}', 'error')
+    return render_dashboard(_DASH_ADMINS_HTML, admins=admins, deploy_time=DEPLOY_TIME)
+
+@app.route('/dashboard/admins/grant', methods=['POST'])
+@require_dash_level('superadmin')
+def dashboard_admins_grant():
+    discord_id = request.form.get('discord_id', '').strip()
+    level = request.form.get('level', 'viewer').strip().lower()
+    if level not in ('viewer', 'admin', 'superadmin'):
+        level = 'viewer'
+    db = get_db()
+    if not db or not discord_id:
+        flash('Chybí Discord ID.', 'error')
+        return redirect(url_for('dashboard_admins'))
+    user = db.table('users').select('discord_id, nick').eq('discord_id', discord_id).execute().data
+    if not user:
+        flash(f'Uživatel s Discord ID {discord_id} nenalezen v databázi.', 'error')
+        return redirect(url_for('dashboard_admins'))
+    db.table('users').update({'dashboard_access': True, 'dashboard_level': level}).eq('discord_id', discord_id).execute()
+    send_log('🔑 Dashboard přístup udělen', f'Uživateli **{user[0].get("nick", discord_id)}** (`{discord_id}`) byl udělen přístup do dashboardu se úrovní **{level}**.', 0x38bdf8)
+    flash(f'Přístup udělen: {user[0].get("nick", discord_id)} → {level}', 'success')
+    return redirect(url_for('dashboard_admins'))
+
+@app.route('/dashboard/admins/revoke', methods=['POST'])
+@require_dash_level('superadmin')
+def dashboard_admins_revoke():
+    discord_id = request.form.get('discord_id', '').strip()
+    # Superadmin nemůže odebrat sám sobě přístup
+    if str(discord_id) == str(session.get('discord_id')):
+        flash('Nemůžeš odebrat přístup sám sobě!', 'error')
+        return redirect(url_for('dashboard_admins'))
+    db = get_db()
+    if not db or not discord_id:
+        flash('Chybí Discord ID.', 'error')
+        return redirect(url_for('dashboard_admins'))
+    user = db.table('users').select('discord_id, nick').eq('discord_id', discord_id).execute().data
+    db.table('users').update({'dashboard_access': False, 'dashboard_level': ''}).eq('discord_id', discord_id).execute()
+    nick = user[0].get('nick', discord_id) if user else discord_id
+    send_log('🔒 Dashboard přístup odebrán', f'Uživateli **{nick}** (`{discord_id}`) byl odebrán dashboard přístup.', 0xef4444)
+    flash(f'Přístup odebrán: {nick}', 'success')
+    return redirect(url_for('dashboard_admins'))
+
+@app.route('/dashboard/admins/change_level', methods=['POST'])
+@require_dash_level('superadmin')
+def dashboard_admins_change_level():
+    discord_id = request.form.get('discord_id', '').strip()
+    level = request.form.get('level', 'viewer').strip().lower()
+    if level not in ('viewer', 'admin', 'superadmin'):
+        level = 'viewer'
+    if str(discord_id) == str(session.get('discord_id')):
+        flash('Nemůžeš měnit vlastní úroveň!', 'error')
+        return redirect(url_for('dashboard_admins'))
+    db = get_db()
+    if db and discord_id:
+        db.table('users').update({'dashboard_level': level}).eq('discord_id', discord_id).execute()
+        flash(f'Úroveň změněna na {level}.', 'success')
+    return redirect(url_for('dashboard_admins'))
+
+_DASH_ADMINS_HTML = '''
+<div style="max-width:900px;margin:0 auto;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+    <h2 style="margin:0;color:#38bdf8;"><i class="fas fa-shield-alt"></i> Správa dashboard adminů</h2>
+  </div>
+  <div style="background:#1e293b;border:1px solid #f59e0b;border-radius:10px;padding:16px;margin-bottom:24px;">
+    <div style="color:#f59e0b;font-weight:bold;margin-bottom:10px;"><i class="fas fa-exclamation-triangle"></i> Přidat nového admina</div>
+    <form method="POST" action="/dashboard/admins/grant" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+      <div><label style="font-size:12px;color:#94a3b8;">Discord ID uživatele</label><br>
+        <input name="discord_id" type="text" placeholder="Např. 123456789012345678" style="background:#0f172a;color:#fff;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-size:13px;width:230px;margin-top:4px;">
+      </div>
+      <div><label style="font-size:12px;color:#94a3b8;">Úroveň přístupu</label><br>
+        <select name="level" style="background:#0f172a;color:#fff;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-size:13px;margin-top:4px;">
+          <option value="viewer">👁️ Viewer – pouze čtení</option>
+          <option value="admin">🛡️ Admin – správa uživatelů</option>
+          <option value="superadmin">⭐ Superadmin – vše</option>
+        </select>
+      </div>
+      <button type="submit" style="background:#10b981;color:#fff;border:none;border-radius:6px;padding:9px 18px;font-weight:bold;cursor:pointer;"><i class="fas fa-plus"></i> Udělit přístup</button>
+    </form>
+  </div>
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;overflow:hidden;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:#0f172a;">
+        <th style="padding:10px 14px;text-align:left;color:#94a3b8;">Uživatel</th>
+        <th style="padding:10px 14px;text-align:left;color:#94a3b8;">Discord ID</th>
+        <th style="padding:10px 14px;text-align:left;color:#94a3b8;">Úroveň</th>
+        <th style="padding:10px 14px;text-align:center;color:#94a3b8;">Akce</th>
+      </tr></thead>
+      <tbody>
+      {% for a in admins %}
+      <tr style="border-top:1px solid #334155;">
+        <td style="padding:10px 14px;color:#fff;font-weight:bold;">{{ a.nick or "–" }}</td>
+        <td style="padding:10px 14px;color:#94a3b8;font-family:monospace;">{{ a.discord_id }}</td>
+        <td style="padding:10px 14px;">
+          {% set lv = (a.dashboard_level or "admin").lower() %}
+          {% if lv == "superadmin" %}<span style="background:rgba(245,158,11,.2);color:#f59e0b;border:1px solid #f59e0b;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:bold;">⭐ Superadmin</span>
+          {% elif lv == "admin" %}<span style="background:rgba(56,189,248,.15);color:#38bdf8;border:1px solid #38bdf8;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:bold;">🛡️ Admin</span>
+          {% else %}<span style="background:rgba(148,163,184,.1);color:#94a3b8;border:1px solid #334155;border-radius:20px;padding:2px 10px;font-size:11px;">👁️ Viewer</span>{% endif %}
+        </td>
+        <td style="padding:10px 14px;text-align:center;">
+          {% if a.discord_id|string != session.get("discord_id")|string %}
+          <form method="POST" action="/dashboard/admins/change_level" style="display:inline;">
+            <input type="hidden" name="discord_id" value="{{ a.discord_id }}">
+            <select name="level" onchange="this.form.submit()" style="background:#0f172a;color:#fff;border:1px solid #334155;border-radius:4px;padding:3px 6px;font-size:11px;">
+              <option value="viewer" {% if (a.dashboard_level or "admin")=="viewer" %}selected{% endif %}>Viewer</option>
+              <option value="admin" {% if (a.dashboard_level or "admin")=="admin" %}selected{% endif %}>Admin</option>
+              <option value="superadmin" {% if (a.dashboard_level or "admin")=="superadmin" %}selected{% endif %}>Superadmin</option>
+            </select>
+          </form>
+          <form method="POST" action="/dashboard/admins/revoke" style="display:inline;margin-left:6px;" onsubmit="return confirm('Odebrat přístup?');">
+            <input type="hidden" name="discord_id" value="{{ a.discord_id }}">
+            <button type="submit" style="background:rgba(239,68,68,.2);color:#ef4444;border:1px solid #ef4444;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;"><i class="fas fa-times"></i></button>
+          </form>
+          {% else %}
+          <span style="color:#64748b;font-size:11px;">to jsi ty</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" style="padding:20px;text-align:center;color:#64748b;">Žádní admini. Udělte přístup výše.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top:16px;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px;font-size:12px;color:#94a3b8;line-height:1.7;">
+    <b style="color:#38bdf8;">Vysvětlení úrovní:</b><br>
+    👁️ <b>Viewer</b> – Pouze čte data (dashboard, statistiky, feedback seznam). Nemůže nic měnit.<br>
+    🛡️ <b>Admin</b> – Může spravovat uživatele (ban, unban, edit, HWID reset), schvalovat role a feedback.<br>
+    ⭐ <b>Superadmin</b> – Plný přístup včetně zapínání/vypínání systémů, verzí softwaru a správy dalších adminů.<br>
+    <br><b style="color:#f59e0b;">⚠️ Tip:</b> Přístup udělíš také bot příkazem <code>!dashadd [discord_id] [viewer|admin|superadmin]</code>
+  </div>
+</div>
+'''
+# ─────────────────────────────────────────────────────────────────────────────
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DISCORD BOT
