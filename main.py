@@ -3015,7 +3015,7 @@ async def ping(ctx): await ctx.send(f"🏓 Pong! Odezva: **{round(bot.latency * 
 @bot.command()
 async def help(ctx):
     embed = discord.Embed(title="🤖 Nápověda - Projekt OIS IDPK", color=0x38bdf8)
-    embed.add_field(name="🌍 Veřejné", value="`!auth`, `!ping`, `!help`, `!register`", inline=False)
+    embed.add_field(name="🌍 Veřejné", value="`!auth`, `!ping`, `!help`, `!register`, `!id`", inline=False)
     embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]`, `!db [ID]`, `!ban`, `!unban`, `!delete`, `!perdelete`, `!dm @user`, `!message #channel`, `!website_block`, `!website_block_mapa`", inline=False)
     embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download`, `!sm @uživatel`, `!debugvozovna`, `!aktulizace`, `!dashadd [id] [viewer|admin|superadmin]`, `!dashremove [id]`", inline=False)
     await ctx.send(embed=embed)
@@ -3023,6 +3023,15 @@ async def help(ctx):
 @bot.command()
 async def cmds(ctx):
     await help(ctx)
+
+@bot.command()
+async def id(ctx, user: discord.User = None):
+    """Zobrazí Discord ID uživatele. Pokud není zadán uživatel, zobrazí tvé ID."""
+    target = user or ctx.author
+    if target == ctx.author:
+        await ctx.send(f"🆔 Tvoje Discord ID je: `{target.id}`")
+    else:
+        await ctx.send(f"🆔 Discord ID uživatele {target.mention} je: `{target.id}`")
 
 @bot.command()
 async def auth(ctx):
