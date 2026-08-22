@@ -430,7 +430,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 .hb{flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:bold;}
 .hb-jr{background:#38bdf8;color:#0f172a;}.hb-st{background:#ef4444;color:#fff;}
 .hb-mn{background:none;border:1px solid #334155;color:#94a3b8;padding:2px 7px;border-radius:4px;cursor:pointer;font-size:14px;}
-#sw{display:none;position:fixed;top:68px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#991b1b,#ef4444);color:#fff;padding:11px 18px;border-radius:10px;font-weight:bold;z-index:5000;text-align:center;max-width:92vw;width:410px;animation:swPulse 2.4s ease-in-out infinite alternate;}
+#sw{display:none;position:fixed;top:90px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#991b1b,#ef4444);color:#fff;padding:11px 18px;border-radius:10px;font-weight:bold;z-index:5000;text-align:center;max-width:92vw;width:410px;animation:swPulse 2.4s ease-in-out infinite alternate;}
 @keyframes swPulse{0%{box-shadow:0 4px 20px rgba(239,68,68,.4);}100%{box-shadow:0 4px 45px rgba(239,68,68,.9);}}
 #ttm{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.72);z-index:6000;align-items:center;justify-content:center;}
 #ttm.open{display:flex;}
@@ -451,11 +451,11 @@ body.nt-add-active #map{cursor:crosshair !important;}
 @keyframes routeDraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0;}}
 /* Floating close-route button */
 #close-route-btn, #edit-route-btn, #save-route-btn { display:none; position:fixed; z-index:4200; border-radius:24px; padding:8px 22px; font-size:13px; font-weight:700; cursor:pointer; backdrop-filter:blur(8px); transition:all .2s; letter-spacing:.3px; }
-#close-route-btn { top: 75px; left: 50%; transform:translateX(-50%); background:rgba(15,23,42,.92); color:#ef4444; border:1.5px solid #ef4444; box-shadow:0 4px 20px rgba(239,68,68,.35); }
+#close-route-btn { bottom: 40px; left: calc(50% - 65px); transform:translateX(-50%); background:rgba(15,23,42,.92); color:#ef4444; border:1.5px solid #ef4444; box-shadow:0 4px 20px rgba(239,68,68,.35); }
 #close-route-btn:hover { background:#ef4444; color:#fff; box-shadow:0 4px 28px rgba(239,68,68,.6); }
-#edit-route-btn { top: 75px; left: calc(50% + 80px); transform:translateX(-50%); background:rgba(15,23,42,.92); color:#38bdf8; border:1.5px solid #38bdf8; box-shadow:0 4px 20px rgba(56,189,248,.35); }
+#edit-route-btn { bottom: 40px; left: calc(50% + 65px); transform:translateX(-50%); background:rgba(15,23,42,.92); color:#38bdf8; border:1.5px solid #38bdf8; box-shadow:0 4px 20px rgba(56,189,248,.35); }
 #edit-route-btn:hover { background:#38bdf8; color:#fff; box-shadow:0 4px 28px rgba(56,189,248,.6); }
-#save-route-btn { top: 75px; left: calc(50% + 80px); transform:translateX(-50%); background:rgba(239,68,68,.92); color:white; border:1.5px solid #f87171; box-shadow:0 4px 20px rgba(239,68,68,.35); }
+#save-route-btn { bottom: 40px; left: calc(50% + 65px); transform:translateX(-50%); background:rgba(239,68,68,.92); color:white; border:1.5px solid #f87171; box-shadow:0 4px 20px rgba(239,68,68,.35); }
 #save-route-btn:hover { background:#ef4444; color:#fff; box-shadow:0 4px 28px rgba(239,68,68,.6); }
 /* Leaflet popup fade-in */
 .leaflet-popup{animation:popupIn .22s cubic-bezier(.34,1.56,.64,1);}
@@ -803,7 +803,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <div id="log-approx-body" style="display:none;max-height:200px;overflow-y:auto;padding:6px 12px;font-size:11px;"></div>
     <div id="log-system-body" style="display:none;max-height:240px;overflow-y:auto;padding:6px 12px;font-family:monospace;font-size:11px;color:#94a3b8;white-space:pre-wrap;"></div>
   </div>
-  <div id="nt-add-bar" style="display:none;position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:5000;background:#1e293b;border:2px solid #f59e0b;border-radius:8px;padding:8px 14px;display:none;align-items:center;gap:8px;box-shadow:0 4px 20px rgba(0,0,0,.7);">
+  <div id="nt-add-bar" style="display:none;position:fixed;top:90px;left:50%;transform:translateX(-50%);z-index:5000;background:#1e293b;border:2px solid #f59e0b;border-radius:8px;padding:8px 14px;display:none;align-items:center;gap:8px;box-shadow:0 4px 20px rgba(0,0,0,.7);">
     <span style="color:#f59e0b;font-size:12px;font-weight:bold;">🚏 Klikni na mapu kde je zastávka</span>
     <input id="nt-add-name" type="text" placeholder="Název zastávky" style="background:#0f172a;color:white;border:1px solid #475569;border-radius:4px;padding:4px 8px;font-size:12px;width:160px;">
     <button onclick="confirmNtAdd()" style="background:#10b981;color:white;border:none;border-radius:4px;padding:5px 10px;font-size:12px;cursor:pointer;">Přidat</button>
