@@ -5965,13 +5965,17 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 break
 
         if not bus_data:
+            print(f"\033[35m[NOTIF DEBUG] Pravidlo {rule_id[:8]} nenalezlo aktivní bus ({id_type}={identifier})\033[0m", flush=True)
             continue
 
+        print(f"\033[35m[NOTIF DEBUG] Vyhodnocuji pravidlo {rule_id[:8]} (bus {bus_data['id']}) - triggers: {triggers}\033[0m", flush=True)
         state = _NOTIF_STATE_CACHE.setdefault(rule_id, {})
 
         def _fire(trigger_key, new_state, context_text=""):
+            print(f"\033[35m[NOTIF DEBUG] Pokus o FIRE pravidla {rule_id[:8]} trigger_key='{trigger_key}', new_state='{new_state}'\033[0m", flush=True)
             old = state.get(trigger_key)
             if old == new_state:
+                print(f"\033[35m[NOTIF DEBUG] Storno FIRE {rule_id[:8]}: state se nezměnil ('{old}' == '{new_state}')\033[0m", flush=True)
                 return False
             # Anti-spam: max 1x za 5 minut na pravidlo
             last_fired = rule.get("last_fired_at")
@@ -5979,9 +5983,11 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 try:
                     lf = datetime.fromisoformat(last_fired.replace("Z", "+00:00")).replace(tzinfo=None)
                     if (now - lf).total_seconds() < 300:
+                        print(f"\033[35m[NOTIF DEBUG] Storno FIRE {rule_id[:8]}: Anti-spam 5 min (uplynulo {(now-lf).total_seconds()} s)\033[0m", flush=True)
                         return False
                 except Exception:
                     pass
+            print(f"\033[35m[NOTIF DEBUG] ---> ODPALUJI (FIRE) pravidlo {rule_id[:8]} trigger='{trigger_key}'! <---\033[0m", flush=True)
             embed, dm_text = _build_notification_message(rule, trigger_key, bus_data, context_text)
             # Odpal do fronty pro Discord bot (DM)
             NOTIFICATION_DM_QUEUE.put({
@@ -6065,11 +6071,13 @@ def _check_and_fire_notifications(db_client, bus_cache):
 
         stop_name = triggers.get("stop_near", "")
         if stop_name:
+            print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} testuji stop_near='{stop_name}' (status: '{status_text}')\033[0m", flush=True)
             # Upozorni pokud je bus v okruhu 250m od zastávky, i když není napsáno "stojí"
             b_lat = bus_data.get("lat", 0)
             b_lon = bus_data.get("lng", 0)
             if b_lat and b_lon and GTFS_LOADED:
                 near = _nearest_stop_name(b_lat, b_lon, 250)
+                print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} nejblizsi zastavka (<250m) = '{near}'\033[0m", flush=True)
                 if near and stop_name.lower() in near.lower():
                     _fire(f"stop_near:{stop_name}", f"{status_text} ({near})", f"V blízkosti: {now_time_str} ({near})")
 
@@ -6111,13 +6119,16 @@ def _check_and_fire_notifications(db_client, bus_cache):
         # Zpoždění
         delay_thresh = triggers.get("delay_threshold")
         if delay_thresh:
+            print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} testuji delay_threshold={delay_thresh}, current_delay={delay_val}\033[0m", flush=True)
             try:
                 dt = int(delay_thresh)
-                prev_delay = state.get("_delay_thresh_val", 0)
+                prev_delay = state.get("_delay_thresh_val", -1)
+                print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} delay_thresh limit={dt}, current={delay_val}, prev={prev_delay}\033[0m", flush=True)
                 if delay_val >= dt and prev_delay < dt:
                     _fire(f"delay_threshold:{dt}", str(delay_val), f"Zpoždění dosáhlo {delay_val} min (limit {dt} min)")
                 state["_delay_thresh_val"] = delay_val
-            except: pass
+            except Exception as e:
+                print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} chyba delay_threshold: {e}\033[0m", flush=True)
 
         delay_change = triggers.get("delay_change")
         if delay_change:
