@@ -566,7 +566,7 @@ body.low-graphics .route-line-future, body.low-graphics .route-line-past { anima
 body.medium-graphics .leaflet-marker-icon div, body.medium-graphics .leaflet-popup-content-wrapper { box-shadow: none !important; filter: none !important; }
 
 body.ultra-graphics .route-line-future { animation: routeFlow 0.5s linear infinite !important; }
-body.ultra-graphics .leaflet-marker-icon div { filter: drop-shadow(0 4px 10px rgba(0,0,0,0.95)) !important; }
+body.ultra-graphics .leaflet-marker-icon div { filter: drop-shadow(0 2px 5px rgba(0,0,0,0.4)) !important; }
 
 .gfx-slider { -webkit-appearance:none; width:100%; height:6px; border-radius:3px; outline:none; background:linear-gradient(to right, #38bdf8 66.6%, #334155 66.6%); transition:background 0.2s; cursor:pointer; margin-top:4px; user-select:none; -webkit-user-select:none; }
 .gfx-slider::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 2px 6px rgba(0,0,0,0.5); transition:transform 0.2s; cursor:grab; }
