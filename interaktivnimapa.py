@@ -417,6 +417,9 @@ body.nt-add-active #map{cursor:crosshair !important;}
 .pa{background:#38bdf8;color:#0f172a;border:none;padding:8px;width:100%;border-radius:5px;font-weight:bold;cursor:pointer;transition:.2s;margin-top:7px;display:block;text-align:center;font-size:12px;}
 .pa:hover{background:#0284c7;color:#fff;}
 .pa-d{background:#334155;color:#fff;}.pa-d:hover{background:#475569;}
+.notif-check-row{display:flex;align-items:center;gap:10px;cursor:pointer;background:rgba(255,255,255,0.04);border:1px solid #334155;border-radius:8px;padding:8px 12px;color:#e2e8f0;font-size:13px;transition:background 0.2s;}
+.notif-check-row:hover{background:rgba(167,139,250,0.1);border-color:#7c3aed;}
+.notif-check-row input[type=checkbox]{width:16px;height:16px;accent-color:#a78bfa;flex-shrink:0;}
 #hud{display:none;position:fixed;bottom:18px;right:18px;z-index:4000;font-family:'Segoe UI',sans-serif;}
 #hf{background:#1e293b;border:2px solid #38bdf8;border-radius:12px;padding:13px;width:248px;box-shadow:0 8px 28px rgba(0,0,0,.75);}
 #hm{display:none;background:#1e293b;border:2px solid #38bdf8;border-radius:50px;padding:6px 12px;align-items:center;gap:8px;}
@@ -679,7 +682,80 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <button id="ttc-btn" onclick="document.getElementById('ttm').classList.remove('open')">X</button>
     <div id="ttc" style="color:white;">Načítám…</div>
   </div></div>
+
+  <!-- NOTIFIKAČNÍ MODAL -->
+  <div id="notif-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9500;overflow-y:auto;padding:20px;box-sizing:border-box;">
+    <div style="max-width:500px;margin:40px auto;background:rgba(15,23,42,0.97);backdrop-filter:blur(20px);border:1px solid #334155;border-radius:16px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.8);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <h2 style="color:#a78bfa;font-size:18px;margin:0;">🔔 Upozornění na autobus</h2>
+        <button onclick="closeNotifModal()" style="background:transparent;border:none;color:#94a3b8;font-size:20px;cursor:pointer;padding:4px 8px;">✕</button>
+      </div>
+      <div id="notif-bus-info" style="background:rgba(167,139,250,0.1);border:1px solid #7c3aed;border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:13px;color:#c4b5fd;"></div>
+
+      <!-- Identifikátor -->
+      <div style="margin-bottom:14px;">
+        <label style="color:#94a3b8;font-size:12px;font-weight:bold;text-transform:uppercase;">Sledovat podle</label>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <label style="display:flex;align-items:center;gap:6px;color:#e2e8f0;font-size:13px;cursor:pointer;background:#1e293b;padding:6px 12px;border-radius:8px;border:1px solid #334155;">
+            <input type="radio" name="notif-id-type" value="spz" id="notif-type-spz" checked> SPZ
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;color:#e2e8f0;font-size:13px;cursor:pointer;background:#1e293b;padding:6px 12px;border-radius:8px;border:1px solid #334155;">
+            <input type="radio" name="notif-id-type" value="bus_id" id="notif-type-busid"> Bus ID
+          </label>
+        </div>
+        <input id="notif-identifier" type="text" placeholder="SPZ nebo Bus ID" style="width:100%;margin-top:8px;padding:9px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:14px;box-sizing:border-box;">
+      </div>
+
+      <!-- Label -->
+      <div style="margin-bottom:14px;">
+        <label style="color:#94a3b8;font-size:12px;font-weight:bold;text-transform:uppercase;">Název upozornění (volitelné)</label>
+        <input id="notif-label" type="text" placeholder="Např. Můj oblíbený bus" style="width:100%;margin-top:6px;padding:9px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:14px;box-sizing:border-box;">
+      </div>
+
+      <!-- Triggery -->
+      <div style="margin-bottom:18px;">
+        <label style="color:#94a3b8;font-size:12px;font-weight:bold;text-transform:uppercase;display:block;margin-bottom:10px;">Upozornit mě když</label>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <label class="notif-check-row"><input type="checkbox" id="nt-terminal"> <span>🏁 Autobus přijede na konečnou zastávku</span></label>
+          <label class="notif-check-row"><input type="checkbox" id="nt-new-line"> <span>🔄 Autobus začne obsluhovat novou linku</span></label>
+          <label class="notif-check-row"><input type="checkbox" id="nt-depot-in"> <span>🅿️ Autobus vjede do vozovny</span></label>
+          <label class="notif-check-row"><input type="checkbox" id="nt-depot-out"> <span>🚌 Autobus vyjede z vozovny</span></label>
+          <label class="notif-check-row"><input type="checkbox" id="nt-trip-change"> <span>🔀 Autobus přepne linkospoj (formát X/Y)</span></label>
+          <label class="notif-check-row"><input type="checkbox" id="nt-started-moving"> <span>▶️ Autobus se dá do pohybu (byl stojící)</span></label>
+          <label class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+            <div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="nt-stop-near"> <span>🚏 Autobus se blíží k zastávce:</span></div>
+            <input id="nt-stop-name" type="text" placeholder="Název zastávky (např. Planá)" style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;display:none;">
+          </label>
+        </div>
+      </div>
+
+      <!-- Webhook URL -->
+      <div style="margin-bottom:14px;">
+        <label style="color:#94a3b8;font-size:12px;font-weight:bold;text-transform:uppercase;">Discord Webhook URL</label>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <input id="notif-webhook" type="url" placeholder="https://discord.com/api/webhooks/..." style="flex:1;padding:9px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:13px;box-sizing:border-box;">
+          <button onclick="testNotifWebhook()" style="padding:9px 14px;background:#1e293b;color:#38bdf8;border:1px solid #334155;border-radius:8px;font-size:12px;cursor:pointer;white-space:nowrap;">🧪 Test</button>
+        </div>
+        <div id="notif-webhook-status" style="font-size:11px;margin-top:5px;min-height:16px;"></div>
+      </div>
+
+      <!-- Moje pravidla -->
+      <div id="notif-rules-section" style="margin-bottom:18px;display:none;">
+        <label style="color:#94a3b8;font-size:12px;font-weight:bold;text-transform:uppercase;display:block;margin-bottom:8px;">Moje aktivní pravidla</label>
+        <div id="notif-rules-list" style="display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;"></div>
+      </div>
+
+      <div id="notif-modal-msg" style="font-size:13px;min-height:18px;margin-bottom:10px;text-align:center;"></div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="saveNotifRule()" style="flex:1;padding:12px;background:#7c3aed;color:white;border:none;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;">💾 Uložit pravidlo</button>
+        <button onclick="closeNotifModal()" style="padding:12px 18px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:8px;font-size:14px;cursor:pointer;">Zavřít</button>
+      </div>
+    </div>
+  </div>
+  <!-- KONEC NOTIFIKAČNÍHO MODALU -->
+
   <div id="close-route-btn" onclick="closeActiveRoute()"><i class="fas fa-times"></i> Zavřít trasu</div>
+
   <div id="edit-route-btn" onclick="startEditRouteRoads()"><i class="fas fa-edit"></i> Silnice</div>
   <div id="save-route-btn" onclick="saveRouteRoads()"><i class="fas fa-save"></i> ULOŽIT TRASU</div>
   <div id="hud">
@@ -1622,7 +1698,173 @@ document.addEventListener('DOMContentLoaded', () => {
         isHudDragging = false;
     }
 });
+
+// === NOTIFIKACE JS ===
+let _notifCurrentBusId = null, _notifCurrentSpz = null;
+
+window.openNotifModal = function(busId, spz, line, destination) {
+  _notifCurrentBusId = busId;
+  _notifCurrentSpz = spz;
+  let info = document.getElementById('notif-bus-info');
+  if(info) info.innerHTML = `<b>Linka ${line}</b> → ${destination}${spz&&spz!=='Neznama'?' &nbsp;|&nbsp; SPZ: <b>'+spz+'</b>':''}`;
+  // Předvyplň identifikátor
+  let inp = document.getElementById('notif-identifier');
+  if(inp) {
+    if(spz && spz !== 'Neznama') {
+      inp.value = spz;
+      let r = document.getElementById('notif-type-spz'); if(r) r.checked = true;
+    } else {
+      inp.value = busId;
+      let r = document.getElementById('notif-type-busid'); if(r) r.checked = true;
+    }
+  }
+  document.getElementById('notif-modal').style.display = 'block';
+  document.getElementById('notif-modal-msg').textContent = '';
+  // Zobraz zastávkové pole pokud zaškrtnuto
+  let stopCb = document.getElementById('nt-stop-near');
+  if(stopCb) stopCb.onchange = () => {
+    let sn = document.getElementById('nt-stop-name');
+    if(sn) sn.style.display = stopCb.checked ? 'block' : 'none';
+  };
+  // Načti existující pravidla
+  loadNotifRules();
+};
+
+window.closeNotifModal = function() {
+  document.getElementById('notif-modal').style.display = 'none';
+};
+
+async function loadNotifRules() {
+  try {
+    let r = await fetch('/api/notifications/list');
+    let d = await r.json();
+    let sec = document.getElementById('notif-rules-section');
+    let list = document.getElementById('notif-rules-list');
+    if(!d.rules || !d.rules.length) { if(sec) sec.style.display='none'; return; }
+    if(sec) sec.style.display = 'block';
+    if(!list) return;
+    list.innerHTML = '';
+    d.rules.forEach(rule => {
+      let row = document.createElement('div');
+      row.style.cssText = 'background:#1e293b;border:1px solid #334155;border-radius:8px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;';
+      let fired = rule.fired_count || 0;
+      row.innerHTML = `<span style="color:#e2e8f0;"><b>${rule.label||rule.identifier}</b> <span style="color:#64748b;">(${rule.identifier})</span> <span style="color:#38bdf8;margin-left:6px;">🔔 ${fired}x</span></span>
+        <button onclick="deleteNotifRule('${rule.id}')" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid #ef4444;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;">✕</button>`;
+      list.appendChild(row);
+    });
+  } catch(e) {}
+}
+
+async function deleteNotifRule(ruleId) {
+  try {
+    let r = await fetch('/api/notifications/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: ruleId})});
+    let d = await r.json();
+    if(d.status==='success') loadNotifRules();
+    else showNotifMsg('Chyba: ' + (d.message||'?'), false);
+  } catch(e) { showNotifMsg('Chyba spojení', false); }
+}
+
+function showNotifMsg(msg, ok) {
+  let el = document.getElementById('notif-modal-msg');
+  if(!el) return;
+  el.textContent = msg;
+  el.style.color = ok ? '#10b981' : '#ef4444';
+}
+
+async function testNotifWebhook() {
+  let url = document.getElementById('notif-webhook').value.trim();
+  let status = document.getElementById('notif-webhook-status');
+  if(status) status.textContent = '⏳ Testuju...'; status.style.color = '#94a3b8';
+  try {
+    let r = await fetch('/api/notifications/check_webhook', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({webhook_url: url})});
+    let d = await r.json();
+    if(status) { status.textContent = d.status==='success' ? '✅ Webhook funguje!' : '❌ ' + (d.message||'Chyba'); status.style.color = d.status==='success' ? '#10b981' : '#ef4444'; }
+  } catch(e) { if(status) { status.textContent = '❌ Chyba spojení'; status.style.color = '#ef4444'; } }
+}
+
+async function saveNotifRule() {
+  let identifier = document.getElementById('notif-identifier').value.trim();
+  let idType = document.querySelector('input[name="notif-id-type"]:checked')?.value || 'spz';
+  let label = document.getElementById('notif-label').value.trim();
+  let webhook = document.getElementById('notif-webhook').value.trim();
+  let stopName = document.getElementById('nt-stop-near')?.checked ? document.getElementById('nt-stop-name')?.value.trim() : '';
+  let triggers = {
+    terminal: document.getElementById('nt-terminal')?.checked || false,
+    new_line: document.getElementById('nt-new-line')?.checked || false,
+    depot_in: document.getElementById('nt-depot-in')?.checked || false,
+    depot_out: document.getElementById('nt-depot-out')?.checked || false,
+    trip_change: document.getElementById('nt-trip-change')?.checked || false,
+    started_moving: document.getElementById('nt-started-moving')?.checked || false,
+    stop_near: stopName || '',
+  };
+  if(!identifier) { showNotifMsg('Zadej SPZ nebo Bus ID', false); return; }
+  if(!webhook) { showNotifMsg('Zadej Discord Webhook URL', false); return; }
+  if(!Object.values(triggers).some(v => v && v !== '')) { showNotifMsg('Vyber alespoň jeden trigger', false); return; }
+  showNotifMsg('⏳ Ukládám...', true);
+  try {
+    let r = await fetch('/api/notifications/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({identifier, identifier_type: idType, triggers, webhook_url: webhook, label})});
+    let d = await r.json();
+    if(d.status==='success') {
+      showNotifMsg('✅ Pravidlo uloženo!', true);
+      loadNotifRules();
+      // Reset checkboxů
+      ['nt-terminal','nt-new-line','nt-depot-in','nt-depot-out','nt-trip-change','nt-started-moving','nt-stop-near'].forEach(id => { let el=document.getElementById(id); if(el) el.checked=false; });
+      let sn=document.getElementById('nt-stop-name'); if(sn){sn.value='';sn.style.display='none';}
+    } else {
+      showNotifMsg('❌ ' + (d.message||'Chyba'), false);
+    }
+  } catch(e) { showNotifMsg('❌ Chyba spojení', false); }
+}
+
+// === SDÍLENÍ AUTOBUSU ===
+window.shareBus = function(busId, spz, line, destination) {
+  let trackUrl = location.origin + '/mapa?track=' + busId;
+  let bus = (typeof lastArr !== 'undefined') ? lastArr.find(b => b.id === busId) : null;
+  let parts = [`Autobus linky ${line} jede směr ${destination}`];
+  if(spz && spz !== 'Neznama') parts.push(`SPZ ${spz}`);
+  let shareText = parts.join(', ') + `. Sleduj ho taky: ${trackUrl}`;
+  if(navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(shareText).then(() => {
+      showMapToast('📋 Text sdílení zkopírován do schránky!');
+    }).catch(() => _shareFallback(shareText));
+  } else {
+    _shareFallback(shareText);
+  }
+};
+
+function _shareFallback(text) {
+  let ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); showMapToast('📋 Text sdílení zkopírován!'); }
+  catch(e) { prompt('Zkopíruj tento odkaz:', text); }
+  document.body.removeChild(ta);
+}
+
+function showMapToast(msg) {
+  let t = document.getElementById('map-toast');
+  if(!t) {
+    t = document.createElement('div');
+    t.id = 'map-toast';
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(16,185,129,0.95);color:white;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:bold;z-index:9999;pointer-events:none;transition:opacity 0.3s;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg; t.style.opacity = '1';
+  clearTimeout(t._to);
+  t._to = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+}
+
+// === URL TRACKING (?track=BUS_ID) ===
+(function() {
+  let trackId = new URLSearchParams(location.search).get('track');
+  if(!trackId) return;
+  window._pendingTrackId = String(trackId);
+  // Pokus se otevřít popup při každém refreshi dat po načtení
+  window._trackAttempts = 0;
+})();
+
 window.toggleFollow=function(busId,inflowId){
+
   if(followId===busId){stopFollow();return;}
   followId=busId;followInflowId=inflowId||busId;
   // Auto-pin: kamera se okamžitě připne na bus
@@ -2890,7 +3132,12 @@ async function fetchBuses(){
           <button class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
           ${histBtn}
           <button id="route-btn-${bus.id}" class="pa pa-d" style="margin-top:5px;${rA?'background:#1e40af;':''}" onclick="toggleRoute('${bus.id}')">${rA?'🗺️ Skryt trasu':'🗺️ Zobrazit trasu'}</button>
+          <div style="display:flex;gap:5px;margin-top:5px;">
+            <button class="pa" style="flex:1;background:#7c3aed;color:#fff;border-color:#6d28d9;" onclick="openNotifModal('${bus.id}','${bus.spz}','${bus.line}','${bus.destination}')">🔔 Notifikace</button>
+            <button class="pa" style="flex:1;background:#0369a1;color:#fff;border-color:#075985;" onclick="shareBus('${bus.id}','${bus.spz}','${bus.line}','${bus.destination}')">📤 Sdílet</button>
+          </div>
         </div>`;
+
 
       if(IS_ADMIN){
         let oSpz=bus.spz==='Neznama'?'':bus.spz;
@@ -3002,6 +3249,25 @@ async function fetchBuses(){
     }
 
     setTimeout(()=>{isRefreshing=false;},50);
+
+    // URL ?track=BUS_ID: automaticky otevřít popup sledovaného autobusu
+    if(window._pendingTrackId && window._trackAttempts < 15) {
+      window._trackAttempts++;
+      let tId = window._pendingTrackId;
+      let tMarker = window.busMarkersMap && window.busMarkersMap.get(tId);
+      if(!tMarker) {
+        // Zkus najít podle SPZ
+        let tBus = lastArr.find(b => String(b.id)===tId || b.spz===tId);
+        if(tBus) tMarker = window.busMarkersMap.get(tBus.id);
+      }
+      if(tMarker) {
+        window._pendingTrackId = null;
+        let tBus2 = lastArr.find(b => window.busMarkersMap && window.busMarkersMap.get(b.id) === tMarker);
+        if(tBus2) { map.setView([tBus2.lat, tBus2.lng], 16); }
+        setTimeout(() => { try { tMarker.openPopup(); } catch(e){} }, 400);
+      }
+    }
+
 
     // Komplexní logování stavu mapy
     if(IS_ADMIN){
@@ -5386,7 +5652,19 @@ def background_map_worker():
                     except Exception:
                         pass
 
+
+            # ── Notifikace: zkontroluj triggery (kazdych 30s) ─────────────
+            global _last_notification_check
+            if db_client and (not _last_notification_check or
+                    (now - _last_notification_check).total_seconds() >= 30):
+                _last_notification_check = now
+                try:
+                    _check_and_fire_notifications(db_client, GLOBAL_BUS_CACHE)
+                except Exception as _notif_err:
+                    print(f"[NOTIF] Chyba pri kontrole notifikaci: {_notif_err}", flush=True)
+
             time.sleep(10)
+
 
         except Exception as crash_error:
             import traceback
@@ -5396,6 +5674,319 @@ def background_map_worker():
             except Exception:
                 print(f"[MAPA CRITICAL] {err_str}", flush=True)
             time.sleep(10)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NOTIFIKAČNÍ SYSTÉM
+# ─────────────────────────────────────────────────────────────────────────────
+
+_last_notification_check = None
+_NOTIF_STATE_CACHE = {}  # {notif_id: {trigger_key: last_state_value}}
+
+
+def _send_discord_webhook(webhook_url, embed_data):
+    """Odešle Discord Embed zprávu na webhook URL."""
+    try:
+        payload = json.dumps({"embeds": [embed_data]}).encode("utf-8")
+        req = urllib.request.Request(
+            webhook_url,
+            data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "OIS-IDPK-Bot/1.0"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return resp.status in (200, 204)
+    except Exception as e:
+        print(f"[NOTIF] Webhook chyba: {e}", flush=True)
+        return False
+
+
+def _build_discord_embed(rule, trigger_name, bus_data):
+    """Sestaví Discord Embed pro notifikaci."""
+    spz = bus_data.get("spz", "Neznámá")
+    line = bus_data.get("line", "?")
+    dest = bus_data.get("destination", "?")
+    bus_id = bus_data.get("id", rule.get("identifier", "?"))
+    status = bus_data.get("status", "?")
+    base_url = "https://datacorebot.koyeb.app"
+    track_url = f"{base_url}/mapa?track={bus_id}"
+
+    color_map = {
+        "terminal": 0xa855f7,
+        "new_line": 0x38bdf8,
+        "stop_near": 0x10b981,
+        "depot_in": 0xfacc15,
+        "depot_out": 0xf59e0b,
+        "trip_change": 0x60a5fa,
+        "started_moving": 0x10b981,
+    }
+    trigger_key_base = trigger_name.split(":")[0]
+    color = color_map.get(trigger_key_base, 0x38bdf8)
+
+    trigger_labels = {
+        "terminal": "🏁 Autobus přijel na konečnou zastávku",
+        "new_line": "🔄 Autobus začal obsluhovat novou linku",
+        "stop_near": f"🚏 Autobus se blíží k zastávce",
+        "depot_in": "🅿️ Autobus vjel do vozovny",
+        "depot_out": "🚌 Autobus vyjel z vozovny",
+        "trip_change": "🔀 Autobus přepnul linkospoj",
+        "started_moving": "▶️ Autobus se dal do pohybu",
+    }
+    trigger_label = trigger_labels.get(trigger_key_base, f"🔔 Trigger: {trigger_name}")
+    label = rule.get("label") or f"Bus {spz}"
+    now_str = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M:%S")
+
+    embed = {
+        "title": f"🔔 Upozornění: {label}",
+        "description": trigger_label,
+        "color": color,
+        "fields": [
+            {"name": "Linka", "value": str(line), "inline": True},
+            {"name": "SPZ", "value": str(spz), "inline": True},
+            {"name": "Cíl", "value": str(dest), "inline": True},
+            {"name": "Stav", "value": str(status), "inline": False},
+            {"name": "Čas", "value": now_str, "inline": True},
+        ],
+        "footer": {"text": "OIS IDPK Notifikace"},
+        "url": track_url,
+    }
+    return embed
+
+
+def _check_and_fire_notifications(db_client, bus_cache):
+    """Zkontroluje pravidla notifikací a odpalí webhook pro splněné triggery."""
+    global _NOTIF_STATE_CACHE
+    try:
+        res = db_client.table("bus_notifications").select("*").eq("is_active", True).execute()
+        rules = res.data or []
+    except Exception as e:
+        print(f"[NOTIF] Chyba pri nacitani pravidel: {e}", flush=True)
+        return
+
+    now = datetime.now(ZoneInfo("Europe/Prague")).replace(tzinfo=None)
+
+    for rule in rules:
+        rule_id = str(rule["id"])
+        identifier = rule.get("identifier", "")
+        id_type = rule.get("identifier_type", "spz")
+        triggers = rule.get("triggers") or {}
+        webhook_url = rule.get("webhook_url")
+
+        if not identifier or not webhook_url:
+            continue
+
+        # Najdi autobus v cache
+        bus_data = None
+        for bus_id, bc in bus_cache.items():
+            if id_type == "spz" and bc.get("spz", "") == identifier:
+                bus_data = dict(bc)
+                bus_data["id"] = bus_id
+                break
+            elif id_type == "bus_id" and bus_id == identifier:
+                bus_data = dict(bc)
+                bus_data["id"] = bus_id
+                break
+
+        if not bus_data:
+            continue
+
+        state = _NOTIF_STATE_CACHE.setdefault(rule_id, {})
+        fired_any = False
+
+        def _fire(trigger_key, new_state):
+            nonlocal fired_any
+            old = state.get(trigger_key)
+            if old == new_state:
+                return  # Stejný stav, nepalíme znovu
+            # Anti-spam: max 1x za 5 minut na trigger
+            last_fired = rule.get("last_fired_at")
+            if last_fired:
+                try:
+                    lf = datetime.fromisoformat(last_fired.replace("Z", "+00:00")).replace(tzinfo=None)
+                    if (now - lf).total_seconds() < 300:
+                        return
+                except Exception:
+                    pass
+            embed = _build_discord_embed(rule, trigger_key, bus_data)
+            ok = _send_discord_webhook(webhook_url, embed)
+            if ok:
+                state[trigger_key] = new_state
+                fired_any = True
+                try:
+                    db_client.table("bus_notifications").update({
+                        "last_fired_at": now.isoformat(),
+                        "fired_count": (rule.get("fired_count") or 0) + 1
+                    }).eq("id", rule_id).execute()
+                except Exception:
+                    pass
+                print(f"[NOTIF] Odpaleno pravidlo {rule_id[:8]} trigger={trigger_key}", flush=True)
+
+        # --- Vyhodnocení triggerů ---
+        status_text = bus_data.get("status", "")
+        color_class = bus_data.get("color_class", "")
+        line = str(bus_data.get("line", ""))
+        trip_id = str(bus_data.get("trip_id", ""))
+
+        if triggers.get("terminal") and ("Konečná" in status_text or "Konecna" in status_text):
+            _fire("terminal", status_text)
+
+        if triggers.get("new_line"):
+            prev_line = state.get("_line")
+            if prev_line and prev_line != line:
+                _fire("new_line", line)
+            state["_line"] = line
+
+        stop_name = triggers.get("stop_near", "")
+        if stop_name and stop_name.lower() in status_text.lower():
+            _fire(f"stop_near:{stop_name}", status_text)
+
+        if triggers.get("depot_in") and ("bg-depot" in color_class or "Vozovna" in status_text):
+            _fire("depot_in", color_class)
+
+        if triggers.get("depot_out"):
+            was_in_depot = state.get("_in_depot", False)
+            now_in_depot = "bg-depot" in color_class or "Vozovna" in status_text
+            if was_in_depot and not now_in_depot:
+                _fire("depot_out", "out")
+            state["_in_depot"] = now_in_depot
+
+        if triggers.get("trip_change") and "/" in line:
+            _fire("trip_change", line)
+
+        if triggers.get("started_moving"):
+            was_stopped = state.get("_stopped", False)
+            now_stopped = "Stoji" in status_text or "stoji" in status_text
+            if was_stopped and not now_stopped:
+                _fire("started_moving", status_text)
+            state["_stopped"] = now_stopped
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NOTIFIKACE - Flask API endpointy
+# ─────────────────────────────────────────────────────────────────────────────
+
+@mapa_bp.route('/api/notifications/create', methods=['POST'])
+def api_notif_create():
+    """Vytvoří nové pravidlo notifikace. Vyžaduje přihlášení."""
+    cookie_token = request.cookies.get('web_session_token')
+    if not cookie_token:
+        return jsonify({"status": "error", "message": "Musíš být přihlášen/a"}), 401
+    db = get_db_client()
+    if not db:
+        return jsonify({"status": "error", "message": "DB nedostupná"}), 500
+    # Ověř uživatele
+    try:
+        user_res = db.table("users").select("id, nick").eq("web_session_token", cookie_token).execute()
+        if not user_res.data:
+            return jsonify({"status": "error", "message": "Neplatná session"}), 401
+        user_session_val = str(user_res.data[0]["id"])
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+    data = request.get_json(silent=True) or {}
+    identifier = str(data.get("identifier", "")).strip()
+    identifier_type = data.get("identifier_type", "spz")
+    triggers = data.get("triggers", {})
+    webhook_url = str(data.get("webhook_url", "")).strip()
+    label = str(data.get("label", "")).strip()[:80]
+
+    if not identifier:
+        return jsonify({"status": "error", "message": "Chybí identifikátor (SPZ nebo bus ID)"}), 400
+    if not webhook_url or not webhook_url.startswith("https://discord.com/api/webhooks/"):
+        return jsonify({"status": "error", "message": "Neplatná Discord Webhook URL"}), 400
+    if not any(triggers.values()):
+        return jsonify({"status": "error", "message": "Vyber alespoň jeden trigger"}), 400
+
+    # Rate limit: max 10 pravidel na uživatele
+    try:
+        cnt_res = db.table("bus_notifications").select("id").eq("user_session", user_session_val).eq("is_active", True).execute()
+        if len(cnt_res.data or []) >= 10:
+            return jsonify({"status": "error", "message": "Dosáhli jste limitu 10 pravidel"}), 429
+    except Exception:
+        pass
+
+    try:
+        db.table("bus_notifications").insert({
+            "user_session": user_session_val,
+            "identifier": identifier,
+            "identifier_type": identifier_type,
+            "triggers": triggers,
+            "webhook_url": webhook_url,
+            "label": label,
+        }).execute()
+        return jsonify({"status": "success", "message": "Pravidlo uloženo"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@mapa_bp.route('/api/notifications/list')
+def api_notif_list():
+    """Vrátí pravidla notifikací přihlášeného uživatele."""
+    cookie_token = request.cookies.get('web_session_token')
+    if not cookie_token:
+        return jsonify({"status": "error", "rules": []})
+    db = get_db_client()
+    if not db:
+        return jsonify({"status": "error", "rules": []})
+    try:
+        user_res = db.table("users").select("id").eq("web_session_token", cookie_token).execute()
+        if not user_res.data:
+            return jsonify({"status": "error", "rules": []})
+        user_session_val = str(user_res.data[0]["id"])
+        res = db.table("bus_notifications").select("id, identifier, identifier_type, triggers, label, is_active, fired_count, last_fired_at, created_at").eq("user_session", user_session_val).order("created_at", desc=True).limit(20).execute()
+        return jsonify({"status": "success", "rules": res.data or []})
+    except Exception as e:
+        return jsonify({"status": "error", "rules": [], "message": str(e)})
+
+
+@mapa_bp.route('/api/notifications/delete', methods=['POST'])
+def api_notif_delete():
+    """Smaže pravidlo notifikace (pouze vlastní)."""
+    cookie_token = request.cookies.get('web_session_token')
+    if not cookie_token:
+        return jsonify({"status": "error", "message": "Musíš být přihlášen/a"}), 401
+    db = get_db_client()
+    if not db:
+        return jsonify({"status": "error", "message": "DB nedostupná"}), 500
+    try:
+        user_res = db.table("users").select("id").eq("web_session_token", cookie_token).execute()
+        if not user_res.data:
+            return jsonify({"status": "error", "message": "Neplatná session"}), 401
+        user_session_val = str(user_res.data[0]["id"])
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    data = request.get_json(silent=True) or {}
+    rule_id = str(data.get("id", ""))
+    if not rule_id:
+        return jsonify({"status": "error", "message": "Chybí ID pravidla"}), 400
+    try:
+        db.table("bus_notifications").delete().eq("id", rule_id).eq("user_session", user_session_val).execute()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@mapa_bp.route('/api/notifications/check_webhook', methods=['POST'])
+def api_notif_check_webhook():
+    """Otestuje Discord Webhook URL odesláním testovací zprávy."""
+    cookie_token = request.cookies.get('web_session_token')
+    if not cookie_token:
+        return jsonify({"status": "error", "message": "Musíš být přihlášen/a"}), 401
+    data = request.get_json(silent=True) or {}
+    webhook_url = str(data.get("webhook_url", "")).strip()
+    if not webhook_url.startswith("https://discord.com/api/webhooks/"):
+        return jsonify({"status": "error", "message": "Neplatná Discord Webhook URL"}), 400
+    test_embed = {
+        "title": "✅ Test notifikace – OIS IDPK",
+        "description": "Webhook funguje správně! Notifikace o autobusech budou doručeny na tento kanál.",
+        "color": 0x10b981,
+        "footer": {"text": "OIS IDPK Notifikace"},
+    }
+    ok = _send_discord_webhook(webhook_url, test_embed)
+    if ok:
+        return jsonify({"status": "success", "message": "Testovací zpráva odeslána!"})
+    else:
+        return jsonify({"status": "error", "message": "Webhook nefunguje nebo je URL neplatná"}), 400
 
 
 def start_map_background_task():
