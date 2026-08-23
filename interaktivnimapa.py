@@ -5826,7 +5826,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
 
         state = _NOTIF_STATE_CACHE.setdefault(rule_id, {})
 
-        def _fire(trigger_key, new_state):
+        def _fire(trigger_key, new_state, context_text=""):
             old = state.get(trigger_key)
             if old == new_state:
                 return False
@@ -5839,7 +5839,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                         return False
                 except Exception:
                     pass
-            embed, dm_text = _build_notification_message(rule, trigger_key, bus_data)
+            embed, dm_text = _build_notification_message(rule, trigger_key, bus_data, context_text)
             # Odpal do fronty pro Discord bot (DM)
             NOTIFICATION_DM_QUEUE.put({
                 "discord_id": discord_id,
@@ -5965,15 +5965,18 @@ def api_notif_create():
     if not db:
         return jsonify({"status": "error", "message": "DB nedostupná"}), 500
     try:
-        user_res = db.table("users").select("id, nick, discord_id, email").eq("web_session_token", cookie_token).execute()
+        user_res = db.table("users").select("id, nick, discord_id, email, role").eq("web_session_token", cookie_token).execute()
         if not user_res.data:
             return jsonify({"status": "error", "message": "Neplatná session"}), 401
         u = user_res.data[0]
         user_session_val = str(u["id"])
         discord_id = u.get("discord_id")
         email = u.get("email")
+        role = u.get("role") or ""
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+    is_admin = 'SA' in role or 'DEV' in role
 
     if not discord_id and not email:
         return jsonify({"status": "error", "message": "Tvůj účet nemá připojen Discord ani e-mail. Nemáme kam notifikaci poslat!"}), 400
@@ -5987,16 +5990,20 @@ def api_notif_create():
     is_one_time = bool(data.get("is_one_time", True))
 
     if not identifier:
-        return jsonify({"status": "error", "message": "Chybí identifikátor (SPZ nebo bus ID)"}), 400
+        return jsonify({"status": "error", "message": "⚠️ Zadejte SPZ nebo ID autobusu."}), 400
     if not any(triggers.values()):
-        return jsonify({"status": "error", "message": "Vyber alespoň jeden trigger"}), 400
+        return jsonify({"status": "error", "message": "⚠️ Vyberte alespoň jednu událost."}), 400
     if not delivery_channels:
-        return jsonify({"status": "error", "message": "Vyber alespoň jeden kanál pro doručení"}), 400
+        return jsonify({"status": "error", "message": "⚠️ Vyberte alespoň jeden způsob doručení zprávy."}), 400
 
+    warning_msg = ""
     try:
         cnt_res = db.table("bus_notifications").select("id").eq("user_session", user_session_val).eq("is_active", True).execute()
         if len(cnt_res.data or []) >= 10:
-            return jsonify({"status": "error", "message": "Dosáhli jste limitu 10 pravidel"}), 429
+            if not is_admin:
+                return jsonify({"status": "error", "message": "🛑 Dosáhli jste maxima 10 aktivních upozornění."}), 429
+            else:
+                warning_msg = " (Admin: překročen limit 10)"
     except Exception:
         pass
 
@@ -6011,9 +6018,9 @@ def api_notif_create():
             "is_one_time": is_one_time,
         }).execute()
         channels_text = []
-        if "discord" in delivery_channels and discord_id: channels_text.append("Discord DM")
-        if "email" in delivery_channels and email: channels_text.append(f"e-mail ({email})")
-        return jsonify({"status": "success", "message": f"Pravidlo uloženo! Až se událost stane, přijde zpráva na: {', '.join(channels_text)}"})
+        if "discord" in delivery_channels and discord_id: channels_text.append("Discord")
+        if "email" in delivery_channels and email: channels_text.append("e-mail")
+        return jsonify({"status": "success", "message": f"✅ Upozornění je nastaveno! Až událost nastane, pošleme vám zprávu na: {', '.join(channels_text)}{warning_msg}"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 

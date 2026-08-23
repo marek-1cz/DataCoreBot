@@ -2050,11 +2050,15 @@ def stranka_ucet():
             t_texts = []
             if triggers.get("terminal"): t_texts.append("Konečná")
             if triggers.get("new_line"): t_texts.append("Změna linky")
-            if triggers.get("depot_in"): t_texts.append("Do vozovny")
+            if triggers.get("depot_in"):
+                dpt = triggers.get("depot_in")
+                t_texts.append(f"Do vozovny ({'Všechny' if dpt=='all' else dpt})")
             if triggers.get("depot_out"): t_texts.append("Z vozovny")
             if triggers.get("trip_change"): t_texts.append("Přepnutí spoje")
             if triggers.get("started_moving"): t_texts.append("Rozjetí")
             if triggers.get("stop_near"): t_texts.append(f"Zastávka: {triggers.get('stop_near')}")
+            if triggers.get("delay_threshold"): t_texts.append(f"Zpoždění přes {triggers.get('delay_threshold')} min")
+            if triggers.get("delay_change"): t_texts.append("Skok zpoždění o 3+ min")
             trig_str = ", ".join(t_texts)
             
             notif_html += f"""
