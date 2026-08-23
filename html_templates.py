@@ -1295,7 +1295,7 @@ function deleteNotificationRule(ruleId) {
     fetch('/api/notifications/delete', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({rule_id: ruleId})
+        body: JSON.stringify({id: ruleId})
     }).then(r => r.json()).then(data => {
         if(data.status === 'success') {
             location.reload();
