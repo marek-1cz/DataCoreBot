@@ -519,12 +519,48 @@ def _get_avatar_html(req):
                 display_name = u.get('nick') or u.get('email') or 'Uživatel'
                 discord_id_text = f"<br>Discord ID: {u.get('discord_id')}" if u.get('discord_id') else ""
                 
+                role_str = u.get('role') or ''
+                if 'SA' in role_str:
+                    role_text = "SUPER ADMIN"
+                    role_bg = "#ef4444"
+                elif 'DEV' in role_str:
+                    role_text = "DEVELOPER"
+                    role_bg = "#10b981"
+                elif 'BT' in role_str:
+                    role_text = "BETA TESTER"
+                    role_bg = "#1e3a8a"
+                else:
+                    role_text = "User"
+                    role_bg = "transparent"
+
                 return f"""
                 <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onclick="let d=this.querySelector('.user-dropdown-menu'); if(d) d.style.display=d.style.display==='none'?'block':'none';" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
                   <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow: 0 0 10px rgba(56,189,248,0.5);">
                     {img_tag}
                   </div>
-                  <span style="color:white; font-weight:bold; font-size:14px; max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{display_name}</span>
+                  <div class="user-role-switcher" data-name="{display_name}" data-role="{role_text}" data-bg="{role_bg}" style="display:flex; align-items:center;">
+                    <span class="switcher-text" data-showing="name" style="color:white; font-weight:bold; font-size:14px; max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background:transparent; padding:2px 6px; border-radius:6px; transition:0.5s;">{display_name}</span>
+                  </div>
+                  <script>
+                  if(!window.roleSwitcherStarted) {{
+                      window.roleSwitcherStarted = true;
+                      setInterval(() => {{
+                          document.querySelectorAll('.user-role-switcher').forEach(el => {{
+                              let span = el.querySelector('.switcher-text');
+                              let isName = span.getAttribute('data-showing') !== 'role';
+                              if(isName) {{
+                                  span.innerText = el.getAttribute('data-role');
+                                  span.style.background = el.getAttribute('data-bg');
+                                  span.setAttribute('data-showing', 'role');
+                              }} else {{
+                                  span.innerText = el.getAttribute('data-name');
+                                  span.style.background = 'transparent';
+                                  span.setAttribute('data-showing', 'name');
+                              }}
+                          }});
+                      }}, 10000);
+                  }}
+                  </script>
                   
                   <div class="user-dropdown-menu" style="display:none; position:absolute; top:calc(100% + 10px); right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left; box-sizing:border-box;">
                     <div style="color:white; font-size:14px; font-weight:bold; margin-bottom:5px;">{display_name}</div>
@@ -3095,8 +3131,8 @@ async def ping(ctx): await ctx.send(f"🏓 Pong! Odezva: **{round(bot.latency * 
 async def help(ctx):
     embed = discord.Embed(title="🤖 Nápověda - Projekt OIS IDPK", color=0x38bdf8)
     embed.add_field(name="🌍 Veřejné", value="`!auth`, `!ping`, `!help`, `!register`, `!id`", inline=False)
-    embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]`, `!db [ID]`, `!ban`, `!unban`, `!delete`, `!perdelete`, `!dm @user`, `!message #channel`, `!website_block`, `!website_block_mapa`", inline=False)
-    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download`, `!sm @uživatel`, `!debugvozovna`, `!aktulizace`, `!dashadd [id] [viewer|admin|superadmin]`, `!dashremove [id]`", inline=False)
+    embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]`, `!db [ID]`, `!ban`, `!unban`, `!delete`, `!perdelete`, `!dm @user`, `!dmhistory @uživatel`, `!message #channel`, `!website_block`, `!website_block_mapa`", inline=False)
+    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download`, `!sm @uživatel`, `!debugvozovna`, `!aktulizace`, `!dashadd [id] [role]`, `!dashremove [id]`", inline=False)
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -3146,7 +3182,7 @@ async def dmhistory(ctx, user: discord.User, limit: int = 20):
             await ctx.send("📭 Žádné DM zprávy nebyly nalezeny.")
             return
         messages.reverse()
-        history_text = "\\n".join(messages)
+        history_text = "\n".join(messages)
         if len(history_text) > 4000:
             with open("dm_history.txt", "w", encoding="utf-8") as f: f.write(history_text)
             await ctx.send(f"📜 Historie je příliš dlouhá, posílám jako soubor pro {user.name}:", file=discord.File("dm_history.txt"))
