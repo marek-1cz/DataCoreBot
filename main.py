@@ -2984,8 +2984,16 @@ async def update_depot_discord_messages():
                 
         try:
             if target_msg:
-                await target_msg.edit(embed=embed)
-                print(f"[DEPOT DISCORD] Aktualizovana zprava pro: {depot_name}", flush=True)
+                try:
+                    await target_msg.edit(embed=embed)
+                    print(f"[DEPOT DISCORD] Aktualizovana zprava pro: {depot_name}", flush=True)
+                except discord.HTTPException as he:
+                    if he.code == 30046 or "Maximum number of edits" in str(he):
+                        await target_msg.delete()
+                        await channel.send(embed=embed)
+                        print(f"[DEPOT DISCORD] Zprava pro {depot_name} byla smazana a odeslana nova (limit editaci vycerpan)", flush=True)
+                    else:
+                        raise he
             else:
                 await channel.send(embed=embed)
                 print(f"[DEPOT DISCORD] Odeslana nova zprava pro: {depot_name}", flush=True)
