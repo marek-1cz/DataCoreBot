@@ -6103,7 +6103,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
             print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} testuji stop_near='{stop_name}' (status: '{status_text}')\033[0m", flush=True)
             # 1) Nejprve zkusit přímo vyhlášenou zastávku z PVVD (nejpřesnější)
             b_last_stop = bus_data.get("last_stop_name", "")
-            if b_last_stop and stop_name.lower() in b_last_stop.lower():
+            if b_last_stop and _norm_txt(stop_name) in _norm_txt(b_last_stop):
                 print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} nalezena shoda v PVVD lastStopName='{b_last_stop}'\033[0m", flush=True)
                 _fire(f"stop_near:{stop_name}", f"{status_text} ({b_last_stop})", f"Vyhlášená zastávka: {now_time_str} ({b_last_stop})")
             else:
@@ -6113,7 +6113,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 if b_lat and b_lon and GTFS_LOADED:
                     near = _nearest_stop_name(b_lat, b_lon, 250)
                     print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} nejblizsi zastavka (<250m) = '{near}'\033[0m", flush=True)
-                    if near and stop_name.lower() in near.lower():
+                    if near and _norm_txt(stop_name) in _norm_txt(near):
                         _fire(f"stop_near:{stop_name}", f"{status_text} ({near})", f"V blízkosti: {now_time_str} ({near})")
 
         depot_name = triggers.get("depot_in", "")
