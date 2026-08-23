@@ -5718,6 +5718,7 @@ def _build_notification_message(rule, trigger_name, bus_data):
         "depot_out": 0xf59e0b,
         "trip_change": 0x60a5fa,
         "started_moving": 0x10b981,
+        "bug_error": 0xef4444,
     }
     trigger_key_base = trigger_name.split(":")[0]
     color = color_map.get(trigger_key_base, 0x38bdf8)
@@ -5725,11 +5726,12 @@ def _build_notification_message(rule, trigger_name, bus_data):
     trigger_labels = {
         "terminal": "\U0001f3c1 Autobus p\u0159ijel na kone\u010dnou zast\u00e1vku",
         "new_line": "\U0001f504 Autobus za\u010dal obsluhovat novou linku",
-        "stop_near": "\U0001f68f Autobus se bl\u00ed\u017e\u00ed k zast\u00e1vce",
+        "stop_near": "\U0001f68f Autobus p\u0159ijel do zast\u00e1vky",
         "depot_in": "\U0001f17f\ufe0f Autobus vjel do vozovny",
         "depot_out": "\U0001f68c Autobus vyjel z vozovny",
         "trip_change": "\U0001f500 Autobus p\u0159epnul linkospoj",
         "started_moving": "\u25b6\ufe0f Autobus se dal do pohybu",
+        "bug_error": "\u26a0\ufe0f Sledovan\u00fd autobus ztratil spolehlivou polohu (stav BUG).\nPravidlo bylo **automaticky smaz\u00e1no**. Vytvo\u0159te si pros\u00edm nov\u00e9 upozorn\u011bn\u00ed.",
     }
     trigger_label = trigger_labels.get(trigger_key_base, f"\U0001f514 Trigger: {trigger_name}")
     label = rule.get("label") or f"Bus {spz}"
@@ -5859,6 +5861,22 @@ def _check_and_fire_notifications(db_client, bus_cache):
         color_class = bus_data.get("color_class", "")
         line = str(bus_data.get("line", ""))
 
+        if "BUG" in status_text.upper():
+            embed, dm_text = _build_notification_message(rule, "bug_error", bus_data)
+            NOTIFICATION_DM_QUEUE.put({
+                "discord_id": discord_id,
+                "email": email,
+                "dm_text": dm_text,
+                "embed": embed,
+                "rule_id": rule_id,
+                "trigger": "bug_error",
+            })
+            try:
+                db_client.table("bus_notifications").delete().eq("id", rule_id).execute()
+            except Exception: pass
+            print(f"[NOTIF] Pravidlo {rule_id[:8]} smazáno - bus v BUG stavu.", flush=True)
+            continue
+
         if triggers.get("terminal") and ("Konečná" in status_text or "Konecna" in status_text):
             _fire("terminal", status_text)
 
@@ -5869,8 +5887,15 @@ def _check_and_fire_notifications(db_client, bus_cache):
             state["_line"] = line
 
         stop_name = triggers.get("stop_near", "")
-        if stop_name and stop_name.lower() in status_text.lower():
-            _fire(f"stop_near:{stop_name}", status_text)
+        if stop_name:
+            is_stopped = "stojí" in status_text.lower() or "stoji" in status_text.lower() or "čeká" in status_text.lower() or "konečná" in status_text.lower() or "konecna" in status_text.lower()
+            if is_stopped:
+                b_lat = bus_data.get("lat", 0)
+                b_lon = bus_data.get("lng", 0)
+                if b_lat and b_lon and GTFS_LOADED:
+                    near = _nearest_stop_name(b_lat, b_lon, 250)
+                    if near and stop_name.lower() in near.lower():
+                        _fire(f"stop_near:{stop_name}", f"{status_text} ({near})")
 
         if triggers.get("depot_in") and ("bg-depot" in color_class or "Vozovna" in status_text):
             _fire("depot_in", color_class)
@@ -5887,7 +5912,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
 
         if triggers.get("started_moving"):
             was_stopped = state.get("_stopped", False)
-            now_stopped = "Stoji" in status_text or "stoji" in status_text
+            now_stopped = "stojí" in status_text.lower() or "stoji" in status_text.lower() or "čeká" in status_text.lower() or "konečná" in status_text.lower() or "konecna" in status_text.lower()
             if was_stopped and not now_stopped:
                 _fire("started_moving", status_text)
             state["_stopped"] = now_stopped
