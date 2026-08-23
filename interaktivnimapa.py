@@ -5727,7 +5727,7 @@ _last_notification_check = None
 _NOTIF_STATE_CACHE = {}  # {notif_id: {trigger_key: last_state_value}}
 
 
-def _build_notification_message(rule, trigger_name, bus_data):
+def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
     """Sestaví text notifikace a Discord embed."""
     spz = bus_data.get("spz", "Nezn\u00e1m\u00e1")
     line = bus_data.get("line", "?")
@@ -5745,6 +5745,8 @@ def _build_notification_message(rule, trigger_name, bus_data):
         "depot_out": 0xf59e0b,
         "trip_change": 0x60a5fa,
         "started_moving": 0x10b981,
+        "delay_threshold": 0xef4444,
+        "delay_change": 0xf59e0b,
         "bug_error": 0xef4444,
     }
     trigger_key_base = trigger_name.split(":")[0]
@@ -5758,9 +5760,14 @@ def _build_notification_message(rule, trigger_name, bus_data):
         "depot_out": "\U0001f68c Autobus vyjel z vozovny",
         "trip_change": "\U0001f500 Autobus p\u0159epnul linkospoj",
         "started_moving": "\u25b6\ufe0f Autobus se dal do pohybu",
+        "delay_threshold": "\u23f3 Zpo\u017ed\u011bn\u00ed p\u0159es\u00e1hlo nastaven\u00fd limit",
+        "delay_change": "\ud83d\udcc8 Do\u0161lo ke skokov\u00e9 zm\u011bn\u011b zpo\u017ed\u011bn\u00ed",
         "bug_error": "\u26a0\ufe0f Sledovan\u00fd autobus ztratil spolehlivou polohu (stav BUG).\nPravidlo bylo **automaticky smaz\u00e1no**. Vytvo\u0159te si pros\u00edm nov\u00e9 upozorn\u011bn\u00ed.",
     }
     trigger_label = trigger_labels.get(trigger_key_base, f"\U0001f514 Trigger: {trigger_name}")
+    if context_text:
+        trigger_label = f"{trigger_label}\n*{context_text}*"
+        
     label = rule.get("label") or f"Bus {spz}"
     now_str = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M:%S")
 
@@ -5895,7 +5902,11 @@ def _check_and_fire_notifications(db_client, bus_cache):
         color_class = bus_data.get("color_class", "")
         line = str(bus_data.get("line", ""))
         now_time_str = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M")
-        delay_val = int(bus_data.get("delay", 0))
+        raw_delay = bus_data.get("delay")
+        try:
+            delay_val = int(float(raw_delay)) if raw_delay is not None else 0
+        except:
+            delay_val = 0
 
         if "BUG" in status_text.upper():
             embed, dm_text = _build_notification_message(rule, "bug_error", bus_data)
