@@ -5884,25 +5884,29 @@ def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
     now_str = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M:%S")
 
     embed = {
-        "title": f"\U0001f514 Upozorn\u011bn\u00ed: {label}",
+        "title": f"🔔 Upozornění: {label}",
         "description": trigger_label,
         "color": color,
         "fields": [
             {"name": "Linka", "value": str(line), "inline": True},
+            {"name": "Spoj (ID)", "value": str(bus_id), "inline": True},
             {"name": "SPZ", "value": str(spz), "inline": True},
-            {"name": "C\u00edl", "value": str(dest), "inline": True},
+            {"name": "Cíl", "value": str(dest), "inline": True},
             {"name": "Stav", "value": str(status), "inline": False},
-            {"name": "\u010cas", "value": now_str, "inline": True},
-            {"name": "Sledovat", "value": f"[Otev\u0159\u00edt na map\u011b]({track_url})", "inline": True},
+            {"name": "Zpoždění", "value": f"{bus_data.get('delay', 0)} min", "inline": True},
+            {"name": "Čas", "value": now_str, "inline": True},
+            {"name": "Sledovat", "value": f"[Otevřít na mapě]({track_url})", "inline": True},
         ],
         "footer": {"text": "OIS IDPK Notifikace"},
     }
     # Textova verze pro DM
     dm_text = (
-        f"\U0001f514 **{label}** – {trigger_label}\n"
-        f"Linka: **{line}** | SPZ: **{spz}** | C\u00edl: **{dest}**\n"
+        f"🔔 **{label}** – {trigger_label}\n"
+        f"Linka: **{line}** | Spoj (ID): **{bus_id}** | SPZ: **{spz}**\n"
+        f"Cíl: **{dest}**\n"
         f"Stav: {status}\n"
-        f"\U0001f517 {track_url}"
+        f"Zpoždění: {bus_data.get('delay', 0)} min\n"
+        f"🔗 {track_url}"
     )
     return embed, dm_text
 
@@ -6036,7 +6040,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
         color_class = bus_data.get("color_class", "")
         line = str(bus_data.get("line", ""))
         now_time_str = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M")
-        raw_delay = bus_data.get("delay")
+        raw_delay = bus_data.get("raw_delay")
         try:
             delay_val = int(float(raw_delay)) if raw_delay is not None else 0
         except:
