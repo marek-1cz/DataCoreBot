@@ -735,10 +735,16 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
       <div style="margin-bottom:18px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.3);border-radius:10px;padding:12px 14px;">
         <div style="color:#38bdf8;font-size:12px;font-weight:bold;text-transform:uppercase;margin-bottom:8px;">📬 Kam přijde upozornění?</div>
         <div id="notif-delivery-info" style="color:#e2e8f0;font-size:13px;line-height:1.6;">
-          Systém automaticky použije kontakty z tvého profilu:<br>
-          <span id="notif-delivery-discord" style="display:none;">✅ <b>Discord DM</b> – zpráva od bota přímo do DM<br></span>
-          <span id="notif-delivery-email" style="display:none;">✅ <b>E-mail</b> – odeslání na tvůj registrovaný e-mail<br></span>
-          <span id="notif-delivery-none" style="color:#f59e0b;display:none;">⚠️ Tvůj účet nemá Discord ani e-mail – nejprve je přidej v nastavení účtu.</span>
+          Vyberte si kam upozornění odeslat:<br>
+          <label id="notif-delivery-discord" style="display:none; cursor:pointer; align-items:center; gap:6px; margin-top:4px;">
+            <input type="checkbox" id="nt-deliv-discord" checked>
+            <b>Discord DM</b> – zpráva od bota přímo do DM
+          </label>
+          <label id="notif-delivery-email" style="display:none; cursor:pointer; align-items:center; gap:6px; margin-top:4px;">
+            <input type="checkbox" id="nt-deliv-email" checked>
+            <b>E-mail</b> – odeslání na tvůj registrovaný e-mail
+          </label>
+          <span id="notif-delivery-none" style="color:#f59e0b;display:none; margin-top:4px; display:inline-block;">⚠️ Tvůj účet nemá Discord ani e-mail – nejprve je přidej v nastavení účtu.</span>
         </div>
       </div>
 
@@ -1735,9 +1741,9 @@ window.openNotifModal = function(busId, spz, line, destination) {
     let dd = document.getElementById('notif-delivery-discord');
     let de = document.getElementById('notif-delivery-email');
     let dn = document.getElementById('notif-delivery-none');
-    if(dd) dd.style.display = d.has_discord ? 'inline' : 'none';
-    if(de) de.style.display = d.has_email ? 'inline' : 'none';
-    if(dn) dn.style.display = (!d.has_discord && !d.has_email) ? 'inline' : 'none';
+    if(dd) { dd.style.display = d.has_discord ? 'flex' : 'none'; }
+    if(de) { de.style.display = d.has_email ? 'flex' : 'none'; }
+    if(dn) dn.style.display = (!d.has_discord && !d.has_email) ? 'inline-block' : 'none';
   }).catch(()=>{});
   // Načti existující pravidla
   loadNotifRules();
@@ -1785,22 +1791,10 @@ function showNotifMsg(msg, ok) {
   el.style.color = ok ? '#10b981' : '#ef4444';
 }
 
-async function testNotifWebhook() {
-  let url = document.getElementById('notif-webhook').value.trim();
-  let status = document.getElementById('notif-webhook-status');
-  if(status) status.textContent = '⏳ Testuju...'; status.style.color = '#94a3b8';
-  try {
-    let r = await fetch('/api/notifications/check_webhook', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({webhook_url: url})});
-    let d = await r.json();
-    if(status) { status.textContent = d.status==='success' ? '✅ Webhook funguje!' : '❌ ' + (d.message||'Chyba'); status.style.color = d.status==='success' ? '#10b981' : '#ef4444'; }
-  } catch(e) { if(status) { status.textContent = '❌ Chyba spojení'; status.style.color = '#ef4444'; } }
-}
-
 async function saveNotifRule() {
   let identifier = document.getElementById('notif-identifier').value.trim();
   let idType = document.querySelector('input[name="notif-id-type"]:checked')?.value || 'spz';
   let label = document.getElementById('notif-label').value.trim();
-  let webhook = document.getElementById('notif-webhook').value.trim();
   let stopName = document.getElementById('nt-stop-near')?.checked ? document.getElementById('nt-stop-name')?.value.trim() : '';
   let triggers = {
     terminal: document.getElementById('nt-terminal')?.checked || false,
@@ -1811,15 +1805,20 @@ async function saveNotifRule() {
     started_moving: document.getElementById('nt-started-moving')?.checked || false,
     stop_near: stopName || '',
   };
+  let deliveryChannels = [];
+  if (document.getElementById('nt-deliv-discord')?.checked) deliveryChannels.push('discord');
+  if (document.getElementById('nt-deliv-email')?.checked) deliveryChannels.push('email');
+
   if(!identifier) { showNotifMsg('Zadej SPZ nebo Bus ID', false); return; }
-  if(!webhook) { showNotifMsg('Zadej Discord Webhook URL', false); return; }
   if(!Object.values(triggers).some(v => v && v !== '')) { showNotifMsg('Vyber alespoň jeden trigger', false); return; }
+  if(deliveryChannels.length === 0) { showNotifMsg('Vyber alespoň jeden kanál pro doručení', false); return; }
+  
   showNotifMsg('⏳ Ukládám...', true);
   try {
-    let r = await fetch('/api/notifications/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({identifier, identifier_type: idType, triggers, webhook_url: webhook, label})});
+    let r = await fetch('/api/notifications/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({identifier, identifier_type: idType, triggers, label, delivery_channels: deliveryChannels})});
     let d = await r.json();
     if(d.status==='success') {
-      showNotifMsg('✅ Pravidlo uloženo!', true);
+      showNotifMsg(d.message || '✅ Pravidlo uloženo!', true);
       loadNotifRules();
       // Reset checkboxů
       ['nt-terminal','nt-new-line','nt-depot-in','nt-depot-out','nt-trip-change','nt-started-moving','nt-stop-near'].forEach(id => { let el=document.getElementById(id); if(el) el.checked=false; });
@@ -3133,7 +3132,10 @@ async function fetchBuses(){
 
       let popH=`
         <div class="ph" style="${mc==='bg-bug'?'background:#1f2937;':''}${mc==='bg-orange'?'background:#1c1400;':''}">
-          <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}${mc==='bg-orange'?'color:#f59e0b;':''}">Linka ${bus.line}${afH}</h3>
+          <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}${mc==='bg-orange'?'color:#f59e0b;':''}; display:flex; justify-content:space-between; align-items:center;">
+            <span>Linka ${bus.line}${afH}</span>
+            <span style="font-size:10px; color:#64748b; font-weight:normal; letter-spacing:0.5px;">#${bus.id}</span>
+          </h3>
         </div>
         <div class="pb">
           ${bugW}${orangeW}${depotW}
@@ -5793,6 +5795,12 @@ def _check_and_fire_notifications(db_client, bus_cache):
         discord_id = u_info.get("discord_id")
         email = u_info.get("email")
 
+        deliv_channels = rule.get("delivery_channels") or []
+        if "discord" not in deliv_channels:
+            discord_id = None
+        if "email" not in deliv_channels:
+            email = None
+
         if not discord_id and not email:
             continue  # Nemáme kam odesílat
 
@@ -5940,11 +5948,14 @@ def api_notif_create():
     identifier_type = data.get("identifier_type", "spz")
     triggers = data.get("triggers", {})
     label = str(data.get("label", "")).strip()[:80]
+    delivery_channels = data.get("delivery_channels", [])
 
     if not identifier:
         return jsonify({"status": "error", "message": "Chybí identifikátor (SPZ nebo bus ID)"}), 400
     if not any(triggers.values()):
         return jsonify({"status": "error", "message": "Vyber alespoň jeden trigger"}), 400
+    if not delivery_channels:
+        return jsonify({"status": "error", "message": "Vyber alespoň jeden kanál pro doručení"}), 400
 
     try:
         cnt_res = db.table("bus_notifications").select("id").eq("user_session", user_session_val).eq("is_active", True).execute()
@@ -5959,10 +5970,13 @@ def api_notif_create():
             "identifier": identifier,
             "identifier_type": identifier_type,
             "triggers": triggers,
-            "webhook_url": webhook_url,
             "label": label,
+            "delivery_channels": delivery_channels,
         }).execute()
-        return jsonify({"status": "success", "message": "Pravidlo uloženo"})
+        channels_text = []
+        if "discord" in delivery_channels and discord_id: channels_text.append("Discord DM")
+        if "email" in delivery_channels and email: channels_text.append(f"e-mail ({email})")
+        return jsonify({"status": "success", "message": f"Pravidlo uloženo! Až se událost stane, přijde zpráva na: {', '.join(channels_text)}"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
