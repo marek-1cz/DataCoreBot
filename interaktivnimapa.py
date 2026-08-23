@@ -722,15 +722,18 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
           <label class="notif-check-row"><input type="checkbox" id="nt-new-line"> <span>🔄 Autobus vyjel na novou linku</span></label>
           
           <div class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px; cursor:default;">
-            <label style="display:flex;align-items:center;gap:8px; cursor:pointer;"><input type="checkbox" id="nt-depot-in" onchange="document.getElementById('nt-depot-name').style.display = this.checked ? 'block' : 'none'"> <span>🅿️ Autobus zajel do vozovny</span></label>
-            <select id="nt-depot-name" style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;display:none;">
+            <label style="display:flex;align-items:center;gap:8px; cursor:pointer;"><input type="checkbox" id="nt-depot-in" onchange="document.getElementById('nt-depot-name-in').style.display = this.checked ? 'block' : 'none'"> <span>🅿️ Autobus zajel do vozovny</span></label>
+            <select id="nt-depot-name-in" class="depot-dynamic-select" style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;display:none;">
               <option value="all">Jakákoliv vozovna</option>
-              <option value="Karlov">Vozovna Karlov</option>
-              <option value="Slovany">Vozovna Slovany</option>
             </select>
           </div>
 
-          <label class="notif-check-row"><input type="checkbox" id="nt-depot-out"> <span>🚌 Autobus vyjel z vozovny</span></label>
+          <div class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px; cursor:default;">
+            <label style="display:flex;align-items:center;gap:8px; cursor:pointer;"><input type="checkbox" id="nt-depot-out" onchange="document.getElementById('nt-depot-name-out').style.display = this.checked ? 'block' : 'none'"> <span>🚌 Autobus vyjel z vozovny</span></label>
+            <select id="nt-depot-name-out" class="depot-dynamic-select" style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;display:none;">
+              <option value="all">Jakákoliv vozovna</option>
+            </select>
+          </div>
           <label class="notif-check-row"><input type="checkbox" id="nt-trip-change"> <span>🔀 Autobus změnil linkospoj</span></label>
           <label class="notif-check-row"><input type="checkbox" id="nt-started-moving"> <span>▶️ Autobus se rozjel</span></label>
           
@@ -762,11 +765,11 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
         <div id="notif-delivery-info" style="color:#e2e8f0;font-size:13px;line-height:1.6;">
           Vyberte si kam upozornění odeslat:<br>
           <label id="notif-delivery-discord" style="display:none; cursor:pointer; align-items:center; gap:6px; margin-top:4px;">
-            <input type="checkbox" id="nt-deliv-discord" checked>
+            <input type="checkbox" id="nt-deliv-discord">
             <b>Discord DM</b> – zpráva od bota přímo do DM
           </label>
           <label id="notif-delivery-email" style="display:none; cursor:pointer; align-items:center; gap:6px; margin-top:4px;">
-            <input type="checkbox" id="nt-deliv-email" checked>
+            <input type="checkbox" id="nt-deliv-email">
             <b>E-mail</b> – odeslání na tvůj registrovaný e-mail
           </label>
           <span id="notif-delivery-none" style="color:#f59e0b;display:none; margin-top:4px; display:inline-block;">⚠️ Tvůj účet nemá Discord ani e-mail – nejprve je přidej v nastavení účtu.</span>
@@ -1815,6 +1818,15 @@ window.openNotifModal = function(busId) {
     }
     if(dn) dn.style.display = (!d.has_discord && !d.has_email) ? 'inline-block' : 'none';
   }).catch(()=>{});
+  // Načti vozovny do selectboxů
+  fetch('/api/depot_zones').then(r=>r.json()).then(d=>{
+    if(d.zones) {
+      let opts = '<option value="all">Jakákoliv vozovna</option>';
+      d.zones.forEach(z => { opts += `<option value="${z.name}">${z.name}</option>`; });
+      document.querySelectorAll('.depot-dynamic-select').forEach(el => el.innerHTML = opts);
+    }
+  }).catch(e=>{});
+
   // Načti existující pravidla
   loadNotifRules();
 };
@@ -1869,8 +1881,8 @@ async function saveNotifRule(isOneTime = true) {
   let triggers = {
     terminal: document.getElementById('nt-terminal')?.checked || false,
     new_line: document.getElementById('nt-new-line')?.checked || false,
-    depot_in: document.getElementById('nt-depot-in')?.checked ? (document.getElementById('nt-depot-name')?.value || 'all') : false,
-    depot_out: document.getElementById('nt-depot-out')?.checked || false,
+    depot_in: document.getElementById('nt-depot-in')?.checked ? (document.getElementById('nt-depot-name-in')?.value || 'all') : false,
+    depot_out: document.getElementById('nt-depot-out')?.checked ? (document.getElementById('nt-depot-name-out')?.value || 'all') : false,
     trip_change: document.getElementById('nt-trip-change')?.checked || false,
     started_moving: document.getElementById('nt-started-moving')?.checked || false,
     stop_near: stopName || '',
@@ -1907,37 +1919,46 @@ window.shareBus = function(busId) {
   let trackUrl = location.origin + '/mapa?track=' + busId;
   let bus = (typeof lastArr !== 'undefined') ? lastArr.find(b => b.id === busId) : null;
   if (!bus) { showMapToast('Autobus nenalezen.'); return; }
-
-  let parts = [`Autobus linky ${bus.line} jede směr ${bus.destination}`];
-  if(bus.spz && bus.spz !== 'Neznama') parts.push(`SPZ ${bus.spz}`);
-  let shareText = parts.join(', ') + `. Sleduj ho taky: ${trackUrl}`;
   
-  if (navigator.share) {
-    navigator.share({
-      title: 'Sledování autobusu',
-      text: parts.join(', ') + '.',
-      url: trackUrl
-    }).catch(console.error);
-    return;
-  }
-
-  if(navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(shareText).then(() => {
-      showMapToast('📋 Text sdílení zkopírován do schránky!');
-    }).catch(() => _shareFallback(shareText));
-  } else {
-    _shareFallback(shareText);
-  }
+  let now = new Date();
+  let timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+  
+  let delay = (typeof bus.delay !== 'undefined') ? bus.delay : '?';
+  let stopName = (bus.status && bus.status.includes('(')) ? bus.status.split('(').pop().replace(')','') : bus.status;
+  
+  let shareText = `Autobus: ${bus.spz !== 'Neznama' && bus.spz ? bus.spz : bus.id}\nLinka: ${bus.line}\nSpoj (ID): ${bus.id}\nSměr: ${bus.destination}\nAktuální poloha blízko: ${stopName} v ${timeStr}\nZpoždění: ${delay} min\nSledovat na mapě: ${trackUrl}`;
+  
+  let modal = document.createElement('div');
+  modal.style.position = 'fixed';
+  modal.style.top = '0'; modal.style.left = '0'; modal.style.width = '100%'; modal.style.height = '100%';
+  modal.style.background = 'rgba(0,0,0,0.7)';
+  modal.style.display = 'flex'; modal.style.justifyContent = 'center'; modal.style.alignItems = 'center';
+  modal.style.zIndex = '10001';
+  modal.style.backdropFilter = 'blur(4px)';
+  
+  let box = document.createElement('div');
+  box.style.background = '#1e293b'; box.style.padding = '20px'; box.style.borderRadius = '12px';
+  box.style.width = '90%'; box.style.maxWidth = '360px'; box.style.color = '#fff';
+  box.style.border = '1px solid #334155';
+  box.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
+  
+  box.innerHTML = `
+    <h3 style="margin-top:0;margin-bottom:15px;text-align:center;color:#38bdf8;">📤 Sdílet spoj</h3>
+    <textarea id="share-ta" readonly style="width:100%;height:140px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:12px;font-size:13px;resize:none;margin-bottom:15px;box-sizing:border-box;outline:none;">${shareText}</textarea>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button onclick="navigator.clipboard.writeText(document.getElementById('share-ta').value).then(()=>showMapToast('📋 Text zkopírován!'));this.parentElement.parentElement.parentElement.remove()" style="background:#0284c7;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 6px rgba(0,0,0,0.2);">📋 Zkopírovat text a odkaz</button>
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:5px;">
+        <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(trackUrl)}" target="_blank" style="flex:1;text-align:center;background:#1877f2;color:white;padding:10px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;">Facebook</a>
+        <a href="fb-messenger://share/?link=${encodeURIComponent(trackUrl)}" target="_blank" style="flex:1;text-align:center;background:#00B2FF;color:white;padding:10px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;">Messenger</a>
+        <a href="https://wa.me/?text=${encodeURIComponent(shareText)}" target="_blank" style="flex:1;text-align:center;background:#25D366;color:white;padding:10px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;">WhatsApp</a>
+      </div>
+      <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background:#475569;color:white;border:none;padding:10px;border-radius:8px;cursor:pointer;width:100%;margin-top:5px;font-size:13px;">Zavřít</button>
+    </div>
+  `;
+  
+  modal.appendChild(box);
+  document.body.appendChild(modal);
 };
-
-function _shareFallback(text) {
-  let ta = document.createElement('textarea');
-  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
-  document.body.appendChild(ta); ta.select();
-  try { document.execCommand('copy'); showMapToast('📋 Text sdílení zkopírován!'); }
-  catch(e) { prompt('Zkopíruj tento odkaz:', text); }
-  document.body.removeChild(ta);
-}
 
 function showMapToast(msg) {
   let t = document.getElementById('map-toast');
@@ -6026,12 +6047,19 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 if depot_name == "all" or depot_name == True or depot_name.lower() in status_text.lower():
                     _fire("depot_in", "in", f"Linka {line} přijela v {now_time_str}")
 
-        if triggers.get("depot_out"):
+        depot_out_name = triggers.get("depot_out", "")
+        if depot_out_name and depot_out_name != "none":
             was_in_depot = state.get("_in_depot", False)
             now_in_depot = "bg-depot" in color_class or "Vozovna" in status_text
+            
             if was_in_depot and not now_in_depot:
-                _fire("depot_out", "out", f"Linka {line} vyjela v {now_time_str}")
+                last_depot = state.get("_depot_name_text", "")
+                if depot_out_name == "all" or depot_out_name == True or depot_out_name.lower() in last_depot.lower():
+                    _fire("depot_out", "out", f"Linka {line} vyjela z vozovny ({last_depot}) v {now_time_str}")
+            
             state["_in_depot"] = now_in_depot
+            if now_in_depot:
+                state["_depot_name_text"] = status_text
 
         if triggers.get("trip_change"):
             prev_dest = state.get("_dest")

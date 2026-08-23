@@ -1,0 +1,49 @@
+=========================================================
+      JAK BEZPEČNĚ PŘIDAT NOVÉHO SUPERADMINA (Dashboard)
+=========================================================
+
+Nové oprávnění pro webový dashboard je zcela oddělené od Discordu.
+I když někomu na Discordu dáš roli SM přes !sm, do dashboardu
+se nedostane, dokud mu to explicitně nepovolíš!
+
+Jsou 2 způsoby, jak někomu povolit přístup do dashboardu:
+
+---------------------------------------------------------
+Způsob 1: Přes Discord bot příkaz (Nejrychlejší)
+---------------------------------------------------------
+Vyžaduje to, abys MĚL TY OSOBNĚ roli web-sa na Discordu.
+
+1. Zjisti Discord ID daného člověka:
+   (Musíš mít zapnutý Vývojářský režim v Discordu:
+    Nastavení -> Pokročilé -> Vývojářský režim = ZAPNUTO)
+   Klikni pravým na jeho profil -> Zkopírovat ID uživatele.
+
+2. Napiš do jakéhokoli kanálu s botem:
+   !dashadd JEHO_ID superadmin
+   (Např. !dashadd 123456789012345678 superadmin)
+
+3. Bot odpoví: "Dashboard přístup 'superadmin' udělen."
+   Nyní se tento člověk může přihlásit na web.
+
+Další úrovně, které můžeš přidělit:
+- admin (nemůže zapínat/vypínat bot systémy, ale může banovat)
+- viewer (může jen číst data)
+
+Pokud chceš někomu přístup odebrat, napiš:
+!dashremove JEHO_ID
+
+---------------------------------------------------------
+Způsob 2: Přes Dashboard (Nejpohodlnější)
+---------------------------------------------------------
+1. Přihlas se do dashboardu (ty, jako superadmin)
+2. Vlevo v menu klikni na novou záložku "Správa Dashboard Adminů"
+3. Vlož Discord ID a vyber úroveň oprávnění.
+4. Klikni na Udělit přístup.
+
+
+Shrnutí rozdílu:
+- !sm na Discordu = dostane barevnou roli na serveru a přístup 
+  k věcem jako je !ban přes bota v chatu. NE webový dashboard.
+- !dashadd / dashboard = dostane přístup k webovému dashboardu.
+
+Uchovávej tento soubor v bezpečí, ať víš, jak systém funguje!
