@@ -2031,6 +2031,46 @@ def stranka_ucet():
     else:
         app_id_badge = '<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(100,116,139,0.1);border:1px solid #334155;border-radius:20px;padding:4px 12px;font-size:12px;color:#64748b;margin-top:5px;"><i class="fas fa-clock"></i> App ID přidělováno...</div>'
 
+    try:
+        notif_res = db.table("bus_notifications").select("*").eq("user_session", cookie_token).execute().data or []
+    except Exception:
+        notif_res = []
+        
+    notif_html = ""
+    if not notif_res:
+        notif_html = '<div style="color:#64748b; font-size:14px; text-align:center; margin-top:20px;">Zatím nemáte žádná aktivní upozornění na spoje. Můžete si je nastavit přímo na mapě kliknutím na autobus.</div>'
+    else:
+        for r in notif_res:
+            n_id = r.get("id")
+            label = r.get("label") or f"Bus {r.get('identifier')}"
+            typ = "Jednorázové" if r.get("is_one_time") else "Trvalé"
+            cnt = r.get("fired_count") or 0
+            
+            triggers = r.get("triggers", {})
+            t_texts = []
+            if triggers.get("terminal"): t_texts.append("Konečná")
+            if triggers.get("new_line"): t_texts.append("Změna linky")
+            if triggers.get("depot_in"): t_texts.append("Do vozovny")
+            if triggers.get("depot_out"): t_texts.append("Z vozovny")
+            if triggers.get("trip_change"): t_texts.append("Přepnutí spoje")
+            if triggers.get("started_moving"): t_texts.append("Rozjetí")
+            if triggers.get("stop_near"): t_texts.append(f"Zastávka: {triggers.get('stop_near')}")
+            trig_str = ", ".join(t_texts)
+            
+            notif_html += f"""
+            <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="color:white; font-weight:bold; font-size:15px; margin-bottom:4px;">{label}</div>
+                <div style="color:#94a3b8; font-size:12px; margin-bottom:4px;">Události: {trig_str}</div>
+                <div style="display:flex; gap:10px; font-size:11px;">
+                   <span style="color: {'#a78bfa' if not r.get('is_one_time') else '#7c3aed'}; font-weight:bold;">{typ}</span>
+                   <span style="color: #64748b;">Spuštěno: {cnt}x</span>
+                </div>
+              </div>
+              <button onclick="deleteNotificationRule('{n_id}')" style="background:transparent; border:none; color:#ef4444; font-size:18px; cursor:pointer; padding:10px;" title="Smazat upozornění"><i class="fas fa-trash"></i></button>
+            </div>
+            """
+
     html = HTML_UCET.replace('__AVATAR_IMG__', avatar_img_html)
     html = html.replace('__NICK__', nick)
     html = html.replace('__AVATAR_URL__', avatar_url)
@@ -2039,6 +2079,7 @@ def stranka_ucet():
     html = html.replace('__EMAIL_STATUS__', email_status)
     html = html.replace('__EMAIL_BTN__', email_btn)
     html = html.replace('__APP_ID_BADGE__', app_id_badge)
+    html = html.replace('__NOTIFICATIONS__', notif_html)
     html += link_scripts
     
     return render_public(html)

@@ -1281,8 +1281,30 @@ HTML_UCET = """
         __EMAIL_BTN__
       </div>
     </div>
+    
+    <div class="link-section">
+      <h3>Moje upozornění na spoje</h3>
+      __NOTIFICATIONS__
+    </div>
   </div>
 </div>
+
+<script>
+function deleteNotificationRule(ruleId) {
+    if(!confirm("Opravdu chcete toto upozornění smazat?")) return;
+    fetch('/api/notifications/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({rule_id: ruleId})
+    }).then(r => r.json()).then(data => {
+        if(data.status === 'success') {
+            location.reload();
+        } else {
+            alert('Chyba: ' + data.message);
+        }
+    });
+}
+
 
 <script>
 let currentAvatarBase64 = "__AVATAR_URL__";
