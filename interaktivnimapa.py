@@ -1737,7 +1737,14 @@ document.addEventListener('DOMContentLoaded', () => {
 // === NOTIFIKACE JS ===
 let _notifCurrentBusId = null, _notifCurrentSpz = null;
 
-window.openNotifModal = function(busId, spz, line, destination) {
+window.openNotifModal = function(busId) {
+  let bus = (typeof lastArr !== 'undefined') ? lastArr.find(b => b.id === busId) : null;
+  if (!bus) { showMapToast('Autobus nenalezen.'); return; }
+  
+  let spz = bus.spz;
+  let line = bus.line;
+  let destination = bus.destination;
+
   _notifCurrentBusId = busId;
   _notifCurrentSpz = spz;
   let info = document.getElementById('notif-bus-info');
@@ -1766,8 +1773,18 @@ window.openNotifModal = function(busId, spz, line, destination) {
     let dd = document.getElementById('notif-delivery-discord');
     let de = document.getElementById('notif-delivery-email');
     let dn = document.getElementById('notif-delivery-none');
-    if(dd) { dd.style.display = d.has_discord ? 'flex' : 'none'; }
-    if(de) { de.style.display = d.has_email ? 'flex' : 'none'; }
+    
+    let cbDiscord = document.getElementById('nt-deliv-discord');
+    let cbEmail = document.getElementById('nt-deliv-email');
+    
+    if(dd) { 
+      dd.style.display = d.has_discord ? 'flex' : 'none'; 
+      if (!d.has_discord && cbDiscord) cbDiscord.checked = false;
+    }
+    if(de) { 
+      de.style.display = d.has_email ? 'flex' : 'none'; 
+      if (!d.has_email && cbEmail) cbEmail.checked = false;
+    }
     if(dn) dn.style.display = (!d.has_discord && !d.has_email) ? 'inline-block' : 'none';
   }).catch(()=>{});
   // Načti existující pravidla
@@ -1857,12 +1874,24 @@ async function saveNotifRule(isOneTime = true) {
 }
 
 // === SDÍLENÍ AUTOBUSU ===
-window.shareBus = function(busId, spz, line, destination) {
+window.shareBus = function(busId) {
   let trackUrl = location.origin + '/mapa?track=' + busId;
   let bus = (typeof lastArr !== 'undefined') ? lastArr.find(b => b.id === busId) : null;
-  let parts = [`Autobus linky ${line} jede směr ${destination}`];
-  if(spz && spz !== 'Neznama') parts.push(`SPZ ${spz}`);
+  if (!bus) { showMapToast('Autobus nenalezen.'); return; }
+
+  let parts = [`Autobus linky ${bus.line} jede směr ${bus.destination}`];
+  if(bus.spz && bus.spz !== 'Neznama') parts.push(`SPZ ${bus.spz}`);
   let shareText = parts.join(', ') + `. Sleduj ho taky: ${trackUrl}`;
+  
+  if (navigator.share) {
+    navigator.share({
+      title: 'Sledování autobusu',
+      text: parts.join(', ') + '.',
+      url: trackUrl
+    }).catch(console.error);
+    return;
+  }
+
   if(navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(shareText).then(() => {
       showMapToast('📋 Text sdílení zkopírován do schránky!');
@@ -3176,8 +3205,8 @@ async function fetchBuses(){
           ${histBtn}
           <button id="route-btn-${bus.id}" class="pa pa-d" style="margin-top:5px;${rA?'background:#1e40af;':''}" onclick="toggleRoute('${bus.id}')">${rA?'🗺️ Skryt trasu':'🗺️ Zobrazit trasu'}</button>
           <div style="display:flex;gap:5px;margin-top:5px;">
-            <button class="pa" style="flex:1;background:#7c3aed;color:#fff;border-color:#6d28d9;" onclick="openNotifModal('${bus.id}','${bus.spz}','${bus.line}','${bus.destination}')">🔔 Notifikace</button>
-            <button class="pa" style="flex:1;background:#0369a1;color:#fff;border-color:#075985;" onclick="shareBus('${bus.id}','${bus.spz}','${bus.line}','${bus.destination}')">📤 Sdílet</button>
+            <button class="pa" style="flex:1;background:#7c3aed;color:#fff;border-color:#6d28d9;" onclick="openNotifModal('${bus.id}')">🔔 Notifikace</button>
+            <button class="pa" style="flex:1;background:#0369a1;color:#fff;border-color:#075985;" onclick="shareBus('${bus.id}')">📤 Sdílet</button>
           </div>
         </div>`;
 
