@@ -4775,6 +4775,7 @@ def background_map_worker():
                 b_lon = b_a.get("longitude") or 0
                 b_line = str(b_a.get("linkNumber") or b_a.get("linkNumberAlias") or "").strip()
                 b_dest = str(b_a.get("destinationName") or "").strip()
+                b_last_stop = str(b_a.get("lastStopName") or "").strip()
                 # aktualizuj/pridej do pameti
                 SPZ_MEMORY[b_spz] = {
                     "last_arriva_lat": b_lat,
@@ -4782,6 +4783,7 @@ def background_map_worker():
                     "last_arriva_time": now,
                     "line": b_line,
                     "destination": b_dest,
+                    "last_stop_name": b_last_stop,
                     "verified": False,  # bude nastaveno pri 3-faktor match
                 }
 
@@ -5091,6 +5093,10 @@ def background_map_worker():
             tt_ftick = 0
             for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
                 inact = (now - c["last_moved"]).total_seconds() / 60.0
+                
+                # Fetch lastStopName z pameti
+                if c.get("spz") and c["spz"] in SPZ_MEMORY:
+                    c["last_stop_name"] = SPZ_MEMORY[c["spz"]].get("last_stop_name", "")
                 
                 # ── Retroaktivni uprava SPZ vozovny ──────────────────────────────────────
                 if c.get("spz") and c["spz"] not in ("Nezn\u00e1m\u00e1", "Neznámá") and not c.get("_depot_retro_updated"):
@@ -6010,7 +6016,9 @@ def _check_and_fire_notifications(db_client, bus_cache):
                     base_trigger_key = trigger_key.split(":")[0]
                     current_triggers = dict(rule.get("triggers", {}))
                     if base_trigger_key in current_triggers:
-                        current_triggers[base_trigger_key] = False
+                        # Skokové zpoždění mažeme až na konečné
+                        if base_trigger_key != "delay_change":
+                            current_triggers[base_trigger_key] = False
                     
                     rule["triggers"] = current_triggers
                     
@@ -6062,10 +6070,27 @@ def _check_and_fire_notifications(db_client, bus_cache):
             print(f"[NOTIF] Pravidlo {rule_id[:8]} smazáno - bus v BUG stavu.", flush=True)
             continue
 
-        if triggers.get("terminal") and ("Konečná" in status_text or "Konecna" in status_text):
-            term_name = status_text.split("Konečná", 1)[-1].strip() if "Konečná" in status_text else ""
-            ctx_text = f"Příjezd: {now_time_str}" + (f" na {term_name}" if term_name else "")
-            _fire("terminal", status_text, ctx_text)
+        if "Konečná" in status_text or "Konecna" in status_text:
+            if triggers.get("terminal"):
+                term_name = status_text.split("Konečná", 1)[-1].strip() if "Konečná" in status_text else ""
+                ctx_text = f"Příjezd: {now_time_str}" + (f" na {term_name}" if term_name else "")
+                _fire("terminal", status_text, ctx_text)
+            
+            # Auto cleanup pro delay_change
+            if rule.get("is_one_time", True) and triggers.get("delay_change"):
+                try:
+                    current_triggers = dict(rule.get("triggers", {}))
+                    if current_triggers.get("delay_change"):
+                        current_triggers["delay_change"] = False
+                        rule["triggers"] = current_triggers
+                        has_active = any(bool(v) and v != "none" and v != "" for v in current_triggers.values())
+                        if has_active:
+                            db_client.table("bus_notifications").update({"triggers": current_triggers}).eq("id", rule_id).execute()
+                        else:
+                            db_client.table("bus_notifications").delete().eq("id", rule_id).execute()
+                            print(f"[NOTIF] Pravidlo {rule_id[:8]} smazáno - bus dojel na konečnou (delay_change cleanup).", flush=True)
+                except Exception:
+                    pass
 
         if triggers.get("new_line"):
             prev_line = state.get("_line")
@@ -6076,14 +6101,20 @@ def _check_and_fire_notifications(db_client, bus_cache):
         stop_name = triggers.get("stop_near", "")
         if stop_name:
             print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} testuji stop_near='{stop_name}' (status: '{status_text}')\033[0m", flush=True)
-            # Upozorni pokud je bus v okruhu 250m od zastávky, i když není napsáno "stojí"
-            b_lat = bus_data.get("lat", 0)
-            b_lon = bus_data.get("lng", 0)
-            if b_lat and b_lon and GTFS_LOADED:
-                near = _nearest_stop_name(b_lat, b_lon, 250)
-                print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} nejblizsi zastavka (<250m) = '{near}'\033[0m", flush=True)
-                if near and stop_name.lower() in near.lower():
-                    _fire(f"stop_near:{stop_name}", f"{status_text} ({near})", f"V blízkosti: {now_time_str} ({near})")
+            # 1) Nejprve zkusit přímo vyhlášenou zastávku z PVVD (nejpřesnější)
+            b_last_stop = bus_data.get("last_stop_name", "")
+            if b_last_stop and stop_name.lower() in b_last_stop.lower():
+                print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} nalezena shoda v PVVD lastStopName='{b_last_stop}'\033[0m", flush=True)
+                _fire(f"stop_near:{stop_name}", f"{status_text} ({b_last_stop})", f"Vyhlášená zastávka: {now_time_str} ({b_last_stop})")
+            else:
+                # 2) Fallback: Upozorni pokud je bus v okruhu 250m od zastávky (GPS)
+                b_lat = bus_data.get("lat", 0)
+                b_lon = bus_data.get("lng", 0)
+                if b_lat and b_lon and GTFS_LOADED:
+                    near = _nearest_stop_name(b_lat, b_lon, 250)
+                    print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} nejblizsi zastavka (<250m) = '{near}'\033[0m", flush=True)
+                    if near and stop_name.lower() in near.lower():
+                        _fire(f"stop_near:{stop_name}", f"{status_text} ({near})", f"V blízkosti: {now_time_str} ({near})")
 
         depot_name = triggers.get("depot_in", "")
         if depot_name and depot_name != "none":
