@@ -8,6 +8,8 @@ import threading
 import queue
 
 DEPOT_DISCORD_QUEUE = queue.Queue()
+NOTIFICATION_DM_QUEUE = queue.Queue()  # {discord_id, email, message, embed_data}
+
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, Response, request, session, redirect, render_template_string
 from zoneinfo import ZoneInfo
@@ -729,15 +731,17 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
         </div>
       </div>
 
-      <!-- Webhook URL -->
-      <div style="margin-bottom:14px;">
-        <label style="color:#94a3b8;font-size:12px;font-weight:bold;text-transform:uppercase;">Discord Webhook URL</label>
-        <div style="display:flex;gap:8px;margin-top:6px;">
-          <input id="notif-webhook" type="url" placeholder="https://discord.com/api/webhooks/..." style="flex:1;padding:9px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:13px;box-sizing:border-box;">
-          <button onclick="testNotifWebhook()" style="padding:9px 14px;background:#1e293b;color:#38bdf8;border:1px solid #334155;border-radius:8px;font-size:12px;cursor:pointer;white-space:nowrap;">🧪 Test</button>
+      <!-- Způsob doručení - automaticky z profilu -->
+      <div style="margin-bottom:18px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.3);border-radius:10px;padding:12px 14px;">
+        <div style="color:#38bdf8;font-size:12px;font-weight:bold;text-transform:uppercase;margin-bottom:8px;">📬 Kam přijde upozornění?</div>
+        <div id="notif-delivery-info" style="color:#e2e8f0;font-size:13px;line-height:1.6;">
+          Systém automaticky použije kontakty z tvého profilu:<br>
+          <span id="notif-delivery-discord" style="display:none;">✅ <b>Discord DM</b> – zpráva od bota přímo do DM<br></span>
+          <span id="notif-delivery-email" style="display:none;">✅ <b>E-mail</b> – odeslání na tvůj registrovaný e-mail<br></span>
+          <span id="notif-delivery-none" style="color:#f59e0b;display:none;">⚠️ Tvůj účet nemá Discord ani e-mail – nejprve je přidej v nastavení účtu.</span>
         </div>
-        <div id="notif-webhook-status" style="font-size:11px;margin-top:5px;min-height:16px;"></div>
       </div>
+
 
       <!-- Moje pravidla -->
       <div id="notif-rules-section" style="margin-bottom:18px;display:none;">
@@ -1726,9 +1730,19 @@ window.openNotifModal = function(busId, spz, line, destination) {
     let sn = document.getElementById('nt-stop-name');
     if(sn) sn.style.display = stopCb.checked ? 'block' : 'none';
   };
+  // Načti info o doručení (discord/email) z API
+  fetch('/api/notifications/delivery_info').then(r=>r.json()).then(d=>{
+    let dd = document.getElementById('notif-delivery-discord');
+    let de = document.getElementById('notif-delivery-email');
+    let dn = document.getElementById('notif-delivery-none');
+    if(dd) dd.style.display = d.has_discord ? 'inline' : 'none';
+    if(de) de.style.display = d.has_email ? 'inline' : 'none';
+    if(dn) dn.style.display = (!d.has_discord && !d.has_email) ? 'inline' : 'none';
+  }).catch(()=>{});
   // Načti existující pravidla
   loadNotifRules();
 };
+
 
 window.closeNotifModal = function() {
   document.getElementById('notif-modal').style.display = 'none';
@@ -5684,26 +5698,9 @@ _last_notification_check = None
 _NOTIF_STATE_CACHE = {}  # {notif_id: {trigger_key: last_state_value}}
 
 
-def _send_discord_webhook(webhook_url, embed_data):
-    """Odešle Discord Embed zprávu na webhook URL."""
-    try:
-        payload = json.dumps({"embeds": [embed_data]}).encode("utf-8")
-        req = urllib.request.Request(
-            webhook_url,
-            data=payload,
-            headers={"Content-Type": "application/json", "User-Agent": "OIS-IDPK-Bot/1.0"},
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            return resp.status in (200, 204)
-    except Exception as e:
-        print(f"[NOTIF] Webhook chyba: {e}", flush=True)
-        return False
-
-
-def _build_discord_embed(rule, trigger_name, bus_data):
-    """Sestaví Discord Embed pro notifikaci."""
-    spz = bus_data.get("spz", "Neznámá")
+def _build_notification_message(rule, trigger_name, bus_data):
+    """Sestaví text notifikace a Discord embed."""
+    spz = bus_data.get("spz", "Nezn\u00e1m\u00e1")
     line = bus_data.get("line", "?")
     dest = bus_data.get("destination", "?")
     bus_id = bus_data.get("id", rule.get("identifier", "?"))
@@ -5724,37 +5721,44 @@ def _build_discord_embed(rule, trigger_name, bus_data):
     color = color_map.get(trigger_key_base, 0x38bdf8)
 
     trigger_labels = {
-        "terminal": "🏁 Autobus přijel na konečnou zastávku",
-        "new_line": "🔄 Autobus začal obsluhovat novou linku",
-        "stop_near": f"🚏 Autobus se blíží k zastávce",
-        "depot_in": "🅿️ Autobus vjel do vozovny",
-        "depot_out": "🚌 Autobus vyjel z vozovny",
-        "trip_change": "🔀 Autobus přepnul linkospoj",
-        "started_moving": "▶️ Autobus se dal do pohybu",
+        "terminal": "\U0001f3c1 Autobus p\u0159ijel na kone\u010dnou zast\u00e1vku",
+        "new_line": "\U0001f504 Autobus za\u010dal obsluhovat novou linku",
+        "stop_near": "\U0001f68f Autobus se bl\u00ed\u017e\u00ed k zast\u00e1vce",
+        "depot_in": "\U0001f17f\ufe0f Autobus vjel do vozovny",
+        "depot_out": "\U0001f68c Autobus vyjel z vozovny",
+        "trip_change": "\U0001f500 Autobus p\u0159epnul linkospoj",
+        "started_moving": "\u25b6\ufe0f Autobus se dal do pohybu",
     }
-    trigger_label = trigger_labels.get(trigger_key_base, f"🔔 Trigger: {trigger_name}")
+    trigger_label = trigger_labels.get(trigger_key_base, f"\U0001f514 Trigger: {trigger_name}")
     label = rule.get("label") or f"Bus {spz}"
     now_str = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M:%S")
 
     embed = {
-        "title": f"🔔 Upozornění: {label}",
+        "title": f"\U0001f514 Upozorn\u011bn\u00ed: {label}",
         "description": trigger_label,
         "color": color,
         "fields": [
             {"name": "Linka", "value": str(line), "inline": True},
             {"name": "SPZ", "value": str(spz), "inline": True},
-            {"name": "Cíl", "value": str(dest), "inline": True},
+            {"name": "C\u00edl", "value": str(dest), "inline": True},
             {"name": "Stav", "value": str(status), "inline": False},
-            {"name": "Čas", "value": now_str, "inline": True},
+            {"name": "\u010cas", "value": now_str, "inline": True},
+            {"name": "Sledovat", "value": f"[Otev\u0159\u00edt na map\u011b]({track_url})", "inline": True},
         ],
         "footer": {"text": "OIS IDPK Notifikace"},
-        "url": track_url,
     }
-    return embed
+    # Textova verze pro DM
+    dm_text = (
+        f"\U0001f514 **{label}** – {trigger_label}\n"
+        f"Linka: **{line}** | SPZ: **{spz}** | C\u00edl: **{dest}**\n"
+        f"Stav: {status}\n"
+        f"\U0001f517 {track_url}"
+    )
+    return embed, dm_text
 
 
 def _check_and_fire_notifications(db_client, bus_cache):
-    """Zkontroluje pravidla notifikací a odpalí webhook pro splněné triggery."""
+    """Zkontroluje pravidla notifikací a odesílá DM/email přihlášenému uživateli."""
     global _NOTIF_STATE_CACHE
     try:
         res = db_client.table("bus_notifications").select("*").eq("is_active", True).execute()
@@ -5765,15 +5769,32 @@ def _check_and_fire_notifications(db_client, bus_cache):
 
     now = datetime.now(ZoneInfo("Europe/Prague")).replace(tzinfo=None)
 
+    # Cache user info per session (abychom nevolali DB pro každé pravidlo zvlášť)
+    _user_cache = {}
+
     for rule in rules:
         rule_id = str(rule["id"])
         identifier = rule.get("identifier", "")
         id_type = rule.get("identifier_type", "spz")
         triggers = rule.get("triggers") or {}
-        webhook_url = rule.get("webhook_url")
+        user_session = rule.get("user_session")
 
-        if not identifier or not webhook_url:
+        if not identifier or not user_session:
             continue
+
+        # Načti info o uživateli (discord_id, email) z cache nebo DB
+        if user_session not in _user_cache:
+            try:
+                u_res = db_client.table("users").select("discord_id, email").eq("id", user_session).execute()
+                _user_cache[user_session] = u_res.data[0] if u_res.data else {}
+            except Exception:
+                _user_cache[user_session] = {}
+        u_info = _user_cache[user_session]
+        discord_id = u_info.get("discord_id")
+        email = u_info.get("email")
+
+        if not discord_id and not email:
+            continue  # Nemáme kam odesílat
 
         # Najdi autobus v cache
         bus_data = None
@@ -5791,14 +5812,12 @@ def _check_and_fire_notifications(db_client, bus_cache):
             continue
 
         state = _NOTIF_STATE_CACHE.setdefault(rule_id, {})
-        fired_any = False
 
         def _fire(trigger_key, new_state):
-            nonlocal fired_any
             old = state.get(trigger_key)
             if old == new_state:
-                return  # Stejný stav, nepalíme znovu
-            # Anti-spam: max 1x za 5 minut na trigger
+                return
+            # Anti-spam: max 1x za 5 minut na pravidlo
             last_fired = rule.get("last_fired_at")
             if last_fired:
                 try:
@@ -5807,25 +5826,30 @@ def _check_and_fire_notifications(db_client, bus_cache):
                         return
                 except Exception:
                     pass
-            embed = _build_discord_embed(rule, trigger_key, bus_data)
-            ok = _send_discord_webhook(webhook_url, embed)
-            if ok:
-                state[trigger_key] = new_state
-                fired_any = True
-                try:
-                    db_client.table("bus_notifications").update({
-                        "last_fired_at": now.isoformat(),
-                        "fired_count": (rule.get("fired_count") or 0) + 1
-                    }).eq("id", rule_id).execute()
-                except Exception:
-                    pass
-                print(f"[NOTIF] Odpaleno pravidlo {rule_id[:8]} trigger={trigger_key}", flush=True)
+            embed, dm_text = _build_notification_message(rule, trigger_key, bus_data)
+            # Odpal do fronty pro Discord bot (DM)
+            NOTIFICATION_DM_QUEUE.put({
+                "discord_id": discord_id,
+                "email": email,
+                "dm_text": dm_text,
+                "embed": embed,
+                "rule_id": rule_id,
+                "trigger": trigger_key,
+            })
+            state[trigger_key] = new_state
+            try:
+                db_client.table("bus_notifications").update({
+                    "last_fired_at": now.isoformat(),
+                    "fired_count": (rule.get("fired_count") or 0) + 1
+                }).eq("id", rule_id).execute()
+            except Exception:
+                pass
+            print(f"[NOTIF] Odpaleno pravidlo {rule_id[:8]} trigger={trigger_key} discord={discord_id}", flush=True)
 
         # --- Vyhodnocení triggerů ---
         status_text = bus_data.get("status", "")
         color_class = bus_data.get("color_class", "")
         line = str(bus_data.get("line", ""))
-        trip_id = str(bus_data.get("trip_id", ""))
 
         if triggers.get("terminal") and ("Konečná" in status_text or "Konecna" in status_text):
             _fire("terminal", status_text)
@@ -5865,6 +5889,29 @@ def _check_and_fire_notifications(db_client, bus_cache):
 # NOTIFIKACE - Flask API endpointy
 # ─────────────────────────────────────────────────────────────────────────────
 
+@mapa_bp.route('/api/notifications/delivery_info', methods=['GET'])
+def api_notif_delivery_info():
+    """Vrátí informace o tom, kam se doručují notifikace."""
+    cookie_token = request.cookies.get('web_session_token')
+    if not cookie_token:
+        return jsonify({"status": "error", "message": "Nejste přihlášeni"}), 401
+    db = get_db_client()
+    if not db:
+        return jsonify({"status": "error", "message": "DB nedostupná"}), 500
+    try:
+        user_res = db.table("users").select("discord_id, email").eq("web_session_token", cookie_token).execute()
+        if not user_res.data:
+            return jsonify({"status": "error", "message": "Neplatná session"}), 401
+        u = user_res.data[0]
+        return jsonify({
+            "status": "success",
+            "has_discord": bool(u.get("discord_id")),
+            "has_email": bool(u.get("email"))
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @mapa_bp.route('/api/notifications/create', methods=['POST'])
 def api_notif_create():
     """Vytvoří nové pravidlo notifikace. Vyžaduje přihlášení."""
@@ -5874,30 +5921,31 @@ def api_notif_create():
     db = get_db_client()
     if not db:
         return jsonify({"status": "error", "message": "DB nedostupná"}), 500
-    # Ověř uživatele
     try:
-        user_res = db.table("users").select("id, nick").eq("web_session_token", cookie_token).execute()
+        user_res = db.table("users").select("id, nick, discord_id, email").eq("web_session_token", cookie_token).execute()
         if not user_res.data:
             return jsonify({"status": "error", "message": "Neplatná session"}), 401
-        user_session_val = str(user_res.data[0]["id"])
+        u = user_res.data[0]
+        user_session_val = str(u["id"])
+        discord_id = u.get("discord_id")
+        email = u.get("email")
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+    if not discord_id and not email:
+        return jsonify({"status": "error", "message": "Tvůj účet nemá připojen Discord ani e-mail. Nemáme kam notifikaci poslat!"}), 400
 
     data = request.get_json(silent=True) or {}
     identifier = str(data.get("identifier", "")).strip()
     identifier_type = data.get("identifier_type", "spz")
     triggers = data.get("triggers", {})
-    webhook_url = str(data.get("webhook_url", "")).strip()
     label = str(data.get("label", "")).strip()[:80]
 
     if not identifier:
         return jsonify({"status": "error", "message": "Chybí identifikátor (SPZ nebo bus ID)"}), 400
-    if not webhook_url or not webhook_url.startswith("https://discord.com/api/webhooks/"):
-        return jsonify({"status": "error", "message": "Neplatná Discord Webhook URL"}), 400
     if not any(triggers.values()):
         return jsonify({"status": "error", "message": "Vyber alespoň jeden trigger"}), 400
 
-    # Rate limit: max 10 pravidel na uživatele
     try:
         cnt_res = db.table("bus_notifications").select("id").eq("user_session", user_session_val).eq("is_active", True).execute()
         if len(cnt_res.data or []) >= 10:

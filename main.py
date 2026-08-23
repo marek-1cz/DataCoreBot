@@ -2907,6 +2907,98 @@ async def check_depot_queue():
     except Exception as e:
         print(f"[DEPOT DISCORD] Chyba: {e}", flush=True)
 
+@tasks.loop(seconds=5)
+async def check_notification_queue():
+    """Zpracuje frontu notifikací a pošle DM přes Discord bota."""
+    try:
+        from interaktivnimapa import NOTIFICATION_DM_QUEUE
+        while not NOTIFICATION_DM_QUEUE.empty():
+            item = NOTIFICATION_DM_QUEUE.get_nowait()
+            discord_id = item.get("discord_id")
+            dm_text = item.get("dm_text", "")
+            embed_data = item.get("embed")
+
+            # Pošli Discord DM
+            if discord_id:
+                try:
+                    user = await bot.fetch_user(int(discord_id))
+                    if embed_data:
+                        em = discord.Embed(
+                            title=embed_data.get("title", "🔔 Upozornění"),
+                            description=embed_data.get("description", ""),
+                            color=embed_data.get("color", 0x38bdf8)
+                        )
+                        for field in embed_data.get("fields", []):
+                            em.add_field(name=field["name"], value=field["value"], inline=field.get("inline", False))
+                        em.set_footer(text=embed_data.get("footer", {}).get("text", "OIS IDPK"))
+                        await user.send(embed=em)
+                    else:
+                        await user.send(dm_text)
+                    print(f"[NOTIF DM] Odesláno DM uživateli {discord_id}", flush=True)
+                except Exception as e:
+                    print(f"[NOTIF DM] Chyba při odesílání DM {discord_id}: {e}", flush=True)
+            
+            # Pošli Email
+            email = item.get("email")
+            if email:
+                try:
+                    await asyncio.to_thread(send_notification_email_sync, email, embed_data, dm_text)
+                    print(f"[NOTIF EMAIL] Odeslán e-mail uživateli {email}", flush=True)
+                except Exception as e:
+                    print(f"[NOTIF EMAIL] Chyba při odesílání emailu {email}: {e}", flush=True)
+    except Exception as e:
+        print(f"[NOTIF DM] Chyba fronty: {e}", flush=True)
+
+def send_notification_email_sync(to_email, embed_data, dm_text):
+    if not SMTP_EMAIL or not SMTP_PASSWORD:
+        return False
+    try:
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        import smtplib
+        
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = embed_data.get("title", "🔔 Upozornění na autobus") if embed_data else "🔔 Upozornění na autobus"
+        msg["From"] = f"DataCore Bot <{SMTP_EMAIL}>"
+        msg["To"] = to_email
+
+        # Sestavení HTML
+        if embed_data:
+            fields_html = "".join([f"<li><strong>{f['name']}:</strong> {f['value']}</li>" for f in embed_data.get("fields", [])])
+            html = f"""
+            <html>
+              <body style="background-color: #ffffff; color: #000000; font-family: sans-serif; padding: 20px;">
+                <h2 style="color: #38bdf8;">{embed_data.get("title", "Upozornění")}</h2>
+                <p><strong>{embed_data.get("description", "")}</strong></p>
+                <ul>
+                  {fields_html}
+                </ul>
+                <p>Hezký den přeje<br>Tým Projekt OIS IDPK</p>
+              </body>
+            </html>
+            """
+        else:
+            html = f"""
+            <html>
+              <body style="background-color: #ffffff; color: #000000; font-family: sans-serif; padding: 20px;">
+                <p>{dm_text.replace(chr(10), '<br>')}</p>
+                <p>Hezký den přeje<br>Tým Projekt OIS IDPK</p>
+              </body>
+            </html>
+            """
+
+        msg.attach(MIMEText(html, "html"))
+        
+        server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+        server.login(SMTP_EMAIL, SMTP_PASSWORD)
+        server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"[NOTIF EMAIL] Chyba odesílání e-mailu sync: {e}")
+        raise e
+
+
 def format_prague_time(iso_str):
     if not iso_str: return ""
     try:
@@ -3056,6 +3148,8 @@ async def on_ready():
     trigger_setup_messages_update()
     if not keepalive_ping.is_running(): keepalive_ping.start()
     if not check_depot_queue.is_running(): check_depot_queue.start()
+    if not check_notification_queue.is_running(): check_notification_queue.start()
+
     import asyncio
     async def initial_depot_update():
         for _ in range(15):
