@@ -2964,7 +2964,13 @@ def send_notification_email_sync(to_email, embed_data, dm_text):
 
         # Sestavení HTML
         if embed_data:
-            fields_html = "".join([f"<li><strong>{f['name']}:</strong> {f['value']}</li>" for f in embed_data.get("fields", [])])
+            import re
+            fields_html = ""
+            for f in embed_data.get("fields", []):
+                val = str(f.get("value", ""))
+                val = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" style="color: #38bdf8; text-decoration: none;">\1</a>', val)
+                fields_html += f"<li><strong>{f.get('name', '')}:</strong> {val}</li>"
+                
             html = f"""
             <html>
               <body style="background-color: #ffffff; color: #000000; font-family: sans-serif; padding: 20px;">
@@ -2978,10 +2984,14 @@ def send_notification_email_sync(to_email, embed_data, dm_text):
             </html>
             """
         else:
+            import re
+            html_text = dm_text.replace(chr(10), '<br>')
+            html_text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" style="color: #38bdf8;">\1</a>', html_text)
+            
             html = f"""
             <html>
               <body style="background-color: #ffffff; color: #000000; font-family: sans-serif; padding: 20px;">
-                <p>{dm_text.replace(chr(10), '<br>')}</p>
+                <p>{html_text}</p>
                 <p>Hezký den přeje<br>Tým Projekt OIS IDPK</p>
               </body>
             </html>
