@@ -721,32 +721,34 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
           <label class="notif-check-row"><input type="checkbox" id="nt-terminal"> <span>🏁 Autobus dorazil na konečnou zastávku</span></label>
           <label class="notif-check-row"><input type="checkbox" id="nt-new-line"> <span>🔄 Autobus vyjel na novou linku</span></label>
           
-          <label class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
-            <div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="nt-depot-in"> <span>🅿️ Autobus zajel do vozovny</span></div>
+          <div class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px; cursor:default;">
+            <label style="display:flex;align-items:center;gap:8px; cursor:pointer;"><input type="checkbox" id="nt-depot-in" onchange="document.getElementById('nt-depot-name').style.display = this.checked ? 'block' : 'none'"> <span>🅿️ Autobus zajel do vozovny</span></label>
             <select id="nt-depot-name" style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;display:none;">
               <option value="all">Jakákoliv vozovna</option>
               <option value="Karlov">Vozovna Karlov</option>
               <option value="Slovany">Vozovna Slovany</option>
             </select>
-          </label>
+          </div>
 
           <label class="notif-check-row"><input type="checkbox" id="nt-depot-out"> <span>🚌 Autobus vyjel z vozovny</span></label>
           <label class="notif-check-row"><input type="checkbox" id="nt-trip-change"> <span>🔀 Autobus změnil linkospoj</span></label>
           <label class="notif-check-row"><input type="checkbox" id="nt-started-moving"> <span>▶️ Autobus se rozjel</span></label>
-          <label class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
-            <div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="nt-stop-near"> <span>🚏 Autobus přijel do zastávky:</span></div>
+          
+          <div class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px; cursor:default;">
+            <label style="display:flex;align-items:center;gap:8px; cursor:pointer;"><input type="checkbox" id="nt-stop-near" onchange="document.getElementById('nt-stop-name').style.display = this.checked ? 'block' : 'none'"> <span>🚏 Autobus přijel do zastávky:</span></label>
             <input id="nt-stop-name" type="text" placeholder="Název zastávky..." style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;display:none;">
-          </label>
+          </div>
 
           <div style="border-top:1px solid #334155; margin-top:5px; padding-top:10px;">
-            <label class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
-              <div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="nt-delay-thresh"> <span>⏳ Zpoždění přesáhne limit (min)</span></div>
+            <div class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px; cursor:default;">
+              <label style="display:flex;align-items:center;gap:8px; cursor:pointer;"><input type="checkbox" id="nt-delay-thresh" onchange="document.getElementById('nt-delay-val').style.display = this.checked ? 'block' : 'none'"> <span>⏳ Zpoždění přesáhne limit (min)</span></label>
               <input id="nt-delay-val" type="number" min="1" max="300" placeholder="Např. 5" style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;display:none;">
-            </label>
-            <label class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px; margin-top:8px;">
-              <div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="nt-delay-change"> <span>📈 Skoková změna zpoždění (o 3+ min)</span></div>
+            </div>
+            
+            <div class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px; margin-top:8px; cursor:default;">
+              <label style="display:flex;align-items:center;gap:8px; cursor:pointer;"><input type="checkbox" id="nt-delay-change" onchange="let warn = document.getElementById('nt-delay-change-warn'); let em = document.getElementById('nt-deliv-email'); if(this.checked){ warn.style.display='block'; if(em){em.checked=false;em.disabled=true;} } else { warn.style.display='none'; if(em){em.disabled=false;} }"> <span>📈 Skoková změna zpoždění (o 3+ min)</span></label>
               <span style="font-size:11px; color:#94a3b8; display:none;" id="nt-delay-change-warn">POUZE na Discord (vypne E-mail)</span>
-            </label>
+            </div>
           </div>
         </div>
       </div>
