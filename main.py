@@ -3085,6 +3085,7 @@ async def on_member_join(member):
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument): await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!**", delete_after=15)
     elif isinstance(error, commands.MemberNotFound): await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
+    elif isinstance(error, commands.CommandNotFound): await ctx.send(f"❌ **Tento příkaz neexistuje.** Zadej `!help` pro zobrazení seznamu příkazů.", delete_after=15)
     elif isinstance(error, commands.CheckFailure): pass
 
 @bot.command()
@@ -3101,6 +3102,59 @@ async def help(ctx):
 @bot.command()
 async def cmds(ctx):
     await help(ctx)
+
+@bot.command()
+@commands.has_role('web-sa')
+async def dashadd(ctx, target_id: str, role: str):
+    role = role.lower()
+    if role not in ["viewer", "admin", "superadmin", "sa", "dev", "bt", "user"]:
+        await ctx.send("❌ Neplatná úroveň! Možnosti: viewer, admin, superadmin, sa, dev, bt, user")
+        return
+    r_str = "User"
+    if role in ["superadmin", "sa"]: r_str = "SA"
+    elif role in ["admin", "dev"]: r_str = "DEV"
+    elif role in ["viewer", "bt"]: r_str = "BT"
+    
+    db = get_db()
+    if db:
+        res = db.table("users").update({"dashboard_access": True, "role": r_str}).eq("discord_id", target_id).execute()
+        if not res.data: await ctx.send(f"❌ Uživatel `{target_id}` nebyl v databázi nalezen.")
+        else: await ctx.send(f"✅ Dashboard přístup '{role}' udělen.")
+
+@bot.command()
+@commands.has_role('web-sa')
+async def dashremove(ctx, target_id: str):
+    db = get_db()
+    if db:
+        res = db.table("users").update({"dashboard_access": False}).eq("discord_id", target_id).execute()
+        if not res.data: await ctx.send(f"❌ Uživatel `{target_id}` nebyl v databázi nalezen.")
+        else: await ctx.send(f"✅ Dashboard přístup odebrán pro `{target_id}`.")
+
+@bot.command()
+@commands.has_any_role('SM', 'web-sa')
+async def dmhistory(ctx, user: discord.User, limit: int = 20):
+    await ctx.send(f"⏳ Načítám DM zprávy pro {user.name} (limit {limit})...")
+    try:
+        if not user.dm_channel: await user.create_dm()
+        messages = []
+        async for msg in user.dm_channel.history(limit=limit):
+            sender = "Bot" if msg.author == bot.user else msg.author.name
+            time_str = msg.created_at.strftime("%d.%m.%Y %H:%M")
+            content = msg.content if msg.content else "[Zpráva s Embedem/Souborem]"
+            messages.append(f"**[{time_str}] {sender}:** {content}")
+        if not messages:
+            await ctx.send("📭 Žádné DM zprávy nebyly nalezeny.")
+            return
+        messages.reverse()
+        history_text = "\\n".join(messages)
+        if len(history_text) > 4000:
+            with open("dm_history.txt", "w", encoding="utf-8") as f: f.write(history_text)
+            await ctx.send(f"📜 Historie je příliš dlouhá, posílám jako soubor pro {user.name}:", file=discord.File("dm_history.txt"))
+        else:
+            embed = discord.Embed(title=f"📜 DM Historie - {user.name}", description=history_text, color=0x38bdf8)
+            await ctx.send(embed=embed)
+    except discord.Forbidden: await ctx.send("❌ Nelze získat DM zprávy. Uživatel mě pravděpodobně zablokoval.")
+    except Exception as e: await ctx.send(f"❌ Nastala chyba: {e}")
 
 @bot.command()
 async def id(ctx, user: discord.User = None):
