@@ -735,8 +735,11 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
           <label class="notif-check-row"><input type="checkbox" id="nt-started-moving"> <span>▶️ Autobus se rozjel</span></label>
           
           <div class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px; cursor:default;">
-            <label style="display:flex;align-items:center;gap:8px; cursor:pointer;"><input type="checkbox" id="nt-stop-near" onchange="document.getElementById('nt-stop-name').style.display = this.checked ? 'block' : 'none'"> <span>🚏 Autobus přijel do zastávky:</span></label>
-            <input id="nt-stop-name" type="text" placeholder="Název zastávky..." style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;display:none;">
+            <label style="display:flex;align-items:center;gap:8px; cursor:pointer;"><input type="checkbox" id="nt-stop-near" onchange="document.getElementById('nt-stop-container').style.display = this.checked ? 'block' : 'none'"> <span>🚏 Autobus přijel do zastávky:</span></label>
+            <div id="nt-stop-container" style="display:none; width:100%; position:relative;">
+              <input id="nt-stop-name" type="text" autocomplete="off" placeholder="Začněte psát název zastávky..." style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;">
+              <div id="nt-stop-autocomplete" style="position:absolute;top:100%;left:0;width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;max-height:150px;overflow-y:auto;z-index:100;display:none;margin-top:2px;"></div>
+            </div>
           </div>
 
           <div style="border-top:1px solid #334155; margin-top:5px; padding-top:10px;">
@@ -1765,9 +1768,34 @@ window.openNotifModal = function(busId) {
   // Zobraz zastávkové pole pokud zaškrtnuto
   let stopCb = document.getElementById('nt-stop-near');
   if(stopCb) stopCb.onchange = () => {
-    let sn = document.getElementById('nt-stop-name');
+    let sn = document.getElementById('nt-stop-container');
     if(sn) sn.style.display = stopCb.checked ? 'block' : 'none';
   };
+  
+  // Autocomplete logika
+  let stopInp = document.getElementById('nt-stop-name');
+  let stopAc = document.getElementById('nt-stop-autocomplete');
+  if (stopInp && stopAc) {
+    let to = null;
+    stopInp.oninput = () => {
+      clearTimeout(to);
+      let v = stopInp.value.trim();
+      if (v.length < 2) { stopAc.style.display = 'none'; return; }
+      to = setTimeout(async () => {
+        try {
+          let r = await fetch('/api/stops_search?q=' + encodeURIComponent(v));
+          let d = await r.json();
+          if (d.status === 'success' && d.results.length > 0) {
+            stopAc.innerHTML = d.results.map(n => `<div style="padding:6px 10px;cursor:pointer;border-bottom:1px solid #334155;font-size:13px;color:#e2e8f0;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" onmousedown="document.getElementById('nt-stop-name').value='${n.replace(/'/g, "\\'")}'; document.getElementById('nt-stop-autocomplete').style.display='none';">${n}</div>`).join('');
+            stopAc.style.display = 'block';
+          } else {
+            stopAc.style.display = 'none';
+          }
+        } catch(e) {}
+      }, 300);
+    };
+    stopInp.onblur = () => { setTimeout(() => { stopAc.style.display = 'none'; }, 200); };
+  }
   // Načti info o doručení (discord/email) z API
   fetch('/api/notifications/delivery_info').then(r=>r.json()).then(d=>{
     let dd = document.getElementById('notif-delivery-discord');
@@ -1866,7 +1894,8 @@ async function saveNotifRule(isOneTime = true) {
       loadNotifRules();
       // Reset checkboxů
       ['nt-terminal','nt-new-line','nt-depot-in','nt-depot-out','nt-trip-change','nt-started-moving','nt-stop-near','nt-delay-thresh','nt-delay-change'].forEach(id => { let el=document.getElementById(id); if(el) el.checked=false; }); if(document.getElementById('nt-deliv-email')) document.getElementById('nt-deliv-email').disabled=false;
-      let sn=document.getElementById('nt-stop-name'); if(sn){sn.value='';sn.style.display='none';}
+      let sn=document.getElementById('nt-stop-name'); if(sn) sn.value='';
+      let sc=document.getElementById('nt-stop-container'); if(sc) sc.style.display='none';
     } else {
       showNotifMsg('❌ ' + (d.message||'Chyba'), false);
     }
@@ -5914,8 +5943,24 @@ def _check_and_fire_notifications(db_client, bus_cache):
             is_one_time = rule.get("is_one_time", True)
             try:
                 if is_one_time:
-                    db_client.table("bus_notifications").delete().eq("id", rule_id).execute()
-                    print(f"[NOTIF] Jednorázové pravidlo {rule_id[:8]} splněno a smazáno (trigger={trigger_key}).", flush=True)
+                    base_trigger_key = trigger_key.split(":")[0]
+                    current_triggers = dict(rule.get("triggers", {}))
+                    if base_trigger_key in current_triggers:
+                        current_triggers[base_trigger_key] = False
+                    
+                    rule["triggers"] = current_triggers
+                    
+                    has_active = any(bool(v) and v != "none" and v != "" for v in current_triggers.values())
+                    if has_active:
+                        db_client.table("bus_notifications").update({
+                            "triggers": current_triggers,
+                            "last_fired_at": now.isoformat(),
+                            "fired_count": (rule.get("fired_count") or 0) + 1
+                        }).eq("id", rule_id).execute()
+                        print(f"[NOTIF] Jednorázové pravidlo {rule_id[:8]} částečně splněno (trigger={trigger_key}). Zbývají další.", flush=True)
+                    else:
+                        db_client.table("bus_notifications").delete().eq("id", rule_id).execute()
+                        print(f"[NOTIF] Jednorázové pravidlo {rule_id[:8]} ZCELA splněno a smazáno.", flush=True)
                 else:
                     db_client.table("bus_notifications").update({
                         "last_fired_at": now.isoformat(),
@@ -6086,6 +6131,26 @@ def api_notif_create():
 
     if not identifier:
         return jsonify({"status": "error", "message": "⚠️ Zadejte SPZ nebo ID autobusu."}), 400
+        
+    if identifier_type == "spz":
+        matched_buses = [
+            {"id": bus_id, "status": bc.get("status", "")}
+            for bus_id, bc in bus_cache.items()
+            if bc.get("spz") == identifier
+        ]
+        
+        if len(matched_buses) > 1:
+            bugged = [b for b in matched_buses if "BUG" in b["status"].upper()]
+            moving = [b for b in matched_buses if "BUG" not in b["status"].upper()]
+            
+            if len(bugged) > 0 and len(moving) == 1:
+                identifier_type = "bus_id"
+                identifier = moving[0]["id"]
+                label = f"{label} (Auto-fixed to ID)" if label else f"Bus ID: {identifier}"
+            else:
+                print(f"[ADMIN ERROR] Duplicitní SPZ na mapě pro {identifier}. Nalezeno {len(matched_buses)}x.", flush=True)
+                return jsonify({"status": "error", "message": "⚠️ Na mapě je aktuálně více autobusů s touto SPZ. Zvolte prosím sledování pomocí Bus ID."}), 400
+
     if not any(triggers.values()):
         return jsonify({"status": "error", "message": "⚠️ Vyberte alespoň jednu událost."}), 400
     if not delivery_channels:
@@ -6703,6 +6768,36 @@ def api_admin_route_stops():
         })
 
     return jsonify({"status": "success", "stops": stops_out, "count": len(stops_out)})
+
+
+@mapa_bp.route('/api/stops_search')
+def api_stops_search():
+    """Autocomplete pro vyhledávání zastávek."""
+    query = request.args.get('q', '').strip().lower()
+    if not query or len(query) < 2:
+        return jsonify({"status": "success", "results": []})
+        
+    if not GTFS_STOPS:
+        return jsonify({"status": "error", "message": "GTFS data nejsou načtena"}), 503
+
+    results = []
+    seen = set()
+    
+    for idx, stop in enumerate(GTFS_STOPS):
+        name = stop[0]
+        n_lower = name.lower()
+        if query in n_lower:
+            key = _norm_txt(name)
+            if key not in seen:
+                seen.add(key)
+                priority = 1 if n_lower.startswith(query) else 2
+                results.append((priority, name))
+                if len(results) > 50:
+                    break
+                    
+    results.sort(key=lambda x: (x[0], x[1]))
+    final_names = [r[1] for r in results[:15]]
+    return jsonify({"status": "success", "results": final_names})
 
 
 @mapa_bp.route('/api/stops_near')
