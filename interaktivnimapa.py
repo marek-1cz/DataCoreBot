@@ -740,8 +740,17 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
           <div class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px; cursor:default;">
             <label style="display:flex;align-items:center;gap:8px; cursor:pointer;"><input type="checkbox" id="nt-stop-near" onchange="document.getElementById('nt-stop-container').style.display = this.checked ? 'block' : 'none'"> <span>🚏 Autobus přijel do zastávky:</span></label>
             <div id="nt-stop-container" style="display:none; width:100%; position:relative;">
-              <input id="nt-stop-name" type="text" autocomplete="off" placeholder="Začněte psát název zastávky..." style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;">
-              <div id="nt-stop-autocomplete" style="position:absolute;top:100%;left:0;width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;max-height:150px;overflow-y:auto;z-index:100;display:none;margin-top:2px;"></div>
+              <div style="display:flex; gap:15px; margin-bottom:8px;">
+                <label style="font-size:12px; cursor:pointer;"><input type="radio" name="nt_stop_type" value="route" checked onchange="document.getElementById('nt-stop-route-select').style.display='block'; document.getElementById('nt-stop-all-container').style.display='none';"> Zastávka na trase spoje</label>
+                <label style="font-size:12px; cursor:pointer;"><input type="radio" name="nt_stop_type" value="all" onchange="document.getElementById('nt-stop-route-select').style.display='none'; document.getElementById('nt-stop-all-container').style.display='block';"> Jiná zastávka</label>
+              </div>
+              <select id="nt-stop-route-select" style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;">
+                <option value="">Načítám zastávky...</option>
+              </select>
+              <div id="nt-stop-all-container" style="display:none; position:relative;">
+                <input id="nt-stop-name" type="text" autocomplete="off" placeholder="Začněte psát název zastávky..." style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;">
+                <div id="nt-stop-autocomplete" style="position:absolute;top:100%;left:0;width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;max-height:150px;overflow-y:auto;z-index:100;display:none;margin-top:2px;"></div>
+              </div>
             </div>
           </div>
 
@@ -1768,6 +1777,22 @@ window.openNotifModal = function(busId) {
   }
   document.getElementById('notif-modal').style.display = 'block';
   document.getElementById('notif-modal-msg').textContent = '';
+  
+  // Načti zastávky spoje
+  fetch('/api/bus_route/' + busId).then(r=>r.json()).then(d=>{
+    let sel = document.getElementById('nt-stop-route-select');
+    if(sel && d.stops) {
+      let opts = '<option value="">-- Vyber zastávku na trase --</option>';
+      d.stops.filter(s => !s.passed).forEach(s => {
+        opts += `<option value="${s.name}">${s.name}</option>`;
+      });
+      if (opts === '<option value="">-- Vyber zastávku na trase --</option>') {
+         opts = '<option value="">Žádné budoucí zastávky (konečná?)</option>';
+      }
+      sel.innerHTML = opts;
+    }
+  }).catch(()=>{});
+  
   // Zobraz zastávkové pole pokud zaškrtnuto
   let stopCb = document.getElementById('nt-stop-near');
   if(stopCb) stopCb.onchange = () => {
@@ -1877,7 +1902,15 @@ async function saveNotifRule(isOneTime = true) {
   let identifier = document.getElementById('notif-identifier').value.trim();
   let idType = document.querySelector('input[name="notif-id-type"]:checked')?.value || 'spz';
   let label = document.getElementById('notif-label').value.trim();
-  let stopName = document.getElementById('nt-stop-near')?.checked ? document.getElementById('nt-stop-name')?.value.trim() : '';
+  let stopName = '';
+  if (document.getElementById('nt-stop-near')?.checked) {
+    let stopType = document.querySelector('input[name="nt_stop_type"]:checked')?.value;
+    if (stopType === 'route') {
+      stopName = document.getElementById('nt-stop-route-select')?.value.trim() || '';
+    } else {
+      stopName = document.getElementById('nt-stop-name')?.value.trim() || '';
+    }
+  }
   let triggers = {
     terminal: document.getElementById('nt-terminal')?.checked || false,
     new_line: document.getElementById('nt-new-line')?.checked || false,
@@ -6163,7 +6196,7 @@ def api_notif_create():
     if identifier_type == "spz":
         matched_buses = [
             {"id": bus_id, "status": bc.get("status", "")}
-            for bus_id, bc in bus_cache.items()
+            for bus_id, bc in GLOBAL_BUS_CACHE.items()
             if bc.get("spz") == identifier
         ]
         
