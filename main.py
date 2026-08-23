@@ -3278,31 +3278,6 @@ async def dashremove(ctx, target_id: str):
         if not res.data: await ctx.send(f"❌ Uživatel `{target_id}` nebyl v databázi nalezen.")
         else: await ctx.send(f"✅ Dashboard přístup odebrán pro `{target_id}`.")
 
-@bot.command()
-@commands.has_any_role('SM', 'web-sa')
-async def dmhistory(ctx, user: discord.User, limit: int = 20):
-    await ctx.send(f"⏳ Načítám DM zprávy pro {user.name} (limit {limit})...")
-    try:
-        if not user.dm_channel: await user.create_dm()
-        messages = []
-        async for msg in user.dm_channel.history(limit=limit):
-            sender = "Bot" if msg.author == bot.user else msg.author.name
-            time_str = msg.created_at.strftime("%d.%m.%Y %H:%M")
-            content = msg.content if msg.content else "[Zpráva s Embedem/Souborem]"
-            messages.append(f"**[{time_str}] {sender}:** {content}")
-        if not messages:
-            await ctx.send("📭 Žádné DM zprávy nebyly nalezeny.")
-            return
-        messages.reverse()
-        history_text = "\n".join(messages)
-        if len(history_text) > 4000:
-            with open("dm_history.txt", "w", encoding="utf-8") as f: f.write(history_text)
-            await ctx.send(f"📜 Historie je příliš dlouhá, posílám jako soubor pro {user.name}:", file=discord.File("dm_history.txt"))
-        else:
-            embed = discord.Embed(title=f"📜 DM Historie - {user.name}", description=history_text, color=0x38bdf8)
-            await ctx.send(embed=embed)
-    except discord.Forbidden: await ctx.send("❌ Nelze získat DM zprávy. Uživatel mě pravděpodobně zablokoval.")
-    except Exception as e: await ctx.send(f"❌ Nastala chyba: {e}")
 
 @bot.command()
 async def id(ctx, user: discord.User = None):
