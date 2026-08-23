@@ -2032,7 +2032,7 @@ def stranka_ucet():
         app_id_badge = '<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(100,116,139,0.1);border:1px solid #334155;border-radius:20px;padding:4px 12px;font-size:12px;color:#64748b;margin-top:5px;"><i class="fas fa-clock"></i> App ID přidělováno...</div>'
 
     try:
-        notif_res = db.table("bus_notifications").select("*").eq("user_session", cookie_token).execute().data or []
+        notif_res = db.table("bus_notifications").select("*").eq("user_session", str(u["id"])).execute().data or []
     except Exception:
         notif_res = []
         

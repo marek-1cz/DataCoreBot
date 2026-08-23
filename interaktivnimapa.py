@@ -718,16 +718,36 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
       <div style="margin-bottom:18px;">
         <label style="color:#94a3b8;font-size:12px;font-weight:bold;text-transform:uppercase;display:block;margin-bottom:10px;">Upozornit mě když</label>
         <div style="display:flex;flex-direction:column;gap:8px;">
-          <label class="notif-check-row"><input type="checkbox" id="nt-terminal"> <span>🏁 Autobus přijede na konečnou zastávku</span></label>
-          <label class="notif-check-row"><input type="checkbox" id="nt-new-line"> <span>🔄 Autobus začne obsluhovat novou linku</span></label>
-          <label class="notif-check-row"><input type="checkbox" id="nt-depot-in"> <span>🅿️ Autobus vjede do vozovny</span></label>
-          <label class="notif-check-row"><input type="checkbox" id="nt-depot-out"> <span>🚌 Autobus vyjede z vozovny</span></label>
-          <label class="notif-check-row"><input type="checkbox" id="nt-trip-change"> <span>🔀 Autobus přepne linkospoj (formát X/Y)</span></label>
-          <label class="notif-check-row"><input type="checkbox" id="nt-started-moving"> <span>▶️ Autobus se dá do pohybu (byl stojící)</span></label>
+          <label class="notif-check-row"><input type="checkbox" id="nt-terminal"> <span>🏁 Autobus dorazil na konečnou zastávku</span></label>
+          <label class="notif-check-row"><input type="checkbox" id="nt-new-line"> <span>🔄 Autobus vyjel na novou linku</span></label>
+          
           <label class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
-            <div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="nt-stop-near"> <span>🚏 Autobus se blíží k zastávce:</span></div>
-            <input id="nt-stop-name" type="text" placeholder="Název zastávky (např. Planá)" style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;display:none;">
+            <div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="nt-depot-in"> <span>🅿️ Autobus zajel do vozovny</span></div>
+            <select id="nt-depot-name" style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;display:none;">
+              <option value="all">Jakákoliv vozovna</option>
+              <option value="Karlov">Vozovna Karlov</option>
+              <option value="Slovany">Vozovna Slovany</option>
+            </select>
           </label>
+
+          <label class="notif-check-row"><input type="checkbox" id="nt-depot-out"> <span>🚌 Autobus vyjel z vozovny</span></label>
+          <label class="notif-check-row"><input type="checkbox" id="nt-trip-change"> <span>🔀 Autobus změnil linkospoj</span></label>
+          <label class="notif-check-row"><input type="checkbox" id="nt-started-moving"> <span>▶️ Autobus se rozjel</span></label>
+          <label class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+            <div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="nt-stop-near"> <span>🚏 Autobus přijel do zastávky:</span></div>
+            <input id="nt-stop-name" type="text" placeholder="Název zastávky..." style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;display:none;">
+          </label>
+
+          <div style="border-top:1px solid #334155; margin-top:5px; padding-top:10px;">
+            <label class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+              <div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="nt-delay-thresh"> <span>⏳ Zpoždění přesáhne limit (min)</span></div>
+              <input id="nt-delay-val" type="number" min="1" max="300" placeholder="Např. 5" style="width:100%;padding:7px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:13px;box-sizing:border-box;display:none;">
+            </label>
+            <label class="notif-check-row" style="flex-direction:column;align-items:flex-start;gap:6px; margin-top:8px;">
+              <div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="nt-delay-change"> <span>📈 Skoková změna zpoždění (o 3+ min)</span></div>
+              <span style="font-size:11px; color:#94a3b8; display:none;" id="nt-delay-change-warn">POUZE na Discord (vypne E-mail)</span>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -1802,11 +1822,13 @@ async function saveNotifRule(isOneTime = true) {
   let triggers = {
     terminal: document.getElementById('nt-terminal')?.checked || false,
     new_line: document.getElementById('nt-new-line')?.checked || false,
-    depot_in: document.getElementById('nt-depot-in')?.checked || false,
+    depot_in: document.getElementById('nt-depot-in')?.checked ? (document.getElementById('nt-depot-name')?.value || 'all') : false,
     depot_out: document.getElementById('nt-depot-out')?.checked || false,
     trip_change: document.getElementById('nt-trip-change')?.checked || false,
     started_moving: document.getElementById('nt-started-moving')?.checked || false,
     stop_near: stopName || '',
+    delay_threshold: document.getElementById('nt-delay-thresh')?.checked ? parseInt(document.getElementById('nt-delay-val')?.value || '0') : false,
+    delay_change: document.getElementById('nt-delay-change')?.checked || false,
   };
   let deliveryChannels = [];
   if (document.getElementById('nt-deliv-discord')?.checked) deliveryChannels.push('discord');
@@ -1824,7 +1846,7 @@ async function saveNotifRule(isOneTime = true) {
       showNotifMsg(d.message || '✅ Pravidlo uloženo!', true);
       loadNotifRules();
       // Reset checkboxů
-      ['nt-terminal','nt-new-line','nt-depot-in','nt-depot-out','nt-trip-change','nt-started-moving','nt-stop-near'].forEach(id => { let el=document.getElementById(id); if(el) el.checked=false; });
+      ['nt-terminal','nt-new-line','nt-depot-in','nt-depot-out','nt-trip-change','nt-started-moving','nt-stop-near','nt-delay-thresh','nt-delay-change'].forEach(id => { let el=document.getElementById(id); if(el) el.checked=false; }); if(document.getElementById('nt-deliv-email')) document.getElementById('nt-deliv-email').disabled=false;
       let sn=document.getElementById('nt-stop-name'); if(sn){sn.value='';sn.style.display='none';}
     } else {
       showNotifMsg('❌ ' + (d.message||'Chyba'), false);
@@ -5870,6 +5892,8 @@ def _check_and_fire_notifications(db_client, bus_cache):
         status_text = bus_data.get("status", "")
         color_class = bus_data.get("color_class", "")
         line = str(bus_data.get("line", ""))
+        now_time_str = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M")
+        delay_val = int(bus_data.get("delay", 0))
 
         if "BUG" in status_text.upper():
             embed, dm_text = _build_notification_message(rule, "bug_error", bus_data)
@@ -5888,44 +5912,73 @@ def _check_and_fire_notifications(db_client, bus_cache):
             continue
 
         if triggers.get("terminal") and ("Konečná" in status_text or "Konecna" in status_text):
-            _fire("terminal", status_text)
+            term_name = status_text.split("Konečná", 1)[-1].strip() if "Konečná" in status_text else ""
+            ctx_text = f"Příjezd: {now_time_str}" + (f" na {term_name}" if term_name else "")
+            _fire("terminal", status_text, ctx_text)
 
         if triggers.get("new_line"):
             prev_line = state.get("_line")
             if prev_line and prev_line != line:
-                _fire("new_line", line)
+                _fire("new_line", line, f"Změna: linka {prev_line} ➡️ {line}")
             state["_line"] = line
 
         stop_name = triggers.get("stop_near", "")
         if stop_name:
-            is_stopped = "stojí" in status_text.lower() or "stoji" in status_text.lower() or "čeká" in status_text.lower() or "konečná" in status_text.lower() or "konecna" in status_text.lower()
-            if is_stopped:
-                b_lat = bus_data.get("lat", 0)
-                b_lon = bus_data.get("lng", 0)
-                if b_lat and b_lon and GTFS_LOADED:
-                    near = _nearest_stop_name(b_lat, b_lon, 250)
-                    if near and stop_name.lower() in near.lower():
-                        _fire(f"stop_near:{stop_name}", f"{status_text} ({near})")
+            # Upozorni pokud je bus v okruhu 250m od zastávky, i když není napsáno "stojí"
+            b_lat = bus_data.get("lat", 0)
+            b_lon = bus_data.get("lng", 0)
+            if b_lat and b_lon and GTFS_LOADED:
+                near = _nearest_stop_name(b_lat, b_lon, 250)
+                if near and stop_name.lower() in near.lower():
+                    _fire(f"stop_near:{stop_name}", f"{status_text} ({near})", f"V blízkosti: {now_time_str} ({near})")
 
-        if triggers.get("depot_in") and ("bg-depot" in color_class or "Vozovna" in status_text):
-            _fire("depot_in", color_class)
+        depot_name = triggers.get("depot_in", "")
+        if depot_name and depot_name != "none":
+            # Je v depu
+            if "bg-depot" in color_class or "Vozovna" in status_text:
+                if depot_name == "all" or depot_name == True or depot_name.lower() in status_text.lower():
+                    _fire("depot_in", "in", f"Linka {line} přijela v {now_time_str}")
 
         if triggers.get("depot_out"):
             was_in_depot = state.get("_in_depot", False)
             now_in_depot = "bg-depot" in color_class or "Vozovna" in status_text
             if was_in_depot and not now_in_depot:
-                _fire("depot_out", "out")
+                _fire("depot_out", "out", f"Linka {line} vyjela v {now_time_str}")
             state["_in_depot"] = now_in_depot
 
-        if triggers.get("trip_change") and "/" in line:
-            _fire("trip_change", line)
+        if triggers.get("trip_change"):
+            prev_dest = state.get("_dest")
+            dest = bus_data.get("destination", "")
+            if prev_dest and prev_dest != dest:
+                _fire("trip_change", dest, f"Původní cíl: {prev_dest} ➡️ Nový cíl: {dest}")
+            state["_dest"] = dest
 
         if triggers.get("started_moving"):
             was_stopped = state.get("_stopped", False)
-            now_stopped = "stojí" in status_text.lower() or "stoji" in status_text.lower() or "čeká" in status_text.lower() or "konečná" in status_text.lower() or "konecna" in status_text.lower()
+            now_stopped = "stojí" in status_text.lower() or "stoji" in status_text.lower() or "čeká" in status_text.lower() or "konečná" in status_text.lower() or "konecna" in status_text.lower() or "bg-gray" in color_class
             if was_stopped and not now_stopped:
-                _fire("started_moving", status_text)
+                _fire("started_moving", status_text, f"Vozidlo se dalo do pohybu ({now_time_str})")
             state["_stopped"] = now_stopped
+            
+        # Zpoždění
+        delay_thresh = triggers.get("delay_threshold")
+        if delay_thresh:
+            try:
+                dt = int(delay_thresh)
+                prev_delay = state.get("_delay_thresh_val", 0)
+                if delay_val >= dt and prev_delay < dt:
+                    _fire(f"delay_threshold:{dt}", str(delay_val), f"Zpoždění dosáhlo {delay_val} min (limit {dt} min)")
+                state["_delay_thresh_val"] = delay_val
+            except: pass
+
+        delay_change = triggers.get("delay_change")
+        if delay_change:
+            prev_d = state.get("_delay_change_val", None)
+            if prev_d is not None and abs(delay_val - prev_d) >= 3:
+                _fire(f"delay_change", str(delay_val), f"Zpoždění se změnilo: {prev_d} min ➡️ {delay_val} min")
+                state["_delay_change_val"] = delay_val
+            elif prev_d is None:
+                state["_delay_change_val"] = delay_val
 
 
 # ─────────────────────────────────────────────────────────────────────────────
