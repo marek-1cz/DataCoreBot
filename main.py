@@ -2108,70 +2108,93 @@ def view_debug_log():
 @app.route('/dashboard/edit_user', methods=['POST'])
 @require_dash_level('admin')
 def edit_user():
-    db = get_db(); discord_id = request.form.get("discord_id"); action = request.form.get("action"); nick = request.form.get("nick"); email = request.form.get("email")
-    if not discord_id:
-        flash(f"Chyba: Nebylo předáno discord_id! (Akce: {action})", "error")
+    db = get_db()
+    discord_id = request.form.get("discord_id")
+    app_id = request.form.get("app_id")
+    action = request.form.get("action")
+    nick = request.form.get("nick")
+    email = request.form.get("email")
+
+    if email: email = email.strip()
+    if not email: email = None  # Prevents unique constraint violation for empty strings
+
+    if discord_id: discord_id = discord_id.strip()
+    
+    if (not discord_id or discord_id == "None") and not app_id:
+        flash(f"Chyba: Nebylo předáno discord_id ani app_id! (Akce: {action})", "error")
         return redirect(url_for('dashboard_main'))
     if not action:
         flash("Chyba: Nebyla předána žádná akce z tlačítka!", "error")
         return redirect(url_for('dashboard_main'))
         
     try:
-        with open("debug_log.txt", "a") as f: f.write(f"edit_user called: discord_id={discord_id}, action={action}\n")
+        with open("debug_log.txt", "a") as f: f.write(f"edit_user called: discord_id={discord_id}, app_id={app_id}, action={action}\n")
     except: pass
-    if db and discord_id:
+
+    if db:
+        # Helper pro stavbu query
+        def build_query(updates):
+            if discord_id and discord_id != "None": return db.table("users").update(updates).eq("discord_id", discord_id)
+            else: return db.table("users").update(updates).eq("app_id", app_id)
+
+        def build_delete_query(table):
+            if discord_id and discord_id != "None": return db.table(table).delete().eq("discord_id", discord_id)
+            else: return db.table(table).delete().eq("app_id", app_id)
+
+        target_identifier = f"discord_id '{discord_id}'" if (discord_id and discord_id != "None") else f"app_id #{app_id}"
+        valid_discord_id = discord_id if (discord_id and discord_id != "None") else None
+
         try:
             if action == 'save':
                 r_str = ",".join(request.form.getlist("roles")) if request.form.getlist("roles") else "User"
                 new_hwid = request.form.get("hwid", "").strip()
                 new_ip = request.form.get("ip_address", "").strip()
                 updates = {"nick": nick, "email": email, "role": r_str, "hwid": new_hwid, "ip_address": new_ip, "dashboard_access": True if request.form.get("dashboard_access") else False}
-                res = db.table("users").update(updates).eq("discord_id", discord_id).execute()
+                res = build_query(updates).execute()
                 try:
                     with open("debug_log.txt", "a") as f: f.write(f"save result: {res.data}\n")
                 except: pass
-                sync_roles_from_flask(discord_id, r_str)
+                if valid_discord_id: sync_roles_from_flask(valid_discord_id, r_str)
                 flash('Údaje upraveny!', 'success')
             elif action == 'ban':
                 try:
                     with open("debug_log.txt", "a") as f: f.write("executing ban query...\n")
                 except: pass
-                res = db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id.strip()).execute()
-                if not res.data: flash(f"Chyba: Uživatel s ID '{discord_id}' nebyl v databázi nalezen.", "error")
+                res = build_query({"is_banned": True, "dashboard_access": False}).execute()
+                if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl v databázi nalezen.", "error")
                 else: flash('BAN udělen.', 'warning')
-                if bot.loop and bot.loop.is_running() and bot.is_ready():
-                    try: asyncio.run_coroutine_threadsafe(send_user_dm(discord_id.strip(), "🔨 Účet zablokován", "Váš přístup do aplikace byl zablokován.", 0xef4444), bot.loop)
+                if bot.loop and bot.loop.is_running() and bot.is_ready() and valid_discord_id:
+                    try: asyncio.run_coroutine_threadsafe(send_user_dm(valid_discord_id, "🔨 Účet zablokován", "Váš přístup do aplikace byl zablokován.", 0xef4444), bot.loop)
                     except: pass
-                if str(session.get('discord_id')) == str(discord_id.strip()): session.clear()
+                if valid_discord_id and str(session.get('discord_id')) == str(valid_discord_id): session.clear()
             elif action == 'unban':
-                res = db.table("users").update({"is_banned": False, "dashboard_access": True}).eq("discord_id", discord_id.strip()).execute()
-                if not res.data: flash(f"Chyba: Uživatel s ID '{discord_id}' nebyl v databázi nalezen.", "error")
+                res = build_query({"is_banned": False, "dashboard_access": True}).execute()
+                if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl v databázi nalezen.", "error")
                 else: flash('BAN zrušen.', 'success')
-                if bot.loop and bot.loop.is_running() and bot.is_ready():
-                    try: asyncio.run_coroutine_threadsafe(send_user_dm(discord_id.strip(), "🕊️ Účet odblokován", "Váš přístup do aplikace byl obnoven.", 0x10b981), bot.loop)
+                if bot.loop and bot.loop.is_running() and bot.is_ready() and valid_discord_id:
+                    try: asyncio.run_coroutine_threadsafe(send_user_dm(valid_discord_id, "🕊️ Účet odblokován", "Váš přístup do aplikace byl obnoven.", 0x10b981), bot.loop)
                     except: pass
             elif action == 'delete':
                 try:
                     with open("debug_log.txt", "a") as f: f.write("executing delete query...\n")
                 except: pass
                 now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
-                res = db.table("users").update({"is_deleted": True, "deleted_at": now_str, "dashboard_access": False}).eq("discord_id", discord_id.strip()).execute()
-                if not res.data: flash(f"Chyba: Uživatel s ID '{discord_id}' nebyl v databázi nalezen pro smazání.", "error")
+                res = build_query({"is_deleted": True, "deleted_at": now_str, "dashboard_access": False}).execute()
+                if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl v databázi nalezen pro smazání.", "error")
                 else: flash('Účet smazán (Soft Delete).', 'danger')
-                if str(session.get('discord_id')) == str(discord_id.strip()): session.clear()
+                if valid_discord_id and str(session.get('discord_id')) == str(valid_discord_id): session.clear()
             elif action == 'restore':
-                res = db.table("users").update({"is_deleted": False, "deleted_at": "", "dashboard_access": True}).eq("discord_id", discord_id.strip()).execute()
-                if not res.data: flash(f"Chyba: Uživatel s ID '{discord_id}' nebyl v databázi nalezen.", "error")
+                res = build_query({"is_deleted": False, "deleted_at": "", "dashboard_access": True}).execute()
+                if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl v databázi nalezen.", "error")
                 else: flash('Účet obnoven!', 'success')
             elif action == 'hard_delete':
-                # Smazat ze všech souvisejících tabulek
                 for t in ["user_stats_lines", "user_stats_stops", "app_sessions", "download_logs", "feedback", "read_messages"]:
-                    try: db.table(t).delete().eq("discord_id", discord_id.strip()).execute()
+                    try: build_delete_query(t).execute()
                     except: pass
-                res = db.table("users").delete().eq("discord_id", discord_id.strip()).execute()
-                if not res.data: flash(f"Chyba: Uživatel s ID '{discord_id}' nebyl nalezen pro permanentní smazání.", "error")
+                res = build_delete_query("users").execute()
+                if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl nalezen pro permanentní smazání.", "error")
                 else: flash('Účet a všechna jeho data byla trvale smazána.', 'dark')
-                if str(session.get('discord_id')) == str(discord_id.strip()): session.clear()
+                if valid_discord_id and str(session.get('discord_id')) == str(valid_discord_id): session.clear()
         except Exception as e:
             flash(f"Chyba při úpravě uživatele (akce {action}): {e}", "error")
     return redirect(url_for('dashboard_main'))

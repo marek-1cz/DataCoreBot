@@ -177,6 +177,7 @@ DASHBOARD_LAYOUT = """
 </div>
 <form action="/dashboard/edit_user" method="POST" style="border-top: 1px solid #334155; padding-top: 15px; margin-top: 15px;">
 <input type="hidden" name="discord_id" id="modalDiscordId">
+<input type="hidden" name="app_id" id="modalAppIdHidden">
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
 <div>
 <label>Herní Nick:</label><input type="text" name="nick" id="modalNick" required>
@@ -200,7 +201,9 @@ DASHBOARD_LAYOUT = """
 function openModal(btn) {
     try {
         document.getElementById('editModal').style.display = 'flex';
-        document.getElementById('modalAppId').innerText = "#" + (btn.getAttribute('data-app-id') || "");
+        let app_id = btn.getAttribute('data-app-id') || "";
+        document.getElementById('modalAppId').innerText = "#" + app_id;
+        document.getElementById('modalAppIdHidden').value = app_id;
         let discord_id = btn.getAttribute('data-discord-id') || "";
         document.getElementById('modalDiscordId').value = discord_id;
         document.getElementById('modalNick').value = btn.getAttribute('data-nick') || "";
