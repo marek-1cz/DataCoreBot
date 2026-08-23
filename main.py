@@ -3232,9 +3232,9 @@ async def on_member_join(member):
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument): await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!**", delete_after=15)
-    elif isinstance(error, commands.MemberNotFound): await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
+    elif isinstance(error, commands.MemberNotFound) or isinstance(error, commands.UserNotFound): await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
     elif isinstance(error, commands.CommandNotFound): await ctx.send(f"❌ **Tento příkaz neexistuje.** Zadej `!help` pro zobrazení seznamu příkazů.", delete_after=15)
-    elif isinstance(error, commands.CheckFailure): pass
+    elif isinstance(error, commands.CheckFailure) or isinstance(error, commands.MissingRole): await ctx.send(f"{ctx.author.mention} ❌ **Nemáš oprávnění použít tento příkaz!**", delete_after=15)
 
 @bot.command()
 async def ping(ctx): await ctx.send(f"🏓 Pong! Odezva: **{round(bot.latency * 1000)}ms**.")
@@ -3457,26 +3457,40 @@ async def dm(ctx, user: discord.User, *, text: str):
 
 @bot.command()
 @check_sm_role()
-async def dm_view(ctx, discord_id: str):
-    if not discord_id.isdigit(): return await ctx.send("❌ Zadej platné číselné ID.")
+async def dmhistory(ctx, user: discord.User):
     status_msg = await ctx.send("<a:loading:123> Načítám historii zpráv...")
     try:
-        user = await bot.fetch_user(int(discord_id))
         if not user.dm_channel: await user.create_dm()
         messages = [msg async for msg in user.dm_channel.history(limit=100)]
         messages.reverse()
         if not messages: return await status_msg.edit(content=f"📭 DM s `{user.display_name}` je prázdné.")
-        log_content = f"--- DM S {user.display_name} ({user.id}) ---\n\n"
+        log_content = f"--- HISTORIE ZPRÁV DM S UŽIVATELEM {user.display_name.upper()} ({user.id}) ---\n\n"
         for m in messages:
             time_str = (m.created_at + timedelta(hours=1)).strftime("%d.%m.%Y %H:%M:%S")
             author_name = "🤖 BOT" if m.author.bot else f"👤 {m.author.display_name}"
-            log_content += f"[{time_str}] {author_name}: {m.content}\n"
-            if m.attachments: log_content += f"    [Příloha]: {', '.join([a.url for a in m.attachments])}\n"
+            log_content += f"[{time_str}] {author_name}:\n"
+            
+            if m.content:
+                indented_content = "\n".join([f"    {line}" for line in m.content.split("\n")])
+                log_content += f"{indented_content}\n"
+            
+            for emb in m.embeds:
+                log_content += f"    [Embed]: {emb.title or 'Bez titulku'}\n"
+                if emb.description:
+                    indented_desc = "\n".join([f"      {line}" for line in emb.description.split("\n")])
+                    log_content += f"{indented_desc}\n"
+                for field in emb.fields:
+                    log_content += f"      - {field.name}: {field.value}\n"
+            
+            if m.attachments: 
+                log_content += f"    [Příloha]: {', '.join([a.url for a in m.attachments])}\n"
+                
+            log_content += "-"*50 + "\n\n"
+            
         file_stream = io.BytesIO(log_content.encode('utf-8'))
-        file = discord.File(file_stream, filename=f"ChatLog_{user.display_name}.txt")
+        file = discord.File(file_stream, filename=f"HistorieDM_{user.display_name}.txt")
         await status_msg.delete()
         await ctx.send(f"📄 Posledních 100 zpráv s `{user.display_name}`:", file=file)
-    except discord.NotFound: await status_msg.edit(content="❌ Uživatel nenalezen.")
     except discord.Forbidden: await status_msg.edit(content="❌ Nemám oprávnění k DM.")
     except Exception as e: await status_msg.edit(content=f"❌ Chyba: `{e}`")
 

@@ -756,9 +756,12 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
       </div>
 
       <div id="notif-modal-msg" style="font-size:13px;min-height:18px;margin-bottom:10px;text-align:center;"></div>
-      <div style="display:flex;gap:10px;">
-        <button onclick="saveNotifRule()" style="flex:1;padding:12px;background:#7c3aed;color:white;border:none;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;">💾 Uložit pravidlo</button>
-        <button onclick="closeNotifModal()" style="padding:12px 18px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:8px;font-size:14px;cursor:pointer;">Zavřít</button>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;gap:10px;">
+          <button onclick="saveNotifRule(true)" style="flex:1;padding:12px;background:#7c3aed;color:white;border:none;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;">✨ Jednorázové upozornění</button>
+          <button onclick="closeNotifModal()" style="padding:12px 18px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:8px;font-size:14px;cursor:pointer;">Zavřít</button>
+        </div>
+        <button onclick="saveNotifRule(false)" style="width:100%;padding:10px;background:transparent;color:#a78bfa;border:1px solid #6d28d9;border-radius:8px;font-size:12px;font-weight:bold;cursor:pointer;">🔁 Přidat jako trvalé pravidlo (dokola)</button>
       </div>
     </div>
   </div>
@@ -1791,7 +1794,7 @@ function showNotifMsg(msg, ok) {
   el.style.color = ok ? '#10b981' : '#ef4444';
 }
 
-async function saveNotifRule() {
+async function saveNotifRule(isOneTime = true) {
   let identifier = document.getElementById('notif-identifier').value.trim();
   let idType = document.querySelector('input[name="notif-id-type"]:checked')?.value || 'spz';
   let label = document.getElementById('notif-label').value.trim();
@@ -1815,7 +1818,7 @@ async function saveNotifRule() {
   
   showNotifMsg('⏳ Ukládám...', true);
   try {
-    let r = await fetch('/api/notifications/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({identifier, identifier_type: idType, triggers, label, delivery_channels: deliveryChannels})});
+    let r = await fetch('/api/notifications/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({identifier, identifier_type: idType, triggers, label, delivery_channels: deliveryChannels, is_one_time: isOneTime})});
     let d = await r.json();
     if(d.status==='success') {
       showNotifMsg(d.message || '✅ Pravidlo uloženo!', true);
@@ -5826,14 +5829,14 @@ def _check_and_fire_notifications(db_client, bus_cache):
         def _fire(trigger_key, new_state):
             old = state.get(trigger_key)
             if old == new_state:
-                return
+                return False
             # Anti-spam: max 1x za 5 minut na pravidlo
             last_fired = rule.get("last_fired_at")
             if last_fired:
                 try:
                     lf = datetime.fromisoformat(last_fired.replace("Z", "+00:00")).replace(tzinfo=None)
                     if (now - lf).total_seconds() < 300:
-                        return
+                        return False
                 except Exception:
                     pass
             embed, dm_text = _build_notification_message(rule, trigger_key, bus_data)
@@ -5847,14 +5850,21 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 "trigger": trigger_key,
             })
             state[trigger_key] = new_state
+            
+            is_one_time = rule.get("is_one_time", True)
             try:
-                db_client.table("bus_notifications").update({
-                    "last_fired_at": now.isoformat(),
-                    "fired_count": (rule.get("fired_count") or 0) + 1
-                }).eq("id", rule_id).execute()
+                if is_one_time:
+                    db_client.table("bus_notifications").delete().eq("id", rule_id).execute()
+                    print(f"[NOTIF] Jednorázové pravidlo {rule_id[:8]} splněno a smazáno (trigger={trigger_key}).", flush=True)
+                else:
+                    db_client.table("bus_notifications").update({
+                        "last_fired_at": now.isoformat(),
+                        "fired_count": (rule.get("fired_count") or 0) + 1
+                    }).eq("id", rule_id).execute()
             except Exception:
                 pass
             print(f"[NOTIF] Odpaleno pravidlo {rule_id[:8]} trigger={trigger_key} discord={discord_id}", flush=True)
+            return True
 
         # --- Vyhodnocení triggerů ---
         status_text = bus_data.get("status", "")
@@ -5974,6 +5984,7 @@ def api_notif_create():
     triggers = data.get("triggers", {})
     label = str(data.get("label", "")).strip()[:80]
     delivery_channels = data.get("delivery_channels", [])
+    is_one_time = bool(data.get("is_one_time", True))
 
     if not identifier:
         return jsonify({"status": "error", "message": "Chybí identifikátor (SPZ nebo bus ID)"}), 400
@@ -5997,6 +6008,7 @@ def api_notif_create():
             "triggers": triggers,
             "label": label,
             "delivery_channels": delivery_channels,
+            "is_one_time": is_one_time,
         }).execute()
         channels_text = []
         if "discord" in delivery_channels and discord_id: channels_text.append("Discord DM")
