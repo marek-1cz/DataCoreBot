@@ -6847,9 +6847,20 @@ def stranka_historie_detail(spz):
 def api_live_buses():
     now = get_prague_time()
     uptime = (now - WORKER_START_TIME).total_seconds() if WORKER_START_TIME else 9999
+    
+    is_admin = bool(session.get('logged_in'))
+    buses_to_send = LIVE_BUSES_DATA
+    if not is_admin:
+        buses_to_send = []
+        for b in LIVE_BUSES_DATA:
+            b_copy = dict(b)
+            b_copy.pop("admin_note", None)
+            b_copy.pop("admin_driver", None)
+            buses_to_send.append(b_copy)
+            
     return jsonify({
         "status": "success", "server_time": now.strftime('%H:%M:%S'),
-        "worker_uptime_seconds": round(uptime), "buses": LIVE_BUSES_DATA,
+        "worker_uptime_seconds": round(uptime), "buses": buses_to_send,
     })
 
 
