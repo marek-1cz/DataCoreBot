@@ -1175,7 +1175,7 @@ function submitEmailCode() {
     if(code.length === 5) {
         window.location.href = `/api/auth/finalize?token=${code}&type=email`;
     } else {
-        alert("Kód musí mít 5 čísel.");
+        alert("Kód musí mít 5 znaků.");
     }
 }
 

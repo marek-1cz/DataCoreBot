@@ -1866,7 +1866,9 @@ def web_auth_email_request():
             db.table("users").insert(insert_data).execute()
         
         import time as _t
-        token = _secrets.token_hex(16)  # 128-bit bezpečný token místo 5číselneho
+        import random
+        import string
+        token = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5)) # 5-místný bezpečný kód pro ruční zadání i magic link
         token_expiry = int(_t.time()) + 900  # 15 minut
         db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("email", email).execute()
         
@@ -1936,9 +1938,50 @@ def web_auth_finalize():
                     return redirect('/ucet')
             perm_token = _secrets.token_hex(32)
             db.table("users").update({"login_token": "", "login_token_expires_at": 0, "web_session_token": perm_token}).eq("email", email).execute()
-            resp = redirect('/ucet')
+            
+            # Nastavíme cookie přes Flask Response, ale vrátíme meta refresh stránku s animací
+            from flask import make_response
+            html_content = """
+            <html>
+            <head>
+                <meta http-equiv="refresh" content="2;url=/ucet">
+                <title>Úspěšné přihlášení</title>
+                <style>
+                    body { background-color: #0f172a; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column; }
+                    .success-checkmark { width: 80px; height: 115px; margin: 0 auto; }
+                    .check-icon { width: 80px; height: 80px; position: relative; border-radius: 50%; box-sizing: content-box; border: 4px solid #4CAF50; }
+                    .check-icon::before { top: 3px; left: -2px; width: 30px; transform-origin: 100% 50%; border-radius: 100px 0 0 100px; }
+                    .check-icon::after { top: 0; left: 30px; width: 60px; transform-origin: 0 50%; border-radius: 0 100px 100px 0; animation: rotate-circle 4.25s ease-in; }
+                    .check-icon::before, .check-icon::after { content: ''; height: 100px; position: absolute; background: #0f172a; transform: rotate(-45deg); }
+                    .icon-line { height: 5px; background-color: #4CAF50; display: block; border-radius: 2px; position: absolute; z-index: 10; }
+                    .icon-line.line-tip { top: 46px; left: 14px; width: 25px; transform: rotate(45deg); animation: icon-line-tip 0.75s; }
+                    .icon-line.line-long { top: 38px; right: 8px; width: 47px; transform: rotate(-45deg); animation: icon-line-long 0.75s; }
+                    .icon-circle { top: -4px; left: -4px; z-index: 10; width: 80px; height: 80px; border-radius: 50%; position: absolute; box-sizing: content-box; border: 4px solid rgba(76, 175, 80, .5); }
+                    .icon-fix { top: 8px; width: 5px; left: 26px; z-index: 1; height: 85px; position: absolute; transform: rotate(-45deg); background-color: #0f172a; }
+                    @keyframes icon-line-tip { 0% { width: 0; left: 1px; top: 19px; } 54% { width: 0; left: 1px; top: 19px; } 70% { width: 50px; left: -8px; top: 37px; } 84% { width: 17px; left: 21px; top: 48px; } 100% { width: 25px; left: 14px; top: 46px; } }
+                    @keyframes icon-line-long { 0% { width: 0; right: 46px; top: 54px; } 65% { width: 0; right: 46px; top: 54px; } 84% { width: 55px; right: 0px; top: 35px; } 100% { width: 47px; right: 8px; top: 38px; } }
+                    h2 { margin-top: 20px; font-weight: normal; }
+                </style>
+            </head>
+            <body>
+                <div class="success-checkmark">
+                    <div class="check-icon">
+                        <span class="icon-line line-tip"></span>
+                        <span class="icon-line line-long"></span>
+                        <div class="icon-circle"></div>
+                        <div class="icon-fix"></div>
+                    </div>
+                </div>
+                <h2>Úspěšně přihlášeno!</h2>
+                <script>
+                    setTimeout(() => { window.location.href = '/ucet'; }, 1500);
+                </script>
+            </body>
+            </html>
+            """
+            resp = make_response(html_content)
             resp.set_cookie('web_session_token', perm_token, max_age=60*60*24*30,
-                            secure=True, httponly=True, samesite='Strict')
+                            secure=True, httponly=True, samesite='Lax')
             return resp
     return "Neplatný nebo expirovaný odkaz.", 400
 
