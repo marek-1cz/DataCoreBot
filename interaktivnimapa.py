@@ -496,7 +496,8 @@ body.nt-add-active #map{cursor:crosshair !important;}
 #log-body .lg-warn{color:#fbbf24;}
 #log-body .lg-ok{color:#34d399;}
 @media(max-width:768px){
-  #top-nav{gap:4px;padding:4px 5px;height:auto;min-height:50px;flex-wrap:wrap;justify-content:center;z-index:4800 !important;width: 100% !important; border-radius: 0;}
+  #top-nav{gap:4px;padding:4px 5px;height:50px;min-height:50px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;white-space:nowrap;justify-content:flex-start;z-index:4800 !important;width: 100% !important; border-radius: 0; scrollbar-width: none; -webkit-overflow-scrolling: touch;}
+  #top-nav::-webkit-scrollbar { display: none; }
   .n-title,.n-warn,.n-clock,.n-sp{display:none !important;}
   .n-btn{font-size:10px;padding:4px 7px;}
   #pub-stops-btn{font-size:11px;padding:5px 10px;}
@@ -505,6 +506,8 @@ body.nt-add-active #map{cursor:crosshair !important;}
   body.nav-glass #top-nav { width: 98% !important; border-radius: 14px !important; left: 50% !important; transform: translateX(-50%) !important; top: 10px !important; }
   body.nav-glass-hide #top-nav { top: -160px !important; }
   body.nav-glass-hide #top-nav.vis { top: 10px !important; }
+
+  .leaflet-top.leaflet-left { top: 60px !important; }
 
   #hf{width:220px; padding: 10px;}
   .dark-popup .leaflet-popup-content{width:240px!important;}
@@ -544,13 +547,13 @@ body.nt-add-active #map{cursor:crosshair !important;}
   #idos-modal-box{width:100% !important;height:100% !important;max-width:none !important;border:none !important;border-radius:0 !important;}
   
   /* HUD floating higher up to not collide with bottom popups */
-  #hud { top: auto !important; left: 10px !important; right: auto !important; bottom: 100px !important; z-index: 4500 !important; }
+  #hud { top: 75px !important; left: 10px !important; right: auto !important; bottom: auto !important; z-index: 4500 !important; }
   
-  #close-route-btn { top: auto !important; bottom: 70px !important; left: 50% !important; transform: translateX(-50%) !important; padding: 8px 22px !important; font-size: 13px !important; }
-  #edit-route-btn, #save-route-btn { top: auto !important; bottom: 110px !important; left: 50% !important; transform: translateX(-50%) !important; }
+  #close-route-btn { top: auto !important; bottom: 70px !important; left: 50% !important; transform: translateX(-50%) !important; padding: 8px 22px !important; font-size: 13px !important; z-index: 5000 !important; }
+  #edit-route-btn, #save-route-btn { top: auto !important; bottom: 110px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 5000 !important; }
 
   /* Settings button top right below nav */
-  #settings-btn-wrap { top: 70px !important; bottom: auto !important; right: 10px !important; z-index: 4800 !important; }
+  #settings-btn-wrap { top: auto !important; bottom: 80px !important; right: 10px !important; z-index: 4800 !important; }
 }
 @media(max-width:420px){
   .n-provoz{display:none;}
