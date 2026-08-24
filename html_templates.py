@@ -986,10 +986,17 @@ HTML_WAIT_AUTH = """
 </div>
 <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
 <script>
-    setInterval(() => {
+    let authInterval = setInterval(() => {
         fetch('/api/check_auth/{{ discord_id }}').then(r => r.json()).then(d => {
-            if (d.status === 'approved') window.location.href = '/dashboard/login_finalize?discord_id={{ discord_id }}';
-            else if (d.status === 'rejected') { document.getElementById('status-text').innerText = "Přihlášení bylo zamítnuto!"; document.getElementById('status-text').style.color = "var(--danger)"; setTimeout(() => window.location.href = '/', 2000); }
+            if (d.status === 'approved') {
+                clearInterval(authInterval);
+                window.location.href = '/dashboard/login_finalize?discord_id={{ discord_id }}';
+            } else if (d.status === 'rejected') {
+                clearInterval(authInterval);
+                document.getElementById('status-text').innerText = "Přihlášení bylo zamítnuto!";
+                document.getElementById('status-text').style.color = "var(--danger)";
+                setTimeout(() => window.location.href = '/', 2000);
+            }
         });
     }, 2000);
 </script>
