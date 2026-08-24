@@ -4068,7 +4068,13 @@ def _name_suggests_train(name):
     stanice) z _pre_normalize, takze chytne zkratkovou i plnou variantu."""
     if not name:
         return False
-    return any(w in _pre_normalize(name) for w in _TRAIN_HINT_WORDS)
+    
+    norm = _pre_normalize(name)
+    # Pokud nazev vyslovne obsahuje autobus nebo aut., neni to vlak (zabrani detekci aut.nadr. jako vlak)
+    if re.search(r'\b(autobus|aut\.)', norm):
+        return False
+        
+    return any(w in norm for w in _TRAIN_HINT_WORDS)
 
 
 def _load_gtfs():
@@ -4366,18 +4372,22 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000, bus_mode=Non
         """
         if not idxs:
             return None
-        preferred = [i for i in idxs if mode_ok(i)]
-        # KLIC: pokud existuje aspon jeden kandidat spravneho rezimu,
-        # IGNORUJ vsechny ostatniho rezimu - nepovoluj fallback na spatny typ.
-        # Toto je hlavni oprava: 'Svojšín' (bus) uz nebude pouzit vlakova stanice
-        # jen proto, ze je v GTFS jako jedina/prvni shoda.
-        if preferred:
-            pool = preferred
+            
+        # 1. Zastávky, které mají explicitně správný typ (bus/train/mixed)
+        exact_mode = [i for i in idxs if i < len(GTFS_MODES) and GTFS_MODES[i] in (target_mode, 'mixed')]
+        # 2. Zastávky bez typu (fallback, když nemáme přesnou shodu módu)
+        none_mode = [i for i in idxs if i >= len(GTFS_MODES) or not GTFS_MODES[i]]
+        
+        if exact_mode:
+            pool = exact_mode
+        elif none_mode:
+            pool = none_mode
         elif strict_mode:
             # Spravny rezim vubec neni k dispozici - radsi None nez spatny typ
             return None
         else:
             pool = idxs
+            
         if not anchor:
             # Bez anchoru: vrat prvni preferovany (nelze geograficky vybrat)
             _, la, lo = GTFS_STOPS[pool[0]]
