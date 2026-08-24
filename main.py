@@ -1705,7 +1705,7 @@ def check_auth(discord_id):
 def login_finalize():
     discord_id = request.args.get('discord_id', '').strip()
     if not discord_id.isdigit():
-        return redirect(url_for('home'))
+        return f"CHYBA: Neplatné Discord ID: '{discord_id}'"
         
     # Pokud prohlížeč (často na mobilech) pošle request 2x kvůli probuzení z pozadí a už má cookies
     if session.get('logged_in') and str(session.get('discord_id')) == str(discord_id):
@@ -1719,15 +1719,18 @@ def login_finalize():
             u = user[0]
             # Ověřit: token, expiry a dashboard_access
             token_exp = int(u.get('login_token_expires_at') or 0)
-            if (u.get("login_token") == "approved"
-                    and u.get("dashboard_access")
+            token_val = u.get("login_token")
+            has_acc = u.get("dashboard_access")
+            
+            if (token_val == "approved"
+                    and has_acc
                     and (token_exp == 0 or _t.time() <= token_exp)):
                 session.permanent = True
                 session['logged_in'] = True
                 session['discord_id'] = discord_id
                 db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("discord_id", discord_id).execute()
                 
-                # Zabezpečení proti Safari/Chrome Mobile zahazování cookies při 302 redirectu (Intelligent Tracking Prevention)
+                # Zabezpečení proti Safari/Chrome Mobile zahazování cookies při 302 redirectu
                 return """
                 <html>
                 <head>
@@ -1745,7 +1748,12 @@ def login_finalize():
                 """
             elif token_exp > 0 and _t.time() > token_exp:
                 db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("discord_id", discord_id).execute()
-    return redirect(url_for('home'))
+                return f"CHYBA: Platnost ověření vypršela. Zkuste to znovu od začátku. (Aktuální: {_t.time()}, Expirace: {token_exp})"
+            else:
+                return f"CHYBA: Něco je špatně s přístupem.<br>Token_v_DB: '{token_val}' (musí být 'approved')<br>Přístup_povolen: {has_acc}<br>Expirovalo: {_t.time() > token_exp}<br>Máte ve svém mobilu zapnuté Cookies?"
+        else:
+            return "CHYBA: Uživatel nebyl nalezen v databázi!"
+    return "CHYBA: Nelze se připojit k databázi."
 
 class WebAuthView(discord.ui.View):
     def __init__(self, token="", discord_id=""):
