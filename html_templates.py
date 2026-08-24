@@ -1199,7 +1199,7 @@ function reqEmail() {
     fetch('/api/auth/email/request', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({email: email})
+        body: JSON.stringify({email: email, intent: 'login'})
     }).then(r=>r.json()).then(data => {
         if(data.status === 'success') {
             showStatus('E-mail odeslán', `Na adresu <b>${email}</b> jsme odeslali e-mail s odkazem pro přihlášení. Klikněte na tlačítko v e-mailu a budete automaticky přihlášeni.<br><br><i>Ověřte si složku Spam, pokud e-mail nedorazí do 2 minut.</i><br><br><div style="margin-top:15px; text-align:center;"><p style="font-size:12px; color:#94a3b8; margin-bottom:10px;">Zkuste to zadat ručně, jen tak pro jistotu. (Zadejte 5místný kód z e-mailu)</p><div style="display:flex; gap:10px; justify-content:center;"><input type="text" id="email_code_input" placeholder="12345" maxlength="5" style="width:100px; text-align:center; padding:10px; border-radius:8px; border:1px solid #334155; background:rgba(0,0,0,0.2); color:white; margin:0;"><button onclick="submitEmailCode()" style="background:#38bdf8; color:black; font-weight:bold; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">Potvrdit kód</button></div></div>`, false);
@@ -1213,7 +1213,7 @@ function reqEmail() {
 function submitEmailCode() {
     const code = document.getElementById('email_code_input').value.trim();
     if(code.length === 5) {
-        window.location.href = `/api/auth/finalize?token=${code}&type=email`;
+        window.location.href = `/api/auth/finalize?token=${code}&type=email&intent=login`;
     } else {
         alert("Kód musí mít 5 znaků.");
     }

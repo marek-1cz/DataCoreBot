@@ -161,7 +161,7 @@ def get_system_statuses():
         pass
     return {}
 
-def send_magic_link_email(to_email, token):
+def send_magic_link_email(to_email, token, intent='login'):
     if not SMTP_EMAIL or not SMTP_PASSWORD:
         print("[AUTH] SMTP není nastaveno!")
         return False
@@ -172,7 +172,7 @@ def send_magic_link_email(to_email, token):
         msg["To"] = to_email
 
         base_url = request.url_root.rstrip('/')
-        login_url = f"{base_url}/api/auth/finalize?token={token}&type=email"
+        login_url = f"{base_url}/api/auth/finalize?token={token}&type=email&intent={intent}"
         
         html = f"""
         <html>
@@ -1848,6 +1848,7 @@ def web_auth_email_request():
     if not _rate_limit_check(f'auth_email:{client_ip}', 3, 300):
         return jsonify({'status': 'error', 'message': 'Příliš mnoho pokusů o zaslání e-mailu. Zkuste to za 5 minut.'}), 429
     email = request.json.get('email') if request.is_json else None
+    intent = request.json.get('intent', 'login') if request.is_json else 'login'
     db = get_db()
     if not db or not email or '@' not in email:
         return jsonify({"status": "error", "message": "Neplatný e-mail."})
@@ -1876,7 +1877,7 @@ def web_auth_email_request():
         token_expiry = int(_t.time()) + 900  # 15 minut
         db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("email", email).execute()
         
-        if send_magic_link_email(email, token):
+        if send_magic_link_email(email, token, intent=intent):
             return jsonify({"status": "success"})
         else:
             return jsonify({"status": "error", "message": "E-mail se nepodařilo odeslat. Máte nastavený SMTP?"})
@@ -1921,6 +1922,7 @@ def web_auth_status():
 def web_auth_finalize():
     token = request.args.get('token')
     auth_type = request.args.get('type')
+    intent = request.args.get('intent', 'login')
     cookie_token = request.cookies.get('web_session_token')
     db = get_db()
     if db and token and auth_type == "email":
@@ -1934,7 +1936,7 @@ def web_auth_finalize():
                 db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
                 return "Odkaz vypršel (platnost 15 minut). Požádejte o nový odkaz.", 400
             email = u.get("email")
-            if cookie_token:
+            if cookie_token and intent == 'link':
                 curr_user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
                 if curr_user and curr_user[0].get('id') != u.get('id'):
                     db.table("users").delete().eq("id", u.get("id")).execute()
@@ -2087,12 +2089,12 @@ def stranka_ucet():
         fetch('/api/auth/email/request', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({email: e})
+            body: JSON.stringify({email: e, intent: 'link'})
         }).then(r=>r.json()).then(data => {
             if(data.status === 'success') {
                 const code = prompt('Odeslán e-mail s odkazem k propojení. Zadejte 5místný kód z e-mailu:');
                 if(code && code.trim().length === 5) {
-                    window.location.href = `/api/auth/finalize?token=${code.trim()}&type=email`;
+                    window.location.href = `/api/auth/finalize?token=${code.trim()}&type=email&intent=link`;
                 } else if(code) {
                     alert('Neplatný kód.');
                 }
