@@ -3746,6 +3746,7 @@ def exit_handler():
                     "color_class": bc.get("color_class"),
                     "status_text": bc.get("status"),
                     "admin_note": bc.get("admin_note", ""),
+                    "admin_driver": bc.get("admin_driver", ""),
                     "admin_flag": bc.get("admin_flag", False),
                     "manual_spz": bc.get("manual_spz", False),
                     "updated_at": now.isoformat(),
