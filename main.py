@@ -3287,7 +3287,7 @@ async def ping(ctx): await ctx.send(f"🏓 Pong! Odezva: **{round(bot.latency * 
 @bot.command()
 async def help(ctx):
     embed = discord.Embed(title="🤖 Nápověda - Projekt OIS IDPK", color=0x38bdf8)
-    embed.add_field(name="🌍 Veřejné", value="`!auth`, `!ping`, `!help`, `!register`, `!id`", inline=False)
+    embed.add_field(name="🌍 Veřejné", value="`!auth`, `!ping`, `!help`, `!register`, `!id`, `!notify list`, `!notify clear`", inline=False)
     embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]`, `!db [ID]`, `!ban`, `!unban`, `!delete`, `!perdelete`, `!dm @user`, `!dmhistory @uživatel`, `!message #channel`, `!website_block`, `!website_block_mapa`", inline=False)
     embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download`, `!sm @uživatel`, `!debugvozovna`, `!aktulizace`, `!dashadd [id] [role]`, `!dashremove [id]`", inline=False)
     await ctx.send(embed=embed)
@@ -3295,6 +3295,68 @@ async def help(ctx):
 @bot.command()
 async def cmds(ctx):
     await help(ctx)
+
+@bot.group(name="notify", invoke_without_command=True)
+async def notify_group(ctx):
+    await ctx.send("Použití: `!notify list [uživatel]` nebo `!notify clear [uživatel]`", delete_after=15)
+
+@notify_group.command(name="list")
+async def notify_list(ctx, target_user: str = None):
+    if target_user:
+        is_admin = discord.utils.get(ctx.author.roles, name="SM") or discord.utils.get(ctx.author.roles, name="web-sa") or discord.utils.get(ctx.author.roles, name="DEV") or ctx.author.guild_permissions.administrator
+        if not is_admin:
+            await ctx.send("❌ K prohlížení notifikací ostatních musíš být administrátor.")
+            return
+        target_discord_id = target_user.strip("<@!>")
+    else:
+        target_discord_id = str(ctx.author.id)
+
+    db = get_db()
+    if not db: return
+    
+    u_res = db.table("users").select("id").eq("discord_id", target_discord_id).execute()
+    if not u_res.data:
+        await ctx.send(f"Uživatel {target_discord_id} není registrován.")
+        return
+    
+    user_session = str(u_res.data[0]["id"])
+    n_res = db.table("bus_notifications").select("*").eq("user_session", user_session).eq("is_active", True).execute()
+    
+    if not n_res.data:
+        await ctx.send(f"Uživatel {target_discord_id} nemá žádná aktivní upozornění.")
+        return
+        
+    embed = discord.Embed(title=f"🔔 Aktivní upozornění", description=f"Pro uživatele: <@{target_discord_id}>", color=0x38bdf8)
+    for n in n_res.data:
+        lbl = n.get("label") or n.get("identifier")
+        active_str = "Aktivní" if n.get("is_active") else "Neaktivní"
+        embed.add_field(name=f"ID: {n['id'][:8]} | {lbl}", value=f"Typ: {n['identifier_type']} - Cíl: {n['identifier']} | Stav: {active_str}", inline=False)
+        
+    await ctx.send(embed=embed)
+
+@notify_group.command(name="clear")
+async def notify_clear(ctx, target_user: str = None):
+    if target_user:
+        is_admin = discord.utils.get(ctx.author.roles, name="SM") or discord.utils.get(ctx.author.roles, name="web-sa") or discord.utils.get(ctx.author.roles, name="DEV") or ctx.author.guild_permissions.administrator
+        if not is_admin:
+            await ctx.send("❌ Ke smazání notifikací ostatních musíš být administrátor.")
+            return
+        target_discord_id = target_user.strip("<@!>")
+    else:
+        target_discord_id = str(ctx.author.id)
+        
+    db = get_db()
+    if not db: return
+        
+    u_res = db.table("users").select("id").eq("discord_id", target_discord_id).execute()
+    if not u_res.data:
+        await ctx.send(f"Uživatel {target_discord_id} není registrován.")
+        return
+        
+    user_session = str(u_res.data[0]["id"])
+    db.table("bus_notifications").delete().eq("user_session", user_session).execute()
+    
+    await ctx.send(f"✅ Všechna upozornění pro uživatele <@{target_discord_id}> byla smazána.")
 
 @bot.command()
 @commands.has_role('web-sa')

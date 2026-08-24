@@ -714,6 +714,12 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
         <input id="notif-label" type="text" placeholder="Např. Můj oblíbený bus" style="width:100%;margin-top:6px;padding:9px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:14px;box-sizing:border-box;">
       </div>
 
+      <!-- Admin target user -->
+      <div id="notif-admin-target-container" style="margin-bottom:14px; display:none; border-left:3px solid #ef4444; padding-left:10px;">
+        <label style="color:#ef4444;font-size:12px;font-weight:bold;text-transform:uppercase;">Admin: Cílový uživatel (ID / E-mail) - volitelné</label>
+        <input id="notif-admin-target" type="text" placeholder="Discord ID nebo E-mail uživatele" style="width:100%;margin-top:6px;padding:9px 12px;background:rgba(239,68,68,0.1);color:white;border:1px solid rgba(239,68,68,0.4);border-radius:8px;font-size:14px;box-sizing:border-box;">
+      </div>
+
       <!-- Triggery -->
       <div style="margin-bottom:18px;">
         <label style="color:#94a3b8;font-size:12px;font-weight:bold;text-transform:uppercase;display:block;margin-bottom:10px;">Upozornit mě když</label>
@@ -1842,6 +1848,8 @@ window.openNotifModal = function(busId) {
       if (!d.has_email && cbEmail) cbEmail.checked = false;
     }
     if(dn) dn.style.display = (!d.has_discord && !d.has_email) ? 'inline-block' : 'none';
+    let adm = document.getElementById('notif-admin-target-container');
+    if(adm) adm.style.display = d.is_admin ? 'block' : 'none';
   }).catch(()=>{});
   // Načti vozovny do selectboxů
   fetch('/api/depot_zones').then(r=>r.json()).then(d=>{
@@ -1925,6 +1933,8 @@ async function saveNotifRule(isOneTime = true) {
   let deliveryChannels = [];
   if (document.getElementById('nt-deliv-discord')?.checked) deliveryChannels.push('discord');
   if (document.getElementById('nt-deliv-email')?.checked) deliveryChannels.push('email');
+  
+  let targetUser = document.getElementById('notif-admin-target') ? document.getElementById('notif-admin-target').value.trim() : "";
 
   if(!identifier) { showNotifMsg('Zadej SPZ nebo Bus ID', false); return; }
   if(!Object.values(triggers).some(v => v && v !== '')) { showNotifMsg('Vyber alespoň jeden trigger', false); return; }
@@ -1932,7 +1942,7 @@ async function saveNotifRule(isOneTime = true) {
   
   showNotifMsg('⏳ Ukládám...', true);
   try {
-    let r = await fetch('/api/notifications/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({identifier, identifier_type: idType, triggers, label, delivery_channels: deliveryChannels, is_one_time: isOneTime})});
+    let r = await fetch('/api/notifications/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({identifier, identifier_type: idType, triggers, label, delivery_channels: deliveryChannels, is_one_time: isOneTime, target_user: targetUser})});
     let d = await r.json();
     if(d.status==='success') {
       showNotifMsg(d.message || '✅ Pravidlo uloženo!', true);
@@ -1941,6 +1951,7 @@ async function saveNotifRule(isOneTime = true) {
       ['nt-terminal','nt-new-line','nt-depot-in','nt-depot-out','nt-trip-change','nt-started-moving','nt-stop-near','nt-delay-thresh','nt-delay-change'].forEach(id => { let el=document.getElementById(id); if(el) el.checked=false; }); if(document.getElementById('nt-deliv-email')) document.getElementById('nt-deliv-email').disabled=false;
       let sn=document.getElementById('nt-stop-name'); if(sn) sn.value='';
       let sc=document.getElementById('nt-stop-container'); if(sc) sc.style.display='none';
+      let tu=document.getElementById('notif-admin-target'); if(tu) tu.value='';
     } else {
       showNotifMsg('❌ ' + (d.message||'Chyba'), false);
     }
@@ -6194,10 +6205,13 @@ def api_notif_delivery_info():
         if not user_res.data:
             return jsonify({"status": "error", "message": "Neplatná session"}), 401
         u = user_res.data[0]
+        role = u.get("role", "") or ""
+        is_admin = 'SA' in role or 'DEV' in role
         return jsonify({
             "status": "success",
             "has_discord": bool(u.get("discord_id")),
-            "has_email": bool(u.get("email"))
+            "has_email": bool(u.get("email")),
+            "is_admin": is_admin
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -6226,10 +6240,21 @@ def api_notif_create():
 
     is_admin = 'SA' in role or 'DEV' in role
 
-    if not discord_id and not email:
-        return jsonify({"status": "error", "message": "Tvůj účet nemá připojen Discord ani e-mail. Nemáme kam notifikaci poslat!"}), 400
-
     data = request.get_json(silent=True) or {}
+    target_user = str(data.get("target_user", "")).strip()
+    
+    if is_admin and target_user:
+        target_res = db.table("users").select("id, discord_id, email").or_(f"discord_id.eq.{target_user},email.eq.{target_user}").execute()
+        if not target_res.data:
+            return jsonify({"status": "error", "message": f"Cílový uživatel '{target_user}' nebyl nalezen."}), 400
+        t_u = target_res.data[0]
+        user_session_val = str(t_u["id"])
+        discord_id = t_u.get("discord_id")
+        email = t_u.get("email")
+
+    if not discord_id and not email:
+        return jsonify({"status": "error", "message": "Tvůj účet (nebo cílový účet) nemá připojen Discord ani e-mail. Nemáme kam notifikaci poslat!"}), 400
+
     identifier = str(data.get("identifier", "")).strip()
     identifier_type = data.get("identifier_type", "spz")
     triggers = data.get("triggers", {})
