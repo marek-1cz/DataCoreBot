@@ -496,12 +496,14 @@ body.nt-add-active #map{cursor:crosshair !important;}
 #log-body .lg-warn{color:#fbbf24;}
 #log-body .lg-ok{color:#34d399;}
 @media(max-width:768px){
-  #top-nav{gap:4px;padding:5px 4px;height:auto;min-height:50px;flex-wrap:wrap;justify-content:center;align-items:center;z-index:4800 !important;width: 100% !important; border-radius: 0;}
+  #top-nav{gap:4px;padding:6px 4px;height:auto;min-height:50px;flex-wrap:wrap;justify-content:center;align-items:center;z-index:4800 !important;width: 100% !important; border-radius: 0;}
   .n-title,.n-warn,.n-clock,.n-sp{display:none !important;}
-  .n-btn, #pub-stops-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #depot-toggle-btn, #log-toggle-btn { font-size: 10px !important; padding: 4px 6px !important; }
-  #spz-search-inp{width:80px !important;font-size:10px !important;padding:4px 6px !important;}
+  .n-btn, #pub-stops-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #depot-toggle-btn, #log-toggle-btn, #nav-pin-btn { font-size: clamp(8px, 2.8vw, 11px) !important; padding: 4px clamp(4px, 1.5vw, 8px) !important; flex: 1 1 auto; text-align: center; white-space: nowrap; }
+  #spz-search-inp{width:clamp(65px, 20vw, 90px) !important;font-size:10px !important;padding:4px 6px !important; flex: 1 1 auto;}
+  #spz-search-wrap{flex: 1 1 auto; display: flex; justify-content: center;}
+  #admin-mode-badge{font-size: 9px !important; padding: 2px 4px !important;}
   
-  body.nav-glass #top-nav { width: 98% !important; max-width: 100% !important; border-radius: 14px !important; left: 50% !important; transform: translateX(-50%) !important; top: 10px !important; flex-wrap: wrap !important; height: auto !important; }
+  body.nav-glass #top-nav { width: 98vw !important; max-width: 98vw !important; border-radius: 14px !important; left: 50% !important; transform: translateX(-50%) !important; top: 10px !important; flex-wrap: wrap !important; height: auto !important; box-sizing: border-box; }
   body.nav-glass-hide #top-nav { top: -160px !important; }
   body.nav-glass-hide #top-nav.vis { top: 10px !important; }
 
