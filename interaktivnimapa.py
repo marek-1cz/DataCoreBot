@@ -6854,7 +6854,6 @@ def api_live_buses():
         buses_to_send = []
         for b in LIVE_BUSES_DATA:
             b_copy = dict(b)
-            b_copy.pop("admin_note", None)
             b_copy.pop("admin_driver", None)
             buses_to_send.append(b_copy)
             
