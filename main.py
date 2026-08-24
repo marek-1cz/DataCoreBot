@@ -1722,13 +1722,15 @@ def login_finalize():
             token_val = u.get("login_token")
             has_acc = u.get("dashboard_access")
             
-            if (token_val == "approved"
+            if (token_val in ["approved", "used"]
                     and has_acc
                     and (token_exp == 0 or _t.time() <= token_exp)):
                 session.permanent = True
                 session['logged_in'] = True
                 session['discord_id'] = discord_id
-                db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("discord_id", discord_id).execute()
+                
+                if token_val == "approved":
+                    db.table("users").update({"login_token": "used", "login_token_expires_at": int(_t.time()) + 10}).eq("discord_id", discord_id).execute()
                 
                 # Zabezpečení proti Safari/Chrome Mobile zahazování cookies při 302 redirectu
                 return """
