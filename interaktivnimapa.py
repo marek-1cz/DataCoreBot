@@ -717,11 +717,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
         <input id="notif-label" type="text" placeholder="Např. Můj oblíbený bus" style="width:100%;margin-top:6px;padding:9px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:14px;box-sizing:border-box;">
       </div>
 
-      <!-- Admin target user -->
-      <div id="notif-admin-target-container" style="margin-bottom:14px; display:none; border-left:3px solid #ef4444; padding-left:10px;">
-        <label style="color:#ef4444;font-size:12px;font-weight:bold;text-transform:uppercase;">Admin: Cílový uživatel (ID / E-mail) - volitelné</label>
-        <input id="notif-admin-target" type="text" placeholder="Discord ID nebo E-mail uživatele" style="width:100%;margin-top:6px;padding:9px 12px;background:rgba(239,68,68,0.1);color:white;border:1px solid rgba(239,68,68,0.4);border-radius:8px;font-size:14px;box-sizing:border-box;">
-      </div>
+
 
       <!-- Triggery -->
       <div style="margin-bottom:18px;">
@@ -791,6 +787,17 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
             <b>E-mail</b> – odeslání na tvůj registrovaný e-mail
           </label>
           <span id="notif-delivery-none" style="color:#f59e0b;display:none; margin-top:4px; display:inline-block;">⚠️ Tvůj účet nemá Discord ani e-mail – nejprve je přidej v nastavení účtu.</span>
+        </div>
+      </div>
+
+      <!-- Admin target user -->
+      <div id="notif-admin-target-container" style="margin-bottom:18px; display:none; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.3); border-radius:10px; padding:12px 14px;">
+        <label class="notif-check-row" style="cursor:pointer; display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="nt-admin-override" onchange="document.getElementById('notif-admin-target-input-box').style.display = this.checked ? 'block' : 'none'; if(!this.checked) document.getElementById('notif-admin-target').value='';">
+          <span style="color:#ef4444; font-weight:bold;">Poslat jinému uživateli (ADMIN ONLY)</span>
+        </label>
+        <div id="notif-admin-target-input-box" style="display:none; margin-top:10px;">
+          <input id="notif-admin-target" type="text" placeholder="Discord ID nebo E-mail uživatele" style="width:100%;padding:9px 12px;background:rgba(239,68,68,0.1);color:white;border:1px solid rgba(239,68,68,0.4);border-radius:8px;font-size:14px;box-sizing:border-box;">
         </div>
       </div>
 
@@ -1990,7 +1997,8 @@ window.shareBus = function(busId) {
   let delay = (typeof bus.delay !== 'undefined') ? bus.delay : '?';
   let stopName = (bus.status && bus.status.includes('(')) ? bus.status.split('(').pop().replace(')','') : bus.status;
   
-  let shareText = `Autobus: ${bus.spz !== 'Neznama' && bus.spz ? bus.spz : bus.id}\nLinka: ${bus.line}\nSpoj (ID): ${bus.id}\nSměr: ${bus.destination}\nAktuální poloha blízko: ${stopName} v ${timeStr}\nZpoždění: ${delay} min\nSledovat na mapě: ${trackUrl}`;
+  let real_spoj = bus.real_linka_spoj ? bus.real_linka_spoj.split('/').pop() : "Neznámý";
+  let shareText = `Autobus: ${bus.spz !== 'Neznama' && bus.spz ? bus.spz : bus.id}\nLinka: ${bus.line}\nSpoj: ${real_spoj}\nMAP ID: ${bus.id}\nSměr: ${bus.destination}\nAktuální poloha blízko: ${stopName} v ${timeStr}\nZpoždění: ${delay} min\nSledovat na mapě: ${trackUrl}`;
   
   let modal = document.createElement('div');
   modal.style.position = 'fixed';
@@ -5782,7 +5790,7 @@ def background_map_worker():
                 fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c["is_train"] else "Nezn\u00e1m\u00e1")
                 new_live_data.append({
                     "id": bus_id, "trip_id": c["trip_id"], "lat": c["lat"], "lng": c["lng"],
-                    "bearing": c.get("bearing"), "line": fld, "delay": c.get("final_delay_display", 0),
+                    "bearing": c.get("bearing"), "line": fld, "real_linka_spoj": c.get("real_linka_spoj"), "delay": c.get("final_delay_display", 0),
                     "destination": c["destination"], "spz": c["spz"] or "Nezn\u00e1m\u00e1",
                     "spz_verified": c.get("spz_verified", False), "is_train": c["is_train"],
                     "status": c["status"], "color_class": c["color_class"], "inactive_minutes": inact,
@@ -5936,13 +5944,17 @@ def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
     label = rule.get("label") or f"Bus {spz}"
     now_str = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M:%S")
 
+    real_ls = bus_data.get("real_linka_spoj")
+    spoj = real_ls.split("/")[-1] if real_ls and "/" in real_ls else "?"
+
     embed = {
         "title": f"🔔 Upozornění: {label}",
         "description": trigger_label,
         "color": color,
         "fields": [
             {"name": "Linka", "value": str(line), "inline": True},
-            {"name": "Spoj (ID)", "value": str(bus_id), "inline": True},
+            {"name": "Spoj", "value": str(spoj), "inline": True},
+            {"name": "MAP ID", "value": str(bus_id), "inline": True},
             {"name": "SPZ", "value": str(spz), "inline": True},
             {"name": "Cíl", "value": str(dest), "inline": True},
             {"name": "Stav", "value": str(status), "inline": False},
@@ -5955,7 +5967,7 @@ def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
     # Textova verze pro DM
     dm_text = (
         f"🔔 **{label}** – {trigger_label}\n"
-        f"Linka: **{line}** | Spoj (ID): **{bus_id}** | SPZ: **{spz}**\n"
+        f"Linka: **{line}** | Spoj: **{spoj}** | MAP ID: **{bus_id}** | SPZ: **{spz}**\n"
         f"Cíl: **{dest}**\n"
         f"Stav: {status}\n"
         f"Zpoždění: {bus_data.get('delay', 0)} min\n"
