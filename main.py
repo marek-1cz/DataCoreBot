@@ -74,7 +74,7 @@ if not _flask_secret:
     print('[SECURITY] VAROVANI: FLASK_SECRET_KEY neni nastaven! Pouzivam nahodny klic (sessions se resetuji pri restartu).', flush=True)
 app.secret_key = _flask_secret
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
-app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = True  # Koyeb bezi na HTTPS
 
@@ -1706,6 +1706,11 @@ def login_finalize():
     discord_id = request.args.get('discord_id', '').strip()
     if not discord_id.isdigit():
         return redirect(url_for('home'))
+        
+    # Pokud prohlížeč (často na mobilech) pošle request 2x kvůli probuzení z pozadí a už má cookies
+    if session.get('logged_in') and str(session.get('discord_id')) == str(discord_id):
+        return redirect(url_for('dashboard_main'))
+
     db = get_db()
     if db and discord_id:
         import time as _t
