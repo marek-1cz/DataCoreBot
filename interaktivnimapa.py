@@ -6152,6 +6152,8 @@ def _check_and_fire_notifications(db_client, bus_cache):
             state["_stopped"] = now_stopped
             
         # Zpoždění
+        is_inactive_for_delay = "odstaven" in status_text.lower() or "bug" in status_text.lower() or "bg-gray" in color_class or "neznám" in status_text.lower()
+
         delay_thresh = triggers.get("delay_threshold")
         if delay_thresh:
             print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} testuji delay_threshold={delay_thresh}, current_delay={delay_val}\033[0m", flush=True)
@@ -6159,7 +6161,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 dt = int(delay_thresh)
                 prev_delay = state.get("_delay_thresh_val", -1)
                 print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} delay_thresh limit={dt}, current={delay_val}, prev={prev_delay}\033[0m", flush=True)
-                if delay_val >= dt and prev_delay < dt:
+                if not is_inactive_for_delay and delay_val >= dt and prev_delay < dt:
                     _fire(f"delay_threshold:{dt}", str(delay_val), f"Zpoždění dosáhlo {delay_val} min (limit {dt} min)")
                 state["_delay_thresh_val"] = delay_val
             except Exception as e:
@@ -6168,11 +6170,10 @@ def _check_and_fire_notifications(db_client, bus_cache):
         delay_change = triggers.get("delay_change")
         if delay_change:
             prev_d = state.get("_delay_change_val", None)
-            if prev_d is not None and abs(delay_val - prev_d) >= 3:
+            if not is_inactive_for_delay and prev_d is not None and abs(delay_val - prev_d) >= 3:
                 _fire(f"delay_change", str(delay_val), f"Zpoždění se změnilo: {prev_d} min ➡️ {delay_val} min")
-                state["_delay_change_val"] = delay_val
-            elif prev_d is None:
-                state["_delay_change_val"] = delay_val
+            
+            state["_delay_change_val"] = delay_val
 
 
 # ─────────────────────────────────────────────────────────────────────────────
