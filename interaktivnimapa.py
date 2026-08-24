@@ -498,6 +498,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 @media(max-width:768px){
   #top-nav{gap:4px;padding:4px 5px;height:50px;min-height:50px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;white-space:nowrap;justify-content:flex-start;z-index:4800 !important;width: 100% !important; border-radius: 0; scrollbar-width: none; -webkit-overflow-scrolling: touch;}
   #top-nav::-webkit-scrollbar { display: none; }
+  #top-nav > * { flex-shrink: 0 !important; }
   .n-title,.n-warn,.n-clock,.n-sp{display:none !important;}
   .n-btn{font-size:10px;padding:4px 7px;}
   #pub-stops-btn{font-size:11px;padding:5px 10px;}
@@ -589,7 +590,7 @@ body.dark-map #settings-toggle-btn:hover, body.bw-dark-map #settings-toggle-btn:
 #settings-toggle-btn:hover .st-text{width:75px;opacity:1;margin-left:6px;}
 
 body.nav-static #top-nav { top: 0 !important; }
-body.nav-glass #top-nav { top: 15px !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; width: max-content !important; max-width: 98vw !important; border-radius: 16px !important; padding: 6px 12px !important; gap: 6px !important; flex-wrap: nowrap !important; background: rgba(15, 23, 42, 0.25) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important; }
+body.nav-glass #top-nav { top: 15px !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; width: max-content !important; max-width: 98vw !important; border-radius: 16px !important; padding: 6px 12px !important; gap: 6px !important; flex-wrap: nowrap !important; background: rgba(15, 23, 42, 0.85) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important; }
 body.nav-glass-hide #top-nav { top: -150px !important; }
 body.nav-glass-hide #top-nav.vis { top: 15px !important; }
 body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn { display: none !important; }
