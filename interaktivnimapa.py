@@ -6129,14 +6129,16 @@ def _check_and_fire_notifications(db_client, bus_cache):
             print(f"[NOTIF] Pravidlo {rule_id[:8]} smazáno - bus v BUG stavu.", flush=True)
             continue
 
-        if "Konečná" in status_text or "Konecna" in status_text:
-            if triggers.get("terminal"):
+        now_terminal = "Konečná" in status_text or "Konecna" in status_text
+        was_terminal = state.get("_terminal")
+        if triggers.get("terminal"):
+            if now_terminal and was_terminal is False:
                 term_name = status_text.split("Konečná", 1)[-1].strip() if "Konečná" in status_text else ""
                 ctx_text = f"Příjezd: {now_time_str}" + (f" na {term_name}" if term_name else "")
                 _fire("terminal", status_text, ctx_text)
             
             # Auto cleanup pro delay_change
-            if rule.get("is_one_time", True) and triggers.get("delay_change"):
+            if now_terminal and rule.get("is_one_time", True) and triggers.get("delay_change"):
                 try:
                     current_triggers = dict(rule.get("triggers", {}))
                     if current_triggers.get("delay_change"):
@@ -6150,6 +6152,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                             print(f"[NOTIF] Pravidlo {rule_id[:8]} smazáno - bus dojel na konečnou (delay_change cleanup).", flush=True)
                 except Exception:
                     pass
+        state["_terminal"] = now_terminal
 
         if triggers.get("new_line"):
             prev_line = state.get("_line")
@@ -6159,42 +6162,50 @@ def _check_and_fire_notifications(db_client, bus_cache):
 
         stop_name = triggers.get("stop_near", "")
         if stop_name:
-            print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} testuji stop_near='{stop_name}' (status: '{status_text}')\033[0m", flush=True)
-            # 1) Nejprve zkusit přímo vyhlášenou zastávku z PVVD (nejpřesnější)
+            now_near_stop = False
+            ctx_text = ""
+            status_val = ""
+            
             b_last_stop = bus_data.get("last_stop_name", "")
             if b_last_stop and _norm_txt(stop_name) in _norm_txt(b_last_stop):
-                print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} nalezena shoda v PVVD lastStopName='{b_last_stop}'\033[0m", flush=True)
-                _fire(f"stop_near:{stop_name}", f"{status_text} ({b_last_stop})", f"Vyhlášená zastávka: {now_time_str} ({b_last_stop})")
+                now_near_stop = True
+                status_val = f"{status_text} ({b_last_stop})"
+                ctx_text = f"Vyhlášená zastávka: {now_time_str} ({b_last_stop})"
             else:
-                # 2) Fallback: Upozorni pokud je bus v okruhu 250m od zastávky (GPS)
                 b_lat = bus_data.get("lat", 0)
                 b_lon = bus_data.get("lng", 0)
                 if b_lat and b_lon and GTFS_LOADED:
                     near = _nearest_stop_name(b_lat, b_lon, 250)
-                    print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} nejblizsi zastavka (<250m) = '{near}'\033[0m", flush=True)
                     if near and _norm_txt(stop_name) in _norm_txt(near):
-                        _fire(f"stop_near:{stop_name}", f"{status_text} ({near})", f"V blízkosti: {now_time_str} ({near})")
+                        now_near_stop = True
+                        status_val = f"{status_text} ({near})"
+                        ctx_text = f"V blízkosti: {now_time_str} ({near})"
+            
+            was_near_stop = state.get(f"_stop_near:{stop_name}")
+            if now_near_stop and was_near_stop is False:
+                _fire(f"stop_near:{stop_name}", status_val, ctx_text)
+            
+            state[f"_stop_near:{stop_name}"] = now_near_stop
+
+        now_in_depot = "bg-depot" in color_class or "Vozovna" in status_text
+        was_in_depot = state.get("_in_depot")
 
         depot_name = triggers.get("depot_in", "")
         if depot_name and depot_name != "none":
-            # Je v depu
-            if "bg-depot" in color_class or "Vozovna" in status_text:
+            if was_in_depot is False and now_in_depot:
                 if depot_name == "all" or depot_name == True or depot_name.lower() in status_text.lower():
                     _fire("depot_in", "in", f"Linka {line} přijela v {now_time_str}")
 
         depot_out_name = triggers.get("depot_out", "")
         if depot_out_name and depot_out_name != "none":
-            was_in_depot = state.get("_in_depot", False)
-            now_in_depot = "bg-depot" in color_class or "Vozovna" in status_text
-            
-            if was_in_depot and not now_in_depot:
+            if was_in_depot is True and not now_in_depot:
                 last_depot = state.get("_depot_name_text", "")
                 if depot_out_name == "all" or depot_out_name == True or depot_out_name.lower() in last_depot.lower():
                     _fire("depot_out", "out", f"Linka {line} vyjela z vozovny ({last_depot}) v {now_time_str}")
             
-            state["_in_depot"] = now_in_depot
-            if now_in_depot:
-                state["_depot_name_text"] = status_text
+        state["_in_depot"] = now_in_depot
+        if now_in_depot:
+            state["_depot_name_text"] = status_text
 
         if triggers.get("trip_change"):
             prev_dest = state.get("_dest")
@@ -6204,9 +6215,9 @@ def _check_and_fire_notifications(db_client, bus_cache):
             state["_dest"] = dest
 
         if triggers.get("started_moving"):
-            was_stopped = state.get("_stopped", False)
+            was_stopped = state.get("_stopped")
             now_stopped = "stojí" in status_text.lower() or "stoji" in status_text.lower() or "čeká" in status_text.lower() or "konečná" in status_text.lower() or "konecna" in status_text.lower() or "bg-gray" in color_class
-            if was_stopped and not now_stopped:
+            if was_stopped is True and not now_stopped:
                 _fire("started_moving", status_text, f"Vozidlo se dalo do pohybu ({now_time_str})")
             state["_stopped"] = now_stopped
             
