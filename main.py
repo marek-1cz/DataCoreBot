@@ -1726,7 +1726,23 @@ def login_finalize():
                 session['logged_in'] = True
                 session['discord_id'] = discord_id
                 db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("discord_id", discord_id).execute()
-                return redirect(url_for('dashboard_main'))
+                
+                # Zabezpečení proti Safari/Chrome Mobile zahazování cookies při 302 redirectu (Intelligent Tracking Prevention)
+                return """
+                <html>
+                <head>
+                    <meta http-equiv="refresh" content="0;url=/dashboard">
+                    <title>Přihlašování...</title>
+                </head>
+                <body style="background-color: #0f172a; color: white; font-family: sans-serif; text-align: center; padding-top: 50px;">
+                    <h2>✅ Úspěšně ověřeno</h2>
+                    <p>Přesměrovávám do administrace...</p>
+                    <script>
+                        setTimeout(() => { window.location.href = '/dashboard'; }, 100);
+                    </script>
+                </body>
+                </html>
+                """
             elif token_exp > 0 and _t.time() > token_exp:
                 db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("discord_id", discord_id).execute()
     return redirect(url_for('home'))
