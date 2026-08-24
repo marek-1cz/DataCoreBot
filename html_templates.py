@@ -107,6 +107,46 @@ tr:hover { background-color: #334155; }
 </head>
 <body>
 {% block layout %}{% endblock %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('hide_discord_popup') === 'true') {
+        return;
+    }
+    
+    // Zkontrolujeme profil z API (zda je uživatel vůbec přihlášený a chybí mu Discord)
+    fetch('/api/auth/me')
+        .then(res => {
+            if (res.ok) return res.json();
+            return null;
+        })
+        .then(data => {
+            if (data && data.status === 'success' && data.user && data.user.discord_id === "čeká na odpověd") {
+                const popupHtml = `
+                <div id="discord-link-popup" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.85); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 999999; animation: fadeIn 0.3s ease;">
+                    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 30px 25px; width: 90%; max-width: 420px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+                        <div style="font-size: 48px; color: #5865F2; margin-bottom: 20px; filter: drop-shadow(0 0 15px rgba(88,101,242,0.4));">
+                            <i class="fab fa-discord"></i>
+                        </div>
+                        <h2 style="color: white; margin-top: 0; margin-bottom: 12px; font-size: 24px; font-weight: 600;">Propojit s Discordem</h2>
+                        <p style="color: #94a3b8; font-size: 15px; margin-bottom: 25px; line-height: 1.5;">Upozornění: Pro více funkcí, plný přístup k systému a oznámení, přidejte své Discord ID.</p>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 25px;">
+                            <button onclick="window.location.href='/ucet'" style="background: #5865F2; color: white; border: none; border-radius: 10px; padding: 14px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 15px rgba(88,101,242,0.3);">Propojit s Discordem</button>
+                            <button onclick="document.getElementById('discord-link-popup').style.display='none'" style="background: transparent; color: #94a3b8; border: 1px solid #475569; border-radius: 10px; padding: 14px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s;">Později</button>
+                        </div>
+                        
+                        <a href="javascript:void(0)" onclick="localStorage.setItem('hide_discord_popup', 'true'); document.getElementById('discord-link-popup').style.display='none'" style="color: #64748b; font-size: 13px; text-decoration: underline; transition: color 0.2s;">Již neupozorňovat</a>
+                    </div>
+                </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', popupHtml);
+            }
+        })
+        .catch(err => console.error("Discord popup check error:", err));
+});
+</script>
+
 </body>
 </html>
 """

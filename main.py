@@ -1858,10 +1858,14 @@ def web_auth_email_request():
             # Auto-assign next app_id and set defaults for new web users
             try:
                 highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
-                new_app_id = (highest[0]["app_id"] + 1) if (highest and highest[0].get("app_id")) else 1001
+                if highest and highest[0].get("app_id"):
+                    highest_val = int(highest[0]["app_id"])
+                    new_app_id = 2001 if highest_val < 2001 else highest_val + 1
+                else:
+                    new_app_id = 2001
             except:
-                new_app_id = None
-            insert_data = {"email": email, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": ""}
+                new_app_id = 2001
+            insert_data = {"email": email, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": "", "discord_id": "čeká na odpověd"}
             if new_app_id: insert_data["app_id"] = new_app_id
             db.table("users").insert(insert_data).execute()
         
@@ -2031,7 +2035,7 @@ def stranka_ucet():
     else:
         avatar_img_html = '<i class="fas fa-user-circle" style="color:#94a3b8;"></i>'
         
-    has_discord = bool(u.get('discord_id'))
+    has_discord = bool(u.get('discord_id') and u.get('discord_id') != "čeká na odpověd")
     has_email = bool(u.get('email'))
     
     discord_status = '<div class="link-status status-yes"><i class="fas fa-check-circle"></i> Připojeno</div>' if has_discord else '<div class="link-status status-no"><i class="fas fa-times-circle"></i> Nepřipojeno</div>'
