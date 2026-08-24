@@ -1883,8 +1883,24 @@ async function loadNotifRules() {
       let row = document.createElement('div');
       row.style.cssText = 'background:#1e293b;border:1px solid #334155;border-radius:8px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;';
       let fired = rule.fired_count || 0;
-      row.innerHTML = `<span style="color:#e2e8f0;"><b>${rule.label||rule.identifier}</b> <span style="color:#64748b;">(${rule.identifier})</span> <span style="color:#38bdf8;margin-left:6px;">🔔 ${fired}x</span></span>
-        <button onclick="deleteNotifRule('${rule.id}')" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid #ef4444;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;">✕</button>`;
+      let t_list = [];
+      let t = rule.triggers || {};
+      if(t.terminal) t_list.push("Konečná");
+      if(t.new_line) t_list.push("Nová linka");
+      if(t.depot_in) t_list.push("Do vozovny");
+      if(t.depot_out) t_list.push("Z vozovny");
+      if(t.trip_change) t_list.push("Změna spoje");
+      if(t.started_moving) t_list.push("Rozjezd");
+      if(t.stop_near) t_list.push("Zastávka");
+      if(t.delay_threshold) t_list.push("Zpoždění > " + t.delay_threshold + " min");
+      if(t.delay_change) t_list.push("Změna zpoždění");
+      let t_str = t_list.join(", ") || "Žádné";
+
+      row.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;">
+        <span style="color:#e2e8f0;"><b>${rule.label||rule.identifier}</b> <span style="color:#64748b;">(${rule.identifier})</span> <span style="color:#38bdf8;margin-left:6px;">🔔 ${fired}x</span></span>
+        <span style="color:#94a3b8;font-size:11px;">Události: ${t_str}</span>
+        </div>
+        <button onclick="deleteNotifRule('${rule.id}')" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid #ef4444;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;align-self:flex-start;">✕</button>`;
       list.appendChild(row);
     });
   } catch(e) {}
@@ -6195,22 +6211,41 @@ def _check_and_fire_notifications(db_client, bus_cache):
 def api_notif_delivery_info():
     """Vrátí informace o tom, kam se doručují notifikace."""
     cookie_token = request.cookies.get('web_session_token')
-    if not cookie_token:
+    admin_discord_id = session.get('discord_id') if session.get('logged_in') else None
+    
+    if not cookie_token and not admin_discord_id:
         return jsonify({"status": "error", "message": "Nejste přihlášeni"}), 401
+        
     db = get_db_client()
     if not db:
         return jsonify({"status": "error", "message": "DB nedostupná"}), 500
+        
+    is_admin = False
+    has_discord = False
+    has_email = False
+    
     try:
-        user_res = db.table("users").select("discord_id, email").eq("web_session_token", cookie_token).execute()
-        if not user_res.data:
-            return jsonify({"status": "error", "message": "Neplatná session"}), 401
-        u = user_res.data[0]
-        role = u.get("role", "") or ""
-        is_admin = 'SA' in role or 'DEV' in role
+        if admin_discord_id:
+            adm_res = db.table("users").select("role").eq("discord_id", admin_discord_id).execute()
+            if adm_res.data:
+                role = adm_res.data[0].get("role") or ""
+                if 'SA' in role or 'DEV' in role:
+                    is_admin = True
+                    
+        if cookie_token:
+            user_res = db.table("users").select("discord_id, email, role").eq("web_session_token", cookie_token).execute()
+            if user_res.data:
+                u = user_res.data[0]
+                role = u.get("role", "") or ""
+                if 'SA' in role or 'DEV' in role:
+                    is_admin = True
+                has_discord = bool(u.get("discord_id"))
+                has_email = bool(u.get("email"))
+                
         return jsonify({
             "status": "success",
-            "has_discord": bool(u.get("discord_id")),
-            "has_email": bool(u.get("email")),
+            "has_discord": has_discord,
+            "has_email": has_email,
             "is_admin": is_admin
         })
     except Exception as e:
@@ -6221,24 +6256,45 @@ def api_notif_delivery_info():
 def api_notif_create():
     """Vytvoří nové pravidlo notifikace. Vyžaduje přihlášení."""
     cookie_token = request.cookies.get('web_session_token')
-    if not cookie_token:
+    admin_discord_id = session.get('discord_id') if session.get('logged_in') else None
+    
+    if not cookie_token and not admin_discord_id:
         return jsonify({"status": "error", "message": "Musíš být přihlášen/a"}), 401
+        
     db = get_db_client()
     if not db:
         return jsonify({"status": "error", "message": "DB nedostupná"}), 500
-    try:
-        user_res = db.table("users").select("id, nick, discord_id, email, role").eq("web_session_token", cookie_token).execute()
-        if not user_res.data:
-            return jsonify({"status": "error", "message": "Neplatná session"}), 401
-        u = user_res.data[0]
-        user_session_val = str(u["id"])
-        discord_id = u.get("discord_id")
-        email = u.get("email")
-        role = u.get("role") or ""
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
 
-    is_admin = 'SA' in role or 'DEV' in role
+    user_session_val = None
+    discord_id = None
+    email = None
+    is_admin = False
+
+    try:
+        if admin_discord_id:
+            adm_res = db.table("users").select("id, role, discord_id, email").eq("discord_id", admin_discord_id).execute()
+            if adm_res.data:
+                a_u = adm_res.data[0]
+                role = a_u.get("role") or ""
+                if 'SA' in role or 'DEV' in role:
+                    is_admin = True
+                if not cookie_token:
+                    user_session_val = str(a_u["id"])
+                    discord_id = a_u.get("discord_id")
+                    email = a_u.get("email")
+                    
+        if cookie_token:
+            user_res = db.table("users").select("id, nick, discord_id, email, role").eq("web_session_token", cookie_token).execute()
+            if user_res.data:
+                u = user_res.data[0]
+                user_session_val = str(u["id"])
+                discord_id = u.get("discord_id")
+                email = u.get("email")
+                role = u.get("role") or ""
+                if 'SA' in role or 'DEV' in role:
+                    is_admin = True
+    except Exception as e:
+        pass
 
     data = request.get_json(silent=True) or {}
     target_user = str(data.get("target_user", "")).strip()
@@ -6251,6 +6307,9 @@ def api_notif_create():
         user_session_val = str(t_u["id"])
         discord_id = t_u.get("discord_id")
         email = t_u.get("email")
+
+    if not user_session_val:
+        return jsonify({"status": "error", "message": "Neplatná session pro vytváření notifikací."}), 401
 
     if not discord_id and not email:
         return jsonify({"status": "error", "message": "Tvůj účet (nebo cílový účet) nemá připojen Discord ani e-mail. Nemáme kam notifikaci poslat!"}), 400

@@ -3330,7 +3330,21 @@ async def notify_list(ctx, target_user: str = None):
     for n in n_res.data:
         lbl = n.get("label") or n.get("identifier")
         active_str = "Aktivní" if n.get("is_active") else "Neaktivní"
-        embed.add_field(name=f"ID: {n['id'][:8]} | {lbl}", value=f"Typ: {n['identifier_type']} - Cíl: {n['identifier']} | Stav: {active_str}", inline=False)
+        
+        t_dict = n.get("triggers") or {}
+        t_list = []
+        if t_dict.get("terminal"): t_list.append("Konečná")
+        if t_dict.get("new_line"): t_list.append("Nová linka")
+        if t_dict.get("depot_in"): t_list.append(f"Do vozovny ({t_dict['depot_in']})")
+        if t_dict.get("depot_out"): t_list.append(f"Z vozovny ({t_dict['depot_out']})")
+        if t_dict.get("trip_change"): t_list.append("Změna spoje")
+        if t_dict.get("started_moving"): t_list.append("Rozjezd")
+        if t_dict.get("stop_near"): t_list.append(f"Zastávka ({t_dict['stop_near']})")
+        if t_dict.get("delay_threshold"): t_list.append(f"Zpoždění > {t_dict['delay_threshold']} min")
+        if t_dict.get("delay_change"): t_list.append("Změna zpoždění")
+        t_str = ", ".join(t_list) or "Žádné"
+        
+        embed.add_field(name=f"ID: {n['id'][:8]} | {lbl}", value=f"Typ: {n['identifier_type']} - Cíl: {n['identifier']} | Stav: {active_str}\nUdálosti: {t_str}", inline=False)
         
     await ctx.send(embed=embed)
 
