@@ -1262,6 +1262,7 @@ function saveAdminInputs(){
   document.querySelectorAll('[id^="adm_spz_"]').forEach(el=>{if(el.value!==el.getAttribute('data-orig'))adminInputCache['spz_'+el.id.replace('adm_spz_','')]=el.value;});
   document.querySelectorAll('[id^="adm_st_"]').forEach(el=>{if(el.value!==el.getAttribute('data-orig'))adminInputCache['st_'+el.id.replace('adm_st_','')]=el.value;});
   document.querySelectorAll('[id^="adm_note_"]').forEach(el=>{adminInputCache['note_'+el.id.replace('adm_note_','')]=el.value;});
+  document.querySelectorAll('[id^="adm_driver_"]').forEach(el=>{adminInputCache['driver_'+el.id.replace('adm_driver_','')]=el.value;});
 }
 function restoreAdminInput(busId,ft){let v=adminInputCache[ft+'_'+busId];return(v!==undefined&&v!==null)?v:null;}
 
@@ -1285,9 +1286,9 @@ window.adminDelete=(id)=>{if(confirm('Smazat tecku? Vrati se az pri novem spoji.
 window.adminRecheck=(id)=>adminAction('recheck_spz',id);
 window.adminSetSPZ=(id)=>{let spz=document.getElementById('adm_spz_'+id)?.value;if(spz)adminAction('edit_spz',id,{spz});};
 window.adminSaveAll=(id,permanent)=>{
-  let st=document.getElementById('adm_st_'+id)?.value?.trim()||'',col=document.getElementById('adm_col_'+id)?.value?.trim()||'',note=document.getElementById('adm_note_'+id)?.value?.trim()||'';
-  if(!st&&!col&&!note){showAdminToast('Nic k ulozeni',false);return;}
-  adminAction('edit_all',id,{status:st,color_class:col,note,permanent});
+  let st=document.getElementById('adm_st_'+id)?.value?.trim()||'',col=document.getElementById('adm_col_'+id)?.value?.trim()||'',note=document.getElementById('adm_note_'+id)?.value?.trim()||'',driver=document.getElementById('adm_driver_'+id)?.value?.trim()||'';
+  if(!st&&!col&&!note&&!driver){showAdminToast('Nic k ulozeni',false);return;}
+  adminAction('edit_all',id,{status:st,color_class:col,note,driver,permanent});
 };
 
 window.openSeznamAutobusu = function(rawSpz) {
@@ -2803,7 +2804,7 @@ function renderNtLineChips(lines){
     chip.innerHTML=`${l}<button onclick="removeNtLine('${l}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;padding:0;line-height:1;">×</button>`;
     wrap.appendChild(chip);
   });
-  if(!lines||!lines.length)wrap.innerHTML='<span style="color:#475569;font-size:10px;">Žádné linky (použije se GTFS)</span>';
+  if(!lines||!lines.length)wrap.innerHTML='<span style="color:#475469;font-size:10px;">Žádné linky (použije se GTFS)</span>';
 }
 async function addLineToNtStop(){
   if(!currentNtEdit)return;
@@ -3306,6 +3307,7 @@ async function fetchBuses(){
         <div class="pb">
           ${bugW}${orangeW}${depotW}
           ${bus.admin_note?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
+          ${bus.admin_driver?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
           <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination||'Neznamy'}</span></div>
           ${spzH}${invTxt}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
@@ -3326,6 +3328,8 @@ async function fetchBuses(){
         let cSpz=restoreAdminInput(bus.id,'spz')??oSpz;
         let cSt=restoreAdminInput(bus.id,'st')??bus.status;
         let cNote=restoreAdminInput(bus.id,'note')??(bus.admin_note||'');
+        let cDriver=restoreAdminInput(bus.id,'driver')??(bus.admin_driver||'');
+        let cCol=bus.color_class||'';
         // Predpocitane promenne pro admin lock tlacitko (reseni 'bus is not defined' pri onclick)
         let adminIsVerified=bus.admin_spz_verified===true;
         let adminVerifyAction=adminIsVerified?'admin_unverify_spz':'admin_verify_spz';
@@ -3368,6 +3372,7 @@ async function fetchBuses(){
               <button onclick="adminSetSPZ('${bus.id}')" style="flex:1;background:#10b981;color:white;border:none;border-radius:5px;font-size:13px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">💾 Uložit</button>
             </div>
             ${adminLockBtn}
+            
             <div style="display:flex;gap:6px;margin-top:6px;">
               <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔍 Hledat</button>
               <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🗑️ Smazat</button>
@@ -3389,6 +3394,7 @@ async function fetchBuses(){
                 <option value="bg-bug" ${bus.color_class==='bg-bug'?'selected':''}>Označeno jako BUG</option>
               </select>
               <input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznámka..." class="adm-inp" style="margin-top:6px;">
+              <input type="text" id="adm_driver_${bus.id}" value="${cDriver}" data-orig="${bus.admin_driver||''}" placeholder="Jméno řidiče..." class="adm-inp" style="margin-top:6px;">
               <div style="display:flex;gap:6px;margin-top:8px;">
                 <button onclick="adminSaveAll('${bus.id}',true)" class="adm-btn" style="flex:1;background:#1e40af;color:white;">📌 Uložit natrvalo</button>
                 <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏱️ Dočasně</button>
@@ -4516,6 +4522,7 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "admin_color_override": None, "admin_status_override": None, "admin_flag": False,
         "bug_locked": False, "admin_lock_display": False, "admin_lock_permanent": False,
         "admin_note": "",
+        "admin_driver": "",
         # admin_spz_verified: absolutni admin lock - automatikaprestane hledat jinou SPZ.
         # Nastavuje se tlacitkem 'Overit SPZ adminem' v Admin Panelu.
         "admin_spz_verified": admin_verified,
@@ -4665,6 +4672,7 @@ def background_map_worker():
                     ADMIN_SPZ_LOCKS[bid] = {
                         "spz": spz,
                         "admin_note": row.get("admin_note", ""),
+                        "admin_driver": row.get("admin_driver", ""),
                         "color_class": row.get("color_class", "bg-darkblue")
                     }
                     
@@ -4684,6 +4692,7 @@ def background_map_worker():
                 ghost_entry["color_class"] = row.get("color_class") or "bg-gray"
                 ghost_entry["status"] = row.get("status_text") or "Obnoven po restartu"
                 ghost_entry["admin_note"] = row.get("admin_note") or ""
+                ghost_entry["admin_driver"] = row.get("admin_driver") or ""
                 ghost_entry["admin_flag"] = row.get("admin_flag", False)
                 if row.get("manual_spz"):
                     ghost_entry["manual_spz"] = True
@@ -4866,6 +4875,7 @@ def background_map_worker():
                                     ghost_verified = best_gc.get("spz_verified", False)
                                     ghost_admin_verified = best_gc.get("admin_spz_verified", False)
                                     ghost_admin_note = best_gc.get("admin_note", "")
+                                    ghost_admin_driver = best_gc.get("admin_driver", "")
                                     ghost_admin_flag = best_gc.get("admin_flag", False)
                                     ghost_color_class = best_gc.get("color_class")
                                     ghost_status = best_gc.get("status")
@@ -4880,6 +4890,8 @@ def background_map_worker():
                             
                             if 'ghost_admin_note' in locals():
                                 nb["admin_note"] = ghost_admin_note
+                            if 'ghost_admin_driver' in locals():
+                                nb["admin_driver"] = ghost_admin_driver
                                 nb["admin_flag"] = ghost_admin_flag
                                 nb["manual_spz"] = ghost_manual_spz
                                 if ghost_color_class and ghost_color_class != "bg-gray":
@@ -4899,6 +4911,8 @@ def background_map_worker():
                                 nb["color_class"] = lock.get("color_class", "bg-darkblue")
                                 if lock.get("admin_note"):
                                     nb["admin_note"] = lock["admin_note"]
+                                if lock.get("admin_driver"):
+                                    nb["admin_driver"] = lock["admin_driver"]
                             
                             GLOBAL_BUS_CACHE[bus_id] = nb
 
@@ -4927,6 +4941,8 @@ def background_map_worker():
                                 c["color_class"] = lock.get("color_class", "bg-darkblue")
                                 if lock.get("admin_note"):
                                     c["admin_note"] = lock["admin_note"]
+                                if lock.get("admin_driver"):
+                                    c["admin_driver"] = lock["admin_driver"]
 
                             if not is_same_line(c["line"], line) and line and c["line"] != "Nezn\u00e1m\u00e1":
                                 if not c["actual_end_time"]:
@@ -5271,7 +5287,7 @@ def background_map_worker():
                         "inactive_minutes": inact,
                         "last_updated": c["last_moved"].strftime("%H:%M:%S") if c.get("last_moved") else "N/A",
                         "investigating": False, "investigation_spz": "",
-                        "admin_flag": c.get("admin_flag", False), "admin_note": c.get("admin_note", ""),
+                        "admin_flag": c.get("admin_flag", False), "admin_note": c.get("admin_note", ""), "admin_driver": c.get("admin_driver", ""),
                         "in_depot": c.get("_in_depot", False),
                         "depot_name": c.get("_depot_name"),
                         "depot_color": c.get("_depot_color")
@@ -5770,7 +5786,7 @@ def background_map_worker():
                     "last_updated": c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A",
                     "investigating": c.get("investigating", False),
                     "investigation_spz": c.get("investigation_spz", ""),
-                    "admin_flag": c.get("admin_flag", False), "admin_note": c.get("admin_note", ""),
+                    "admin_flag": c.get("admin_flag", False), "admin_note": c.get("admin_note", ""), "admin_driver": c.get("admin_driver", ""),
                     "admin_spz_verified": c.get("admin_spz_verified", False),
                     "admin_spz_bug": c.get("admin_spz_bug", False),
                     "admin_spz_conflict": c.get("admin_spz_conflict", False)
@@ -5823,6 +5839,7 @@ def background_map_worker():
                         "color_class": bc.get("color_class"),
                         "status_text": bc.get("status"),
                         "admin_note": bc.get("admin_note", ""),
+                        "admin_driver": bc.get("admin_driver", ""),
                         "admin_flag": bc.get("admin_flag", False),
                         "manual_spz": bc.get("manual_spz", False),
                         "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
@@ -6634,6 +6651,7 @@ def api_admin_map_action():
         new_st = str(data.get("status", "")).strip()
         new_col = str(data.get("color_class", "")).strip()
         new_note = str(data.get("note", "")).strip()
+        new_driver = str(data.get("driver", "")).strip()
         permanent = bool(data.get("permanent", False))
         if new_st:
             c["status"] = new_st
@@ -6645,6 +6663,8 @@ def api_admin_map_action():
             c["admin_lock_display"] = True
         if new_note is not None:
             c["admin_note"] = new_note
+        if new_driver is not None:
+            c["admin_driver"] = new_driver
         c["admin_lock_permanent"] = permanent
 
     elif action == "mark_bug":
@@ -6674,6 +6694,7 @@ def api_admin_map_action():
             ADMIN_SPZ_LOCKS[bus_id] = {
                 "spz": c["spz"],
                 "admin_note": c.get("admin_note", ""),
+                "admin_driver": c.get("admin_driver", ""),
                 "color_class": c.get("color_class", "bg-darkblue")
             }
             # Okamzite zapsat do spz_cache s admin_verified=True
@@ -6741,6 +6762,7 @@ def api_admin_map_action():
         c["admin_lock_display"] = False
         c["admin_lock_permanent"] = False
         c["admin_note"] = ""
+        c["admin_driver"] = ""
         c["color_class"] = "bg-gray"
         c["status"] = "Na\u010d\u00edt\u00e1n\u00ed..."
         c["admin_spz_bug"] = False
@@ -6783,6 +6805,7 @@ def api_admin_approve_conflict_spz():
         "color_class": c.get("color_class", "bg-darkblue"),
         "timestamp": get_prague_time(),
         "admin_note": c.get("admin_note", "")
+        ,"admin_driver": c.get("admin_driver", "")
     }
     
     # Okamzite zapsat do spz_cache s admin_verified=True
