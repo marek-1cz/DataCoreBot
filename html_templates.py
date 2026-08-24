@@ -1306,7 +1306,6 @@ function deleteNotificationRule(ruleId) {
 }
 
 
-<script>
 let currentAvatarBase64 = "__AVATAR_URL__";
 
 function resetAvatar() {
