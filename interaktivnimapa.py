@@ -496,19 +496,16 @@ body.nt-add-active #map{cursor:crosshair !important;}
 #log-body .lg-warn{color:#fbbf24;}
 #log-body .lg-ok{color:#34d399;}
 @media(max-width:768px){
-  #top-nav{gap:4px;padding:4px 5px;height:50px;min-height:50px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;white-space:nowrap;justify-content:flex-start;z-index:4800 !important;width: 100% !important; border-radius: 0; scrollbar-width: none; -webkit-overflow-scrolling: touch;}
-  #top-nav::-webkit-scrollbar { display: none; }
-  #top-nav > * { flex-shrink: 0 !important; }
+  #top-nav{gap:4px;padding:5px 4px;height:auto;min-height:50px;flex-wrap:wrap;justify-content:center;align-items:center;z-index:4800 !important;width: 100% !important; border-radius: 0;}
   .n-title,.n-warn,.n-clock,.n-sp{display:none !important;}
-  .n-btn{font-size:10px;padding:4px 7px;}
-  #pub-stops-btn{font-size:11px;padding:5px 10px;}
-  #spz-search-inp{width:90px !important;font-size:11px;}
+  .n-btn, #pub-stops-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #depot-toggle-btn, #log-toggle-btn { font-size: 10px !important; padding: 4px 6px !important; }
+  #spz-search-inp{width:80px !important;font-size:10px !important;padding:4px 6px !important;}
   
   body.nav-glass #top-nav { width: 98% !important; border-radius: 14px !important; left: 50% !important; transform: translateX(-50%) !important; top: 10px !important; }
   body.nav-glass-hide #top-nav { top: -160px !important; }
   body.nav-glass-hide #top-nav.vis { top: 10px !important; }
 
-  .leaflet-top.leaflet-left { top: 60px !important; }
+  .leaflet-top.leaflet-left { top: 85px !important; }
 
   #hf{width:220px; padding: 10px;}
   .dark-popup .leaflet-popup-content{width:240px!important;}
@@ -531,11 +528,11 @@ body.nt-add-active #map{cursor:crosshair !important;}
   
   /* Top panels (lines, editors) */
   #lines-overlay-panel, #line-editor-panel, #depot-admin-panel {
-    top: 75px !important;
+    top: 90px !important;
     left: 10px !important;
     right: 10px !important;
     width: auto !important;
-    max-height: calc(100vh - 90px) !important;
+    max-height: calc(100vh - 100px) !important;
     overflow-y: auto !important;
     z-index: 4600 !important;
   }
@@ -544,11 +541,11 @@ body.nt-add-active #map{cursor:crosshair !important;}
   .lp-h div{gap:2px;flex-wrap:wrap;}
   .lp-h div button{font-size:10px;padding:2px 5px;}
   
-  #nt-add-bar{left:10px;right:10px;transform:none;flex-wrap:wrap;gap:5px;top:75px;}
+  #nt-add-bar{left:10px;right:10px;transform:none;flex-wrap:wrap;gap:5px;top:90px;}
   #idos-modal-box{width:100% !important;height:100% !important;max-width:none !important;border:none !important;border-radius:0 !important;}
   
   /* HUD floating higher up to not collide with bottom popups */
-  #hud { top: 75px !important; left: 10px !important; right: auto !important; bottom: auto !important; z-index: 4500 !important; }
+  #hud { top: 90px !important; left: 10px !important; right: auto !important; bottom: auto !important; z-index: 4500 !important; }
   
   #close-route-btn { top: auto !important; bottom: 70px !important; left: 50% !important; transform: translateX(-50%) !important; padding: 8px 22px !important; font-size: 13px !important; z-index: 5000 !important; }
   #edit-route-btn, #save-route-btn { top: auto !important; bottom: 110px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 5000 !important; }
@@ -590,7 +587,7 @@ body.dark-map #settings-toggle-btn:hover, body.bw-dark-map #settings-toggle-btn:
 #settings-toggle-btn:hover .st-text{width:75px;opacity:1;margin-left:6px;}
 
 body.nav-static #top-nav { top: 0 !important; }
-body.nav-glass #top-nav { top: 15px !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; width: max-content !important; max-width: 98vw !important; border-radius: 16px !important; padding: 6px 12px !important; gap: 6px !important; flex-wrap: nowrap !important; background: rgba(15, 23, 42, 0.85) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important; }
+body.nav-glass #top-nav { top: 15px !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; width: max-content !important; max-width: 98vw !important; border-radius: 16px !important; padding: 6px 12px !important; gap: 6px !important; flex-wrap: nowrap !important; background: rgba(15, 23, 42, 0.25) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important; }
 body.nav-glass-hide #top-nav { top: -150px !important; }
 body.nav-glass-hide #top-nav.vis { top: 15px !important; }
 body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn { display: none !important; }
