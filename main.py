@@ -1899,10 +1899,37 @@ def web_auth_status():
                     # Link k aktualnimu uctu misto vytvoreni noveho
                     curr_user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
                     if curr_user and curr_user[0].get('id') != u.get('id'):
-                        # Smazat docasny ucet z requestu
-                        db.table("users").delete().eq("id", u.get("id")).execute()
-                        # Aktualizovat nas ucet
-                        db.table("users").update({"discord_id": discord_id}).eq("web_session_token", cookie_token).execute()
+                        c_u = curr_user[0]
+                        
+                        # Vždy zachovat starší účet (s menším app_id)
+                        app_id_c = int(c_u.get('app_id') or 999999)
+                        app_id_u = int(u.get('app_id') or 999999)
+                        
+                        if app_id_c <= app_id_u:
+                            id_to_keep = c_u.get("id")
+                            id_to_del = u.get("id")
+                        else:
+                            id_to_keep = u.get("id")
+                            id_to_del = c_u.get("id")
+                            
+                        # Sloučit data
+                        new_email = c_u.get('email') or u.get('email')
+                        new_discord = c_u.get('discord_id')
+                        if not new_discord or new_discord == "čeká na odpověd":
+                            new_discord = u.get('discord_id')
+                            if not new_discord or new_discord == "čeká na odpověd":
+                                new_discord = discord_id
+                                
+                        # Smazat novější účet
+                        db.table("users").delete().eq("id", id_to_del).execute()
+                        # Sjednotit vše do staršího účtu a zajistit, že zůstaneme přihlášeni
+                        db.table("users").update({
+                            "discord_id": new_discord,
+                            "email": new_email,
+                            "web_session_token": cookie_token,
+                            "login_token": ""
+                        }).eq("id", id_to_keep).execute()
+                        
                         return jsonify({"status": "approved", "linked": True})
                         
                 # Create permanent token and update login time
