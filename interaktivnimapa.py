@@ -501,7 +501,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
   .n-btn, #pub-stops-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #depot-toggle-btn, #log-toggle-btn { font-size: 10px !important; padding: 4px 6px !important; }
   #spz-search-inp{width:80px !important;font-size:10px !important;padding:4px 6px !important;}
   
-  body.nav-glass #top-nav { width: 98% !important; border-radius: 14px !important; left: 50% !important; transform: translateX(-50%) !important; top: 10px !important; }
+  body.nav-glass #top-nav { width: 98% !important; max-width: 100% !important; border-radius: 14px !important; left: 50% !important; transform: translateX(-50%) !important; top: 10px !important; flex-wrap: wrap !important; height: auto !important; }
   body.nav-glass-hide #top-nav { top: -160px !important; }
   body.nav-glass-hide #top-nav.vis { top: 10px !important; }
 
