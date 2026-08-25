@@ -3317,8 +3317,8 @@ async function fetchBuses(){
         </div>
         <div class="pb">
           ${bugW}${orangeW}${depotW}
-          ${(bus.admin_note && bus.admin_note.trim() !== '')?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
-          ${(bus.admin_driver && bus.admin_driver.trim() !== '')?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
+          ${(bus.admin_note && typeof bus.admin_note === 'string' && bus.admin_note.trim() !== '')?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
+          ${(bus.admin_driver && typeof bus.admin_driver === 'string' && bus.admin_driver.trim() !== '')?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
           <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination||'Neznamy'}</span></div>
           ${spzH}${invTxt}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
@@ -5193,7 +5193,7 @@ def background_map_worker():
                                 c["_depot_name"] = depot_name
                                 c["_depot_color"] = depot_color or "#facc15"
                                 # Bylo zde mrazeni SPZ, ale admin pozadoval aby i ve vozovne system kontroloval SPZ
-                                # spz_val = c.get("spz")
+                                spz_val = c.get("spz")
                                 # if spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá"):
                                 #     c["spz_frozen"] = True
                                 #     c["spz_locked"] = True
