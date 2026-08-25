@@ -3317,8 +3317,8 @@ async function fetchBuses(){
         </div>
         <div class="pb">
           ${bugW}${orangeW}${depotW}
-          ${bus.admin_note?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
-          ${bus.admin_driver?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
+          ${(bus.admin_note && bus.admin_note.trim() !== '')?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
+          ${(bus.admin_driver && bus.admin_driver.trim() !== '')?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
           <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination||'Neznamy'}</span></div>
           ${spzH}${invTxt}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
@@ -3386,6 +3386,7 @@ async function fetchBuses(){
             
             <div style="display:flex;gap:6px;margin-top:6px;">
               <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔍 Hledat</button>
+              <button onclick="adminAction('force_refresh','${bus.id}')" style="flex:1;background:#7c3aed;color:#fff;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔄 T. Refresh</button>
               <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🗑️ Smazat</button>
             </div>
             
@@ -5191,11 +5192,11 @@ def background_map_worker():
                                 c["_in_depot"] = True
                                 c["_depot_name"] = depot_name
                                 c["_depot_color"] = depot_color or "#facc15"
-                                # Zamraz SPZ - bus parkuje, nema smysl re-auditovat
-                                spz_val = c.get("spz")
-                                if spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá"):
-                                    c["spz_frozen"] = True
-                                    c["spz_locked"] = True
+                                # Bylo zde mrazeni SPZ, ale admin pozadoval aby i ve vozovne system kontroloval SPZ
+                                # spz_val = c.get("spz")
+                                # if spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá"):
+                                #     c["spz_frozen"] = True
+                                #     c["spz_locked"] = True
 
                                 # === DETEKCE DUPLICITY VOZOVNA vs. AKTIVNI MAPA ===
                                 # Pokud stejná SPZ jede zároveň na aktivní mapě (jiný bus_id),
@@ -6667,6 +6668,36 @@ def api_admin_map_action():
         c["spz_last_audit_check"] = None
         c["investigating"] = False
         c["spz_stable_ticks"] = 0
+
+    elif action == "force_refresh":
+        c["spz_locked"] = False
+        c["spz_verified"] = False
+        c["spz"] = None
+        c["manual_spz"] = False
+        c["bug_locked"] = False
+        c["spz_frozen"] = False
+        c["spz_last_audit_check"] = None
+        c["investigating"] = False
+        c["spz_stable_ticks"] = 0
+        c["status"] = "Neznámý"
+        c["admin_status_override"] = None
+        c["admin_color_override"] = None
+        c["color_class"] = ""
+        c["admin_lock_display"] = False
+        c["admin_flag"] = False
+        c["admin_spz_verified"] = False
+        c["admin_spz_bug"] = False
+        c["admin_note"] = ""
+        c["admin_driver"] = ""
+        c["admin_lock_permanent"] = False
+        c["_in_depot"] = False
+        c["_depot_name"] = None
+        c["_depot_color"] = None
+        ADMIN_SPZ_LOCKS.pop(bus_id, None)
+        try:
+            ADMIN_SPZ_LOCKS.pop(int(bus_id), None)
+        except ValueError:
+            pass
 
     elif action == "edit_status":
         new_st = str(data.get("status", "")).strip()
