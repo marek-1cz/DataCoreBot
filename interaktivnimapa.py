@@ -1997,7 +1997,7 @@ window.shareBus = function(busId) {
   let delay = (typeof bus.delay !== 'undefined') ? bus.delay : '?';
   
   let spzText = (bus.spz !== 'Neznama' && bus.spz) ? bus.spz : bus.id;
-  let stopName = bus.last_stop_name || ((bus.status && bus.status.includes('(')) ? bus.status.split('(').pop().replace(')','') : bus.status);
+  let stopName = bus.real_zastavka || bus.last_stop_name || ((bus.status && bus.status.includes('(')) ? bus.status.split('(').pop().replace(')','') : bus.status);
   if (stopName === 'Jízda' || stopName.includes('Ceka na data')) stopName = 'Neznámá';
   let real_spoj = bus.real_linka_spoj || bus.line;
   
@@ -4547,7 +4547,7 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
                      ghost_spz=None, ghost_verified=False, admin_verified=False):
     return {
         "trip_id": trip_id, "inflow_id": bus_id, "lat": lat, "lng": lng, "bearing": None,
-        "line": line, "real_linka_spoj": None, "destination": dest, "is_train": is_train,
+        "line": line, "real_linka_spoj": None, "real_zastavka": None, "destination": dest, "is_train": is_train,
         "raw_delay": delay, "spz": ghost_spz, "spz_verified": ghost_verified,
         "spz_locked": False, "manual_spz": False, "spz_stable_ticks": 0,
         "spz_last_verified": None, "investigating": False, "investigation_spz": None,
@@ -4590,8 +4590,12 @@ def fetch_tt_bg(bus_id, cached_dict):
             ih = r.read().decode('utf-8')
         ml = re.search(r'<th>Linka</th>\s*<td>(.*?)</td>', ih, re.IGNORECASE | re.DOTALL)
         ms = re.search(r'<th>Spoj</th>\s*<td>(.*?)</td>', ih, re.IGNORECASE | re.DOTALL)
+        mz = re.search(r'<th>Zastávka</th>\s*<td>(.*?)</td>', ih, re.IGNORECASE | re.DOTALL)
         if ml and ms:
             cached_dict["real_linka_spoj"] = f"{ml.group(1).strip()}/{ms.group(1).strip()}"
+        if mz:
+            import html as _html
+            cached_dict["real_zastavka"] = _html.unescape(mz.group(1).strip())
         with opener.open(urllib.request.Request(
                 f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb}",
                 headers=hdr), timeout=4) as r:
