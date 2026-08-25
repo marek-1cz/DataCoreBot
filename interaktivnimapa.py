@@ -5996,13 +5996,15 @@ def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
         "fields": [
             {"name": "Linka", "value": str(line), "inline": True},
             {"name": "Spoj", "value": str(spoj), "inline": True},
-            {"name": "MAP ID", "value": str(bus_id), "inline": True},
             {"name": "SPZ", "value": str(spz), "inline": True},
-            {"name": "Cíl", "value": str(dest), "inline": True},
-            {"name": "Stav", "value": str(status), "inline": False},
+            
             {"name": "Zpoždění", "value": f"{bus_data.get('delay', 0)} min", "inline": True},
             {"name": "Čas", "value": now_str, "inline": True},
-            {"name": "Sledovat", "value": f"[Otevřít na mapě]({track_url})", "inline": True},
+            {"name": "MAP ID", "value": str(bus_id), "inline": True},
+            
+            {"name": "Cíl", "value": str(dest), "inline": False},
+            {"name": "Stav", "value": str(status), "inline": False},
+            {"name": "Sledovat", "value": f"[Otevřít na mapě]({track_url})", "inline": False},
         ],
         "footer": {"text": "OIS IDPK Notifikace"},
     }
