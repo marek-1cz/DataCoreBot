@@ -5836,7 +5836,10 @@ def background_map_worker():
                     "admin_flag": c.get("admin_flag", False), "admin_note": c.get("admin_note", ""), "admin_driver": c.get("admin_driver", ""),
                     "admin_spz_verified": c.get("admin_spz_verified", False),
                     "admin_spz_bug": c.get("admin_spz_bug", False),
-                    "admin_spz_conflict": c.get("admin_spz_conflict", False)
+                    "admin_spz_conflict": c.get("admin_spz_conflict", False),
+                    "real_zastavka": c.get("real_zastavka"),
+                    "nearest_stop": c.get("nearest_stop"),
+                    "last_stop_name": c.get("last_stop_name")
                 })
 
             global LIVE_BUSES_DATA, _last_spz_auto_refresh
@@ -6226,7 +6229,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                         ctx_text = f"SPZ: {bus_data.get('spz')} | V blízkosti: {now_time_str} ({near})"
             
             was_near_stop = state.get(f"_stop_near:{stop_name}")
-            if now_near_stop and was_near_stop is False:
+            if now_near_stop and not was_near_stop:
                 _fire(f"stop_near:{stop_name}", status_val, ctx_text)
             
             state[f"_stop_near:{stop_name}"] = now_near_stop
