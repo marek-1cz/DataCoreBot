@@ -1997,8 +1997,14 @@ window.shareBus = function(busId) {
   let delay = (typeof bus.delay !== 'undefined') ? bus.delay : '?';
   let stopName = (bus.status && bus.status.includes('(')) ? bus.status.split('(').pop().replace(')','') : bus.status;
   
-  let real_spoj = bus.real_linka_spoj ? bus.real_linka_spoj.split('/').pop() : "Neznámý";
-  let shareText = `Autobus: ${bus.spz !== 'Neznama' && bus.spz ? bus.spz : bus.id}\nLinka: ${bus.line}\nSpoj: ${real_spoj}\nMAP ID: ${bus.id}\nSměr: ${bus.destination}\nAktuální poloha blízko: ${stopName} v ${timeStr}\nZpoždění: ${delay} min\nSledovat na mapě: ${trackUrl}`;
+  let spzText = (bus.spz !== 'Neznama' && bus.spz) ? bus.spz : bus.id;
+  let shareText = `🚌 Autobus SPZ: ${spzText}\n` +
+                  `📍 Jede poblíž zastávky: ${stopName}\n` +
+                  `🚍 Má linku: ${bus.line}\n` +
+                  `🏁 Směr: ${bus.destination}\n` +
+                  `⏱️ Zpoždění: ${delay} min\n\n` +
+                  `Sleduj ho taky živě na mapě:\n` +
+                  `${trackUrl}`;
   
   let modal = document.createElement('div');
   modal.style.position = 'fixed';
@@ -2016,15 +2022,19 @@ window.shareBus = function(busId) {
   
   box.innerHTML = `
     <h3 style="margin-top:0;margin-bottom:15px;text-align:center;color:#38bdf8;">📤 Sdílet spoj</h3>
-    <textarea id="share-ta" readonly style="width:100%;height:140px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:12px;font-size:13px;resize:none;margin-bottom:15px;box-sizing:border-box;outline:none;">${shareText}</textarea>
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      <button onclick="navigator.clipboard.writeText(document.getElementById('share-ta').value).then(()=>showMapToast('📋 Text zkopírován!'));this.parentElement.parentElement.parentElement.remove()" style="background:#0284c7;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 6px rgba(0,0,0,0.2);">📋 Zkopírovat text a odkaz</button>
-      <div style="display:flex;gap:10px;justify-content:center;margin-top:5px;">
+    
+    <div style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:15px;font-size:13px;line-height:1.6;margin-bottom:15px;white-space:pre-wrap;">${shareText.replace(/</g, "&lt;")}</div>
+    
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <button onclick="navigator.clipboard.writeText(\`${shareText}\`).then(()=>showMapToast('📋 Zkopírováno!'));this.parentElement.parentElement.parentElement.remove()" style="background:#10b981;color:white;border:none;padding:15px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:15px;box-shadow:0 4px 6px rgba(0,0,0,0.2);text-transform:uppercase;">📋 KOPÍROVAT ODKAZ A TEXT</button>
+      
+      <div style="font-size:11px;color:#94a3b8;text-align:center;">Nebo sdílet přímo přes:</div>
+      <div style="display:flex;gap:10px;justify-content:center;">
         <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(trackUrl)}" target="_blank" style="flex:1;text-align:center;background:#1877f2;color:white;padding:10px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;">Facebook</a>
         <a href="fb-messenger://share/?link=${encodeURIComponent(trackUrl)}" target="_blank" style="flex:1;text-align:center;background:#00B2FF;color:white;padding:10px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;">Messenger</a>
         <a href="https://wa.me/?text=${encodeURIComponent(shareText)}" target="_blank" style="flex:1;text-align:center;background:#25D366;color:white;padding:10px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;">WhatsApp</a>
       </div>
-      <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background:#475569;color:white;border:none;padding:10px;border-radius:8px;cursor:pointer;width:100%;margin-top:5px;font-size:13px;">Zavřít</button>
+      <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background:#475569;color:white;border:none;padding:12px;border-radius:8px;cursor:pointer;width:100%;font-size:14px;font-weight:bold;">Zavřít</button>
     </div>
   `;
   
@@ -5967,7 +5977,7 @@ def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
 
     embed = {
         "title": trigger_label,
-        "description": f"**Upozornění pro:** {label}",
+        "description": f"**Upozornění:** {label}",
         "color": color,
         "fields": [
             {"name": "Linka", "value": str(line), "inline": True},
@@ -5985,7 +5995,7 @@ def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
     # Textova verze pro DM
     dm_text = (
         f"🚨 **{trigger_label}** 🚨\n\n"
-        f"**Upozornění pro:** {label}\n"
+        f"**Upozornění:** {label}\n"
         f"Linka: **{line}** | Spoj: **{spoj}** | MAP ID: **{bus_id}** | SPZ: **{spz}**\n"
         f"Cíl: **{dest}**\n"
         f"Stav: {status}\n"
@@ -6157,7 +6167,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
         if triggers.get("terminal"):
             if now_terminal and was_terminal is False:
                 term_name = status_text.split("Konečná", 1)[-1].strip() if "Konečná" in status_text else ""
-                ctx_text = f"Příjezd: {now_time_str}" + (f" na {term_name}" if term_name else "")
+                ctx_text = f"SPZ: {bus_data.get('spz')} | Příjezd: {now_time_str}" + (f" na {term_name}" if term_name else "")
                 _fire("terminal", status_text, ctx_text)
             
             # Auto cleanup pro delay_change
@@ -6180,7 +6190,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
         if triggers.get("new_line"):
             prev_line = state.get("_line")
             if prev_line and prev_line != line:
-                _fire("new_line", line, f"Změna: linka {prev_line} ➡️ {line}")
+                _fire("new_line", line, f"SPZ: {bus_data.get('spz')} změnil linku: {prev_line} ➡️ {line}")
             state["_line"] = line
 
         stop_name = triggers.get("stop_near", "")
@@ -6193,7 +6203,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
             if b_last_stop and _norm_txt(stop_name) in _norm_txt(b_last_stop):
                 now_near_stop = True
                 status_val = f"{status_text} ({b_last_stop})"
-                ctx_text = f"Vyhlášená zastávka: {now_time_str} ({b_last_stop})"
+                ctx_text = f"SPZ: {bus_data.get('spz')} | Vyhlášená zastávka: {now_time_str} ({b_last_stop})"
             else:
                 b_lat = bus_data.get("lat", 0)
                 b_lon = bus_data.get("lng", 0)
@@ -6202,7 +6212,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                     if near and _norm_txt(stop_name) in _norm_txt(near):
                         now_near_stop = True
                         status_val = f"{status_text} ({near})"
-                        ctx_text = f"V blízkosti: {now_time_str} ({near})"
+                        ctx_text = f"SPZ: {bus_data.get('spz')} | V blízkosti: {now_time_str} ({near})"
             
             was_near_stop = state.get(f"_stop_near:{stop_name}")
             if now_near_stop and was_near_stop is False:
@@ -6217,14 +6227,14 @@ def _check_and_fire_notifications(db_client, bus_cache):
         if depot_name and depot_name != "none":
             if was_in_depot is False and now_in_depot:
                 if depot_name == "all" or depot_name == True or depot_name.lower() in status_text.lower():
-                    _fire("depot_in", "in", f"Linka {line} přijela v {now_time_str}")
+                    _fire("depot_in", "in", f"SPZ: {bus_data.get('spz')} přijel do vozovny v {now_time_str}")
 
         depot_out_name = triggers.get("depot_out", "")
         if depot_out_name and depot_out_name != "none":
             if was_in_depot is True and not now_in_depot:
                 last_depot = state.get("_depot_name_text", "")
                 if depot_out_name == "all" or depot_out_name == True or depot_out_name.lower() in last_depot.lower():
-                    _fire("depot_out", "out", f"Linka {line} vyjela z vozovny ({last_depot}) v {now_time_str}")
+                    _fire("depot_out", "out", f"SPZ: {bus_data.get('spz')} vyjel z vozovny ({last_depot}) v {now_time_str}")
             
         state["_in_depot"] = now_in_depot
         if now_in_depot:
@@ -6234,14 +6244,14 @@ def _check_and_fire_notifications(db_client, bus_cache):
             prev_dest = state.get("_dest")
             dest = bus_data.get("destination", "")
             if prev_dest and prev_dest != dest:
-                _fire("trip_change", dest, f"Původní cíl: {prev_dest} ➡️ Nový cíl: {dest}")
+                _fire("trip_change", dest, f"SPZ: {bus_data.get('spz')} změnil cíl: {prev_dest} ➡️ {dest}")
             state["_dest"] = dest
 
         if triggers.get("started_moving"):
             was_stopped = state.get("_stopped")
             now_stopped = "stojí" in status_text.lower() or "stoji" in status_text.lower() or "čeká" in status_text.lower() or "konečná" in status_text.lower() or "konecna" in status_text.lower() or "bg-gray" in color_class
             if was_stopped is True and not now_stopped:
-                _fire("started_moving", status_text, f"Vozidlo se dalo do pohybu ({now_time_str})")
+                _fire("started_moving", status_text, f"SPZ: {bus_data.get('spz')} se dal do pohybu ({now_time_str})")
             state["_stopped"] = now_stopped
             
         # Zpoždění
@@ -6255,7 +6265,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 prev_delay = state.get("_delay_thresh_val", -1)
                 print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} delay_thresh limit={dt}, current={delay_val}, prev={prev_delay}\033[0m", flush=True)
                 if not is_inactive_for_delay and delay_val >= dt and prev_delay < dt:
-                    _fire(f"delay_threshold:{dt}", str(delay_val), f"Zpoždění dosáhlo {delay_val} min (limit {dt} min)")
+                    _fire(f"delay_threshold:{dt}", str(delay_val), f"SPZ: {bus_data.get('spz')} dosáhl zpoždění {delay_val} min (limit {dt} min)")
                 state["_delay_thresh_val"] = delay_val
             except Exception as e:
                 print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} chyba delay_threshold: {e}\033[0m", flush=True)
@@ -6264,7 +6274,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
         if delay_change:
             prev_d = state.get("_delay_change_val", None)
             if not is_inactive_for_delay and prev_d is not None and abs(delay_val - prev_d) >= 3:
-                _fire(f"delay_change", str(delay_val), f"Zpoždění se změnilo: {prev_d} min ➡️ {delay_val} min")
+                _fire(f"delay_change", str(delay_val), f"SPZ: {bus_data.get('spz')} | Zpoždění se změnilo: {prev_d} min ➡️ {delay_val} min")
             
             state["_delay_change_val"] = delay_val
 
