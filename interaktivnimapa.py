@@ -1297,7 +1297,7 @@ window.adminRecheck=(id)=>adminAction('recheck_spz',id);
 window.adminSetSPZ=(id)=>{let spz=document.getElementById('adm_spz_'+id)?.value;if(spz)adminAction('edit_spz',id,{spz});};
 window.adminSaveAll=(id,permanent)=>{
   let st=document.getElementById('adm_st_'+id)?.value?.trim()||'',col=document.getElementById('adm_col_'+id)?.value?.trim()||'',note=document.getElementById('adm_note_'+id)?.value?.trim()||'',driver=document.getElementById('adm_driver_'+id)?.value?.trim()||'';
-  if(!st&&!col&&!note&&!driver){showAdminToast('Nic k ulozeni',false);return;}
+  // if(!st&&!col&&!note&&!driver){showAdminToast('Nic k ulozeni',false);return;}
   adminAction('edit_all',id,{status:st,color_class:col,note,driver,permanent});
 };
 
