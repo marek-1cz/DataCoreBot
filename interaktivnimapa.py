@@ -5956,11 +5956,15 @@ def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
     now_str = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M:%S")
 
     real_ls = bus_data.get("real_linka_spoj")
-    spoj = real_ls.split("/")[-1] if real_ls and "/" in real_ls else "?"
+    if real_ls and "/" in real_ls:
+        spoj = real_ls.split("/")[-1]
+    else:
+        trip_id = str(bus_data.get("trip_id", ""))
+        spoj = trip_id.replace("TRIP-", "")[:8] if trip_id else "?"
 
     embed = {
-        "title": f"🔔 Upozornění: {label}",
-        "description": trigger_label,
+        "title": trigger_label,
+        "description": f"**Upozornění pro:** {label}",
         "color": color,
         "fields": [
             {"name": "Linka", "value": str(line), "inline": True},
@@ -5977,7 +5981,8 @@ def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
     }
     # Textova verze pro DM
     dm_text = (
-        f"🔔 **{label}** – {trigger_label}\n"
+        f"🚨 **{trigger_label}** 🚨\n\n"
+        f"**Upozornění pro:** {label}\n"
         f"Linka: **{line}** | Spoj: **{spoj}** | MAP ID: **{bus_id}** | SPZ: **{spz}**\n"
         f"Cíl: **{dest}**\n"
         f"Stav: {status}\n"
