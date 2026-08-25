@@ -3435,6 +3435,7 @@ async function fetchBuses(){
                 </label>
                 <button onclick="adminAction('mark_bug','${bus.id}')" style="flex:1;background:#3f0000;color:#fca5a5;border:1px solid #ef4444;border-radius:5px;font-size:11px;cursor:pointer;padding:7px;touch-action:manipulation;font-weight:bold;">⛔ BUG</button>
                 <button onclick="adminAction('reset_admin','${bus.id}')" style="flex:1;background:transparent;color:#94a3b8;border:1px solid #334155;border-radius:5px;font-size:11px;cursor:pointer;padding:7px;touch-action:manipulation;">🔄 Reset</button>
+                <button onclick="adminAction('hard_refresh','${bus.id}')" style="flex:1;background:transparent;color:#f87171;border:1px solid #7f1d1d;border-radius:5px;font-size:11px;cursor:pointer;padding:7px;touch-action:manipulation;">♻️ Hard Refresh</button>
               </div>
             </div>
           </div>`;
@@ -6884,6 +6885,16 @@ def api_admin_map_action():
             if _db_av:
                 _db_av.table("spz_cache").update({"admin_verified": False}).eq("bus_id", bus_id).execute()
         except Exception as e_av:
+            pass
+
+    elif action == "hard_refresh":
+        GLOBAL_BUS_CACHE.pop(bus_id, None)
+        ADMIN_SPZ_LOCKS.pop(bus_id, None)
+        try:
+            _db_av = get_db_client()
+            if _db_av:
+                _db_av.table("spz_cache").delete().eq("bus_id", bus_id).execute()
+        except Exception:
             pass
 
     return jsonify({"status": "success"})
