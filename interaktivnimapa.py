@@ -5959,8 +5959,7 @@ def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
     if real_ls and "/" in real_ls:
         spoj = real_ls.split("/")[-1]
     else:
-        trip_id = str(bus_data.get("trip_id", ""))
-        spoj = trip_id.replace("TRIP-", "")[:8] if trip_id else "?"
+        spoj = "Neznámý"
 
     embed = {
         "title": trigger_label,
@@ -6057,6 +6056,10 @@ def _check_and_fire_notifications(db_client, bus_cache):
         state = _NOTIF_STATE_CACHE.setdefault(rule_id, {})
 
         def _fire(trigger_key, new_state, context_text=""):
+            if bus_data.get("tt_is_fetching") and trigger_key != "bug_error":
+                print(f"\033[35m[NOTIF DEBUG] Storno FIRE {rule_id[:8]}: Čekám na detail spoje (tt_is_fetching)\033[0m", flush=True)
+                return False
+
             print(f"\033[35m[NOTIF DEBUG] Pokus o FIRE pravidla {rule_id[:8]} trigger_key='{trigger_key}', new_state='{new_state}'\033[0m", flush=True)
             old = state.get(trigger_key)
             if old == new_state:
