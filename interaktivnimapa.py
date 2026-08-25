@@ -1995,15 +1995,18 @@ window.shareBus = function(busId) {
   let timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
   
   let delay = (typeof bus.delay !== 'undefined') ? bus.delay : '?';
-  let stopName = (bus.status && bus.status.includes('(')) ? bus.status.split('(').pop().replace(')','') : bus.status;
   
   let spzText = (bus.spz !== 'Neznama' && bus.spz) ? bus.spz : bus.id;
+  let stopName = bus.last_stop_name || ((bus.status && bus.status.includes('(')) ? bus.status.split('(').pop().replace(')','') : bus.status);
+  if (stopName === 'Jízda' || stopName.includes('Ceka na data')) stopName = 'Neznámá';
+  let real_spoj = bus.real_linka_spoj || bus.line;
+  
   let shareText = `🚌 Autobus SPZ: ${spzText}\n` +
                   `📍 Jede poblíž zastávky: ${stopName}\n` +
-                  `🚍 Má linku: ${bus.line}\n` +
+                  `🚍 linka: ${real_spoj}\n` +
                   `🏁 Směr: ${bus.destination}\n` +
                   `⏱️ Zpoždění: ${delay} min\n\n` +
-                  `Sleduj ho taky živě na mapě:\n` +
+                  `Sleduj ho taky na interaktivní mapě:\n` +
                   `${trackUrl}`;
   
   let modal = document.createElement('div');
@@ -2028,18 +2031,18 @@ window.shareBus = function(busId) {
     <div style="display:flex;flex-direction:column;gap:12px;">
       <button onclick="navigator.clipboard.writeText(\`${shareText}\`).then(()=>showMapToast('📋 Zkopírováno!'));this.parentElement.parentElement.parentElement.remove()" style="background:#10b981;color:white;border:none;padding:15px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:15px;box-shadow:0 4px 6px rgba(0,0,0,0.2);text-transform:uppercase;">📋 KOPÍROVAT ODKAZ A TEXT</button>
       
-      <div style="font-size:11px;color:#94a3b8;text-align:center;">Nebo sdílet přímo přes:</div>
-      <div style="display:flex;gap:10px;justify-content:center;">
-        <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(trackUrl)}" target="_blank" style="flex:1;text-align:center;background:#1877f2;color:white;padding:10px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;">Facebook</a>
-        <a href="fb-messenger://share/?link=${encodeURIComponent(trackUrl)}" target="_blank" style="flex:1;text-align:center;background:#00B2FF;color:white;padding:10px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;">Messenger</a>
-        <a href="https://wa.me/?text=${encodeURIComponent(shareText)}" target="_blank" style="flex:1;text-align:center;background:#25D366;color:white;padding:10px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;">WhatsApp</a>
+      <div id="share-api-btn-container" style="display:none; text-align:center;">
+        <button onclick="navigator.share({title:'Sdílet spoj', text:\`${shareText}\`})" style="background:#8b5cf6;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 6px rgba(0,0,0,0.2);">📲 Sdílet na Messenger, IG, TikTok...</button>
       </div>
+      
       <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background:#475569;color:white;border:none;padding:12px;border-radius:8px;cursor:pointer;width:100%;font-size:14px;font-weight:bold;">Zavřít</button>
     </div>
   `;
   
   modal.appendChild(box);
   document.body.appendChild(modal);
+  
+  setTimeout(() => { if(navigator.share) document.getElementById('share-api-btn-container').style.display = 'block'; }, 10);
 };
 
 function showMapToast(msg) {
