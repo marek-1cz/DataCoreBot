@@ -4931,9 +4931,9 @@ def background_map_worker():
                                 nb["spz_locked"] = True
                                 nb["spz_frozen"] = True
                                 nb["color_class"] = lock.get("color_class", "bg-darkblue")
-                                if lock.get("admin_note"):
+                                if "admin_note" in lock:
                                     nb["admin_note"] = lock["admin_note"]
-                                if lock.get("admin_driver"):
+                                if "admin_driver" in lock:
                                     nb["admin_driver"] = lock["admin_driver"]
                             
                             GLOBAL_BUS_CACHE[bus_id] = nb
@@ -4961,9 +4961,9 @@ def background_map_worker():
                                 c["spz_locked"] = True
                                 c["spz_frozen"] = True
                                 c["color_class"] = lock.get("color_class", "bg-darkblue")
-                                if lock.get("admin_note"):
+                                if "admin_note" in lock:
                                     c["admin_note"] = lock["admin_note"]
-                                if lock.get("admin_driver"):
+                                if "admin_driver" in lock:
                                     c["admin_driver"] = lock["admin_driver"]
 
                             if not is_same_line(c["line"], line) and line and c["line"] != "Nezn\u00e1m\u00e1":
@@ -6733,6 +6733,12 @@ def api_admin_map_action():
         if new_driver is not None:
             c["admin_driver"] = new_driver
         c["admin_lock_permanent"] = permanent
+        
+        if bus_id in ADMIN_SPZ_LOCKS:
+            ADMIN_SPZ_LOCKS[bus_id]["admin_note"] = new_note
+            ADMIN_SPZ_LOCKS[bus_id]["admin_driver"] = new_driver
+            if new_col and new_col not in ("", "\u2500\u2500"):
+                ADMIN_SPZ_LOCKS[bus_id]["color_class"] = new_col
 
     elif action == "mark_bug":
         # Admin rucne oznaci bus jako "BUG / nestoji tu" - bude mit cerveny alert
