@@ -269,7 +269,7 @@ async function loadDetail(){
       let ss=trip.start_actual?trip.start_actual:(trip.start_scheduled?`<span style="color:#94a3b8;">${trip.start_scheduled} (Plan)</span>`:"---");
       let iF=trip.end_actual||trip.status.includes('Timeout');
       let es=iF?`${trip.end_actual||'Timeout'} <br><span style="font-size:11px;color:#94a3b8;">(${trip.status})</span>`:`<span style="color:#eab308;font-weight:bold;"><i class="fas fa-spinner fa-pulse"></i> Probiha...</span><br><span style="font-size:11px;color:#94a3b8;">${trip.status}</span>`;
-      html+=`<tr style="border-color:#334155;"><td style="border-color:#334155;padding:12px;color:#cbd5e1;">${dayStr}<br><span style="font-size:10px;color:#64748b;">${trip.trip_id.substring(0,8)}...</span></td><td style="border-color:#334155;padding:12px;font-weight:bold;color:white;">${trip.linka}${trip.jr_link?`<br><a href="${trip.jr_link}" target="_blank" style="font-size:11px;color:#38bdf8;">JR <i class="fas fa-external-link-alt"></i></a>`:''}</td><td style="border-color:#334155;padding:12px;color:#10b981;">${ss}</td><td style="border-color:#334155;padding:12px;color:#ef4444;">${es}</td><td style="border-color:#334155;padding:12px;text-align:center;"><a href="/mapa#${trip.last_lat},${trip.last_lng}" style="background:transparent;color:#cbd5e1;border:1px solid #4b5563;padding:5px 10px;border-radius:4px;text-decoration:none;font-size:12px;"><i class="fas fa-map-marker-alt"></i></a></td></tr>`;
+      html+=`<tr style="border-color:#334155;"><td style="border-color:#334155;padding:12px;color:#cbd5e1;">${dayStr}</td><td style="border-color:#334155;padding:12px;font-weight:bold;color:white;">${trip.linka}${trip.jr_link?`<br><a href="${trip.jr_link}" target="_blank" style="font-size:11px;color:#38bdf8;">JR <i class="fas fa-external-link-alt"></i></a>`:''}</td><td style="border-color:#334155;padding:12px;color:#10b981;">${ss}</td><td style="border-color:#334155;padding:12px;color:#ef4444;">${es}</td><td style="border-color:#334155;padding:12px;text-align:center;"><a href="/mapa#${trip.last_lat},${trip.last_lng}" style="background:transparent;color:#cbd5e1;border:1px solid #4b5563;padding:5px 10px;border-radius:4px;text-decoration:none;font-size:12px;"><i class="fas fa-map-marker-alt"></i></a></td></tr>`;
     });
     tbody.innerHTML=html;
 
@@ -2069,7 +2069,11 @@ window.toggleFollow=function(busId,inflowId){
 };
 function updateHud(b){
   if(!b)return;
-  document.getElementById('h-trip').textContent='Spoj: '+(b.line||'?')+(b.trip_id?' / '+String(b.trip_id).replace('TRIP-','').substring(0,8):'');
+  if (b.real_linka_spoj) {
+    document.getElementById('h-trip').textContent='Spoj: '+b.real_linka_spoj;
+  } else {
+    document.getElementById('h-trip').textContent='Spoj: '+(b.line||'?')+(b.trip_id?' / Zjišťuji...':'');
+  }
   document.getElementById('h-dest').innerHTML='-> '+(b.destination||'Neznamy cil');
   let se=document.getElementById('h-spz');
   if(b.spz&&b.spz!=='Neznama'){
@@ -3311,7 +3315,7 @@ async function fetchBuses(){
       let popH=`
         <div class="ph" style="${mc==='bg-bug'?'background:#1f2937;':''}${mc==='bg-orange'?'background:#1c1400;':''}">
           <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}${mc==='bg-orange'?'color:#f59e0b;':''}; display:flex; justify-content:space-between; align-items:center;">
-            <span>Linka ${bus.line}${afH}</span>
+            <span>Spoj: ${bus.real_linka_spoj || bus.line}${afH}</span>
             <span style="font-size:10px; color:#64748b; font-weight:normal; letter-spacing:0.5px;">#${bus.id}</span>
           </h3>
         </div>
