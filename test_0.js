@@ -1,5 +1,209 @@
 
+window.swPreviewMap = null;
+window.swPreviewLayer = null;
+window.busMarkersMap = new Map();
+
 const IS_ADMIN=__IS_ADMIN__;
+
+// === GRAFIKA A PRŮVODCE ===
+function updateGfxDesc(val, descEl) {
+  let txt = "";
+  if(val==1) txt="Nízké – Doporučeno pro slabší zařízení (např. běžné mobilní telefony)";
+  else if(val==2) txt="Střední – Doporučeno pro méně výkonné počítače a výkonnější mobily";
+  else if(val==3) txt="Vysoké – Doporučeno pro standardně výkonné počítače";
+  else if(val==4) txt="Ultra – Doporučeno pro výkonné počítače";
+  if(descEl) descEl.textContent = txt;
+}
+
+function selectSwTheme(type) {
+  setBaseMap(type);
+  document.querySelectorAll('[id^="sw-bm-"]').forEach(b => {
+    b.style.borderColor = '#334155';
+    b.style.color = '#cbd5e1';
+    b.style.boxShadow = '0 4px 10px rgba(0,0,0,0.5)';
+  });
+  let activeBtn = document.getElementById('sw-bm-' + type);
+  if(activeBtn) {
+    activeBtn.style.borderColor = '#38bdf8';
+    activeBtn.style.color = 'white';
+    activeBtn.style.boxShadow = '0 4px 15px rgba(56,189,248,0.3)';
+  }
+  
+  if (!window.swPreviewMap) return;
+  if (window.swPreviewLayer) { window.swPreviewMap.removeLayer(window.swPreviewLayer); }
+  
+  let urls = {
+    dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=68be98ba-5497-41e4-b14e-0aaa9649aafd',
+    osm: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    transport_dark: 'https://{s}.tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png?apikey=086ca59fb24640be82e5259e96c7a0cb',
+    bw: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    satellite: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
+  };
+  if(urls[type]) {
+    window.swPreviewLayer = L.tileLayer(urls[type]).addTo(window.swPreviewMap);
+  }
+}
+
+let sliderAnimId = null;
+
+function animateSliderTo(el, targetValue, descId) {
+  if (sliderAnimId) { cancelAnimationFrame(sliderAnimId); sliderAnimId = null; }
+  let startVal = parseFloat(el.value);
+  let endVal = targetValue;
+  let duration = 600; // 0.6 seconds
+  let startTime = null;
+  
+  function step(timestamp) {
+    if (!startTime) startTime = timestamp;
+    let progress = (timestamp - startTime) / duration;
+    if (progress > 1) progress = 1;
+    let ease = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+    let currentVal = startVal + (endVal - startVal) * ease;
+    
+    el.value = currentVal.toFixed(2);
+    gfxSliderInput(el, descId, true);
+    
+    if (progress < 1) {
+      sliderAnimId = requestAnimationFrame(step);
+    } else {
+      sliderAnimId = null;
+      el.value = endVal;
+      gfxSliderInput(el, descId, true);
+      setGraphicsLevel(endVal);
+    }
+  }
+  sliderAnimId = requestAnimationFrame(step);
+}
+
+function gfxSliderInput(el, descId, isAnim=false) {
+  if (!isAnim && sliderAnimId) { cancelAnimationFrame(sliderAnimId); sliderAnimId = null; }
+  let val = parseFloat(el.value);
+  let rVal = Math.round(val);
+  let pct = (val - 1) / 3 * 100;
+  let c = "#38bdf8";
+  if(rVal === 1) c = "#10b981";
+  else if(rVal === 2) c = "#fbbf24";
+  else if(rVal === 3) c = "#ef4444";
+  else if(rVal === 4) c = "#a855f7";
+  el.style.background = `linear-gradient(to right, ${c} ${pct}%, #334155 ${pct}%)`;
+  updateGfxDesc(rVal, document.getElementById(descId));
+}
+
+function gfxSliderChange(el) {
+  let rVal = Math.round(parseFloat(el.value));
+  let descId = (el.id === 'sw-gfx-slider') ? 'sw-gfx-desc' : 'settings-gfx-desc';
+  animateSliderTo(el, rVal, descId);
+}
+
+function setGraphicsLevel(level, isInit=false) {
+  level = parseInt(level);
+  localStorage.setItem('graphics_level', level);
+  document.body.classList.remove('low-graphics', 'medium-graphics', 'high-graphics', 'ultra-graphics');
+  
+  if(level===1) document.body.classList.add('low-graphics');
+  else if(level===2) document.body.classList.add('medium-graphics');
+  else if(level===3) document.body.classList.add('high-graphics');
+  else if(level===4) document.body.classList.add('ultra-graphics');
+  
+  let sld1 = document.getElementById('settings-gfx-slider');
+  let sld2 = document.getElementById('sw-gfx-slider');
+  if(sld1 && Math.round(parseFloat(sld1.value)) !== level) { sld1.value = level; gfxSliderInput(sld1, 'settings-gfx-desc'); }
+  if(sld2 && Math.round(parseFloat(sld2.value)) !== level) { sld2.value = level; gfxSliderInput(sld2, 'sw-gfx-desc'); }
+  
+  updateGfxDesc(level, document.getElementById('settings-gfx-desc'));
+  updateGfxDesc(level, document.getElementById('sw-gfx-desc'));
+
+  if(window.map && window.busMarkersMap) {
+    let needsCluster = (level === 1);
+    let hasCluster = !!(window.ml && window.ml.refreshClusters);
+    
+    if (needsCluster !== hasCluster || isInit) {
+      if(window.ml && map.hasLayer(window.ml)) map.removeLayer(window.ml);
+      if (needsCluster) {
+        window.ml = L.markerClusterGroup({ disableClusteringAtZoom: 16, maxClusterRadius: (window.innerWidth < 768) ? 45 : 35, spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: true });
+      } else {
+        window.ml = L.layerGroup();
+      }
+      window.ml.addTo(map);
+      
+      for (const marker of window.busMarkersMap.values()) {
+        window.ml.addLayer(marker);
+      }
+      
+      if(!isInit && typeof fetchBuses === 'function') fetchBuses();
+    }
+  }
+}
+
+function swNext(step) {
+  document.querySelectorAll('.sw-step').forEach(e=>e.style.display='none');
+  let s = document.getElementById('sw-step-'+step);
+  if(s) s.style.display='block';
+  
+  if(step === 2) {
+    if(!window.swPreviewMap) {
+      window.swPreviewMap = L.map('sw-theme-preview', {
+        zoomControl: false, dragging: false, scrollWheelZoom: false,
+        doubleClickZoom: false, keyboard: false, touchZoom: false, attributionControl: false
+      }).setView([49.7535, 13.3050], 14);
+    }
+    setTimeout(() => {
+      window.swPreviewMap.invalidateSize();
+      let current = window.currentBaseMap || 'osm';
+      selectSwTheme(current);
+    }, 150);
+  }
+}
+
+function swFinish() {
+  localStorage.setItem('setup_wizard_done', 'true');
+  document.getElementById('setup-wizard-modal').style.display='none';
+  let gfx = document.getElementById('sw-gfx-slider').value;
+  setGraphicsLevel(gfx);
+}
+
+function startTutorial() {
+  document.getElementById('setup-wizard-modal').style.display='none';
+  let gfx = document.getElementById('sw-gfx-slider').value;
+  setGraphicsLevel(gfx);
+  document.getElementById('tutorial-overlay').style.display='block';
+  tutNext(1);
+}
+
+function tutNext(step) {
+  document.querySelectorAll('.tut-box').forEach(e => e.style.display='none');
+  
+  let nav = document.getElementById('top-nav');
+  if (nav) { nav.style.zIndex = ''; nav.style.position = ''; nav.style.pointerEvents = ''; }
+  let setBtn = document.getElementById('settings-btn-wrap');
+  if (setBtn) { setBtn.style.zIndex = ''; setBtn.style.pointerEvents = ''; }
+  let setPan = document.getElementById('settings-panel');
+  if (setPan) { setPan.style.zIndex = ''; setPan.classList.remove('open'); setPan.style.display='none'; }
+
+  let s = document.getElementById('tut-step-'+step);
+  if(s) s.style.display='block';
+  
+  if (step === 2) {
+    if (nav) {
+      nav.style.zIndex = '10001';
+      if (window.getComputedStyle(nav).position === 'static') nav.style.position = 'relative';
+      nav.style.pointerEvents = 'none';
+    }
+  } else if (step === 3) {
+    if (setBtn) { setBtn.style.zIndex = '10001'; setBtn.style.pointerEvents = 'none'; }
+    if (setPan) {
+      setPan.style.zIndex = '10001';
+      setPan.style.display = 'block';
+      setTimeout(() => setPan.classList.add('open'), 10);
+    }
+  }
+}
+
+function tutFinish() {
+  localStorage.setItem('setup_wizard_done', 'true');
+  document.getElementById('tutorial-overlay').style.display='none';
+  tutNext(-1); // Cleanup highlights
+}
 
 // === ADMIN ===
 let adminInputCache={};
@@ -8,6 +212,7 @@ function saveAdminInputs(){
   document.querySelectorAll('[id^="adm_spz_"]').forEach(el=>{if(el.value!==el.getAttribute('data-orig'))adminInputCache['spz_'+el.id.replace('adm_spz_','')]=el.value;});
   document.querySelectorAll('[id^="adm_st_"]').forEach(el=>{if(el.value!==el.getAttribute('data-orig'))adminInputCache['st_'+el.id.replace('adm_st_','')]=el.value;});
   document.querySelectorAll('[id^="adm_note_"]').forEach(el=>{adminInputCache['note_'+el.id.replace('adm_note_','')]=el.value;});
+  document.querySelectorAll('[id^="adm_driver_"]').forEach(el=>{adminInputCache['driver_'+el.id.replace('adm_driver_','')]=el.value;});
 }
 function restoreAdminInput(busId,ft){let v=adminInputCache[ft+'_'+busId];return(v!==undefined&&v!==null)?v:null;}
 
@@ -31,9 +236,9 @@ window.adminDelete=(id)=>{if(confirm('Smazat tecku? Vrati se az pri novem spoji.
 window.adminRecheck=(id)=>adminAction('recheck_spz',id);
 window.adminSetSPZ=(id)=>{let spz=document.getElementById('adm_spz_'+id)?.value;if(spz)adminAction('edit_spz',id,{spz});};
 window.adminSaveAll=(id,permanent)=>{
-  let st=document.getElementById('adm_st_'+id)?.value?.trim()||'',col=document.getElementById('adm_col_'+id)?.value?.trim()||'',note=document.getElementById('adm_note_'+id)?.value?.trim()||'';
-  if(!st&&!col&&!note){showAdminToast('Nic k ulozeni',false);return;}
-  adminAction('edit_all',id,{status:st,color_class:col,note,permanent});
+  let st=document.getElementById('adm_st_'+id)?.value?.trim()||'',col=document.getElementById('adm_col_'+id)?.value?.trim()||'',note=document.getElementById('adm_note_'+id)?.value?.trim()||'',driver=document.getElementById('adm_driver_'+id)?.value?.trim()||'';
+  if(!st&&!col&&!note&&!driver){showAdminToast('Nic k ulozeni',false);return;}
+  adminAction('edit_all',id,{status:st,color_class:col,note,driver,permanent});
 };
 
 window.openSeznamAutobusu = function(rawSpz) {
@@ -42,19 +247,33 @@ window.openSeznamAutobusu = function(rawSpz) {
     if (s.length > 4) {
         formattedSpz = s.substring(0, s.length - 4) + ' ' + s.substring(s.length - 4);
     }
-    let form = document.createElement('form');
-    form.method = 'POST';
-    form.action = 'https://seznam-autobusu.cz/';
-    form.target = '_blank';
     
-    let p1 = document.createElement('input'); p1.type = 'hidden'; p1.name = 'search'; p1.value = formattedSpz;
-    let p2 = document.createElement('input'); p2.type = 'hidden'; p2.name = '_submit'; p2.value = 'vyhledat';
-    let p3 = document.createElement('input'); p3.type = 'hidden'; p3.name = '_do'; p3.value = 'header-combinedSearch-search-submit';
+    // Synchronously open a new tab to avoid popup blockers
+    let newTab = window.open('about:blank', '_blank');
     
-    form.appendChild(p1); form.appendChild(p2); form.appendChild(p3);
-    document.body.appendChild(form);
-    form.submit();
-    document.body.removeChild(form);
+    // Inject a nice loading screen into the new tab
+    newTab.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Načítám seznam autobusů...</title>
+            <meta charset="utf-8">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+        </head>
+        <body style="background:#0f172a; color:white; font-family:sans-serif; display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh; margin:0;">
+            <i class="fas fa-circle-notch fa-spin" style="font-size:3rem; color:#38bdf8; margin-bottom:20px;"></i>
+            <h2 style="margin:0;">Otevírám databázi vozidel...</h2>
+            <p style="color:#94a3b8; margin-top:15px; text-align:center; max-width: 400px; line-height:1.5;">
+                Vyhledávám vůz <b>${formattedSpz}</b> na stránce https://seznam-autobusu.cz/<br>
+                Prosím o strpení, navazuji spojení s cílovým serverem (cca 5 sekund)...
+            </p>
+        </body>
+        </html>
+    `);
+    newTab.document.close();
+    
+    // Redirect the new tab to the target URL
+    newTab.location.href = 'https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz);
 };
 
 // === NAV ===
@@ -89,7 +308,7 @@ window.mapLayers = {
   osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
   dark: L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=68be98ba-5497-41e4-b14e-0aaa9649aafd',{maxZoom:20,attribution:'&copy; Stadia Maps'}),
   bw: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
-  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'}),
+  satellite: L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:21,attribution:'&copy; Google Maps'}),
   transport_dark: L.tileLayer('https://{s}.tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png?apikey=086ca59fb24640be82e5259e96c7a0cb',{maxZoom:22,attribution:'&copy; Thunderforest'}),
   transport: L.tileLayer('https://{s}.tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=086ca59fb24640be82e5259e96c7a0cb',{maxZoom:22,attribution:'&copy; Thunderforest'})
 };
@@ -138,10 +357,25 @@ setTimeout(() => {
   window.setNavDesign(savedNav);
 }, 100);
 setTimeout(()=>map.invalidateSize(),300);
-var ml=L.layerGroup().addTo(map);
+var ml;
 var routeLayer=L.layerGroup().addTo(map);
 var ntLayer=L.layerGroup().addTo(map);
 var pubStopsLayer=L.layerGroup().addTo(map);
+
+// Inicializace grafiky a průvodce
+let setupWizardDone = localStorage.getItem('setup_wizard_done');
+let savedGfx = localStorage.getItem('graphics_level');
+
+if (setupWizardDone !== 'true') {
+  let sw = document.getElementById('setup-wizard-modal');
+  if(sw) sw.style.display = 'flex';
+  savedGfx = (window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent)) ? "1" : "3";
+} else if (!savedGfx) {
+  savedGfx = "3";
+}
+
+setGraphicsLevel(savedGfx, true);
+
 // Smart pan during tracking: allow user to pan, return to bus 1.5s after release
 let _panReturnTimer=null;
 map.on('mousedown touchstart',()=>{if(followId&&pinMode)clearTimeout(_panReturnTimer);});
@@ -208,29 +442,6 @@ function renderSpzLog(){
     line.textContent=`[${e.t}] Bus ${e.busId}: ${e.spz} — ${e.detail}`;
     body.appendChild(line);
   });
-}
-
-function renderConflictLog(){
-  let body=document.getElementById('log-conflict-body');
-  if(!body)return;
-  body.innerHTML='';
-  let hasConflicts = false;
-  if(window.liveBuses){
-    window.liveBuses.forEach(bus=>{
-      if(bus.admin_spz_conflict){
-        hasConflicts = true;
-        let div=document.createElement('div');
-        div.style.cssText='padding:8px 0;border-bottom:1px solid #3b82f6;';
-        div.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-          <span style="color:#a78bfa;font-size:13px;font-weight:bold;">⚔️ SPZ ${bus.spz} (Bus ${bus.id})</span>
-          <span style="color:#94a3b8;font-size:11px;">Linka ${bus.line}</span>
-        </div>
-        <button onclick="fetch('/api/admin/approve_conflict_spz',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bus_id:'${bus.id}'})}).then(r=>r.json()).then(r=>{if(r.status==='success'){setLogTab('conflict');setTimeout(()=>fetchLiveBuses(),1000);}});" style="width:100%;background:#8b5cf6;color:white;border:none;border-radius:4px;padding:5px 0;font-size:11px;font-weight:bold;cursor:pointer;">✔️ Schválit</button>`;
-        body.appendChild(div);
-      }
-    });
-  }
-  if(!hasConflicts){body.innerHTML='<div style="color:#64748b;padding:8px;">Žádné SPZ konflikty</div>';}
 }
 function renderMissingLog(){
   let body=document.getElementById('log-missing-body');
@@ -316,9 +527,9 @@ async function _saveMissingFix(missingName, lat, lng, sourceName){
 
 function setLogTab(tab){
   logCurrentTab=tab;
-  let tabIds=['all','err','spz','missing','conflict','report','approx','system'];
+  let tabIds=['all','err','spz','missing','report','approx','system'];
   tabIds.forEach(id=>{
-    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':id==='spz'?'log-spz-body':id==='missing'?'log-missing-body':id==='conflict'?'log-conflict-body':id==='report'?'log-report-body':id==='system'?'log-system-body':'log-approx-body');
+    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':id==='spz'?'log-spz-body':id==='missing'?'log-missing-body':id==='report'?'log-report-body':id==='system'?'log-system-body':'log-approx-body');
     if(body)body.style.display=(tab===id?'':'none');
     let btn=document.getElementById(`log-tab-${id}`);
     if(btn){btn.style.background=(tab===id?'#334155':'transparent');btn.style.color='';}
@@ -326,7 +537,6 @@ function setLogTab(tab){
   if(tab==='err'){let b=document.getElementById('log-errors-body');b.innerHTML='';logErrEntries.forEach(e=>{let l=document.createElement('div');l.className='lg-err';l.textContent=`[${e.t}] ${e.msg}`;b.appendChild(l);});b.scrollTop=b.scrollHeight;}
   if(tab==='spz')renderSpzLog();
   if(tab==='missing')renderMissingLog();
-  if(tab==='conflict')renderConflictLog();
   if(tab==='report')loadReportSituace();
   if(tab==='approx')renderApproxLog();
   if(tab==='system')loadSystemLogs();
@@ -445,6 +655,7 @@ window.addEventListener('unhandledrejection',e=>{appLog('Promise chyba: '+(e.rea
 
 // === HUD + KAMERA + ŠPENDLÍK ===
 let pinMode=false;
+function _hudShowRoute(){ if(followId) toggleRoute(followId); }
 function stopFollow(){
   followId=null;followInflowId=null;hudMin=false;pinMode=false;
   document.getElementById('hud').style.display='none';
@@ -458,10 +669,333 @@ function togglePin(){
   if(btn){btn.style.background=pinMode?'#f59e0b':'#334155';btn.style.color=pinMode?'#0f172a':'#94a3b8';}
   if(pinMode&&followId){let b=lastArr.find(x=>x.id===followId);if(b&&b.lat)map.setView([b.lat,b.lng]);}
 }
-function minHud(){hudMin=true;document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';}
-function maxHud(){hudMin=false;document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';}
-function _hudShowRoute(){if(followId)toggleRoute(followId);}
+function minHud(){hudMin=true;document.getElementById('hf').style.display='none';document.getElementById('hm').style.display='flex';document.getElementById('hud').style.transform='none';}
+function maxHud(){hudMin=false;document.getElementById('hf').style.display='block';document.getElementById('hm').style.display='none';document.getElementById('hud').style.transform='translate3d(' + hudX + 'px, ' + hudY + 'px, 0)';}
+
+let hudX=0, hudY=0, isHudDragging=false, hudStartX, hudStartY;
+document.addEventListener('DOMContentLoaded', () => {
+    let hudHandle = document.getElementById('hud-drag-handle');
+    let hudEl = document.getElementById('hud');
+    if (hudHandle) {
+        hudHandle.addEventListener('mousedown', hudDragStart);
+        hudHandle.addEventListener('touchstart', hudDragStart, {passive: false});
+        document.addEventListener('mousemove', hudDragMove);
+        document.addEventListener('touchmove', hudDragMove, {passive: false});
+        document.addEventListener('mouseup', hudDragEnd);
+        document.addEventListener('touchend', hudDragEnd);
+    }
+    function hudDragStart(e) {
+        if(e.target.tagName === 'BUTTON' || hudMin) return;
+        isHudDragging = true;
+        let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        hudStartX = clientX - hudX;
+        hudStartY = clientY - hudY;
+    }
+    function hudDragMove(e) {
+        if(!isHudDragging) return;
+        e.preventDefault();
+        let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        hudX = clientX - hudStartX;
+        hudY = clientY - hudStartY;
+        hudEl.style.transform = 'translate3d(' + hudX + 'px, ' + hudY + 'px, 0)';
+    }
+    function hudDragEnd(e) {
+        isHudDragging = false;
+    }
+});
+
+// === NOTIFIKACE JS ===
+let _notifCurrentBusId = null, _notifCurrentSpz = null;
+
+window.openNotifModal = function(busId) {
+  let bus = (typeof lastArr !== 'undefined') ? lastArr.find(b => b.id === busId) : null;
+  if (!bus) { showMapToast('Autobus nenalezen.'); return; }
+  
+  let spz = bus.spz;
+  let line = bus.line;
+  let destination = bus.destination;
+
+  _notifCurrentBusId = busId;
+  _notifCurrentSpz = spz;
+  let info = document.getElementById('notif-bus-info');
+  if(info) info.innerHTML = `<b>Linka ${line}</b> → ${destination}${spz&&spz!=='Neznama'?' &nbsp;|&nbsp; SPZ: <b>'+spz+'</b>':''}`;
+  // Předvyplň identifikátor
+  let inp = document.getElementById('notif-identifier');
+  if(inp) {
+    if(spz && spz !== 'Neznama') {
+      inp.value = spz;
+      let r = document.getElementById('notif-type-spz'); if(r) r.checked = true;
+    } else {
+      inp.value = busId;
+      let r = document.getElementById('notif-type-busid'); if(r) r.checked = true;
+    }
+  }
+  document.getElementById('notif-modal').style.display = 'block';
+  document.getElementById('notif-modal-msg').textContent = '';
+  
+  // Načti zastávky spoje
+  fetch('/api/bus_route/' + busId).then(r=>r.json()).then(d=>{
+    let sel = document.getElementById('nt-stop-route-select');
+    if(sel && d.stops) {
+      let opts = '<option value="">-- Vyber zastávku na trase --</option>';
+      d.stops.filter(s => !s.passed).forEach(s => {
+        opts += `<option value="${s.name}">${s.name}</option>`;
+      });
+      if (opts === '<option value="">-- Vyber zastávku na trase --</option>') {
+         opts = '<option value="">Žádné budoucí zastávky (konečná?)</option>';
+      }
+      sel.innerHTML = opts;
+    }
+  }).catch(()=>{});
+  
+  // Zobraz zastávkové pole pokud zaškrtnuto
+  let stopCb = document.getElementById('nt-stop-near');
+  if(stopCb) stopCb.onchange = () => {
+    let sn = document.getElementById('nt-stop-container');
+    if(sn) sn.style.display = stopCb.checked ? 'block' : 'none';
+  };
+  
+  // Autocomplete logika
+  let stopInp = document.getElementById('nt-stop-name');
+  let stopAc = document.getElementById('nt-stop-autocomplete');
+  if (stopInp && stopAc) {
+    let to = null;
+    stopInp.oninput = () => {
+      clearTimeout(to);
+      let v = stopInp.value.trim();
+      if (v.length < 2) { stopAc.style.display = 'none'; return; }
+      to = setTimeout(async () => {
+        try {
+          let r = await fetch('/api/stops_search?q=' + encodeURIComponent(v));
+          let d = await r.json();
+          if (d.status === 'success' && d.results.length > 0) {
+            stopAc.innerHTML = d.results.map(n => `<div style="padding:6px 10px;cursor:pointer;border-bottom:1px solid #334155;font-size:13px;color:#e2e8f0;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" onmousedown="document.getElementById('nt-stop-name').value='${n.replace(/'/g, "\\'")}'; document.getElementById('nt-stop-autocomplete').style.display='none';">${n}</div>`).join('');
+            stopAc.style.display = 'block';
+          } else {
+            stopAc.style.display = 'none';
+          }
+        } catch(e) {}
+      }, 300);
+    };
+    stopInp.onblur = () => { setTimeout(() => { stopAc.style.display = 'none'; }, 200); };
+  }
+  // Načti info o doručení (discord/email) z API
+  fetch('/api/notifications/delivery_info').then(r=>r.json()).then(d=>{
+    let dd = document.getElementById('notif-delivery-discord');
+    let de = document.getElementById('notif-delivery-email');
+    let dn = document.getElementById('notif-delivery-none');
+    
+    let cbDiscord = document.getElementById('nt-deliv-discord');
+    let cbEmail = document.getElementById('nt-deliv-email');
+    
+    if(dd) { 
+      dd.style.display = d.has_discord ? 'flex' : 'none'; 
+      if (!d.has_discord && cbDiscord) cbDiscord.checked = false;
+    }
+    if(de) { 
+      de.style.display = d.has_email ? 'flex' : 'none'; 
+      if (!d.has_email && cbEmail) cbEmail.checked = false;
+    }
+    if(dn) dn.style.display = (!d.has_discord && !d.has_email) ? 'inline-block' : 'none';
+    let adm = document.getElementById('notif-admin-target-container');
+    if(adm) adm.style.display = d.is_admin ? 'block' : 'none';
+  }).catch(()=>{});
+  // Načti vozovny do selectboxů
+  fetch('/api/depot_zones').then(r=>r.json()).then(d=>{
+    if(d.zones) {
+      let opts = '<option value="all">Jakákoliv vozovna</option>';
+      d.zones.forEach(z => { opts += `<option value="${z.name}">${z.name}</option>`; });
+      document.querySelectorAll('.depot-dynamic-select').forEach(el => el.innerHTML = opts);
+    }
+  }).catch(e=>{});
+
+  // Načti existující pravidla
+  loadNotifRules();
+};
+
+
+window.closeNotifModal = function() {
+  document.getElementById('notif-modal').style.display = 'none';
+};
+
+async function loadNotifRules() {
+  try {
+    let r = await fetch('/api/notifications/list');
+    let d = await r.json();
+    let sec = document.getElementById('notif-rules-section');
+    let list = document.getElementById('notif-rules-list');
+    if(!d.rules || !d.rules.length) { if(sec) sec.style.display='none'; return; }
+    if(sec) sec.style.display = 'block';
+    if(!list) return;
+    list.innerHTML = '';
+    d.rules.forEach(rule => {
+      let row = document.createElement('div');
+      row.style.cssText = 'background:#1e293b;border:1px solid #334155;border-radius:8px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;';
+      let fired = rule.fired_count || 0;
+      let t_list = [];
+      let t = rule.triggers || {};
+      if(t.terminal) t_list.push("Konečná");
+      if(t.new_line) t_list.push("Nová linka");
+      if(t.depot_in) t_list.push("Do vozovny");
+      if(t.depot_out) t_list.push("Z vozovny");
+      if(t.trip_change) t_list.push("Změna spoje");
+      if(t.started_moving) t_list.push("Rozjezd");
+      if(t.stop_near) t_list.push("Zastávka");
+      if(t.delay_threshold) t_list.push("Zpoždění > " + t.delay_threshold + " min");
+      if(t.delay_change) t_list.push("Změna zpoždění");
+      let t_str = t_list.join(", ") || "Žádné";
+
+      row.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;">
+        <span style="color:#e2e8f0;"><b>${rule.label||rule.identifier}</b> <span style="color:#64748b;">(${rule.identifier})</span> <span style="color:#38bdf8;margin-left:6px;">🔔 ${fired}x</span></span>
+        <span style="color:#94a3b8;font-size:11px;">Události: ${t_str}</span>
+        </div>
+        <button onclick="deleteNotifRule('${rule.id}')" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid #ef4444;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;align-self:flex-start;">✕</button>`;
+      list.appendChild(row);
+    });
+  } catch(e) {}
+}
+
+async function deleteNotifRule(ruleId) {
+  try {
+    let r = await fetch('/api/notifications/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: ruleId})});
+    let d = await r.json();
+    if(d.status==='success') loadNotifRules();
+    else showNotifMsg('Chyba: ' + (d.message||'?'), false);
+  } catch(e) { showNotifMsg('Chyba spojení', false); }
+}
+
+function showNotifMsg(msg, ok) {
+  let el = document.getElementById('notif-modal-msg');
+  if(!el) return;
+  el.textContent = msg;
+  el.style.color = ok ? '#10b981' : '#ef4444';
+}
+
+async function saveNotifRule(isOneTime = true) {
+  let identifier = document.getElementById('notif-identifier').value.trim();
+  let idType = document.querySelector('input[name="notif-id-type"]:checked')?.value || 'spz';
+  let label = document.getElementById('notif-label').value.trim();
+  let stopName = '';
+  if (document.getElementById('nt-stop-near')?.checked) {
+    let stopType = document.querySelector('input[name="nt_stop_type"]:checked')?.value;
+    if (stopType === 'route') {
+      stopName = document.getElementById('nt-stop-route-select')?.value.trim() || '';
+    } else {
+      stopName = document.getElementById('nt-stop-name')?.value.trim() || '';
+    }
+  }
+  let triggers = {
+    terminal: document.getElementById('nt-terminal')?.checked || false,
+    new_line: document.getElementById('nt-new-line')?.checked || false,
+    depot_in: document.getElementById('nt-depot-in')?.checked ? (document.getElementById('nt-depot-name-in')?.value || 'all') : false,
+    depot_out: document.getElementById('nt-depot-out')?.checked ? (document.getElementById('nt-depot-name-out')?.value || 'all') : false,
+    trip_change: document.getElementById('nt-trip-change')?.checked || false,
+    started_moving: document.getElementById('nt-started-moving')?.checked || false,
+    stop_near: stopName || '',
+    delay_threshold: document.getElementById('nt-delay-thresh')?.checked ? parseInt(document.getElementById('nt-delay-val')?.value || '0') : false,
+    delay_change: document.getElementById('nt-delay-change')?.checked || false,
+  };
+  let deliveryChannels = [];
+  if (document.getElementById('nt-deliv-discord')?.checked) deliveryChannels.push('discord');
+  if (document.getElementById('nt-deliv-email')?.checked) deliveryChannels.push('email');
+  
+  let targetUser = document.getElementById('notif-admin-target') ? document.getElementById('notif-admin-target').value.trim() : "";
+
+  if(!identifier) { showNotifMsg('Zadej SPZ nebo Bus ID', false); return; }
+  if(!Object.values(triggers).some(v => v && v !== '')) { showNotifMsg('Vyber alespoň jeden trigger', false); return; }
+  if(deliveryChannels.length === 0) { showNotifMsg('Vyber alespoň jeden kanál pro doručení', false); return; }
+  
+  showNotifMsg('⏳ Ukládám...', true);
+  try {
+    let r = await fetch('/api/notifications/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({identifier, identifier_type: idType, triggers, label, delivery_channels: deliveryChannels, is_one_time: isOneTime, target_user: targetUser})});
+    let d = await r.json();
+    if(d.status==='success') {
+      showNotifMsg(d.message || '✅ Pravidlo uloženo!', true);
+      loadNotifRules();
+      // Reset checkboxů
+      ['nt-terminal','nt-new-line','nt-depot-in','nt-depot-out','nt-trip-change','nt-started-moving','nt-stop-near','nt-delay-thresh','nt-delay-change'].forEach(id => { let el=document.getElementById(id); if(el) el.checked=false; }); if(document.getElementById('nt-deliv-email')) document.getElementById('nt-deliv-email').disabled=false;
+      let sn=document.getElementById('nt-stop-name'); if(sn) sn.value='';
+      let sc=document.getElementById('nt-stop-container'); if(sc) sc.style.display='none';
+      let tu=document.getElementById('notif-admin-target'); if(tu) tu.value='';
+    } else {
+      showNotifMsg('❌ ' + (d.message||'Chyba'), false);
+    }
+  } catch(e) { showNotifMsg('❌ Chyba spojení', false); }
+}
+
+// === SDÍLENÍ AUTOBUSU ===
+window.shareBus = function(busId) {
+  let trackUrl = location.origin + '/mapa?track=' + busId;
+  let bus = (typeof lastArr !== 'undefined') ? lastArr.find(b => b.id === busId) : null;
+  if (!bus) { showMapToast('Autobus nenalezen.'); return; }
+  
+  let now = new Date();
+  let timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+  
+  let delay = (typeof bus.delay !== 'undefined') ? bus.delay : '?';
+  let stopName = (bus.status && bus.status.includes('(')) ? bus.status.split('(').pop().replace(')','') : bus.status;
+  
+  let real_spoj = bus.real_linka_spoj ? bus.real_linka_spoj.split('/').pop() : "Neznámý";
+  let shareText = `Autobus: ${bus.spz !== 'Neznama' && bus.spz ? bus.spz : bus.id}\nLinka: ${bus.line}\nSpoj: ${real_spoj}\nMAP ID: ${bus.id}\nSměr: ${bus.destination}\nAktuální poloha blízko: ${stopName} v ${timeStr}\nZpoždění: ${delay} min\nSledovat na mapě: ${trackUrl}`;
+  
+  let modal = document.createElement('div');
+  modal.style.position = 'fixed';
+  modal.style.top = '0'; modal.style.left = '0'; modal.style.width = '100%'; modal.style.height = '100%';
+  modal.style.background = 'rgba(0,0,0,0.7)';
+  modal.style.display = 'flex'; modal.style.justifyContent = 'center'; modal.style.alignItems = 'center';
+  modal.style.zIndex = '10001';
+  modal.style.backdropFilter = 'blur(4px)';
+  
+  let box = document.createElement('div');
+  box.style.background = '#1e293b'; box.style.padding = '20px'; box.style.borderRadius = '12px';
+  box.style.width = '90%'; box.style.maxWidth = '360px'; box.style.color = '#fff';
+  box.style.border = '1px solid #334155';
+  box.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
+  
+  box.innerHTML = `
+    <h3 style="margin-top:0;margin-bottom:15px;text-align:center;color:#38bdf8;">📤 Sdílet spoj</h3>
+    <textarea id="share-ta" readonly style="width:100%;height:140px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:12px;font-size:13px;resize:none;margin-bottom:15px;box-sizing:border-box;outline:none;">${shareText}</textarea>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button onclick="navigator.clipboard.writeText(document.getElementById('share-ta').value).then(()=>showMapToast('📋 Text zkopírován!'));this.parentElement.parentElement.parentElement.remove()" style="background:#0284c7;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 6px rgba(0,0,0,0.2);">📋 Zkopírovat text a odkaz</button>
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:5px;">
+        <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(trackUrl)}" target="_blank" style="flex:1;text-align:center;background:#1877f2;color:white;padding:10px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;">Facebook</a>
+        <a href="fb-messenger://share/?link=${encodeURIComponent(trackUrl)}" target="_blank" style="flex:1;text-align:center;background:#00B2FF;color:white;padding:10px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;">Messenger</a>
+        <a href="https://wa.me/?text=${encodeURIComponent(shareText)}" target="_blank" style="flex:1;text-align:center;background:#25D366;color:white;padding:10px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;">WhatsApp</a>
+      </div>
+      <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background:#475569;color:white;border:none;padding:10px;border-radius:8px;cursor:pointer;width:100%;margin-top:5px;font-size:13px;">Zavřít</button>
+    </div>
+  `;
+  
+  modal.appendChild(box);
+  document.body.appendChild(modal);
+};
+
+function showMapToast(msg) {
+  let t = document.getElementById('map-toast');
+  if(!t) {
+    t = document.createElement('div');
+    t.id = 'map-toast';
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(16,185,129,0.95);color:white;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:bold;z-index:9999;pointer-events:none;transition:opacity 0.3s;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg; t.style.opacity = '1';
+  clearTimeout(t._to);
+  t._to = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+}
+
+// === URL TRACKING (?track=BUS_ID) ===
+(function() {
+  let trackId = new URLSearchParams(location.search).get('track');
+  if(!trackId) return;
+  window._pendingTrackId = String(trackId);
+  // Pokus se otevřít popup při každém refreshi dat po načtení
+  window._trackAttempts = 0;
+})();
+
 window.toggleFollow=function(busId,inflowId){
+
   if(followId===busId){stopFollow();return;}
   followId=busId;followInflowId=inflowId||busId;
   // Auto-pin: kamera se okamžitě připne na bus
@@ -1102,7 +1636,7 @@ function _renderRoute(busId,data,btn){
 let leLayer=null,leStops=[],leLineName='',leAddActive=false;
 function leInit(){if(!leLayer)leLayer=L.layerGroup().addTo(map);}
 function lineEditorOff(){if(leLayer)leLayer.clearLayers();leAddActive=false;document.body.classList.remove('nt-add-active');let b=document.getElementById('le-add-btn');if(b){b.style.background='#334155';b.style.color='#a855f7';}}
-function toggleLineEditor(){leInit();let p=document.getElementById('line-editor-panel');if(!p)return;p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='none')lineEditorOff();}
+function toggleLineEditor(){leInit();let p=document.getElementById('le-editor-panel');if(!p)return;p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='none')lineEditorOff();}
 async function leLoadLine(){
   leInit();leLayer.clearLayers();leStops=[];
   let inp=document.getElementById('le-line-inp');
@@ -1123,7 +1657,7 @@ function leRender(){
   let listEl=document.getElementById('le-stops');if(listEl)listEl.innerHTML='';
   if(leStops.length>=2){
     let coords=leStops.map(s=>[s.lat,s.lng]);
-    leLayer.addLayer(L.polyline(coords,{color:'#a855f7',weight:6,opacity:0.85,dashArray:'8,4',lineCap:'round'}));
+    leLayer.addLayer(L.polyline(coords,{color:'#a855f7',weight:6,opacity:0.85,dashArray:'8,4',lineCap:'round',lineJoin:'round'}));
   }
   leStops.forEach((s,i)=>{
     let col=s._moved?'#f59e0b':'#a855f7';
@@ -1163,7 +1697,7 @@ async function leSave(){
 // === NT (Nastaveni tras) - rucni kalibrace poloh zastavek ===
 let ntMode=false,ntMoveTimer=null,currentNtEdit=null,ntAddMode=false,ntAddName='';
 function stopDisplayName(s){
-  // Zobrazovany nazev ma prednost pred systemovym (pouzitym jen pro vyhledavani v JR)
+  // Zobrazovany nazev ma prednost pred systemovym (pouzitym jen pro vyhledavani v JŘ)
   return (s.display_name&&s.display_name.trim())?s.display_name.trim():s.name;
 }
 function ntDotIcon(cls){return L.divIcon({className:'',html:`<div class="nt-dot ${cls}"></div>`,iconSize:[14,14],iconAnchor:[7,7]});}
@@ -1221,7 +1755,7 @@ function renderNtLineChips(lines){
     chip.innerHTML=`${l}<button onclick="removeNtLine('${l}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;padding:0;line-height:1;">×</button>`;
     wrap.appendChild(chip);
   });
-  if(!lines||!lines.length)wrap.innerHTML='<span style="color:#475569;font-size:10px;">Žádné linky (použije se GTFS)</span>';
+  if(!lines||!lines.length)wrap.innerHTML='<span style="color:#475469;font-size:10px;">Žádné linky (použije se GTFS)</span>';
 }
 async function addLineToNtStop(){
   if(!currentNtEdit)return;
@@ -1643,12 +2177,21 @@ async function fetchBuses(){
       } else document.getElementById('h-status').textContent='Ztráta signálu';
     }
     saveAdminInputs();
-    let savedOpenId=openPopupBusId;
-    isRefreshing=true;
-    ml.clearLayers();
 
-    window.liveBuses=data.buses; data.buses.forEach(bus=>{
+    // Ochrana pred ztratou fokusu pri psani v popupu
+    let isTyping = false;
+    let ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT') && ae.closest('.leaflet-popup')) {
+        isTyping = true;
+    }
+
+    if (!window.busMarkersMap) window.busMarkersMap = new Map();
+    let currentBusIds = new Set();
+    isRefreshing=true;
+
+    data.buses.forEach(bus=>{
       if(!bus.lat||!bus.lng)return;
+      currentBusIds.add(bus.id);
       let mc=bus.color_class,dv=parseInt(bus.delay),dTxt='';
       if(mc==='bg-gray'||mc==='bg-bug')dTxt='<span style="color:#94a3b8;">N/A</span>';
       else if(mc==='bg-purple')dTxt='<span style="color:#a855f7;">Konečná</span>';
@@ -1666,32 +2209,17 @@ async function fetchBuses(){
         markerColor='bg-depot:'+bus.depot_color;
       }
       let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,bus.is_train),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
-      let marker=L.marker([bus.lat,bus.lng],{icon,zIndexOffset:1000});
-      marker._busId=bus.id;
-      marker.on('popupopen',()=>{openPopupBusId=bus.id;});
-      marker.on('popupclose',()=>{
-        if(openPopupBusId===bus.id)openPopupBusId=null;
-        // Trasa NEZNIKNE po zavření popupu
-      });
-
       let spzH='',invTxt='',histBtn='';
       if(!bus.is_train){
         if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
         else if(bus.spz&&bus.spz!=='Neznama'){
           let seznamBtn = '';
-          if (bus.spz_verified || bus.admin_spz_verified) {
+          if (bus.spz_verified || bus.admin_flag) {
               seznamBtn = `<a href="javascript:void(0)" onclick="openSeznamAutobusu('${bus.spz}')" class="pa pa-d" style="margin-top:5px; background: #2563eb; color: #fff; border-color: #1d4ed8;">🚌 Fotografie a informace o vozu</a>`;
           }
 
-          if(bus.admin_spz_bug){
-            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#10b981;border-color:#059669;" title="Pravděpodobně zaseknutý bus">${bus.spz} <i class="fas fa-question" style="color:#d1fae5;"></i></span></div>`;
-            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>${seznamBtn}`;
-          } else if(bus.admin_spz_conflict){
-            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#8b5cf6;border-color:#7c3aed;" title="Ověřeno, neschváleno">${bus.spz} <i class="fas fa-check" style="color:#ddd6fe;"></i></span></div>`;
-            histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>${seznamBtn}`;
-          } else if(bus.admin_spz_verified){
-            // Dvojita fajfka = admin lock
-            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#1e40af;border-color:#3b82f6;" title="Ověřená SPZ správci systému">${bus.spz} <i class="fas fa-check-double" style="color:#93c5fd;"></i></span></div>`;
+          if(bus.admin_flag){
+            spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#60a5fa;color:#0f172a;border-color:#3b82f6;font-weight:bold;" title="Ověřená SPZ správci systému">${bus.spz} <i class="fas fa-check-double" style="color:#0f172a;"></i></span></div>`;
             histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>${seznamBtn}`;
           } else if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" title="SPZ ověřena systémem">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>${seznamBtn}`;}
           else{spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#f97316;color:#fff;border-color:#c2410c;">${bus.spz} <i class="fas fa-clock"></i></span></div>`;}
@@ -1722,11 +2250,15 @@ async function fetchBuses(){
 
       let popH=`
         <div class="ph" style="${mc==='bg-bug'?'background:#1f2937;':''}${mc==='bg-orange'?'background:#1c1400;':''}">
-          <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}${mc==='bg-orange'?'color:#f59e0b;':''}">Linka ${bus.line}${afH}</h3>
+          <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}${mc==='bg-orange'?'color:#f59e0b;':''}; display:flex; justify-content:space-between; align-items:center;">
+            <span>Linka ${bus.line}${afH}</span>
+            <span style="font-size:10px; color:#64748b; font-weight:normal; letter-spacing:0.5px;">#${bus.id}</span>
+          </h3>
         </div>
         <div class="pb">
           ${bugW}${orangeW}${depotW}
-          ${bus.admin_note?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
+          ${(bus.admin_note && typeof bus.admin_note === 'string' && bus.admin_note.trim() !== '')?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
+          ${(bus.admin_driver && typeof bus.admin_driver === 'string' && bus.admin_driver.trim() !== '')?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
           <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination||'Neznamy'}</span></div>
           ${spzH}${invTxt}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
@@ -1735,13 +2267,20 @@ async function fetchBuses(){
           <button class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
           ${histBtn}
           <button id="route-btn-${bus.id}" class="pa pa-d" style="margin-top:5px;${rA?'background:#1e40af;':''}" onclick="toggleRoute('${bus.id}')">${rA?'🗺️ Skryt trasu':'🗺️ Zobrazit trasu'}</button>
+          <div style="display:flex;gap:5px;margin-top:5px;">
+            <button class="pa" style="flex:1;background:#7c3aed;color:#fff;border-color:#6d28d9;" onclick="openNotifModal('${bus.id}')">🔔 Notifikace</button>
+            <button class="pa" style="flex:1;background:#0369a1;color:#fff;border-color:#075985;" onclick="shareBus('${bus.id}')">📤 Sdílet</button>
+          </div>
         </div>`;
+
 
       if(IS_ADMIN){
         let oSpz=bus.spz==='Neznama'?'':bus.spz;
         let cSpz=restoreAdminInput(bus.id,'spz')??oSpz;
         let cSt=restoreAdminInput(bus.id,'st')??bus.status;
         let cNote=restoreAdminInput(bus.id,'note')??(bus.admin_note||'');
+        let cDriver=restoreAdminInput(bus.id,'driver')??(bus.admin_driver||'');
+        let cCol=bus.color_class||'';
         // Predpocitane promenne pro admin lock tlacitko (reseni 'bus is not defined' pri onclick)
         let adminIsVerified=bus.admin_spz_verified===true;
         let adminVerifyAction=adminIsVerified?'admin_unverify_spz':'admin_verify_spz';
@@ -1754,14 +2293,14 @@ async function fetchBuses(){
         let adminLockBtn='';
         if(hasSPZ){
           adminLockBtn='<button id="adm_lock_'+bus.id+'" '
-            +'onclick="let b=document.getElementById(\'adm_lock_'+bus.id+'\');'
-            +'adminAction(\''+adminVerifyAction+'\',\''+bus.id+'\');'
-            +'if(\''+adminVerifyAction+'\'===\'admin_verify_spz\'){'
-            +'b.style.background=\'#1d4ed8\';b.style.color=\'#bfdbfe\';b.style.borderColor=\'#3b82f6\';'
-            +'b.textContent=\'🔒 SPZ UZAMČENA ADMINEM\';'
+            +'onclick="let b=document.getElementById(\\\'adm_lock_'+bus.id+'\\\');'
+            +'adminAction(\\\''+adminVerifyAction+'\\\',\\\''+bus.id+'\\\');'
+            +'if(\\\''+adminVerifyAction+'\\\'===\\\'admin_verify_spz\\\'){'
+            +'b.style.background=\\\'#1d4ed8\\\';b.style.color=\\\'#bfdbfe\\\';b.style.borderColor=\\\'#3b82f6\\\';'
+            +'b.textContent=\\\'🔒 SPZ UZAMČENA ADMINEM\\\';'
             +'}else{'
-            +'b.style.background=\'#1e293b\';b.style.color=\'#94a3b8\';b.style.borderColor=\'#334155\';'
-            +'b.textContent=\'🔓 Ověřit SPZ adminem (Admin Lock)\';'
+            +'b.style.background=\\\'#1e293b\\\';b.style.color=\\\'#94a3b8\\\';b.style.borderColor=\\\'#334155\\\';'
+            +'b.textContent=\\\'🔓 Ověřit SPZ adminem (Admin Lock)\\\';'
             +'}" '
             +'style="width:100%;margin-top:6px;padding:9px;border:1px solid '+adminVerifyBorder+';border-radius:5px;'
             +'font-size:12px;cursor:pointer;font-weight:bold;touch-action:manipulation;'
@@ -1784,8 +2323,10 @@ async function fetchBuses(){
               <button onclick="adminSetSPZ('${bus.id}')" style="flex:1;background:#10b981;color:white;border:none;border-radius:5px;font-size:13px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">💾 Uložit</button>
             </div>
             ${adminLockBtn}
+            
             <div style="display:flex;gap:6px;margin-top:6px;">
               <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔍 Hledat</button>
+              <button onclick="adminAction('force_refresh','${bus.id}')" style="flex:1;background:#7c3aed;color:#fff;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔄 T. Refresh</button>
               <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🗑️ Smazat</button>
             </div>
             
@@ -1805,6 +2346,7 @@ async function fetchBuses(){
                 <option value="bg-bug" ${bus.color_class==='bg-bug'?'selected':''}>Označeno jako BUG</option>
               </select>
               <input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznámka..." class="adm-inp" style="margin-top:6px;">
+              <input type="text" id="adm_driver_${bus.id}" value="${cDriver}" data-orig="${bus.admin_driver||''}" placeholder="Jméno řidiče..." class="adm-inp" style="margin-top:6px;">
               <div style="display:flex;gap:6px;margin-top:8px;">
                 <button onclick="adminSaveAll('${bus.id}',true)" class="adm-btn" style="flex:1;background:#1e40af;color:white;">📌 Uložit natrvalo</button>
                 <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏱️ Dočasně</button>
@@ -1820,19 +2362,52 @@ async function fetchBuses(){
             </div>
           </div>`;
       }
-      marker.bindPopup(popH,{className:'dark-popup',maxWidth:300});
-      ml.addLayer(marker);
+      
+      let existingMarker = window.busMarkersMap.get(bus.id);
+      if (existingMarker) {
+          existingMarker.setLatLng([bus.lat, bus.lng]);
+          existingMarker.setIcon(icon);
+          if (!(isTyping && openPopupBusId === bus.id)) {
+              existingMarker.setPopupContent(popH);
+          }
+      } else {
+          let m = L.marker([bus.lat, bus.lng], {icon, zIndexOffset: 1000});
+          m.bindPopup(popH, {className:'dark-popup', maxWidth:300});
+          m._busId = bus.id;
+          m.on('popupopen', ()=>{openPopupBusId=bus.id;});
+          m.on('popupclose', ()=>{if(openPopupBusId===bus.id)openPopupBusId=null;});
+          m.addTo(ml);
+          window.busMarkersMap.set(bus.id, m);
+      }
     });
 
-    if(savedOpenId){
-      ml.eachLayer(layer=>{
-        if(layer._busId===savedOpenId){
-          setTimeout(()=>{layer.openPopup();isRefreshing=false;},30);
+    for (let [id, m] of window.busMarkersMap.entries()) {
+        if (!currentBusIds.has(id)) {
+            ml.removeLayer(m);
+            window.busMarkersMap.delete(id);
         }
-      });
-    }else{
-      setTimeout(()=>{isRefreshing=false;},50);
     }
+
+    setTimeout(()=>{isRefreshing=false;},50);
+
+    // URL ?track=BUS_ID: automaticky otevřít popup sledovaného autobusu
+    if(window._pendingTrackId && window._trackAttempts < 15) {
+      window._trackAttempts++;
+      let tId = window._pendingTrackId;
+      let tMarker = window.busMarkersMap && window.busMarkersMap.get(tId);
+      if(!tMarker) {
+        // Zkus najít podle SPZ
+        let tBus = lastArr.find(b => String(b.id)===tId || b.spz===tId);
+        if(tBus) tMarker = window.busMarkersMap.get(tBus.id);
+      }
+      if(tMarker) {
+        window._pendingTrackId = null;
+        let tBus2 = lastArr.find(b => window.busMarkersMap && window.busMarkersMap.get(b.id) === tMarker);
+        if(tBus2) { map.setView([tBus2.lat, tBus2.lng], 16); }
+        setTimeout(() => { try { tMarker.openPopup(); } catch(e){} }, 400);
+      }
+    }
+
 
     // Komplexní logování stavu mapy
     if(IS_ADMIN){
@@ -1885,89 +2460,137 @@ async function loadDepotZones(){
 }
 
 function renderDepotZones(){
-  depotLayer.clearLayers();
-  depotZones.forEach(z=>{
-    if(!z.polygon||z.polygon.length<3)return;
-    let zColor=z.color||'#facc15';
-    let poly=L.polygon(z.polygon,{
-      color:zColor,fillColor:zColor,
-      fillOpacity:0.13,weight:2,dashArray:'6,4',opacity:0.7,
-    });
-    // Střed polygonu pro ikonu garáže
-    let bounds=poly.getBounds(),center=bounds.getCenter();
-    // Ikona vozovny: emoji s barvou zóny ve stínu
-    let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🅿️</div>`;
-    let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
-    let popId = 'depot_pop_' + Math.random().toString(36).substr(2,9);
-    let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:15px;min-width:380px;font-family:sans-serif;max-height:85vh;overflow-y:auto;overflow-x:hidden;">
-        <div style="font-weight:bold;font-size:16px;margin-bottom:12px;color:${zColor};display:flex;align-items:center;gap:6px;">
-            <span>🅿️ Vozovna: ${z.name}</span>
-        </div>
-        <div style="font-weight:bold;font-size:13px;color:#cbd5e1;margin-bottom:6px;">VOZIDLA VE VOZOVNĚ:</div>
-        <div id="${popId}_active" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;">Načítám...</div>
-        <div style="margin-top:16px;border-top:1px dashed #334155;padding-top:12px;">
-            <div style="font-size:13px;color:#cbd5e1;font-weight:bold;margin-bottom:10px;">Historie odjezdů a příjezdů</div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center;">
-                <input type="text" id="${popId}_search" placeholder="🔍 SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;width:100px;">
-                <input type="datetime-local" id="${popId}_dtFrom" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;" title="Od">
-                <span style="color:#64748b;font-size:11px;">-</span>
-                <input type="datetime-local" id="${popId}_dtTo" style="background:#1e293b;border:1px solid #334155;color:white;padding:3px 6px;border-radius:4px;font-size:11px;" title="Do">
-            </div>
-            <div id="${popId}_hist" style="font-size:12px;color:#94a3b8;width:100%;">Načítám historii...</div>
-        </div>
-    </div>`;
-
-    let mk=L.marker(center,{icon:depotIcon,zIndexOffset:500});
-    mk.bindPopup(popHtml,{className:'dark-popup',maxWidth:340, minWidth:260});
+    if(!window._depotMarkersMap) { window._depotMarkersMap = new Map(); window._depotPolysMap = new Map(); }
+    let currentNames = new Set(depotZones.map(z => z.name));
     
-    mk.on('popupopen', function() {
-        let activeDiv = document.getElementById(popId+'_active');
-        if(activeDiv) {
-            if(z.buses && z.buses.length) {
-                let seenSpz = new Set();
-                let uniqueBuses = [];
-                for(let b of z.buses) {
-                    let spzKey = b.spz || '?';
-                    if(!seenSpz.has(spzKey)) {
-                        seenSpz.add(spzKey);
-                        uniqueBuses.push(b);
-                    }
-                }
-                activeDiv.innerHTML = uniqueBuses.map(b=>{
-                    let adminDel = IS_ADMIN && b.session_id ? `<button onclick="deleteDepotRecord('${b.session_id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:0 2px;margin-left:4px;" title="Smazat">❌</button>` : '';
-                    return `<span style="background:rgba(255,255,255,0.05);border:1px solid #334155;color:${zColor};padding:4px 8px;border-radius:6px;font-weight:bold;font-size:13px;display:inline-flex;align-items:center;gap:4px;">
-                        ${b.spz||'?'}
-                        <span style="color:#64748b;font-size:10px;font-weight:normal;">L${b.line||'?'}</span>
-                        ${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}
-                        ${adminDel}
-                    </span>`;
-                }).join('');
-            } else {
-                activeDiv.innerHTML = '<span style="color:#64748b;font-size:12px;padding:4px;">Žádný bus v depu</span>';
-            }
+    // Odstranění starých vozoven
+    for(let [name, mk] of window._depotMarkersMap.entries()) {
+        if(!currentNames.has(name)) {
+            depotLayer.removeLayer(mk);
+            let poly = window._depotPolysMap.get(name);
+            if(poly) depotLayer.removeLayer(poly);
+            window._depotMarkersMap.delete(name);
+            window._depotPolysMap.delete(name);
+        }
+    }
+    
+    depotZones.forEach(z=>{
+        if(!z.polygon||z.polygon.length<3)return;
+        let zColor=z.color||'#facc15';
+        
+        let poly = window._depotPolysMap.get(z.name);
+        if(!poly) {
+            poly=L.polygon(z.polygon,{
+                color:zColor,fillColor:zColor,
+                fillOpacity:0.13,weight:2,dashArray:'6,4',opacity:0.7,
+            });
+            window._depotPolysMap.set(z.name, poly);
+            depotLayer.addLayer(poly);
+        } else {
+            poly.setLatLngs(z.polygon);
         }
         
-        let histDiv = document.getElementById(popId+'_hist');
+        let center = poly.getBounds().getCenter();
+        let mk = window._depotMarkersMap.get(z.name);
+        if(!mk) {
+            let depotIconHtml=`<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 4px ${zColor}) drop-shadow(0 1px 3px #000);cursor:pointer;" title="Vozovna: ${z.name}">🅿️</div>`;
+            let depotIcon=L.divIcon({className:'',html:depotIconHtml,iconSize:[28,28],iconAnchor:[14,14]});
+            mk=L.marker(center,{icon:depotIcon,zIndexOffset:500});
+            window._depotMarkersMap.set(z.name, mk);
+            
+            let popId = 'depot_pop_' + Math.random().toString(36).substr(2,9);
+            mk._popId = popId;
+            mk._zName = z.name;
+            
+            let popHtml = `<div id="${popId}" style="background:#0f172a;color:white;padding:15px;width:100%;box-sizing:border-box;font-family:sans-serif;max-height:85vh;overflow-y:auto;overflow-x:hidden;">
+                <div style="font-weight:bold;font-size:16px;margin-bottom:12px;color:${zColor};display:flex;align-items:center;gap:6px;">
+                    <span>🅿️ Vozovna: ${z.name}</span>
+                </div>
+                <div style="font-weight:bold;font-size:13px;color:#cbd5e1;margin-bottom:6px;">VOZIDLA VE VOZOVNĚ:</div>
+                <div id="${popId}_active" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;">Načítám...</div>
+                <div style="margin-top:16px;border-top:1px dashed #334155;padding-top:12px;">
+                    <div style="font-size:13px;color:#cbd5e1;font-weight:bold;margin-bottom:10px;">Historie odjezdů a příjezdů</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center;">
+                        <input type="text" id="${popId}_search" placeholder="🔍 SPZ..." autocomplete="off" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;width:100px;">
+                        <select id="${popId}_sort" style="background:#1e293b;border:1px solid #334155;color:white;padding:4px 8px;border-radius:4px;font-size:12px;">
+                            <option value="desc">Nejnovější</option>
+                            <option value="asc">Nejstarší</option>
+                        </select>
+                    </div>
+                    <div id="${popId}_hist" style="font-size:12px;color:#94a3b8;width:100%;overflow-x:auto;">Načítám historii...</div>
+                </div>
+            </div>`;
+            mk.bindPopup(popHtml,{className:'dark-popup', maxWidth:500, minWidth:460});
+            
+            mk.on('popupopen', function() {
+                window._activeDepotPopId = mk._popId;
+                window._activeDepotName = mk._zName;
+                if(window.updateActiveDepotPopup) window.updateActiveDepotPopup();
+            });
+            mk.on('popupclose', function() {
+                window._activeDepotPopId = null;
+                window._activeDepotName = null;
+            });
+            
+            depotLayer.addLayer(mk);
+        }
+    });
+    
+    // Aktualizuj otevřené popup okno bez refreshování celé mapy
+    if(window.updateActiveDepotPopup) window.updateActiveDepotPopup();
+}
+
+window.updateActiveDepotPopup = function() {
+    let zName = window._activeDepotName;
+    let popId = window._activeDepotPopId;
+    if(!zName || !popId) return;
+    
+    let z = depotZones.find(dz => dz.name === zName);
+    if(!z) return;
+    
+    let activeDiv = document.getElementById(popId+'_active');
+    if(activeDiv) {
+        if(z.buses && z.buses.length) {
+            let seenSpz = new Set();
+            let uniqueBuses = [];
+            for(let b of z.buses) {
+                let spzKey = b.spz || '?';
+                if(!seenSpz.has(spzKey)) { seenSpz.add(spzKey); uniqueBuses.push(b); }
+            }
+            let zColor = z.color || '#facc15';
+            activeDiv.innerHTML = uniqueBuses.map(b=>{
+                let adminDel = IS_ADMIN && b.session_id ? `<button onclick="deleteDepotRecord('${b.session_id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:0 2px;margin-left:4px;" title="Smazat">❌</button>` : '';
+                return `<span style="background:rgba(255,255,255,0.05);border:1px solid #334155;color:${zColor};padding:4px 8px;border-radius:6px;font-weight:bold;font-size:13px;display:inline-flex;align-items:center;gap:4px;">
+                    ${b.spz||'?'}
+                    <span style="color:#64748b;font-size:10px;font-weight:normal;">L${b.line||'?'}</span>
+                    ${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}
+                    ${adminDel}
+                </span>`;
+            }).join('');
+        } else {
+            activeDiv.innerHTML = '<span style="color:#64748b;font-size:12px;padding:4px;">Žádný bus v depu</span>';
+        }
+    }
+    
+    let histDiv = document.getElementById(popId+'_hist');
+    if(histDiv && !histDiv._eventsAttached) {
+        histDiv._eventsAttached = true;
         let searchInp = document.getElementById(popId+'_search');
-        let dtFrom = document.getElementById(popId+'_dtFrom');
-        let dtTo = document.getElementById(popId+'_dtTo');
+        let sortSel = document.getElementById(popId+'_sort');
         
         async function fetchHist() {
             if(!histDiv) return;
             histDiv.innerHTML = '<div style="text-align:center;padding:10px;"><i class="fas fa-spinner fa-spin"></i> Načítám...</div>';
             try {
                 let q = searchInp ? searchInp.value : '';
-                let dF = dtFrom && dtFrom.value ? new Date(dtFrom.value).toISOString() : '';
-                let dT = dtTo && dtTo.value ? new Date(dtTo.value).toISOString() : '';
-                let url = '/api/depot_history?depot_name='+encodeURIComponent(z.name)+'&q='+encodeURIComponent(q);
-                if(dF) url += '&dt_from='+encodeURIComponent(dF);
-                if(dT) url += '&dt_to='+encodeURIComponent(dT);
+                let sDir = sortSel ? sortSel.value : 'desc';
+                let url = '/api/depot_history?depot_name='+encodeURIComponent(z.name)+'&q='+encodeURIComponent(q)+'&sort='+encodeURIComponent(sDir);
                 let r = await fetch(url);
                 let d = await r.json();
                 if(d.status==='success' && d.data && d.data.length>0) {
                     let hMap = new Map();
                     for(let h of d.data) {
-                        let k = h.spz + '_' + h.arrived_at;
+                        let k = h.spz; // Sjednotíme podle SPZ - zobrazí se pouze poslední (nejnovější/nejstarší podle řazení) návštěva dané SPZ
                         if(!hMap.has(k)) hMap.set(k, h);
                     }
                     let uniqueHist = Array.from(hMap.values());
@@ -1975,27 +2598,28 @@ function renderDepotZones(){
                     let tableRows = uniqueHist.map(h=>{
                         let fmtT = (iso) => {
                             if(!iso) return '';
-                            let d = new Date(iso);
-                            if(isNaN(d)) return iso;
-                            return d.toLocaleString('cs-CZ', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+                            let dt = new Date(iso);
+                            if(isNaN(dt)) return iso;
+                            // Krátký formát, např. "19. 8. 08:06"
+                            return dt.toLocaleString('cs-CZ', {day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit'});
                         };
                         let lTime = h.left_at ? fmtT(h.left_at) : '<span style="color:#10b981;font-weight:bold;">Nyní parkuje</span>';
-                        let aTime = h.arrived_at ? fmtT(h.arrived_at) : 'Neznámý (Před úpravou)';
-                        let impr = h.is_imprecise ? ' <span title="Reset mapy - nepřesný čas" style="color:#facc15;font-size:9px;">(RESET MAPY)</span>' : '';
+                        let aTime = h.arrived_at ? fmtT(h.arrived_at) : 'Neznámý';
+                        let impr = h.is_imprecise ? ' <span title="Nepřesný čas (Reset mapy)" style="color:#facc15;font-size:10px;">⚠️</span>' : '';
                         let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${h.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:2px 4px;" title="Smazat ze záznamu">❌</button>` : '';
                         return `<tr style="border-bottom:1px solid #1e293b;">
-                            <td style="padding:6px;color:#f59e0b;font-weight:bold;">${h.spz}</td>
-                            <td style="padding:6px;font-size:11px;">${aTime}${impr}</td>
-                            <td style="padding:6px;font-size:11px;">${lTime}</td>
-                            <td style="padding:6px;text-align:right;">${adminDel}</td>
+                            <td style="padding:4px;color:#f59e0b;font-weight:bold;white-space:nowrap;">${h.spz}</td>
+                            <td style="padding:4px;font-size:11px;white-space:nowrap;">${aTime}${impr}</td>
+                            <td style="padding:4px;font-size:11px;white-space:nowrap;">${lTime}</td>
+                            <td style="padding:4px;text-align:right;">${adminDel}</td>
                         </tr>`;
                     }).join('');
-                    histDiv.innerHTML = `<table style="width:100%;border-collapse:collapse;color:#cbd5e1;">
+                    histDiv.innerHTML = `<table style="width:100%;border-collapse:collapse;color:#cbd5e1;table-layout:auto;">
                         <thead><tr style="background:#1e293b;text-align:left;">
-                            <th style="padding:6px;color:#38bdf8;font-weight:bold;">SPZ</th>
-                            <th style="padding:6px;color:#38bdf8;font-weight:bold;">Příjezd</th>
-                            <th style="padding:6px;color:#38bdf8;font-weight:bold;">Odjezd</th>
-                            <th style="padding:6px;"></th>
+                            <th style="padding:4px;color:#38bdf8;font-weight:bold;">SPZ</th>
+                            <th style="padding:4px;color:#38bdf8;font-weight:bold;">Příjezd</th>
+                            <th style="padding:4px;color:#38bdf8;font-weight:bold;">Odjezd</th>
+                            <th style="padding:4px;"></th>
                         </tr></thead>
                         <tbody>${tableRows}</tbody>
                     </table>`;
@@ -2010,24 +2634,21 @@ function renderDepotZones(){
         fetchHist();
         
         let debounce = null;
-        let attachEv = (el) => {
+        let attachEv = (el, type='input') => {
             if(!el) return;
-            el.addEventListener('input', ()=>{
+            el.addEventListener(type, ()=>{
                 clearTimeout(debounce);
                 debounce = setTimeout(fetchHist, 400);
             });
-            el.addEventListener('keydown', e => e.stopPropagation());
-            el.addEventListener('keyup', e => e.stopPropagation());
-            el.addEventListener('keypress', e => e.stopPropagation());
+            if(type==='input') {
+                el.addEventListener('keydown', e => e.stopPropagation());
+                el.addEventListener('keyup', e => e.stopPropagation());
+                el.addEventListener('keypress', e => e.stopPropagation());
+            }
         };
-        attachEv(searchInp);
-        attachEv(dtFrom);
-        attachEv(dtTo);
-    });
-
-    depotLayer.addLayer(poly);
-    depotLayer.addLayer(mk);
-  });
+        attachEv(searchInp, 'input');
+        attachEv(sortSel, 'change');
+    }
 }
 
 window.deleteDepotRecord = async function(id, depotName) {
@@ -2053,7 +2674,7 @@ function renderDepotList(){
       <div style="width:10px;height:10px;border-radius:2px;background:${z.color||'#facc15'};flex-shrink:0;"></div>
       <span style="flex:1;font-size:12px;color:#e2e8f0;">${z.name}</span>
       <button onclick="depotEditZone('${z.id}')" style="background:#1e40af;color:#93c5fd;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">✏️ Edit</button>
-      <button onclick="depotDeleteZone('${z.id}','${z.name.replace(/'/g,"\\'")}'')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">🗑️</button>
+      <button onclick="depotDeleteZone('${z.id}','${z.name.replace(/'/g,"\\'")}')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;">🗑️</button>
     </div>`).join('');
 }
 
@@ -2066,7 +2687,7 @@ async function depotDeleteZone(id,name){
 }
 
 function depotEditZone(id){
-  let z=depotZones.find(x=>x.id===id);
+  let z=depotZones.find(x=>String(x.id)===String(id));
   if(!z)return;
   document.getElementById('depot-name-inp').value=z.name;
   document.getElementById('depot-color-inp').value=z.color||'#facc15';

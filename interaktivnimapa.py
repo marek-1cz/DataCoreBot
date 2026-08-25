@@ -4587,15 +4587,15 @@ def fetch_tt_bg(bus_id, cached_dict):
                'Referer': 'https://pvvd.idpk.cz/', 'Cache-Control': 'no-cache'}
         with opener.open(urllib.request.Request(
                 f"https://pvvd.idpk.cz/Ajax/OpenInfoWindow?id={bus_id}&_={cb}", headers=hdr), timeout=4) as r:
-            ih = r.read().decode('utf-8')
+            import html as _html
+            ih = _html.unescape(r.read().decode('utf-8'))
         ml = re.search(r'<th>Linka</th>\s*<td>(.*?)</td>', ih, re.IGNORECASE | re.DOTALL)
         ms = re.search(r'<th>Spoj</th>\s*<td>(.*?)</td>', ih, re.IGNORECASE | re.DOTALL)
         mz = re.search(r'<th>Zastávka</th>\s*<td>(.*?)</td>', ih, re.IGNORECASE | re.DOTALL)
         if ml and ms:
             cached_dict["real_linka_spoj"] = f"{ml.group(1).strip()}/{ms.group(1).strip()}"
         if mz:
-            import html as _html
-            cached_dict["real_zastavka"] = _html.unescape(mz.group(1).strip())
+            cached_dict["real_zastavka"] = mz.group(1).strip()
         with opener.open(urllib.request.Request(
                 f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb}",
                 headers=hdr), timeout=4) as r:
