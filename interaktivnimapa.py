@@ -6217,7 +6217,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
             if b_last_stop and _norm_txt(stop_name) in _norm_txt(b_last_stop):
                 now_near_stop = True
                 status_val = f"{status_text} ({b_last_stop})"
-                ctx_text = f"SPZ: {bus_data.get('spz')} | Vyhlášená zastávka: {now_time_str} ({b_last_stop})"
+                ctx_text = f"SPZ: {bus_data.get('spz')} | Blíží se do zastávky: {b_last_stop} (v {now_time_str})"
             else:
                 b_lat = bus_data.get("lat", 0)
                 b_lon = bus_data.get("lng", 0)
@@ -6226,7 +6226,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                     if near and _norm_txt(stop_name) in _norm_txt(near):
                         now_near_stop = True
                         status_val = f"{status_text} ({near})"
-                        ctx_text = f"SPZ: {bus_data.get('spz')} | V blízkosti: {now_time_str} ({near})"
+                        ctx_text = f"SPZ: {bus_data.get('spz')} | Fyzicky poblíž zastávky: {near} (v {now_time_str})"
             
             was_near_stop = state.get(f"_stop_near:{stop_name}")
             if now_near_stop and not was_near_stop:
