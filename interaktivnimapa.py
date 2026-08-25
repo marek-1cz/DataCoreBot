@@ -1997,7 +1997,7 @@ window.shareBus = function(busId) {
   let delay = (typeof bus.delay !== 'undefined') ? bus.delay : '?';
   
   let spzText = (bus.spz !== 'Neznama' && bus.spz) ? bus.spz : bus.id;
-  let stopName = bus.real_zastavka || bus.last_stop_name || ((bus.status && bus.status.includes('(')) ? bus.status.split('(').pop().replace(')','') : bus.status);
+  let stopName = bus.real_zastavka || bus.nearest_stop || bus.last_stop_name || 'Neznámá';
   if (stopName === 'Jízda' || stopName.includes('Ceka na data')) stopName = 'Neznámá';
   let real_spoj = bus.real_linka_spoj || bus.line;
   
@@ -4547,7 +4547,7 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
                      ghost_spz=None, ghost_verified=False, admin_verified=False):
     return {
         "trip_id": trip_id, "inflow_id": bus_id, "lat": lat, "lng": lng, "bearing": None,
-        "line": line, "real_linka_spoj": None, "real_zastavka": None, "destination": dest, "is_train": is_train,
+        "line": line, "real_linka_spoj": None, "real_zastavka": None, "nearest_stop": None, "destination": dest, "is_train": is_train,
         "raw_delay": delay, "spz": ghost_spz, "spz_verified": ghost_verified,
         "spz_locked": False, "manual_spz": False, "spz_stable_ticks": 0,
         "spz_last_verified": None, "investigating": False, "investigation_spz": None,
@@ -5039,8 +5039,12 @@ def background_map_worker():
                                 x = math.cos(l1r) * math.sin(l2r) - math.sin(l1r) * math.cos(l2r) * math.cos(ld)
                                 c["bearing"] = int((math.degrees(math.atan2(y, x)) + 360) % 360)
                                 c["last_moved"] = now
+                                if GTFS_LOADED:
+                                    c["nearest_stop"] = _nearest_stop_name(lat1, lng1, 500)
                             c["lat"] = lat1
                             c["lng"] = lng1
+                            if c.get("nearest_stop") is None and GTFS_LOADED:
+                                c["nearest_stop"] = _nearest_stop_name(lat1, lng1, 500)
                     except Exception:
                         continue
 
