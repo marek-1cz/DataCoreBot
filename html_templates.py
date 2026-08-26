@@ -238,6 +238,7 @@ DASHBOARD_LAYOUT = """
 <a href="/dashboard/app_management" class="sidebar-link"><i class="fas fa-desktop"></i> Správa Aplikace</a>
 <a href="/dashboard/notifications" class="sidebar-link" style="color: #f59e0b;"><i class="fas fa-bell"></i> Oznámení</a>
 <a href="/dashboard/downloads" class="sidebar-link"><i class="fas fa-code-branch"></i> Správa Verzí a Přístupů</a>
+<a href="/dashboard/updater" class="sidebar-link"><i class="fas fa-sync"></i> Auto-Updater & Role</a>
 <a href="/dashboard/pending_roles" class="sidebar-link" style="color: #10b981;"><i class="fas fa-ticket-alt"></i> Rezervace Rolí</a>
 <a href="/dashboard/ids" class="sidebar-link"><i class="fas fa-id-badge"></i> Správa ID</a>
 <a href="/dashboard/team" class="sidebar-link"><i class="fas fa-user-plus"></i> Správa Týmu</a>
@@ -942,6 +943,88 @@ HTML_DOWNLOADS_MGMT = """
     {% for v in versions %}{% set is_active = (v.get('is_active', True) | string | lower) != 'false' %}<tr style="opacity: {{ '1' if is_active else '0.5' }};"><td><strong>{{ v.get('version_name', '') }}</strong></td><td style="color: var(--warning); font-family: monospace;">{{ v.get('db_version', '') }}</td><td>{% if is_active %}<span class="role-tag" style="background-color: var(--success); color: white;">Aktivní</span>{% else %}<span class="role-tag" style="background-color: var(--danger); color: white;">Zablokováno</span>{% endif %}</td><td>{% if v.get('target_role') == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User</span>{% elif v.get('target_role') == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BT+</span>{% else %}<span class="role-tag" style="background-color: #ef4444; color: white;">DEV/SA</span>{% endif %}</td><td style="display:flex; gap:5px;"><form action="/dashboard/delete_version" method="POST" style="display:inline;"><input type="hidden" name="version_id" value="{{ v.get('id', '') }}"><button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Odebrat?')"><i class="fas fa-trash"></i></button></form></td></tr>{% else %}<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Zatím nebyly přidány žádné verze.</td></tr>{% endfor %}</table>
 </div>
 """
+</div>
+"""
+
+HTML_UPDATER_MGMT = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;"><h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-sync" style="color:var(--blue-main);"></i> Auto-Updater & Role</h2></div>
+
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">👥 Správa Rolí Uživatelů</h3>
+        <table>
+            <tr><th>HWID Uživatele</th><th>Aktuální Role</th><th>Změnit na</th></tr>
+            {% for u in updater_users %}
+            <tr>
+                <td style="font-family: monospace;">{{ u.get('hwid', '') }}</td>
+                <td>
+                    {% if u.get('role') == 'public' %}<span class="role-tag" style="background-color: #64748b; color: white;">Public</span>
+                    {% elif u.get('role') == 'beta_tester' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">Beta Tester</span>
+                    {% elif u.get('role') == 'developer' %}<span class="role-tag" style="background-color: #ef4444; color: white;">Developer</span>
+                    {% else %}{{ u.get('role') }}{% endif %}
+                </td>
+                <td>
+                    <form action="/dashboard/updater/update_user" method="POST" style="display:flex; gap:5px;">
+                        <input type="hidden" name="hwid" value="{{ u.get('hwid', '') }}">
+                        <select name="role">
+                            <option value="public" {% if u.get('role') == 'public' %}selected{% endif %}>Public</option>
+                            <option value="beta_tester" {% if u.get('role') == 'beta_tester' %}selected{% endif %}>Beta Tester</option>
+                            <option value="developer" {% if u.get('role') == 'developer' %}selected{% endif %}>Developer</option>
+                        </select>
+                        <button type="submit" class="btn btn-primary" style="padding: 5px;">Uložit</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Zatím žádní uživatelé</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
+        <h3 style="color: var(--blue-main); margin-top: 0;">📦 Evidované Verze (GitHub)</h3>
+        <p style="color: var(--text-muted); font-size: 13px;">Poznámka: Auto-updater stahuje buildy z GitHub Releases (latest.yml / beta.yml). Zde jen měníš evidenci.</p>
+        
+        <form action="/dashboard/updater/add_release" method="POST" style="margin-bottom:15px; padding-bottom:15px; border-bottom:1px solid #333;">
+            <input type="text" name="version" placeholder="Verze (např. 1.7.0)" required>
+            <select name="channel" required>
+                <option value="developer">Developer (Alpha)</option>
+                <option value="beta">Beta</option>
+                <option value="public">Public (Latest)</option>
+            </select>
+            <input type="text" name="release_notes" placeholder="Poznámky (nepovinné)">
+            <button type="submit" class="btn" style="width: 100%;">Přidat do evidence</button>
+        </form>
+
+        <table>
+            <tr><th>Verze</th><th>Kanál</th><th>Akce</th></tr>
+            {% for r in updater_releases %}
+            <tr>
+                <td><strong>{{ r.get('version', '') }}</strong></td>
+                <td>
+                    {% if r.get('channel') == 'public' %}<span class="role-tag" style="background-color: #10b981; color: white;">Public</span>
+                    {% elif r.get('channel') == 'beta' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">Beta</span>
+                    {% else %}<span class="role-tag" style="background-color: #ef4444; color: white;">Developer</span>{% endif %}
+                </td>
+                <td>
+                    <form action="/dashboard/updater/change_channel" method="POST" style="display:flex; gap:5px;">
+                        <input type="hidden" name="id" value="{{ r.get('id', '') }}">
+                        <select name="channel">
+                            <option value="developer" {% if r.get('channel') == 'developer' %}selected{% endif %}>Dev</option>
+                            <option value="beta" {% if r.get('channel') == 'beta' %}selected{% endif %}>Beta</option>
+                            <option value="public" {% if r.get('channel') == 'public' %}selected{% endif %}>Public</option>
+                        </select>
+                        <button type="submit" class="btn btn-primary" style="padding: 5px;">Změnit</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Zatím žádné verze</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+"""
 
 HTML_PENDING_ROLES = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;"><h2 style="margin: 0; color: var(--text-main);">Rezervace Rolí</h2></div>
@@ -1057,6 +1140,11 @@ HTML_FEEDBACK = """
     <h3 style="color: var(--warning); margin-top: 0;">Nové žádosti o HWID a IP Reset</h3>
     <table><tr><th>Uživatel</th><th>Zpráva</th><th>Datum</th><th>Akce</th></tr>
     {% for f in hwid_pending %}<tr><td style="color:white; font-weight:bold;">{{ f.get('nick', '') }}<br><span style="font-size:11px; color:#aaa;">{{ f.get('discord_id', '') }}</span></td><td style="color:#ddd; font-style:italic;">{{ f.get('message', '') }}</td><td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td><td style="display:flex; gap:5px;"><form action="/dashboard/feedback_reset_hwid" method="POST" style="margin:0;"><input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}"><input type="hidden" name="discord_id" value="{{ f.get('discord_id', '') }}"><button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-check"></i> Resetovat</button></form></td></tr>{% else %}<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Žádné žádosti.</td></tr>{% endfor %}</table>
+</div>
+<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid #f59e0b; margin-bottom: 20px;">
+    <h3 style="color: #f59e0b; margin-top: 0;">Žádosti o Admin Bypass</h3>
+    <table><tr><th>Uživatel</th><th>Zpráva</th><th>Datum</th><th>Akce</th></tr>
+    {% for f in bypass_pending %}<tr><td style="color:white; font-weight:bold;">{{ f.get('nick', '') }}<br><span style="font-size:11px; color:#aaa;">{{ f.get('discord_id', '') }}</span></td><td style="color:#ddd; font-style:italic;">{{ f.get('message', '') }}</td><td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td><td style="display:flex; gap:5px;"><form action="/dashboard/bypass_approve" method="POST" style="margin:0;"><input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}"><button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-check"></i> Schválit</button></form><form action="/dashboard/bypass_reject" method="POST" style="margin:0;"><input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}"><button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-times"></i> Zamítnout</button></form></td></tr>{% else %}<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Žádné žádosti o bypass.</td></tr>{% endfor %}</table>
 </div>
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--blue-main); margin-bottom: 20px;">
     <h3 style="color: var(--blue-main); margin-top: 0;">Nové zprávy od uživatelů</h3>
