@@ -2909,8 +2909,12 @@ def bypass_reject():
     fb_id = request.form.get("feedback_id")
     db = get_db()
     if db and fb_id:
-        now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
-        db.table("feedback").update({"status": "resolved", "sys_note": f"Bypass zamítnut [{now_str}]"}).eq("id", fb_id).execute()
+        fb = db.table("feedback").select("*").eq("id", fb_id).execute().data
+        if fb:
+            d_id = fb[0]['discord_id']
+            now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+            db.table("feedback").update({"status": "resolved", "sys_note": f"Bypass zamítnut [{now_str}]"}).eq("id", fb_id).execute()
+            if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "❌ Přístup zamítnut", "Tvá žádost o jednorázový vstup do staré verze byla administrátorem zamítnuta.", 0xef4444), bot.loop)
         flash('Bypass zamítnut.', 'success')
     return redirect(url_for('dashboard_feedback'))
 
