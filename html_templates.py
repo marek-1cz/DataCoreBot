@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 BASE_HTML = """
 <!DOCTYPE html>
 <html lang="cs">
