@@ -944,8 +944,6 @@ HTML_DOWNLOADS_MGMT = """
     {% for v in versions %}{% set is_active = (v.get('is_active', True) | string | lower) != 'false' %}<tr style="opacity: {{ '1' if is_active else '0.5' }};"><td><strong>{{ v.get('version_name', '') }}</strong></td><td style="color: var(--warning); font-family: monospace;">{{ v.get('db_version', '') }}</td><td>{% if is_active %}<span class="role-tag" style="background-color: var(--success); color: white;">Aktivní</span>{% else %}<span class="role-tag" style="background-color: var(--danger); color: white;">Zablokováno</span>{% endif %}</td><td>{% if v.get('target_role') == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User</span>{% elif v.get('target_role') == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BT+</span>{% else %}<span class="role-tag" style="background-color: #ef4444; color: white;">DEV/SA</span>{% endif %}</td><td style="display:flex; gap:5px;"><form action="/dashboard/delete_version" method="POST" style="display:inline;"><input type="hidden" name="version_id" value="{{ v.get('id', '') }}"><button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Odebrat?')"><i class="fas fa-trash"></i></button></form></td></tr>{% else %}<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Zatím nebyly přidány žádné verze.</td></tr>{% endfor %}</table>
 </div>
 """
-</div>
-"""
 
 HTML_UPDATER_MGMT = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;"><h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-sync" style="color:var(--blue-main);"></i> Auto-Updater & Role</h2></div>
