@@ -1494,14 +1494,22 @@ def api_app_ping():
     if not db: return _cors_jsonify({"status": "error"})
     try:
         now_str = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
-        user_resp = db.table("users").select("launch_count, total_time").eq("discord_id", discord_id).execute()
+        if discord_id.startswith("email-"):
+            user_id = discord_id.split("-")[1]
+            user_resp = db.table("users").select("launch_count, total_time, discord_id").eq("id", user_id).execute()
+        else:
+            user_resp = db.table("users").select("launch_count, total_time, discord_id").eq("discord_id", discord_id).execute()
+        
         if not user_resp.data: return _cors_jsonify({"status": "error"})
         updates = {"last_active": now_str, "is_online": True}
         if action == "start":
             updates["launch_count"] = (user_resp.data[0].get("launch_count") or 0) + 1
             new_session_id = str(uuid.uuid4())
             db.table("app_sessions").insert({"session_id": new_session_id, "discord_id": discord_id, "start_time": now_str, "end_time": now_str}).execute()
-            db.table("users").update(updates).eq("discord_id", discord_id).execute()
+            if discord_id.startswith("email-"):
+                db.table("users").update(updates).eq("id", user_id).execute()
+            else:
+                db.table("users").update(updates).eq("discord_id", discord_id).execute()
             return _cors_jsonify({"status": "ok", "session_id": new_session_id})
         elif action == "ping":
             updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 1
@@ -1510,7 +1518,12 @@ def api_app_ping():
             updates["is_online"] = False
             updates["admin_bypass"] = False
             if session_id: db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
-        db.table("users").update(updates).eq("discord_id", discord_id).execute()
+        
+        if discord_id.startswith("email-"):
+            db.table("users").update(updates).eq("id", user_id).execute()
+        else:
+            db.table("users").update(updates).eq("discord_id", discord_id).execute()
+        
         return _cors_jsonify({"status": "ok", "session_id": session_id})
     except: return _cors_jsonify({"status": "error"})
 
