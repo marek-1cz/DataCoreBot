@@ -2871,10 +2871,43 @@ def feedback_reject():
 def feedback_resolve():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     fb_id = request.form.get("feedback_id")
+    reply_text = request.form.get("reply_text")
     db = get_db()
     if db and fb_id:
+        fb_data = db.table("feedback").select("*").eq("id", fb_id).execute()
         now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
-        db.table("feedback").update({"status": "resolved", "sys_note": f"Vyřešeno [{now_str}]"}).eq("id", fb_id).execute()
+        
+        sys_note_msg = f"Vyřešeno [{now_str}]"
+        
+        if fb_data.data and reply_text and reply_text.strip():
+            f_row = fb_data.data[0]
+            discord_id = f_row.get("discord_id", "")
+            
+            sys_note_msg = f"Odpověď: {reply_text.strip()} [{now_str}]"
+            
+            if discord_id.startswith("email-"):
+                user_id = discord_id.split("-")[1]
+                u_resp = db.table("users").select("email").eq("id", user_id).execute()
+                if u_resp.data and u_resp.data[0].get("email"):
+                    email = u_resp.data[0].get("email")
+                    try:
+                        import asyncio
+                        embed_data = {
+                            "title": "Odpověď na vaši zpětnou vazbu",
+                            "description": reply_text.strip(),
+                            "fields": [{"name": "Vaše původní zpráva", "value": f_row.get("message", "")}]
+                        }
+                        if bot.loop and bot.loop.is_running() and bot.is_ready():
+                            asyncio.run_coroutine_threadsafe(asyncio.to_thread(send_notification_email_sync, email, embed_data, ""), bot.loop)
+                    except: pass
+            elif discord_id.isdigit():
+                try:
+                    import asyncio
+                    if bot.loop and bot.loop.is_running() and bot.is_ready():
+                        asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "Odpověď na vaši zpětnou vazbu", reply_text.strip(), 0x10b981), bot.loop)
+                except: pass
+                
+        db.table("feedback").update({"status": "resolved", "sys_note": sys_note_msg}).eq("id", fb_id).execute()
         flash('Ticket uzavřen.', 'success')
     return redirect(url_for('dashboard_feedback'))
 
