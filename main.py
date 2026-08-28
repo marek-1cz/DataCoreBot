@@ -3955,7 +3955,304 @@ try:
 except Exception:
     pass
 
-if __name__ == "__main__":
+import time
+
+# ============================================================
+# MOBILE MIRROR (Ovladač Web Zrcadlo pro řidiče)
+# ============================================================
+MIRROR_STATES = {}
+# Struktura:
+# MIRROR_STATES[session_id] = {
+#     "last_updated": time.time(),
+#     "state": { "line": "...", "dest": "...", "next_stop": "...", "current_stop": "...", "ah_active": False, ... },
+#     "pending_actions": []
+# }
+
+@app.route('/api/mirror/pc_sync', methods=['POST'])
+def mirror_pc_sync():
+    """
+    PC aplikace (Ovladač) sem každou sekundu posílá svůj stav.
+    Vrací seznam akcí (stisků tlačítek) z mobilu, aby je PC provedlo.
+    """
+    data = request.json
+    if not data or 'session_id' not in data:
+        return jsonify({"error": "Missing session_id"}), 400
+        
+    session_id = data['session_id']
+    discord_id = data.get('discord_id')
+    
+    # Ověření oprávnění
+    allowed = False
+    if discord_id:
+        try:
+            resp = supabase.table('users').select('role').eq('discord_id', discord_id).execute()
+            if resp.data and len(resp.data) > 0:
+                role = resp.data[0].get('role', '')
+                if any(x in role for x in ['BT', 'DEV', 'SA']):
+                    allowed = True
+        except:
+            pass
+            
+    if not allowed and discord_id != 'VSC-DEV':
+        return jsonify({"error": "Nemas opravneni (Vyžadována Premium role)"}), 403
+
+    # Aktualizace stavu
+    if session_id not in MIRROR_STATES:
+        MIRROR_STATES[session_id] = {"pending_actions": []}
+        
+    MIRROR_STATES[session_id]["last_updated"] = time.time()
+    MIRROR_STATES[session_id]["state"] = data.get('state', {})
+    
+    # Vrácení a vyčištění akcí, co byly stisknuty na mobilu
+    actions = MIRROR_STATES[session_id]["pending_actions"].copy()
+    MIRROR_STATES[session_id]["pending_actions"].clear()
+    
+    # Čištění starých session (starší 2 minuty)
+    now = time.time()
+    to_delete = [sid for sid, s in MIRROR_STATES.items() if now - s["last_updated"] > 120]
+    for sid in to_delete:
+        del MIRROR_STATES[sid]
+        
+    return jsonify({"status": "ok", "actions": actions})
+
+
+@app.route('/api/mirror/mobile_state/<session_id>')
+def mirror_mobile_state(session_id):
+    """
+    Server-Sent Events pro mobilní aplikaci. Mobil se napojí a server mu posílá aktualizace.
+    """
+    def generate():
+        last_state_hash = None
+        while True:
+            if session_id not in MIRROR_STATES:
+                yield f"data: {{\"status\": \"offline\"}}\n\n"
+                time.sleep(2)
+                continue
+                
+            s = MIRROR_STATES[session_id]
+            if time.time() - s["last_updated"] > 10:
+                yield f"data: {{\"status\": \"offline\"}}\n\n"
+            else:
+                import json
+                state = s.get("state", {})
+                state_str = json.dumps(state)
+                h = hash(state_str)
+                if h != last_state_hash:
+                    last_state_hash = h
+                    yield f"data: {{\"status\": \"online\", \"state\": {state_str}}}\n\n"
+            time.sleep(0.5)
+            
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
+
+@app.route('/api/mirror/mobile_action/<session_id>', methods=['POST'])
+def mirror_mobile_action(session_id):
+    """
+    Mobilní aplikace sem odešle stisknuté tlačítko (např. {"action": "btn-announce"})
+    """
+    if session_id not in MIRROR_STATES:
+        return jsonify({"error": "Offline"}), 404
+        
+    data = request.json
+    action = data.get("action")
+    if action:
+        MIRROR_STATES[session_id]["pending_actions"].append(action)
+        
+    return jsonify({"status": "ok"})
+
+
+@app.route('/m/<session_id>')
+def mirror_mobile_ui(session_id):
+    """
+    Zobrazí mobilní webové rozhraní (Ovladač do kapsy).
+    """
+    html = """
+    <!DOCTYPE html>
+    <html lang="cs">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+        <title>IDPK Ovladač - Mobilní Zrcadlo</title>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+        <style>
+            :root {
+                --idpk-blue: #035689; --idpk-dark-blue: #023e63; --idpk-yellow: #F4CC17;
+                --idpk-green: #048E56; --idpk-red: #e74c3c;
+            }
+            body { 
+                background-color: var(--idpk-blue); 
+                margin: 0; 
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                color: white; 
+                display: flex; 
+                flex-direction: column; 
+                height: 100vh;
+                user-select: none;
+                overflow: hidden;
+            }
+            .status-bar {
+                background-color: rgba(0,0,0,0.5);
+                padding: 8px;
+                text-align: center;
+                font-size: 12px;
+                font-weight: bold;
+                color: #e74c3c;
+            }
+            .status-bar.online { color: #2ecc71; }
+            .info-panel {
+                flex: 1;
+                padding: 15px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                text-align: center;
+            }
+            .line-dest { font-size: 24px; font-weight: bold; margin-bottom: 20px; color: var(--idpk-yellow); }
+            .stop-label { font-size: 11px; color: #aaa; margin-bottom: 2px; }
+            .next-stop { font-size: 18px; margin-bottom: 15px; font-weight: bold; }
+            .curr-stop { font-size: 26px; font-weight: 900; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; border: 2px solid var(--idpk-yellow); width: 100%; box-sizing: border-box;}
+            
+            .controls-panel {
+                background: var(--idpk-dark-blue);
+                padding: 15px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                padding-bottom: 30px;
+                box-shadow: 0 -4px 10px rgba(0,0,0,0.5);
+            }
+            .btn-big {
+                background: #e0e0e0;
+                color: black;
+                font-size: 20px;
+                font-weight: 900;
+                border: none;
+                border-radius: 8px;
+                padding: 20px 10px;
+                box-shadow: 0 4px 0 #999;
+                text-align: center;
+                cursor: pointer;
+            }
+            .btn-big:active { transform: translateY(4px); box-shadow: 0 0 0 #999; }
+            .row { display: flex; gap: 10px; }
+            .btn-small {
+                flex: 1;
+                background: #e0e0e0;
+                color: black;
+                font-size: 14px;
+                font-weight: bold;
+                border: none;
+                border-radius: 6px;
+                padding: 15px 5px;
+                box-shadow: 0 3px 0 #999;
+                cursor: pointer;
+            }
+            .btn-small:active { transform: translateY(3px); box-shadow: 0 0 0 #999; }
+            .btn-red { background: #e74c3c; color: white; box-shadow: 0 3px 0 #c0392b; }
+            .btn-red:active { box-shadow: 0 0 0 #c0392b; }
+            .offline-overlay {
+                position: absolute; top:0; left:0; right:0; bottom:0;
+                background: rgba(0,0,0,0.8); z-index: 100;
+                display: flex; flex-direction: column; justify-content: center; align-items: center;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="status-bar" class="status-bar">PŘIPOJOVÁNÍ...</div>
+        
+        <div id="offline-screen" class="offline-overlay">
+            <i class="fas fa-satellite-dish" style="font-size: 40px; color: #e74c3c; margin-bottom: 15px;"></i>
+            <div style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">OVLADAČ JE OFFLINE</div>
+            <div style="font-size: 12px; color: #aaa; text-align: center; padding: 0 20px;">PC s Palubním systémem není připojeno,<br>nebo skončila platnost spojení.</div>
+        </div>
+
+        <div class="info-panel">
+            <div class="line-dest" id="txt-header">LINKA --- | CÍL ---</div>
+            
+            <div class="stop-label">PŘÍŠTÍ ZASTÁVKA</div>
+            <div class="next-stop" id="txt-next">---</div>
+            
+            <div class="stop-label">AKTUÁLNÍ ZASTÁVKA</div>
+            <div class="curr-stop" id="txt-curr">---</div>
+        </div>
+
+        <div class="controls-panel">
+            <button class="btn-big" id="btn-smart" onclick="sendAction('btn-announce')">VYHLÁSIT ZASTÁVKU</button>
+            <div class="row">
+                <button class="btn-small" onclick="sendAction('btn-up')"><i class="fas fa-arrow-up"></i> ZPĚT</button>
+                <button class="btn-small" onclick="sendAction('btn-down')"><i class="fas fa-arrow-down"></i> VSTŘÍC</button>
+            </div>
+            <div class="row">
+                <button class="btn-small btn-red" onclick="sendAction('btn-terminate')">UKONČIT</button>
+                <button class="btn-small" onclick="sendAction('btn-repeat')">OPAKOVAT</button>
+            </div>
+        </div>
+
+        <script>
+            const sessionId = "{{ session_id }}";
+            const statusBar = document.getElementById('status-bar');
+            const offlineScreen = document.getElementById('offline-screen');
+            const txtHeader = document.getElementById('txt-header');
+            const txtNext = document.getElementById('txt-next');
+            const txtCurr = document.getElementById('txt-curr');
+            const btnSmart = document.getElementById('btn-smart');
+
+            function connectSSE() {
+                const source = new EventSource('/api/mirror/mobile_state/' + sessionId);
+                
+                source.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    if (data.status === 'offline') {
+                        statusBar.className = 'status-bar';
+                        statusBar.innerText = 'OFFLINE';
+                        offlineScreen.style.display = 'flex';
+                    } else if (data.status === 'online') {
+                        statusBar.className = 'status-bar online';
+                        statusBar.innerText = 'PŘIPOJENO - LIVE';
+                        offlineScreen.style.display = 'none';
+                        updateUI(data.state);
+                    }
+                };
+                source.onerror = function() {
+                    statusBar.className = 'status-bar';
+                    statusBar.innerText = 'SPOJENÍ ZTRACENO, OBNOVUJI...';
+                    offlineScreen.style.display = 'flex';
+                };
+            }
+
+            function updateUI(state) {
+                if (state.header) txtHeader.innerText = state.header;
+                if (state.nextStop) txtNext.innerText = state.nextStop;
+                if (state.currStop) {
+                    txtCurr.innerHTML = state.currStop; // může obsahovat HTML (např. ikony)
+                }
+                if (state.smartBtnMain) {
+                    let sub = state.smartBtnSub ? `<br><span style="font-size:12px; color:#555;">${state.smartBtnSub}</span>` : "";
+                    btnSmart.innerHTML = state.smartBtnMain + sub;
+                }
+            }
+
+            function sendAction(actionId) {
+                // Haptická odezva
+                if (navigator.vibrate) navigator.vibrate(50);
+                
+                fetch('/api/mirror/mobile_action/' + sessionId, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: actionId })
+                }).catch(e => console.error(e));
+            }
+
+            connectSSE();
+        </script>
+    </body>
+    </html>
+    """
+    return render_template_string(html, session_id=session_id)
+
+
+if __name__ == "main":
     token = os.environ.get("DISCORD_TOKEN")
     start_map_background_task()
     if token:
@@ -3963,3 +4260,4 @@ if __name__ == "__main__":
     else:
         print("KRITICKÁ CHYBA: DISCORD_TOKEN chybí! (Web běží dál bez Bota)")
     run_web()
+
