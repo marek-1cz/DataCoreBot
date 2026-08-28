@@ -4252,7 +4252,7 @@ def mirror_mobile_ui(session_id):
     return render_template_string(html, session_id=session_id)
 
 
-if __name__ == "main":
+if __name__ == "__main__":
     token = os.environ.get("DISCORD_TOKEN")
     start_map_background_task()
     if token:
