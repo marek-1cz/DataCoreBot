@@ -889,16 +889,9 @@ def api_report_error():
     nick = str(data.get("nick", "Neznámý"))
     error_type = str(data.get("type", "ERROR"))
     msg = str(data.get("message", "Neznámá chyba"))
-    if bot.loop and bot.loop.is_running() and bot.is_ready():
-        async def send_err():
-            for guild in bot.guilds:
-                channel = discord.utils.get(guild.channels, name="📲・error-app")
-                if channel:
-                    embed = discord.Embed(title=f"⚠️ APLIKAČNÍ CHYBA: {error_type}", description=f"**Hráč:** {nick} (`{discord_id}`)\n**Chyba:**\n`{msg}`", color=0xef4444, timestamp=get_prague_time())
-                    try: await channel.send(embed=embed)
-                    except: pass
-                    break
-        asyncio.run_coroutine_threadsafe(send_err(), bot.loop)
+    
+    send_log(f"⚠️ APLIKAČNÍ CHYBA: {error_type}", f"**Hráč:** {nick} (`{discord_id}`)\n**Chyba:**\n`{msg}`", 0xef4444)
+    
     return _cors_jsonify({"status": "success"})
 
 @app.route('/api/keepalive', methods=['GET', 'OPTIONS'], strict_slashes=False)
@@ -2473,6 +2466,7 @@ def toggle_software():
     if db:
         db.table("settings").update({"setting_value": new_status}).eq("setting_key", "software_enabled").execute()
         flash(f'Stav softwaru: {"ZAPNUT" if new_status.lower() == "true" else "VYPNUT"}', 'success')
+        send_log("💻 Software / Spouštění hry", f"**Uživatel:** {session.get('discord_nick')}\n**Nový stav:** {'ZAPNUTO' if new_status.lower() == 'true' else 'VYPNUTO'}", 0xf59e0b)
         trigger_status_channel_update()
     return redirect(url_for('dashboard_app_management'))
 
@@ -2484,6 +2478,7 @@ def toggle_downloads():
     if db:
         db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute()
         flash(f'Stahování: {"POVOLENO" if new_status.lower() == "true" else "ZAKÁZÁNO"}', 'success')
+        send_log("⬇️ Stahování hry v Launcheru", f"**Uživatel:** {session.get('discord_nick')}\n**Nový stav:** {'POVOLENO' if new_status.lower() == 'true' else 'ZAKÁZÁNO'}", 0x3b82f6)
         trigger_setup_messages_update()
         trigger_status_channel_update()
     ret = request.form.get('return_to', 'app_management')
@@ -2644,6 +2639,7 @@ def add_version():
             else:
                 raise e
         flash('Nová verze vydána!', 'success')
+        send_log("🚀 Vydána nová verze aplikce", f"**Uživatel:** {session.get('discord_nick')}\n**Název:** {row['version_name']}\n**Cílová role:** {row['target_role']}", 0x10b981)
         trigger_setup_messages_update()
     except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
@@ -2671,6 +2667,7 @@ def edit_version():
             else:
                 raise e
         flash('Verze upravena.', 'success')
+        send_log("✏️ Úprava verze aplikace", f"**Uživatel:** {session.get('discord_nick')}\n**Název:** {row['version_name']}\n**Aktivní:** {'Ano' if row['is_active'] else 'Ne'}", 0xf59e0b)
         trigger_setup_messages_update()
     except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
@@ -2679,8 +2676,10 @@ def edit_version():
 @require_dash_level('superadmin')
 def delete_version():
     try:
-        get_db().table("software_versions").delete().eq("id", request.form.get("version_id")).execute()
+        vid = request.form.get("version_id")
+        get_db().table("software_versions").delete().eq("id", vid).execute()
         flash('Verze smazána.', 'success')
+        send_log("🗑️ Smazána verze aplikace", f"**Uživatel:** {session.get('discord_nick')}\n**ID verze:** {vid}", 0xef4444)
         trigger_setup_messages_update()
     except: pass
     return redirect(url_for('dashboard_downloads'))
