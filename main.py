@@ -2625,7 +2625,24 @@ def dashboard_downloads():
 @require_dash_level('superadmin')
 def add_version():
     try:
-        get_db().table("software_versions").insert({"version_name": request.form.get("version_name"), "db_version": request.form.get("db_version"), "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role"), "is_active": True, "eol_date": ""}).execute()
+        db = get_db()
+        row = {
+            "version_name": request.form.get("version_name"),
+            "db_version": request.form.get("db_version"),
+            "file_url": request.form.get("file_url"),
+            "target_role": request.form.get("target_role"),
+            "is_active": True,
+            "eol_date": "",
+            "show_in_launcher": True if request.form.get("show_in_launcher") else False
+        }
+        try:
+            db.table("software_versions").insert(row).execute()
+        except Exception as e:
+            if "show_in_launcher" in str(e) or "PGRST204" in str(e):
+                row.pop("show_in_launcher", None)
+                db.table("software_versions").insert(row).execute()
+            else:
+                raise e
         flash('Nová verze vydána!', 'success')
         trigger_setup_messages_update()
     except Exception as e: flash(f'Chyba: {e}', 'error')
@@ -2635,7 +2652,24 @@ def add_version():
 @require_dash_level('superadmin')
 def edit_version():
     try:
-        get_db().table("software_versions").update({"version_name": request.form.get("version_name"), "db_version": request.form.get("db_version"), "file_url": request.form.get("file_url"), "target_role": request.form.get("target_role"), "is_active": True if request.form.get("is_active") else False, "eol_date": request.form.get("eol_date", "")}).eq("id", request.form.get("version_id")).execute()
+        db = get_db()
+        row = {
+            "version_name": request.form.get("version_name"),
+            "db_version": request.form.get("db_version"),
+            "file_url": request.form.get("file_url"),
+            "target_role": request.form.get("target_role"),
+            "is_active": True if request.form.get("is_active") else False,
+            "eol_date": request.form.get("eol_date", ""),
+            "show_in_launcher": True if request.form.get("show_in_launcher") else False
+        }
+        try:
+            db.table("software_versions").update(row).eq("id", request.form.get("version_id")).execute()
+        except Exception as e:
+            if "show_in_launcher" in str(e) or "PGRST204" in str(e):
+                row.pop("show_in_launcher", None)
+                db.table("software_versions").update(row).eq("id", request.form.get("version_id")).execute()
+            else:
+                raise e
         flash('Verze upravena.', 'success')
         trigger_setup_messages_update()
     except Exception as e: flash(f'Chyba: {e}', 'error')
@@ -2651,52 +2685,6 @@ def delete_version():
     except: pass
     return redirect(url_for('dashboard_downloads'))
 
-@app.route('/dashboard/updater', methods=['GET'], strict_slashes=False)
-def dashboard_updater():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    users = []; releases = []
-    try:
-        db = get_db()
-        if db:
-            users = db.table("app_users").select("*").order("last_login", desc=True).execute().data or []
-            releases = db.table("app_releases").select("*").order("created_at", desc=True).execute().data or []
-    except Exception as e: flash(f"Chyba DB: {e}", "error")
-    return render_dashboard(HTML_UPDATER_MGMT, updater_users=users, updater_releases=releases, deploy_time=DEPLOY_TIME)
-
-@app.route('/dashboard/updater/update_user', methods=['POST'])
-@require_dash_level('superadmin')
-def updater_update_user():
-    try:
-        hwid = request.form.get("hwid")
-        role = request.form.get("role")
-        get_db().table("app_users").update({"role": role}).eq("hwid", hwid).execute()
-        flash('Role uživatele upravena.', 'success')
-    except Exception as e: flash(f'Chyba: {e}', 'error')
-    return redirect(url_for('dashboard_updater'))
-
-@app.route('/dashboard/updater/add_release', methods=['POST'])
-@require_dash_level('superadmin')
-def updater_add_release():
-    try:
-        get_db().table("app_releases").insert({
-            "version": request.form.get("version"),
-            "channel": request.form.get("channel"),
-            "release_notes": request.form.get("release_notes")
-        }).execute()
-        flash('Nová verze přidána do evidence.', 'success')
-    except Exception as e: flash(f'Chyba: {e}', 'error')
-    return redirect(url_for('dashboard_updater'))
-
-@app.route('/dashboard/updater/change_channel', methods=['POST'])
-@require_dash_level('superadmin')
-def updater_change_channel():
-    try:
-        rid = request.form.get("id")
-        channel = request.form.get("channel")
-        get_db().table("app_releases").update({"channel": channel}).eq("id", rid).execute()
-        flash('Kanál verze změněn.', 'success')
-    except Exception as e: flash(f'Chyba: {e}', 'error')
-    return redirect(url_for('dashboard_updater'))
 
 @app.route('/dashboard/pending_roles', methods=['GET'], strict_slashes=False)
 def pending_roles():

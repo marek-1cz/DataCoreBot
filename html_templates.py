@@ -239,7 +239,6 @@ DASHBOARD_LAYOUT = """
 <a href="/dashboard/app_management" class="sidebar-link"><i class="fas fa-desktop"></i> Správa Aplikace</a>
 <a href="/dashboard/notifications" class="sidebar-link" style="color: #f59e0b;"><i class="fas fa-bell"></i> Oznámení</a>
 <a href="/dashboard/downloads" class="sidebar-link"><i class="fas fa-code-branch"></i> Správa Verzí a Přístupů</a>
-<a href="/dashboard/updater" class="sidebar-link"><i class="fas fa-sync"></i> Auto-Updater & Role</a>
 <a href="/dashboard/pending_roles" class="sidebar-link" style="color: #10b981;"><i class="fas fa-ticket-alt"></i> Rezervace Rolí</a>
 <a href="/dashboard/ids" class="sidebar-link"><i class="fas fa-id-badge"></i> Správa ID</a>
 <a href="/dashboard/team" class="sidebar-link"><i class="fas fa-user-plus"></i> Správa Týmu</a>
@@ -934,96 +933,53 @@ HTML_DOWNLOADS_MGMT = """
             <input type="text" name="file_url" placeholder="Odkaz(y) na stažení (více odkazů oddělte čárkou)" required>
             <label style="color: var(--text-muted); font-size: 13px;">Pro jakou roli?</label>
             <select name="target_role" required><option value="User">User (Všichni)</option><option value="BT">BETA TESTER</option><option value="DEV_SA">DEV / SERVER ADMIN</option></select>
+            <label style="color: var(--text-muted); font-size: 13px; display: block; margin-top: 10px; margin-bottom: 10px;">
+                <input type="checkbox" name="show_in_launcher" checked style="margin-right: 5px;"> Zobrazit v Launcheru jako nabídku ke hraní?
+            </label>
             <button type="submit" class="btn" style="width: 100%;">Přidat verzi</button>
         </form>
     </div>
 </div>
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-top: 20px;">
     <h3 style="color: var(--blue-main); margin-top: 0;">📦 Vydané verze softwaru</h3>
-    <table><tr><th>Název</th><th>Verze pro DB</th><th>Stav</th><th>Cílová Skupina</th><th>Akce</th></tr>
-    {% for v in versions %}{% set is_active = (v.get('is_active', True) | string | lower) != 'false' %}<tr style="opacity: {{ '1' if is_active else '0.5' }};"><td><strong>{{ v.get('version_name', '') }}</strong></td><td style="color: var(--warning); font-family: monospace;">{{ v.get('db_version', '') }}</td><td>{% if is_active %}<span class="role-tag" style="background-color: var(--success); color: white;">Aktivní</span>{% else %}<span class="role-tag" style="background-color: var(--danger); color: white;">Zablokováno</span>{% endif %}</td><td>{% if v.get('target_role') == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User</span>{% elif v.get('target_role') == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BT+</span>{% else %}<span class="role-tag" style="background-color: #ef4444; color: white;">DEV/SA</span>{% endif %}</td><td style="display:flex; gap:5px;"><form action="/dashboard/delete_version" method="POST" style="display:inline;"><input type="hidden" name="version_id" value="{{ v.get('id', '') }}"><button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Odebrat?')"><i class="fas fa-trash"></i></button></form></td></tr>{% else %}<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Zatím nebyly přidány žádné verze.</td></tr>{% endfor %}</table>
+    <table><tr><th>Název</th><th>Verze pro DB</th><th>Stav</th><th>Cílová Skupina</th><th>V Launcheru</th><th>Akce</th></tr>
+    {% for v in versions %}{% set is_active = (v.get('is_active', True) | string | lower) != 'false' %}{% set in_launcher = (v.get('show_in_launcher', True) | string | lower) != 'false' %}<tr style="opacity: {{ '1' if is_active else '0.5' }};"><td><strong>{{ v.get('version_name', '') }}</strong></td><td style="color: var(--warning); font-family: monospace;">{{ v.get('db_version', '') }}</td><td>{% if is_active %}<span class="role-tag" style="background-color: var(--success); color: white;">Aktivní</span>{% else %}<span class="role-tag" style="background-color: var(--danger); color: white;">Zablokováno</span>{% endif %}</td><td>{% if v.get('target_role') == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User</span>{% elif v.get('target_role') == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BT+</span>{% else %}<span class="role-tag" style="background-color: #ef4444; color: white;">DEV/SA</span>{% endif %}</td><td>{% if in_launcher %}<i class="fas fa-check" style="color:var(--success);"></i>{% else %}<i class="fas fa-times" style="color:var(--danger);"></i>{% endif %}</td><td style="display:flex; gap:5px;"><button class="btn" style="padding: 5px 10px; font-size: 12px; background:var(--blue-main);" onclick="document.getElementById('editVersionModal_{{ v.get('id') }}').style.display='flex'"><i class="fas fa-edit"></i></button><form action="/dashboard/delete_version" method="POST" style="display:inline;"><input type="hidden" name="version_id" value="{{ v.get('id', '') }}"><button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu odebrat?')"><i class="fas fa-trash"></i></button></form></td></tr>
+    
+    <div id="editVersionModal_{{ v.get('id') }}" class="modal-overlay" style="display: none; align-items: center; justify-content: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000;">
+        <div class="modal-content" style="background: var(--bg-panel); padding: 25px; border-radius: 12px; width: 90%; max-width: 500px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: var(--text-main);">Upravit Verzi</h2>
+                <button onclick="document.getElementById('editVersionModal_{{ v.get('id') }}').style.display='none'" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 20px;"><i class="fas fa-times"></i></button>
+            </div>
+            <form action="/dashboard/edit_version" method="POST">
+                <input type="hidden" name="version_id" value="{{ v.get('id', '') }}">
+                <label style="color: var(--text-muted); font-size: 13px;">Název Verze</label>
+                <input type="text" name="version_name" value="{{ v.get('version_name', '') }}" required>
+                <label style="color: var(--text-muted); font-size: 13px;">DB Verze</label>
+                <input type="text" name="db_version" value="{{ v.get('db_version', '') }}" required>
+                <label style="color: var(--text-muted); font-size: 13px;">Soubory (odkazy ke stažení)</label>
+                <input type="text" name="file_url" value="{{ v.get('file_url', '') }}" required>
+                <label style="color: var(--text-muted); font-size: 13px;">Role (Přístup)</label>
+                <select name="target_role" required>
+                    <option value="User" {% if v.get('target_role') == 'User' %}selected{% endif %}>User (Všichni)</option>
+                    <option value="BT" {% if v.get('target_role') == 'BT' %}selected{% endif %}>BETA TESTER</option>
+                    <option value="DEV_SA" {% if v.get('target_role') == 'DEV_SA' %}selected{% endif %}>DEV / SERVER ADMIN</option>
+                </select>
+                <label style="color: var(--text-muted); font-size: 13px; display: block; margin-top: 10px; margin-bottom: 5px;">
+                    <input type="checkbox" name="is_active" {% if is_active %}checked{% endif %} style="margin-right: 5px;"> Aktivní (lze stáhnout a spustit)
+                </label>
+                <label style="color: var(--text-muted); font-size: 13px; display: block; margin-bottom: 15px;">
+                    <input type="checkbox" name="show_in_launcher" {% if in_launcher %}checked{% endif %} style="margin-right: 5px;"> Viditelné v Launcheru
+                </label>
+                <button type="submit" class="btn" style="width: 100%;">Uložit Změny</button>
+            </form>
+        </div>
+    </div>
+    {% else %}<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Zatím nebyly přidány žádné verze.</td></tr>{% endfor %}</table>
 </div>
 """
 
-HTML_UPDATER_MGMT = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;"><h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-sync" style="color:var(--blue-main);"></i> Auto-Updater & Role</h2></div>
 
-<div style="display: flex; gap: 20px; flex-wrap: wrap;">
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">👥 Správa Rolí Uživatelů</h3>
-        <table>
-            <tr><th>HWID Uživatele</th><th>Aktuální Role</th><th>Změnit na</th></tr>
-            {% for u in updater_users %}
-            <tr>
-                <td style="font-family: monospace;">{{ u.get('hwid', '') }}</td>
-                <td>
-                    {% if u.get('role') == 'public' %}<span class="role-tag" style="background-color: #64748b; color: white;">Public</span>
-                    {% elif u.get('role') == 'beta_tester' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">Beta Tester</span>
-                    {% elif u.get('role') == 'developer' %}<span class="role-tag" style="background-color: #ef4444; color: white;">Developer</span>
-                    {% else %}{{ u.get('role') }}{% endif %}
-                </td>
-                <td>
-                    <form action="/dashboard/updater/update_user" method="POST" style="display:flex; gap:5px;">
-                        <input type="hidden" name="hwid" value="{{ u.get('hwid', '') }}">
-                        <select name="role">
-                            <option value="public" {% if u.get('role') == 'public' %}selected{% endif %}>Public</option>
-                            <option value="beta_tester" {% if u.get('role') == 'beta_tester' %}selected{% endif %}>Beta Tester</option>
-                            <option value="developer" {% if u.get('role') == 'developer' %}selected{% endif %}>Developer</option>
-                        </select>
-                        <button type="submit" class="btn btn-primary" style="padding: 5px;">Uložit</button>
-                    </form>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Zatím žádní uživatelé</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">📦 Evidované Verze (GitHub)</h3>
-        <p style="color: var(--text-muted); font-size: 13px;">Poznámka: Auto-updater stahuje buildy z GitHub Releases (latest.yml / beta.yml). Zde jen měníš evidenci.</p>
-        
-        <form action="/dashboard/updater/add_release" method="POST" style="margin-bottom:15px; padding-bottom:15px; border-bottom:1px solid #333;">
-            <input type="text" name="version" placeholder="Verze (např. 1.7.0)" required>
-            <select name="channel" required>
-                <option value="developer">Developer (Alpha)</option>
-                <option value="beta">Beta</option>
-                <option value="public">Public (Latest)</option>
-            </select>
-            <input type="text" name="release_notes" placeholder="Poznámky (nepovinné)">
-            <button type="submit" class="btn" style="width: 100%;">Přidat do evidence</button>
-        </form>
-
-        <table>
-            <tr><th>Verze</th><th>Kanál</th><th>Akce</th></tr>
-            {% for r in updater_releases %}
-            <tr>
-                <td><strong>{{ r.get('version', '') }}</strong></td>
-                <td>
-                    {% if r.get('channel') == 'public' %}<span class="role-tag" style="background-color: #10b981; color: white;">Public</span>
-                    {% elif r.get('channel') == 'beta' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">Beta</span>
-                    {% else %}<span class="role-tag" style="background-color: #ef4444; color: white;">Developer</span>{% endif %}
-                </td>
-                <td>
-                    <form action="/dashboard/updater/change_channel" method="POST" style="display:flex; gap:5px;">
-                        <input type="hidden" name="id" value="{{ r.get('id', '') }}">
-                        <select name="channel">
-                            <option value="developer" {% if r.get('channel') == 'developer' %}selected{% endif %}>Dev</option>
-                            <option value="beta" {% if r.get('channel') == 'beta' %}selected{% endif %}>Beta</option>
-                            <option value="public" {% if r.get('channel') == 'public' %}selected{% endif %}>Public</option>
-                        </select>
-                        <button type="submit" class="btn btn-primary" style="padding: 5px;">Změnit</button>
-                    </form>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Zatím žádné verze</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-</div>
-"""
 
 HTML_PENDING_ROLES = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;"><h2 style="margin: 0; color: var(--text-main);">Rezervace Rolí</h2></div>
