@@ -4203,6 +4203,11 @@ def _load_depot_zones(db):
         loaded = []
         for row in (res.data or []):
             poly = row.get("polygon")
+            if isinstance(poly, str):
+                try:
+                    poly = json.loads(poly)
+                except Exception:
+                    pass
             if not poly or len(poly) < 3:
                 continue
             loaded.append({
@@ -4966,7 +4971,10 @@ def background_map_worker():
                             c["is_offline"] = False
                             c["raw_delay"] = delay
                             c["is_train"] = is_train
-                            dm = math.hypot(lat1 - c["lat"], lng1 - c["lng"])
+                            if "last_moved_lat" not in c:
+                                c["last_moved_lat"] = c["lat"]
+                                c["last_moved_lng"] = c["lng"]
+                            dm = math.hypot(lat1 - c["last_moved_lat"], lng1 - c["last_moved_lng"])
                             
                             is_restored = c.pop("_is_restored", False)
                             if is_restored:
@@ -5040,6 +5048,8 @@ def background_map_worker():
                                 x = math.cos(l1r) * math.sin(l2r) - math.sin(l1r) * math.cos(l2r) * math.cos(ld)
                                 c["bearing"] = int((math.degrees(math.atan2(y, x)) + 360) % 360)
                                 c["last_moved"] = now
+                                c["last_moved_lat"] = lat1
+                                c["last_moved_lng"] = lng1
                                 if GTFS_LOADED:
                                     c["nearest_stop"] = _nearest_stop_name(lat1, lng1, 500)
                             c["lat"] = lat1
