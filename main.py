@@ -4203,8 +4203,8 @@ def mirror_mobile_ui(session_id):
             <div class="mobile-settings-btn" onclick="openMobileSettings()">⚙</div>
         </div>
 
-        <div class="drive-current-box" id="status-box">SPOJENÍ S PC AKTIVNÍ</div>
-        <div class="status-note">ODESÍLÁM STISKY · ŽIVÝ TEXT ZASTÁVEK NENÍ DOSTUPNÝ</div>
+        <div class="drive-current-box" id="status-box">PŘIPOJUJI SE...</div>
+        <div class="status-note"><div id='mobile-state-text'>Načítání zrcadla...</div></div>
 
         <div id="drive-controls-area">
             <button type="button" class="big-drive-btn" onclick="sendAction('space')">
@@ -4276,7 +4276,7 @@ def mirror_mobile_ui(session_id):
             flashTimeout = setTimeout(() => {
                 box.style.borderColor = 'rgba(244,204,23,0.7)';
                 box.style.color = 'var(--idpk-yellow)';
-                box.textContent = 'SPOJENÍ S PC AKTIVNÍ';
+                box.textContent = 'PŘIPOJUJI SE...';
             }, 700);
         }
 
@@ -4307,7 +4307,7 @@ def mirror_mobile_ui(session_id):
                     box.style.borderColor = 'rgba(231,76,60,0.7)';
                     box.style.color = '#e74c3c';
                     box.textContent = 'PC JE OFFLINE';
-                    if (txt) txt.innerHTML = 'Palubn� po��ta� nen� p�ipojen.';
+                    if (txt) txt.innerHTML = 'Palubní počítač není připojen.';
                 } else if (data.status === 'online') {
                     box.style.borderColor = 'rgba(4,142,86,0.8)';
                     box.style.color = '#2ecc71';
@@ -4315,13 +4315,13 @@ def mirror_mobile_ui(session_id):
                     if (txt && data.state) {
                         let info = '';
                         if (data.state.appState === 'LINKOSPOJ') {
-                            info = 'V�B�R LINKY: ' + (data.state.displayLinkospoj || '---');
+                            info = 'VÝBĚR LINKY: ' + (data.state.displayLinkospoj || '---');
                         } else if (data.state.appState === 'IDPK_LINE') {
-                            info = 'IDPK DATAB�ZE';
+                            info = 'IDPK DATABÁZE';
                         } else if (data.state.appState === 'DRIVE') {
                             info = (data.state.header || '') + '<br>' + (data.state.currStop || '');
                         } else {
-                            info = data.state.appState || '�ek�n� na akci...';
+                            info = data.state.appState || 'Čekání na akci...';
                         }
                         txt.innerHTML = info;
                     }
@@ -4331,12 +4331,13 @@ def mirror_mobile_ui(session_id):
                 const box = document.getElementById('status-box');
                 box.style.borderColor = 'rgba(231,76,60,0.7)';
                 box.style.color = '#e74c3c';
-                box.textContent = 'SPOJEN� ZTRACENO';
+                box.textContent = 'SPOJENÍ ZTRACENO';
             };
         }
         connectSSE();
     </script>
 </body>
+
 </html>
     """
     return render_template_string(html, session_id=session_id)
