@@ -1379,7 +1379,10 @@ def api_app_login():
         client_ip_raw = request.headers.get('X-Forwarded-For', request.remote_addr)
         client_ip = client_ip_raw.split(',')[0].strip() if client_ip_raw else "Neznámá"
         if identifier.isdigit():
-            user_resp = db.table("users").select("*").or_(f"discord_id.eq.{identifier},app_id.eq.{int(identifier)}").execute()
+            if len(identifier) < 10:
+                user_resp = db.table("users").select("*").or_(f"discord_id.eq.{identifier},app_id.eq.{int(identifier)}").execute()
+            else:
+                user_resp = db.table("users").select("*").eq("discord_id", identifier).execute()
         else:
             user_resp = db.table("users").select("*").eq("nick", identifier).execute()
         if not user_resp.data:
