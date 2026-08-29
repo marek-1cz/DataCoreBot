@@ -1986,7 +1986,7 @@ def web_auth_finalize():
             
             # Nastavíme cookie přes Flask Response, ale vrátíme meta refresh stránku s animací
             from flask import make_response
-            html_content = f"""
+            html_content = """
             <html>
             <head>
                 <meta http-equiv="refresh" content="4;url=/ucet">
@@ -2009,7 +2009,7 @@ def web_auth_finalize():
                         <div class="icon-fix"></div>
                     </div>
                 </div>
-                <h2>{status_text}</h2>
+                <h2>""" + status_text + """</h2>
                 <script>
                     setTimeout(() => { window.location.href = '/ucet'; }, 4000);
                 </script>
