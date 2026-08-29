@@ -3991,17 +3991,20 @@ def mirror_pc_sync():
     if discord_id:
         try:
             db = get_db()
-            if discord_id.startswith('email-'):
+            if discord_id == 'VSC-DEV':
+                allowed = True
+            elif discord_id.startswith('email-'):
                 user_id = discord_id.split('-')[1]
                 resp = db.table('users').select('role').eq('id', user_id).execute()
             else:
                 resp = db.table('users').select('role').eq('discord_id', discord_id).execute()
+            print('mirror_pc_sync auth:', discord_id, resp.data)
             if resp.data and len(resp.data) > 0:
                 role = resp.data[0].get('role', '')
                 if any(x in role for x in ['BT', 'DEV', 'SA']):
                     allowed = True
-        except:
-            pass
+        except Exception as e:
+            print('mirror_pc_sync auth error:', e)
             
     if not allowed and discord_id != 'VSC-DEV':
         return jsonify({"error": "Nemas opravneni (Vyžadována Premium role)"}), 403
