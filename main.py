@@ -3990,7 +3990,12 @@ def mirror_pc_sync():
     allowed = False
     if discord_id:
         try:
-            resp = supabase.table('users').select('role').eq('discord_id', discord_id).execute()
+            db = get_db()
+            if discord_id.startswith('email-'):
+                user_id = discord_id.split('-')[1]
+                resp = db.table('users').select('role').eq('id', user_id).execute()
+            else:
+                resp = db.table('users').select('role').eq('discord_id', discord_id).execute()
             if resp.data and len(resp.data) > 0:
                 role = resp.data[0].get('role', '')
                 if any(x in role for x in ['BT', 'DEV', 'SA']):
