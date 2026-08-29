@@ -4072,273 +4072,507 @@ def mirror_mobile_ui(session_id):
     Zobrazí mobilní webové rozhraní (Ovladač do kapsy).
     """
     html = """
-<!DOCTYPE html>
-<html lang="cs">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>IDPK Mobilní Ovladač</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
+
+    <!DOCTYPE html>
+    <html lang="cs">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+        <title>IDPK Mobilní Zrcadlo (1:1)</title>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+        <style>
+            
         :root {
-            --idpk-blue: #035689;
-            --idpk-dark-blue: #023e63;
-            --idpk-yellow: #F4CC17;
-            --idpk-green: #048E56;
-            --idpk-red: #e74c3c;
-            --btn-bg: #e0e0e0;
-            --btn-shadow: #999;
+            --idpk-blue: #035689; --idpk-dark-blue: #023e63; --idpk-yellow: #F4CC17;
+            --idpk-green: #048E56; --idpk-red: #e74c3c; --text-white: #ffffff;
+            --btn-bg: #e0e0e0; --btn-shadow: #999;
         }
-        * { box-sizing: border-box; }
         ::-webkit-scrollbar { display: none; }
-        body {
-            background-color: var(--idpk-blue);
-            display: flex; justify-content: center; align-items: flex-start;
-            height: 100vh; margin: 0;
-            font-family: 'Segoe UI', Roboto, sans-serif;
-            user-select: none; overflow: hidden;
+        * { box-sizing: border-box; }
+        body { background-color: var(--idpk-blue); display: flex; flex-direction: row; justify-content: flex-start; align-items: flex-start; height: 100vh; margin: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; user-select: none; overflow: hidden; transition: width 0.3s ease; }
+        .main-container { width: 380px; flex-shrink: 0; height: 100vh; display: flex; flex-direction: column; padding: 15px; position: relative; }
+
+        .loading-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; background: var(--idpk-blue) !important; z-index: 50000 !important; display: none; justify-content: center; align-items: center; flex-direction: column; color: white; font-weight: bold; }
+        .startup-screen { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; background: var(--idpk-blue) !important; z-index: 60000 !important; display: flex; justify-content: center; align-items: center; flex-direction: column; }
+        .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.3); border-top: 4px solid var(--idpk-yellow); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px;}
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .startup-title { font-size: 24px; font-weight: 900; color: white; margin-top: 10px; }
+
+        .settings-btn { position: absolute; top: 5px; right: 5px; width: 35px; height: 35px; color: rgba(255, 255, 255, 0.5); font-size: 24px; display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 9999; transition: color 0.2s;}
+        .settings-btn:hover { color: var(--idpk-yellow); }
+        .star-btn { position: absolute; top: 5px; right: 45px; width: 35px; height: 35px; color: #F4CC17; font-size: 20px; display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 9999; animation: starGlow 2s infinite alternate; }
+        @keyframes starGlow { from { text-shadow: 0 0 5px rgba(244, 204, 23, 0.5); transform: scale(1); } to { text-shadow: 0 0 15px rgba(244, 204, 23, 1); transform: scale(1.1); } }
+        @keyframes pulseExtreme { from { box-shadow: 0 0 15px rgba(255, 51, 51, 0.6); transform: scale(1); } to { box-shadow: 0 0 40px rgba(255, 51, 51, 1); transform: scale(1.03); } }
+
+        /* === PREMIUM BADGE – smart animace === */
+        #premium-watermark {
+            display: none;
+            position: absolute;
+            top: 5px;
+            right: 85px;
+            z-index: 9998;
+            pointer-events: all;
+            cursor: pointer;
         }
-        .main-container {
-            width: 100%; max-width: 420px; height: 100vh;
-            display: flex; flex-direction: column;
-            padding: 12px 12px 8px 12px; position: relative;
+        #premium-watermark .pw-inner {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: linear-gradient(135deg, rgba(244,204,23,0.2), rgba(244,204,23,0.1));
+            border: 1px solid rgba(244, 204, 23, 0.5);
+            border-radius: 20px;
+            padding: 3px 10px;
+            backdrop-filter: blur(4px);
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            overflow: hidden;
+            white-space: nowrap;
         }
-        .system-header {
-            text-align: center; font-size: 13px; margin-bottom: 10px;
-            letter-spacing: 2px; border-bottom: 1px solid rgba(255,255,255,0.25);
-            padding-bottom: 8px; color: white; font-weight: bold;
-            flex-shrink: 0; position: relative;
+        #premium-watermark.pw-collapsed .pw-inner {
+            padding: 3px 6px;
+            border-radius: 50%;
+            gap: 0;
+            background: transparent;
+            border-color: transparent;
         }
-        .mobile-settings-btn {
-            position: absolute; top: 0; right: 0;
-            width: 32px; height: 32px; color: rgba(255,255,255,0.5);
-            font-size: 20px; display: flex; justify-content: center;
-            align-items: center; cursor: pointer; transition: color 0.2s;
+        #premium-watermark.pw-collapsed .pw-text {
+            max-width: 0;
+            opacity: 0;
+            margin: 0;
+            padding: 0;
         }
-        .mobile-settings-btn:hover { color: var(--idpk-yellow); }
-        .drive-current-box {
-            width: 100%; padding: 10px 12px;
-            background: rgba(0,0,0,0.35); border: 1px dashed rgba(244,204,23,0.7);
-            border-radius: 8px; color: var(--idpk-yellow); font-size: 15px;
-            font-weight: bold; text-align: center; margin-bottom: 6px; flex-shrink: 0;
-            transition: border-color 0.3s, color 0.3s;
+        #premium-watermark .pw-star { font-size: 11px; color: #F4CC17; animation: premiumGlow 2s ease-in-out infinite alternate; flex-shrink: 0; }
+        #premium-watermark .pw-text {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #F4CC17;
+            max-width: 120px;
+            opacity: 1;
+            transition: max-width 0.4s ease, opacity 0.3s ease;
         }
-        .status-note {
-            color: rgba(255,255,255,0.4); font-size: 10px; text-align: center;
-            font-weight: bold; margin-bottom: 8px; flex-shrink: 0; letter-spacing: 1px;
+        @keyframes premiumGlow {
+            from { text-shadow: 0 0 4px rgba(244,204,23,0.5); }
+            to { text-shadow: 0 0 12px rgba(244,204,23,1), 0 0 20px rgba(244,204,23,0.5); }
         }
-        #drive-controls-area { flex-shrink: 0; margin-bottom: 8px; }
-        .big-drive-btn {
-            width: 100%; height: 58px; background-color: var(--idpk-yellow);
-            color: #333; font-weight: 900; font-size: 16px; border: none;
-            border-radius: 10px; box-shadow: 0 4px 0 #cba90f; cursor: pointer;
-            margin-bottom: 8px; display: flex; align-items: center;
-            justify-content: center; gap: 8px;
+
+        /* === GLASS BUTTONS ENHANCED GLOW === */
+        .glass-btn {
+            width: 100%;
+            padding: 13px 16px;
+            margin-bottom: 7px;
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 12px;
+            background: rgba(255,255,255,0.09);
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+            backdrop-filter: blur(4px);
         }
-        .big-drive-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #cba90f; }
-        .small-btns-row { display: flex; gap: 8px; }
-        .small-action-btn {
-            flex: 1; height: 46px; font-size: 13px; font-weight: bold;
-            border: none; border-radius: 8px; cursor: pointer;
-            background: #ddd; color: black; box-shadow: 0 3px 0 #999;
+        .glass-btn:hover { background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.3); box-shadow: 0 4px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15); }
+        .glass-btn:active { background: rgba(255,255,255,0.22); transform: scale(0.98); }
+        .glass-btn .gb-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+        .glass-btn.gb-yellow { border-color: rgba(244,204,23,0.5); background: rgba(244,204,23,0.12); }
+        .glass-btn.gb-yellow:hover { background: rgba(244,204,23,0.22); box-shadow: 0 4px 16px rgba(244,204,23,0.2); border-color: rgba(244,204,23,0.7); }
+        .glass-btn.gb-green { border-color: rgba(4,142,86,0.6); background: rgba(4,142,86,0.18); }
+        .glass-btn.gb-green:hover { background: rgba(4,142,86,0.3); box-shadow: 0 4px 16px rgba(4,142,86,0.25); }
+        .glass-btn.gb-red { border-color: rgba(231,76,60,0.6); background: rgba(231,76,60,0.18); }
+        .glass-btn.gb-red:hover { background: rgba(231,76,60,0.3); box-shadow: 0 4px 16px rgba(231,76,60,0.25); }
+        .glass-btn.gb-blue { border-color: rgba(52,152,219,0.6); background: rgba(52,152,219,0.18); }
+        .glass-btn.gb-blue:hover { background: rgba(52,152,219,0.3); box-shadow: 0 4px 16px rgba(52,152,219,0.25); }
+        .glass-btn.gb-purple { border-color: rgba(168,85,247,0.6); background: rgba(168,85,247,0.18); }
+        .glass-btn.gb-purple:hover { background: rgba(168,85,247,0.3); box-shadow: 0 4px 16px rgba(168,85,247,0.25); }
+        .glass-btn.gb-orange { border-color: rgba(243,156,18,0.6); background: rgba(243,156,18,0.18); }
+        .glass-btn.gb-orange:hover { background: rgba(243,156,18,0.3); box-shadow: 0 4px 16px rgba(243,156,18,0.25); }
+        .glass-close-btn {
+            width: 100%;
+            padding: 13px;
+            margin-top: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            background: rgba(255,255,255,0.06);
+            color: rgba(255,255,255,0.8);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
         }
+        .glass-close-btn:hover { background: rgba(255,255,255,0.14); color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+
+        /* === LINK SELECTION REDESIGN === */
+        .link-search-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(0,0,20,0.6);
+            border: 2px solid rgba(244,204,23,0.5);
+            border-radius: 12px;
+            padding: 10px 14px;
+            margin-bottom: 10px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .link-search-box:focus-within {
+            border-color: var(--idpk-yellow);
+            box-shadow: 0 0 16px rgba(244,204,23,0.3);
+        }
+        .link-search-icon { color: rgba(244,204,23,0.7); font-size: 16px; flex-shrink: 0; }
+        #search-linkospoj-input {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 22px;
+            font-weight: 700;
+            font-family: 'Consolas', monospace;
+            width: 100%;
+            outline: none;
+            letter-spacing: 1px;
+        }
+        #search-linkospoj-input::placeholder { color: rgba(255,255,255,0.2); font-weight: 400; font-size: 16px; }
+        .link-search-clear {
+            color: rgba(255,255,255,0.4);
+            font-size: 18px;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: color 0.2s;
+        }
+        .link-search-clear:hover { color: var(--idpk-yellow); }
+        .link-suggestions {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .link-suggestion-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(255,255,255,0.04);
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, transform 0.1s;
+            animation: slideInItem 0.15s ease;
+        }
+        @keyframes slideInItem {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .link-suggestion-item:hover { background: rgba(255,255,255,0.1); border-color: rgba(244,204,23,0.3); }
+        .link-suggestion-item.lsi-selected {
+            background: rgba(244,204,23,0.15);
+            border-color: rgba(244,204,23,0.6);
+            box-shadow: 0 0 10px rgba(244,204,23,0.15);
+        }
+        .lsi-badge {
+            background: rgba(244,204,23,0.2);
+            border: 1px solid rgba(244,204,23,0.4);
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 18px;
+            font-weight: 900;
+            color: var(--idpk-yellow);
+            flex-shrink: 0;
+            min-width: 50px;
+            text-align: center;
+        }
+        .lsi-badge.beta { background: rgba(52,152,219,0.2); border-color: rgba(52,152,219,0.4); color: #3498db; }
+        .lsi-name { flex: 1; font-size: 12px; color: rgba(255,255,255,0.6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lsi-match { color: var(--idpk-yellow); font-weight: 700; }
+        .link-no-results {
+            text-align: center;
+            color: rgba(255,255,255,0.35);
+            font-size: 13px;
+            padding: 30px 20px;
+        }
+        .link-empty-state {
+            text-align: center;
+            color: rgba(255,255,255,0.25);
+            font-size: 12px;
+            padding: 20px;
+            line-height: 2;
+        }
+        .link-select-section-title {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            color: rgba(255,255,255,0.3);
+            text-transform: uppercase;
+            padding: 4px 0 6px 2px;
+            margin-bottom: 4px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .glass-section-title {
+            width: 100%;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.4);
+            padding: 4px 0 6px 2px;
+            margin-top: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            margin-bottom: 8px;
+        }
+        .glass-btn {
+            width: 100%;
+            padding: 12px 16px;
+            margin-bottom: 7px;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px;
+            background: rgba(255,255,255,0.06);
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: background 0.2s, border-color 0.2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.07);
+            backdrop-filter: blur(4px);
+        }
+        .glass-btn:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); }
+        .glass-btn:active { background: rgba(255,255,255,0.18); transform: scale(0.98); }
+        .glass-btn .gb-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+        .glass-btn.gb-yellow { border-color: rgba(244,204,23,0.4); background: rgba(244,204,23,0.1); }
+        .glass-btn.gb-yellow:hover { background: rgba(244,204,23,0.18); }
+        .glass-btn.gb-green { border-color: rgba(4,142,86,0.5); background: rgba(4,142,86,0.15); }
+        .glass-btn.gb-green:hover { background: rgba(4,142,86,0.25); }
+        .glass-btn.gb-red { border-color: rgba(231,76,60,0.5); background: rgba(231,76,60,0.15); }
+        .glass-btn.gb-red:hover { background: rgba(231,76,60,0.25); }
+        .glass-btn.gb-blue { border-color: rgba(52,152,219,0.5); background: rgba(52,152,219,0.15); }
+        .glass-btn.gb-blue:hover { background: rgba(52,152,219,0.25); }
+        .glass-btn.gb-purple { border-color: rgba(168,85,247,0.5); background: rgba(168,85,247,0.15); }
+        .glass-btn.gb-purple:hover { background: rgba(168,85,247,0.25); }
+        .glass-btn.gb-orange { border-color: rgba(243,156,18,0.5); background: rgba(243,156,18,0.15); }
+        .glass-btn.gb-orange:hover { background: rgba(243,156,18,0.25); }
+        .glass-close-btn {
+            width: 100%;
+            padding: 13px;
+            margin-top: 8px;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 12px;
+            background: rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.7);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .glass-close-btn:hover { background: rgba(255,255,255,0.14); color: white; }
+
+        /* Modaly jako OVERLAY – bez zvětšení okna */
+        .settings-modal, .funk-modal { position: fixed; left: 0; right: 0; top: 0; bottom: 0; width: 100%; background-color: var(--idpk-dark-blue); z-index: 10000; display: none; flex-direction: column; padding: 15px; align-items: center; justify-content: flex-start; overflow-y: auto; }
+        .glass-modal { background: rgba(2, 30, 50, 0.92) !important; backdrop-filter: blur(24px) !important; -webkit-backdrop-filter: blur(24px) !important; }
+        .settings-title, .funk-title { color: var(--idpk-yellow); font-size: 18px; font-weight: bold; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; border-bottom: 2px solid white; padding-bottom: 5px; width: 100%; text-align: center; }
+        .settings-action-btn, .funk-btn-close { width: 100%; height: 45px; margin-bottom: 8px; font-weight: bold; font-size: 13px; border: none; border-radius: 6px; cursor: pointer; text-transform: uppercase; box-shadow: 0 3px 0 rgba(0,0,0,0.3); transition: background 0.2s, color 0.2s;}
+        .settings-action-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,0.3); }
+
+
+        #debug-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 999999; flex-direction: column; padding: 20px; color: #0f0; font-family: monospace; box-sizing: border-box; }
+
+        .error-modal { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--idpk-blue); z-index: 80000; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+        .error-inner-box { width: 100%; background: #011f32; border: 2px solid #e74c3c; border-radius: 8px; padding: 20px; box-shadow: 0 0 25px rgba(231, 76, 60, 0.8); }
+        .error-icon-triangle { font-size: 60px; color: #e74c3c; margin-bottom: 10px; font-weight: bold; text-shadow: 0 0 15px rgba(231, 76, 60, 0.8); }
+        .error-msg-box { color: white; font-size: 15px; margin-bottom: 25px; text-align: center; line-height: 1.4; }
+        .error-back-btn { background: #c0392b; color: white; border: none; border-radius: 6px; width: 100%; padding: 15px; font-weight: bold; font-size: 14px; cursor: pointer; box-shadow: 0 4px 0 #922b21; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+        .error-back-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #922b21; }
+
+        .announcement-modal { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(3, 86, 137, 0.95); z-index: 95000; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; backdrop-filter: blur(5px); }
+        .announcement-inner-box { width: 100%; background: #012a45; border: 2px solid var(--idpk-yellow); border-radius: 8px; padding: 25px 20px; box-shadow: 0 0 30px rgba(244, 204, 23, 0.4); display: flex; flex-direction: column; align-items: center; max-height: 90vh; }
+        .announcement-logo { max-width: 120px; margin-bottom: 15px; filter: drop-shadow(0 0 10px rgba(0,0,0,0.5)); }
+        .announcement-title { color: var(--idpk-yellow); font-size: 18px; font-weight: 900; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .announcement-content { color: white; font-size: 14px; line-height: 1.5; margin-bottom: 25px; width: 100%; overflow-y: auto; max-height: 250px; text-align: center; }
+
+        .screen-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; margin-bottom: 10px; position: relative; z-index: 1; width: 100%; }
+        .system-header { text-align: center; font-size: 14px; margin-bottom: 15px; letter-spacing: 2px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; color: white; font-weight: bold; text-shadow: 0 0 5px rgba(0,0,0,0.5); width: 100%; flex-shrink: 0; }
+
+        .login-view { display: none; flex-direction: column; width: 100%; height: 100%; align-items: center; justify-content: center; position: relative; }
+        .auth-input-container { background: #012a45; width: 100%; border-radius: 8px; padding: 15px 15px; border-left: 5px solid var(--idpk-yellow); box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 15px; box-sizing: border-box; }
+        .auth-input-label { color: white; font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+        .auth-input-field { background: transparent; border: none; color: white; font-size: 20px; font-weight: bold; width: 100%; outline: none; }
+        .auth-input-field::placeholder { color: rgba(255,255,255,0.3); font-weight: normal; }
+        .auth-btn-green { background: var(--idpk-green); color: white; border: none; padding: 15px; width: 100%; border-radius: 6px; font-weight: bold; font-size: 14px; cursor: pointer; box-shadow: 0 4px 0 #025c37; box-sizing: border-box; }
+        .auth-btn-green:active { transform: translateY(2px); box-shadow: 0 2px 0 #025c37; }
+        .auth-btn-dark { background: #012a45; color: white; border: 1px solid var(--idpk-yellow); padding: 15px; width: 100%; border-radius: 6px; font-weight: bold; font-size: 14px; cursor: pointer; margin-bottom: 10px; transition: 0.2s; box-sizing: border-box; }
+        .auth-btn-dark:hover { background: rgba(244, 204, 23, 0.1); }
+        .auth-btn-dark:active { background: var(--idpk-yellow); color: black; }
+        .auth-spinner { width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.1); border-top: 5px solid var(--idpk-yellow); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        .auth-info-box { background: #012a45; border-left: 4px solid var(--idpk-yellow); border-radius: 6px; padding: 15px; width: 100%; margin-top: 20px; color: white; font-size: 12px; line-height: 1.5; box-sizing: border-box; }
+
+        .pin-container { display: flex; gap: 20px; justify-content: center; margin: 30px 0 40px 0; width: 100%; }
+        .pin-dot { width: 25px; height: 25px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); background: transparent; transition: all 0.2s; }
+        .pin-dot.active { background: var(--idpk-yellow); border-color: var(--idpk-yellow); box-shadow: 0 0 15px rgba(244, 204, 23, 0.8); }
+        .hwid-watermark { position: absolute; bottom: 0; width: 100%; text-align: center; color: rgba(255,255,255,0.15); font-size: 10px; pointer-events: none; }
+
+        .input-display { background: #002244; color: #fff; font-family: 'Consolas', monospace; font-size: 28px; padding: 10px; border-bottom: 3px solid var(--idpk-yellow); text-align: right; margin-bottom: 10px; font-weight: bold; width: 100%; }
+        .list-toggle-row { display: flex; align-items: center; padding: 8px; margin-top: 10px; border-radius: 5px; cursor: pointer; font-size: 14px; color: rgba(255,255,255,0.9); border: 1px solid transparent; transition: background 0.2s; width: 100%; }
+        .list-toggle-row.selected { background: rgba(255,255,255,0.1); border: 1px solid var(--idpk-yellow); color: var(--idpk-yellow); }
+        .link-list-container { position: absolute; top: 100px; left: 0; width: 100%; height: 60%; background: rgba(0,0,0,0.95); border: 1px solid var(--idpk-yellow); z-index: 50; display: none; overflow-y: auto; }
+        .link-item { padding: 10px; color: white; border-bottom: 1px solid #333; cursor: pointer; width: 100%; }
+        .link-item.selected { background: var(--idpk-yellow); color: black; }
+        .db-switch-btn { width: 100%; height: 35px; background: rgba(0,0,0,0.3); border: 1px solid #3498db; color: #3498db; font-size: 11px; font-weight: bold; margin-top: auto; cursor: pointer; }
+        .trip-badge { display:inline-block; padding:4px 8px; border-radius:4px; font-weight:bold; color:black; font-size:14px; margin-left:10px; }
+        .badge-green { background-color: #2ecc71; } 
+        .badge-yellow { background-color: var(--idpk-yellow); } 
+
+        .drive-header-box { border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 10px; margin-bottom: 15px; display: flex; flex-direction: column; align-items: center; text-align: center; width: 100%; }
+        .drive-title-row { font-weight: bold; color: var(--text-white); font-size: 18px; }
+        .drive-dest-row { font-size: 14px; color: white; margin-top: 5px; font-weight: bold; text-align: center; width: 100%; }
+        .drive-main-info { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; position: relative; width: 100%; }
+        .drive-label-small { font-size: 10px; color: rgba(255,255,255,0.7); text-transform: uppercase; margin-bottom: 5px; width: 100%; text-align: center;}
+        .drive-next-stop-val { font-size: 16px; color: white; margin-bottom: 15px; font-weight: normal; width: 100%; text-align: center; }
+        #drive-stop-indicator { width: 100%; background-color: var(--idpk-red); color: white; font-weight: bold; font-size: 22px; padding: 12px 0; border-radius: 6px; text-align: center; margin-bottom: 15px; display: none; box-shadow: 0 4px 0 #922b21; letter-spacing: 2px; }
+        .stop-preview-box { width: 100%; margin: 0 auto 10px auto; padding: 12px; background: rgba(0,0,0,0.8); border: 2px solid var(--idpk-yellow); border-radius: 6px; color: white; text-align: center; display: none; }
+        .drive-current-box { width: 100%; margin: 0 auto; padding: 12px; background: rgba(0,0,0,0.35); border: 1px dashed rgba(244, 204, 23, 0.8); border-radius: 6px; color: var(--idpk-yellow); font-size: 19px; font-weight: bold; text-align: center; display: flex; justify-content: center; align-items: center; box-shadow: inset 0 0 15px rgba(0,0,0,0.5); }
+        #drive-controls-area { flex-shrink: 0; margin-bottom: 10px; width: 100%; }
+        #live-clock-display { color: #fff; font-size: 26px; font-weight: 900; text-align: center; margin-bottom: 5px; font-family: monospace; letter-spacing: 2px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); width: 100%; }
+        .big-drive-btn { width: 100%; height: 65px; background-color: var(--idpk-yellow); color: #333; font-weight: 900; font-size: 18px; border: none; border-radius: 8px; box-shadow: 0 4px 0 #cba90f; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; margin-bottom: 8px; padding: 0 10px; }
+        .big-drive-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #cba90f; }
+        .sub-text { font-size: 12px; font-weight: bold; color: rgba(0,0,0,0.6); margin-top: 2px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+        .small-action-btn { flex: 1; height: 40px; font-size: 12px; font-weight: bold; border: none; border-radius: 5px; cursor: pointer; background: #ddd; color: black; box-shadow: 0 3px 0 #999; }
         .small-action-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #999; }
-        .small-action-btn.red { background: var(--idpk-red); color: white; box-shadow: 0 3px 0 #922b21; }
-        .small-action-btn.red:active { box-shadow: 0 1px 0 #922b21; }
-        .keypad-area {
-            flex: 1; display: grid; gap: 7px;
-            grid-template-columns: repeat(4, 1fr);
-            grid-template-rows: repeat(4, 1fr);
-            grid-template-areas:
-                "k7 k8 k9 kup"
-                "k4 k5 k6 kdot"
-                "k1 k2 k3 kdown"
-                "kdel k0 kent kent";
-            min-height: 0;
-        }
-        .btn {
-            background-color: var(--btn-bg); border: none; border-radius: 8px;
-            font-size: 22px; font-weight: 600; color: #333;
-            box-shadow: 0 3px 0 var(--btn-shadow);
-            display: flex; align-items: center; justify-content: center;
-            width: 100%; height: 100%; cursor: pointer;
-        }
+
+        .funk-row { width: 100%; background: rgba(0,0,0,0.3); padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.1); color: white; }
+        .funk-label { font-size: 12px; font-weight: bold; margin-bottom: 5px; display: block; text-transform: uppercase;}
+        .funk-toggle { width: 100%; padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; background: #555; color: #ccc; }
+        .funk-toggle.on { background: var(--idpk-green); color: white; }
+
+        .keypad-area { flex-shrink: 0; display: grid; width: 100%; z-index: 10; grid-template-columns: repeat(4, 1fr); gap: 8px; padding-bottom: 5px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 5px; grid-template-areas: "k7 k8 k9 kup" "k4 k5 k6 kdot" "k1 k2 k3 kdown" "kaction k0 kent kent"; }
+        .btn { background-color: var(--btn-bg); border: none; border-radius: 6px; height: 45px; font-size: 20px; font-weight: 600; color: #333; cursor: pointer; box-shadow: 0 3px 0 var(--btn-shadow); display: flex; align-items: center; justify-content: center; width: 100%; }
         .btn:active { box-shadow: 0 1px 0 var(--btn-shadow); transform: translateY(2px); }
-        .btn-arrow { background-color: #d0dae3; font-size: 18px; }
-        .btn-confirm { background-color: var(--idpk-green); color: white; box-shadow: 0 3px 0 #025c37; }
-        .btn-confirm:active { box-shadow: 0 1px 0 #025c37; }
-        .btn-del { background-color: #e74c3c; color: white; font-size: 16px; font-weight: bold; box-shadow: 0 3px 0 #c0392b; }
-        .btn-del:active { box-shadow: 0 1px 0 #c0392b; }
-        /* SETTINGS OVERLAY */
-        #mobile-settings-overlay {
-            display: none; position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(2, 25, 45, 0.93);
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            z-index: 99999; flex-direction: column;
-            align-items: center; justify-content: center; padding: 30px 20px;
-        }
-        .mob-settings-title {
-            color: white; font-size: 16px; font-weight: 700;
-            letter-spacing: 3px; text-transform: uppercase;
-            margin-bottom: 30px; text-align: center;
-        }
-        .mob-glass-btn {
-            width: 100%; max-width: 300px; padding: 16px 20px; margin-bottom: 12px;
-            border: 1px solid rgba(255,255,255,0.15); border-radius: 14px;
-            background: rgba(255,255,255,0.08); color: white; font-size: 15px;
-            font-weight: 600; cursor: pointer; text-align: center;
-            backdrop-filter: blur(4px); transition: background 0.2s;
-        }
-        .mob-glass-btn:active { background: rgba(255,255,255,0.18); transform: scale(0.97); }
-        .mob-glass-btn.red { border-color: rgba(231,76,60,0.5); background: rgba(231,76,60,0.15); }
-        .mob-glass-btn.close { border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.6); }
-        .mob-server-info { color: rgba(255,255,255,0.35); font-size: 11px; text-align: center; margin-top: 20px; letter-spacing: 1px; }
-    </style>
-</head>
-<body>
-    <div class="main-container">
-        <div class="system-header">
-            IDPK MOBILNÍ OVLADAČ
-            <div class="mobile-settings-btn" onclick="openMobileSettings()">⚙</div>
-        </div>
-
-        <div class="drive-current-box" id="status-box">PŘIPOJUJI SE...</div>
-        <div class="status-note"><div id='mobile-state-text'>Načítání zrcadla...</div></div>
-
-        <div id="drive-controls-area">
-            <button type="button" class="big-drive-btn" onclick="sendAction('space')">
-                <i class="fas fa-volume-up"></i> VYHLÁSIT ZASTÁVKU
-            </button>
-            <div class="small-btns-row">
-                <button type="button" class="small-action-btn" onclick="sendAction('r')">
-                    <i class="fas fa-redo"></i> OPAKOVAT (R)
-                </button>
-                <button type="button" class="small-action-btn red" onclick="sendAction('s')">
-                    <i class="fas fa-stop"></i> STOP (S)
-                </button>
-            </div>
-        </div>
-
-        <div class="keypad-area">
-            <button type="button" class="btn" style="grid-area:k7;" onclick="sendAction('7')">7</button>
-            <button type="button" class="btn" style="grid-area:k8;" onclick="sendAction('8')">8</button>
-            <button type="button" class="btn" style="grid-area:k9;" onclick="sendAction('9')">9</button>
-            <button type="button" class="btn btn-arrow" style="grid-area:kup;" onclick="sendAction('up')">▲</button>
-            <button type="button" class="btn" style="grid-area:k4;" onclick="sendAction('4')">4</button>
-            <button type="button" class="btn" style="grid-area:k5;" onclick="sendAction('5')">5</button>
-            <button type="button" class="btn" style="grid-area:k6;" onclick="sendAction('6')">6</button>
-            <button type="button" class="btn btn-arrow" style="grid-area:kdot;" onclick="sendAction('dot')">●</button>
-            <button type="button" class="btn" style="grid-area:k1;" onclick="sendAction('1')">1</button>
-            <button type="button" class="btn" style="grid-area:k2;" onclick="sendAction('2')">2</button>
-            <button type="button" class="btn" style="grid-area:k3;" onclick="sendAction('3')">3</button>
-            <button type="button" class="btn btn-arrow" style="grid-area:kdown;" onclick="sendAction('down')">▼</button>
-            <button type="button" class="btn btn-del" style="grid-area:kdel;" onclick="sendAction('del')">DEL</button>
-            <button type="button" class="btn" style="grid-area:k0;" onclick="sendAction('0')">0</button>
-            <button type="button" class="btn btn-confirm" style="grid-area:kent;" onclick="sendAction('ent')">ENT</button>
-        </div>
-    </div>
-
-    <!-- SETTINGS OVERLAY -->
-    <div id="mobile-settings-overlay">
-        <div class="mob-settings-title">⚙ Nastavení</div>
-        <button type="button" class="mob-glass-btn red" onclick="disconnectAndClose()">
-            <i class="fas fa-sign-out-alt"></i> Odpojit se od PC
-        </button>
-        <button type="button" class="mob-glass-btn close" onclick="closeMobileSettings()">
-            Zavřít
-        </button>
-        <div class="mob-server-info" id="server-addr-info"></div>
-    </div>
-
-    <script>
-        let flashTimeout;
-
-        function sendAction(action) {
-            fetch('/api/mirror/mobile_action/{{ session_id }}', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: action }) })
-                .then(res => { if (res.ok) flashStatus(true); else flashStatus(false); })
-                .catch(() => { flashStatus(false); });
-            if ("vibrate" in navigator) { navigator.vibrate(30); }
-        }
-
-        function flashStatus(ok) {
-            const box = document.getElementById('status-box');
-            if (ok) {
-                box.style.borderColor = 'rgba(4,142,86,0.8)';
-                box.style.color = '#2ecc71';
-                box.textContent = 'ODESLÁNO ✓';
-            } else {
-                box.style.borderColor = 'rgba(231,76,60,0.7)';
-                box.style.color = '#e74c3c';
-                box.textContent = 'CHYBA SPOJENÍ';
+        #btn-up { grid-area: kup; background: #dbe4eb; font-size: 18px;}
+        #btn-down { grid-area: kdown; background: #dbe4eb; font-size: 18px;}
+        #key-del { grid-area: kaction; background-color: #e74c3c; color: white; box-shadow: 0 3px 0 #c0392b; font-size: 16px; font-weight: bold; }
+        #key-funk { grid-area: kaction; background-color: var(--idpk-yellow); color: black; box-shadow: 0 3px 0 #cba90f; display: none; font-size: 16px; font-weight: bold; }
+        #key-ent { grid-area: kent; color: white; transition: background 0.2s; font-size: 20px; font-weight: bold; width: 100%; }
+        .btn-confirm { background-color: var(--idpk-green); box-shadow: 0 3px 0 #025c37; }
+        
+        /* Tlačítko STOP pro enter (zachováno) */
+        .btn-stop { background-color: var(--idpk-red) !important; color: white !important; box-shadow: 0 3px 0 #922b21 !important; font-size: 24px !important; letter-spacing: 2px !important; animation: blinkAnim 0.5s infinite alternate; }
+        @keyframes blinkAnim { from { opacity: 1; } to { opacity: 0.8; } }
+    
+            /* Extra mobile tweaks */
+            body {
+                overflow: hidden !important;
+                margin: 0 !important;
+                padding: 0 !important;
             }
-            clearTimeout(flashTimeout);
-            flashTimeout = setTimeout(() => {
-                box.style.borderColor = 'rgba(244,204,23,0.7)';
-                box.style.color = 'var(--idpk-yellow)';
-                box.textContent = 'PŘIPOJUJI SE...';
-            }, 700);
-        }
+            .system-header { display: none !important; } /* Hide header bar to save space on mobile */
+            /* Hide the mobile control button in settings just in case */
+            #settings-mobile-link { display: none !important; }
+            #premium-watermark { top: 15px !important; left: 15px !important; display: block !important; }
+            
+            #mobile-offline-overlay {
+                display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.85); z-index: 999999;
+                flex-direction: column; align-items: center; justify-content: center;
+                color: white; font-family: 'Segoe UI', sans-serif; text-align: center;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="mobile-offline-overlay">
+            <i class="fas fa-wifi" style="font-size: 50px; color: #e74c3c; margin-bottom: 20px;"></i>
+            <h2>PC JE OFFLINE</h2>
+            <p>Spojení s palubním počítačem bylo přerušeno.</p>
+        </div>
+        
+        <!-- The PC DOM will be injected here -->
+        <div id="mirror-container"></div>
 
-        function openMobileSettings() {
-            document.getElementById('mobile-settings-overlay').style.display = 'flex';
-            document.getElementById('server-addr-info').textContent = 'Server: ' + window.location.hostname;
-        }
+        <script>
+            const sessionId = '{ session_id }';
+            let isFocused = false;
 
-        function closeMobileSettings() {
-            document.getElementById('mobile-settings-overlay').style.display = 'none';
-        }
-
-        function disconnectAndClose() {
-            closeMobileSettings();
-            window.close();
-        }
-    </script>
-
-    <script>
-        const sessionId = '{{ session_id }}';
-        function connectSSE() {
-            const source = new EventSource('/api/mirror/mobile_state/' + sessionId);
-            source.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                const box = document.getElementById('status-box');
-                const txt = document.getElementById('mobile-state-text');
-                if (data.status === 'offline') {
-                    box.style.borderColor = 'rgba(231,76,60,0.7)';
-                    box.style.color = '#e74c3c';
-                    box.textContent = 'PC JE OFFLINE';
-                    if (txt) txt.innerHTML = 'Palubní počítač není připojen.';
-                } else if (data.status === 'online') {
-                    box.style.borderColor = 'rgba(4,142,86,0.8)';
-                    box.style.color = '#2ecc71';
-                    box.textContent = 'PC JE ONLINE';
-                    if (txt && data.state) {
-                        let info = '';
-                        if (data.state.appState === 'LINKOSPOJ') {
-                            info = 'VÝBĚR LINKY: ' + (data.state.displayLinkospoj || '---');
-                        } else if (data.state.appState === 'IDPK_LINE') {
-                            info = 'IDPK DATABÁZE';
-                        } else if (data.state.appState === 'DRIVE') {
-                            info = (data.state.header || '') + '<br>' + (data.state.currStop || '');
-                        } else {
-                            info = data.state.appState || 'Čekání na akci...';
+            function connectSSE() {
+                const source = new EventSource('/api/mirror/mobile_state/' + sessionId);
+                
+                source.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    const offline = document.getElementById('mobile-offline-overlay');
+                    const container = document.getElementById('mirror-container');
+                    
+                    if (data.status === 'offline') {
+                        offline.style.display = 'flex';
+                    } else if (data.status === 'online') {
+                        offline.style.display = 'none';
+                        if (data.state && data.state.dom && !isFocused) {
+                            container.innerHTML = data.state.dom;
                         }
-                        txt.innerHTML = info;
+                    }
+                };
+                
+                source.onerror = function() {
+                    document.getElementById('mobile-offline-overlay').style.display = 'flex';
+                };
+            }
+
+            // Handle Clicks
+            document.addEventListener('click', function(e) {
+                // Find nearest element with onclick
+                let el = e.target.closest('[onclick]');
+                if (!el) {
+                    // Fallback to finding generic buttons
+                    el = e.target.closest('.glass-btn, .settings-action-btn, .funk-action-btn, .link-suggestion-item, .nav-btn, .funk-btn-close');
+                }
+                
+                if (el) {
+                    let actionCode = el.getAttribute('onclick');
+                    
+                    if (actionCode) {
+                        e.preventDefault();
+                        if (navigator.vibrate) navigator.vibrate(20);
+                        
+                        fetch('/api/mirror/mobile_action/' + sessionId, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'eval', code: actionCode })
+                        });
                     }
                 }
-            };
-            source.onerror = function() {
-                const box = document.getElementById('status-box');
-                box.style.borderColor = 'rgba(231,76,60,0.7)';
-                box.style.color = '#e74c3c';
-                box.textContent = 'SPOJENÍ ZTRACENO';
-            };
-        }
-        connectSSE();
-    </script>
-</body>
+            });
 
-</html>
+            // Handle Input Typing
+            document.addEventListener('focusin', function(e) {
+                if (e.target.tagName === 'INPUT') {
+                    isFocused = true;
+                }
+            });
+            
+            document.addEventListener('focusout', function(e) {
+                if (e.target.tagName === 'INPUT') {
+                    isFocused = false;
+                }
+            });
+
+            document.addEventListener('input', function(e) {
+                if (e.target.tagName === 'INPUT') {
+                    fetch('/api/mirror/mobile_action/' + sessionId, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'input', id: e.target.id, value: e.target.value })
+                    });
+                }
+            });
+
+            connectSSE();
+        </script>
+    </body>
+    </html>
+    
     """
     return render_template_string(html, session_id=session_id)
 
