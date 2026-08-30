@@ -55,6 +55,10 @@ def main():
     current_hash = h.hexdigest()
     print(f"Staženo {len(content)} bytů. Hash: {current_hash}")
 
+    # Uložení zipu na disk pro nahrání do GitHub Releases
+    with open("gtfs.zip", "wb") as f:
+        f.write(content)
+
     # Kontrola proti Supabase
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
