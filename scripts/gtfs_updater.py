@@ -27,10 +27,7 @@ def send_discord(msg):
 def is_idpk_route(r_short):
     try:
         rNum = int(r_short)
-        return (400621 <= rNum <= 405611) or \
-               (430432 <= rNum <= 440649) or \
-               (450411 <= rNum <= 475211) or \
-               (490722 <= rNum <= 496711)
+        return (400000 <= rNum <= 499999)
     except:
         return False
 
@@ -101,9 +98,15 @@ def main():
     # IDPK routes filter
     with zf.open("routes.txt") as f:
         reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
+        import re
         for row in reader:
             r_id = row['route_id']
             r_short = row.get('route_short_name', '')
+            relations = row.get('relations', '')
+            m = re.search(r'CISJR:(\d+)', relations)
+            if m:
+                r_short = m.group(1)
+
             route_id_to_short[r_id] = r_short
             if is_idpk_route(r_short):
                 routes_idpk.add(r_id)
@@ -165,6 +168,8 @@ def main():
     
     for conn in [conn_idpk, conn_fall]:
         conn.execute("CREATE TABLE stops (stop_id TEXT, name TEXT, lat REAL, lon REAL, mode TEXT, lines TEXT)")
+        conn.execute("CREATE TABLE routes (route_id TEXT, route_short_name TEXT, route_long_name TEXT, route_type TEXT)")
+        conn.execute("CREATE TABLE trips (trip_id TEXT, route_id TEXT, service_id TEXT, trip_headsign TEXT)")
     
     total_stops_inserted = 0
     with zf.open("stops.txt") as f:
@@ -191,6 +196,34 @@ def main():
                 
         conn_idpk.executemany("INSERT INTO stops VALUES (?,?,?,?,?,?)", rows_idpk)
         conn_fall.executemany("INSERT INTO stops VALUES (?,?,?,?,?,?)", rows_fall)
+        
+    print("Vkládám data do routes...")
+    with zf.open("routes.txt") as f:
+        reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
+        routes_db_idpk = []
+        routes_db_fall = []
+        for row in reader:
+            val = (row['route_id'], row.get('route_short_name', ''), row.get('route_long_name', ''), row.get('route_type', ''))
+            if row['route_id'] in routes_idpk:
+                routes_db_idpk.append(val)
+            elif row['route_id'] in routes_fallback:
+                routes_db_fall.append(val)
+        conn_idpk.executemany("INSERT INTO routes VALUES (?,?,?,?)", routes_db_idpk)
+        conn_fall.executemany("INSERT INTO routes VALUES (?,?,?,?)", routes_db_fall)
+
+    print("Vkládám data do trips...")
+    with zf.open("trips.txt") as f:
+        reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
+        trips_db_idpk = []
+        trips_db_fall = []
+        for row in reader:
+            val = (row['trip_id'], row['route_id'], row.get('service_id', ''), row.get('trip_headsign', ''))
+            if row['trip_id'] in trips_idpk:
+                trips_db_idpk.append(val)
+            elif row['trip_id'] in trips_fallback:
+                trips_db_fall.append(val)
+        conn_idpk.executemany("INSERT INTO trips VALUES (?,?,?,?)", trips_db_idpk)
+        conn_fall.executemany("INSERT INTO trips VALUES (?,?,?,?)", trips_db_fall)
         
     conn_idpk.commit()
     conn_fall.commit()
