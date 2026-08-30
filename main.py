@@ -3912,7 +3912,7 @@ def run_discord_bot(bot_token):
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     from werkzeug.serving import run_simple
-    run_simple('0.0.0.0', port, app, use_reloader=False)
+    run_simple('0.0.0.0', port, app, use_reloader=False, threaded=True)
 
 
 def exit_handler():
