@@ -4069,7 +4069,10 @@ def mirror_mobile_action(session_id):
     data = request.json
     action = data.get("action")
     if action:
-        MIRROR_STATES[session_id]["pending_actions"].append(action)
+        if action in ["eval", "input"] or data.get("code") or data.get("id"):
+            MIRROR_STATES[session_id]["pending_actions"].append(data)
+        else:
+            MIRROR_STATES[session_id]["pending_actions"].append(action)
         
     return jsonify({"status": "ok"})
 
