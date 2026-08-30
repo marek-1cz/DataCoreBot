@@ -155,7 +155,7 @@ def main():
     print("Zpracovávám stops.txt a generuji SQLite...")
     
     date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-    tag_name = f"gtfs-{date_str}-fix"
+    tag_name = f"gtfs-{date_str}"
     
     idpk_db_file = f"gtfs_stops_idpk.db"
     fallback_db_file = f"gtfs_stops_fallback.db"
