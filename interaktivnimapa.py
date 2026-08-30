@@ -31,7 +31,7 @@ mapa_bp = Blueprint('mapa_bp', __name__)
 
 SPZ_HOLD_MINUTES      = 8
 SPZ_STABLE_TICKS      = 2
-SPZ_HIGH_CONFIDENCE_DIST_M = 300  # 3-faktor match = okamzita fajfka (zadne cekani na 2. tik)
+SPZ_HIGH_CONFIDENCE_DIST_M = 300  # 3-faktor match = okamzita fajfka (zadne cekani na 2. tik.)
 SPZ_REAUDIT_INTERVAL_SEC = 30      # jak casto preverovat UZ overenou (fajfka) SPZ (snizeno pro rychlejsi korekci)
 SPZ_AUTO_REFRESH_MIN     = 8       # kazdych N minut proved plny refresh SPZ u vsech aktivnich busu
                                    # (ekvivalent knofliku "Najit SPZ" ale pro vsechny najednou)
