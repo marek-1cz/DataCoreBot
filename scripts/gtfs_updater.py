@@ -152,8 +152,10 @@ def main():
         for row in reader:
             s_id = row['stop_id']
             s_name = row.get('stop_name', '')
-            s_lat = float(row.get('stop_lat', 0))
-            s_lon = float(row.get('stop_lon', 0))
+            lat_str = row.get('stop_lat', '').strip()
+            lon_str = row.get('stop_lon', '').strip()
+            s_lat = float(lat_str) if lat_str else 0.0
+            s_lon = float(lon_str) if lon_str else 0.0
             
             mode = 'bus' # Simplified
             val = (s_id, s_name, s_lat, s_lon, mode, "[]")
