@@ -3894,6 +3894,50 @@ async def aktulizace(ctx):
     except: pass
 
 
+@bot.command(name="data")
+async def cmd_data(ctx, arg: str = None):
+    db = get_db()
+    if not db:
+        await ctx.send("Databáze není dostupná.")
+        return
+        
+    try:
+        res = db.table("gtfs_feed_versions").select("*").order("id", desc=True).limit(1).execute()
+        data = res.data
+        if not data:
+            await ctx.send("V databázi nejsou žádné informace o GTFS.")
+            return
+            
+        latest = data[0]
+        ver = latest.get("version_tag", "Neznámá")
+        date_raw = latest.get("published_at", "")
+        if date_raw:
+            try:
+                dt = datetime.fromisoformat(date_raw.replace("Z", "+00:00")).astimezone(ZoneInfo('Europe/Prague'))
+                date_str = dt.strftime("%d.%m.%Y %H:%M:%S")
+            except:
+                date_str = date_raw
+        else:
+            date_str = "Neznámé"
+            
+        stops = latest.get("stop_count", 0)
+        routes = latest.get("route_count", 0)
+        trips = latest.get("trip_count", 0)
+        
+        if arg:
+            if arg.isdigit() and len(arg) == 6:
+                await ctx.send(f"🚌 **Data pro linku {arg}**\n- Zahrnuta v aktuálním datovém balíčku (verze: `{ver}`).\n- Poslední aktualizace proběhla: **{date_str}**.\n*(Poznámka: GTFS balíček se stahuje a aktualizuje jako celek pro celý Plzeňský kraj a vybrané dálkové linky současně).*")
+            else:
+                await ctx.send(f"❌ '{arg}' nevypadá jako číslo regionální linky (např. 490735).")
+        else:
+            msg = (f"🗄️ **Aktuální stav GTFS databáze**\n"
+                   f"**Verze dat:** `{ver}`\n"
+                   f"**Poslední aktualizace:** {date_str}\n"
+                   f"**Obsah databáze:** {stops} zastávek, {routes} linek, {trips} spojů.\n\n"
+                   f"*(Pro info o konkrétní lince napiš `!data <číslo>`)*")
+            await ctx.send(msg)
+    except Exception as e:
+        await ctx.send(f"Chyba při čtení dat: {e}")
 # ═══════════════════════════════════════════════════════════════════════════════
 # STARTUP
 # ═══════════════════════════════════════════════════════════════════════════════

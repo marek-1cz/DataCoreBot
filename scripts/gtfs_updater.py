@@ -202,8 +202,15 @@ def main():
     # Uložení notes pro GitHub Action
     with open(".release_notes.md", "w") as f:
         f.write(f"Automatická aktualizace dat.\n- Zastávek: {total_stops_inserted}\n- Linek: {len(routes_idpk)+len(routes_fallback)}\n- Spojů: {len(trips_idpk)+len(trips_fallback)}\n- Hash: `{current_hash}`")
-        
-    send_discord(f"✅ **GTFS Update úspěšný:** Vytvořena nová verze `{tag_name}`.\nZastávek: {total_stops_inserted}, Linek: {len(routes_idpk)+len(routes_fallback)}, Spojů: {len(trips_idpk)+len(trips_fallback)}.")
+    
+    # Odeslání notifikace na Discord
+    msg = (f"✅ **GTFS Data úspěšně aktualizována!**\n"
+           f"- **Nová verze:** `{tag_name}`\n"
+           f"- **Celkem zastávek:** {total_stops_inserted}\n"
+           f"- **Celkem linek:** {len(routes_idpk) + len(routes_fallback)}\n"
+           f"- **Celkem spojů:** {len(trips_idpk) + len(trips_fallback)}")
+    send_discord(msg)
+    
     print("Zpracování úspěšně dokončeno.")
 
 if __name__ == "__main__":
