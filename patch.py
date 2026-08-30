@@ -1,32 +1,68 @@
-import sys
 import re
 
-file_path = r'c:\Users\marek\Desktop\testa\DataCoreBot\interaktivnimapa.py'
+def update_html():
+    with open(r'..\IDPK-OIS-RC-EDITION-V1.6\web_ovladac.html', 'r', encoding='utf-8') as f:
+        content = f.read()
 
-with open(file_path, 'r', encoding='utf-8') as f:
-    content = f.read()
+    content = content.replace("fetch('/press/' + action)", "fetch('/api/mirror/mobile_action/{{ session_id }}', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: action }) })")
+    content = content.replace("SPOJENÍ S PC AKTIVNÍ", "PŘIPOJUJI SE...")
+    content = content.replace("ODESÍLÁM STISKY · ŽIVÝ TEXT ZASTÁVEK NENÍ DOSTUPNÝ", "<div id='mobile-state-text'>Načítání zrcadla...</div>")
 
-# 4524: "admin_note": "", -> "admin_note": "", "admin_driver": "",
-content = re.sub(r'("admin_note":\s*"",\s*\n)', r'\1        "admin_driver": "",\n', content)
+    js_script = """
+    <script>
+        const sessionId = '{{ session_id }}';
+        function connectSSE() {
+            const source = new EventSource('/api/mirror/mobile_state/' + sessionId);
+            source.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                const box = document.getElementById('status-box');
+                const txt = document.getElementById('mobile-state-text');
+                if (data.status === 'offline') {
+                    box.style.borderColor = 'rgba(231,76,60,0.7)';
+                    box.style.color = '#e74c3c';
+                    box.textContent = 'PC JE OFFLINE';
+                    if (txt) txt.innerHTML = 'Palubní počítač není připojen.';
+                } else if (data.status === 'online') {
+                    box.style.borderColor = 'rgba(4,142,86,0.8)';
+                    box.style.color = '#2ecc71';
+                    box.textContent = 'PC JE ONLINE';
+                    if (txt && data.state) {
+                        let info = '';
+                        if (data.state.appState === 'LINKOSPOJ') {
+                            info = 'VÝBĚR LINKY: ' + (data.state.displayLinkospoj || '---');
+                        } else if (data.state.appState === 'IDPK_LINE') {
+                            info = 'IDPK DATABÁZE';
+                        } else if (data.state.appState === 'DRIVE') {
+                            info = (data.state.header || '') + '<br>' + (data.state.currStop || '');
+                        } else {
+                            info = data.state.appState || 'Čekání na akci...';
+                        }
+                        txt.innerHTML = info;
+                    }
+                }
+            };
+            source.onerror = function() {
+                const box = document.getElementById('status-box');
+                box.style.borderColor = 'rgba(231,76,60,0.7)';
+                box.style.color = '#e74c3c';
+                box.textContent = 'SPOJENÍ ZTRACENO';
+            };
+        }
+        connectSSE();
+    </script>
+</body>
+"""
+    content = content.replace("</body>", js_script)
 
-# 4673: "admin_note": row.get("admin_note", ""),
-content = re.sub(r'("admin_note":\s*row\.get\("admin_note",\s*""\),)', r'\1\n                        "admin_driver": row.get("admin_driver", ""),', content)
+    with open('main.py', 'r', encoding='utf-8') as f:
+        py_content = f.read()
 
-# 4692: ghost_entry["admin_note"] = row.get("admin_note") or ""
-content = re.sub(r'(ghost_entry\["admin_note"\]\s*=\s*row\.get\("admin_note"\)\s*or\s*""\s*\n)', r'\1                ghost_entry["admin_driver"] = row.get("admin_driver") or ""\n', content)
+    new_html = '    html = """\\n' + content + '\\n    """'
+    py_content = re.sub(r'    html = """(.*?)    """', new_html, py_content, flags=re.DOTALL)
 
-# 4874: ghost_admin_note = best_gc.get("admin_note", "")
-content = re.sub(r'(ghost_admin_note\s*=\s*best_gc\.get\("admin_note",\s*""\)\s*\n)', r'\1                                    ghost_admin_driver = best_gc.get("admin_driver", "")\n', content)
+    with open('main.py', 'w', encoding='utf-8') as f:
+        f.write(py_content)
 
-# 5831: "admin_note": bc.get("admin_note", ""),
-content = re.sub(r'("admin_note":\s*bc\.get\("admin_note",\s*""\),)', r'\1\n                        "admin_driver": bc.get("admin_driver", ""),', content)
-
-# 6753: c["admin_note"] = ""
-content = re.sub(r'(c\["admin_note"\]\s*=\s*""\s*\n)', r'\1        c["admin_driver"] = ""\n', content)
-
-# 6795: "admin_note": c.get("admin_note", "")
-content = re.sub(r'("admin_note":\s*c\.get\("admin_note",\s*""\)\s*\n)', r'\1        ,"admin_driver": c.get("admin_driver", "")\n', content)
-
-with open(file_path, 'w', encoding='utf-8') as f:
-    f.write(content)
-print("Regex patch applied.")
+if __name__ == "__main__":
+    update_html()
+    print("Done")
