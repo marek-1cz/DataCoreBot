@@ -3986,11 +3986,11 @@ def mirror_pc_sync():
     session_id = data['session_id']
     discord_id = data.get('discord_id')
     
-    # Ověření oprávnění
     allowed = False
     if discord_id:
         try:
             db = get_db()
+            resp = None
             if discord_id == 'VSC-DEV':
                 allowed = True
             elif discord_id.startswith('email-'):
@@ -3998,11 +3998,13 @@ def mirror_pc_sync():
                 resp = db.table('users').select('role').eq('id', user_id).execute()
             else:
                 resp = db.table('users').select('role').eq('discord_id', discord_id).execute()
-            print('mirror_pc_sync auth:', discord_id, resp.data)
-            if resp.data and len(resp.data) > 0:
-                role = resp.data[0].get('role', '')
-                if any(x in role for x in ['BT', 'DEV', 'SA']):
-                    allowed = True
+            
+            if resp:
+                print('mirror_pc_sync auth:', discord_id, resp.data)
+                if resp.data and len(resp.data) > 0:
+                    role = resp.data[0].get('role', '')
+                    if any(x in role for x in ['BT', 'DEV', 'SA']):
+                        allowed = True
         except Exception as e:
             print('mirror_pc_sync auth error:', e)
             
@@ -4505,7 +4507,7 @@ def mirror_mobile_ui(session_id):
         <div id="mirror-container"></div>
 
         <script>
-            const sessionId = '{ session_id }';
+            const sessionId = '{{ session_id }}';
             let isFocused = false;
 
             function connectSSE() {
