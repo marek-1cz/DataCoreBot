@@ -1,5 +1,7 @@
 import os
 import sys
+import os
+import sys
 import requests
 import hashlib
 import zipfile
@@ -8,6 +10,7 @@ import sqlite3
 import datetime
 import json
 import io
+import collections
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
@@ -89,6 +92,7 @@ def main():
     print("Zpracovávám routes.txt...")
     routes_idpk = set()
     routes_fallback = set()
+    route_id_to_short = {}
     
     # IDPK routes filter
     with zf.open("routes.txt") as f:
@@ -96,6 +100,7 @@ def main():
         for row in reader:
             r_id = row['route_id']
             r_short = row.get('route_short_name', '')
+            route_id_to_short[r_id] = r_short
             if is_idpk_route(r_short):
                 routes_idpk.add(r_id)
             else:
@@ -104,11 +109,13 @@ def main():
     print("Zpracovávám trips.txt...")
     trips_idpk = set()
     trips_fallback = set()
+    trip_to_route = {}
     with zf.open("trips.txt") as f:
         reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
         for row in reader:
             r_id = row['route_id']
             t_id = row['trip_id']
+            trip_to_route[t_id] = r_id
             if r_id in routes_idpk:
                 trips_idpk.add(t_id)
             else:
@@ -117,15 +124,26 @@ def main():
     print("Zpracovávám stop_times.txt...")
     stops_idpk = set()
     stops_fallback = set()
+    route_hashes_builder = collections.defaultdict(hashlib.md5)
+    
     with zf.open("stop_times.txt") as f:
         reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
         for row in reader:
             t_id = row['trip_id']
             s_id = row['stop_id']
+            
+            # Budování hashe pro detekci změn linek
+            r_id = trip_to_route.get(t_id)
+            if r_id:
+                s = f"{s_id}{row.get('arrival_time','')}{row.get('departure_time','')}{row.get('stop_sequence','')}"
+                route_hashes_builder[r_id].update(s.encode('utf-8'))
+                
             if t_id in trips_idpk:
                 stops_idpk.add(s_id)
             elif t_id in trips_fallback:
                 stops_fallback.add(s_id)
+                
+    current_route_hashes = {r_id: hasher.hexdigest() for r_id, hasher in route_hashes_builder.items()}
 
     print("Zpracovávám stops.txt a generuji SQLite...")
     
@@ -195,6 +213,48 @@ def main():
     except Exception as e:
         print(f"Nepodařilo se zapsat do Supabase: {e}")
 
+    # Zpracování změn jednotlivých linek
+    existing_hashes = {}
+    try:
+        r = requests.get(f"{SUPABASE_URL}/rest/v1/gtfs_line_updates?select=route_id,hash", headers=headers)
+        r.raise_for_status()
+        for x in r.json():
+            existing_hashes[x['route_id']] = x['hash']
+    except Exception as e:
+        print("Nepodařilo se stáhnout staré hashe linek:", e)
+        
+    changed_route_ids = []
+    updates_for_db = []
+    now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+    
+    for r_id, h in current_route_hashes.items():
+        if existing_hashes.get(r_id) != h:
+            changed_route_ids.append(r_id)
+            updates_for_db.append({
+                "route_id": r_id,
+                "hash": h,
+                "last_updated_at": now_iso
+            })
+            
+    if updates_for_db:
+        try:
+            # Upsert
+            headers_upsert = headers.copy()
+            headers_upsert["Prefer"] = "resolution=merge-duplicates"
+            # Můžeme to poslat po dávkách, kdyby toho bylo moc
+            chunk_size = 1000
+            for i in range(0, len(updates_for_db), chunk_size):
+                requests.post(f"{SUPABASE_URL}/rest/v1/gtfs_line_updates", headers=headers_upsert, json=updates_for_db[i:i+chunk_size])
+        except Exception as e:
+            print("Nepodařilo se zapsat gtfs_line_updates:", e)
+
+    # Příprava výstupu pro discord
+    changed_shorts = [route_id_to_short.get(r, r) for r in changed_route_ids]
+    changed_idpk = [rs for rs in changed_shorts if is_idpk_route(rs)]
+    changed_str = ", ".join(changed_idpk) if changed_idpk else "Žádné (nebo jen mimo IDPK)"
+    if len(changed_str) > 1000:
+        changed_str = changed_str[:1000] + "... (více zkráceno)"
+
     # Uložení tagu pro GitHub Action
     with open(".release_tag", "w") as f:
         f.write(tag_name)
@@ -208,7 +268,8 @@ def main():
            f"- **Nová verze:** `{tag_name}`\n"
            f"- **Celkem zastávek:** {total_stops_inserted}\n"
            f"- **Celkem linek:** {len(routes_idpk) + len(routes_fallback)}\n"
-           f"- **Celkem spojů:** {len(trips_idpk) + len(trips_fallback)}")
+           f"- **Celkem spojů:** {len(trips_idpk) + len(trips_fallback)}\n"
+           f"- **Změněné IDPK linky:** {changed_str}")
     send_discord(msg)
     
     print("Zpracování úspěšně dokončeno.")

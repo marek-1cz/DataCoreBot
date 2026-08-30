@@ -3926,7 +3926,21 @@ async def cmd_data(ctx, arg: str = None):
         
         if arg:
             if arg.isdigit() and len(arg) == 6:
-                await ctx.send(f"🚌 **Data pro linku {arg}**\n- Zahrnuta v aktuálním datovém balíčku (verze: `{ver}`).\n- Poslední aktualizace proběhla: **{date_str}**.\n*(Poznámka: GTFS balíček se stahuje a aktualizuje jako celek pro celý Plzeňský kraj a vybrané dálkové linky současně).*")
+                # Načtení konkrétní linky z gtfs_line_updates
+                l_res = db.table("gtfs_line_updates").select("last_updated_at").eq("route_id", arg).execute()
+                line_data = l_res.data
+                
+                if line_data and len(line_data) > 0:
+                    l_date_raw = line_data[0].get("last_updated_at")
+                    try:
+                        l_dt = datetime.fromisoformat(l_date_raw.replace("Z", "+00:00")).astimezone(ZoneInfo('Europe/Prague'))
+                        l_date_str = l_dt.strftime("%d.%m.%Y v %H:%M:%S")
+                    except:
+                        l_date_str = l_date_raw
+                    
+                    await ctx.send(f"🚌 **Data pro linku {arg}**\n- Zahrnuta v balíčku (verze: `{ver}`).\n- **Jízdní řád linky se naposledy reálně změnil: {l_date_str}**.")
+                else:
+                    await ctx.send(f"🚌 **Data pro linku {arg}**\n- Zahrnuta v balíčku (verze: `{ver}`).\n- **Zatím u ní neevidujeme žádnou změnu od spuštění sledovacího systému.**")
             else:
                 await ctx.send(f"❌ '{arg}' nevypadá jako číslo regionální linky (např. 490735).")
         else:
