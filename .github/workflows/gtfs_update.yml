@@ -1,0 +1,72 @@
+name: GTFS Automated Update Pipeline
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # Běží každý den v 3:00 UTC
+  workflow_dispatch: # Povoluje ruční spuštění pro testování a prvotní nasazení
+
+jobs:
+  gtfs-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Nutné pro vytváření a mazání GitHub Releases
+
+    steps:
+      - name: Checkout repozitáře
+        uses: actions/checkout@v4
+
+      - name: Nastavení Pythonu
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalace závislostí
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Spuštění GTFS aktualizačního skriptu
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GTFS_SOURCE_URL: 'https://www.spojenka.cz/jrdata/jizdnirady-gtfs.zip'
+        run: |
+          python scripts/gtfs_updater.py
+
+      - name: Vytvoření GitHub Release a nahrání aktiv
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Získá tag vygenerovaný Python skriptem (např. gtfs-2026-08-30)
+          if [ -f .release_tag ]; then
+            TAG=$(cat .release_tag)
+            echo "Publikuji release $TAG"
+            
+            # Pokud tag už existuje, gh release create selže (což chceme, pokud se stala neočekávaná chyba)
+            gh release create "$TAG" gtfs_stops_*.db --title "GTFS Update $TAG" --notes-file .release_notes.md
+          else
+            echo "Soubor .release_tag nenalezen. Pravděpodobně nenastala žádná změna ve zdrojových databázi."
+          fi
+
+      - name: Retence starých verzí (ponechat pouze 3 nejnovější)
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Získá všechny release začínající na 'gtfs-', setřídí podle data (nejnovější první)
+          RELEASES=$(gh release list --exclude-drafts --exclude-pre-releases | grep 'gtfs-' | awk '{print $1}')
+          COUNT=$(echo "$RELEASES" | wc -l)
+          
+          if [ "$COUNT" -gt 3 ]; then
+            echo "Našel jsem $COUNT verzí, mažu ty nejstarší (nad limit 3)."
+            # Vezme všechny od 4. řádku dolů
+            TO_DELETE=$(echo "$RELEASES" | tail -n +4)
+            for REL in $TO_DELETE; do
+              echo "Mažu release a tag: $REL"
+              gh release delete "$REL" -y --cleanup-tag
+            done
+          else
+            echo "Retence: $COUNT verzí je v pořádku (limit 3)."
+          fi

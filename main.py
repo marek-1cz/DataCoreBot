@@ -490,18 +490,18 @@ async def announce_new_supporter(discord_nick, amount_str, message, role_names_l
             except: pass
             break
 
-async def async_send_log(title, description, color=0x38bdf8):
+async def async_send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacore-logs"):
     if not bot.is_ready(): return
     for guild in bot.guilds:
-        channel = discord.utils.get(guild.channels, name="🖥️・datacore-logs")
+        channel = discord.utils.get(guild.channels, name=channel_name)
         if channel:
             try: await channel.send(embed=discord.Embed(title=title, description=description, color=color, timestamp=get_prague_time()))
             except: pass
             break
 
-def send_log(title, description, color=0x38bdf8):
+def send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacore-logs"):
     if bot.loop and bot.loop.is_running() and bot.is_ready():
-        asyncio.run_coroutine_threadsafe(async_send_log(title, description, color), bot.loop)
+        asyncio.run_coroutine_threadsafe(async_send_log(title, description, color, channel_name), bot.loop)
 
 def _cors_jsonify(data):
     return jsonify(data)
@@ -890,7 +890,7 @@ def api_report_error():
     error_type = str(data.get("type", "ERROR"))
     msg = str(data.get("message", "Neznámá chyba"))
     
-    send_log(f"⚠️ APLIKAČNÍ CHYBA: {error_type}", f"**Hráč:** {nick} (`{discord_id}`)\n**Chyba:**\n`{msg}`", 0xef4444)
+    send_log(f"⚠️ APLIKAČNÍ CHYBA: {error_type}", f"**Hráč:** {nick} (`{discord_id}`)\n**Chyba:**\n`{msg}`", 0xef4444, "📲・error-app")
     
     return _cors_jsonify({"status": "success"})
 
@@ -4103,7 +4103,7 @@ def mirror_mobile_ui(session_id):
         ::-webkit-scrollbar { display: none; }
         * { box-sizing: border-box; }
         body { background-color: var(--idpk-blue); display: flex; flex-direction: row; justify-content: flex-start; align-items: flex-start; height: 100vh; margin: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; user-select: none; overflow: hidden; transition: width 0.3s ease; }
-        .main-container { width: 380px; flex-shrink: 0; height: 100vh; display: flex; flex-direction: column; padding: 15px; position: relative; }
+        .main-container { width: 380px; flex-shrink: 0; height: 100vh; display: flex; flex-direction: column; padding: 15px; padding-bottom: 70px; position: relative; }
 
         .loading-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; background: var(--idpk-blue) !important; z-index: 50000 !important; display: none; justify-content: center; align-items: center; flex-direction: column; color: white; font-weight: bold; }
         .startup-screen { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; background: var(--idpk-blue) !important; z-index: 60000 !important; display: flex; justify-content: center; align-items: center; flex-direction: column; }
@@ -4593,10 +4593,43 @@ def mirror_mobile_ui(session_id):
     """
     return render_template_string(html, session_id=session_id)
 
+def check_and_download_latest_gtfs():
+    try:
+        import requests, os
+        supabase_url = os.environ.get("SUPABASE_URL")
+        supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
+        if not supabase_url or not supabase_key: return
+
+        headers = {"apikey": supabase_key, "Authorization": f"Bearer {supabase_key}"}
+        r = requests.get(f"{supabase_url}/rest/v1/gtfs_feed_versions?select=version_tag,release_url&order=id.desc&limit=1", headers=headers, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            if data:
+                tag = data[0].get("version_tag")
+                if os.path.exists(".current_gtfs_version"):
+                    with open(".current_gtfs_version", "r") as f:
+                        if f.read().strip() == tag:
+                            return 
+
+                download_url = f"https://github.com/{os.environ.get('GITHUB_REPOSITORY', 'marek-1cz/DataCoreBot')}/releases/download/{tag}/gtfs_stops_idpk.db"
+                print(f"Stahuji novou GTFS databázi ({tag})...")
+                dl_r = requests.get(download_url, stream=True)
+                if dl_r.status_code == 200:
+                    with open("gtfs_stops.db", "wb") as f:
+                        for chunk in dl_r.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    with open(".current_gtfs_version", "w") as f:
+                        f.write(tag)
+                    print(f"GTFS databáze aktualizována na {tag}.")
+                else:
+                    print(f"Nelze stáhnout GTFS {tag}: HTTP {dl_r.status_code}")
+    except Exception as e:
+        print(f"Chyba při aktualizaci GTFS: {e}")
 
 if __name__ == "__main__":
     token = os.environ.get("DISCORD_TOKEN")
     start_map_background_task()
+    check_and_download_latest_gtfs()
     if token:
         Thread(target=run_discord_bot, args=(token,), daemon=True).start()
     else:
