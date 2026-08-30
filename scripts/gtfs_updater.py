@@ -70,8 +70,8 @@ def main():
         if data and len(data) > 0:
             last_hash = data[0].get("source_hash")
             if last_hash == current_hash:
-                print("Hash je shodný s předchozí verzí. Není třeba aktualizovat.")
-                sys.exit(0)
+                print("Hash je shodný s předchozí verzí. Pokračuji (vynucená aktualizace).")
+                # sys.exit(0)
     except Exception as e:
         print(f"Varování: Nelze přečíst hash z databáze, pokračuji: {e}")
 
@@ -155,7 +155,7 @@ def main():
     print("Zpracovávám stops.txt a generuji SQLite...")
     
     date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-    tag_name = f"gtfs-{date_str}"
+    tag_name = f"gtfs-{date_str}-fix"
     
     idpk_db_file = f"gtfs_stops_idpk.db"
     fallback_db_file = f"gtfs_stops_fallback.db"
