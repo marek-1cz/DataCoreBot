@@ -4481,7 +4481,11 @@ def mirror_mobile_ui(session_id):
             body {
                 overflow: hidden !important;
                 margin: 0 !important;
-                padding: 0 !important;
+                padding: 0 0 60px 0 !important; /* Spodní padding pro navigační lištu telefonu */
+            }
+            * {
+                animation: none !important;
+                transition: none !important;
             }
             .system-header { display: none !important; } /* Hide header bar to save space on mobile */
             /* Hide the mobile control button in settings just in case */
