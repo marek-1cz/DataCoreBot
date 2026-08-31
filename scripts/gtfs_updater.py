@@ -170,6 +170,9 @@ def main():
         conn.execute("CREATE TABLE stops (stop_id TEXT, name TEXT, lat REAL, lon REAL, mode TEXT, lines TEXT)")
         conn.execute("CREATE TABLE routes (route_id TEXT, route_short_name TEXT, route_long_name TEXT, route_type TEXT)")
         conn.execute("CREATE TABLE trips (trip_id TEXT, route_id TEXT, service_id TEXT, trip_headsign TEXT)")
+        conn.execute("CREATE TABLE stop_times (trip_id TEXT, arrival_time TEXT, departure_time TEXT, stop_id TEXT, stop_sequence INTEGER, pickup_type TEXT)")
+        conn.execute("CREATE INDEX idx_stop_times_trip_id ON stop_times(trip_id)")
+        conn.execute("CREATE INDEX idx_stop_times_stop_id ON stop_times(stop_id)")
     
     total_stops_inserted = 0
     with zf.open("stops.txt") as f:
@@ -224,6 +227,33 @@ def main():
                 trips_db_fall.append(val)
         conn_idpk.executemany("INSERT INTO trips VALUES (?,?,?,?)", trips_db_idpk)
         conn_fall.executemany("INSERT INTO trips VALUES (?,?,?,?)", trips_db_fall)
+
+    print("Vkládám data do stop_times...")
+    with zf.open("stop_times.txt") as f:
+        reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
+        batch_idpk = []
+        batch_fall = []
+        for row in reader:
+            try:
+                seq = int(row.get('stop_sequence') or 0)
+            except ValueError:
+                seq = 0
+            val = (row['trip_id'], row.get('arrival_time', ''), row.get('departure_time', ''), row['stop_id'], seq, row.get('pickup_type', '0'))
+            if row['trip_id'] in trips_idpk:
+                batch_idpk.append(val)
+                if len(batch_idpk) >= 100000:
+                    conn_idpk.executemany("INSERT INTO stop_times VALUES (?,?,?,?,?,?)", batch_idpk)
+                    batch_idpk = []
+            elif row['trip_id'] in trips_fallback:
+                batch_fall.append(val)
+                if len(batch_fall) >= 100000:
+                    conn_fall.executemany("INSERT INTO stop_times VALUES (?,?,?,?,?,?)", batch_fall)
+                    batch_fall = []
+                    
+        if batch_idpk:
+            conn_idpk.executemany("INSERT INTO stop_times VALUES (?,?,?,?,?,?)", batch_idpk)
+        if batch_fall:
+            conn_fall.executemany("INSERT INTO stop_times VALUES (?,?,?,?,?,?)", batch_fall)
         
     conn_idpk.commit()
     conn_fall.commit()
