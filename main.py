@@ -1003,6 +1003,23 @@ def api_gtfs_info():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/gtfs-db-url')
+def api_gtfs_db_url():
+    """Získá přesnou CORS-povolenou URL pro stáhnutí GTFS databáze IDPK"""
+    import requests
+    try:
+        r = requests.get('https://api.github.com/repos/marek-1cz/DataCoreBot/releases/latest', headers={'Accept':'application/vnd.github+json'})
+        if r.status_code == 200:
+            data = r.json()
+            for asset in data.get('assets', []):
+                if asset['name'] == 'gtfs_stops_idpk.db':
+                    # Získá S3 URL z Location hlavičky
+                    r2 = requests.get(asset['browser_download_url'], allow_redirects=False)
+                    return jsonify({'url': r2.headers.get('Location', asset['browser_download_url'])})
+        return jsonify({'error': 'Release or asset not found'}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/gtfs-line-updates')
 def api_gtfs_line_updates():
     """Vrátí seznam posledně změněných IDPK linek"""

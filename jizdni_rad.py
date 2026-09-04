@@ -151,12 +151,11 @@ async function ensureDb(){
     document.getElementById('loadingStatus').style.display='block';
     document.getElementById('searchBtn').disabled=true;
     try{
-        const rel = await fetch(GH_API,{headers:{'Accept':'application/vnd.github+json'}});
+        const rel = await fetch('/api/gtfs-db-url');
         const rd = await rel.json();
-        const asset = rd.assets&&rd.assets.find(a=>a.name==='gtfs_stops_idpk.db');
-        if(!asset) throw new Error('GTFS DB asset nenalezen v GitHub Releases');
-        const resp = await fetch(asset.browser_download_url);
-        if(!resp.ok) throw new Error('Chyba stahovani: '+resp.status);
+        if(rd.error) throw new Error(rd.error);
+        const resp = await fetch(rd.url);
+        if(!resp.ok) throw new Error('Chyba stahovani DB: '+resp.status);
         const buf = await resp.arrayBuffer();
         const SQL = await initSqlJs({locateFile:f=>`https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}`});
         db = new SQL.Database(new Uint8Array(buf));
