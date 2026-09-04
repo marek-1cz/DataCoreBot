@@ -25,11 +25,7 @@ def send_discord(msg):
         pass
 
 def is_idpk_route(r_short):
-    try:
-        rNum = int(r_short)
-        return (400000 <= rNum <= 499999)
-    except:
-        return False
+    pass # Obsolete, but kept to not break anything if referenced elsewhere
 
 def main():
     print("Spouštím GTFS Updater...")
@@ -83,11 +79,29 @@ def main():
         send_discord("❌ **GTFS Update selhal:** Stažený soubor není validní ZIP.")
         sys.exit(1)
 
-    mandatory = ["stops.txt", "routes.txt", "trips.txt", "stop_times.txt"]
+    mandatory = ["stops.txt", "routes.txt", "trips.txt", "stop_times.txt", "agency.txt", "calendar.txt", "calendar_dates.txt"]
     for m in mandatory:
         if m not in zf.namelist():
             send_discord(f"❌ **GTFS Update selhal:** Chybí povinný soubor `{m}`.")
             sys.exit(1)
+
+    IDPK_AGENCIES = {
+        "arriva střední čechy s.r.o.",
+        "čsad autobusy plzeň a.s.",
+        "akv bus a.s.",
+        "klatovská dopravní společnost s.r.o.",
+        "lextrans bus s.r.o."
+    }
+
+    print("Zpracovávám agency.txt...")
+    allowed_agency_ids = set()
+    with zf.open("agency.txt") as f:
+        reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
+        for row in reader:
+            a_name = row.get('agency_name', '').strip().lower()
+            a_id = row.get('agency_id', '').strip()
+            if a_name in IDPK_AGENCIES:
+                allowed_agency_ids.add(a_id)
 
     # Načtení dat a filtrace IDPK
     print("Zpracovávám routes.txt...")
@@ -102,13 +116,23 @@ def main():
         for row in reader:
             r_id = row['route_id']
             r_short = row.get('route_short_name', '')
+            a_id = row.get('agency_id', '').strip()
+            r_type = row.get('route_type', '').strip()
             relations = row.get('relations', '')
             m = re.search(r'CISJR:(\d+)', relations)
             if m:
                 r_short = m.group(1)
 
             route_id_to_short[r_id] = r_short
-            if is_idpk_route(r_short):
+            
+            in_range = False
+            try:
+                num = int(r_short)
+                in_range = (400621 <= num <= 405611) or (430432 <= num <= 440649) or (450411 <= num <= 475211) or (490722 <= num <= 496711)
+            except:
+                pass
+            
+            if a_id in allowed_agency_ids and r_type in ('701', '704', '3') and in_range:
                 routes_idpk.add(r_id)
             else:
                 routes_fallback.add(r_id)
@@ -116,17 +140,22 @@ def main():
     print("Zpracovávám trips.txt...")
     trips_idpk = set()
     trips_fallback = set()
+    services_idpk = set()
+    services_fallback = set()
     trip_to_route = {}
     with zf.open("trips.txt") as f:
         reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
         for row in reader:
             r_id = row['route_id']
             t_id = row['trip_id']
+            s_id = row.get('service_id', '')
             trip_to_route[t_id] = r_id
             if r_id in routes_idpk:
                 trips_idpk.add(t_id)
+                if s_id: services_idpk.add(s_id)
             else:
                 trips_fallback.add(t_id)
+                if s_id: services_fallback.add(s_id)
 
     print("Zpracovávám stop_times.txt...")
     stops_idpk = set()
@@ -167,12 +196,16 @@ def main():
     conn_fall = sqlite3.connect(fallback_db_file)
     
     for conn in [conn_idpk, conn_fall]:
-        conn.execute("CREATE TABLE stops (stop_id TEXT, name TEXT, lat REAL, lon REAL, mode TEXT, lines TEXT)")
+        conn.execute("CREATE TABLE stops (stop_id TEXT, name TEXT, lat REAL, lon REAL, mode TEXT, lines TEXT, zone_id TEXT, cisjr_id TEXT)")
         conn.execute("CREATE TABLE routes (route_id TEXT, route_short_name TEXT, route_long_name TEXT, route_type TEXT)")
-        conn.execute("CREATE TABLE trips (trip_id TEXT, route_id TEXT, service_id TEXT, trip_headsign TEXT)")
+        conn.execute("CREATE TABLE trips (trip_id TEXT, route_id TEXT, service_id TEXT, trip_headsign TEXT, spoj_cislo INTEGER)")
         conn.execute("CREATE TABLE stop_times (trip_id TEXT, arrival_time TEXT, departure_time TEXT, stop_id TEXT, stop_sequence INTEGER, pickup_type TEXT)")
+        conn.execute("CREATE TABLE calendar (service_id TEXT, monday INTEGER, tuesday INTEGER, wednesday INTEGER, thursday INTEGER, friday INTEGER, saturday INTEGER, sunday INTEGER, start_date TEXT, end_date TEXT)")
+        conn.execute("CREATE TABLE calendar_dates (service_id TEXT, date TEXT, exception_type INTEGER)")
         conn.execute("CREATE INDEX idx_stop_times_trip_id ON stop_times(trip_id)")
         conn.execute("CREATE INDEX idx_stop_times_stop_id ON stop_times(stop_id)")
+        conn.execute("CREATE INDEX idx_calendar_service_id ON calendar(service_id)")
+        conn.execute("CREATE INDEX idx_calendar_dates_service_id ON calendar_dates(service_id)")
     
     total_stops_inserted = 0
     with zf.open("stops.txt") as f:
@@ -182,13 +215,36 @@ def main():
         for row in reader:
             s_id = row['stop_id']
             s_name = row.get('stop_name', '')
+            s_name = s_name.replace('autobusová stanice', 'aut. st.')
+            s_name = s_name.replace('Autobusová stanice', 'aut. st.')
+            s_name = s_name.replace('autobusové nádraží', 'aut. nádr.')
+            s_name = s_name.replace('Autobusové nádraží', 'aut. nádr.')
+            s_name = s_name.replace('železniční stanice', 'žel. st.')
+            s_name = s_name.replace('Železniční stanice', 'žel. st.')
+            s_name = s_name.replace('restaurace', 'rest.')
+            s_name = s_name.replace('Restaurace', 'rest.')
+            s_name = s_name.replace('rozcestí', 'rozc.')
+            s_name = s_name.replace('Rozcestí', 'rozc.')
+            s_name = s_name.replace('průmyslová zóna', 'prům. zóna')
+            s_name = s_name.replace('Průmyslová zóna', 'prům. zóna')
+            s_name = s_name.replace('náměstí', 'nám.')
+            s_name = s_name.replace('Náměstí', 'nám.')
+            s_name = s_name.replace('nemocnice', 'nem.')
+            s_name = s_name.replace('Nemocnice', 'nem.')
+            s_name = s_name.replace('závod', 'záv.')
+            s_name = s_name.replace('Závod', 'záv.')
             lat_str = row.get('stop_lat', '').strip()
             lon_str = row.get('stop_lon', '').strip()
             s_lat = float(lat_str) if lat_str else 0.0
             s_lon = float(lon_str) if lon_str else 0.0
             
             mode = 'bus' # Simplified
-            val = (s_id, s_name, s_lat, s_lon, mode, "[]")
+            z_id = row.get('zone_id', '')
+            relations = row.get('relations', '')
+            import re
+            m = re.search(r'CISJR:(\d+)', relations)
+            cisjr_id = m.group(1) if m else ""
+            val = (s_id, s_name, s_lat, s_lon, mode, "[]", z_id, cisjr_id)
             
             if s_id in stops_idpk:
                 rows_idpk.append(val)
@@ -197,8 +253,8 @@ def main():
                 rows_fall.append(val)
                 total_stops_inserted += 1
                 
-        conn_idpk.executemany("INSERT INTO stops VALUES (?,?,?,?,?,?)", rows_idpk)
-        conn_fall.executemany("INSERT INTO stops VALUES (?,?,?,?,?,?)", rows_fall)
+        conn_idpk.executemany("INSERT INTO stops VALUES (?,?,?,?,?,?,?,?)", rows_idpk)
+        conn_fall.executemany("INSERT INTO stops VALUES (?,?,?,?,?,?,?,?)", rows_fall)
         
     print("Vkládám data do routes...")
     with zf.open("routes.txt") as f:
@@ -206,10 +262,34 @@ def main():
         routes_db_idpk = []
         routes_db_fall = []
         for row in reader:
-            val = (row['route_id'], row.get('route_short_name', ''), row.get('route_long_name', ''), row.get('route_type', ''))
-            if row['route_id'] in routes_idpk:
+            r_id = row['route_id']
+            # Použijeme správný route_short_name, který jsme si dříve vydolovali (pokud je dostupný)
+            r_short = route_id_to_short.get(r_id, row.get('route_short_name', ''))
+            
+            r_long = row.get('route_long_name', '')
+            r_long = r_long.replace('autobusová stanice', 'aut. st.')
+            r_long = r_long.replace('Autobusová stanice', 'aut. st.')
+            r_long = r_long.replace('autobusové nádraží', 'aut. nádr.')
+            r_long = r_long.replace('Autobusové nádraží', 'aut. nádr.')
+            r_long = r_long.replace('železniční stanice', 'žel. st.')
+            r_long = r_long.replace('Železniční stanice', 'žel. st.')
+            r_long = r_long.replace('restaurace', 'rest.')
+            r_long = r_long.replace('Restaurace', 'rest.')
+            r_long = r_long.replace('rozcestí', 'rozc.')
+            r_long = r_long.replace('Rozcestí', 'rozc.')
+            r_long = r_long.replace('průmyslová zóna', 'prům. zóna')
+            r_long = r_long.replace('Průmyslová zóna', 'prům. zóna')
+            r_long = r_long.replace('náměstí', 'nám.')
+            r_long = r_long.replace('Náměstí', 'nám.')
+            r_long = r_long.replace('nemocnice', 'nem.')
+            r_long = r_long.replace('Nemocnice', 'nem.')
+            r_long = r_long.replace('závod', 'záv.')
+            r_long = r_long.replace('Závod', 'záv.')
+            
+            val = (r_id, r_short, r_long, row.get('route_type', ''))
+            if r_id in routes_idpk:
                 routes_db_idpk.append(val)
-            elif row['route_id'] in routes_fallback:
+            elif r_id in routes_fallback:
                 routes_db_fall.append(val)
         conn_idpk.executemany("INSERT INTO routes VALUES (?,?,?,?)", routes_db_idpk)
         conn_fall.executemany("INSERT INTO routes VALUES (?,?,?,?)", routes_db_fall)
@@ -220,13 +300,77 @@ def main():
         trips_db_idpk = []
         trips_db_fall = []
         for row in reader:
-            val = (row['trip_id'], row['route_id'], row.get('service_id', ''), row.get('trip_headsign', ''))
+            trip_short = row.get('trip_short_name', '')
+            trip_rels = row.get('relations', '')
+            spoj = 0
+            import re
+            m = re.search(r'CISJR:(\d+)', trip_rels)
+            if m:
+                spoj = int(m.group(1))
+            elif trip_short:
+                parts = trip_short.split()
+                if parts:
+                    try:
+                        spoj = int(parts[-1])
+                    except ValueError:
+                        pass
+            t_head = row.get('trip_headsign', '')
+            t_head = t_head.replace('autobusová stanice', 'aut. st.')
+            t_head = t_head.replace('Autobusová stanice', 'aut. st.')
+            t_head = t_head.replace('autobusové nádraží', 'aut. nádr.')
+            t_head = t_head.replace('Autobusové nádraží', 'aut. nádr.')
+            t_head = t_head.replace('železniční stanice', 'žel. st.')
+            t_head = t_head.replace('Železniční stanice', 'žel. st.')
+            t_head = t_head.replace('restaurace', 'rest.')
+            t_head = t_head.replace('Restaurace', 'rest.')
+            t_head = t_head.replace('rozcestí', 'rozc.')
+            t_head = t_head.replace('Rozcestí', 'rozc.')
+            t_head = t_head.replace('průmyslová zóna', 'prům. zóna')
+            t_head = t_head.replace('Průmyslová zóna', 'prům. zóna')
+            t_head = t_head.replace('náměstí', 'nám.')
+            t_head = t_head.replace('Náměstí', 'nám.')
+            t_head = t_head.replace('nemocnice', 'nem.')
+            t_head = t_head.replace('Nemocnice', 'nem.')
+            t_head = t_head.replace('závod', 'záv.')
+            t_head = t_head.replace('Závod', 'záv.')
+            
+            val = (row['trip_id'], row['route_id'], row.get('service_id', ''), t_head, spoj)
             if row['trip_id'] in trips_idpk:
                 trips_db_idpk.append(val)
             elif row['trip_id'] in trips_fallback:
                 trips_db_fall.append(val)
-        conn_idpk.executemany("INSERT INTO trips VALUES (?,?,?,?)", trips_db_idpk)
-        conn_fall.executemany("INSERT INTO trips VALUES (?,?,?,?)", trips_db_fall)
+        conn_idpk.executemany("INSERT INTO trips VALUES (?,?,?,?,?)", trips_db_idpk)
+        conn_fall.executemany("INSERT INTO trips VALUES (?,?,?,?,?)", trips_db_fall)
+
+    print("Vkládám data do calendar...")
+    with zf.open("calendar.txt") as f:
+        reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
+        cal_idpk = []
+        cal_fall = []
+        for row in reader:
+            s_id = row['service_id']
+            val = (s_id, int(row['monday']), int(row['tuesday']), int(row['wednesday']), int(row['thursday']), int(row['friday']), int(row['saturday']), int(row['sunday']), row['start_date'], row['end_date'])
+            if s_id in services_idpk:
+                cal_idpk.append(val)
+            if s_id in services_fallback:
+                cal_fall.append(val)
+        conn_idpk.executemany("INSERT INTO calendar VALUES (?,?,?,?,?,?,?,?,?,?)", cal_idpk)
+        conn_fall.executemany("INSERT INTO calendar VALUES (?,?,?,?,?,?,?,?,?,?)", cal_fall)
+
+    print("Vkládám data do calendar_dates...")
+    with zf.open("calendar_dates.txt") as f:
+        reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
+        cd_idpk = []
+        cd_fall = []
+        for row in reader:
+            s_id = row['service_id']
+            val = (s_id, row['date'], int(row['exception_type']))
+            if s_id in services_idpk:
+                cd_idpk.append(val)
+            if s_id in services_fallback:
+                cd_fall.append(val)
+        conn_idpk.executemany("INSERT INTO calendar_dates VALUES (?,?,?)", cd_idpk)
+        conn_fall.executemany("INSERT INTO calendar_dates VALUES (?,?,?)", cd_fall)
 
     print("Vkládám data do stop_times...")
     with zf.open("stop_times.txt") as f:
@@ -317,8 +461,8 @@ def main():
 
     # Příprava výstupu pro discord
     changed_shorts = [route_id_to_short.get(r, r) for r in changed_route_ids]
-    changed_idpk = [rs for rs in changed_shorts if is_idpk_route(rs)]
-    changed_str = ", ".join(changed_idpk) if changed_idpk else "Žádné (nebo jen mimo IDPK)"
+    changed_idpk = [rs for rs in changed_shorts if rs]
+    changed_str = ", ".join(changed_idpk) if changed_idpk else "Žádné"
     if len(changed_str) > 1000:
         changed_str = changed_str[:1000] + "... (více zkráceno)"
 
@@ -332,6 +476,7 @@ def main():
     
     # Odeslání notifikace na Discord
     msg = (f"✅ **GTFS Data úspěšně aktualizována!**\n"
+           f"- **Zdroj dat:** [Stáhnout původní ZIP]({GTFS_SOURCE_URL})\n"
            f"- **Nová verze:** `{tag_name}`\n"
            f"- **Celkem zastávek:** {total_stops_inserted}\n"
            f"- **Celkem linek:** {len(routes_idpk) + len(routes_fallback)}\n"
@@ -342,4 +487,20 @@ def main():
     print("Zpracování úspěšně dokončeno.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        err_msg = traceback.format_exc()
+        # Truncate if too long for discord
+        if len(err_msg) > 1000:
+            err_msg = err_msg[:1000] + "...\n(Chyba byla příliš dlouhá)"
+        
+        # We need DISCORD_WEBHOOK_URL available here, which it is since it's global
+        if DISCORD_WEBHOOK_URL:
+            try:
+                requests.post(DISCORD_WEBHOOK_URL, json={"content": f"🚨 **Kritická chyba GTFS Updateru (GitHub Actions Crash):**\n```python\n{err_msg}\n```\nMrkni do logů na GitHubu."})
+            except:
+                pass
+        print("Kritická chyba:", err_msg)
+        sys.exit(1)
