@@ -1006,16 +1006,24 @@ def api_gtfs_info():
 @app.route('/api/gtfs-db-url')
 def api_gtfs_db_url():
     """Získá přesnou CORS-povolenou URL pro stáhnutí GTFS databáze IDPK"""
-    import requests
+    import urllib.request
+    import json
     try:
-        r = requests.get('https://api.github.com/repos/marek-1cz/DataCoreBot/releases/latest', headers={'Accept':'application/vnd.github+json'})
-        if r.status_code == 200:
-            data = r.json()
+        req = urllib.request.Request('https://api.github.com/repos/marek-1cz/DataCoreBot/releases/latest', headers={'Accept': 'application/vnd.github+json'})
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
             for asset in data.get('assets', []):
                 if asset['name'] == 'gtfs_stops_idpk.db':
-                    # Získá S3 URL z Location hlavičky
-                    r2 = requests.get(asset['browser_download_url'], allow_redirects=False)
-                    return jsonify({'url': r2.headers.get('Location', asset['browser_download_url'])})
+                    class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+                        def redirect_request(self, req, fp, code, msg, headers, newurl):
+                            return None
+                    opener = urllib.request.build_opener(NoRedirectHandler)
+                    req2 = urllib.request.Request(asset['browser_download_url'], method='HEAD')
+                    try:
+                        opener.open(req2)
+                    except urllib.error.HTTPError as e:
+                        # 302 Found will raise HTTPError because we blocked redirects
+                        return jsonify({'url': e.headers.get('Location', e.url)})
         return jsonify({'error': 'Release or asset not found'}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
