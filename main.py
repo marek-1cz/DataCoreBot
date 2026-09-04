@@ -998,13 +998,6 @@ def led_panel_view():
     from led_panel_view import HTML_LED_PANEL_VIEW
     return HTML_LED_PANEL_VIEW
 
-@app.route('/bukova')
-def bukova_page():
-    try:
-        with open("bukova.html", "r", encoding="utf-8") as f:
-            return f.read()
-    except Exception as e:
-        return f"<h1>CHYBA: Nenalezen soubor bukova.html</h1><p>{e}</p>"
 
 # /mapa je zpracovávána blueprintem z interaktivnimapa.py (mapa_bp)
 
