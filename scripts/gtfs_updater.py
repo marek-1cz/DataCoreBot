@@ -14,15 +14,15 @@ import collections
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 GTFS_SOURCE_URL = os.environ.get("GTFS_SOURCE_URL", "https://www.spojenka.cz/jrdata/jizdnirady-gtfs.zip")
 
-def send_discord(msg):
-    if not DISCORD_WEBHOOK_URL: return
+def write_discord_msg(msg):
+    """Uloží Discord zprávu do souboru pro GitHub Actions workflow"""
     try:
-        requests.post(DISCORD_WEBHOOK_URL, json={"content": msg})
-    except:
-        pass
+        with open(".discord_msg.txt", "w", encoding="utf-8") as f:
+            f.write(msg)
+    except Exception as e:
+        print(f"Nepodařilo se uložit discord zprávu: {e}")
 
 def is_idpk_route(r_short):
     pass # Obsolete, but kept to not break anything if referenced elsewhere
@@ -342,20 +342,29 @@ def main():
         conn_idpk.executemany("INSERT INTO trips VALUES (?,?,?,?,?)", trips_db_idpk)
         conn_fall.executemany("INSERT INTO trips VALUES (?,?,?,?,?)", trips_db_fall)
 
-    print("Vkládám data do calendar...")
+    print("Čtu rozsah platnosti dat z calendar...")
+    cal_start_date = None
+    cal_end_date = None
+    cal_idpk = []
+    cal_fall = []
     with zf.open("calendar.txt") as f:
         reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
-        cal_idpk = []
-        cal_fall = []
         for row in reader:
             s_id = row['service_id']
+            s_start = row['start_date']
+            s_end = row['end_date']
+            if s_id in services_idpk:
+                if cal_start_date is None or s_start < cal_start_date:
+                    cal_start_date = s_start
+                if cal_end_date is None or s_end > cal_end_date:
+                    cal_end_date = s_end
             val = (s_id, int(row['monday']), int(row['tuesday']), int(row['wednesday']), int(row['thursday']), int(row['friday']), int(row['saturday']), int(row['sunday']), row['start_date'], row['end_date'])
             if s_id in services_idpk:
                 cal_idpk.append(val)
             if s_id in services_fallback:
                 cal_fall.append(val)
-        conn_idpk.executemany("INSERT INTO calendar VALUES (?,?,?,?,?,?,?,?,?,?)", cal_idpk)
-        conn_fall.executemany("INSERT INTO calendar VALUES (?,?,?,?,?,?,?,?,?,?)", cal_fall)
+    conn_idpk.executemany("INSERT INTO calendar VALUES (?,?,?,?,?,?,?,?,?,?)", cal_idpk)
+    conn_fall.executemany("INSERT INTO calendar VALUES (?,?,?,?,?,?,?,?,?,?)", cal_fall)
 
     print("Vkládám data do calendar_dates...")
     with zf.open("calendar_dates.txt") as f:
@@ -459,30 +468,56 @@ def main():
         except Exception as e:
             print("Nepodařilo se zapsat gtfs_line_updates:", e)
 
-    # Příprava výstupu pro discord
-    changed_shorts = [route_id_to_short.get(r, r) for r in changed_route_ids]
-    changed_idpk = [rs for rs in changed_shorts if rs]
-    changed_str = ", ".join(changed_idpk) if changed_idpk else "Žádné"
-    if len(changed_str) > 1000:
-        changed_str = changed_str[:1000] + "... (více zkráceno)"
+    # Format validity dates for display
+    def fmt_date(d):
+        if d and len(d) == 8:
+            return f"{d[6:8]}.{d[4:6]}.{d[0:4]}"
+        return d or "?"
+    
+    validity_str = f"{fmt_date(cal_start_date)} – {fmt_date(cal_end_date)}" if cal_start_date else "neznámo"
+
+    # Příprava výstupu pro discord - changed linky s názvem linky
+    changed_shorts = []
+    for r_id in changed_route_ids:
+        r_short = route_id_to_short.get(r_id, r_id)
+        if not r_short:
+            continue
+        # Only include IDPK routes (numeric in range)
+        try:
+            num = int(r_short)
+            in_range = (400621 <= num <= 405611) or (430432 <= num <= 440649) or (450411 <= num <= 475211) or (490722 <= num <= 496711)
+            if in_range:
+                changed_shorts.append(r_short)
+        except:
+            pass
+
+    changed_shorts = list(set(changed_shorts))  # deduplicate
+    changed_shorts.sort()
+
+    if changed_shorts:
+        changed_str = "\n".join([f"• {rs}" for rs in changed_shorts[:30]])
+        if len(changed_shorts) > 30:
+            changed_str += f"\n... a {len(changed_shorts) - 30} dalších"
+    else:
+        changed_str = "Žádné IDPK linky se nezměnily"
 
     # Uložení tagu pro GitHub Action
     with open(".release_tag", "w") as f:
         f.write(tag_name)
-        
+
     # Uložení notes pro GitHub Action
     with open(".release_notes.md", "w") as f:
-        f.write(f"Automatická aktualizace dat.\n- Zastávek: {total_stops_inserted}\n- Linek: {len(routes_idpk)+len(routes_fallback)}\n- Spojů: {len(trips_idpk)+len(trips_fallback)}\n- Hash: `{current_hash}`")
+        f.write(f"Automatická aktualizace dat.\n- Zastávek: {total_stops_inserted}\n- Linek: {len(routes_idpk)+len(routes_fallback)}\n- Spojů: {len(trips_idpk)+len(trips_fallback)}\n- Platnost dat: {validity_str}\n- Hash: `{current_hash}`")
     
-    # Odeslání notifikace na Discord
+    # Sestavení Discord zprávy – uloží do souboru pro workflow
     msg = (f"✅ **GTFS Data úspěšně aktualizována!**\n"
-           f"- **Zdroj dat:** [Stáhnout původní ZIP]({GTFS_SOURCE_URL})\n"
+           f"- **Platnost JŘ dat:** `{validity_str}`\n"
            f"- **Nová verze:** `{tag_name}`\n"
            f"- **Celkem zastávek:** {total_stops_inserted}\n"
-           f"- **Celkem linek:** {len(routes_idpk) + len(routes_fallback)}\n"
-           f"- **Celkem spojů:** {len(trips_idpk) + len(trips_fallback)}\n"
-           f"- **Změněné IDPK linky:** {changed_str}")
-    send_discord(msg)
+           f"- **Celkem linek (IDPK):** {len(routes_idpk)}\n"
+           f"- **Celkem spojů (IDPK):** {len(trips_idpk)}\n"
+           f"- **Změněné IDPK linky ({len(changed_shorts)}):**\n{changed_str}")
+    write_discord_msg(msg)
     
     print("Zpracování úspěšně dokončeno.")
 
@@ -492,15 +527,13 @@ if __name__ == "__main__":
     except Exception as e:
         import traceback
         err_msg = traceback.format_exc()
-        # Truncate if too long for discord
-        if len(err_msg) > 1000:
-            err_msg = err_msg[:1000] + "...\n(Chyba byla příliš dlouhá)"
-        
-        # We need DISCORD_WEBHOOK_URL available here, which it is since it's global
-        if DISCORD_WEBHOOK_URL:
-            try:
-                requests.post(DISCORD_WEBHOOK_URL, json={"content": f"🚨 **Kritická chyba GTFS Updateru (GitHub Actions Crash):**\n```python\n{err_msg}\n```\nMrkni do logů na GitHubu."})
-            except:
-                pass
+        if len(err_msg) > 1500:
+            err_msg = err_msg[:1500] + "...\n(Chyba byla příliš dlouhá)"
         print("Kritická chyba:", err_msg)
+        # Write error to discord msg file so workflow can send it
+        try:
+            with open(".discord_msg.txt", "w", encoding="utf-8") as f:
+                f.write(f"❌ **Kritická chyba GTFS Updateru:**\n```\n{err_msg[:800]}\n```")
+        except:
+            pass
         sys.exit(1)

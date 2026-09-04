@@ -355,6 +355,7 @@ HTML_HOME = """
         <p style="margin-bottom:0;">Celý projekt vznikl z nadšení pro dopravu, technologie a informační systems ve veřejné dopravě. Projekt není oficiálním produktem ani službou dopravců nebo organizací veřejné dopravy a nijak s nimi nespolupracuje. Jedná se čistě o fanouškovský projekt vytvořený pro zábavu, experimentování a zájem o dopravní technologie.</p>
     </div>
     <a href="/download" class="btn" style="font-size: 18px; padding: 15px 40px; border-radius: 30px; box-shadow: 0 5px 15px rgba(56, 189, 248, 0.4);"><i class="fas fa-download"></i> Získat Software</a>
+    <a href="/jizdni-rad" class="btn" style="font-size: 18px; padding: 15px 40px; border-radius: 30px; background: linear-gradient(135deg, #f59e0b, #d97706); box-shadow: 0 5px 15px rgba(245, 158, 11, 0.4); margin-left: 15px; margin-top: 10px; display: inline-block;"><i class="fas fa-bus"></i> DATA IDPK – Jízdní řád</a>
     <div style="margin-top: 50px;">
         <h2 style="color: var(--blue-main); margin-bottom: 20px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.4);">Ukázky z aplikace</h2>
         <div style="display: flex; flex-direction: column; gap: 25px; align-items: center;">

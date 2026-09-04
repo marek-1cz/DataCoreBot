@@ -29,7 +29,6 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           GTFS_SOURCE_URL: 'https://www.spojenka.cz/jrdata/jizdnirady-gtfs.zip'
         run: |
           python scripts/gtfs_updater.py
@@ -39,12 +38,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Získá tag vygenerovaný Python skriptem (např. gtfs-2026-08-30)
           if [ -f .release_tag ]; then
             TAG=$(cat .release_tag)
             echo "Publikuji release $TAG"
-            
-            # Pokud tag už existuje, gh release create selže (což chceme, pokud se stala neočekávaná chyba)
             gh release create "$TAG" gtfs.zip gtfs_stops_*.db --title "GTFS Update $TAG" --notes-file .release_notes.md
           else
             echo "Soubor .release_tag nenalezen. Pravděpodobně nenastala žádná změna ve zdrojových databázi."
@@ -55,13 +51,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Získá všechny release začínající na 'gtfs-', setřídí podle data (nejnovější první)
           RELEASES=$(gh release list --exclude-drafts --exclude-pre-releases | grep 'gtfs-' | awk '{print $1}')
           COUNT=$(echo "$RELEASES" | wc -l)
-          
           if [ "$COUNT" -gt 3 ]; then
             echo "Našel jsem $COUNT verzí, mažu ty nejstarší (nad limit 3)."
-            # Vezme všechny od 4. řádku dolů
             TO_DELETE=$(echo "$RELEASES" | tail -n +4)
             for REL in $TO_DELETE; do
               echo "Mažu release a tag: $REL"
@@ -70,3 +63,24 @@ jobs:
           else
             echo "Retence: $COUNT verzí je v pořádku (limit 3)."
           fi
+
+      - name: Odeslání Discord notifikace – Úspěch
+        if: success()
+        run: |
+          if [ -f .discord_msg.txt ]; then
+            MSG=$(cat .discord_msg.txt)
+          else
+            MSG="✅ **GTFS data úspěšně aktualizována!**"
+          fi
+          curl -s -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": $(echo "$MSG" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')}"
+
+      - name: Odeslání Discord notifikace – Selhání
+        if: failure()
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG="❌ **GTFS Update SELHAL!**\n- **Workflow:** ${{ github.workflow }}\n- **Datum:** $(date -u '+%Y-%m-%d %H:%M UTC')\n- **Logy:** $RUN_URL"
+          curl -s -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": $(echo -e "$MSG" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')}"

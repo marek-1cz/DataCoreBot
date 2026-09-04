@@ -983,6 +983,38 @@ def provoz_idpk():
     """Rozcestník Provoz IDPK — Interaktivní mapa & Databáze autobusů"""
     return render_public(HTML_PROVOZ_IDPK)
 
+@app.route('/jizdni-rad')
+def jizdni_rad():
+    """Veřejný jízdní řád IDPK z GTFS dat"""
+    from jizdni_rad import HTML_JIZDNI_RAD
+    return HTML_JIZDNI_RAD
+
+@app.route('/api/gtfs-info')
+def api_gtfs_info():
+    """Vrátí info o aktuální verzi GTFS dat (verze, platnost)"""
+    try:
+        db = get_db()
+        if not db:
+            return jsonify({"error": "DB nedostupná"}), 503
+        data = db.table("gtfs_feed_versions").select("version_tag,created_at,stop_count,route_count,trip_count").order("id", desc=True).limit(1).execute().data
+        if data:
+            return jsonify(data[0])
+        return jsonify({"version_tag": "neznámá"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/gtfs-line-updates')
+def api_gtfs_line_updates():
+    """Vrátí seznam posledně změněných IDPK linek"""
+    try:
+        db = get_db()
+        if not db:
+            return jsonify([]), 503
+        data = db.table("gtfs_line_updates").select("route_id,hash,last_updated_at").order("last_updated_at", desc=True).limit(50).execute().data
+        return jsonify(data or [])
+    except Exception as e:
+        return jsonify([]), 500
+
 @app.route('/led-panel')
 def led_panel_landing():
     from led_panel_html import HTML_LED_PANEL
