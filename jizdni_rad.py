@@ -96,6 +96,14 @@ HTML_JIZDNI_RAD = """<!DOCTYPE html>
                 <input type="text" id="lineInput" placeholder="napr. 400621, 490722..." autocomplete="off">
                 <div id="suggestions"></div>
             </div>
+            <div class="field" id="odkudField" style="flex:2; display:none">
+                <label><i class="fas fa-map-marker-alt"></i> Odkud</label>
+                <select id="odkudSelect" onchange="renderFilteredTrips()"><option value="">-- Všechny --</option></select>
+            </div>
+            <div class="field" id="kamField" style="flex:2; display:none">
+                <label><i class="fas fa-map-marker-alt"></i> Kam</label>
+                <select id="kamSelect" onchange="renderFilteredTrips()"><option value="">-- Všechny --</option></select>
+            </div>
             <div class="field" style="flex:0 0 auto">
                 <label>&nbsp;</label>
                 <button class="btn-search" id="searchBtn" onclick="searchLine()">
@@ -116,6 +124,8 @@ HTML_JIZDNI_RAD = """<!DOCTYPE html>
 const GH_API = 'https://api.github.com/repos/marek-1cz/DataCoreBot/releases/latest';
 const RANGES = [[400621,405611],[430432,440649],[450411,475211],[490722,496711]];
 let db = null, allRoutes = [], dbLoading = false, dbLoaded = false;
+let currentTrips = []; 
+let currentShortName = '';
 
 fetch('/api/gtfs-info').then(r=>r.json()).then(d=>{
     const bar = document.getElementById('gtfsBar');
@@ -184,6 +194,10 @@ async function searchLine(){
     hideSug();
     const res = document.getElementById('results');
     res.innerHTML='<div class="loading"><i class="fas fa-spinner"></i><br>Nacitam...</div>';
+    
+    document.getElementById('odkudField').style.display = 'none';
+    document.getElementById('kamField').style.display = 'none';
+    
     const ok = await ensureDb();
     if(!ok) return;
 
@@ -199,22 +213,17 @@ async function searchLine(){
         shortName=part[0].values[0][1];
     } else { shortName=rows[0].values[0][1]; }
 
+    currentShortName = shortName;
     const sn=shortName.replace(/'/g,"''");
     const idRows=db.exec(`SELECT DISTINCT route_id FROM routes WHERE route_short_name='${sn}'`);
     if(!idRows.length){ res.innerHTML='<div class="empty"><i class="fas fa-ban"></i><br>Zadne vysledky</div>'; return; }
     const ids=idRows[0].values.map(r=>`'${r[0]}'`).join(',');
+    
     const longRow=db.exec(`SELECT route_long_name FROM routes WHERE route_short_name='${sn}' LIMIT 1`);
     const longName=(longRow[0]&&longRow[0].values[0]&&longRow[0].values[0][0])||'';
 
-    const tripRows=db.exec(`SELECT t.trip_id,t.trip_headsign,t.spoj_cislo,MIN(st.arrival_time) as dep FROM trips t JOIN stop_times st ON t.trip_id=st.trip_id WHERE t.route_id IN (${ids}) GROUP BY t.trip_id ORDER BY dep`);
-    if(!tripRows.length||!tripRows[0].values.length){
-        res.innerHTML=`<div class="empty"><i class="fas fa-calendar-times"></i><br>Zadne spoje pro linku <b style="color:var(--yellow)">${shortName}</b></div>`;
-        return;
-    }
-    const trips=tripRows[0].values;
-
     let validity='';
-    try{
+    try {
         const cal=db.exec(`SELECT MIN(start_date),MAX(end_date) FROM calendar c JOIN trips t ON c.service_id=t.service_id WHERE t.route_id IN (${ids})`);
         if(cal.length&&cal[0].values[0][0]){
             const fmt=d=>d?d.slice(6,8)+'.'+d.slice(4,6)+'.'+d.slice(0,4):'?';
@@ -222,31 +231,164 @@ async function searchLine(){
         }
     }catch(e){}
 
-    let html=`<div class="route-header"><h2><i class="fas fa-bus" style="font-size:0.85em"></i> Linka ${shortName}</h2><div class="route-meta"><span><i class="fas fa-route"></i> ${longName||'Trasa nedostupna'}</span>${validity?`<span><i class="fas fa-calendar-alt"></i> Platnost JR: ${validity}</span>`:''}<span><i class="fas fa-list-ol"></i> Nalezenych spoju: ${trips.length}</span></div></div><p class="trips-title">Spoje (${trips.length})</p>`;
-    trips.forEach(([tid,headsign,spoj,dep])=>{
-        const t=dep?dep.substring(0,5):'--:--';
-        const sid='t_'+tid.replace(/[^a-z0-9]/gi,'_');
-        html+=`<div class="trip-card" id="card_${sid}"><div class="trip-hdr" onclick="toggleTrip('${tid.replace(/'/g,"\\'")}','${sid}')"><span class="trip-time">${t}</span><span class="trip-num">spoj ${spoj||'?'}</span><span class="trip-dest">${headsign||'Neznamy cil'}</span><i class="fas fa-chevron-down trip-toggle"></i></div><div class="stop-list" id="${sid}"><div style="color:var(--muted);font-size:13px;padding:10px 0"><i class="fas fa-spinner fa-spin"></i> Nacitam zastavky...</div></div></div>`;
+    const dt = new Date();
+    const todayStr = dt.getFullYear() + String(dt.getMonth()+1).padStart(2,'0') + String(dt.getDate()).padStart(2,'0');
+    const dowCols = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+    const todayDowCol = dowCols[dt.getDay()];
+
+    const query = `
+        SELECT t.trip_id, t.trip_headsign, t.spoj_cislo, 
+        (SELECT arrival_time FROM stop_times WHERE trip_id=t.trip_id AND arrival_time IS NOT NULL AND arrival_time != '' ORDER BY stop_sequence ASC LIMIT 1) as dep,
+        (SELECT s.name FROM stop_times st JOIN stops s ON st.stop_id=s.stop_id WHERE st.trip_id=t.trip_id ORDER BY st.stop_sequence ASC LIMIT 1) as start_stop,
+        (SELECT s.name FROM stop_times st JOIN stops s ON st.stop_id=s.stop_id WHERE st.trip_id=t.trip_id ORDER BY st.stop_sequence DESC LIMIT 1) as end_stop,
+        cal.start_date, cal.end_date, cal.monday, cal.tuesday, cal.wednesday, cal.thursday, cal.friday, cal.saturday, cal.sunday,
+        (
+            (cal.start_date <= '${todayStr}' AND cal.end_date >= '${todayStr}' AND cal.${todayDowCol} = 1 
+            AND t.service_id NOT IN (SELECT service_id FROM calendar_dates WHERE date='${todayStr}' AND exception_type=2))
+            OR t.service_id IN (SELECT service_id FROM calendar_dates WHERE date='${todayStr}' AND exception_type=1)
+        ) as is_running_today
+        FROM trips t
+        LEFT JOIN calendar cal ON t.service_id = cal.service_id
+        WHERE t.route_id IN (${ids})
+        ORDER BY dep
+    `;
+    
+    let tripRows;
+    try { tripRows = db.exec(query); } catch(e) { console.error(e); tripRows = []; }
+    
+    if(!tripRows.length||!tripRows[0].values.length){
+        res.innerHTML=`<div class="empty"><i class="fas fa-calendar-times"></i><br>Zadne spoje pro linku <b style="color:var(--yellow)">${shortName}</b></div>`;
+        return;
+    }
+    
+    currentTrips = tripRows[0].values.map(r => ({
+        tid: r[0],
+        headsign: r[1],
+        spoj: r[2],
+        dep: r[3],
+        startStop: r[4],
+        endStop: r[5],
+        startDate: r[6],
+        endDate: r[7],
+        dow: [r[8],r[9],r[10],r[11],r[12],r[13],r[14]],
+        isRunningToday: r[15] == 1,
+        longName: longName,
+        validity: validity
+    }));
+    
+    const starts = [...new Set(currentTrips.map(t=>t.startStop).filter(Boolean))].sort();
+    const ends = [...new Set(currentTrips.map(t=>t.endStop).filter(Boolean))].sort();
+    
+    let odHtml = '<option value="">-- Všechny --</option>' + starts.map(s=>`<option value="${s.replace(/"/g,'&quot;')}">${s}</option>`).join('');
+    let kamHtml = '<option value="">-- Všechny --</option>' + ends.map(s=>`<option value="${s.replace(/"/g,'&quot;')}">${s}</option>`).join('');
+    
+    document.getElementById('odkudSelect').innerHTML = odHtml;
+    document.getElementById('kamSelect').innerHTML = kamHtml;
+    document.getElementById('odkudField').style.display = 'block';
+    document.getElementById('kamField').style.display = 'block';
+    
+    renderFilteredTrips();
+}
+
+function renderFilteredTrips() {
+    const res = document.getElementById('results');
+    const odVal = document.getElementById('odkudSelect').value;
+    const kamVal = document.getElementById('kamSelect').value;
+    
+    let filtered = currentTrips;
+    if (odVal) filtered = filtered.filter(t => t.startStop === odVal);
+    if (kamVal) filtered = filtered.filter(t => t.endStop === kamVal);
+    
+    if(filtered.length === 0) {
+        res.innerHTML = `<div class="empty"><i class="fas fa-filter"></i><br>Zadné spoje neodpovídají filtru</div>`;
+        return;
+    }
+    
+    const t0 = filtered[0];
+    let html=`<div class="route-header"><h2><i class="fas fa-bus" style="font-size:0.85em"></i> Linka ${currentShortName}</h2><div class="route-meta"><span><i class="fas fa-route"></i> ${t0.longName||'Trasa nedostupna'}</span>${t0.validity?`<span><i class="fas fa-calendar-alt"></i> Platnost JR: ${t0.validity}</span>`:''}<span><i class="fas fa-list-ol"></i> Nalezenych spoju: ${filtered.length}</span></div></div><p class="trips-title">Spoje (${filtered.length})</p>`;
+    
+    const dt = new Date();
+    const todayStr = dt.getFullYear() + String(dt.getMonth()+1).padStart(2,'0') + String(dt.getDate()).padStart(2,'0');
+
+    filtered.forEach(t=>{
+        const depStr = t.dep ? t.dep.substring(0,5) : '--:--';
+        const sid = 't_' + String(t.tid).replace(/[^a-z0-9]/gi,'_');
+        
+        let hs = t.headsign;
+        if (!hs || hs.trim() === '') hs = t.endStop || 'Neznámý cíl';
+        
+        let isInactive = false;
+        let inactiveReason = "";
+        let dowReason = "";
+        
+        if (t.startDate && t.endDate) {
+            if (t.endDate < todayStr) { isInactive = true; inactiveReason = "❌ ZASTARALÝ SPOJ"; }
+            else if (t.startDate > todayStr) { isInactive = true; inactiveReason = "📅 BUDOUCÍ SPOJ"; }
+        }
+        
+        if (t.dow) {
+            const [mo, tu, we, th, fr, sa, su] = t.dow;
+            const isWork = (mo && tu && we && th && fr && !sa && !su);
+            const isWkend = (!mo && !tu && !we && !th && !fr && sa && su);
+            if (isWkend) dowReason = "JEDE POUZE O VÍKENDU";
+            else if (!mo && !tu && !we && !th && !fr && !sa && su) dowReason = "JEDE POUZE V NEDĚLI";
+            else if (!mo && !tu && !we && !th && !fr && sa && !su) dowReason = "JEDE POUZE V SOBOTU";
+            else if (isWork) dowReason = "JEDE POUZE V PRACOVNÍ DNY";
+        }
+        
+        let bgStyle = 'background:rgba(255,255,255,0.04); border-color:rgba(255,255,255,0.06);';
+        let extraLabel = '';
+        
+        if (isInactive) {
+            bgStyle = 'background:rgba(0,0,0,0.3); border-color:rgba(255,255,255,0.1); opacity:0.65; filter: grayscale(60%);';
+            extraLabel = `<span style="background:rgba(255,255,255,0.15); color:white; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px;">${inactiveReason || '⏳ SEZÓNNÍ'}</span>`;
+        } else if (!t.isRunningToday) {
+            if (dowReason) extraLabel = `<span style="background:rgba(255,255,255,0.1); color:#ccc; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px;">ℹ️ ${dowReason}</span>`;
+            else extraLabel = `<span style="background:rgba(255,255,255,0.1); color:#ccc; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px;">ℹ️ NEJEDE DNES</span>`;
+        }
+        
+        html+=`<div class="trip-card" id="card_${sid}" style="${bgStyle}">
+            <div class="trip-hdr" onclick="toggleTrip('${String(t.tid).replace(/'/g,"\\'")}','${sid}')">
+                <span class="trip-time">${depStr}</span>
+                <span class="trip-num">spoj ${t.spoj||'?'}</span>
+                <span class="trip-dest">${hs}</span>
+                ${extraLabel}
+                <i class="fas fa-chevron-down trip-toggle"></i>
+            </div>
+            <div class="stop-list" id="${sid}">
+                <div style="color:var(--muted);font-size:13px;padding:10px 0"><i class="fas fa-spinner fa-spin"></i> Nacitam zastavky...</div>
+            </div>
+        </div>`;
     });
     res.innerHTML=html;
 }
 
 function toggleTrip(tripId, sid){
-    const card=document.getElementById('card_'+sid);
+    const card = document.getElementById('card_'+sid);
     if(card.classList.contains('open')){ card.classList.remove('open'); return; }
     card.classList.add('open');
-    const div=document.getElementById(sid);
+    const div = document.getElementById(sid);
     if(div.dataset.loaded) return;
-    div.dataset.loaded='1';
-    try{
-        const r=db.exec(`SELECT st.arrival_time,s.name,s.zone_id,st.pickup_type FROM stop_times st JOIN stops s ON st.stop_id=s.stop_id WHERE st.trip_id='${tripId.replace(/'/g,"''")}' ORDER BY st.stop_sequence`);
+    div.dataset.loaded = '1';
+    try {
+        const r = db.exec(`SELECT st.arrival_time, s.name, s.zone_id, st.pickup_type, st.drop_off_type FROM stop_times st JOIN stops s ON st.stop_id=s.stop_id WHERE st.trip_id='${tripId.replace(/'/g,"''")}' ORDER BY st.stop_sequence`);
         if(!r.length||!r[0].values.length){ div.innerHTML='<div style="color:var(--muted);font-size:13px;padding:10px 0">Zadne zastavky</div>'; return; }
-        const stops=r[0].values;
-        div.innerHTML=stops.map(([time,name,zone,pickup],i)=>{
-            const t=time?time.substring(0,5):'--:--';
-            const nc=i===0?'stop-name stop-first':i===stops.length-1?'stop-name stop-last':'stop-name';
-            const p=pickup==='1'?'<span style="color:var(--muted);font-size:11px" title="Pouze vystup">&#x1F6AB;</span>':'';
-            return `<div class="stop-row"><span class="stop-time">${t}</span><span class="${nc}">${p}${name}</span>${zone?`<span class="stop-zone">${zone}</span>`:''}</div>`;
+        const stops = r[0].values;
+        div.innerHTML = stops.map(([time,name,zone,pickup,dropoff], i) => {
+            const t = time ? time.substring(0,5) : '--:--';
+            const nc = i===0 ? 'stop-name stop-first' : i===stops.length-1 ? 'stop-name stop-last' : 'stop-name';
+            
+            let pIcon = '';
+            if (pickup === '1' && dropoff === '1') {
+                pIcon = '<span style="color:var(--muted);font-weight:bold;margin-right:6px;" title="Projizdi">|</span>';
+            } else if (pickup === '2' || pickup === '3') {
+                pIcon = '<span style="color:var(--yellow);font-weight:bold;margin-right:6px;" title="Na znameni">x</span>';
+            } else if (pickup === '1') {
+                pIcon = '<span style="color:var(--red);font-size:11px;margin-right:6px;" title="Pouze vystup">&#x1F6AB;</span>';
+            }
+            
+            let cleanZone = zone ? zone.replace(/^P/i, '') : '';
+            return `<div class="stop-row"><span class="stop-time">${t}</span><span class="${nc}">${pIcon}${name}</span>${cleanZone?`<span class="stop-zone">${cleanZone}</span>`:''}</div>`;
         }).join('');
     }catch(e){ div.innerHTML=`<div style="color:var(--red);font-size:13px;padding:10px 0">Chyba: ${e.message}</div>`; }
 }
