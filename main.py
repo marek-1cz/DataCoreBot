@@ -1006,12 +1006,21 @@ def api_gtfs_info():
 @app.route('/api/gtfs-db-url')
 def api_gtfs_db_url():
     """Proxy the GTFS DB download to avoid CORS issues"""
-    import requests
+    import urllib.request
     from flask import Response
     try:
         url = 'https://github.com/marek-1cz/DataCoreBot/releases/latest/download/gtfs_stops_idpk.db'
-        req = requests.get(url, stream=True)
-        return Response(req.iter_content(chunk_size=1024*1024), content_type=req.headers.get('content-type'))
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        response = urllib.request.urlopen(req)
+        
+        def generate():
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+                
+        return Response(generate(), content_type=response.headers.get('content-type', 'application/octet-stream'))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
