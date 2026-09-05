@@ -4102,8 +4102,15 @@ def _load_gtfs():
     global GTFS_TOKENS, GTFS_TOKEN_IDX, GTFS_MODES, GTFS_LINES
     db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gtfs_stops_idpk.db")
     if not os.path.exists(db_path):
-        print(f"[GTFS] Soubor nenalezen: {db_path}", flush=True)
-        return False
+        print(f"[GTFS] Soubor nenalezen: {db_path}, pokousim se stahnout z Github Releases...", flush=True)
+        try:
+            import urllib.request
+            url = 'https://github.com/marek-1cz/DataCoreBot/releases/latest/download/gtfs_stops_idpk.db'
+            urllib.request.urlretrieve(url, db_path)
+            print("[GTFS] Databaze uspesne stazena.", flush=True)
+        except Exception as e:
+            print(f"[GTFS] Chyba pri stahovani databaze: {e}", flush=True)
+            return False
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
