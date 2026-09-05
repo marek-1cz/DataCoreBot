@@ -66,8 +66,14 @@ def main():
         if data and len(data) > 0:
             last_hash = data[0].get("source_hash")
             if last_hash == current_hash:
-                print("Hash je shodný s předchozí verzí. Pokračuji (vynucená aktualizace).")
-                # sys.exit(0)
+                print("Hash je shodný s předchozí verzí. Data jsou aktuální, není třeba aktualizovat.")
+                # Uložíme zprávu pro Discord – bez selhání, jen info
+                with open(".discord_msg.txt", "w", encoding="utf-8") as f:
+                    f.write("✅ **GTFS Pipeline proběhla v pořádku.**\n- Data jsou **aktuální** – žádná nová verze od IDPK nebyla vydána.\n- Systém nebyl zbytečně zatížen.")
+                # Smazat .release_tag aby workflow nevytvářelo nový release
+                if os.path.exists(".release_tag"):
+                    os.remove(".release_tag")
+                sys.exit(0)
     except Exception as e:
         print(f"Varování: Nelze přečíst hash z databáze, pokračuji: {e}")
 
