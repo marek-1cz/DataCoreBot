@@ -7359,7 +7359,8 @@ def api_admin_save_stop_override():
         "custom_lines": custom_lines,
         "mode": mode
     }
-    CONFIDENCE_LOG.pop(key, None)
+    base_key = _norm_txt(name)
+    CONFIDENCE_LOG.pop(base_key, None)
 
     db = get_db_client()
     if db:
