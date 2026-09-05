@@ -4562,7 +4562,7 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "line": line, "real_linka_spoj": None, "real_zastavka": None, "nearest_stop": None, "destination": dest, "is_train": is_train,
         "raw_delay": delay, "spz": ghost_spz, "spz_verified": ghost_verified,
         "spz_locked": False, "manual_spz": False, "spz_stable_ticks": 0,
-        "spz_last_verified": None, "investigating": False, "investigation_spz": None,
+        "spz_last_verified": now if ghost_verified else None, "investigating": False, "investigation_spz": None,
         "investigation_start": None, "first_seen": now, "last_inflow_seen": now,
         "last_moved": now, "created_at": now, "actual_start_time": None,
         "actual_end_time": None, "first_dep_time": None, "last_dep_time": None,
@@ -5031,6 +5031,7 @@ def background_map_worker():
                                     # i kdyz byl bus driv "Kone\u010dn\u00e1 zast\u00e1vka"/v depu.
                                     c["spz_frozen"] = False
                                     c["spz_last_audit_check"] = None
+                                    c["spz_last_verified"] = None
                                 if not c.get("admin_lock_permanent"):
                                     c["admin_lock_display"] = False
                                     c["admin_color_override"] = None
@@ -6918,7 +6919,7 @@ def api_admin_map_action():
 
 @mapa_bp.route('/api/admin/approve_conflict_spz', methods=['POST'])
 def api_admin_approve_conflict_spz():
-    if not current_user.is_authenticated:
+    if not session.get('logged_in'):
         return jsonify({"status": "error", "message": "Neopravneny pristup"}), 401
         
     data = request.json or {}
