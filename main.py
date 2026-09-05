@@ -1005,12 +1005,13 @@ def api_gtfs_info():
 
 @app.route('/api/gtfs-db-url')
 def api_gtfs_db_url():
-    """Získá přesnou CORS-povolenou URL pro stáhnutí GTFS databáze IDPK (obchází API rate-limity)"""
-    import urllib.request
+    """Proxy the GTFS DB download to avoid CORS issues"""
+    import requests
+    from flask import Response
     try:
-        req = urllib.request.Request('https://github.com/marek-1cz/DataCoreBot/releases/latest/download/gtfs_stops_idpk.db', method='HEAD')
-        with urllib.request.urlopen(req) as response:
-            return jsonify({'url': response.url})
+        url = 'https://github.com/marek-1cz/DataCoreBot/releases/latest/download/gtfs_stops_idpk.db'
+        req = requests.get(url, stream=True)
+        return Response(req.iter_content(chunk_size=1024*1024), content_type=req.headers.get('content-type'))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

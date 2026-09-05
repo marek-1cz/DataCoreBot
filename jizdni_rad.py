@@ -151,10 +151,7 @@ async function ensureDb(){
     document.getElementById('loadingStatus').style.display='block';
     document.getElementById('searchBtn').disabled=true;
     try{
-        const rel = await fetch('/api/gtfs-db-url');
-        const rd = await rel.json();
-        if(rd.error) throw new Error(rd.error);
-        const resp = await fetch(rd.url);
+        const resp = await fetch('/api/gtfs-db-url');
         if(!resp.ok) throw new Error('Chyba stahovani DB: '+resp.status);
         const buf = await resp.arrayBuffer();
         const SQL = await initSqlJs({locateFile:f=>`https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}`});
