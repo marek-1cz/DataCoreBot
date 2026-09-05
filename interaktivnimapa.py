@@ -4097,31 +4097,31 @@ def _name_suggests_train(name):
 
 
 def _load_gtfs():
-    """Nacte gtfs_stops.db do pameti. Vola se jednou pri startu workeru."""
+    """Nacte gtfs_stops_idpk.db do pameti. Vola se jednou pri startu workeru."""
     global GTFS_LOADED, GTFS_STOPS, GTFS_NAME_IDX, GTFS_GRID, GTFS_STOP_CNT
     global GTFS_TOKENS, GTFS_TOKEN_IDX, GTFS_MODES, GTFS_LINES
-    if not os.path.exists(GTFS_DB_PATH):
-        print(f"[GTFS] Soubor nenalezen: {GTFS_DB_PATH}", flush=True)
+    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gtfs_stops_idpk.db")
+    if not os.path.exists(db_path):
+        print(f"[GTFS] Soubor nenalezen: {db_path}", flush=True)
         return False
     try:
-        conn = sqlite3.connect(GTFS_DB_PATH)
+        conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        cur.execute("PRAGMA table_info(stops)")
-        cols = [r[1] for r in cur.fetchall()]
-        def pick(cands):
-            for c in cands:
-                if c in cols: return c
-            return None
-        nc  = pick(["stop_name","name"])
-        lac = pick(["stop_lat","lat","latitude"])
-        loc = pick(["stop_lon","stop_lng","lon","lng","longitude"])
-        mc  = pick(["mode"])    # volitelny - 'bus'/'train'/'mixed'/NULL
-        lc  = pick(["lines"])   # volitelny - JSON pole nazvu linek napr. '["490","733"]'
-        if not (nc and lac and loc):
-            raise RuntimeError(f"Nerozpoznane schema: {cols}")
-        extras = (f", {mc} AS md" if mc else "") + (f", {lc} AS ln" if lc else "")
-        cur.execute(f"SELECT {nc} AS n, {lac} AS la, {loc} AS lo{extras} FROM stops")
+        
+        # Novy dotaz s agregaci:
+        cur.execute("""
+            SELECT s.name AS n, AVG(s.lat) AS la, AVG(s.lon) AS lo, 
+                   (SELECT GROUP_CONCAT(DISTINCT r.route_short_name)
+                    FROM stop_times st
+                    JOIN trips t ON st.trip_id = t.trip_id
+                    JOIN routes r ON t.route_id = r.route_id
+                    JOIN stops s2 ON st.stop_id = s2.stop_id
+                    WHERE s2.name = s.name) as ln
+            FROM stops s
+            GROUP BY s.name
+        """)
+        
         stops, name_idx, grid, modes, lines_list = [], {}, {}, [], []
         tokens_list, token_idx = [], {}
         for row in cur.fetchall():
@@ -4134,12 +4134,12 @@ def _load_gtfs():
                 continue
             idx = len(stops)
             stops.append((name, la, lo))
-            modes.append(row["md"] if mc else None)
-            raw_lines = row["ln"] if lc else None
-            try:
-                lines_list.append(json.loads(raw_lines) if raw_lines else [])
-            except Exception:
-                lines_list.append([])
+            
+            modes.append('bus') # Implicitně bus
+            
+            raw_lines = row["ln"]
+            lines_list.append(raw_lines.split(",") if raw_lines else [])
+            
             nk = _norm_txt(name)
             name_idx.setdefault(nk, []).append(idx)
             grid.setdefault(_gtfs_grid_key(la, lo), []).append(idx)
@@ -4154,8 +4154,7 @@ def _load_gtfs():
         GTFS_LINES = lines_list
         GTFS_STOP_CNT = len(stops)
         GTFS_LOADED = True
-        has_modes = mc is not None
-        print(f"[GTFS] Nacteno {len(stops)} zastavek z {GTFS_DB_PATH} (mode info: {'ano' if has_modes else 'ne - stary format DB'})", flush=True)
+        print(f"[GTFS] Nacteno {len(stops)} zastavek z {db_path}", flush=True)
         return True
     except Exception as e:
         print(f"[GTFS] Chyba nacitani: {e}", flush=True)
