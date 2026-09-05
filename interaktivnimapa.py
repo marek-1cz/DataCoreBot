@@ -7911,9 +7911,11 @@ def api_bus_route(bus_id):
         if coords:
             seen[name_c] = coords
             anchor = coords
-            ov = STOP_OVERRIDES.get(f"{_norm_txt(name_c)}|{bus_mode}") or STOP_OVERRIDES.get(f"{_norm_txt(name_c)}|mixed")
+            eff_mode = 'train' if _name_suggests_train(name_c) else (bus_mode or 'bus')
+            ov = STOP_OVERRIDES.get(f"{_norm_txt(name_c)}|{eff_mode}") or STOP_OVERRIDES.get(f"{_norm_txt(name_c)}|mixed")
             result[i] = {"name": name_c, "time": t, "lat": coords[0], "lng": coords[1],
                          "passed": i < current_idx, "confidence": conf,
+                         "mode": eff_mode,
                          "display_name": (ov.get("display_name") if ov else "") or ""}
         else:
             pending.append((i, name_c, anchor, t))
@@ -7929,12 +7931,14 @@ def api_bus_route(bus_id):
             for idx, name_c, t, coords in pool.map(resolve, pending):
                 if coords:
                     seen[name_c] = coords
+                eff_mode = 'train' if _name_suggests_train(name_c) else (bus_mode or 'bus')
                 result[idx] = {
                     "name": name_c, "time": t,
                     "lat": coords[0] if coords else None,
                     "lng": coords[1] if coords else None,
                     "passed": idx < current_idx,
                     "confidence": "geocoded" if coords else "none",
+                    "mode": eff_mode,
                 }
 
     # Zaznamenej jistotu kazde zastavky - NT rezim podle tohoto zvyrazni
