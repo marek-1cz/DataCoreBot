@@ -1619,8 +1619,8 @@ function copyLog(){
 }
 // === Přibližné polohy log ===
 let logApproxStops = {};  // name -> {confidence, lat, lng}
-function logApproxStop(name, lat, lng, confidence){
-  logApproxStops[name] = {name, lat, lng, confidence, ts: new Date().toLocaleTimeString('cs-CZ')};
+function logApproxStop(name, lat, lng, confidence, mode){
+  logApproxStops[name] = {name, lat, lng, confidence, mode, ts: new Date().toLocaleTimeString('cs-CZ')};
   let btn = document.getElementById('log-tab-approx');
   if(btn && logCurrentTab !== 'approx') btn.style.color = '#f59e0b';
   if(logCurrentTab === 'approx') renderApproxLog();
@@ -1646,10 +1646,10 @@ function renderApproxLog(){
       </div>`;
     let [okBtn, moveBtn] = div.querySelectorAll('button');
     okBtn.onclick = async () => {
-      // Oznac jako overeno - ulozi approx=false
+      // Oznac jako overeno - ulozi approx=false a se spravnym mode
       let res = await fetch('/api/admin/save_stop_override', {method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({name: s.name, lat: s.lat, lng: s.lng, approx: false})});
+        body: JSON.stringify({name: s.name, lat: s.lat, lng: s.lng, approx: false, mode: s.mode || 'bus'})});
       let rd = await res.json();
       if(rd.status==='success'){
         delete logApproxStops[s.name];
@@ -2692,7 +2692,7 @@ function _renderRoute(busId,data,btn){
   let uncertain=data.stops.filter(s=>s.lat&&(s.confidence==='fuzzy'||s.confidence==='geocoded')).length;
   let missing=data.stops.filter(s=>!s.lat);
   missing.forEach(s=>{appLog('Zastávka nenalezena: "'+s.name+'" přidej v NT','warn');logMissingStop(s.name);fetch('/api/admin/report_missing_stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stop_name:s.name,bus_id:busId})}).catch(()=>{});});
-  if(IS_ADMIN){data.stops.filter(s=>s.lat&&(s.confidence==='fuzzy'||s.confidence==='geocoded')&&!s.substitute).forEach(s=>logApproxStop(s.name,s.lat,s.lng,s.confidence));}
+  if(IS_ADMIN){data.stops.filter(s=>s.lat&&(s.confidence==='fuzzy'||s.confidence==='geocoded')&&!s.substitute).forEach(s=>logApproxStop(s.name,s.lat,s.lng,s.confidence, (bus && bus.is_train)?'train':'bus'));}
   appLog('Trasa '+busId+': '+found+'/'+data.stops.length+' (nejisté:'+uncertain+' chybí:'+missing.length+')','info');
   let label='🗺️ Zavřít trasu ('+found+'/'+data.stops.length+' zast.)'+(uncertain?' ⚠️'+uncertain:'')+(missing.length?' ❓'+missing.length:'');
   if(btn){btn.textContent=label;btn.style.background='#1e40af';}
