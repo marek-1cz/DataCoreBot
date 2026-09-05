@@ -41,6 +41,8 @@ jobs:
           if [ -f .release_tag ]; then
             TAG=$(cat .release_tag)
             echo "Publikuji release $TAG"
+            # Smaž starý release se stejným tagem, pokud existuje (idempotentní)
+            gh release delete "$TAG" -y --cleanup-tag 2>/dev/null || true
             gh release create "$TAG" gtfs.zip gtfs_stops_*.db --title "GTFS Update $TAG" --notes-file .release_notes.md
           else
             echo "Soubor .release_tag nenalezen. Pravděpodobně nenastala žádná změna ve zdrojových databázi."
@@ -51,17 +53,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          RELEASES=$(gh release list --exclude-drafts --exclude-pre-releases | grep 'gtfs-' | awk '{print $1}')
-          COUNT=$(echo "$RELEASES" | wc -l)
-          if [ "$COUNT" -gt 3 ]; then
-            echo "Našel jsem $COUNT verzí, mažu ty nejstarší (nad limit 3)."
-            TO_DELETE=$(echo "$RELEASES" | tail -n +4)
-            for REL in $TO_DELETE; do
-              echo "Mažu release a tag: $REL"
-              gh release delete "$REL" -y --cleanup-tag
-            done
+          # grep vrací exit code 1 pokud nic nenajde - proto || true
+          RELEASES=$(gh release list --exclude-drafts --exclude-pre-releases --limit 50 | grep 'gtfs-' | awk '{print $1}' || true)
+          if [ -z "$RELEASES" ]; then
+            echo "Retence: Žádné gtfs- releases nenalezeny."
           else
-            echo "Retence: $COUNT verzí je v pořádku (limit 3)."
+            COUNT=$(echo "$RELEASES" | wc -l)
+            echo "Nalezeno $COUNT gtfs- verzí."
+            if [ "$COUNT" -gt 3 ]; then
+              echo "Mažu nejstarší verze (nad limit 3)."
+              TO_DELETE=$(echo "$RELEASES" | tail -n +4)
+              for REL in $TO_DELETE; do
+                echo "Mažu release a tag: $REL"
+                gh release delete "$REL" -y --cleanup-tag || true
+              done
+            else
+              echo "Retence: $COUNT verzí je v pořádku (limit 3)."
+            fi
           fi
 
       - name: Odeslání Discord notifikace – Úspěch
@@ -80,7 +88,13 @@ jobs:
         if: failure()
         run: |
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          MSG="❌ **GTFS Update SELHAL!**\n- **Workflow:** ${{ github.workflow }}\n- **Datum:** $(date -u '+%Y-%m-%d %H:%M UTC')\n- **Logy:** $RUN_URL"
+          # Zjisti kde to selhalo - zkus přečíst error z discord msg souboru
+          if [ -f .discord_msg.txt ]; then
+            ERR_DETAIL=$(cat .discord_msg.txt)
+          else
+            ERR_DETAIL="Zkontroluj logy pro více informací."
+          fi
+          MSG="❌ **GTFS Update SELHAL!**\n- **Datum:** $(date -u '+%Y-%m-%d %H:%M UTC')\n- **Logy:** $RUN_URL\n\n$ERR_DETAIL"
           curl -s -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
-            -d "{\"content\": $(echo -e "$MSG" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')}"
+            -d "{\"content\": $(printf '%s' "$MSG" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')}"
