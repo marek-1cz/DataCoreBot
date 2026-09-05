@@ -358,8 +358,7 @@ function renderFilteredTrips() {
             bgStyle = 'background:rgba(0,0,0,0.3); border-color:rgba(255,255,255,0.1); opacity:0.65; filter: grayscale(60%);';
             extraLabel = `<span style="background:rgba(255,255,255,0.15); color:white; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px;">${inactiveReason || '⏳ SEZÓNNÍ'}</span>`;
         } else if (!t.isRunningToday) {
-            if (dowReason) extraLabel = `<span style="background:rgba(255,0,0,0.15); color:#ff6b6b; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px; border: 1px solid;">⚠️ ${dowReason}</span>`;
-            else extraLabel = `<span style="background:rgba(255,0,0,0.15); color:#ff6b6b; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px; border: 1px solid;">⚠️ NEJEDE DNES</span>`;
+            extraLabel = `<span style="background:rgba(255,0,0,0.15); color:#ff6b6b; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px; border: 1px solid rgba(255,0,0,0.3);">⚠️ NEJEDE DNES</span>`;
         }
         
         html+=`<div class="trip-card" id="card_${sid}" style="${bgStyle}">
