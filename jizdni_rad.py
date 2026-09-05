@@ -336,6 +336,21 @@ function renderFilteredTrips() {
             else if (isWork) dowReason = "JEDE POUZE V PRACOVNÍ DNY";
         }
         
+        let typeLabel = '';
+        if (t.dow) {
+            const [mo, tu, we, th, fr, sa, su] = t.dow;
+            const isWork = (mo || tu || we || th || fr) && !sa && !su;
+            const isWkend = !mo && !tu && !we && !th && !fr && (sa || su);
+            
+            if (isWkend) {
+                typeLabel = `<span style="background:rgba(4,142,86,0.25); border-color:rgba(4,142,86,0.6); color:#2ecc71; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px; border: 1px solid;">🟢 VÍKEND</span>`;
+            } else if (isWork) {
+                typeLabel = `<span style="background:rgba(244,204,23,0.2); border-color:rgba(244,204,23,0.4); color:var(--yellow); font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px; border: 1px solid;">📅 PRACOVNÍ</span>`;
+            } else {
+                typeLabel = `<span style="background:rgba(255,255,255,0.1); color:#ccc; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px; border: 1px solid;">📅 JINÉ</span>`;
+            }
+        }
+        
         let bgStyle = 'background:rgba(255,255,255,0.04); border-color:rgba(255,255,255,0.06);';
         let extraLabel = '';
         
@@ -343,8 +358,8 @@ function renderFilteredTrips() {
             bgStyle = 'background:rgba(0,0,0,0.3); border-color:rgba(255,255,255,0.1); opacity:0.65; filter: grayscale(60%);';
             extraLabel = `<span style="background:rgba(255,255,255,0.15); color:white; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px;">${inactiveReason || '⏳ SEZÓNNÍ'}</span>`;
         } else if (!t.isRunningToday) {
-            if (dowReason) extraLabel = `<span style="background:rgba(255,255,255,0.1); color:#ccc; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px;">ℹ️ ${dowReason}</span>`;
-            else extraLabel = `<span style="background:rgba(255,255,255,0.1); color:#ccc; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px;">ℹ️ NEJEDE DNES</span>`;
+            if (dowReason) extraLabel = `<span style="background:rgba(255,0,0,0.15); color:#ff6b6b; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px; border: 1px solid;">⚠️ ${dowReason}</span>`;
+            else extraLabel = `<span style="background:rgba(255,0,0,0.15); color:#ff6b6b; font-size:9px; font-weight:bold; padding:2px 4px; border-radius:3px; margin-left:5px; border: 1px solid;">⚠️ NEJEDE DNES</span>`;
         }
         
         html+=`<div class="trip-card" id="card_${sid}" style="${bgStyle}">
@@ -352,6 +367,7 @@ function renderFilteredTrips() {
                 <span class="trip-time">${depStr}</span>
                 <span class="trip-num">spoj ${t.spoj||'?'}</span>
                 <span class="trip-dest">${hs}</span>
+                ${typeLabel}
                 ${extraLabel}
                 <i class="fas fa-chevron-down trip-toggle"></i>
             </div>
@@ -371,20 +387,18 @@ function toggleTrip(tripId, sid){
     if(div.dataset.loaded) return;
     div.dataset.loaded = '1';
     try {
-        const r = db.exec(`SELECT st.arrival_time, s.name, s.zone_id, st.pickup_type, st.drop_off_type FROM stop_times st JOIN stops s ON st.stop_id=s.stop_id WHERE st.trip_id='${tripId.replace(/'/g,"''")}' ORDER BY st.stop_sequence`);
+        const r = db.exec(`SELECT st.arrival_time, s.name, s.zone_id, st.pickup_type FROM stop_times st JOIN stops s ON st.stop_id=s.stop_id WHERE st.trip_id='${tripId.replace(/'/g,"''")}' ORDER BY st.stop_sequence`);
         if(!r.length||!r[0].values.length){ div.innerHTML='<div style="color:var(--muted);font-size:13px;padding:10px 0">Zadne zastavky</div>'; return; }
         const stops = r[0].values;
-        div.innerHTML = stops.map(([time,name,zone,pickup,dropoff], i) => {
+        div.innerHTML = stops.map(([time,name,zone,pickup], i) => {
             const t = time ? time.substring(0,5) : '--:--';
             const nc = i===0 ? 'stop-name stop-first' : i===stops.length-1 ? 'stop-name stop-last' : 'stop-name';
             
             let pIcon = '';
-            if (pickup === '1' && dropoff === '1') {
-                pIcon = '<span style="color:var(--muted);font-weight:bold;margin-right:6px;" title="Projizdi">|</span>';
-            } else if (pickup === '2' || pickup === '3') {
+            if (pickup === '2' || pickup === '3') {
                 pIcon = '<span style="color:var(--yellow);font-weight:bold;margin-right:6px;" title="Na znameni">x</span>';
             } else if (pickup === '1') {
-                pIcon = '<span style="color:var(--red);font-size:11px;margin-right:6px;" title="Pouze vystup">&#x1F6AB;</span>';
+                pIcon = '<span style="color:var(--muted);font-weight:bold;margin-right:6px;" title="Projizdi">|</span>';
             }
             
             let cleanZone = zone ? zone.replace(/^P/i, '') : '';
