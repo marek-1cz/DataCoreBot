@@ -4196,6 +4196,7 @@ def mirror_mobile_ui(session_id):
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>IDPK Mobilní Ovladač</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/morphdom@2.7.4/dist/morphdom-umd.min.js"></script>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background: #035689; }
         #mirror-container { width: 100vw; height: 100vh; display: flex; justify-content: center; overflow: hidden; pointer-events: auto; }
@@ -4313,8 +4314,21 @@ def mirror_mobile_ui(session_id):
                 } else if (data.status === 'online') {
                     statusOverlay.style.display = 'none';
                     if (data.state && data.state.dom) {
-                        if (container.innerHTML !== data.state.dom) {
-                            container.innerHTML = data.state.dom;
+                        if (!window.lastDom || window.lastDom !== data.state.dom) {
+                            window.lastDom = data.state.dom;
+                            if (typeof morphdom !== 'undefined') {
+                                let temp = document.createElement('div');
+                                temp.id = 'mirror-container';
+                                temp.innerHTML = data.state.dom;
+                                morphdom(container, temp, {
+                                    onBeforeElUpdated: function(fromEl, toEl) {
+                                        if (fromEl.isEqualNode && fromEl.isEqualNode(toEl)) return false;
+                                        return true;
+                                    }
+                                });
+                            } else {
+                                container.innerHTML = data.state.dom;
+                            }
                         }
                     }
                 }
