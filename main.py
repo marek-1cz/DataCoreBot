@@ -4197,166 +4197,56 @@ def mirror_mobile_ui(session_id):
     <title>IDPK Mobilní Ovladač</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root {
-            --idpk-blue: #035689;
-            --idpk-dark-blue: #023e63;
-            --idpk-yellow: #F4CC17;
-            --idpk-green: #048E56;
-            --idpk-red: #e74c3c;
-            --btn-bg: #e0e0e0;
-            --btn-shadow: #999;
-        }
-        * { box-sizing: border-box; }
-        ::-webkit-scrollbar { display: none; }
-        body {
-            background-color: var(--idpk-blue);
-            display: flex; justify-content: center; align-items: flex-start;
-            height: 100vh; margin: 0;
-            font-family: 'Segoe UI', Roboto, sans-serif;
-            user-select: none; overflow: hidden;
-        }
-        .main-container {
-            width: 100%; max-width: 420px; height: 100vh;
-            display: flex; flex-direction: column;
-            padding: 12px 12px 8px 12px; position: relative;
-        }
-        .system-header {
-            text-align: center; font-size: 13px; margin-bottom: 10px;
-            letter-spacing: 2px; border-bottom: 1px solid rgba(255,255,255,0.25);
-            padding-bottom: 8px; color: white; font-weight: bold;
-            flex-shrink: 0; position: relative;
-        }
+        body { margin: 0; padding: 0; overflow: hidden; background: #035689; }
+        #mirror-container { width: 100vw; height: 100vh; display: flex; justify-content: center; overflow: hidden; pointer-events: auto; }
+        
         .mobile-settings-btn {
-            position: absolute; top: 0; right: 0;
-            width: 32px; height: 32px; color: rgba(255,255,255,0.5);
-            font-size: 20px; display: flex; justify-content: center;
-            align-items: center; cursor: pointer; transition: color 0.2s;
+            position: fixed; top: 10px; right: 15px;
+            width: 32px; height: 32px; color: rgba(255,255,255,0.7);
+            font-size: 24px; display: flex; justify-content: center;
+            align-items: center; cursor: pointer; z-index: 999999;
+            text-shadow: 0 0 5px rgba(0,0,0,0.8);
         }
-        .mobile-settings-btn:hover { color: var(--idpk-yellow); }
-        .drive-current-box {
-            width: 100%; padding: 10px 12px;
-            background: rgba(0,0,0,0.35); border: 1px dashed rgba(244,204,23,0.7);
-            border-radius: 8px; color: var(--idpk-yellow); font-size: 15px;
-            font-weight: bold; text-align: center; margin-bottom: 6px; flex-shrink: 0;
-            transition: border-color 0.3s, color 0.3s;
-        }
-        .status-note {
-            color: rgba(255,255,255,0.4); font-size: 10px; text-align: center;
-            font-weight: bold; margin-bottom: 8px; flex-shrink: 0; letter-spacing: 1px;
-        }
-        #drive-controls-area { flex-shrink: 0; margin-bottom: 8px; }
-        .big-drive-btn {
-            width: 100%; height: 58px; background-color: var(--idpk-yellow);
-            color: #333; font-weight: 900; font-size: 16px; border: none;
-            border-radius: 10px; box-shadow: 0 4px 0 #cba90f; cursor: pointer;
-            margin-bottom: 8px; display: flex; align-items: center;
-            justify-content: center; gap: 8px;
-        }
-        .big-drive-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #cba90f; }
-        .small-btns-row { display: flex; gap: 8px; }
-        .small-action-btn {
-            flex: 1; height: 46px; font-size: 13px; font-weight: bold;
-            border: none; border-radius: 8px; cursor: pointer;
-            background: #ddd; color: black; box-shadow: 0 3px 0 #999;
-        }
-        .small-action-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #999; }
-        .small-action-btn.red { background: var(--idpk-red); color: white; box-shadow: 0 3px 0 #922b21; }
-        .small-action-btn.red:active { box-shadow: 0 1px 0 #922b21; }
-        .keypad-area {
-            flex: 1; display: grid; gap: 7px;
-            grid-template-columns: repeat(4, 1fr);
-            grid-template-rows: repeat(4, 1fr);
-            grid-template-areas:
-                "k7 k8 k9 kup"
-                "k4 k5 k6 kdot"
-                "k1 k2 k3 kdown"
-                "kdel k0 kent kent";
-            min-height: 0;
-        }
-        .btn {
-            background-color: var(--btn-bg); border: none; border-radius: 8px;
-            font-size: 22px; font-weight: 600; color: #333;
-            box-shadow: 0 3px 0 var(--btn-shadow);
-            display: flex; align-items: center; justify-content: center;
-            width: 100%; height: 100%; cursor: pointer;
-        }
-        .btn:active { box-shadow: 0 1px 0 var(--btn-shadow); transform: translateY(2px); }
-        .btn-arrow { background-color: #d0dae3; font-size: 18px; }
-        .btn-confirm { background-color: var(--idpk-green); color: white; box-shadow: 0 3px 0 #025c37; }
-        .btn-confirm:active { box-shadow: 0 1px 0 #025c37; }
-        .btn-del { background-color: #e74c3c; color: white; font-size: 16px; font-weight: bold; box-shadow: 0 3px 0 #c0392b; }
-        .btn-del:active { box-shadow: 0 1px 0 #c0392b; }
-        /* SETTINGS OVERLAY */
+        
         #mobile-settings-overlay {
             display: none; position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(2, 25, 45, 0.93);
             backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            z-index: 99999; flex-direction: column;
+            z-index: 9999999; flex-direction: column;
             align-items: center; justify-content: center; padding: 30px 20px;
         }
         .mob-settings-title {
             color: white; font-size: 16px; font-weight: 700;
             letter-spacing: 3px; text-transform: uppercase;
-            margin-bottom: 30px; text-align: center;
+            margin-bottom: 30px; text-align: center; font-family: sans-serif;
         }
         .mob-glass-btn {
             width: 100%; max-width: 300px; padding: 16px 20px; margin-bottom: 12px;
             border: 1px solid rgba(255,255,255,0.15); border-radius: 14px;
             background: rgba(255,255,255,0.08); color: white; font-size: 15px;
             font-weight: 600; cursor: pointer; text-align: center;
-            backdrop-filter: blur(4px); transition: background 0.2s;
+            backdrop-filter: blur(4px); transition: background 0.2s; font-family: sans-serif;
         }
-        .mob-glass-btn:active { background: rgba(255,255,255,0.18); transform: scale(0.97); }
         .mob-glass-btn.red { border-color: rgba(231,76,60,0.5); background: rgba(231,76,60,0.15); }
         .mob-glass-btn.close { border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.6); }
-        .mob-server-info { color: rgba(255,255,255,0.35); font-size: 11px; text-align: center; margin-top: 20px; letter-spacing: 1px; }
+        
+        #status-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: #035689; z-index: 900000; display: flex;
+            flex-direction: column; align-items: center; justify-content: center;
+            color: white; font-family: sans-serif;
+        }
     </style>
 </head>
 <body>
-    <div class="main-container">
-        <div class="system-header">
-            IDPK MOBILNÍ OVLADAČ
-            <div class="mobile-settings-btn" onclick="openMobileSettings()">⚙</div>
-        </div>
-
-        <div class="drive-current-box" id="status-box">PŘIPOJUJI SE...</div>
-        <div class="status-note"><div id='mobile-state-text'>Načítání zrcadla...</div></div>
-
-        <div id="drive-controls-area">
-            <button type="button" class="big-drive-btn" onclick="sendAction('space')">
-                <i class="fas fa-volume-up"></i> VYHLÁSIT ZASTÁVKU
-            </button>
-            <div class="small-btns-row">
-                <button type="button" class="small-action-btn" onclick="sendAction('r')">
-                    <i class="fas fa-redo"></i> OPAKOVAT (R)
-                </button>
-                <button type="button" class="small-action-btn red" onclick="sendAction('s')">
-                    <i class="fas fa-stop"></i> STOP (S)
-                </button>
-            </div>
-        </div>
-
-        <div class="keypad-area">
-            <button type="button" class="btn" style="grid-area:k7;" onclick="sendAction('7')">7</button>
-            <button type="button" class="btn" style="grid-area:k8;" onclick="sendAction('8')">8</button>
-            <button type="button" class="btn" style="grid-area:k9;" onclick="sendAction('9')">9</button>
-            <button type="button" class="btn btn-arrow" style="grid-area:kup;" onclick="sendAction('up')">▲</button>
-            <button type="button" class="btn" style="grid-area:k4;" onclick="sendAction('4')">4</button>
-            <button type="button" class="btn" style="grid-area:k5;" onclick="sendAction('5')">5</button>
-            <button type="button" class="btn" style="grid-area:k6;" onclick="sendAction('6')">6</button>
-            <button type="button" class="btn btn-arrow" style="grid-area:kdot;" onclick="sendAction('dot')">●</button>
-            <button type="button" class="btn" style="grid-area:k1;" onclick="sendAction('1')">1</button>
-            <button type="button" class="btn" style="grid-area:k2;" onclick="sendAction('2')">2</button>
-            <button type="button" class="btn" style="grid-area:k3;" onclick="sendAction('3')">3</button>
-            <button type="button" class="btn btn-arrow" style="grid-area:kdown;" onclick="sendAction('down')">▼</button>
-            <button type="button" class="btn btn-del" style="grid-area:kdel;" onclick="sendAction('del')">DEL</button>
-            <button type="button" class="btn" style="grid-area:k0;" onclick="sendAction('0')">0</button>
-            <button type="button" class="btn btn-confirm" style="grid-area:kent;" onclick="sendAction('ent')">ENT</button>
-        </div>
+    <div id="status-overlay">
+        <h2 id="status-text">PŘIPOJUJI SE...</h2>
     </div>
-
-    <!-- SETTINGS OVERLAY -->
+    
+    <div class="mobile-settings-btn" onclick="openMobileSettings()">⚙</div>
+    <div id="mirror-container"></div>
+    
     <div id="mobile-settings-overlay">
         <div class="mob-settings-title">⚙ Nastavení</div>
         <button type="button" class="mob-glass-btn red" onclick="disconnectAndClose()">
@@ -4365,51 +4255,45 @@ def mirror_mobile_ui(session_id):
         <button type="button" class="mob-glass-btn close" onclick="closeMobileSettings()">
             Zavřít
         </button>
-        <div class="mob-server-info" id="server-addr-info"></div>
     </div>
 
     <script>
-        let flashTimeout;
-
-        function sendAction(action) {
-            fetch('/api/mirror/mobile_action/{{ session_id }}', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: action }) })
-                .then(res => { if (res.ok) flashStatus(true); else flashStatus(false); })
-                .catch(() => { flashStatus(false); });
-            if ("vibrate" in navigator) { navigator.vibrate(30); }
+        function sendEval(codeStr) {
+            fetch('/api/mirror/mobile_action/{{ session_id }}', { 
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ action: "eval", code: codeStr }) 
+            }).catch(()=>{});
+            if ("vibrate" in navigator) { navigator.vibrate(20); }
+        }
+        
+        function sendInput(id, val) {
+            fetch('/api/mirror/mobile_action/{{ session_id }}', { 
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ action: "input", id: id, value: val }) 
+            }).catch(()=>{});
         }
 
-        function flashStatus(ok) {
-            const box = document.getElementById('status-box');
-            if (ok) {
-                box.style.borderColor = 'rgba(4,142,86,0.8)';
-                box.style.color = '#2ecc71';
-                box.textContent = 'ODESLÁNO ✓';
-            } else {
-                box.style.borderColor = 'rgba(231,76,60,0.7)';
-                box.style.color = '#e74c3c';
-                box.textContent = 'CHYBA SPOJENÍ';
+        document.getElementById('mirror-container').addEventListener('click', function(e) {
+            let btn = e.target.closest('[onclick]');
+            if (btn) {
+                let code = btn.getAttribute('onclick');
+                if (code) {
+                    e.preventDefault(); e.stopPropagation();
+                    sendEval(code);
+                }
             }
-            clearTimeout(flashTimeout);
-            flashTimeout = setTimeout(() => {
-                box.style.borderColor = 'rgba(244,204,23,0.7)';
-                box.style.color = 'var(--idpk-yellow)';
-                box.textContent = 'PŘIPOJUJI SE...';
-            }, 700);
-        }
+        }, true);
+        
+        document.getElementById('mirror-container').addEventListener('input', function(e) {
+            let el = e.target;
+            if (el.tagName === 'INPUT' && el.id) {
+                sendInput(el.id, el.value);
+            }
+        });
 
-        function openMobileSettings() {
-            document.getElementById('mobile-settings-overlay').style.display = 'flex';
-            document.getElementById('server-addr-info').textContent = 'Server: ' + window.location.hostname;
-        }
-
-        function closeMobileSettings() {
-            document.getElementById('mobile-settings-overlay').style.display = 'none';
-        }
-
-        function disconnectAndClose() {
-            closeMobileSettings();
-            window.close();
-        }
+        function openMobileSettings() { document.getElementById('mobile-settings-overlay').style.display = 'flex'; }
+        function closeMobileSettings() { document.getElementById('mobile-settings-overlay').style.display = 'none'; }
+        function disconnectAndClose() { closeMobileSettings(); window.close(); }
     </script>
 
     <script>
@@ -4418,37 +4302,28 @@ def mirror_mobile_ui(session_id):
             const source = new EventSource('/api/mirror/mobile_state/' + sessionId);
             source.onmessage = function(event) {
                 const data = JSON.parse(event.data);
-                const box = document.getElementById('status-box');
-                const txt = document.getElementById('mobile-state-text');
+                const statusOverlay = document.getElementById('status-overlay');
+                const statusText = document.getElementById('status-text');
+                const container = document.getElementById('mirror-container');
+                
                 if (data.status === 'offline') {
-                    box.style.borderColor = 'rgba(231,76,60,0.7)';
-                    box.style.color = '#e74c3c';
-                    box.textContent = 'PC JE OFFLINE';
-                    if (txt) txt.innerHTML = 'Palubní počítač není připojen.';
+                    statusOverlay.style.display = 'flex';
+                    statusText.textContent = 'PC JE OFFLINE';
+                    statusText.style.color = '#e74c3c';
                 } else if (data.status === 'online') {
-                    box.style.borderColor = 'rgba(4,142,86,0.8)';
-                    box.style.color = '#2ecc71';
-                    box.textContent = 'PC JE ONLINE';
-                    if (txt && data.state) {
-                        let info = '';
-                        if (data.state.appState === 'LINKOSPOJ') {
-                            info = 'VÝBĚR LINKY: ' + (data.state.displayLinkospoj || '---');
-                        } else if (data.state.appState === 'IDPK_LINE') {
-                            info = 'IDPK DATABÁZE';
-                        } else if (data.state.appState === 'DRIVE') {
-                            info = (data.state.header || '') + '<br>' + (data.state.currStop || '');
-                        } else {
-                            info = data.state.appState || 'Čekání na akci...';
+                    statusOverlay.style.display = 'none';
+                    if (data.state && data.state.dom) {
+                        if (container.innerHTML !== data.state.dom) {
+                            container.innerHTML = data.state.dom;
                         }
-                        txt.innerHTML = info;
                     }
                 }
             };
             source.onerror = function() {
-                const box = document.getElementById('status-box');
-                box.style.borderColor = 'rgba(231,76,60,0.7)';
-                box.style.color = '#e74c3c';
-                box.textContent = 'SPOJENÍ ZTRACENO';
+                document.getElementById('status-overlay').style.display = 'flex';
+                const statusText = document.getElementById('status-text');
+                statusText.textContent = 'CHYBA SPOJENÍ';
+                statusText.style.color = '#e74c3c';
             };
         }
         connectSSE();
