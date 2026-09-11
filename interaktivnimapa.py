@@ -554,6 +554,21 @@ body.nt-add-active #map{cursor:crosshair !important;}
 
   /* Settings button top right below nav */
   #settings-btn-wrap { top: auto !important; bottom: 80px !important; right: 10px !important; z-index: 4800 !important; }
+  
+  /* Center all tutorial boxes on mobile and hide arrows */
+  .tut-box {
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: translate(-50%, -50%) !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    width: 95% !important;
+  }
+  .tut-arrow-up, .tut-arrow-right, .tut-arrow-down, .tut-arrow-left {
+    display: none !important;
+  }
 }
 @media(max-width:420px){
   .n-provoz{display:none;}
