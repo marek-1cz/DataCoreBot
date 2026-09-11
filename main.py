@@ -1432,7 +1432,7 @@ def api_app_login():
         else:
             user_resp = db.table("users").select("*").eq("nick", identifier).execute()
         if not user_resp.data:
-            return _cors_jsonify({"status": "error", "message": "Uživatel nenalezen."})
+            return _cors_jsonify({"status": "error", "message": "Toto ID neexistuje. Jestli problém přetrvává, jděte na náš Discord."})
         user = user_resp.data[0]
         discord_id = user.get("discord_id")
         if user.get("is_banned"):
