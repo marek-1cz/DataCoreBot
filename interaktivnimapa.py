@@ -609,6 +609,9 @@ body.nav-glass-hide #top-nav { top: -150px !important; }
 body.nav-glass-hide #top-nav.vis { top: 15px !important; }
 body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn { display: none !important; }
 
+@media(max-width:768px){
+  body.nav-glass #top-nav { flex-wrap: wrap !important; }
+}
 </style>
 
 <div id="map-wrap">
