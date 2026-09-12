@@ -1012,8 +1012,8 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
   </div>
 </div>
 
-<div id="setup-wizard-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.95);z-index:9999;align-items:center;justify-content:center;flex-direction:column;backdrop-filter:blur(10px);">
-  <div style="background:#1e293b;border:2px solid #38bdf8;border-radius:16px;width:90%;max-width:500px;padding:30px;box-shadow:0 15px 50px rgba(0,0,0,0.8);text-align:center;">
+<div id="setup-wizard-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100%;background:rgba(15,23,42,0.95);z-index:9999;align-items:center;justify-content:center;flex-direction:column;backdrop-filter:blur(10px);">
+  <div style="background:#1e293b;border:2px solid #38bdf8;border-radius:16px;width:90%;max-width:500px;max-height:85vh;overflow-y:auto;padding:20px;box-shadow:0 15px 50px rgba(0,0,0,0.8);text-align:center;box-sizing:border-box;">
     <h2 id="sw-title" style="color:#38bdf8;margin-bottom:20px;font-size:28px;line-height:1.2;">Vítejte v interaktivní mapě<br><span style="color:#94a3b8;font-size:13px;font-weight:normal;display:block;margin-top:8px;">Neoficiální mapa příměstských autobusů Plzeňského kraje</span></h2>
     
     <div id="sw-step-1" class="sw-step">
