@@ -612,6 +612,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
 @media(max-width:768px){
   body.nav-glass #top-nav { flex-wrap: wrap !important; }
 }
+.map-bw-filter { filter: grayscale(100%) contrast(1.1) opacity(0.9); }
 </style>
 
 <div id="map-wrap">
@@ -1114,11 +1115,12 @@ function selectSwTheme(type) {
     dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=68be98ba-5497-41e4-b14e-0aaa9649aafd',
     osm: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     transport_dark: 'https://{s}.tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png?apikey=086ca59fb24640be82e5259e96c7a0cb',
-    bw: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    bw: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     satellite: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
   };
   if(urls[type]) {
-    window.swPreviewLayer = L.tileLayer(urls[type]).addTo(window.swPreviewMap);
+    let opts = (type === 'bw') ? {className: 'map-bw-filter'} : {};
+    window.swPreviewLayer = L.tileLayer(urls[type], opts).addTo(window.swPreviewMap);
   }
 }
 
@@ -1385,7 +1387,7 @@ L.control.zoom({position:'bottomleft'}).addTo(map);
 window.mapLayers = {
   osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
   dark: L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=68be98ba-5497-41e4-b14e-0aaa9649aafd',{maxZoom:20,attribution:'&copy; Stadia Maps'}),
-  bw: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; CARTO'}),
+  bw: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap', className: 'map-bw-filter'}),
   satellite: L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:21,attribution:'&copy; Google Maps'}),
   transport_dark: L.tileLayer('https://{s}.tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png?apikey=086ca59fb24640be82e5259e96c7a0cb',{maxZoom:22,attribution:'&copy; Thunderforest'}),
   transport: L.tileLayer('https://{s}.tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=086ca59fb24640be82e5259e96c7a0cb',{maxZoom:22,attribution:'&copy; Thunderforest'})
