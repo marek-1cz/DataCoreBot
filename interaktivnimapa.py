@@ -1597,7 +1597,9 @@ async function _saveMissingFix(missingName, lat, lng, sourceName){
       showAdminToast(`✅ "${missingName}" -> "${sourceName||'nová poloha'}"`,true);
       appLog(`Opravena zastávka: "${missingName}" @ ${lat.toFixed(5)},${lng.toFixed(5)} (${sourceName||'nový bod'})`,'ok');
       delete logMissingStops[missingName];
+      delete logApproxStops[missingName];
       if(logCurrentTab==='missing')renderMissingLog();
+      if(logCurrentTab==='approx')renderApproxLog();
       if(_missingPickLayer){_missingPickLayer.clearLayers();}
       // Obnov trasu - tohle je klíčové!
       setTimeout(refreshActiveRoute, 300);
