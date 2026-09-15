@@ -1591,7 +1591,7 @@ async function _saveMissingFix(missingName, lat, lng, sourceName){
   try{
     let res=await fetch('/api/admin/save_stop_override',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:missingName, lat, lng})});
+      body:JSON.stringify({name:missingName, lat, lng, approx:false, mode:'mixed'})});
     let rd=await res.json();
     if(rd.status==='success'){
       showAdminToast(`✅ "${missingName}" -> "${sourceName||'nová poloha'}"`,true);
@@ -4058,6 +4058,8 @@ _ABBREV_PATTERNS = [
     (re.compile(r'\brozc\.?\b'), 'rozcesti'),
     (re.compile(r'\bkriz\.?\b'), 'krizovatka'),
     (re.compile(r'\bul\.?\b'), 'ulice'),
+    (re.compile(r'\bhaj\.?\b'), 'hajovna'),
+    (re.compile(r'\bhajenka\b'), 'hajovna'),
 ]
 
 
