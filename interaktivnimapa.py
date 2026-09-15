@@ -4805,6 +4805,7 @@ def background_map_worker():
     last_db_cleanup = get_prague_time()
     last_spz_memory_cleanup = get_prague_time()
     last_spz_cache_flush = get_prague_time()
+    last_overrides_poll = get_prague_time()
     TRIP_COUNTER = int(time.time())
 
     while True:
@@ -4812,6 +4813,12 @@ def background_map_worker():
             now = get_prague_time()
             if db_client and (now - last_db_cleanup).total_seconds() > 86400:
                 last_db_cleanup = now
+
+            if db_client and (now - last_overrides_poll).total_seconds() > 30:
+                last_overrides_poll = now
+                _load_stop_overrides(db_client)
+                _load_route_stop_overrides(db_client)
+                _load_custom_routes(db_client)
 
             # === SPZ MEMORY CLEANUP: smaz stare zaznamy (max 24h) ===
             if (now - last_spz_memory_cleanup).total_seconds() > 3600:
@@ -7582,21 +7589,6 @@ def api_lines_map():
         return jsonify({'status': 'error',
                         'message': f'Nalezeno {len(line_stops)} linek — zadej přesnější číslo (např. 490)'}), 400
 
-    # Seřaď zastávky každé linky metodou nejbližšího souseda
-    def sort_stops_nn(stops):
-        if len(stops) <= 2:
-            return stops
-        # Začni od nejzápadnějšího bodu
-        remaining = list(stops)
-        remaining.sort(key=lambda s: s['lng'])
-        ordered = [remaining.pop(0)]
-        while remaining:
-            last = ordered[-1]
-            best = min(remaining, key=lambda s: (s['lat']-last['lat'])**2 + (s['lng']-last['lng'])**2)
-            ordered.append(best)
-            remaining.remove(best)
-        return ordered
-
     result = {}
     for l, stops in line_stops.items():
         # Deduplikuj (stejný bod z více stop_id)
@@ -7607,7 +7599,9 @@ def api_lines_map():
             if k not in seen:
                 seen.add(k)
                 unique.append(s)
-        result[l] = sort_stops_nn(unique)
+        # Byla odstraněna problematická sort_stops_nn, která 
+        # způsobovala cik-cak spojování bodů linek.
+        result[l] = unique
 
     return jsonify({'status': 'success', 'lines': result, 'count': len(result)})
 
