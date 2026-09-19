@@ -742,37 +742,8 @@ def sync_roles_from_flask(discord_id, role_string):
     if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
 def check_version_access(db, app_version_from_pc, user):
-    if user.get("admin_bypass") == True:
-        return {"allowed": True}
-    user_role_str = user.get("role", "")
-    if not app_version_from_pc or str(app_version_from_pc).strip() == "":
-        return {"allowed": False, "msg": "Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
-    try:
-        v_data = db.table("software_versions").select("*").eq("db_version", app_version_from_pc).execute().data
-        if not v_data: return {"allowed": False, "msg": f"Verze '{app_version_from_pc}' neexistuje v databázi!"}
-        v_info = v_data[0]
-        if str(v_info.get("is_active", "True")).lower() == "false":
-            return {"allowed": False, "msg": "Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
-        eol = v_info.get("eol_date")
-        if eol and str(eol).strip():
-            try:
-                eol_dt = datetime.strptime(str(eol).strip(), "%d.%m.%Y")
-                if get_prague_time().replace(tzinfo=None) > eol_dt:
-                    db.table("software_versions").update({"is_active": False}).eq("id", v_info["id"]).execute()
-                    return {"allowed": False, "msg": "Nepodporovaná verze aplikace. Stáhněte si novou verzi přes náš Discord."}
-            except:
-                pass
-        target = v_info.get("target_role", "User")
-        if target != "User":
-            roles = [r.strip() for r in user_role_str.split(",")] if user_role_str else []
-            if "SA" not in roles and "DEV" not in roles:
-                if target == "BT" and "BT" not in roles:
-                    return {"allowed": False, "msg": "Tato verze je omezena pouze pro Beta Testery."}
-                elif target == "DEV_SA":
-                    return {"allowed": False, "msg": "Tato verze je neveřejná."}
-        return {"allowed": True}
-    except:
-        return {"allowed": True}
+    # Launcher is now universal, version checking/updating is handled client-side.
+    return {"allowed": True}
 
 class DynamicDownloadView(discord.ui.View):
     def __init__(self):
