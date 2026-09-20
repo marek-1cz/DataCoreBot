@@ -199,10 +199,21 @@ def send_magic_link_email(to_email, token, intent='login'):
 
 class AppAuthView(discord.ui.View):
     def __init__(self, token="", discord_id="", is_dm=True):
-        super().__init__(timeout=None)
+        super().__init__(timeout=300) # 5 minutes timeout
         self.token = token
         self.discord_id = str(discord_id)
         self.is_dm = is_dm
+        self.message = None
+
+    async def on_timeout(self):
+        try:
+            if hasattr(self, 'message') and self.message:
+                await self.message.edit(content="⏳ **Vypršel čas. Nedostatečná reakce.**", embed=None, view=None)
+            db = get_db()
+            if db:
+                db.table("users").update({"login_token": "timeout"}).eq("discord_id", self.discord_id).execute()
+        except Exception as e:
+            pass
 
     @discord.ui.button(label="Schválit přihlášení", style=discord.ButtonStyle.success, emoji="✅", custom_id="app_auth_approve")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1432,7 +1443,10 @@ def api_app_login():
         async def send():
             try:
                 u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
-                if u: await u.send(embed=discord.Embed(title="🛡️ Ověření přihlášení", description=f"Pokus o spuštění softwaru.\n**Uživatel:** {user.get('nick')}\nPotvrďte přístup tlačkem níže.", color=0x38bdf8), view=AppAuthView(token, discord_id, is_dm=True))
+                if u:
+                    view = AppAuthView(token, discord_id, is_dm=True)
+                    msg = await u.send(embed=discord.Embed(title="🛡️ Ověření přihlášení", description=f"Pokus o spuštění softwaru.\n**Uživatel:** {user.get('nick')}\nPotvrďte přístup tlačkem níže.", color=0x38bdf8), view=view)
+                    view.message = msg
             except: pass
         if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
         return _cors_jsonify({"status": "waiting", "discord_id": discord_id})
@@ -1454,6 +1468,9 @@ def api_app_check():
         elif user.get("login_token") == "rejected":
             db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
             return _cors_jsonify({"status": "error", "message": "Přístup zamítnut uživatelem."})
+        elif user.get("login_token") == "timeout":
+            db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
+            return _cors_jsonify({"status": "timeout", "message": "Čas vypršel (nedostatečná reakce). Zkuste to prosím znovu."})
         return _cors_jsonify({"status": "pending"})
     except: return _cors_jsonify({"status": "error"})
 
@@ -1901,7 +1918,7 @@ def web_auth_email_request():
         import random
         import string
         token = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5)) # 5-místný bezpečný kód pro ruční zadání i magic link
-        token_expiry = int(_t.time()) + 900  # 15 minut
+        token_expiry = int(_t.time()) + 600  # 10 minut
         db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("email", email).execute()
         
         if send_magic_link_email(email, token, intent=intent):
@@ -1984,11 +2001,11 @@ def web_auth_finalize():
         user = db.table("users").select("*").eq("login_token", token).execute().data
         if user:
             u = user[0]
-            # Zkontrolovat expiraci tokenu (15 minut)
+            # Zkontrolovat expiraci tokenu (10 minut)
             token_exp = int(u.get('login_token_expires_at') or 0)
             if token_exp > 0 and _t.time() > token_exp:
                 db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
-                return "Odkaz vypršel (platnost 15 minut). Požádejte o nový odkaz.", 400
+                return "Odkaz vypršel (platnost 10 minut). Požádejte o nový odkaz.", 400
             email = u.get("email")
             if cookie_token and intent == 'link':
                 curr_user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
