@@ -947,20 +947,32 @@ HTML_DOWNLOADS_MGMT = """
     <thead>
       <tr style="background:rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.08);">
         <th style="padding:14px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Verze</th>
+        <th style="padding:14px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">DB verze</th>
         <th style="padding:14px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Role</th>
-        <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Aktivní</th>
-        <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Viditelné</th>
-        <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Stahovat</th>
-        <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Spustit</th>
+        <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);" title="Aktivní = verze existuje. Vypnuto = nikdo ji nevidí.">Aktivní</th>
+        <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);" title="Viditelné v Launcheru">Viditelné</th>
+        <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);" title="Lze stáhnout">Stáhnout</th>
+        <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);" title="Lze spustit">Spustit</th>
         <th style="padding:14px 16px;text-align:right;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Akce</th>
       </tr>
     </thead>
     <tbody>
     {% for v in versions %}
-      <tr style="border-bottom:1px solid rgba(255,255,255,0.05);{% if not v.get('is_active') %}opacity:0.45;{% endif %}">
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.05);{% if not v.get('is_active') %}opacity:0.45;{% endif %}"
+          data-vid="{{ v.get('id','') }}"
+          data-vname="{{ v.get('version_name','') | e }}"
+          data-dbver="{{ v.get('db_version','') | e }}"
+          data-furl="{{ v.get('file_url','') | e }}"
+          data-role="{{ v.get('target_role','User') | e }}"
+          data-active="{{ '1' if v.get('is_active') else '0' }}"
+          data-show="{{ '1' if v.get('show_in_launcher', True) else '0' }}"
+          data-dl="{{ '1' if v.get('can_download', True) else '0' }}"
+          data-launch="{{ '1' if v.get('can_launch', True) else '0' }}">
         <td style="padding:14px 16px;">
           <div style="font-weight:600;color:var(--text-main);">{{ v.get('version_name','—') }}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">DB: {{ v.get('db_version','—') }}</div>
+        </td>
+        <td style="padding:14px 16px;">
+          <span style="font-size:13px;color:var(--text-muted);font-family:monospace;">{{ v.get('db_version','—') }}</span>
         </td>
         <td style="padding:14px 16px;">
           <span style="background:rgba(96,165,250,0.15);color:#60a5fa;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;">
@@ -969,9 +981,9 @@ HTML_DOWNLOADS_MGMT = """
         </td>
         <td style="padding:14px 8px;text-align:center;">
           {% if v.get('is_active') %}
-            <span style="color:#10b981;font-size:18px;" title="Aktivní"><i class="fas fa-toggle-on"></i></span>
+            <span style="color:#10b981;font-size:18px;" title="Aktivní – verze je dostupná"><i class="fas fa-toggle-on"></i></span>
           {% else %}
-            <span style="color:#ef4444;font-size:18px;" title="Vypnuto – neviditelné pro nikoho"><i class="fas fa-toggle-off"></i></span>
+            <span style="color:#ef4444;font-size:18px;" title="Vypnuto – verze neexistuje pro nikoho"><i class="fas fa-toggle-off"></i></span>
           {% endif %}
         </td>
         <td style="padding:14px 8px;text-align:center;">
@@ -996,12 +1008,12 @@ HTML_DOWNLOADS_MGMT = """
           {% endif %}
         </td>
         <td style="padding:14px 16px;text-align:right;">
-          <button onclick="openEditVersion({{ v | tojson | safe }})"
+          <button class="btn-edit-version"
             style="background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;margin-right:6px;">
             <i class="fas fa-edit"></i> Upravit
           </button>
           <form method="POST" action="/dashboard/delete_version" style="display:inline;"
-            onsubmit="return confirm('Smazat verzi {{ v.get('version_name','') }}?')">
+            onsubmit="return confirm('Smazat tuto verzi?')">
             <input type="hidden" name="version_id" value="{{ v.get('id') }}">
             <button type="submit" style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;">
               <i class="fas fa-trash"></i>
@@ -1010,9 +1022,9 @@ HTML_DOWNLOADS_MGMT = """
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" style="padding:40px;text-align:center;color:var(--text-muted);">
+      <tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-muted);">
         <i class="fas fa-inbox" style="font-size:32px;opacity:0.3;display:block;margin-bottom:10px;"></i>
-        Zatím nebyly přidány žádné verze.
+        Zatím nebyly přidány žádné verze. Klikni na <b>Přidat verzi</b> výše.
       </td></tr>
     {% endfor %}
     </tbody>
@@ -1021,10 +1033,10 @@ HTML_DOWNLOADS_MGMT = """
 
 <!-- LEGENDA -->
 <div style="margin-top:16px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);">
-  <span><i class="fas fa-toggle-off" style="color:#ef4444;"></i> <b>Aktivní = VYP</b> – verze neexistuje pro nikoho</span>
-  <span><i class="fas fa-eye-slash" style="color:#6b7280;"></i> <b>Viditelné = VYP</b> – zobrazí se jako "Nedostupné"</span>
-  <span><i class="fas fa-ban" style="color:#ef4444;"></i> <b>Stahovat = VYP</b> – nelze stáhnout</span>
-  <span><i class="fas fa-stop-circle" style="color:#ef4444;"></i> <b>Spustit = VYP</b> – nelze spustit</span>
+  <span><i class="fas fa-toggle-off" style="color:#ef4444;"></i> <b>Aktivní=VYP</b> – nikdo nevidí</span>
+  <span><i class="fas fa-eye-slash" style="color:#6b7280;"></i> <b>Viditelné=VYP</b> – zobrazí se jako "Nedostupné"</span>
+  <span><i class="fas fa-ban" style="color:#ef4444;"></i> <b>Stáhnout=VYP</b> – nelze stáhnout</span>
+  <span><i class="fas fa-stop-circle" style="color:#ef4444;"></i> <b>Spustit=VYP</b> – nelze spustit</span>
 </div>
 
 <!-- MODAL: Přidat verzi -->
@@ -1038,11 +1050,15 @@ HTML_DOWNLOADS_MGMT = """
           <input name="version_name" required placeholder="např. 1.6.1" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
         </div>
         <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Verze DB * <span style="color:var(--text-muted);font-weight:400;">(kontrola kompatibility – např. 2026-09)</span></label>
+          <input name="db_version" required placeholder="např. 2026-09" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div>
           <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">URL ke stažení (ZIP) *</label>
           <input name="file_url" required placeholder="https://github.com/.../releases/download/..." style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
         </div>
         <div>
-          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Cílová role *</label>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Minimální role pro přístup *</label>
           <select name="target_role" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
             <option value="User">User (všichni)</option>
             <option value="BT">BT (Beta Testeři)</option>
@@ -1050,26 +1066,36 @@ HTML_DOWNLOADS_MGMT = """
             <option value="SA">SA (Super Admin)</option>
           </select>
         </div>
-        <div>
-          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Verze DB (volitelné)</label>
-          <input name="db_version" placeholder="např. 2026-09" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
-        </div>
-        <!-- PŘEPÍNAČE -->
-        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:16px;display:grid;gap:12px;">
-          <div style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Nastavení přístupu</div>
-          {% macro toggle_row(name, label, description, default="checked") %}
-          <label style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:16px;display:grid;gap:14px;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-muted);">Nastavení přístupu</div>
+          <label style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;gap:12px;">
             <div>
-              <div style="font-size:14px;color:var(--text-main);">{{ label }}</div>
-              <div style="font-size:12px;color:var(--text-muted);">{{ description }}</div>
+              <div style="font-size:14px;color:var(--text-main);font-weight:500;">Aktivní</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Vypnutí skryje verzi úplně pro všechny (ani SA ji neuvidí)</div>
             </div>
-            <input type="checkbox" name="{{ name }}" {{ default }} style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);">
+            <input type="checkbox" name="is_active" checked style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);flex-shrink:0;margin-top:2px;">
           </label>
-          {% endmacro %}
-          {{ toggle_row('is_active', 'Aktivní', 'Vypnutí skryje verzi úplně pro všechny včetně SA') }}
-          {{ toggle_row('show_in_launcher', 'Viditelné v Launcheru', 'Vypnutí zobrazí badge „Nedostupné" – nelze stáhnout ani spustit') }}
-          {{ toggle_row('can_download', 'Lze stáhnout', 'Povolí tlačítko Stáhnout v Launcheru') }}
-          {{ toggle_row('can_launch', 'Lze spustit', 'Povolí tlačítko Spustit v Launcheru') }}
+          <label style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;gap:12px;">
+            <div>
+              <div style="font-size:14px;color:var(--text-main);font-weight:500;">Viditelné v Launcheru</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Vypnutí zobrazí verzi jako „Nedostupné" – nikdo ji nemůže stáhnout ani spustit</div>
+            </div>
+            <input type="checkbox" name="show_in_launcher" checked style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);flex-shrink:0;margin-top:2px;">
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;gap:12px;">
+            <div>
+              <div style="font-size:14px;color:var(--text-main);font-weight:500;">Lze stáhnout</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Povolí tlačítko Stáhnout – pokud vypnuto, nelze nově stáhnout</div>
+            </div>
+            <input type="checkbox" name="can_download" checked style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);flex-shrink:0;margin-top:2px;">
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;gap:12px;">
+            <div>
+              <div style="font-size:14px;color:var(--text-main);font-weight:500;">Lze spustit</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Povolí tlačítko Spustit – pokud vypnuto, verze nejde spustit ani ze stažené kopie</div>
+            </div>
+            <input type="checkbox" name="can_launch" checked style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);flex-shrink:0;margin-top:2px;">
+          </label>
         </div>
       </div>
       <div style="display:flex;gap:12px;margin-top:24px;">
@@ -1097,11 +1123,15 @@ HTML_DOWNLOADS_MGMT = """
           <input name="version_name" id="edit-version-name" required style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
         </div>
         <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Verze DB * <span style="color:var(--text-muted);font-weight:400;">(kontrola kompatibility)</span></label>
+          <input name="db_version" id="edit-db-version" required style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div>
           <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">URL ke stažení (ZIP)</label>
           <input name="file_url" id="edit-file-url" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
         </div>
         <div>
-          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Cílová role</label>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Minimální role</label>
           <select name="target_role" id="edit-target-role" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
             <option value="User">User (všichni)</option>
             <option value="BT">BT (Beta Testeři)</option>
@@ -1109,39 +1139,23 @@ HTML_DOWNLOADS_MGMT = """
             <option value="SA">SA (Super Admin)</option>
           </select>
         </div>
-        <div>
-          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Verze DB</label>
-          <input name="db_version" id="edit-db-version" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
-        </div>
-        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:16px;display:grid;gap:12px;">
-          <div style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Nastavení přístupu</div>
-          <label style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
-            <div>
-              <div style="font-size:14px;color:var(--text-main);">Aktivní</div>
-              <div style="font-size:12px;color:var(--text-muted);">Vypnutí skryje verzi úplně pro všechny včetně SA</div>
-            </div>
-            <input type="checkbox" name="is_active" id="edit-is-active" style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);">
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:16px;display:grid;gap:14px;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-muted);">Nastavení přístupu</div>
+          <label style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;gap:12px;">
+            <div><div style="font-size:14px;color:var(--text-main);font-weight:500;">Aktivní</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Vypnutí skryje verzi úplně pro všechny</div></div>
+            <input type="checkbox" name="is_active" id="edit-is-active" style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);flex-shrink:0;margin-top:2px;">
           </label>
-          <label style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
-            <div>
-              <div style="font-size:14px;color:var(--text-main);">Viditelné v Launcheru</div>
-              <div style="font-size:12px;color:var(--text-muted);">Vypnutí zobrazí badge „Nedostupné"</div>
-            </div>
-            <input type="checkbox" name="show_in_launcher" id="edit-show-in-launcher" style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);">
+          <label style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;gap:12px;">
+            <div><div style="font-size:14px;color:var(--text-main);font-weight:500;">Viditelné v Launcheru</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Vypnutí zobrazí badge „Nedostupné"</div></div>
+            <input type="checkbox" name="show_in_launcher" id="edit-show-in-launcher" style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);flex-shrink:0;margin-top:2px;">
           </label>
-          <label style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
-            <div>
-              <div style="font-size:14px;color:var(--text-main);">Lze stáhnout</div>
-              <div style="font-size:12px;color:var(--text-muted);">Povolí tlačítko Stáhnout v Launcheru</div>
-            </div>
-            <input type="checkbox" name="can_download" id="edit-can-download" style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);">
+          <label style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;gap:12px;">
+            <div><div style="font-size:14px;color:var(--text-main);font-weight:500;">Lze stáhnout</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Povolí tlačítko Stáhnout v Launcheru</div></div>
+            <input type="checkbox" name="can_download" id="edit-can-download" style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);flex-shrink:0;margin-top:2px;">
           </label>
-          <label style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
-            <div>
-              <div style="font-size:14px;color:var(--text-main);">Lze spustit</div>
-              <div style="font-size:12px;color:var(--text-muted);">Povolí tlačítko Spustit v Launcheru</div>
-            </div>
-            <input type="checkbox" name="can_launch" id="edit-can-launch" style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);">
+          <label style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;gap:12px;">
+            <div><div style="font-size:14px;color:var(--text-main);font-weight:500;">Lze spustit</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Povolí tlačítko Spustit (i ze stažené kopie)</div></div>
+            <input type="checkbox" name="can_launch" id="edit-can-launch" style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);flex-shrink:0;margin-top:2px;">
           </label>
         </div>
       </div>
@@ -1159,23 +1173,30 @@ HTML_DOWNLOADS_MGMT = """
 </div>
 
 <script>
-function openEditVersion(v) {
-  document.getElementById('edit-version-id').value = v.id || '';
-  document.getElementById('edit-version-name').value = v.version_name || '';
-  document.getElementById('edit-file-url').value = v.file_url || '';
-  document.getElementById('edit-db-version').value = v.db_version || '';
-  var roleEl = document.getElementById('edit-target-role');
-  if (roleEl) { for(var i=0;i<roleEl.options.length;i++) { if(roleEl.options[i].value === v.target_role) { roleEl.selectedIndex=i; break; } } }
-  document.getElementById('edit-is-active').checked = v.is_active !== false;
-  document.getElementById('edit-show-in-launcher').checked = v.show_in_launcher !== false;
-  document.getElementById('edit-can-download').checked = v.can_download !== false;
-  document.getElementById('edit-can-launch').checked = v.can_launch !== false;
-  document.getElementById('modal-edit-version').style.display = 'flex';
-}
-// Close modals on backdrop click
-['modal-add-version','modal-edit-version'].forEach(function(id) {
-  document.getElementById(id).addEventListener('click', function(e) {
-    if (e.target === this) this.style.display = 'none';
+// Edit button – reads data-* attrs from the <tr> row
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.btn-edit-version').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var tr = this.closest('tr');
+      document.getElementById('edit-version-id').value = tr.dataset.vid || '';
+      document.getElementById('edit-version-name').value = tr.dataset.vname || '';
+      document.getElementById('edit-db-version').value = tr.dataset.dbver || '';
+      document.getElementById('edit-file-url').value = tr.dataset.furl || '';
+      var roleEl = document.getElementById('edit-target-role');
+      for (var i = 0; i < roleEl.options.length; i++) {
+        if (roleEl.options[i].value === tr.dataset.role) { roleEl.selectedIndex = i; break; }
+      }
+      document.getElementById('edit-is-active').checked = tr.dataset.active === '1';
+      document.getElementById('edit-show-in-launcher').checked = tr.dataset.show === '1';
+      document.getElementById('edit-can-download').checked = tr.dataset.dl === '1';
+      document.getElementById('edit-can-launch').checked = tr.dataset.launch === '1';
+      document.getElementById('modal-edit-version').style.display = 'flex';
+    });
+  });
+  // Close modals on backdrop click
+  ['modal-add-version','modal-edit-version'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('click', function(e) { if (e.target === this) this.style.display = 'none'; });
   });
 });
 </script>
