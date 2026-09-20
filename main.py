@@ -4116,6 +4116,7 @@ def mirror_pc_sync():
         elif data["approve_connection"] is False:
             MIRROR_STATES[session_id]["approved"] = "rejected"
             MIRROR_STATES[session_id]["connection_requested"] = False
+            MIRROR_STATES[session_id]["lockout_until"] = time.time() + 60
             
     conn_req = MIRROR_STATES[session_id].get("connection_requested", False)
     approved = MIRROR_STATES[session_id].get("approved")
@@ -4135,6 +4136,16 @@ def mirror_pc_sync():
     return jsonify({"status": "ok", "actions": actions, "connection_requested": conn_req_flag, "is_approved": is_approved_bool})
 
 
+@app.route('/api/mirror/request_connection/<session_id>', methods=['POST'])
+def mirror_request_connection(session_id):
+    if session_id in MIRROR_STATES:
+        s = MIRROR_STATES[session_id]
+        if s.get("lockout_until", 0) > time.time():
+            return jsonify({"status": "error", "message": "locked out"}), 429
+        s["connection_requested"] = True
+        return jsonify({"status": "ok"})
+    return jsonify({"status": "error", "message": "session not found"}), 404
+
 @app.route('/api/mirror/mobile_state/<session_id>')
 def mirror_mobile_state(session_id):
     """
@@ -4153,17 +4164,18 @@ def mirror_mobile_state(session_id):
                 if time.time() - s["last_updated"] > 10:
                     yield f"data: {{\"status\": \"offline\"}}\n\n"
                 else:
-                    if s.get("approved") == "rejected":
-                        yield f"data: {{\"status\": \"rejected\"}}\n\n"
-                        time.sleep(1)
-                        break
+                    if s.get("lockout_until", 0) > time.time():
+                        remaining = int(s["lockout_until"] - time.time())
+                        yield f"data: {{\"status\": \"lockout\", \"remaining\": {remaining}}}\n\n"
+                    else:
+                        if s.get("approved") == "rejected":
+                            s["approved"] = False
                         
-                    if not s.get("connection_requested") and not s.get("approved"):
-                        s["connection_requested"] = True
-                        
-                    if not s.get("approved"):
-                        yield f"data: {{\"status\": \"waiting_for_approval\"}}\n\n"
-                    elif s.get("approved") is True:
+                        if not s.get("connection_requested") and not s.get("approved"):
+                            yield f"data: {{\"status\": \"request_needed\"}}\n\n"
+                        elif s.get("connection_requested") and not s.get("approved"):
+                            yield f"data: {{\"status\": \"waiting_for_approval\"}}\n\n"
+                        elif s.get("approved") is True:
                         import json
                         state = s.get("state", {})
                         state_str = json.dumps(state)
