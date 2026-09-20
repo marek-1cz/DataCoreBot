@@ -4105,22 +4105,30 @@ def mirror_pc_sync():
 
     # Aktualizace stavu
     if session_id not in MIRROR_STATES:
-        MIRROR_STATES[session_id] = {"pending_actions": []}
+        MIRROR_STATES[session_id] = {"pending_actions": [], "approved": False, "connection_requested": False}
         
     MIRROR_STATES[session_id]["last_updated"] = time.time()
     MIRROR_STATES[session_id]["state"] = data.get('state', {})
     
-    # Vrácení a vyčištění akcí, co byly stisknuty na mobilu
+    if "approve_connection" in data:
+        if data["approve_connection"] is True:
+            MIRROR_STATES[session_id]["approved"] = True
+        elif data["approve_connection"] is False:
+            MIRROR_STATES[session_id]["approved"] = False
+            MIRROR_STATES[session_id]["connection_requested"] = False
+            
+    conn_req = MIRROR_STATES[session_id].get("connection_requested", False)
+    approved = MIRROR_STATES[session_id].get("approved", False)
+    
     actions = MIRROR_STATES[session_id]["pending_actions"].copy()
     MIRROR_STATES[session_id]["pending_actions"].clear()
     
-    # Čištění starých session (starší 2 minuty)
     now = time.time()
     to_delete = [sid for sid, s in MIRROR_STATES.items() if now - s["last_updated"] > 120]
     for sid in to_delete:
         del MIRROR_STATES[sid]
         
-    return jsonify({"status": "ok", "actions": actions})
+    return jsonify({"status": "ok", "actions": actions, "connection_requested": conn_req and not approved, "is_approved": approved})
 
 
 @app.route('/api/mirror/mobile_state/<session_id>')
@@ -4140,13 +4148,19 @@ def mirror_mobile_state(session_id):
             if time.time() - s["last_updated"] > 10:
                 yield f"data: {{\"status\": \"offline\"}}\n\n"
             else:
-                import json
-                state = s.get("state", {})
-                state_str = json.dumps(state)
-                h = hash(state_str)
-                if h != last_state_hash:
-                    last_state_hash = h
-                    yield f"data: {{\"status\": \"online\", \"state\": {state_str}}}\n\n"
+                if not s.get("connection_requested") and not s.get("approved"):
+                    s["connection_requested"] = True
+                    
+                if not s.get("approved"):
+                    yield f"data: {{\"status\": \"waiting_for_approval\"}}\n\n"
+                else:
+                    import json
+                    state = s.get("state", {})
+                    state_str = json.dumps(state)
+                    h = hash(state_str)
+                    if h != last_state_hash:
+                        last_state_hash = h
+                        yield f"data: {{\"status\": \"online\", \"state\": {state_str}}}\n\n"
             time.sleep(0.5)
             
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
@@ -4227,10 +4241,8 @@ def mirror_mobile_ui(session_id):
             flex-direction: column; align-items: center; justify-content: center;
             color: white; font-family: 'Segoe UI', sans-serif; backdrop-filter: blur(10px);
         }
-        .offline-icon-container { position: relative; width: 140px; height: 100px; margin-bottom: 25px; display: flex; justify-content: center; align-items: center; }
-        .offline-icon { font-size: 45px; color: rgba(255,255,255,0.3); position: absolute; }
-        .icon-pc { left: 10px; }
-        .icon-mobile { right: 10px; }
+        .offline-icon-container { width: 100%; margin-bottom: 25px; display: flex; justify-content: center; align-items: center; gap: 20px; }
+        .offline-icon { font-size: 45px; color: rgba(255,255,255,0.3); }
         .icon-bolt { color: #e74c3c; font-size: 35px; animation: pulseBolt 1.5s infinite; z-index: 2; }
         @keyframes pulseBolt {
             0% { transform: scale(1); opacity: 1; text-shadow: 0 0 10px #e74c3c; }
@@ -4342,6 +4354,10 @@ def mirror_mobile_ui(session_id):
                     statusOverlay.style.display = 'flex';
                     sTitle.textContent = 'PC JE OFFLINE';
                     sDesc.textContent = 'Aplikace přestala odesílat data. Zkontrolujte, zda PC neusnulo.';
+                } else if (data.status === 'waiting_for_approval') {
+                    statusOverlay.style.display = 'flex';
+                    sTitle.textContent = 'ČEKÁM NA SCHVÁLENÍ';
+                    sDesc.innerHTML = 'Potvrďte prosím na vašem PC žádost o připojení ke sdílení.<br><br><i class="fas fa-spinner fa-spin" style="font-size: 24px; color: #F4CC17;"></i>';
                 } else if (data.status === 'online') {
                     statusOverlay.style.display = 'none';
                     if (data.state && data.state.dom) {
