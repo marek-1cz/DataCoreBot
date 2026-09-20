@@ -4138,30 +4138,37 @@ def mirror_mobile_state(session_id):
     """
     def generate():
         last_state_hash = None
-        while True:
-            if session_id not in MIRROR_STATES:
-                yield f"data: {{\"status\": \"offline\"}}\n\n"
-                time.sleep(2)
-                continue
-                
-            s = MIRROR_STATES[session_id]
-            if time.time() - s["last_updated"] > 10:
-                yield f"data: {{\"status\": \"offline\"}}\n\n"
-            else:
-                if not s.get("connection_requested") and not s.get("approved"):
-                    s["connection_requested"] = True
+        try:
+            while True:
+                if session_id not in MIRROR_STATES:
+                    yield f"data: {{\"status\": \"offline\"}}\n\n"
+                    time.sleep(2)
+                    continue
                     
-                if not s.get("approved"):
-                    yield f"data: {{\"status\": \"waiting_for_approval\"}}\n\n"
+                s = MIRROR_STATES[session_id]
+                if time.time() - s["last_updated"] > 10:
+                    yield f"data: {{\"status\": \"offline\"}}\n\n"
                 else:
-                    import json
-                    state = s.get("state", {})
-                    state_str = json.dumps(state)
-                    h = hash(state_str)
-                    if h != last_state_hash:
-                        last_state_hash = h
-                        yield f"data: {{\"status\": \"online\", \"state\": {state_str}}}\n\n"
-            time.sleep(0.5)
+                    if not s.get("connection_requested") and not s.get("approved"):
+                        s["connection_requested"] = True
+                        
+                    if not s.get("approved"):
+                        yield f"data: {{\"status\": \"waiting_for_approval\"}}\n\n"
+                    else:
+                        import json
+                        state = s.get("state", {})
+                        state_str = json.dumps(state)
+                        h = hash(state_str)
+                        if h != last_state_hash:
+                            last_state_hash = h
+                            yield f"data: {{\"status\": \"online\", \"state\": {state_str}}}\n\n"
+                time.sleep(0.5)
+        except GeneratorExit:
+            pass
+        finally:
+            if session_id in MIRROR_STATES:
+                MIRROR_STATES[session_id]["approved"] = False
+                MIRROR_STATES[session_id]["connection_requested"] = False
             
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
