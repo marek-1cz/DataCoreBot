@@ -1060,10 +1060,10 @@ HTML_DOWNLOADS_MGMT = """
         <div>
           <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Minimální role pro přístup *</label>
           <select name="target_role" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
-            <option value="User">User (všichni)</option>
-            <option value="BT">BT (Beta Testeři)</option>
-            <option value="DEV">DEV (Vývojáři)</option>
-            <option value="SA">SA (Super Admin)</option>
+            <option value="User" style="background:#0f172a; color:#fff;">User (všichni)</option>
+            <option value="BT" style="background:#0f172a; color:#fff;">BT (Beta Testeři)</option>
+            <option value="DEV" style="background:#0f172a; color:#fff;">DEV (Vývojáři)</option>
+            <option value="SA" style="background:#0f172a; color:#fff;">SA (Super Admin)</option>
           </select>
         </div>
         <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:16px;display:grid;gap:14px;">
@@ -1133,10 +1133,10 @@ HTML_DOWNLOADS_MGMT = """
         <div>
           <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Minimální role</label>
           <select name="target_role" id="edit-target-role" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
-            <option value="User">User (všichni)</option>
-            <option value="BT">BT (Beta Testeři)</option>
-            <option value="DEV">DEV (Vývojáři)</option>
-            <option value="SA">SA (Super Admin)</option>
+            <option value="User" style="background:#0f172a; color:#fff;">User (všichni)</option>
+            <option value="BT" style="background:#0f172a; color:#fff;">BT (Beta Testeři)</option>
+            <option value="DEV" style="background:#0f172a; color:#fff;">DEV (Vývojáři)</option>
+            <option value="SA" style="background:#0f172a; color:#fff;">SA (Super Admin)</option>
           </select>
         </div>
         <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:16px;display:grid;gap:14px;">
