@@ -2665,20 +2665,15 @@ def add_version():
             "db_version": request.form.get("db_version"),
             "file_url": request.form.get("file_url"),
             "target_role": request.form.get("target_role"),
-            "is_active": True,
+            "is_active": True if request.form.get("is_active") else False,
             "eol_date": "",
-            "show_in_launcher": True if request.form.get("show_in_launcher") else False
+            "show_in_launcher": True if request.form.get("show_in_launcher") else False,
+            "can_download": True if request.form.get("can_download") else False,
+            "can_launch": True if request.form.get("can_launch") else False,
         }
-        try:
-            db.table("software_versions").insert(row).execute()
-        except Exception as e:
-            if "show_in_launcher" in str(e) or "PGRST204" in str(e):
-                row.pop("show_in_launcher", None)
-                db.table("software_versions").insert(row).execute()
-            else:
-                raise e
+        db.table("software_versions").insert(row).execute()
         flash('Nová verze vydána!', 'success')
-        send_log("🚀 Vydána nová verze aplikce", f"**Uživatel:** {session.get('discord_nick')}\n**Název:** {row['version_name']}\n**Cílová role:** {row['target_role']}", 0x10b981)
+        send_log("🚀 Vydána nová verze", f"**Uživatel:** {session.get('discord_nick')}\n**Název:** {row['version_name']}\n**Role:** {row['target_role']}", 0x10b981)
         trigger_setup_messages_update()
     except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
@@ -2695,21 +2690,68 @@ def edit_version():
             "target_role": request.form.get("target_role"),
             "is_active": True if request.form.get("is_active") else False,
             "eol_date": request.form.get("eol_date", ""),
-            "show_in_launcher": True if request.form.get("show_in_launcher") else False
+            "show_in_launcher": True if request.form.get("show_in_launcher") else False,
+            "can_download": True if request.form.get("can_download") else False,
+            "can_launch": True if request.form.get("can_launch") else False,
         }
-        try:
-            db.table("software_versions").update(row).eq("id", request.form.get("version_id")).execute()
-        except Exception as e:
-            if "show_in_launcher" in str(e) or "PGRST204" in str(e):
-                row.pop("show_in_launcher", None)
-                db.table("software_versions").update(row).eq("id", request.form.get("version_id")).execute()
-            else:
-                raise e
+        db.table("software_versions").update(row).eq("id", request.form.get("version_id")).execute()
         flash('Verze upravena.', 'success')
-        send_log("✏️ Úprava verze aplikace", f"**Uživatel:** {session.get('discord_nick')}\n**Název:** {row['version_name']}\n**Aktivní:** {'Ano' if row['is_active'] else 'Ne'}", 0xf59e0b)
+        send_log("✏️ Úprava verze", f"**Uživatel:** {session.get('discord_nick')}\n**Název:** {row['version_name']}\n**Aktivní:** {'Ano' if row['is_active'] else 'Ne'}", 0xf59e0b)
         trigger_setup_messages_update()
     except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
+
+
+@app.route('/api/launcher/versions')
+def api_launcher_versions():
+    """
+    Vrátí seznam verzí pro Launcher podle role uživatele.
+    Launcher posílá discord_id nebo email-<id> jako query param.
+    """
+    discord_id = request.args.get('discord_id', '')
+    user_role = 'User'
+    try:
+        db = get_db()
+        if discord_id and discord_id != 'VSC-DEV':
+            if discord_id.startswith('email-'):
+                uid = discord_id.split('-')[1]
+                resp = db.table('users').select('role').eq('id', uid).execute()
+            else:
+                resp = db.table('users').select('role').eq('discord_id', discord_id).execute()
+            if resp and resp.data:
+                user_role = resp.data[0].get('role', 'User')
+        elif discord_id == 'VSC-DEV':
+            user_role = 'SA'
+        
+        all_versions = db.table('software_versions').select('*').eq('is_active', True).order('id', desc=True).execute().data or []
+        
+        ROLE_HIERARCHY = {'User': 1, 'BT': 2, 'DEV': 3, 'SA': 4}
+        def user_level(r):
+            for key in ['SA','DEV','BT']:
+                if key in r: return ROLE_HIERARCHY.get(key, 1)
+            return 1
+        
+        u_level = user_level(user_role)
+        result = []
+        for v in all_versions:
+            v_role = v.get('target_role', 'User')
+            v_level = ROLE_HIERARCHY.get(v_role, 1)
+            has_access = u_level >= v_level
+            result.append({
+                'id': v.get('id'),
+                'version_name': v.get('version_name'),
+                'db_version': v.get('db_version'),
+                'file_url': v.get('file_url') if has_access else None,
+                'target_role': v_role,
+                'show_in_launcher': v.get('show_in_launcher', True),
+                'can_download': v.get('can_download', True) and has_access,
+                'can_launch': v.get('can_launch', True) and has_access,
+                'has_access': has_access,
+                'eol_date': v.get('eol_date', ''),
+            })
+        return jsonify({'status': 'ok', 'versions': result, 'user_role': user_role})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/dashboard/delete_version', methods=['POST'])
 @require_dash_level('superadmin')

@@ -923,62 +923,263 @@ function toggleTargetData(){const t=document.getElementById('target_type').value
 """
 
 HTML_DOWNLOADS_MGMT = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;"><h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-code-branch" style="color:var(--blue-main);"></i> Manažer Verzí a Přístupů</h2></div>
-<div style="display: flex; gap: 20px; flex-wrap: wrap;">
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-        <h3 style="color: var(--blue-main); margin-top: 0;">➕ Vydat novou verzi</h3>
-        <form action="/dashboard/add_version" method="POST">
-            <input type="text" name="version_name" placeholder="Zobrazený Název (např. Jarní Update 1.5)" required>
-            <input type="text" name="db_version" placeholder="Verze Databáze (Přesně z logic-ovladac.js!)" required>
-            <input type="text" name="file_url" placeholder="Odkaz(y) na stažení (více odkazů oddělte čárkou)" required>
-            <label style="color: var(--text-muted); font-size: 13px;">Pro jakou roli?</label>
-            <select name="target_role" required><option value="User">User (Všichni)</option><option value="BT">BETA TESTER</option><option value="DEV_SA">DEV / SERVER ADMIN</option></select>
-            <label style="color: var(--text-muted); font-size: 13px; display: block; margin-top: 10px; margin-bottom: 10px;">
-                <input type="checkbox" name="show_in_launcher" checked style="margin-right: 5px;"> Zobrazit v Launcheru jako nabídku ke hraní?
-            </label>
-            <button type="submit" class="btn" style="width: 100%;">Přidat verzi</button>
-        </form>
-    </div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+  <h2 style="margin:0;color:var(--text-main);display:flex;align-items:center;gap:10px;">
+    <i class="fas fa-layer-group" style="color:var(--blue-main);"></i> Manager Verzí Launcheru
+  </h2>
+  <button onclick="document.getElementById('modal-add-version').style.display='flex'"
+    style="background:var(--blue-main);color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:600;display:flex;align-items:center;gap:8px;">
+    <i class="fas fa-plus"></i> Přidat verzi
+  </button>
 </div>
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-top: 20px;">
-    <h3 style="color: var(--blue-main); margin-top: 0;">📦 Vydané verze softwaru</h3>
-    <table><tr><th>Název</th><th>Verze pro DB</th><th>Stav</th><th>Cílová Skupina</th><th>V Launcheru</th><th>Akce</th></tr>
-    {% for v in versions %}{% set is_active = (v.get('is_active', True) | string | lower) != 'false' %}{% set in_launcher = (v.get('show_in_launcher', True) | string | lower) != 'false' %}<tr style="opacity: {{ '1' if is_active else '0.5' }};"><td><strong>{{ v.get('version_name', '') }}</strong></td><td style="color: var(--warning); font-family: monospace;">{{ v.get('db_version', '') }}</td><td>{% if is_active %}<span class="role-tag" style="background-color: var(--success); color: white;">Aktivní</span>{% else %}<span class="role-tag" style="background-color: var(--danger); color: white;">Zablokováno</span>{% endif %}</td><td>{% if v.get('target_role') == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User</span>{% elif v.get('target_role') == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BT+</span>{% else %}<span class="role-tag" style="background-color: #ef4444; color: white;">DEV/SA</span>{% endif %}</td><td>{% if in_launcher %}<i class="fas fa-check" style="color:var(--success);"></i>{% else %}<i class="fas fa-times" style="color:var(--danger);"></i>{% endif %}</td><td style="display:flex; gap:5px;"><button class="btn" style="padding: 5px 10px; font-size: 12px; background:var(--blue-main);" onclick="document.getElementById('editVersionModal_{{ v.get('id') }}').style.display='flex'"><i class="fas fa-edit"></i></button><form action="/dashboard/delete_version" method="POST" style="display:inline;"><input type="hidden" name="version_id" value="{{ v.get('id', '') }}"><button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Opravdu odebrat?')"><i class="fas fa-trash"></i></button></form></td></tr>
-    
-    <div id="editVersionModal_{{ v.get('id') }}" class="modal-overlay" style="display: none; align-items: center; justify-content: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000;">
-        <div class="modal-content" style="background: var(--bg-panel); padding: 25px; border-radius: 12px; width: 90%; max-width: 500px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 style="margin: 0; color: var(--text-main);">Upravit Verzi</h2>
-                <button onclick="document.getElementById('editVersionModal_{{ v.get('id') }}').style.display='none'" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 20px;"><i class="fas fa-times"></i></button>
-            </div>
-            <form action="/dashboard/edit_version" method="POST">
-                <input type="hidden" name="version_id" value="{{ v.get('id', '') }}">
-                <label style="color: var(--text-muted); font-size: 13px;">Název Verze</label>
-                <input type="text" name="version_name" value="{{ v.get('version_name', '') }}" required>
-                <label style="color: var(--text-muted); font-size: 13px;">DB Verze</label>
-                <input type="text" name="db_version" value="{{ v.get('db_version', '') }}" required>
-                <label style="color: var(--text-muted); font-size: 13px;">Soubory (odkazy ke stažení)</label>
-                <input type="text" name="file_url" value="{{ v.get('file_url', '') }}" required>
-                <label style="color: var(--text-muted); font-size: 13px;">Role (Přístup)</label>
-                <select name="target_role" required>
-                    <option value="User" {% if v.get('target_role') == 'User' %}selected{% endif %}>User (Všichni)</option>
-                    <option value="BT" {% if v.get('target_role') == 'BT' %}selected{% endif %}>BETA TESTER</option>
-                    <option value="DEV_SA" {% if v.get('target_role') == 'DEV_SA' %}selected{% endif %}>DEV / SERVER ADMIN</option>
-                </select>
-                <label style="color: var(--text-muted); font-size: 13px; display: block; margin-top: 10px; margin-bottom: 5px;">
-                    <input type="checkbox" name="is_active" {% if is_active %}checked{% endif %} style="margin-right: 5px;"> Aktivní (lze stáhnout a spustit)
-                </label>
-                <label style="color: var(--text-muted); font-size: 13px; display: block; margin-bottom: 15px;">
-                    <input type="checkbox" name="show_in_launcher" {% if in_launcher %}checked{% endif %} style="margin-right: 5px;"> Viditelné v Launcheru
-                </label>
-                <button type="submit" class="btn" style="width: 100%;">Uložit Změny</button>
-            </form>
-        </div>
-    </div>
-    {% else %}<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Zatím nebyly přidány žádné verze.</td></tr>{% endfor %}</table>
-</div>
-"""
 
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat,msg in messages %}
+    <div style="padding:12px 16px;border-radius:8px;margin-bottom:16px;background:{% if cat=='success' %}rgba(16,185,129,0.15);border:1px solid #10b981;color:#10b981{% else %}rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444{% endif %};">
+      <i class="fas fa-{% if cat=='success' %}check-circle{% else %}exclamation-circle{% endif %}"></i> {{msg}}
+    </div>
+  {% endfor %}
+{% endwith %}
+
+<!-- Tabulka verzí -->
+<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;">
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="background:rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.08);">
+        <th style="padding:14px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Verze</th>
+        <th style="padding:14px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Role</th>
+        <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Aktivní</th>
+        <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Viditelné</th>
+        <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Stahovat</th>
+        <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Spustit</th>
+        <th style="padding:14px 16px;text-align:right;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Akce</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for v in versions %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.05);{% if not v.get('is_active') %}opacity:0.45;{% endif %}">
+        <td style="padding:14px 16px;">
+          <div style="font-weight:600;color:var(--text-main);">{{ v.get('version_name','—') }}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">DB: {{ v.get('db_version','—') }}</div>
+        </td>
+        <td style="padding:14px 16px;">
+          <span style="background:rgba(96,165,250,0.15);color:#60a5fa;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;">
+            {{ v.get('target_role','—') }}
+          </span>
+        </td>
+        <td style="padding:14px 8px;text-align:center;">
+          {% if v.get('is_active') %}
+            <span style="color:#10b981;font-size:18px;" title="Aktivní"><i class="fas fa-toggle-on"></i></span>
+          {% else %}
+            <span style="color:#ef4444;font-size:18px;" title="Vypnuto – neviditelné pro nikoho"><i class="fas fa-toggle-off"></i></span>
+          {% endif %}
+        </td>
+        <td style="padding:14px 8px;text-align:center;">
+          {% if v.get('show_in_launcher', True) %}
+            <span style="color:#10b981;" title="Viditelné v Launcheru"><i class="fas fa-eye"></i></span>
+          {% else %}
+            <span style="color:#6b7280;" title="Skryté – zobrazí se jako Nedostupné"><i class="fas fa-eye-slash"></i></span>
+          {% endif %}
+        </td>
+        <td style="padding:14px 8px;text-align:center;">
+          {% if v.get('can_download', True) %}
+            <span style="color:#10b981;" title="Stahování povoleno"><i class="fas fa-download"></i></span>
+          {% else %}
+            <span style="color:#ef4444;" title="Stahování zakázáno"><i class="fas fa-ban"></i></span>
+          {% endif %}
+        </td>
+        <td style="padding:14px 8px;text-align:center;">
+          {% if v.get('can_launch', True) %}
+            <span style="color:#10b981;" title="Spuštění povoleno"><i class="fas fa-play-circle"></i></span>
+          {% else %}
+            <span style="color:#ef4444;" title="Spuštění zakázáno"><i class="fas fa-stop-circle"></i></span>
+          {% endif %}
+        </td>
+        <td style="padding:14px 16px;text-align:right;">
+          <button onclick="openEditVersion({{ v | tojson | safe }})"
+            style="background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;margin-right:6px;">
+            <i class="fas fa-edit"></i> Upravit
+          </button>
+          <form method="POST" action="/dashboard/delete_version" style="display:inline;"
+            onsubmit="return confirm('Smazat verzi {{ v.get('version_name','') }}?')">
+            <input type="hidden" name="version_id" value="{{ v.get('id') }}">
+            <button type="submit" style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;">
+              <i class="fas fa-trash"></i>
+            </button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" style="padding:40px;text-align:center;color:var(--text-muted);">
+        <i class="fas fa-inbox" style="font-size:32px;opacity:0.3;display:block;margin-bottom:10px;"></i>
+        Zatím nebyly přidány žádné verze.
+      </td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- LEGENDA -->
+<div style="margin-top:16px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);">
+  <span><i class="fas fa-toggle-off" style="color:#ef4444;"></i> <b>Aktivní = VYP</b> – verze neexistuje pro nikoho</span>
+  <span><i class="fas fa-eye-slash" style="color:#6b7280;"></i> <b>Viditelné = VYP</b> – zobrazí se jako "Nedostupné"</span>
+  <span><i class="fas fa-ban" style="color:#ef4444;"></i> <b>Stahovat = VYP</b> – nelze stáhnout</span>
+  <span><i class="fas fa-stop-circle" style="color:#ef4444;"></i> <b>Spustit = VYP</b> – nelze spustit</span>
+</div>
+
+<!-- MODAL: Přidat verzi -->
+<div id="modal-add-version" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;justify-content:center;align-items:center;">
+  <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:32px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;">
+    <h3 style="margin:0 0 24px;color:var(--text-main);"><i class="fas fa-plus-circle" style="color:var(--blue-main);"></i> Přidat novou verzi</h3>
+    <form method="POST" action="/dashboard/add_version">
+      <div style="display:grid;gap:16px;">
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Název verze *</label>
+          <input name="version_name" required placeholder="např. 1.6.1" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">URL ke stažení (ZIP) *</label>
+          <input name="file_url" required placeholder="https://github.com/.../releases/download/..." style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Cílová role *</label>
+          <select name="target_role" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+            <option value="User">User (všichni)</option>
+            <option value="BT">BT (Beta Testeři)</option>
+            <option value="DEV">DEV (Vývojáři)</option>
+            <option value="SA">SA (Super Admin)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Verze DB (volitelné)</label>
+          <input name="db_version" placeholder="např. 2026-09" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+        </div>
+        <!-- PŘEPÍNAČE -->
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:16px;display:grid;gap:12px;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Nastavení přístupu</div>
+          {% macro toggle_row(name, label, description, default="checked") %}
+          <label style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
+            <div>
+              <div style="font-size:14px;color:var(--text-main);">{{ label }}</div>
+              <div style="font-size:12px;color:var(--text-muted);">{{ description }}</div>
+            </div>
+            <input type="checkbox" name="{{ name }}" {{ default }} style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);">
+          </label>
+          {% endmacro %}
+          {{ toggle_row('is_active', 'Aktivní', 'Vypnutí skryje verzi úplně pro všechny včetně SA') }}
+          {{ toggle_row('show_in_launcher', 'Viditelné v Launcheru', 'Vypnutí zobrazí badge „Nedostupné" – nelze stáhnout ani spustit') }}
+          {{ toggle_row('can_download', 'Lze stáhnout', 'Povolí tlačítko Stáhnout v Launcheru') }}
+          {{ toggle_row('can_launch', 'Lze spustit', 'Povolí tlačítko Spustit v Launcheru') }}
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:24px;">
+        <button type="submit" style="flex:1;background:var(--blue-main);color:#fff;border:none;padding:12px;border-radius:8px;cursor:pointer;font-weight:600;font-size:15px;">
+          <i class="fas fa-plus"></i> Přidat verzi
+        </button>
+        <button type="button" onclick="document.getElementById('modal-add-version').style.display='none'"
+          style="padding:12px 24px;background:rgba(255,255,255,0.06);color:var(--text-muted);border:1px solid rgba(255,255,255,0.1);border-radius:8px;cursor:pointer;">
+          Zrušit
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: Upravit verzi -->
+<div id="modal-edit-version" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;justify-content:center;align-items:center;">
+  <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:32px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;">
+    <h3 style="margin:0 0 24px;color:var(--text-main);"><i class="fas fa-edit" style="color:#f59e0b;"></i> Upravit verzi</h3>
+    <form method="POST" action="/dashboard/edit_version" id="form-edit-version">
+      <input type="hidden" name="version_id" id="edit-version-id">
+      <div style="display:grid;gap:16px;">
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Název verze *</label>
+          <input name="version_name" id="edit-version-name" required style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">URL ke stažení (ZIP)</label>
+          <input name="file_url" id="edit-file-url" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Cílová role</label>
+          <select name="target_role" id="edit-target-role" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+            <option value="User">User (všichni)</option>
+            <option value="BT">BT (Beta Testeři)</option>
+            <option value="DEV">DEV (Vývojáři)</option>
+            <option value="SA">SA (Super Admin)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Verze DB</label>
+          <input name="db_version" id="edit-db-version" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:16px;display:grid;gap:12px;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Nastavení přístupu</div>
+          <label style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
+            <div>
+              <div style="font-size:14px;color:var(--text-main);">Aktivní</div>
+              <div style="font-size:12px;color:var(--text-muted);">Vypnutí skryje verzi úplně pro všechny včetně SA</div>
+            </div>
+            <input type="checkbox" name="is_active" id="edit-is-active" style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);">
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
+            <div>
+              <div style="font-size:14px;color:var(--text-main);">Viditelné v Launcheru</div>
+              <div style="font-size:12px;color:var(--text-muted);">Vypnutí zobrazí badge „Nedostupné"</div>
+            </div>
+            <input type="checkbox" name="show_in_launcher" id="edit-show-in-launcher" style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);">
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
+            <div>
+              <div style="font-size:14px;color:var(--text-main);">Lze stáhnout</div>
+              <div style="font-size:12px;color:var(--text-muted);">Povolí tlačítko Stáhnout v Launcheru</div>
+            </div>
+            <input type="checkbox" name="can_download" id="edit-can-download" style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);">
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
+            <div>
+              <div style="font-size:14px;color:var(--text-main);">Lze spustit</div>
+              <div style="font-size:12px;color:var(--text-muted);">Povolí tlačítko Spustit v Launcheru</div>
+            </div>
+            <input type="checkbox" name="can_launch" id="edit-can-launch" style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);">
+          </label>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:24px;">
+        <button type="submit" style="flex:1;background:#f59e0b;color:#000;border:none;padding:12px;border-radius:8px;cursor:pointer;font-weight:600;font-size:15px;">
+          <i class="fas fa-save"></i> Uložit změny
+        </button>
+        <button type="button" onclick="document.getElementById('modal-edit-version').style.display='none'"
+          style="padding:12px 24px;background:rgba(255,255,255,0.06);color:var(--text-muted);border:1px solid rgba(255,255,255,0.1);border-radius:8px;cursor:pointer;">
+          Zrušit
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openEditVersion(v) {
+  document.getElementById('edit-version-id').value = v.id || '';
+  document.getElementById('edit-version-name').value = v.version_name || '';
+  document.getElementById('edit-file-url').value = v.file_url || '';
+  document.getElementById('edit-db-version').value = v.db_version || '';
+  var roleEl = document.getElementById('edit-target-role');
+  if (roleEl) { for(var i=0;i<roleEl.options.length;i++) { if(roleEl.options[i].value === v.target_role) { roleEl.selectedIndex=i; break; } } }
+  document.getElementById('edit-is-active').checked = v.is_active !== false;
+  document.getElementById('edit-show-in-launcher').checked = v.show_in_launcher !== false;
+  document.getElementById('edit-can-download').checked = v.can_download !== false;
+  document.getElementById('edit-can-launch').checked = v.can_launch !== false;
+  document.getElementById('modal-edit-version').style.display = 'flex';
+}
+// Close modals on backdrop click
+['modal-add-version','modal-edit-version'].forEach(function(id) {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+  });
+});
+</script>
+"""
 
 
 HTML_PENDING_ROLES = """
