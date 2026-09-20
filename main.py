@@ -4176,13 +4176,13 @@ def mirror_mobile_state(session_id):
                         elif s.get("connection_requested") and not s.get("approved"):
                             yield f"data: {{\"status\": \"waiting_for_approval\"}}\n\n"
                         elif s.get("approved") is True:
-                        import json
-                        state = s.get("state", {})
-                        state_str = json.dumps(state)
-                        h = hash(state_str)
-                        if h != last_state_hash:
-                            last_state_hash = h
-                            yield f"data: {{\"status\": \"online\", \"state\": {state_str}}}\n\n"
+                            import json
+                            state = s.get("state", {})
+                            state_str = json.dumps(state)
+                            h = hash(state_str)
+                            if h != last_state_hash:
+                                last_state_hash = h
+                                yield f"data: {{\"status\": \"online\", \"state\": {state_str}}}\n\n"
                 time.sleep(0.5)
         except GeneratorExit:
             pass
