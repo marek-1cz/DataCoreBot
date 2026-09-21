@@ -2438,13 +2438,14 @@ def edit_user():
 @app.route('/dashboard/app_management', methods=['GET'], strict_slashes=False)
 def dashboard_app_management():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    db = get_db(); soft_enabled = True; dl_enabled = True; web_login_enabled = True; map_enabled = True; web_maintenance = False
+    db = get_db(); soft_enabled = True; launcher_enabled = True; dl_enabled = True; web_login_enabled = True; map_enabled = True; web_maintenance = False
     try:
         if db:
             s_resp = db.table("settings").select("*").in_("setting_key", ["software_enabled", "launcher_enabled", "downloads_enabled", "web_login_enabled", "map_enabled", "web_maintenance"]).execute().data or []
             for s in s_resp:
                 k = s['setting_key']; v = str(s['setting_value']).lower()
                 if k == 'software_enabled': soft_enabled = v != 'false'
+                elif k == 'launcher_enabled': launcher_enabled = v != 'false'
                 elif k == 'downloads_enabled': dl_enabled = v != 'false'
                 elif k == 'web_login_enabled': web_login_enabled = v != 'false'
                 elif k == 'map_enabled': map_enabled = v != 'false'
@@ -2472,6 +2473,7 @@ async def _trigger_status_update():
         
         embed.add_field(name="🌍 Web (Údržba)", value="🔴 OFFLINE (Údržba)" if web_maintenance else "🟢 ONLINE", inline=False)
         embed.add_field(name="💻 Herní Software", value="🟢 ONLINE" if soft_enabled else "🔴 OFFLINE", inline=False)
+        embed.add_field(name="🚀 Zámek Launcheru", value="✅ Ο ODEMČEN" if launcher_enabled else "♄ ⭐ ZAmüEN", inline=False)
         embed.add_field(name="📥 Stahování softwaru", value="🟢 POVOLENO" if dl_enabled else "🔴 ZAKÁZÁNO", inline=False)
         embed.add_field(name="🔐 Přihlašování na web", value="🟢 POVOLENO" if web_login_enabled else "🔴 ZAKÁZÁNO", inline=False)
         embed.add_field(name="🗺️ Interaktivní Mapa", value="🟢 ONLINE" if map_enabled else "🔴 OFFLINE", inline=False)
