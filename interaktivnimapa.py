@@ -4632,42 +4632,43 @@ def fetch_tt_bg(bus_id, cached_dict):
         cb = int(time.time() * 1000)
         hdr = {'User-Agent': 'Mozilla/5.0', 'X-Requested-With': 'XMLHttpRequest',
                'Referer': 'https://pvvd.idpk.cz/', 'Cache-Control': 'no-cache'}
-        with opener.open(urllib.request.Request(
-                f"https://pvvd.idpk.cz/Ajax/OpenInfoWindow?id={bus_id}&_={cb}", headers=hdr), timeout=4) as r:
-            import html as _html
-            ih = _html.unescape(r.read().decode('utf-8'))
-        ml = re.search(r'<th>Linka</th>\s*<td>(.*?)</td>', ih, re.IGNORECASE | re.DOTALL)
-        ms = re.search(r'<th>Spoj</th>\s*<td>(.*?)</td>', ih, re.IGNORECASE | re.DOTALL)
-        mz = re.search(r'<th>Zastávka</th>\s*<td>(.*?)</td>', ih, re.IGNORECASE | re.DOTALL)
-        if ml and ms:
-            cached_dict["real_linka_spoj"] = f"{ml.group(1).strip()}/{ms.group(1).strip()}"
-        if mz:
-            cached_dict["real_zastavka"] = mz.group(1).strip()
+               
+        # Jízdní řád a Destinace má nejvyšší prioritu
         with opener.open(urllib.request.Request(
                 f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb}",
                 headers=hdr), timeout=4) as r:
             tt = r.read().decode('utf-8')
+            
+        import html as _html
+        tt_unescaped = _html.unescape(tt)
+        
+        # Extrahuj Linka/Spoj (místo OpenInfoWindow)
+        ml = re.search(r'<span id="currentLineRouteLabel">\s*(.*?)\s*</span>', tt_unescaped, re.IGNORECASE | re.DOTALL)
+        if ml:
+            ls_val = ml.group(1).strip()
+            if ls_val and ls_val != "-- / --":
+                cached_dict["real_linka_spoj"] = ls_val
+            
+        # Extrahuj casy
         times = re.findall(r'\b\d{2}:\d{2}\b', tt)
         if times:
             cached_dict["first_dep_time"] = times[0]
             cached_dict["last_dep_time"] = times[-1]
             
-        import html as _html
-        tt_unescaped = _html.unescape(tt)
+        # Extrahuj destinaci z posledni zastavky v tabulce
         stops = re.findall(r'<tr>\s*<td>(.*?)</td>', tt_unescaped, re.IGNORECASE | re.DOTALL)
         if stops:
             real_dest = stops[-1].strip()
             curr_dest = cached_dict.get("destination", "")
             if "Neznámý" in curr_dest or "-1" in curr_dest or not curr_dest:
                 cached_dict["destination"] = real_dest
-        
+
         return True
     except Exception as e:
         print(f"[PVVD FETCH ERROR] Nepodarilo se ziskat spoj pro {bus_id}: {e}", flush=True)
         return False
     finally:
         cached_dict["tt_is_fetching"] = False
-
 
 def close_previous_trips(db, spz, current_trip_id, end_time_str):
     if not db or not spz or spz == "Neznámá":
