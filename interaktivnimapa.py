@@ -5243,7 +5243,7 @@ def background_map_worker():
                     elif om > 2:
                         if not c["actual_end_time"]:
                             c["actual_end_time"] = now.strftime('%H:%M')
-                        c["status"] = "Ztráta polohy"
+                        c["status"] = f"Odstaven ({int(om)} min)"
                         c["color_class"] = "bg-gray"
                         c["raw_delay"] = 0
                         c["spz_locked"] = True
@@ -5396,6 +5396,15 @@ def background_map_worker():
                                     c["spz_verified"] = False
                                     c["spz_stable_ticks"] = 0
                                 print(f"[DEPOT] Bus {bus_id} opustil vozovnu", flush=True)
+
+                # ── JR fetch pro offline busy ──────────────────────────────────────────────────
+                if c.get("is_offline") and not c.get("is_train"):
+                    tt_age = (now - c["tt_last_fetch"]).total_seconds() if c.get("tt_last_fetch") else 9999
+                    retry_lim = 300 if c.get("real_linka_spoj") else 60
+                    if tt_age > retry_lim and not c.get("tt_is_fetching"):
+                        c["tt_last_fetch"] = now
+                        c["tt_is_fetching"] = True
+                        TT_FETCH_QUEUE.put((4, bus_id, c))
 
                 if c.get("is_offline"):
                     fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c.get("is_train") else "Nezn\u00e1m\u00e1")
