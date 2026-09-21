@@ -4606,21 +4606,24 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
     }
 
 
-TT_FETCH_QUEUE = queue.Queue()
+TT_FETCH_QUEUE = queue.PriorityQueue()
 
 def _tt_fetch_worker():
     while True:
         try:
-            bus_id, cached_dict = TT_FETCH_QUEUE.get()
+            priority, bus_id, cached_dict = TT_FETCH_QUEUE.get()
             if not cached_dict.get("is_offline"):
-                fetch_tt_bg(bus_id, cached_dict)
+                success = fetch_tt_bg(bus_id, cached_dict)
+                if not success:
+                    # Pokud se seklo (pravděpodobně rate limit), dej si delší pauzu
+                    time.sleep(1.5)
             else:
                 cached_dict["tt_is_fetching"] = False
             TT_FETCH_QUEUE.task_done()
-            time.sleep(0.5)
+            time.sleep(0.3) # Rychlejší pro prioritní spoje, pokud se to neseká
         except Exception as e:
             print(f"[PVVD QUEUE ERROR] {e}", flush=True)
-            time.sleep(1)
+            time.sleep(2)
 
 threading.Thread(target=_tt_fetch_worker, daemon=True).start()
 
@@ -4648,8 +4651,20 @@ def fetch_tt_bg(bus_id, cached_dict):
         if times:
             cached_dict["first_dep_time"] = times[0]
             cached_dict["last_dep_time"] = times[-1]
+            
+        import html as _html
+        tt_unescaped = _html.unescape(tt)
+        stops = re.findall(r'<tr>\s*<td>(.*?)</td>', tt_unescaped, re.IGNORECASE | re.DOTALL)
+        if stops:
+            real_dest = stops[-1].strip()
+            curr_dest = cached_dict.get("destination", "")
+            if "Neznámý" in curr_dest or "-1" in curr_dest or not curr_dest:
+                cached_dict["destination"] = real_dest
+        
+        return True
     except Exception as e:
         print(f"[PVVD FETCH ERROR] Nepodarilo se ziskat spoj pro {bus_id}: {e}", flush=True)
+        return False
     finally:
         cached_dict["tt_is_fetching"] = False
 
@@ -5767,7 +5782,15 @@ def background_map_worker():
                         if tt_age > retry_lim and not c.get("tt_is_fetching"):
                             c["tt_last_fetch"] = now
                             c["tt_is_fetching"] = True
-                            TT_FETCH_QUEUE.put((bus_id, c))
+                            pri = 1
+                            if c.get("is_offline") or c.get("_in_depot") or inact > 10:
+                                pri = 4
+                            elif not is_moving:
+                                if delay_val <= -10000:
+                                    pri = 2
+                                elif inact > 2:
+                                    pri = 3
+                            TT_FETCH_QUEUE.put((pri, bus_id, c))
 
                 # ── Barvy + status ────────────────────────────────────────────────────────
                 old_status = c.get("status", "")
