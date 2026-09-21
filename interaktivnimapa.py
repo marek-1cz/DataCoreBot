@@ -2150,15 +2150,13 @@ function checkSW(uptimeSec){
 // === SVG MARKER ===
 function buildMarkerSvg(mc,bearing,lineText,isTrain){
   const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151'};
-  // Podpora pro bg-depot:HEX format (bus v depu s barvou zony)
-  let isDepot=mc&&mc.startsWith('bg-depot:');
-  let bgC=isDepot?mc.substring(9):(cM[mc]||'#64748b');
+  let bgC=cM[mc]||'#64748b';
   const tF=(mc==='bg-orange'||mc==='bg-yellow')?'#0f172a':'#fff';
   let lC=String(lineText||'').split('/')[0].trim().replace(/[^0-9]/g,'');
   let lD=lC.length>=4?lC.slice(-3):lC;
   const cx=18,cy=18,r=isTrain?10:12;
   let si='';
-  const hB=bearing!==null&&bearing!==undefined&&!['bg-gray','bg-purple','bg-bug'].includes(mc)&&!isTrain&&!isDepot;
+  const hB=bearing!==null&&bearing!==undefined&&!['bg-gray','bg-purple','bg-bug'].includes(mc)&&!isTrain;
   if(hB){
     const rad=(bearing*Math.PI)/180;
     const tX=+(cx+Math.sin(rad)*(r+10)).toFixed(2),tY=+(cy-Math.cos(rad)*(r+10)).toFixed(2);
@@ -2169,14 +2167,8 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain){
   }
   si+=`<circle cx="${cx+1}" cy="${cy+1}" r="${r}" fill="rgba(0,0,0,0.3)"/>`;
   if(isTrain)si+=`<rect x="${cx-r}" y="${cy-r}" width="${r*2}" height="${r*2}" rx="3" fill="${bgC}" stroke="white" stroke-width="2"/>`;
-  else if(isDepot){
-    // Bus v depu: plny kruh s barvou zony + tlustsi border
-    si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${bgC}" stroke="white" stroke-width="2.5" opacity="0.9"/>`;
-    // Mala ikona garáže uvnitř (H symbol)
-    si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="rgba(0,0,0,0.5)" font-size="10" font-family="sans-serif">🅿️</text>`;
-  }
   else{const ds=mc==='bg-bug'?'stroke-dasharray="3,2"':'';si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${bgC}" stroke="white" stroke-width="2" ${ds} opacity="${mc==='bg-bug'?0.7:1}"/>`;}
-  if(lD&&!isTrain&&mc!=='bg-bug'&&!isDepot){
+  if(lD&&!isTrain&&mc!=='bg-bug'){
     if(lD.length>3){si+=`<text x="${cx}" y="${cy-2.5}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(0,3)}</text>`;si+=`<text x="${cx}" y="${cy+5.5}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="6" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(3)}</text>`;}
     else si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="8" font-family="'Segoe UI',system-ui,sans-serif">${lD}</text>`;
   }
@@ -3302,10 +3294,8 @@ async function fetchBuses(){
 
       // Barveni markeru: depot_color ma prednost pred color_class
       let markerColor=mc;
-      if(bus.in_depot&&bus.depot_color){
-        // Bus v vozovne: pouzij barvu zony (HEX) pro marker
-        // Preved na interni format: ulozi se jako special 'bg-depot-hex'
-        markerColor='bg-depot:'+bus.depot_color;
+      if(bus.in_depot){
+        markerColor='bg-yellow';
       }
       let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,bus.is_train),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
       let spzH='',invTxt='',histBtn='';
@@ -4922,6 +4912,8 @@ def background_map_worker():
                         lng1 = bus1.get("lng", 0)
                         delay = int(bus1.get("delay", 0)) if bus1.get("delay") is not None else 0
                         dest1 = str(bus1.get("finalStopName", "")).strip()
+                        if dest1 == "-1":
+                            dest1 = "Neznámý"
                         traction = str(bus1.get("traction", "BUS")).upper()
                         is_train = int(bus_id) < 0 or traction in ["TRAIN", "UNKNOWN"]
 
