@@ -833,6 +833,15 @@ HTML_APP_MANAGEMENT = """
     </form>
   </div>
   <div class="toggle-card">
+    <div class="toggle-circle {% if launcher_enabled %}toggle-on{% else %}toggle-off{% endif %}"><i class="fas {% if launcher_enabled %}fa-rocket{% else %}fa-power-off{% endif %}" style="color: white; font-size: 32px;"></i></div>
+    <h3>Zámek Launcheru</h3>
+    <p>Zablokuje vstup do Launcheru pro všechny uživatele.</p>
+    <form action="/dashboard/toggle_launcher" method="POST" style="width:100%;">
+      <input type="hidden" name="new_status" value="{% if launcher_enabled %}False{% else %}True{% endif %}">
+      <button type="submit" class="{% if launcher_enabled %}toggle-btn-on{% else %}toggle-btn-off{% endif %}"><i class="fas {% if launcher_enabled %}fa-times-circle{% else %}fa-check-circle{% endif %}"></i> {% if launcher_enabled %}Vypnout{% else %}Zapnout{% endif %}</button>
+    </form>
+  </div>
+  <div class="toggle-card">
     <div class="toggle-circle {% if dl_enabled %}toggle-on{% else %}toggle-off{% endif %}" style="{% if dl_enabled %}background:#3b82f6; box-shadow: 0 0 30px rgba(59,130,246,0.6);{% endif %}"><i class="fas {% if dl_enabled %}fa-download{% else %}fa-times{% endif %}" style="color: white; font-size: 32px;"></i></div>
     <h3>Stahování Softwaru</h3>
     <p>Povoluje/zakazuje stahování přes Discord bot a web.</p>

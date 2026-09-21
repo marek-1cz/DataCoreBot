@@ -224,6 +224,7 @@ class AppAuthView(discord.ui.View):
         if db:
             db.table("users").update({"login_token": "approved"}).eq("discord_id", target_id).execute()
             await interaction.response.edit_message(content="✅ **Přihlášení úspěšně schváleno!**", embed=None, view=None)
+            self.stop()
 
     @discord.ui.button(label="Zamítnout", style=discord.ButtonStyle.danger, emoji="❌", custom_id="app_auth_reject")
     async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -234,6 +235,7 @@ class AppAuthView(discord.ui.View):
         if db:
             db.table("users").update({"login_token": "rejected"}).eq("discord_id", target_id).execute()
             await interaction.response.edit_message(content="❌ **Přihlášení bylo zamítnuto.**", embed=None, view=None)
+            self.stop()
 
 class DashboardAuthView(discord.ui.View):
     def __init__(self, token="", discord_id=""):
@@ -2439,7 +2441,7 @@ def dashboard_app_management():
     db = get_db(); soft_enabled = True; dl_enabled = True; web_login_enabled = True; map_enabled = True; web_maintenance = False
     try:
         if db:
-            s_resp = db.table("settings").select("*").in_("setting_key", ["software_enabled", "downloads_enabled", "web_login_enabled", "map_enabled", "web_maintenance"]).execute().data or []
+            s_resp = db.table("settings").select("*").in_("setting_key", ["software_enabled", "launcher_enabled", "downloads_enabled", "web_login_enabled", "map_enabled", "web_maintenance"]).execute().data or []
             for s in s_resp:
                 k = s['setting_key']; v = str(s['setting_value']).lower()
                 if k == 'software_enabled': soft_enabled = v != 'false'
@@ -2448,18 +2450,19 @@ def dashboard_app_management():
                 elif k == 'map_enabled': map_enabled = v != 'false'
                 elif k == 'web_maintenance': web_maintenance = v == 'true'
     except: pass
-    return render_dashboard(HTML_APP_MANAGEMENT, soft_enabled=soft_enabled, dl_enabled=dl_enabled, web_login_enabled=web_login_enabled, map_enabled=map_enabled, web_maintenance=web_maintenance, deploy_time=DEPLOY_TIME)
+    return render_dashboard(HTML_APP_MANAGEMENT, soft_enabled=soft_enabled, launcher_enabled=launcher_enabled, dl_enabled=dl_enabled, web_login_enabled=web_login_enabled, map_enabled=map_enabled, web_maintenance=web_maintenance, deploy_time=DEPLOY_TIME)
 
 async def _trigger_status_update():
     try:
         db = get_db()
         if not db: return
-        s_resp = db.table("settings").select("*").in_("setting_key", ["software_enabled", "downloads_enabled", "web_login_enabled", "map_enabled", "web_maintenance"]).execute().data or []
+        s_resp = db.table("settings").select("*").in_("setting_key", ["software_enabled", "launcher_enabled", "downloads_enabled", "web_login_enabled", "map_enabled", "web_maintenance"]).execute().data or []
         settings = {}
         for s in s_resp:
             settings[s['setting_key']] = str(s['setting_value']).lower()
             
         soft_enabled = settings.get('software_enabled', 'true') != 'false'
+        launcher_enabled = settings.get('launcher_enabled', 'true') != 'false'
         dl_enabled = settings.get('downloads_enabled', 'true') != 'false'
         web_login_enabled = settings.get('web_login_enabled', 'true') != 'false'
         map_enabled = settings.get('map_enabled', 'true') != 'false'
@@ -2496,6 +2499,21 @@ async def _trigger_status_update():
 def trigger_status_channel_update():
     if bot.loop and bot.loop.is_running() and bot.is_ready():
         asyncio.run_coroutine_threadsafe(_trigger_status_update(), bot.loop)
+
+@app.route('/dashboard/toggle_software', methods=['POST'])
+@require_dash_level('superadmin')
+
+@app.route('/dashboard/toggle_launcher', methods=['POST'])
+@require_dash_level('superadmin')
+def toggle_launcher():
+    new_status = request.form.get('new_status', 'True')
+    db = get_db()
+    if db:
+        db.table("settings").update({"setting_value": new_status}).eq("setting_key", "launcher_enabled").execute()
+        flash(f'Stav Launcheru: {"ZAPNUT" if new_status.lower() == "true" else "VYPNUT"}', 'success')
+        send_log("🚀 Zámek Launcheru", f"**Uživatel:** {session.get('discord_nick')}\n**Nový stav:** {'ZAPNUTO' if new_status.lower() == 'true' else 'VYPNUTO'}", 0xf59e0b)
+        trigger_status_channel_update()
+    return redirect(url_for('dashboard_app_management'))
 
 @app.route('/dashboard/toggle_software', methods=['POST'])
 @require_dash_level('superadmin')
@@ -2710,6 +2728,15 @@ def api_launcher_versions():
     """
     discord_id = request.args.get('discord_id', '')
     user_role = 'User'
+    
+    try:
+        db = get_db()
+        set_resp = db.table("settings").select("setting_value").eq("setting_key", "launcher_enabled").execute()
+        if set_resp.data and str(set_resp.data[0].get('setting_value', 'True')).lower() == 'false':
+            return jsonify({"status": "error", "message": "Launcher je z důvodu údržby dočasně uzamčen administrátorem."})
+    except:
+        pass
+
     try:
         db = get_db()
         if discord_id and discord_id != 'VSC-DEV':
