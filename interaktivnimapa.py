@@ -4612,12 +4612,14 @@ def _tt_fetch_worker():
     while True:
         try:
             bus_id, cached_dict = TT_FETCH_QUEUE.get()
-            if not cached_dict.get("is_offline") and not cached_dict.get("tt_is_fetching"):
-                cached_dict["tt_is_fetching"] = True
+            if not cached_dict.get("is_offline"):
                 fetch_tt_bg(bus_id, cached_dict)
+            else:
+                cached_dict["tt_is_fetching"] = False
             TT_FETCH_QUEUE.task_done()
             time.sleep(0.5)
-        except Exception:
+        except Exception as e:
+            print(f"[PVVD QUEUE ERROR] {e}", flush=True)
             time.sleep(1)
 
 threading.Thread(target=_tt_fetch_worker, daemon=True).start()
@@ -4646,8 +4648,8 @@ def fetch_tt_bg(bus_id, cached_dict):
         if times:
             cached_dict["first_dep_time"] = times[0]
             cached_dict["last_dep_time"] = times[-1]
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[PVVD FETCH ERROR] Nepodarilo se ziskat spoj pro {bus_id}: {e}", flush=True)
     finally:
         cached_dict["tt_is_fetching"] = False
 
