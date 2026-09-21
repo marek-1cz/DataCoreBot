@@ -4606,6 +4606,22 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
     }
 
 
+TT_FETCH_QUEUE = queue.Queue()
+
+def _tt_fetch_worker():
+    while True:
+        try:
+            bus_id, cached_dict = TT_FETCH_QUEUE.get()
+            if not cached_dict.get("is_offline") and not cached_dict.get("tt_is_fetching"):
+                cached_dict["tt_is_fetching"] = True
+                fetch_tt_bg(bus_id, cached_dict)
+            TT_FETCH_QUEUE.task_done()
+            time.sleep(0.5)
+        except Exception:
+            time.sleep(1)
+
+threading.Thread(target=_tt_fetch_worker, daemon=True).start()
+
 def fetch_tt_bg(bus_id, cached_dict):
     try:
         cb = int(time.time() * 1000)
@@ -5744,12 +5760,12 @@ def background_map_worker():
 
                 # ── JR fetch ──────────────────────────────────────────────────────────────
                 if not is_train:
-                    tt_age = (now - c["tt_last_fetch"]).total_seconds() if c.get("tt_last_fetch") else 9999
-                    if tt_age > 300 and not c.get("tt_is_fetching") and tt_ftick < 5:
-                        tt_ftick += 1
-                        c["tt_last_fetch"] = now
-                        c["tt_is_fetching"] = True
-                        threading.Thread(target=fetch_tt_bg, args=(bus_id, c), daemon=True).start()
+                        tt_age = (now - c["tt_last_fetch"]).total_seconds() if c.get("tt_last_fetch") else 9999
+                        retry_lim = 300 if c.get("real_linka_spoj") else 60
+                        if tt_age > retry_lim and not c.get("tt_is_fetching"):
+                            c["tt_last_fetch"] = now
+                            c["tt_is_fetching"] = True
+                            TT_FETCH_QUEUE.put((bus_id, c))
 
                 # ── Barvy + status ────────────────────────────────────────────────────────
                 old_status = c.get("status", "")
@@ -5855,7 +5871,8 @@ def background_map_worker():
 
                 if has_spz and tracked_line:
                     if (not c.get("db_first_upsert") or (old_status != c["status"]) or just_ended
-                            or (is_moving and c.get("actual_start_time") and int(time.time()) % 30 < 10)):
+                    or c.get("_last_db_linka") != (c.get("real_linka_spoj") or c.get("line"))
+                    or (is_moving and c.get("actual_start_time") and int(time.time()) % 30 < 10)):
                         upsert_to_history(db_client, c)
                         c["db_first_upsert"] = True
                         c["_last_db_status"] = c["status"]
