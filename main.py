@@ -2473,7 +2473,7 @@ async def _trigger_status_update():
         
         embed.add_field(name="🌍 Web (Údržba)", value="🔴 OFFLINE (Údržba)" if web_maintenance else "🟢 ONLINE", inline=False)
         embed.add_field(name="💻 Herní Software", value="🟢 ONLINE" if soft_enabled else "🔴 OFFLINE", inline=False)
-        embed.add_field(name="🚀 Zámek Launcheru", value="✅ Ο ODEMČEN" if launcher_enabled else "♄ ⭐ ZAmüEN", inline=False)
+        embed.add_field(name="🚀 Zámek Launcheru", value="🟦 ODEMČEN" if launcher_enabled else "🟦 ZAMëN", inline=False)
         embed.add_field(name="📥 Stahování softwaru", value="🟢 POVOLENO" if dl_enabled else "🔴 ZAKÁZÁNO", inline=False)
         embed.add_field(name="🔐 Přihlašování na web", value="🟢 POVOLENO" if web_login_enabled else "🔴 ZAKÁZÁNO", inline=False)
         embed.add_field(name="🗺️ Interaktivní Mapa", value="🟢 ONLINE" if map_enabled else "🔴 OFFLINE", inline=False)
