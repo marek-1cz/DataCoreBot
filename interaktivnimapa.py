@@ -4663,6 +4663,10 @@ def fetch_tt_bg(bus_id, cached_dict):
             if "Neznámý" in curr_dest or "-1" in curr_dest or not curr_dest:
                 cached_dict["destination"] = real_dest
 
+        # Pokud se jízdní řád podařilo načíst (není to chybová hláška), uložíme si HTML do paměti!
+        if "nepodařilo načíst" not in tt:
+            cached_dict["tt_html"] = tt
+
         return True
     except Exception as e:
         print(f"[PVVD FETCH ERROR] Nepodarilo se ziskat spoj pro {bus_id}: {e}", flush=True)
@@ -7799,27 +7803,35 @@ def api_bus_detail(bus_id):
     try:
         cb = int(time.time() * 1000)
         hdr = {'User-Agent': 'Mozilla/5.0', 'X-Requested-With': 'XMLHttpRequest', 'Referer': 'https://pvvd.idpk.cz/'}
+        
         info_html = ""
-        try:
-            with opener.open(urllib.request.Request(
-                    f"https://pvvd.idpk.cz/Ajax/OpenInfoWindow?id={bus_id}&_={cb}", headers=hdr), timeout=4) as r:
-                info_html = r.read().decode('utf-8')
-        except Exception:
-            pass
         tt_html = ""
+        
+        # Nejprve zkusíme načíst JŘ z PVVD
         try:
             with opener.open(urllib.request.Request(
                     f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb}",
                     headers=hdr), timeout=4) as r:
                 tt_html = r.read().decode('utf-8')
         except Exception:
-            tt_html = "<p style='color:#94a3b8;'>J\u0158 nen\u00ed dostupn\u00fd.</p>"
+            tt_html = ""
+            
+        # Pokud se jízdní řád nepodařilo načíst z PVVD, zkusíme použít naši CACHE
+        if not tt_html or "nepodařilo načíst" in tt_html:
+            if bus_id in GLOBAL_BUS_CACHE and GLOBAL_BUS_CACHE[bus_id].get("tt_html"):
+                tt_html = GLOBAL_BUS_CACHE[bus_id]["tt_html"]
+                
+        # Pokud cache stále nemáme, nebo selhalo i to
+        if not tt_html or "nepodařilo načíst" in tt_html:
+             tt_html = "<p style='color:#94a3b8;'>Jízdní řád není momentálně pro tento spoj dostupný (ani v paměti bota).</p>"
+
         return f"""<div style="background:#0f172a;color:white;font-family:sans-serif;">
-<div style="background:#1e293b;padding:12px;border-radius:6px;margin-bottom:12px;">{info_html}</div>
-<div style="overflow-x:auto;"><style>table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #334155;padding:6px 10px;text-align:left}}th{{background:#0f172a;color:#38bdf8}}tr:hover td{{background:#1e293b}}.current{{background:#166534!important;font-weight:bold}}
-</style>{tt_html}</div></div>"""
+        <div style="background:#1e293b;padding:12px;border-radius:6px;margin-bottom:12px;">{info_html}</div>
+        <div style="overflow-x:auto;"><style>table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #334155;padding:6px 10px;text-align:left}}th{{background:#0f172a;color:#38bdf8}}tr:hover td{{background:#1e293b}}.current{{background:#166534!important;font-weight:bold}}
+        </style>{tt_html}</div></div>"""
     except Exception as e:
         return f"<p style='color:#ef4444;padding:20px;'>Chyba: {e}</p>"
+
 
 
 @mapa_bp.route('/api/history_full')
