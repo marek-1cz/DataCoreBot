@@ -2500,9 +2500,6 @@ def trigger_status_channel_update():
     if bot.loop and bot.loop.is_running() and bot.is_ready():
         asyncio.run_coroutine_threadsafe(_trigger_status_update(), bot.loop)
 
-@app.route('/dashboard/toggle_software', methods=['POST'])
-@require_dash_level('superadmin')
-
 @app.route('/dashboard/toggle_launcher', methods=['POST'])
 @require_dash_level('superadmin')
 def toggle_launcher():
