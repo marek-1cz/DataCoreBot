@@ -5226,8 +5226,8 @@ def background_map_worker():
                     elif om > 2:
                         if not c["actual_end_time"]:
                             c["actual_end_time"] = now.strftime('%H:%M')
-                        c["status"] = "Ztr\u00e1ta polohy (Kone\u010dn\u00e1)"
-                        c["color_class"] = "bg-purple"
+                        c["status"] = "Ztráta polohy"
+                        c["color_class"] = "bg-gray"
                         c["raw_delay"] = 0
                         c["spz_locked"] = True
                         if spz_ok:
