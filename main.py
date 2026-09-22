@@ -2755,6 +2755,8 @@ def api_launcher_versions():
             else:
                 resp = db.table('users').select('role, is_banned').eq('discord_id', discord_id).execute()
             if resp and resp.data:
+                if resp.data[0].get("is_banned"):
+                    return jsonify({"status": "banned", "message": "Tento účet má BAN."})
                 user_role = resp.data[0].get('role', 'User')
         elif discord_id == 'VSC-DEV':
             user_role = 'SA'
