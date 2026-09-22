@@ -1476,7 +1476,7 @@ def api_app_check():
         user = user_resp.data[0]
         if user.get("login_token") == "approved":
             db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
-            return _cors_jsonify({"status": "success", "display_name": user.get("nick"), "app_id": str(user.get("app_id", ""))})
+            return _cors_jsonify({"status": "success", "display_name": user.get("nick"), "app_id": str(user.get("app_id", "")), "roles": [user.get("role", "User")]})
         elif user.get("login_token") == "rejected":
             db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
             return _cors_jsonify({"status": "error", "message": "Přístup zamítnut uživatelem."})
