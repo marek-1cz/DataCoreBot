@@ -2751,9 +2751,9 @@ def api_launcher_versions():
         if discord_id and discord_id != 'VSC-DEV':
             if discord_id.startswith('email-'):
                 uid = discord_id.split('-')[1]
-                resp = db.table('users').select('role').eq('id', uid).execute()
+                resp = db.table('users').select('role, is_banned').eq('id', uid).execute()
             else:
-                resp = db.table('users').select('role').eq('discord_id', discord_id).execute()
+                resp = db.table('users').select('role, is_banned').eq('discord_id', discord_id).execute()
             if resp and resp.data:
                 user_role = resp.data[0].get('role', 'User')
         elif discord_id == 'VSC-DEV':
@@ -4167,7 +4167,7 @@ def mirror_pc_sync():
                 user_id = discord_id.split('-')[1]
                 resp = db.table('users').select('role').eq('id', user_id).execute()
             else:
-                resp = db.table('users').select('role').eq('discord_id', discord_id).execute()
+                resp = db.table('users').select('role, is_banned').eq('discord_id', discord_id).execute()
             
             if resp:
                 print('mirror_pc_sync auth:', discord_id, resp.data)
