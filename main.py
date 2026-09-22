@@ -66,6 +66,16 @@ import hmac as _hmac
 import hashlib as _hashlib
 from collections import defaultdict
 
+def set_setting_db(db, key, value):
+    try:
+        res = db.table("settings").select("*").eq("setting_key", key).execute()
+        if res.data:
+            db.table("settings").update({"setting_value": value}).eq("setting_key", key).execute()
+        else:
+            db.table("settings").insert({"setting_key": key, "setting_value": value}).execute()
+    except Exception as e:
+        print(f"Error updating setting {key}: {e}")
+
 app = Flask(__name__)
 # ── Secret key MUSTÍ být nastaven jako env proměnná FLASK_SECRET_KEY ──
 _flask_secret = os.environ.get('FLASK_SECRET_KEY')
@@ -2508,7 +2518,7 @@ def toggle_launcher():
     new_status = request.form.get('new_status', 'True')
     db = get_db()
     if db:
-        db.table("settings").update({"setting_value": new_status}).eq("setting_key", "launcher_enabled").execute()
+        set_setting_db(db, "launcher_enabled", new_status)
         flash(f'Stav Launcheru: {"ZAPNUT" if new_status.lower() == "true" else "VYPNUT"}', 'success')
         send_log("🚀 Zámek Launcheru", f"**Uživatel:** {session.get('discord_nick')}\n**Nový stav:** {'ZAPNUTO' if new_status.lower() == 'true' else 'VYPNUTO'}", 0xf59e0b)
         trigger_status_channel_update()
@@ -2520,7 +2530,7 @@ def toggle_software():
     new_status = request.form.get('new_status', 'True')
     db = get_db()
     if db:
-        db.table("settings").update({"setting_value": new_status}).eq("setting_key", "software_enabled").execute()
+        set_setting_db(db, "software_enabled", new_status)
         flash(f'Stav softwaru: {"ZAPNUT" if new_status.lower() == "true" else "VYPNUT"}', 'success')
         send_log("💻 Software / Spouštění hry", f"**Uživatel:** {session.get('discord_nick')}\n**Nový stav:** {'ZAPNUTO' if new_status.lower() == 'true' else 'VYPNUTO'}", 0xf59e0b)
         trigger_status_channel_update()
@@ -2532,7 +2542,7 @@ def toggle_downloads():
     new_status = request.form.get('new_status', 'True')
     db = get_db()
     if db:
-        db.table("settings").update({"setting_value": new_status}).eq("setting_key", "downloads_enabled").execute()
+        set_setting_db(db, "downloads_enabled", new_status)
         flash(f'Stahování: {"POVOLENO" if new_status.lower() == "true" else "ZAKÁZÁNO"}', 'success')
         send_log("⬇️ Stahování hry v Launcheru", f"**Uživatel:** {session.get('discord_nick')}\n**Nový stav:** {'POVOLENO' if new_status.lower() == 'true' else 'ZAKÁZÁNO'}", 0x3b82f6)
         trigger_setup_messages_update()
@@ -2546,7 +2556,7 @@ def toggle_web_login():
     new_status = request.form.get('new_status', 'True')
     db = get_db()
     if db:
-        db.table("settings").update({"setting_value": new_status}).eq("setting_key", "web_login_enabled").execute()
+        set_setting_db(db, "web_login_enabled", new_status)
         send_log("🔐 Přihlašování na Web", f"Přihlašování na web bylo **{'POVOLENO' if new_status.lower() == 'true' else 'ZABLOKOVANÉ'}** přes dashboard.", 0xf59e0b)
         flash(f'Přihlašování na web: {"POVOLENO" if new_status.lower() == "true" else "ZABLOKOVANÉ"}', 'success')
         trigger_status_channel_update()
@@ -2558,7 +2568,7 @@ def toggle_map():
     new_status = request.form.get('new_status', 'True')
     db = get_db()
     if db:
-        db.table("settings").update({"setting_value": new_status}).eq("setting_key", "map_enabled").execute()
+        set_setting_db(db, "map_enabled", new_status)
         send_log("🗺️ Interaktivní Mapa", f"Mapa byla **{'ZAPNUTA' if new_status.lower() == 'true' else 'VYPNUTA'}** přes dashboard.", 0x38bdf8)
         flash(f'Mapa: {"ZAPNUTA" if new_status.lower() == "true" else "VYPNUTA"}', 'success')
         trigger_status_channel_update()
@@ -2570,7 +2580,7 @@ def toggle_maintenance():
     new_status = request.form.get('new_status', 'False')
     db = get_db()
     if db:
-        db.table("settings").update({"setting_value": new_status}).eq("setting_key", "web_maintenance").execute()
+        set_setting_db(db, "web_maintenance", new_status)
         if new_status.lower() == 'true':
             send_log("🚧 Maintenance Mode ZAPNUT", "Web byl přepnut do maintenance módu. Probíhá přesměrování všech návštěvníků na /blocked.", 0xef4444)
         else:
