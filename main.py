@@ -3507,6 +3507,8 @@ async def on_ready():
     except: pass
     try: bot.add_view(DashboardAuthView())
     except: pass
+    try: bot.add_view(LauncherInstallView())
+    except: pass
     try:
         for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
     except: pass
@@ -3599,7 +3601,7 @@ async def help(ctx):
     embed = discord.Embed(title="🤖 Nápověda - Projekt OIS IDPK", color=0x38bdf8)
     embed.add_field(name="🌍 Veřejné", value="`!auth`, `!ping`, `!help`, `!register`, `!id`, `!notify list`, `!notify clear`", inline=False)
     embed.add_field(name="🛡️ Správa (SM)", value="`!info [ID]`, `!db [ID]`, `!ban`, `!unban`, `!delete`, `!perdelete`, `!dm @user`, `!dmhistory @uživatel`, `!message #channel`, `!website_block`, `!website_block_mapa`", inline=False)
-    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download`, `!sm @uživatel`, `!debugvozovna`, `!aktulizace`, `!dashadd [id] [role]`, `!dashremove [id]`", inline=False)
+    embed.add_field(name="⚙️ Administrace (web-sa)", value="`!setup_download`, `!download_setup`, `!sm @uživatel`, `!debugvozovna`, `!aktulizace`, `!dashadd [id] [role]`, `!dashremove [id]`", inline=False)
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -3919,6 +3921,159 @@ async def setup_download(ctx):
     try: await ctx.message.delete()
     except: pass
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# LAUNCHER DOWNLOAD PANEL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# URL na GitHub Release – aktualizuj po každém buildu
+LAUNCHER_DOWNLOAD_URL = "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/latest/download/IDPK.Launcher.Setup.1.6.2.exe"
+
+class LauncherRulesView(discord.ui.View):
+    """Ephemeral podmínky užívání – zobrazí se po kliknutí Zahájit instalaci."""
+    def __init__(self):
+        super().__init__(timeout=300)
+
+    @discord.ui.button(label="Souhlasím", style=discord.ButtonStyle.success, emoji="✅")
+    async def agree(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except Exception:
+            pass
+
+        # Kontrola banu
+        db = get_db()
+        if db:
+            chk = db.table("users").select("is_banned").eq("discord_id", str(interaction.user.id)).execute()
+            if chk.data and chk.data[0].get("is_banned"):
+                return await interaction.followup.send(
+                    "**⛔ Přístup zamítnut:** Váš účet má aktivní BAN. Stažení Launcheru není povoleno.",
+                    ephemeral=True
+                )
+
+        await interaction.followup.send(
+            content=(
+                "✅ **Podmínky přijaty.** Stahování Launcheru zahájeno!\n\n"
+                f"📥 **Klikni na odkaz níže:**\n{LAUNCHER_DOWNLOAD_URL}\n\n"
+                "Po instalaci se přihlas přes Discord ID a stáhni nejnovější verzi OIS IDPK."
+            ),
+            ephemeral=True
+        )
+        # Log do datacore
+        send_log(
+            "📥 Stažení Launcheru",
+            f"Uživatel **{interaction.user.display_name}** (`{interaction.user.id}`) si stáhl IDPK Launcher.",
+            0x38bdf8,
+            "🖥️・datacore-logs"
+        )
+
+    @discord.ui.button(label="Nesouhlasím", style=discord.ButtonStyle.danger, emoji="❌")
+    async def disagree(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except Exception:
+            pass
+        await interaction.followup.send(
+            content="**Akce zrušena.** Pokud si to rozmyslíš, klikni na tlačítko znovu.",
+            ephemeral=True
+        )
+
+
+class LauncherInstallView(discord.ui.View):
+    """Persistentní panel pro stažení Launcheru (zůstane i po restartu bota)."""
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Zahájit instalaci Launcheru",
+        style=discord.ButtonStyle.primary,
+        emoji="📥",
+        custom_id="persistent_launcher_install_btn"
+    )
+    async def install_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except Exception:
+            pass
+
+        db = get_db()
+
+        # Kontrola banu hned na začátku
+        if db:
+            chk = db.table("users").select("is_banned").eq("discord_id", str(interaction.user.id)).execute()
+            if chk.data and chk.data[0].get("is_banned"):
+                return await interaction.followup.send(
+                    "**⛔ Přístup zamítnut:** Váš účet má aktivní BAN.",
+                    ephemeral=True
+                )
+
+        podmínky_text = (
+            "**PODMÍNKY UŽÍVÁNÍ:**\n"
+            "1. Přísný zákaz šíření, kopírování nebo sdílení aplikace bez výslovného souhlasu autora.\n"
+            "2. Systém využívá HWID ochranu a shromažďuje telemetrická data.\n"
+            "3. Každý pokus o modifikaci kódu nebo obcházení zabezpečení povede k okamžitému zablokování.\n\n"
+            "Souhlasíte s těmito podmínkami?"
+        )
+        await interaction.followup.send(
+            content=podmínky_text,
+            view=LauncherRulesView(),
+            ephemeral=True
+        )
+
+
+def build_launcher_embed():
+    """Vytvoří embed pro Launcher download panel."""
+    embed = discord.Embed(
+        title="📥 Projekt OIS IDPK – Launcher",
+        description=(
+            "Vítejte v oficiálním instalačním průvodci.\n\n"
+            "Kliknutím na tlačítko níže zahájíte ověření účtu a stahování.\n"
+            "Dále v Launcheru stáhnete nejnovější verzi aplikace."
+        ),
+        color=0x38bdf8
+    )
+    embed.add_field(
+        name="⚠️ Upozornění",
+        value="Pokud máte BAN, systém vás ke stahování nepustí.",
+        inline=False
+    )
+    embed.set_footer(text="Projekt OIS IDPK • Officiální distribuční kanál")
+    return embed
+
+
+# Uložená ID launcher-panelových zpráv (pro refresh)
+def get_launcher_panel_messages(db):
+    resp = db.table("settings").select("setting_value").eq("setting_key", "launcher_panel_messages").execute()
+    if not resp.data: return []
+    try: return json.loads(resp.data[0]['setting_value'])
+    except: return []
+
+def save_launcher_panel_message(db, channel_id, message_id):
+    msgs = get_launcher_panel_messages(db)
+    msgs.append({"channel_id": str(channel_id), "message_id": str(message_id)})
+    msgs = msgs[-10:]
+    check = db.table("settings").select("*").eq("setting_key", "launcher_panel_messages").execute().data
+    if not check:
+        db.table("settings").insert({"setting_key": "launcher_panel_messages", "setting_value": json.dumps(msgs)}).execute()
+    else:
+        db.table("settings").update({"setting_value": json.dumps(msgs)}).eq("setting_key", "launcher_panel_messages").execute()
+
+
+@bot.command(name="download_setup")
+@check_web_sa()
+async def cmd_download_setup(ctx):
+    """Pošle persistentní Launcher download panel do kanálu."""
+    db = get_db()
+    if not db:
+        return await ctx.send("❌ Databáze není dostupná.", delete_after=10)
+
+    embed = build_launcher_embed()
+    msg = await ctx.send(embed=embed, view=LauncherInstallView())
+    save_launcher_panel_message(db, ctx.channel.id, msg.id)
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+
 @bot.command()
 @check_sm_role()
 async def sm(ctx, member: discord.Member):
@@ -4222,6 +4377,7 @@ def mirror_request_connection(session_id):
         if s.get("lockout_until", 0) > time.time():
             return jsonify({"status": "error", "message": "locked out"}), 429
         s["connection_requested"] = True
+        s["connection_requested_time"] = time.time()
         return jsonify({"status": "ok"})
     return jsonify({"status": "error", "message": "session not found"}), 404
 
@@ -4253,7 +4409,12 @@ def mirror_mobile_state(session_id):
                         if not s.get("connection_requested") and not s.get("approved"):
                             yield f"data: {{\"status\": \"request_needed\"}}\n\n"
                         elif s.get("connection_requested") and not s.get("approved"):
-                            yield f"data: {{\"status\": \"waiting_for_approval\"}}\n\n"
+                            if s.get("connection_requested_time") and time.time() - s.get("connection_requested_time") > 30:
+                                s["connection_requested"] = False
+                                s["connection_requested_time"] = 0
+                                yield f"data: {{\"status\": \"timeout\"}}\n\n"
+                            else:
+                                yield f"data: {{\"status\": \"waiting_for_approval\"}}\n\n"
                         elif s.get("approved") is True:
                             import json
                             state = s.get("state", {})
@@ -4494,10 +4655,16 @@ def mirror_mobile_ui(session_id):
                     sTitle.textContent = 'ZAMÍTNUTO';
                     sDesc.innerHTML = 'Spojení bylo odmítnuto z PC.<br>Nelze se připojit.';
                     source.close();
+                } else if (data.status === 'timeout') {
+                    statusOverlay.style.display = 'flex';
+                    sTitle.textContent = 'VYPRŠEL ČAS';
+                    sDesc.innerHTML = 'PC neodpovědělo včas na vaši žádost.<br><button onclick="requestConnection()" style="padding: 15px 30px; font-size: 18px; font-weight: bold; background: #22c55e; color: white; border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 4px 15px rgba(34,197,94,0.4); margin-top: 15px;">Zkusit znovu</button>';
+                    let sp = document.querySelector('.spinner');
+                    if(sp) sp.style.display = 'none';
                 } else if (data.status === 'waiting_for_approval') {
                     statusOverlay.style.display = 'flex';
                     sTitle.textContent = 'ČEKÁM NA SCHVÁLENÍ';
-                    sDesc.innerHTML = 'Potvrďte prosím na vašem PC žádost o připojení ke sdílení.<br><br><i class="fas fa-spinner fa-spin" style="font-size: 24px; color: #F4CC17;"></i>';
+                    sDesc.innerHTML = 'Potvrďte prosím na vašem PC žádost o připojení ke sdílení.<br><br><i class="fas fa-spinner fa-spin spinner" style="font-size: 24px; color: #F4CC17;"></i>';
                     let sp = document.querySelector('.spinner');
                     if(sp) sp.style.display = 'block';
                 } else if (data.status === 'online') {
