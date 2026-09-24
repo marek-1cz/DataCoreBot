@@ -335,8 +335,9 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
                 send_log("⚠️ Spojení přerušeno", f"Uživateli `{nick}` se přerušilo stahování.\nDůvod: {stream_err}", 0xf59e0b)
             finally:
                 resp.close()
+        ext = ".zip" if not version_name.endswith(".exe") else ""
         resp_headers = {
-            'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name.replace(" ", "_")}.zip"',
+            'Content-Disposition': f'attachment; filename="OIS_IDPK_{version_name.replace(" ", "_")}{ext}"',
             'Content-Type': resp.headers.get('Content-Type', 'application/octet-stream')
         }
         if resp.headers.get('Content-Length'):
@@ -931,33 +932,101 @@ def api_submit_stats():
 # PUBLIC ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@app.route('/download-launcher')
-def download_launcher_page():
-    content = """
-    <div style="text-align: center; margin-top: 100px; padding: 20px; background: rgba(30, 41, 59, 0.5); border-radius: 12px; max-width: 600px; margin-left: auto; margin-right: auto; border: 1px solid rgba(56, 189, 248, 0.2);">
-        <i class="fas fa-rocket" style="font-size: 3rem; color: #38bdf8; margin-bottom: 20px;"></i>
-        <h1 style="color: white; font-size: 2rem; margin-bottom: 10px;">OIS IDPK Launcher</h1>
-        <p style="color: #94a3b8; margin-bottom: 30px; font-size: 1.1rem;">
-            Kliknutím na tlačítko níže bezpečně stáhnete instalační soubor.
+@app.route('/launcher-page/<token>')
+def launcher_page(token):
+    db = get_db()
+    if not db: return "Databáze nedostupná."
+    user = db.table("users").select("*").eq("download_token", token).execute().data
+    if not user: return "Neplatný nebo expirovaný token."
+    if user[0].get('is_banned'): return "Přístup zamítnut: Máte BAN."
+
+    content = f"""
+    <div style="text-align: center; margin-top: 100px; padding: 40px; background: rgba(30, 41, 59, 0.7); border-radius: 16px; max-width: 600px; margin-left: auto; margin-right: auto; border: 1px solid rgba(56, 189, 248, 0.3); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <div id="icon-container" style="transition: all 0.5s ease;">
+            <i class="fas fa-rocket" id="main-icon" style="font-size: 4rem; color: #38bdf8; margin-bottom: 20px; animation: bounce 2s infinite;"></i>
+        </div>
+        <h1 id="main-title" style="color: white; font-size: 2.2rem; margin-bottom: 15px;">Příprava ke stažení...</h1>
+        <p id="main-desc" style="color: #94a3b8; font-size: 1.1rem; margin-bottom: 30px;">
+            Váš unikátní odkaz se právě zpracovává. Prosím čekejte.
         </p>
-        <a href="https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/latest/download/IDPK.Launcher.Setup.1.6.2.exe" 
-           style="background: #38bdf8; color: #0f172a; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 1.2rem; display: inline-block; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);"
-           onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(56, 189, 248, 0.6)'"
-           onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(56, 189, 248, 0.4)'">
-           <i class="fas fa-download" style="margin-right: 8px;"></i> Stáhnout Installer
+        
+        <div id="progress-bar-container" style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; margin-bottom: 30px;">
+            <div id="progress-bar" style="width: 0%; height: 100%; background: #38bdf8; transition: width 0.1s linear;"></div>
+        </div>
+
+        <a id="download-btn" href="/api/download-launcher/{token}" style="display: none; background: #10b981; color: white; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 1.2rem; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);"
+           onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(16, 185, 129, 0.6)'"
+           onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(16, 185, 129, 0.4)'">
+           <i class="fas fa-download" style="margin-right: 8px;"></i> Stáhnout IDPK Launcher
         </a>
+
         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
             <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
-                <i class="fas fa-shield-alt" style="color: #10b981;"></i> Bezpečné stažení přímo z GitHubu.<br>
-                Pokud vás Windows SmartScreen upozorní na neznámého vydavatele, klikněte na <b>Další informace</b> a poté <b>Přesto spustit</b>.
+                <i class="fas fa-shield-alt" style="color: #10b981;"></i> Zabezpečeno speciálním tokenem.<br>
+                Odkaz je platný pouze pro jedno stažení a nesmí být sdílen.
             </p>
         </div>
     </div>
+    
+    <style>
+        @keyframes bounce {{
+            0%, 100% {{ transform: translateY(0); }}
+            50% {{ transform: translateY(-10px); }}
+        }}
+        @keyframes flyAway {{
+            0% {{ transform: translateY(0) scale(1); opacity: 1; }}
+            100% {{ transform: translateY(-100px) scale(0.5); opacity: 0; }}
+        }}
+        @keyframes popIn {{
+            0% {{ transform: scale(0); opacity: 0; }}
+            100% {{ transform: scale(1); opacity: 1; }}
+        }}
+    </style>
+
+    <script>
+        setTimeout(() => {{
+            let w = 0;
+            let intv = setInterval(() => {{
+                w += 2;
+                document.getElementById('progress-bar').style.width = w + '%';
+                if(w >= 100) {{
+                    clearInterval(intv);
+                    
+                    document.getElementById('main-icon').style.animation = 'flyAway 0.5s forwards';
+                    
+                    setTimeout(() => {{
+                        document.getElementById('icon-container').innerHTML = '<i class="fas fa-check-circle" style="font-size: 4rem; color: #10b981; margin-bottom: 20px; animation: popIn 0.5s forwards;"></i>';
+                        document.getElementById('main-title').innerText = 'Připraveno!';
+                        document.getElementById('main-desc').innerText = 'Váš zabezpečený soubor je připraven ke stažení.';
+                        document.getElementById('progress-bar-container').style.display = 'none';
+                        document.getElementById('download-btn').style.display = 'inline-block';
+                        
+                        // Start automatic download
+                        setTimeout(() => {{
+                            window.location.href = '/api/download-launcher/{token}';
+                        }}, 1000);
+                    }}, 500);
+                }}
+            }}, 30);
+        }}, 500);
+    </script>
     """
     html = BASE_HTML.replace("__TITLE__", "OIS IDPK | Stažení Launcheru")\
                     .replace("__HEAD_EXTRA__", "")\
                     .replace("__CONTENT__", PUBLIC_LAYOUT.replace("__PAGE_CONTENT__", content))
     return render_template_string(html)
+
+@app.route('/api/download-launcher/<token>')
+def api_download_launcher(token):
+    db = get_db()
+    if not db: return "Databáze nedostupná."
+    user = db.table("users").select("*").eq("download_token", token).execute().data
+    if not user: return "Neplatný nebo expirovaný token."
+    
+    # Invalidate token
+    db.table("users").update({"download_token": ""}).eq("discord_id", user[0]['discord_id']).execute()
+    
+    return stream_proxy_file("https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/latest/download/IDPK.Launcher.Setup.1.6.2.exe", "Launcher.exe", user[0]['discord_id'], user[0]['nick'])
 
 @app.route('/')
 def home():
@@ -3968,8 +4037,10 @@ class LauncherRulesView(discord.ui.View):
         except Exception:
             pass
 
-        # Kontrola banu
+        # Kontrola banu a generování tokenu
         db = get_db()
+        token = ""
+        link = ""
         if db:
             chk = db.table("users").select("is_banned").eq("discord_id", str(interaction.user.id)).execute()
             if chk.data and chk.data[0].get("is_banned"):
@@ -3977,11 +4048,16 @@ class LauncherRulesView(discord.ui.View):
                     "**⛔ Přístup zamítnut:** Váš účet má aktivní BAN. Stažení Launcheru není povoleno.",
                     ephemeral=True
                 )
+            
+            import uuid
+            token = str(uuid.uuid4())
+            db.table("users").update({"download_token": token}).eq("discord_id", str(interaction.user.id)).execute()
+            link = f"https://datacorebot.koyeb.app/launcher-page/{token}"
 
         await interaction.followup.send(
             content=(
                 "✅ **Podmínky přijaty.** Stahování Launcheru zahájeno!\n\n"
-                f"📥 **Klikni na odkaz níže:**\n{LAUNCHER_DOWNLOAD_URL}\n\n"
+                f"📥 **Klikni na odkaz níže (platí jen pro tebe):**\n{link}\n\n"
                 "Po instalaci se přihlas přes Discord ID a stáhni nejnovější verzi OIS IDPK."
             ),
             ephemeral=True
