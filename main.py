@@ -954,11 +954,15 @@ def launcher_page(token):
             <div id="progress-bar" style="width: 0%; height: 100%; background: #38bdf8; transition: width 0.1s linear;"></div>
         </div>
 
-        <a id="download-btn" href="/api/download-launcher/{token}" style="display: none; background: #10b981; color: white; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 1.2rem; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);"
-           onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(16, 185, 129, 0.6)'"
-           onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(16, 185, 129, 0.4)'">
-           <i class="fas fa-download" style="margin-right: 8px;"></i> Stáhnout IDPK Launcher
-        </a>
+        <div id="success-msg" style="display: none; padding: 20px; background: rgba(16, 185, 129, 0.1); border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.3);">
+            <p style="color: #10b981; font-weight: bold; font-size: 1.1rem; margin: 0;">
+                Stahování bylo automaticky zahájeno.
+            </p>
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 10px; margin-bottom: 0;">
+                Nyní můžete tuto stránku bezpečně zavřít.<br>
+                (Pokud se stahování přerušilo, vygenerujte si nový odkaz na Discordu)
+            </p>
+        </div>
 
         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
             <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
@@ -997,9 +1001,9 @@ def launcher_page(token):
                     setTimeout(() => {{
                         document.getElementById('icon-container').innerHTML = '<i class="fas fa-check-circle" style="font-size: 4rem; color: #10b981; margin-bottom: 20px; animation: popIn 0.5s forwards;"></i>';
                         document.getElementById('main-title').innerText = 'Připraveno!';
-                        document.getElementById('main-desc').innerText = 'Váš zabezpečený soubor je připraven ke stažení.';
+                        document.getElementById('main-desc').innerText = 'Váš zabezpečený soubor se stahuje.';
                         document.getElementById('progress-bar-container').style.display = 'none';
-                        document.getElementById('download-btn').style.display = 'inline-block';
+                        document.getElementById('success-msg').style.display = 'block';
                         
                         // Start automatic download
                         setTimeout(() => {{
