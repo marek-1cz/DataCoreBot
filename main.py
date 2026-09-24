@@ -931,6 +931,34 @@ def api_submit_stats():
 # PUBLIC ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
 
+@app.route('/download-launcher')
+def download_launcher_page():
+    content = """
+    <div style="text-align: center; margin-top: 100px; padding: 20px; background: rgba(30, 41, 59, 0.5); border-radius: 12px; max-width: 600px; margin-left: auto; margin-right: auto; border: 1px solid rgba(56, 189, 248, 0.2);">
+        <i class="fas fa-rocket" style="font-size: 3rem; color: #38bdf8; margin-bottom: 20px;"></i>
+        <h1 style="color: white; font-size: 2rem; margin-bottom: 10px;">OIS IDPK Launcher</h1>
+        <p style="color: #94a3b8; margin-bottom: 30px; font-size: 1.1rem;">
+            Kliknutím na tlačítko níže bezpečně stáhnete instalační soubor.
+        </p>
+        <a href="https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/latest/download/IDPK.Launcher.Setup.1.6.2.exe" 
+           style="background: #38bdf8; color: #0f172a; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 1.2rem; display: inline-block; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);"
+           onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(56, 189, 248, 0.6)'"
+           onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(56, 189, 248, 0.4)'">
+           <i class="fas fa-download" style="margin-right: 8px;"></i> Stáhnout Installer
+        </a>
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
+                <i class="fas fa-shield-alt" style="color: #10b981;"></i> Bezpečné stažení přímo z GitHubu.<br>
+                Pokud vás Windows SmartScreen upozorní na neznámého vydavatele, klikněte na <b>Další informace</b> a poté <b>Přesto spustit</b>.
+            </p>
+        </div>
+    </div>
+    """
+    html = BASE_HTML.replace("__TITLE__", "OIS IDPK | Stažení Launcheru")\
+                    .replace("__HEAD_EXTRA__", "")\
+                    .replace("__CONTENT__", PUBLIC_LAYOUT.replace("__PAGE_CONTENT__", content))
+    return render_template_string(html)
+
 @app.route('/')
 def home():
     def log_visit(ip, cf_country):
@@ -3925,8 +3953,8 @@ async def setup_download(ctx):
 # LAUNCHER DOWNLOAD PANEL
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# URL na GitHub Release – aktualizuj po každém buildu
-LAUNCHER_DOWNLOAD_URL = "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/latest/download/IDPK.Launcher.Setup.1.6.2.exe"
+# URL na GitHub Release – používáme webovou stránku, abychom se vyhli varování Discordu
+LAUNCHER_DOWNLOAD_URL = "https://datacorebot.koyeb.app/download-launcher"
 
 class LauncherRulesView(discord.ui.View):
     """Ephemeral podmínky užívání – zobrazí se po kliknutí Zahájit instalaci."""
