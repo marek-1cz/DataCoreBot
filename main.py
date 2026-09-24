@@ -2794,11 +2794,9 @@ def dashboard_downloads():
     return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled, deploy_time=DEPLOY_TIME, launcher_url=launcher_url)
 
 @app.route('/dashboard/update_launcher_url', methods=['POST'])
+@require_dash_level('superadmin')
 def dashboard_update_launcher_url():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    if session.get('dashboard_level') != 'SA':
-        flash('Nedostatečná oprávnění.', 'error')
-        return redirect(url_for('dashboard_downloads'))
         
     new_url = request.form.get('launcher_url', '').strip()
     db = get_db()
