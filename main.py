@@ -1011,10 +1011,7 @@ def launcher_page(token):
         }}, 500);
     </script>
     """
-    html = BASE_HTML.replace("__TITLE__", "OIS IDPK | Stažení Launcheru")\
-                    .replace("__HEAD_EXTRA__", "")\
-                    .replace("__CONTENT__", PUBLIC_LAYOUT.replace("__PAGE_CONTENT__", content))
-    return render_template_string(html)
+    return render_public(content)
 
 @app.route('/api/download-launcher/<token>')
 def api_download_launcher(token):
