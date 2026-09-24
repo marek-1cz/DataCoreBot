@@ -949,6 +949,15 @@ HTML_DOWNLOADS_MGMT = """
     </div>
   {% endfor %}
 {% endwith %}
+<!-- Global Launcher URL -->
+<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:20px;">
+  <h3 style="margin-top:0;color:var(--text-main);font-size:16px;"><i class="fas fa-link" style="color:#10b981;margin-right:8px;"></i>Globální odkaz na stažení Launcheru (.exe)</h3>
+  <p style="color:var(--text-muted);font-size:13px;margin-bottom:15px;">Tento odkaz se použije pro stahování instalačního souboru z webové stránky při autorizaci Discordem.</p>
+  <form action="/dashboard/update_launcher_url" method="POST" style="display:flex;gap:10px;">
+    <input type="text" name="launcher_url" value="{{ launcher_url | e }}" style="flex:1;padding:10px;background:rgba(0,0,0,0.2);border:1px solid #334155;color:#fff;border-radius:6px;" placeholder="https://github.com/...">
+    <button type="submit" style="background:var(--blue-main);color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;">Uložit odkaz</button>
+  </form>
+</div>
 
 <!-- Tabulka verzí -->
 <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;">

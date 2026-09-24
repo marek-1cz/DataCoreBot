@@ -1027,7 +1027,16 @@ def api_download_launcher(token):
     # Invalidate token
     db.table("users").update({"download_token": ""}).eq("discord_id", user[0]['discord_id']).execute()
     
-    return stream_proxy_file("https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/latest/download/IDPK.Launcher.Setup.1.6.2.exe", "Launcher.exe", user[0]['discord_id'], user[0]['nick'])
+    # Get dynamic launcher URL
+    launcher_url = "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/latest/download/IDPK.Launcher.Setup.1.6.2.exe"
+    url_setting = db.table("settings").select("setting_value").eq("setting_key", "launcher_download_url").execute().data
+    if url_setting and url_setting[0].get('setting_value'):
+        launcher_url = url_setting[0]['setting_value']
+        
+    # Extract filename from URL or default to Launcher.exe
+    filename = launcher_url.split('/')[-1] if '/' in launcher_url else "Launcher.exe"
+    
+    return stream_proxy_file(launcher_url, filename, user[0]['discord_id'], user[0]['nick'])
 
 @app.route('/')
 def home():
@@ -2770,15 +2779,38 @@ def delete_app_message():
 @app.route('/dashboard/downloads', methods=['GET'], strict_slashes=False)
 def dashboard_downloads():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    versions = []; enabled = True
+    versions = []; enabled = True; launcher_url = ""
     try:
         db = get_db()
         if db:
             set_resp = db.table("settings").select("*").eq("setting_key", "downloads_enabled").execute().data or []
             if set_resp and str(set_resp[0].get('setting_value')).lower() == 'false': enabled = False
+            
+            url_resp = db.table("settings").select("setting_value").eq("setting_key", "launcher_download_url").execute().data or []
+            if url_resp: launcher_url = url_resp[0].get("setting_value", "")
+            
             versions = db.table("software_versions").select("*").order("id", desc=True).execute().data or []
     except Exception as e: flash(f"Chyba DB: {e}", "error")
-    return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled, deploy_time=DEPLOY_TIME)
+    return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled, deploy_time=DEPLOY_TIME, launcher_url=launcher_url)
+
+@app.route('/dashboard/update_launcher_url', methods=['POST'])
+def dashboard_update_launcher_url():
+    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
+    if session.get('dashboard_level') != 'SA':
+        flash('Nedostatečná oprávnění.', 'error')
+        return redirect(url_for('dashboard_downloads'))
+        
+    new_url = request.form.get('launcher_url', '').strip()
+    db = get_db()
+    if db:
+        check = db.table("settings").select("id").eq("setting_key", "launcher_download_url").execute().data
+        if check:
+            db.table("settings").update({"setting_value": new_url}).eq("setting_key", "launcher_download_url").execute()
+        else:
+            db.table("settings").insert({"setting_key": "launcher_download_url", "setting_value": new_url}).execute()
+        flash('Odkaz na Launcher byl úspěšně aktualizován.', 'success')
+        send_log("🔗 Změna odkazu Launcheru", f"**Uživatel:** {session.get('discord_nick')}\n**Nový odkaz:** {new_url}", 0x3b82f6)
+    return redirect(url_for('dashboard_downloads'))
 
 @app.route('/dashboard/add_version', methods=['POST'])
 @require_dash_level('superadmin')
