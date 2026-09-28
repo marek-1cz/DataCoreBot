@@ -6791,7 +6791,16 @@ def api_admin_map_action():
             c["spz_locked"] = True
             c["spz_verified"] = True
             c["manual_spz"] = True
+            c["admin_spz_verified"] = True
+            c["admin_flag"] = True
             c["investigating"] = False
+            
+            ADMIN_SPZ_LOCKS[bus_id] = {
+                "spz": new_spz,
+                "admin_note": c.get("admin_note", ""),
+                "admin_driver": c.get("admin_driver", ""),
+                "color_class": c.get("color_class", "bg-darkblue")
+            }
 
     elif action == "recheck_spz":
         c["spz_locked"] = False
