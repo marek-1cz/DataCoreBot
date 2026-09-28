@@ -6,7 +6,7 @@ BASE_HTML = """
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Projekt OIS IDPK</title>
-<link rel="icon" type="image/png" href="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png">
+<link rel="icon" type="image/png" href="/static/img/datacorebot_pf-lepsi.png">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
@@ -208,7 +208,7 @@ document.addEventListener("DOMContentLoaded", function() {
 PUBLIC_LAYOUT = """
 <nav class="top-nav">
 <div class="nav-brand-mobile" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-<a href="/" class="logo"><img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png" alt="Logo" style="height: 30px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 8px rgba(56, 189, 248, 0.6));">OIS IDPK</a>
+<a href="/" class="logo"><img src="/static/img/datacorebot_pf-lepsi.png" alt="Logo" style="height: 30px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 8px rgba(56, 189, 248, 0.6));">OIS IDPK</a>
 <div class="mobile-avatar-slot" style="display:none;">__AVATAR__</div>
 </div>
 <div class="nav-links" style="display:flex; align-items:center;">
@@ -231,7 +231,7 @@ PUBLIC_LAYOUT = """
 DASHBOARD_LAYOUT = """
 <div class="dashboard-wrapper">
 <div class="sidebar">
-<div class="sidebar-header"><a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;"><img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png" alt="Logo" style="height: 24px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 6px rgba(56, 189, 248, 0.6));">OIS IDPK</a><div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div></div>
+<div class="sidebar-header"><a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;"><img src="/static/img/datacorebot_pf-lepsi.png" alt="Logo" style="height: 24px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 6px rgba(56, 189, 248, 0.6));">OIS IDPK</a><div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div></div>
 <div class="sidebar-menu">
 <a href="/" class="sidebar-link" style="color: #10b981; border-bottom: 1px solid #334155; margin-bottom: 5px;"><i class="fas fa-globe"></i> Veřejný Web (Bypass)</a>
 <a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a>
@@ -358,19 +358,19 @@ HTML_HOME = """
     <div style="margin-top: 50px;">
         <h2 style="color: var(--blue-main); margin-bottom: 20px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.4);">Ukázky z aplikace</h2>
         <div style="display: flex; flex-direction: column; gap: 25px; align-items: center;">
-            <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/sc/sc1.png" alt="Screenshot 1" style="width: 100%; max-width: 800px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
-            <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/sc/sc2.png" alt="Screenshot 2" style="width: 100%; max-width: 800px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
-            <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/sc/sc3.png" alt="Screenshot 3" style="width: 100%; max-width: 800px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
-            <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/sc/sc4.png" alt="Screenshot 4" style="width: 100%; max-width: 800px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+            <img src="/static/img/sc1.png" alt="Screenshot 1" style="width: 100%; max-width: 800px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+            <img src="/static/img/sc2.png" alt="Screenshot 2" style="width: 100%; max-width: 800px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+            <img src="/static/img/sc3.png" alt="Screenshot 3" style="width: 100%; max-width: 800px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+            <img src="/static/img/sc4.png" alt="Screenshot 4" style="width: 100%; max-width: 800px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
             <div class="screenshot-pair" style="display: flex; justify-content: center; gap: 20px; width: 100%; max-width: 800px;">
-                <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/sc/sc5.png" alt="Screenshot 5" style="width: 48%; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
-                <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/sc/sc6.png" alt="Screenshot 6" style="width: 48%; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+                <img src="/static/img/sc5.png" alt="Screenshot 5" style="width: 48%; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+                <img src="/static/img/sc6.png" alt="Screenshot 6" style="width: 48%; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
             </div>
         </div>
     </div>
     <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 60px 0;">
     <div class="footer-box" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; background: var(--bg-panel); padding: 40px; border-radius: 15px; border: 1px solid #334155;">
-        <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png" alt="DataCoreBot Logo" style="max-width: 250px; height: auto; filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.5)); margin-bottom: 10px;">
+        <img src="/static/img/datacorebot_n.png" alt="DataCoreBot Logo" style="max-width: 250px; height: auto; filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.5)); margin-bottom: 10px;">
         <div style="text-align: center; max-width: 600px;">
             <h3 style="color: var(--warning); margin-top: 0; font-size: 1.6em; text-shadow: 0 0 5px rgba(245, 158, 11, 0.5);">Poháněno systémem DataCoreBot</h3>
             <p style="color: var(--text-muted); font-size: 1em; line-height: 1.6; margin: 0 0 15px 0;">Celá infrastruktura, od databází po ověřování uživatelů, je bezpečně řízena a chráněna unikátním systémem DataCoreBot. Zajišťuje bleskovou synchronizaci dat, striktní Hardware ID (HWID) ochranu a nepřetržitý chod palubních počítačů.</p>
@@ -410,9 +410,9 @@ HTML_TEAM = """
     <div class="team-card" style="background-color: var(--bg-panel); border-radius: 10px; width: 300px; padding: 20px; text-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.3);">
         {% set img_url = member.get('image_url', '') %}
         {% if 'hynek' in member.get('name', '').lower() %}
-            {% set img_url = 'https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/IMG_3650.jpg' %}
+            {% set img_url = '/static/img/IMG_3650.jpg' %}
         {% endif %}
-        <img src="{{ img_url }}" onerror="this.onerror=null; this.src='https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png';" alt="Avatar" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid var(--blue-main); margin-bottom: 15px; background-color: var(--bg-dark);">
+        <img src="{{ img_url }}" onerror="this.onerror=null; this.src='/static/img/datacorebot_pf-lepsi.png';" alt="Avatar" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid var(--blue-main); margin-bottom: 15px; background-color: var(--bg-dark);">
         <h3 style="color: var(--text-main); margin: 0 0 5px 0; font-size: 22px;">{{ member.get('name', '') }}</h3>
         <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 15px;"><i class="fab fa-discord"></i> {{ member.get('discord_nick', '') }}</div>
         <div style="margin-bottom: 15px;">
@@ -1442,7 +1442,7 @@ HTML_PROVOZ_IDPK = """
 
 HTML_REGISTER = """
 <style>
-  .register-wrapper { background: url('https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/bg-map.jpg') no-repeat center center fixed; background-size: cover; display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 60px); margin: -20px; padding: 20px; position: relative; }
+  .register-wrapper { background: url('/static/img/bg-map.jpg') no-repeat center center fixed; background-size: cover; display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 60px); margin: -20px; padding: 20px; position: relative; }
   .glass-card { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 20px; padding: 40px; width: 100%; max-width: 400px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.2); text-align: center; position: relative; z-index: 10; }
   .glass-card h2 { color: var(--blue-main); margin-bottom: 30px; font-size: 28px; margin-top: 0; }
   .input-group { margin-bottom: 20px; text-align: left; }
@@ -1468,7 +1468,7 @@ HTML_REGISTER = """
 <div class="register-wrapper">
 <a href="/" class="back-btn"><i class="fas fa-arrow-left"></i> Zpět</a>
 <div class="glass-card">
-  <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png" style="width:60px; height:60px; border-radius:12px; margin-bottom:15px; box-shadow: 0 0 15px rgba(56,189,248,0.5);">
+  <img src="/static/img/datacorebot_pf-lepsi.png" style="width:60px; height:60px; border-radius:12px; margin-bottom:15px; box-shadow: 0 0 15px rgba(56,189,248,0.5);">
   <h2>Přihlášení</h2>
   
   <div id="login-container">
@@ -1587,7 +1587,7 @@ function startPolling() {
 
 HTML_UCET = """
 <style>
-  .ucet-wrapper { background: url('https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/bg-map.jpg') no-repeat center center fixed; background-size: cover; display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 60px); margin: -20px; padding: 20px; position: relative; }
+  .ucet-wrapper { background: url('/static/img/bg-map.jpg') no-repeat center center fixed; background-size: cover; display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 60px); margin: -20px; padding: 20px; position: relative; }
   .ucet-card { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 20px; padding: 40px; width: 100%; max-width: 500px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.2); position: relative; z-index: 10; }
   .ucet-header { display: flex; align-items: center; gap: 20px; border-bottom: 1px solid #334155; padding-bottom: 20px; margin-bottom: 20px; }
   .avatar-preview { width: 80px; height: 80px; border-radius: 50%; border: 3px solid #38bdf8; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 85px; color: #38bdf8; overflow: hidden; flex-shrink: 0; box-shadow: 0 0 15px rgba(56,189,248,0.5); }
@@ -1778,7 +1778,7 @@ HTML_LOGIN_BLOCKED = """
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Přihlašování vypnuto | OIS IDPK</title>
-<link rel="icon" type="image/png" href="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png">
+<link rel="icon" type="image/png" href="/static/img/datacorebot_pf-lepsi.png">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1824,7 +1824,7 @@ HTML_BLOCKED = """
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Web mimo provoz | OIS IDPK</title>
-<link rel="icon" type="image/png" href="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png">
+<link rel="icon" type="image/png" href="/static/img/datacorebot_pf-lepsi.png">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1880,7 +1880,7 @@ HTML_MAP_OFFLINE = """
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mapa offline | OIS IDPK</title>
-<link rel="icon" type="image/png" href="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20pf-lepsi.png">
+<link rel="icon" type="image/png" href="/static/img/datacorebot_pf-lepsi.png">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }

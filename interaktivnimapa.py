@@ -620,7 +620,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
   <div id="nav-handle" title="Klikni pro zobrazeni navigace"></div>
   <nav id="top-nav">
     <a href="https://datacorebot.koyeb.app/" class="n-logo">
-      <img src="https://tdonrppusbwhoftdontz.supabase.co/storage/v1/object/public/logo/datacorebot%20n.png" alt="OIS IDPK">
+      <img src="/static/img/datacorebot_n.png" alt="OIS IDPK">
     </a>
     __AD_BTN__
     <button id="pub-stops-btn" onclick="togglePubStops()"><i class="fas fa-bus"></i> Zastávky</button>
