@@ -2374,6 +2374,9 @@ def api_ucet_update():
     if not nick:
         return jsonify({"status": "error", "message": "Přezdívka nesmí být prázdná"})
         
+    if avatar_url and not avatar_url.startswith('data:image/'):
+        return jsonify({"status": "error", "message": "Avatar musí být obrázek."})
+        
     db = get_db()
     try:
         db.table("users").update({"nick": nick, "avatar_url": avatar_url}).eq("web_session_token", cookie_token).execute()
@@ -3404,7 +3407,8 @@ async def check_notification_queue():
             # Pošli Discord DM
             if discord_id:
                 try:
-                    user = await bot.fetch_user(int(discord_id))
+                    d_id = int(str(discord_id).strip())
+                    user = await bot.fetch_user(d_id)
                     if embed_data:
                         em = discord.Embed(
                             title=embed_data.get("title", "🔔 Upozornění"),

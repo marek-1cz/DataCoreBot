@@ -6146,7 +6146,8 @@ def _check_and_fire_notifications(db_client, bus_cache):
         # Načti info o uživateli (discord_id, email) z cache nebo DB
         if user_session not in _user_cache:
             try:
-                u_res = db_client.table("users").select("discord_id, email").eq("id", user_session).execute()
+                uid = int(user_session) if str(user_session).isdigit() else user_session
+                u_res = db_client.table("users").select("discord_id, email").eq("id", uid).execute()
                 _user_cache[user_session] = u_res.data[0] if u_res.data else {}
             except Exception:
                 _user_cache[user_session] = {}
@@ -6170,7 +6171,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 bus_data = dict(bc)
                 bus_data["id"] = bus_id
                 break
-            elif id_type == "bus_id" and bus_id == identifier:
+            elif id_type == "bus_id" and str(bus_id) == str(identifier):
                 bus_data = dict(bc)
                 bus_data["id"] = bus_id
                 break

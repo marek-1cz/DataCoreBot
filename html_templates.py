@@ -1708,6 +1708,12 @@ function resetAvatar() {
 function previewAvatar(input) {
     if (input.files && input.files[0]) {
         const file = input.files[0];
+        const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        if (!validTypes.includes(file.type)) {
+            alert('Chyba: Lze nahrát pouze obrázky (JPG, PNG, WEBP, GIF).');
+            input.value = '';
+            return;
+        }
         const reader = new FileReader();
         reader.onload = function(e) {
             const img = new Image();
