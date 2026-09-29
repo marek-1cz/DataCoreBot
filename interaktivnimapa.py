@@ -21,6 +21,7 @@ import unicodedata
 import concurrent.futures
 
 try:
+    # pyrefly: ignore [missing-import]
     from supabase import create_client
     HAS_SUPABASE = True
 except ImportError:
@@ -146,9 +147,9 @@ HTML_HISTORIE_INDEX = """
 <p style="color:#64748b;font-size:11px;margin-top:8px;">* Neomezena historie. Aktualizace kazdych 10s.</p>
 <script>
 let allData=[];
-function buildFreqMap(data){const f={};data.forEach(r=>{const spz=r.spz||'Neznama';if(spz==='Neznama')return;const lb=String(r.linka||'').replace(/\\/.*/g,'').trim().replace(/[^0-9]/g,'');f[spz+'_'+lb]=(f[spz+'_'+lb]||0)+1;});return f;}
+function buildFreqMap(data){const f={};data.forEach(r=>{const spz=r.spz||'Neznámá';if(spz==='Neznámá')return;const lb=String(r.linka||'').replace(/\\/.*/g,'').trim().replace(/[^0-9]/g,'');f[spz+'_'+lb]=(f[spz+'_'+lb]||0)+1;});return f;}
 function renderStats(data){
-  const ss=new Set(data.filter(r=>r.spz&&r.spz!=='Neznama').map(r=>r.spz));
+  const ss=new Set(data.filter(r=>r.spz&&r.spz!=='Neznámá').map(r=>r.spz));
   const total=data.length,active=data.filter(r=>!r.end_actual&&!r.status?.includes('Timeout')&&!r.status?.includes('depu')).length,depot=data.filter(r=>r.status?.includes('depu')||r.status?.includes('Vozovn')).length;
   document.getElementById('statsBar').innerHTML=`
     <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 16px;flex:1;min-width:130px;text-align:center;"><div style="color:#38bdf8;font-size:22px;font-weight:900;">${total}</div><div style="color:#64748b;font-size:11px;text-transform:uppercase;">📋 Zaznamu</div></div>
@@ -179,10 +180,10 @@ async function loadIndex(){
     let html='';
     allData.forEach(row=>{
       const d=new Date(row.created_at),dayStr=d.toLocaleDateString('cs-CZ');
-      const spz=row.spz||'Neznama',linka=row.linka||'---';
+      const spz=row.spz||'Neznámá',linka=row.linka||'---';
       const lb=String(linka).replace(/\\/.*/,'').trim().replace(/[^0-9]/g,'');
       const rc=row.run_count||freq[spz+'_'+lb]||0;
-      let spzB=spz==='Neznama'?`<span style="background:#334155;color:#94a3b8;padding:3px 8px;border-radius:4px;font-size:12px;">Neznama</span>`:
+      let spzB=spz==='Neznámá'?`<span style="background:#334155;color:#94a3b8;padding:3px 8px;border-radius:4px;font-size:12px;">Neznámá</span>`:
                row.status?.includes('Falesny')?`<span style="background:#ef4444;color:white;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:bold;">${spz} X</span>`:
                `<span style="background:#f59e0b;color:#0f172a;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:bold;">${spz} OK</span>`;
       let fb=rc>=10?`<br><span style="background:#7c3aed;color:white;padding:1px 6px;border-radius:10px;font-size:10px;display:inline-block;margin-top:3px;"><i class="fas fa-star"></i> Staly vuz (${rc}x)</span>`:
@@ -202,7 +203,7 @@ async function loadIndex(){
         <td style="padding:11px 14px;vertical-align:middle;"><strong style="color:white;">${linka}</strong>${row.jr_link?`<br><a href="${row.jr_link}" target="_blank" style="font-size:11px;color:#38bdf8;">JR <i class="fas fa-external-link-alt"></i></a>`:''}</td>
         <td style="padding:11px 14px;vertical-align:middle;font-size:13px;">${ss}</td>
         <td style="padding:11px 14px;vertical-align:middle;">${sH}</td>
-        <td style="padding:11px 14px;vertical-align:middle;text-align:center;">${spz!=='Neznama'?`<a href="/historie/${spz}" style="background:#38bdf8;color:#0f172a;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:bold;text-decoration:none;"><i class="fas fa-list"></i> Detail vozu</a>`:`<span style="color:#475569;font-size:11px;">Ceka na SPZ</span>`}</td>
+        <td style="padding:11px 14px;vertical-align:middle;text-align:center;">${spz!=='Neznámá'?`<a href="/historie/${spz}" style="background:#38bdf8;color:#0f172a;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:bold;text-decoration:none;"><i class="fas fa-list"></i> Detail vozu</a>`:`<span style="color:#475569;font-size:11px;">Ceka na SPZ</span>`}</td>
       </tr>`;
     });
     tbody.innerHTML=html;applyFilters();
@@ -1802,11 +1803,11 @@ window.openNotifModal = function(busId) {
   _notifCurrentBusId = busId;
   _notifCurrentSpz = spz;
   let info = document.getElementById('notif-bus-info');
-  if(info) info.innerHTML = `<b>Linka ${line}</b> → ${destination}${spz&&spz!=='Neznama'?' &nbsp;|&nbsp; SPZ: <b>'+spz+'</b>':''}`;
+  if(info) info.innerHTML = `<b>Linka ${line}</b> → ${destination}${spz&&spz!=='Neznámá'?' &nbsp;|&nbsp; SPZ: <b>'+spz+'</b>':''}`;
   // Předvyplň identifikátor
   let inp = document.getElementById('notif-identifier');
   if(inp) {
-    if(spz && spz !== 'Neznama') {
+    if(spz && spz !== 'Neznámá') {
       inp.value = spz;
       let r = document.getElementById('notif-type-spz'); if(r) r.checked = true;
     } else {
@@ -4897,6 +4898,7 @@ def background_map_worker():
                     data_arriva = resp2.get("data", {}).get("busesCurrentLocations", [])
                 # Arriva fetch stats
                 if data_arriva:
+                    data_arriva = [b for b in data_arriva if str(b.get("mainType", "")).upper() != "TRAIN"]
                     _arriva_fetch_stats["ok"] += 1
                     _arriva_fetch_stats["last_ok_cnt"] = len(data_arriva)
                 else:
