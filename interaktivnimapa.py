@@ -7746,6 +7746,50 @@ def api_admin_arriva_stats():
     })
 
 
+@mapa_bp.route('/api/admin/clean_trains', methods=['GET'])
+def admin_clean_trains():
+    cookie_token = request.cookies.get('web_session_token')
+    if not cookie_token or not HAS_SUPABASE:
+        return jsonify({"error": "unauthorized"}), 401
+    
+    db = get_db_client()
+    user_res = db.table("users").select("role").eq("web_session_token", cookie_token).execute()
+    if not user_res.data or user_res.data[0].get("role") not in ["DEV", "SA"]:
+        return jsonify({"error": "unauthorized"}), 401
+
+    deleted_cache = 0
+    deleted_hist = 0
+    try:
+        # 1. Clean spz_cache
+        cache_res = db.table("spz_cache").select("*").execute()
+        for r in cache_res.data:
+            bid = str(r.get("bus_id", ""))
+            line = str(r.get("line") or "")
+            if bid.startswith("-") or _name_suggests_train(line):
+                db.table("spz_cache").delete().eq("bus_id", bid).execute()
+                deleted_cache += 1
+
+        # 2. Clean bus_history (jen cast)
+        hist_res = db.table("bus_history").select("id, bus_id, linka, spz").order("created_at", desc=True).limit(3000).execute()
+        for r in hist_res.data:
+            bid = str(r.get("bus_id") or r.get("id") or "")
+            line = str(r.get("linka") or "")
+            if bid.startswith("-") or _name_suggests_train(line):
+                db.table("bus_history").delete().eq("id", r["id"]).execute()
+                deleted_hist += 1
+                
+        # 3. Vymyzat errory z aktualni pameti
+        for bid, c in GLOBAL_BUS_CACHE.items():
+            line = str(c.get("line") or c.get("real_linka_spoj") or "")
+            if str(bid).startswith("-") or _name_suggests_train(line):
+                c["spz"] = "Neznámá"
+                c["skip_spz"] = True
+                c["is_train"] = True
+                
+        return jsonify({"status": "ok", "deleted_cache": deleted_cache, "deleted_hist": deleted_hist})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @mapa_bp.route('/api/admin/line_stops')
 def api_admin_line_stops():
     """NT linka-editor: vrati vsechny zastavky pro dané číslo linky Z CELE GTFS DB,
