@@ -766,8 +766,43 @@ def sync_roles_from_flask(discord_id, role_string):
     if bot.loop and bot.loop.is_running(): asyncio.run_coroutine_threadsafe(sync(), bot.loop)
 
 def check_version_access(db, app_version_from_pc, user):
-    # Launcher is now universal, version checking/updating is handled client-side.
-    return {"allowed": True}
+    try:
+        if not app_version_from_pc:
+            return {"allowed": False, "msg": "Verze aplikace nebyla poskytnuta."}
+            
+        v_resp = db.table("software_versions").select("*").eq("db_version", app_version_from_pc).execute()
+        if not v_resp.data:
+            # Fallback pro názvy verze (pokud někdo poslal např. V1.6 místo V1.6)
+            v_resp = db.table("software_versions").select("*").eq("version_name", app_version_from_pc).execute()
+            
+        if not v_resp.data:
+            return {"allowed": False, "msg": "Tato verze neexistuje v databázi. Spusťte hru přes oficiální Launcher."}
+            
+        v_data = v_resp.data[0]
+        
+        if not v_data.get("is_active"):
+            return {"allowed": False, "msg": "Tato verze je vyřazena z provozu a již ji nelze používat."}
+            
+        if not v_data.get("can_launch"):
+            return {"allowed": False, "msg": "Spouštění této verze je administrátorem zakázáno."}
+            
+        u_role = user.get('role', 'User')
+        v_role = v_data.get('target_role', 'User')
+        
+        ROLE_HIERARCHY = {'User': 1, 'BT': 2, 'DEV': 3, 'SA': 4}
+        def get_level(r):
+            for k in ['SA', 'DEV', 'BT']:
+                if k in r: return ROLE_HIERARCHY[k]
+            return 1
+            
+        if get_level(u_role) < get_level(v_role):
+            return {"allowed": False, "msg": f"Nemáte dostatečná oprávnění k této verzi (Vyžaduje: {v_role})."}
+            
+        return {"allowed": True}
+    except Exception as e:
+        print(f"Version check error: {e}")
+        # Při chybě DB radši pustíme, abychom nezablokovali všechny při výpadku Supabase
+        return {"allowed": True}
 
 class DynamicDownloadView(discord.ui.View):
     def __init__(self):
