@@ -4955,7 +4955,7 @@ def background_map_worker():
                         if dest1 == "-1":
                             dest1 = "Neznámý"
                         traction = str(bus1.get("traction", "BUS")).upper()
-                        is_train = int(bus_id) < 0 or traction in ["TRAIN", "UNKNOWN"]
+                        is_train = int(bus_id) < 0 or traction in ["TRAIN", "UNKNOWN"] or _name_suggests_train(line) or (len(''.join(filter(str.isdigit, line))) < 6 and ''.join(filter(str.isdigit, line)))
 
                         if bus_id in ADMIN_DELETED_BUSES:
                             if not is_same_line(line, ADMIN_DELETED_BUSES[bus_id]):
@@ -7757,6 +7757,14 @@ def admin_clean_trains():
     if not user_res.data or user_res.data[0].get("role") not in ["DEV", "SA"]:
         return jsonify({"error": "unauthorized"}), 401
 
+    def is_bad_train(bid_str, line_str):
+        if bid_str.startswith("-"): return True
+        if _name_suggests_train(line_str): return True
+        digits = ''.join(filter(str.isdigit, line_str))
+        if digits and len(digits) < 6:
+            return True
+        return False
+
     deleted_cache = 0
     deleted_hist = 0
     try:
@@ -7765,7 +7773,7 @@ def admin_clean_trains():
         for r in cache_res.data:
             bid = str(r.get("bus_id", ""))
             line = str(r.get("line") or "")
-            if bid.startswith("-") or _name_suggests_train(line):
+            if is_bad_train(bid, line):
                 db.table("spz_cache").delete().eq("bus_id", bid).execute()
                 deleted_cache += 1
 
@@ -7774,14 +7782,14 @@ def admin_clean_trains():
         for r in hist_res.data:
             bid = str(r.get("bus_id") or r.get("id") or "")
             line = str(r.get("linka") or "")
-            if bid.startswith("-") or _name_suggests_train(line):
+            if is_bad_train(bid, line):
                 db.table("bus_history").delete().eq("id", r["id"]).execute()
                 deleted_hist += 1
                 
         # 3. Vymyzat errory z aktualni pameti
         for bid, c in GLOBAL_BUS_CACHE.items():
             line = str(c.get("line") or c.get("real_linka_spoj") or "")
-            if str(bid).startswith("-") or _name_suggests_train(line):
+            if is_bad_train(str(bid), line):
                 c["spz"] = "Neznámá"
                 c["skip_spz"] = True
                 c["is_train"] = True
