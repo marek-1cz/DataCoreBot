@@ -126,9 +126,24 @@ DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
 def handle_exception(e):
     if isinstance(e, HTTPException):
         return f"<div style='background:#0f172a; color:#f59e0b; padding:40px; font-family:sans-serif; text-align:center; height:100vh; box-sizing:border-box;'><h2 style='font-size:40px;'>CHYBA {e.code}</h2><p style='font-size:18px; color:white;'>Stránka nebyla nalezena.</p><a href='/' style='display:inline-block; margin-top:20px; padding:10px 20px; background:#38bdf8; color:black; text-decoration:none; font-weight:bold; border-radius:5px;'>Zpět domů</a></div>", e.code
-    # 500 – NIKDY nezobrazovat traceback věřejnosti!
-    print('[ERROR 500]', traceback.format_exc(), flush=True)
-    return "<div style='background:#0f172a; color:#ef4444; padding:40px; font-family:sans-serif; text-align:center;'><h2>Došlo k interní chybě.</h2><p>Chyba byla zalogována. Kontaktujte administrátora.</p><a href='/' style='background:#334155;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;'>Zpět</a></div>", 500
+    
+    # Zjistíme, jestli to není chyba Supabase (402 Payment Required atd.)
+    err_str = str(e)
+    tb = traceback.format_exc()
+    print('[ERROR 500]', tb, flush=True)
+    
+    # Zalogovat na discord (max 2000 znaků pro Discord embed description)
+    try:
+        short_tb = tb[-1900:] if len(tb) > 1900 else tb
+        send_log("🔥 Kritická chyba serveru (500)", f"**Chyba:** {err_str}\n```py\n{short_tb}\n```", 0xef4444)
+    except Exception:
+        pass
+
+    msg = "Chyba komunikace s databází nebo interní chyba serveru."
+    if "402" in err_str or "egress" in err_str.lower() or "payment required" in err_str.lower():
+        msg = "Chyba databáze (překročen datový limit). Provoz bude brzy obnoven."
+        
+    return f"<div style='background:#0f172a; color:#ef4444; padding:40px; font-family:sans-serif; text-align:center;'><h2>{msg}</h2><p>Chyba byla automaticky nahlášena vývojářům na Discord.</p><a href='/' style='background:#334155;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;'>Zpět na úvodní stránku</a></div>", 500
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -285,6 +300,16 @@ def check_egress_quota():
                     "setting_key": "egress_save_mode",
                     "setting_value": "true" if EGRESS_SAVE_MODE else "false"
                 }).execute()
+        except Exception:
+            pass
+            
+        try:
+            if EGRESS_SAVE_MODE:
+                msg = f"⚠️ **UPOZORNĚNÍ:** Supabase Egress dosáhl **{EGRESS_USED_GB:.2f} GB** z {EGRESS_LIMIT_GB} GB ({pct:.1f}%).\nSystém automaticky **AKTIVOVAL** šetřící režim (delší intervaly aktualizací)!"
+                send_log("🚨 Egress Limit Varování", msg, 0xef4444)
+            else:
+                msg = f"✅ Supabase Egress klesl pod limit na **{EGRESS_USED_GB:.2f} GB** ({pct:.1f}%).\nSystém **DEAKTIVOVAL** šetřící režim (plný výkon)."
+                send_log("🟢 Egress V Normě", msg, 0x10b981)
         except Exception:
             pass
 
