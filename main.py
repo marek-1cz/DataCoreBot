@@ -1416,18 +1416,6 @@ def led_panel_view():
     from led_panel_view import HTML_LED_PANEL_VIEW
     return HTML_LED_PANEL_VIEW
 
-@app.route('/emergency_login')
-def emergency_login():
-    """Nouzové přihlášení pomocí speciálního tokenu (pro případ výpadku DB)."""
-    token = request.args.get('token')
-    if not token or token not in _SESSION_CACHE:
-        return "<h1 style='color:white; background:black; padding:20px;'>Neplatný nebo vypršelý token. Zadejte `!emergency_login` znovu na Discordu.</h1>", 401
-    
-    # Nastavíme cookie (jako běžný login)
-    resp = make_response("<h1 style='color:white; background:black; padding:20px;'>Nouzový login úspěšný. <a href='/dashboard' style='color:#38bdf8'>Přejít do Dashboardu</a></h1>")
-    resp.set_cookie('web_session_token', token, max_age=86400, httponly=True, secure=True)
-    return resp
-
 
 # /mapa je zpracovávána blueprintem z interaktivnimapa.py (mapa_bp)
 
@@ -4312,47 +4300,6 @@ async def message(ctx, channel: discord.TextChannel, *, text: str):
         await ctx.send(f"✅ Zpráva odeslána do {channel.mention}.")
     except discord.Forbidden: await ctx.send(f"❌ Nemám oprávnění psát do {channel.mention}.")
     except Exception as e: await ctx.send(f"❌ Chyba: `{e}`")
-
-@bot.command()
-@check_web_sa()
-async def emergency_login(ctx):
-    """Vygeneruje nouzový token pro přístup do dashboardu v případě výpadku databáze."""
-    try:
-        await ctx.message.delete()
-    except Exception:
-        pass
-    
-    import secrets
-    import time
-    token = secrets.token_hex(32)
-    
-    # Uložení do RAM cache s dlouhou expirací (24 hodin), maskujeme se jako SA
-    _SESSION_CACHE[token] = (
-        time.time(),
-        {
-            "discord_id": str(ctx.author.id),
-            "nick": ctx.author.display_name,
-            "role": "SA",
-            "is_banned": False,
-            "hwid": None
-        }
-    )
-    
-    login_url = f"https://datacorebot.koyeb.app/emergency_login?token={token}"
-    
-    embed = discord.Embed(
-        title="🚨 Nouzový přístup do Dashboardu",
-        description="Tento odkaz využij, pokud je hlavní databáze nefunkční (např. chyba 402 - Egress Limit).\nOdkaz funguje přímo bez komunikace s databází.",
-        color=0xef4444
-    )
-    embed.add_field(name="Odkaz k přihlášení:", value=f"[**Klikni zde pro nouzové přihlášení**]({login_url})", inline=False)
-    embed.set_footer(text="Odkaz nevyzrazuj a použij ho v tomto prohlížeči. Platnost tokenu je omezena dokud se nerestartuje server.")
-    
-    try:
-        await ctx.author.send(embed=embed)
-        await ctx.send("✅ Nouzový login ti byl odeslán do DM.", delete_after=10)
-    except Exception as e:
-        await ctx.send(f"❌ Nelze ti odeslat zprávu do DM (máš je povolené?). Chyba: `{e}`")
 
 @bot.command()
 @check_web_sa()
