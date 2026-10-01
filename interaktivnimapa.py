@@ -38,7 +38,7 @@ SPZ_AUTO_REFRESH_MIN     = 8       # kazdych N minut proved plny refresh SPZ u v
                                    # (ekvivalent knofliku "Najit SPZ" ale pro vsechny najednou)
 SPZ_BEARING_MAX_DIFF     = 75      # max rozdil smer (deg) pro bearing bonus faktor SPZ
 SPZ_MIN_MOVE_MINUTES     = 2       # bus musi jet alespon N minut nez se provede prvni SPZ parovani
-SPZ_CACHE_FLUSH_SEC      = 60      # jak casto zapisovat spz_cache do Supabase (sekundy)
+SPZ_CACHE_FLUSH_SEC      = 300     # jak casto zapisovat spz_cache do Supabase (sekundy) - 5 min
 # Stavy (color_class), pri kterych se ZAKAZUJE hledani nove SPZ z Arrivy
 SPZ_BLOCKED_COLORS = frozenset({'bg-bug', 'bg-blue', 'bg-purple', 'bg-gray'})
 GHOST_MAX_OFFLINE_MIN = 20
@@ -4847,7 +4847,7 @@ def background_map_worker():
             if db_client and (now - last_db_cleanup).total_seconds() > 86400:
                 last_db_cleanup = now
 
-            if db_client and (now - last_overrides_poll).total_seconds() > 30:
+            if db_client and (now - last_overrides_poll).total_seconds() > 300:
                 last_overrides_poll = now
                 _load_stop_overrides(db_client)
                 _load_route_stop_overrides(db_client)
@@ -5969,7 +5969,15 @@ def background_map_worker():
                     print(f"[SPZ AUTO-REFRESH] Reset SPZ zamku u {refreshed} busu -> dalsi tik opatri cerstve parovani", flush=True)
 
             # ── SPZ CACHE FLUSH do Supabase (kazdych SPZ_CACHE_FLUSH_SEC sekund) ─────────
-            if db_client and (now - last_spz_cache_flush).total_seconds() >= SPZ_CACHE_FLUSH_SEC:
+            # V šetřícím režimu (EGRESS_SAVE_MODE) flush každých 1800s (30 min) místo 300s
+            try:
+                import main as _main_mod
+                _egress_save = getattr(_main_mod, 'EGRESS_SAVE_MODE', False)
+            except Exception:
+                _egress_save = False
+            _flush_interval = 1800 if _egress_save else SPZ_CACHE_FLUSH_SEC
+
+            if db_client and (now - last_spz_cache_flush).total_seconds() >= _flush_interval:
                 last_spz_cache_flush = now
                 cache_rows = []
                 for bid, bc in list(GLOBAL_BUS_CACHE.items()):
@@ -5998,13 +6006,14 @@ def background_map_worker():
                         db_client.table("spz_cache").upsert(cache_rows).execute()
                     except Exception as e_flush:
                         print(f"[SPZ CACHE] Chyba pri zapisu: {e_flush}", flush=True)
-                # Smaz zaznamy ktere uz nejsou aktivni
-                active_ids = list(GLOBAL_BUS_CACHE.keys())
-                if active_ids:
-                    try:
-                        db_client.table("spz_cache").delete().not_.in_("bus_id", active_ids).eq("admin_verified", False).execute()
-                    except Exception:
-                        pass
+                # Smaz zaznamy ktere uz nejsou aktivni (přeskočit v šetřícím režimu)
+                if not _egress_save:
+                    active_ids = list(GLOBAL_BUS_CACHE.keys())
+                    if active_ids:
+                        try:
+                            db_client.table("spz_cache").delete().not_.in_("bus_id", active_ids).eq("admin_verified", False).execute()
+                        except Exception:
+                            pass
 
 
             # ── Notifikace: zkontroluj triggery (kazdych 30s) ─────────────

@@ -132,10 +132,21 @@ def handle_exception(e):
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 SMTP_EMAIL = os.environ.get("SMTP_EMAIL")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
 BMAC_WEBHOOK_SECRET = os.environ.get("BMAC_WEBHOOK_SECRET", "")
 _db_client = None
+
+# ── Dynamický egress monitor ──────────────────────────────────────────────────
+# EGRESS_SAVE_MODE: True = šetřící režim (omezí nekriticke DB dotazy, mirror sync atd.)
+# Automaticky se aktivuje když Egress > EGRESS_WARN_GB
+EGRESS_SAVE_MODE: bool = False
+EGRESS_USED_GB: float = 0.0
+EGRESS_LIMIT_GB: float = 5.5   # Free tier limit
+EGRESS_WARN_PCT: float = 80.0  # % limitu při kterém se aktivuje šetřící režim
+_last_egress_check: float = 0.0
+_EGRESS_CHECK_INTERVAL: int = 3600  # kontrola každou hodinu
 
 # ── In-memory rate limiter (jednoduchý, bez externí závislosti) ──
 _rl_store: dict = defaultdict(list)
@@ -160,6 +171,164 @@ def get_db():
     except Exception as e:
         print(f"Chyba připojení k DB: {e}")
     return None
+
+_AUTH_CACHE = {}      # {discord_id: (timestamp, role, is_banned)}
+_SESSION_CACHE = {}   # {web_session_token: (timestamp, user_dict)}
+_SETTINGS_CACHE = {}  # {setting_key: (timestamp, value)}
+
+def _invalidate_session_cache(token):
+    _SESSION_CACHE.pop(token, None)
+
+def get_cached_session_user(token):
+    """Vrátí uživatele podle session tokenu s 2min cache (avatar/web)."""
+    now = time.time()
+    if token in _SESSION_CACHE:
+        ts, u = _SESSION_CACHE[token]
+        if now - ts < 120:  # 2 minuty
+            return u
+    db = get_db()
+    if not db:
+        return None
+    try:
+        data = db.table("users").select("*").eq("web_session_token", token).execute().data
+        u = data[0] if data else None
+    except Exception:
+        u = None
+    _SESSION_CACHE[token] = (now, u)
+    return u
+
+def get_cached_setting(key, default=None, ttl=60):
+    """Načte nastavení s cache (default 60s TTL)."""
+    now = time.time()
+    if key in _SETTINGS_CACHE:
+        ts, val = _SETTINGS_CACHE[key]
+        if now - ts < ttl:
+            return val
+    db = get_db()
+    val = default
+    if db:
+        try:
+            r = db.table("settings").select("setting_value").eq("setting_key", key).execute().data
+            if r:
+                val = r[0].get("setting_value", default)
+        except Exception:
+            pass
+    _SETTINGS_CACHE[key] = (now, val)
+    return val
+
+def check_egress_quota():
+    """
+    Zkontroluje aktuální využití Egress přes Supabase Management API.
+    Pokud přesáhne EGRESS_WARN_PCT % limitu, aktivuje EGRESS_SAVE_MODE.
+    Volá se automaticky v background threadu každou hodinu.
+    """
+    global EGRESS_SAVE_MODE, EGRESS_USED_GB, _last_egress_check
+    import urllib.request as _ur
+    import json as _json
+
+    _last_egress_check = time.time()
+    org_id = "spsicrfgwjgazstohmts"  # MRWEB-DataCore org ID z emailu
+
+    try:
+        # Supabase Management API – usage metrics
+        svc_key = SUPABASE_SERVICE_KEY or SUPABASE_KEY or ""
+        if not svc_key:
+            return
+
+        req = _ur.Request(
+            f"https://api.supabase.com/v1/organizations/{org_id}/billing/usage",
+            headers={"Authorization": f"Bearer {svc_key}", "Content-Type": "application/json"}
+        )
+        with _ur.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read())
+
+        # Hledáme egress metriku
+        egress_bytes = 0
+        for item in (data.get("usages") or data.get("metrics") or []):
+            name = (item.get("metric") or item.get("name") or "").lower()
+            if "egress" in name or "bandwidth" in name:
+                egress_bytes = item.get("usage") or item.get("value") or 0
+                break
+
+        if egress_bytes:
+            EGRESS_USED_GB = egress_bytes / (1024 ** 3)
+        else:
+            # Fallback: zkus přečíst z naší settings tabulky (ručně nastavená hodnota)
+            val = get_cached_setting("egress_used_gb", "0", ttl=0)
+            try:
+                EGRESS_USED_GB = float(val)
+            except Exception:
+                EGRESS_USED_GB = 0.0
+
+    except Exception as e:
+        print(f"[EGRESS] Nepodařilo se načíst usage: {e}", flush=True)
+        # Fallback: přečti z DB settings
+        try:
+            val = get_cached_setting("egress_used_gb", "0", ttl=0)
+            EGRESS_USED_GB = float(val)
+        except Exception:
+            pass
+
+    # Rozhodnutí o šetřícím režimu
+    pct = (EGRESS_USED_GB / EGRESS_LIMIT_GB * 100) if EGRESS_LIMIT_GB > 0 else 0
+    old_mode = EGRESS_SAVE_MODE
+    EGRESS_SAVE_MODE = pct >= EGRESS_WARN_PCT
+
+    if EGRESS_SAVE_MODE != old_mode:
+        mode_str = "AKTIVOVÁN" if EGRESS_SAVE_MODE else "DEAKTIVOVÁN"
+        print(f"[EGRESS] Šetřící režim {mode_str} – využití: {EGRESS_USED_GB:.2f} GB / {EGRESS_LIMIT_GB} GB ({pct:.1f}%)", flush=True)
+        # Ulož stav do settings tabulky
+        try:
+            db = get_db()
+            if db:
+                db.table("settings").upsert({
+                    "setting_key": "egress_save_mode",
+                    "setting_value": "true" if EGRESS_SAVE_MODE else "false"
+                }).execute()
+        except Exception:
+            pass
+
+    print(f"[EGRESS] Check: {EGRESS_USED_GB:.2f} GB / {EGRESS_LIMIT_GB} GB ({pct:.1f}%) – šetřící režim: {EGRESS_SAVE_MODE}", flush=True)
+
+def _egress_monitor_loop():
+    """Background thread – kontroluje Egress každou hodinu."""
+    time.sleep(30)  # počkej na start
+    while True:
+        try:
+            check_egress_quota()
+        except Exception as e:
+            print(f"[EGRESS MONITOR] Chyba: {e}", flush=True)
+        time.sleep(_EGRESS_CHECK_INTERVAL)
+
+# Spusť monitor v background threadu
+import threading as _threading
+_egress_thread = _threading.Thread(target=_egress_monitor_loop, daemon=True, name="egress-monitor")
+_egress_thread.start()
+
+def get_cached_user_role(discord_id):
+    now = time.time()
+    if discord_id in _AUTH_CACHE:
+        cache_time, role, is_banned = _AUTH_CACHE[discord_id]
+        if now - cache_time < 300: # 5 minutes cache
+            return role, is_banned
+
+    db = get_db()
+    role, is_banned = 'User', False
+    if db and discord_id:
+        try:
+            if discord_id.startswith('email-'):
+                uid = discord_id.split('-')[1]
+                resp = db.table('users').select('role, is_banned').eq('id', uid).execute()
+            else:
+                resp = db.table('users').select('role, is_banned').eq('discord_id', discord_id).execute()
+            if resp and resp.data:
+                role = resp.data[0].get('role', 'User')
+                is_banned = resp.data[0].get('is_banned', False)
+        except Exception as e:
+            print('auth cache error:', e)
+    
+    _AUTH_CACHE[discord_id] = (now, role, is_banned)
+    return role, is_banned
 
 def get_system_statuses():
     try:
@@ -534,10 +703,8 @@ def _get_avatar_html(req):
     cookie_token = req.cookies.get('web_session_token')
     if cookie_token:
         try:
-            db = get_db()
-            user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
-            if user:
-                u = user[0]
+            u = get_cached_session_user(cookie_token)
+            if u:
 
                 avatar_src = u.get('avatar_url')
                 img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>'
@@ -684,31 +851,23 @@ def check_session_validity():
         return False
 
     try:
-        db = get_db()
-        if db:
-            settings_keys = ['web_maintenance', 'web_login_enabled']
-            s_data = db.table('settings').select('setting_key, setting_value').in_('setting_key', settings_keys).execute().data or []
-            s_map = {s['setting_key']: s['setting_value'] for s in s_data}
+        maintenance = str(get_cached_setting('web_maintenance', 'False', ttl=60)).lower() == 'true'
+        if maintenance and not is_maintenance_exempt():
+            # Allow SM/SA/DEV admin bypass if logged in
+            role = ""
+            discord_id = session.get('discord_id')
+            if session.get('logged_in') and discord_id:
+                role, _ = get_cached_user_role(discord_id)
+            if not any(r in role for r in ['SM', 'SA', 'DEV']):
+                return redirect('/blocked')
 
-            maintenance = str(s_map.get('web_maintenance', 'False')).lower() == 'true'
-            if maintenance and not is_maintenance_exempt():
-                # Allow SM/SA/DEV admin bypass if logged in
-                role = ""
-                discord_id = session.get('discord_id')
-                if session.get('logged_in') and discord_id:
-                    u_data = db.table('users').select('role').eq('discord_id', discord_id).execute().data
-                    if u_data:
-                        role = u_data[0].get('role', '')
-                if not any(r in role for r in ['SM', 'SA', 'DEV']):
-                    return redirect('/blocked')
-
-            web_login_enabled = str(s_map.get('web_login_enabled', 'True')).lower() != 'false'
-            LOGIN_PATHS = ['/register', '/login', '/api/auth/discord/request', '/api/auth/email/request']
-            if not web_login_enabled and path in LOGIN_PATHS:
-                if request.is_json or path.startswith('/api/'):
-                    return jsonify({'status': 'error', 'message': 'Přihlašování je z bezpečnostních důvodů dočasně nedostupné.'}), 503
-                else:
-                    return redirect('/login_blocked')
+        web_login_enabled = str(get_cached_setting('web_login_enabled', 'True', ttl=60)).lower() != 'false'
+        LOGIN_PATHS = ['/register', '/login', '/api/auth/discord/request', '/api/auth/email/request']
+        if not web_login_enabled and path in LOGIN_PATHS:
+            if request.is_json or path.startswith('/api/'):
+                return jsonify({'status': 'error', 'message': 'Přihlašování je z bezpečnostních důvodů dočasně nedostupné.'}), 503
+            else:
+                return redirect('/login_blocked')
     except:
         pass
 
@@ -718,12 +877,14 @@ def check_session_validity():
         discord_id = session.get('discord_id')
         if discord_id:
             try:
+                role, is_banned = get_cached_user_role(discord_id)
+                # Zkontroluj dashboard_access přes _get_dash_level (ta má vlastní cache při opakování)
                 db = get_db()
                 if db:
-                    users_data = db.table("users").select("dashboard_access, is_banned, is_deleted").eq("discord_id", discord_id).execute().data
+                    users_data = db.table("users").select("dashboard_access, is_deleted").eq("discord_id", discord_id).execute().data
                     if users_data:
                         user = users_data[0]
-                        if not user.get("dashboard_access") or user.get("is_banned") or user.get("is_deleted"):
+                        if not user.get("dashboard_access") or is_banned or user.get("is_deleted"):
                             session.clear()
                             flash('Váš přístup byl zablokován.', 'error')
                             return redirect(url_for('dashboard_main'))
@@ -928,6 +1089,49 @@ def api_report_error():
 def api_keepalive():
     if request.method == 'OPTIONS': return _cors_jsonify({})
     return _cors_jsonify({"status": "ok", "message": "Server is running"})
+
+@app.route('/api/egress_status', methods=['GET'])
+def api_egress_status():
+    """Vrátí aktuální stav Egress kvóty (pro admin dashboard)."""
+    pct = (EGRESS_USED_GB / EGRESS_LIMIT_GB * 100) if EGRESS_LIMIT_GB > 0 else 0
+    return _cors_jsonify({
+        "egress_used_gb": round(EGRESS_USED_GB, 3),
+        "egress_limit_gb": EGRESS_LIMIT_GB,
+        "egress_pct": round(pct, 1),
+        "save_mode": EGRESS_SAVE_MODE,
+        "warn_pct": EGRESS_WARN_PCT,
+        "last_check": _last_egress_check,
+    })
+
+@app.route('/api/egress_set', methods=['POST'])
+def api_egress_set():
+    """Ruční nastavení egress hodnot (SA only)."""
+    cookie_token = request.cookies.get('web_session_token')
+    if not cookie_token:
+        return jsonify({"error": "Unauthorized"}), 403
+    u = get_cached_session_user(cookie_token)
+    if not u or 'SA' not in (u.get('role') or ''):
+        return jsonify({"error": "Unauthorized"}), 403
+    global EGRESS_USED_GB, EGRESS_LIMIT_GB, EGRESS_WARN_PCT, EGRESS_SAVE_MODE
+    data = request.get_json(silent=True) or {}
+    if 'used_gb' in data:
+        EGRESS_USED_GB = float(data['used_gb'])
+        # Ulož do settings jako fallback
+        try:
+            db = get_db()
+            if db:
+                db.table("settings").upsert({"setting_key": "egress_used_gb", "setting_value": str(EGRESS_USED_GB)}).execute()
+        except Exception: pass
+    if 'limit_gb' in data:
+        EGRESS_LIMIT_GB = float(data['limit_gb'])
+    if 'warn_pct' in data:
+        EGRESS_WARN_PCT = float(data['warn_pct'])
+    if 'save_mode' in data:
+        EGRESS_SAVE_MODE = bool(data['save_mode'])
+    # Znovu vyhodnoť
+    pct = (EGRESS_USED_GB / EGRESS_LIMIT_GB * 100) if EGRESS_LIMIT_GB > 0 else 0
+    EGRESS_SAVE_MODE = pct >= EGRESS_WARN_PCT
+    return jsonify({"status": "ok", "save_mode": EGRESS_SAVE_MODE, "pct": round(pct, 1)})
 
 @app.route('/api/submit_stats', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_submit_stats():
@@ -2915,16 +3119,10 @@ def api_launcher_versions():
     try:
         db = get_db()
         if discord_id:
-            if discord_id.startswith('email-'):
-                uid = discord_id.split('-')[1]
-                resp = db.table('users').select('role, is_banned').eq('id', uid).execute()
-            else:
-                resp = db.table('users').select('role, is_banned').eq('discord_id', discord_id).execute()
-            if resp and resp.data:
-                if resp.data[0].get("is_banned"):
-                    return jsonify({"status": "banned", "message": "Tento účet má BAN."})
-                user_role = resp.data[0].get('role', 'User')
-        
+            role, is_banned = get_cached_user_role(discord_id)
+            if is_banned:
+                return jsonify({"status": "banned", "message": "Tento účet má BAN."})
+            user_role = role
         
         all_versions = db.table('software_versions').select('*').eq('is_active', True).order('id', desc=True).execute().data or []
         
@@ -4488,26 +4686,13 @@ def mirror_pc_sync():
     
     allowed = False
     if discord_id:
-        try:
-            db = get_db()
-            resp = None
-            if discord_id == 'VSC-DEV':
+        if discord_id == 'VSC-DEV':
+            allowed = True
+        else:
+            role, is_banned = get_cached_user_role(discord_id)
+            if any(x in role for x in ['BT', 'DEV', 'SA']) and not is_banned:
                 allowed = True
-            elif discord_id.startswith('email-'):
-                user_id = discord_id.split('-')[1]
-                resp = db.table('users').select('role').eq('id', user_id).execute()
-            else:
-                resp = db.table('users').select('role, is_banned').eq('discord_id', discord_id).execute()
-            
-            if resp:
-                print('mirror_pc_sync auth:', discord_id, resp.data)
-                if resp.data and len(resp.data) > 0:
-                    role = resp.data[0].get('role', '')
-                    if any(x in role for x in ['BT', 'DEV', 'SA']):
-                        allowed = True
-        except Exception as e:
-            print('mirror_pc_sync auth error:', e)
-            
+
     if not allowed and discord_id != 'VSC-DEV':
         return jsonify({"error": "Nemas opravneni (Vyžadována Premium role)"}), 403
 
