@@ -88,9 +88,8 @@ app = Flask(__name__)
 # ── Secret key MUSTÍ být nastaven jako env proměnná FLASK_SECRET_KEY ──
 _flask_secret = os.environ.get('FLASK_SECRET_KEY')
 if not _flask_secret:
-    # Fallback pro dev prostředí – v produkci VZDY nastav env!
-    _flask_secret = _secrets.token_hex(64)
-    print('[SECURITY] VAROVANI: FLASK_SECRET_KEY neni nastaven! Pouzivam nahodny klic (sessions se resetuji pri restartu).', flush=True)
+    _flask_secret = "datacorebot_fallback_secret_key_998877665544332211"
+    print('[SECURITY] VAROVANI: FLASK_SECRET_KEY neni nastaven! Pouzivam staticky fallback klic.', flush=True)
 app.secret_key = _flask_secret
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
