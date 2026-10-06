@@ -1,4 +1,4 @@
-﻿import os
+import os
 import json
 import sqlite3
 import threading
@@ -9,6 +9,25 @@ from datetime import datetime
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _LOCAL_DB_PATH = os.path.join(_BASE_DIR, "datacore_local.db")
 _OFFLINE_ADMINS_PATH = os.path.join(_BASE_DIR, "offline_admins.json")
+
+# Pokud soubor neexistuje ale je nastaven env var OFFLINE_ADMINS_B64, automaticky ho rozbalíme
+# (Koyeb – obsah souboru zakódován do base64 a uložen v environment variables)
+def _maybe_restore_offline_admins():
+    import base64
+    if os.path.exists(_OFFLINE_ADMINS_PATH):
+        return
+    b64 = os.environ.get("OFFLINE_ADMINS_B64", "")
+    if not b64:
+        return
+    try:
+        decoded = base64.b64decode(b64.encode()).decode("utf-8")
+        with open(_OFFLINE_ADMINS_PATH, "w", encoding="utf-8") as f:
+            f.write(decoded)
+        print("[LOCAL DB] offline_admins.json obnoven z env promenne OFFLINE_ADMINS_B64", flush=True)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba obnovy offline_admins.json z env: {e}", flush=True)
+
+_maybe_restore_offline_admins()
 
 _local_db_lock = threading.Lock()
 
