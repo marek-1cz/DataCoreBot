@@ -903,9 +903,9 @@ def check_session_validity():
     except:
         pass
 
-    if path.startswith('/dashboard/') and path not in ['/dashboard/wait_auth', '/dashboard/login_finalize']:
+    if path.startswith('/dashboard/') and path not in ['/dashboard/wait_auth', '/dashboard/login_finalize', '/dashboard/offline_login']:
         if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    if path.startswith('/dashboard') and path not in ['/dashboard/wait_auth', '/dashboard/login_finalize'] and session.get('logged_in'):
+    if path.startswith('/dashboard') and path not in ['/dashboard/wait_auth', '/dashboard/login_finalize', '/dashboard/offline_login'] and session.get('logged_in'):
         discord_id = session.get('discord_id')
         if discord_id:
             try:
