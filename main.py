@@ -95,7 +95,7 @@ app.secret_key = _flask_secret
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SECURE'] = True  # Koyeb bezi na HTTPS
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('KOYEB_APP_NAME') is not None  # Koyeb běží na HTTPS, lokálně HTTP
 
 app.register_blueprint(mapa_bp)
 
@@ -2154,7 +2154,12 @@ def login_request():
                             except: pass
                         if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send(), bot.loop)
                         return redirect(url_for('wait_auth', discord_id=discord_id))
-        except Exception as e: flash(f'Chyba: {e}', 'error')
+        except Exception as e:
+            err_str = str(e)
+            if "402" in err_str or "egress" in err_str:
+                flash("Chyba: Systém je dočasně offline (vyčerpán limit databáze). Použijte administrátorský NOUZOVÝ REŽIM (tlačítko DEV).", "error")
+            else:
+                flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_main'))
 
 @app.route('/dashboard/offline_login', methods=['POST'])
@@ -2783,7 +2788,12 @@ def dashboard_main():
                                 u["is_online"] = False
                                 db.table("users").update({"is_online": False}).eq("discord_id", u["discord_id"]).execute()
                         except: pass
-    except Exception as e: flash(f"Chyba při načítání dat: {e}", "error")
+    except Exception as e:
+        err_str = str(e)
+        if "402" in err_str or "egress" in err_str:
+            flash("Nepodařilo se načíst data z databáze (limit vyčerpán). Jste v nouzovém režimu.", "warning")
+        else:
+            flash(f"Chyba při načítání dat: {e}", "error")
     gc.collect()
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů", deploy_time=DEPLOY_TIME)
 
