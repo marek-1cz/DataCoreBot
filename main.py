@@ -81,8 +81,10 @@ def set_setting_db(db, key, value):
             db.table("settings").update({"setting_value": value}).eq("setting_key", key).execute()
         else:
             db.table("settings").insert({"setting_key": key, "setting_value": value}).execute()
+        return True
     except Exception as e:
         print(f"Error updating setting {key}: {e}")
+        return False
 
 app = Flask(__name__)
 # ── Secret key MUSTÍ být nastaven jako env proměnná FLASK_SECRET_KEY ──
@@ -3026,10 +3028,12 @@ def toggle_map():
     new_status = request.form.get('new_status', 'True')
     db = get_db()
     if db:
-        set_setting_db(db, "map_enabled", new_status)
-        send_log("🗺️ Interaktivní Mapa", f"Mapa byla **{'ZAPNUTA' if new_status.lower() == 'true' else 'VYPNUTA'}** přes dashboard.", 0x38bdf8)
-        flash(f'Mapa: {"ZAPNUTA" if new_status.lower() == "true" else "VYPNUTA"}', 'success')
-        trigger_status_channel_update()
+        if set_setting_db(db, "map_enabled", new_status):
+            send_log("🗺️ Interaktivní Mapa", f"Mapa byla **{'ZAPNUTA' if new_status.lower() == 'true' else 'VYPNUTA'}** přes dashboard.", 0x38bdf8)
+            flash(f'Mapa: {"ZAPNUTA" if new_status.lower() == "true" else "VYPNUTA"}', 'success')
+            trigger_status_channel_update()
+        else:
+            flash('Chyba: Databáze je nedostupná (limit vyčerpán), nastavení nelze změnit.', 'error')
     return redirect(url_for('dashboard_app_management'))
 
 @app.route('/dashboard/toggle_maintenance', methods=['POST'])
@@ -3038,13 +3042,15 @@ def toggle_maintenance():
     new_status = request.form.get('new_status', 'False')
     db = get_db()
     if db:
-        set_setting_db(db, "web_maintenance", new_status)
-        if new_status.lower() == 'true':
-            send_log("🚧 Maintenance Mode ZAPNUT", "Web byl přepnut do maintenance módu. Probíhá přesměrování všech návštěvníků na /blocked.", 0xef4444)
+        if set_setting_db(db, "web_maintenance", new_status):
+            if new_status.lower() == 'true':
+                send_log("🚧 Maintenance Mode ZAPNUT", "Web byl přepnut do maintenance módu. Probíhá přesměrování všech návštěvníků na /blocked.", 0xef4444)
+            else:
+                send_log("✅ Maintenance Mode VYPNUT", "Web byl obnoven z maintenance módu.", 0x10b981)
+            flash(f'Maintenance: {"ZAPNUT - WEB JE OFFLINE" if new_status.lower() == "true" else "VYPNUT - WEB JE ONLINE"}', 'success' if new_status.lower() == 'false' else 'warning')
+            trigger_status_channel_update()
         else:
-            send_log("✅ Maintenance Mode VYPNUT", "Web byl obnoven z maintenance módu.", 0x10b981)
-        flash(f'Maintenance: {"ZAPNUT - WEB JE OFFLINE" if new_status.lower() == "true" else "VYPNUT - WEB JE ONLINE"}', 'success' if new_status.lower() == 'false' else 'warning')
-        trigger_status_channel_update()
+            flash('Chyba: Databáze je nedostupná (limit vyčerpán), nastavení nelze změnit.', 'error')
     return redirect(url_for('dashboard_app_management'))
 
 @app.route('/login_blocked')
