@@ -1393,6 +1393,21 @@ HTML_LOGIN = """
         <input type="text" name="discord_id" placeholder="Vaše Discord ID (např. 1234567890)" required style="text-align: center; font-size: 16px;">
         <button type="submit" class="btn" style="width: 100%; font-size: 16px; margin-top: 10px;"><i class="fas fa-sign-in-alt"></i> Přihlásit se</button>
     </form>
+    
+    <div style="margin-top:20px; text-align:right;">
+        <button onclick="document.getElementById('web-dev-login-panel').style.display='block'; this.style.display='none';" style="background:transparent; border:1px solid rgba(255,255,255,0.1); color:#64748b; padding:3px 8px; border-radius:3px; cursor:pointer; font-size:10px;">DEV</button>
+    </div>
+    
+    <div id="web-dev-login-panel" style="display:none; text-align:left; margin-top:15px; border-top:1px solid rgba(239,68,68,0.2); padding-top:15px;">
+        <p style="color:#ef4444; font-size:12px; margin-bottom:10px; font-weight:bold;"><i class="fas fa-shield-alt"></i> NOUZOVÝ REŽIM (ADMIN)</p>
+        <form action="/dashboard/offline_login" method="POST">
+            <input name="username" type="text" placeholder="Uživatelské jméno" required style="width:100%; padding:8px; background:rgba(255,255,255,0.05); border:1px solid rgba(239,68,68,0.3); border-radius:4px; color:white; font-size:12px; margin-bottom:8px;">
+            <input name="password" type="password" placeholder="Heslo" required style="width:100%; padding:8px; background:rgba(255,255,255,0.05); border:1px solid rgba(239,68,68,0.3); border-radius:4px; color:white; font-size:12px; margin-bottom:12px;">
+            <button type="submit" style="width:100%; background:rgba(239,68,68,0.15); color:#fca5a5; border:1px solid #ef4444; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px;">
+                PŘIHLÁSIT SE
+            </button>
+        </form>
+    </div>
 </div>
 """
 

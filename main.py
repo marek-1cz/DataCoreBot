@@ -2157,6 +2157,29 @@ def login_request():
         except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_main'))
 
+@app.route('/dashboard/offline_login', methods=['POST'])
+def dashboard_offline_login():
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '').strip()
+    
+    if not username or not password:
+        flash('Chybí jméno nebo heslo.', 'error')
+        return redirect(url_for('dashboard_main'))
+        
+    result = check_offline_login(username, password)
+    if result:
+        session['logged_in'] = True
+        session['discord_id'] = result['discord_id']
+        session['role'] = result['role']
+        session['discord_nick'] = result['nick']
+        session['dashboard_level'] = 'superadmin' # offline admin has full access
+        session['offline_mode'] = True
+        flash(f'Úspěšně přihlášen v nouzovém režimu jako {result["nick"]}.', 'success')
+        return redirect(url_for('dashboard_main'))
+    
+    flash('Nesprávné jméno nebo heslo.', 'error')
+    return redirect(url_for('dashboard_main'))
+
 @app.route('/dashboard/wait_auth')
 def wait_auth(): return render_public(HTML_WAIT_AUTH, discord_id=request.args.get("discord_id"))
 
