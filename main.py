@@ -61,6 +61,14 @@ except AttributeError:
 
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
+try:
+    from local_db import init_local_db, try_sync_to_supabase, local_spz_upsert, check_offline_login
+    init_local_db()
+    _HAS_LOCAL_DB = True
+except Exception as _e_ldb:
+    _HAS_LOCAL_DB = False
+    print(f'[LOCAL DB] Modul local_db neni dostupny: {_e_ldb}', flush=True)
+
 import secrets as _secrets
 import hmac as _hmac
 import hashlib as _hashlib
@@ -1939,6 +1947,45 @@ def api_app_ping():
         
         return _cors_jsonify({"status": "ok", "session_id": session_id})
     except Exception as e: return _cors_jsonify({"status": "error", "reason": "db_error", "message": str(e)})
+
+
+@app.route('/api/auth/offline_login', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_offline_login():
+    """Nouzové přihlášení admin účtu (offline_admins.json) - funguje pouze když Supabase je nedostupná."""
+    if request.method == 'OPTIONS': return _cors_jsonify({})
+    # Pokud je Supabase DOSTUPNA, offline login odmitneme - uzivatel musi pouzit normalni prihlaseni
+    db = get_db()
+    if db:
+        try:
+            # Rychly test - pokud DB odpovi normalne, odmitneme offline login
+            db.table('settings').select('setting_key').limit(1).execute()
+            return _cors_jsonify({"status": "error", "reason": "db_available", "message": "Databaze je dostupna. Pouzij normalni prihlaseni."}), 403
+        except Exception:
+            pass  # DB dostupna ale nefunguje - povolime offline login
+    
+    data = request.get_json(silent=True) or {}
+    username = str(data.get('username', '')).strip()
+    password = str(data.get('password', '')).strip()
+    
+    if not username or not password:
+        return _cors_jsonify({"status": "error", "message": "Chybi username nebo heslo."}), 400
+    
+    if not _HAS_LOCAL_DB:
+        return _cors_jsonify({"status": "error", "message": "Offline admin modul neni k dispozici."}), 503
+    
+    result = check_offline_login(username, password)
+    if result:
+        print(f"[OFFLINE AUTH] Uspesne prihlaseni uzivatele: {result.get('nick')} ({result.get('discord_id')})", flush=True)
+        return _cors_jsonify({
+            "status": "ok",
+            "discord_id": result['discord_id'],
+            "discord_nick": result['nick'],
+            "role": result['role'],
+            "offline_mode": True,
+            "roles": [result['role']]
+        })
+    return _cors_jsonify({"status": "error", "message": "Nespravne jmeno nebo heslo."}), 401
+
 
 @app.route('/api/get_profile_data/<discord_id>', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_get_profile_data(discord_id):

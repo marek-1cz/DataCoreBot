@@ -1,0 +1,12 @@
+{
+  "admins": [
+    {
+      "offline_username": "DataCoreBot_admin",
+      "discord_id": "719896287301992449",
+      "nick": "marekk_czz",
+      "email": "marek.rupert@email.cz",
+      "role": "DEV",
+      "password_hash": "$2b$12$bKidyspI7QHPq7q74IkTouyvAvayQYzLvf8Oql21QVaFiBDyZijG2"
+    }
+  ]
+}

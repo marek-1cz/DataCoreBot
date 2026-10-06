@@ -5977,7 +5977,7 @@ def background_map_worker():
                 _egress_save = False
             _flush_interval = 1800 if _egress_save else SPZ_CACHE_FLUSH_SEC
 
-            if db_client and (now - last_spz_cache_flush).total_seconds() >= _flush_interval:
+            if (now - last_spz_cache_flush).total_seconds() >= _flush_interval:
                 last_spz_cache_flush = now
                 cache_rows = []
                 for bid, bc in list(GLOBAL_BUS_CACHE.items()):
@@ -6002,16 +6002,30 @@ def background_map_worker():
                         "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
                     })
                 if cache_rows:
+                    # ★ Plán A: Lokální SQLite zálohování (vždy, bez ohledu na Supabase)
                     try:
-                        db_client.table("spz_cache").upsert(cache_rows).execute()
-                    except Exception as e_flush:
-                        print(f"[SPZ CACHE] Chyba pri zapisu: {e_flush}", flush=True)
+                        from local_db import local_spz_upsert as _local_upsert, try_sync_to_supabase as _try_sync
+                        _local_upsert(cache_rows)
+                    except Exception:
+                        pass
+                    # Supabase zápis (pokud je dostupná)
+                    if db_client:
+                        try:
+                            db_client.table("spz_cache").upsert(cache_rows).execute()
+                            # Po úspěšném zápisu: synchronizuj dříve neukončené záznamy (s cooldownem 5 min)
+                            try:
+                                _try_sync(db_client)
+                            except Exception:
+                                pass
+                        except Exception as e_flush:
+                            print(f"[SPZ CACHE] Chyba pri zapisu do Supabase (lokální kopie OK): {e_flush}", flush=True)
                 # Smaz zaznamy ktere uz nejsou aktivni (přeskočit v šetřícím režimu)
                 if not _egress_save:
                     active_ids = list(GLOBAL_BUS_CACHE.keys())
                     if active_ids:
                         try:
-                            db_client.table("spz_cache").delete().not_.in_("bus_id", active_ids).eq("admin_verified", False).execute()
+                            if db_client:
+                                db_client.table("spz_cache").delete().not_.in_("bus_id", active_ids).eq("admin_verified", False).execute()
                         except Exception:
                             pass
 
