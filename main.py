@@ -1913,7 +1913,7 @@ def api_app_ping():
         else:
             user_resp = db.table("users").select("launch_count, total_time, discord_id, role").eq("discord_id", discord_id).execute()
         
-        if not user_resp.data: return _cors_jsonify({"status": "error"})
+        if not user_resp.data: return _cors_jsonify({"status": "error", "reason": "not_found"})
         updates = {"last_active": now_str, "is_online": True}
         if action == "start":
             updates["launch_count"] = (user_resp.data[0].get("launch_count") or 0) + 1
@@ -1938,7 +1938,7 @@ def api_app_ping():
             db.table("users").update(updates).eq("discord_id", discord_id).execute()
         
         return _cors_jsonify({"status": "ok", "session_id": session_id})
-    except: return _cors_jsonify({"status": "error"})
+    except Exception as e: return _cors_jsonify({"status": "error", "reason": "db_error", "message": str(e)})
 
 @app.route('/api/get_profile_data/<discord_id>', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_get_profile_data(discord_id):
