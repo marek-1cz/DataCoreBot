@@ -3214,6 +3214,60 @@ def edit_version():
     return redirect(url_for('dashboard_downloads'))
 
 
+@app.route('/api/launcher/email_poll', methods=['POST'])
+def api_launcher_email_poll():
+    email = request.json.get('email') if request.is_json else None
+    if not email: return jsonify({"status": "error"})
+    try:
+        db = get_db()
+        user = db.table("users").select("web_session_token, discord_id, id, email, nick").eq("email", email).execute().data
+        if user:
+            return jsonify({
+                "status": "success",
+                "web_session_token": user[0].get("web_session_token"),
+                "discord_id": user[0].get("discord_id") or f"email-{user[0].get('id')}",
+                "email": user[0].get("email"),
+                "nick": user[0].get("nick") or user[0].get("email")
+            })
+    except: pass
+    return jsonify({"status": "error"})
+
+@app.route('/api/launcher/email_verify', methods=['POST'])
+def api_launcher_email_verify():
+    email = request.json.get('email') if request.is_json else None
+    code = request.json.get('code') if request.is_json else None
+    if not email or not code: return jsonify({"status": "error", "message": "Missing email or code"})
+    try:
+        db = get_db()
+        user = db.table("users").select("*").eq("email", email).eq("login_token", code).execute().data
+        if user:
+            u = user[0]
+            db.table("users").update({"login_token": ""}).eq("id", u.get("id")).execute()
+            return jsonify({
+                "status": "success",
+                "discord_id": u.get("discord_id") or f"email-{u.get('id')}",
+                "email": u.get("email"),
+                "nick": u.get("nick") or u.get("email")
+            })
+    except: pass
+    return jsonify({"status": "error", "message": "Invalid code or expired"})
+
+@app.route('/api/launcher/user_info', methods=['POST'])
+def api_launcher_user_info():
+    discord_id = request.json.get('discord_id') if request.is_json else None
+    if not discord_id: return jsonify({"status": "error"})
+    try:
+        db = get_db()
+        user = db.table("users").select("role, avatar_url").eq("discord_id", discord_id).execute().data
+        if user:
+            return jsonify({
+                "status": "success",
+                "role": user[0].get("role", "User"),
+                "avatar_url": user[0].get("avatar_url")
+            })
+    except: pass
+    return jsonify({"status": "error"})
+
 @app.route('/api/launcher/versions')
 def api_launcher_versions():
     """
