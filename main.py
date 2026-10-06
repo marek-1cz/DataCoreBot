@@ -828,6 +828,9 @@ DASH_LEVEL_ORDER = {'superadmin': 3, 'admin': 2, 'viewer': 1}
 
 def _get_dash_level(discord_id: str) -> str:
     """Vrátí dashboard_level uživatele nebo '' pokud nemá přístup."""
+    from flask import session
+    if session.get('offline_mode'):
+        return session.get('dashboard_level', 'superadmin')
     try:
         db = get_db()
         if not db or not discord_id:
@@ -906,22 +909,24 @@ def check_session_validity():
     if path.startswith('/dashboard/') and path not in ['/dashboard/wait_auth', '/dashboard/login_finalize', '/dashboard/offline_login']:
         if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     if path.startswith('/dashboard') and path not in ['/dashboard/wait_auth', '/dashboard/login_finalize', '/dashboard/offline_login'] and session.get('logged_in'):
-        discord_id = session.get('discord_id')
-        if discord_id:
-            try:
-                role, is_banned = get_cached_user_role(discord_id)
-                # Zkontroluj dashboard_access přes _get_dash_level (ta má vlastní cache při opakování)
-                db = get_db()
-                if db:
-                    users_data = db.table("users").select("dashboard_access, is_deleted").eq("discord_id", discord_id).execute().data
-                    if users_data:
-                        user = users_data[0]
-                        if not user.get("dashboard_access") or is_banned or user.get("is_deleted"):
-                            session.clear()
-                            flash('Váš přístup byl zablokován.', 'error')
-                            return redirect(url_for('dashboard_main'))
-            except:
-                pass
+        if session.get('offline_mode'):
+            pass # Skip Supabase checks for offline admins
+        else:
+            discord_id = session.get('discord_id')
+            if discord_id:
+                try:
+                    role, is_banned = get_cached_user_role(discord_id)
+                    db = get_db()
+                    if db:
+                        users_data = db.table("users").select("dashboard_access, is_deleted").eq("discord_id", discord_id).execute().data
+                        if users_data:
+                            user = users_data[0]
+                            if not user.get("dashboard_access") or is_banned or user.get("is_deleted"):
+                                session.clear()
+                                flash('Váš přístup byl zablokován.', 'error')
+                                return redirect(url_for('dashboard_main'))
+                except:
+                    pass
 
 async def update_member_roles(member, role_string):
     if not member: return
