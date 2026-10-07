@@ -5667,9 +5667,17 @@ def background_map_worker():
                                     oth_c["spz_3factor"] = False
                                     oth_c["spz_stable_ticks"] = 0
                                     oth_c["spz_conflict_warn"] = True
-                                elif is_3f_winner and not oth_c.get("spz_3factor"):
-                                    # Nas kandidat je 3-faktor, ostatni neni -> jen conflict_warn
+                                elif is_3f_winner and not oth_c.get("spz_3factor") and not oth_c.get("manual_spz") and not oth_c.get("bug_locked"):
+                                    # Nas kandidat je 3-faktor, ostatni neni -> prebirame SPZ
+                                    oth_c["spz_verified"] = False
+                                    oth_c["spz_locked"] = False
+                                    oth_c["spz_3factor"] = False
+                                    oth_c["spz_stable_ticks"] = 0
                                     oth_c["spz_conflict_warn"] = True
+                                else:
+                                    # Ostatni bus uz SPZ ma a je stejne dobry (nebo lepsi). Nesmime mu ji krast!
+                                    best_spz = None
+                                    break
 
                     # SPZ DEBUG LOG: zaznamenej matching decision pro kazdy bus
                     if best_spz:
