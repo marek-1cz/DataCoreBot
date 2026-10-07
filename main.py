@@ -190,7 +190,9 @@ def get_db():
     global _db_client
     try:
         if _db_client is None and SUPABASE_URL and SUPABASE_KEY:
-            _db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+            # Používáme service key pokud je dostupný (service key přeskočí RLS = méně logů)
+            active_key = SUPABASE_SERVICE_KEY if SUPABASE_SERVICE_KEY else SUPABASE_KEY
+            _db_client = create_client(SUPABASE_URL, active_key)
         return _db_client
     except Exception as e:
         print(f"Chyba připojení k DB: {e}")
