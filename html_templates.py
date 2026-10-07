@@ -943,10 +943,14 @@ HTML_NOTIFICATIONS = """
       <input type="text" name="announcement_url" value="{{ a_url }}" placeholder="/mapa" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
     </div>
     <div>
-      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Text oznámení (podporuje HTML!)</label>
+      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Volitelný nadpis (nech prázdné pro výchozí)</label>
+      <input type="text" name="announcement_title" value="{{ a_title }}" placeholder="Nouzový Režim!" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Text oznámení (nové řádky se zachovají, HTML funguje)</label>
       <textarea name="announcement_text" rows="4" placeholder="Nějaký problém s mapou..." style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; font-family:sans-serif; box-sizing:border-box;">{{ a_text }}</textarea>
     </div>
-    <button type="submit" class="btn-primary" style="margin-top:5px;"><i class="fas fa-save"></i> Uložit oznámení</button>
+    <button type="submit" class="btn btn-warning" style="margin-top:5px; width: 100%;"><i class="fas fa-save"></i> Uložit oznámení</button>
   </form>
 </div>
 
