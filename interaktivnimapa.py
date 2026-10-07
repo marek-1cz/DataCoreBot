@@ -2152,12 +2152,20 @@ function checkSW(uptimeSec){
 function buildMarkerSvg(mc,bearing,lineText,isTrain){
   const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151'};
   let bgC=cM[mc]||'#64748b';
+  const cx=18,cy=18;
+  
+  if (isTrain) {
+    let tr = 11;
+    let si = `<rect x="${cx-tr}" y="${cy-tr}" width="${tr*2}" height="${tr*2}" rx="3" fill="${bgC}" stroke="white" stroke-width="2" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.6));"/>`;
+    return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
+  }
+
   const tF=(mc==='bg-orange'||mc==='bg-yellow')?'#0f172a':'#fff';
   let lC=String(lineText||'').split('/')[0].trim().replace(/[^0-9]/g,'');
   let lD=lC.length>=4?lC.slice(-3):lC;
-  const cx=18,cy=18,r=isTrain?10:12;
+  const r=12;
   let si='';
-  const hB=bearing!==null&&bearing!==undefined&&!['bg-gray','bg-purple','bg-bug'].includes(mc)&&!isTrain;
+  const hB=bearing!==null&&bearing!==undefined&&!['bg-gray','bg-purple','bg-bug'].includes(mc);
   if(hB){
     const rad=(bearing*Math.PI)/180;
     const tX=+(cx+Math.sin(rad)*(r+10)).toFixed(2),tY=+(cy-Math.cos(rad)*(r+10)).toFixed(2);
@@ -2167,10 +2175,14 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain){
     si+=`<polygon points="${tX},${tY} ${b1X},${b1Y} ${b2X},${b2Y}" fill="${bgC}" stroke="white" stroke-width="1.5" stroke-linejoin="round" opacity="0.95"/>`;
   }
   si+=`<circle cx="${cx+1}" cy="${cy+1}" r="${r}" fill="rgba(0,0,0,0.3)"/>`;
-  if(isTrain)si+=`<rect x="${cx-r}" y="${cy-r}" width="${r*2}" height="${r*2}" rx="3" fill="${bgC}" stroke="white" stroke-width="2"/>`;
-  else{const ds=mc==='bg-bug'?'stroke-dasharray="3,2"':'';si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${bgC}" stroke="white" stroke-width="2" ${ds} opacity="${mc==='bg-bug'?0.7:1}"/>`;}
-  if(lD&&!isTrain&&mc!=='bg-bug'){
-    if(lD.length>3){si+=`<text x="${cx}" y="${cy-2.5}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(0,3)}</text>`;si+=`<text x="${cx}" y="${cy+5.5}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="6" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(3)}</text>`;}
+  const ds=mc==='bg-bug'?'stroke-dasharray="3,2"':'';
+  si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${bgC}" stroke="white" stroke-width="2" ${ds} opacity="${mc==='bg-bug'?0.7:1}"/>`;
+  
+  if(lD&&mc!=='bg-bug'){
+    if(lD.length>3){
+      si+=`<text x="${cx}" y="${cy-2.5}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(0,3)}</text>`;
+      si+=`<text x="${cx}" y="${cy+5.5}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="6" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(3)}</text>`;
+    }
     else si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="8" font-family="'Segoe UI',system-ui,sans-serif">${lD}</text>`;
   }
   return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
@@ -4956,7 +4968,7 @@ def background_map_worker():
                         if dest1 == "-1":
                             dest1 = "Neznámý"
                         traction = str(bus1.get("traction", "BUS")).upper()
-                        is_train = int(bus_id) < 0 or traction in ["TRAIN", "UNKNOWN"] or _name_suggests_train(line) or (len(''.join(filter(str.isdigit, line))) < 6 and ''.join(filter(str.isdigit, line)))
+                        is_train = bool(int(bus_id) < 0 or traction in ["TRAIN"] or _name_suggests_train(line) or line.startswith(("Os ", "Sp ", "R ", "Ex ", "IC ", "EC ", "SC ", "rj ", "RJ ")))
 
                         if bus_id in ADMIN_DELETED_BUSES:
                             if not is_same_line(line, ADMIN_DELETED_BUSES[bus_id]):
