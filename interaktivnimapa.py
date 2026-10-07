@@ -4561,7 +4561,8 @@ def get_db_client():
     if not HAS_SUPABASE:
         return None
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_KEY")
+    # Preferujeme service key - obejde RLS a generuje méně chybových logů
+    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
     if url and key:
         try:
             return create_client(url, key)
