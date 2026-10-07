@@ -548,7 +548,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
   #idos-modal-box{width:100% !important;height:100% !important;max-width:none !important;border:none !important;border-radius:0 !important;}
   
   /* HUD floating higher up to not collide with bottom popups */
-  #hud { top: 90px !important; left: 10px !important; right: auto !important; bottom: auto !important; z-index: 4500 !important; }
+  #hud { top: auto !important; bottom: 80px !important; left: 10px !important; right: auto !important; z-index: 4500 !important; }
   
   #close-route-btn { top: auto !important; bottom: 70px !important; left: 50% !important; transform: translateX(-50%) !important; padding: 8px 22px !important; font-size: 13px !important; z-index: 5000 !important; }
   #edit-route-btn, #save-route-btn { top: auto !important; bottom: 110px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 5000 !important; }
@@ -1759,16 +1759,23 @@ let hudX=0, hudY=0, isHudDragging=false, hudStartX, hudStartY;
 document.addEventListener('DOMContentLoaded', () => {
     let hudHandle = document.getElementById('hud-drag-handle');
     let hudEl = document.getElementById('hud');
-    if (hudHandle) {
-        hudHandle.addEventListener('mousedown', hudDragStart);
-        hudHandle.addEventListener('touchstart', hudDragStart, {passive: false});
+    if (hudEl) {
+        hudEl.addEventListener('mousedown', hudDragStart);
+        hudEl.addEventListener('touchstart', hudDragStart, {passive: false});
         document.addEventListener('mousemove', hudDragMove);
         document.addEventListener('touchmove', hudDragMove, {passive: false});
         document.addEventListener('mouseup', hudDragEnd);
         document.addEventListener('touchend', hudDragEnd);
+        
+        // Also update the handle cursor to reflect it's the whole element
+        hudEl.style.cursor = 'move';
+        if (hudHandle) hudHandle.style.cursor = 'move';
     }
     function hudDragStart(e) {
-        if(e.target.tagName === 'BUTTON' || hudMin) return;
+        // Prevent drag when clicking interactive elements
+        let tag = e.target.tagName;
+        if (['BUTTON', 'A', 'INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || e.target.closest('button, a, input, textarea, select')) return;
+        if (hudMin) return;
         isHudDragging = true;
         let clientX = e.touches ? e.touches[0].clientX : e.clientX;
         let clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -1777,7 +1784,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function hudDragMove(e) {
         if(!isHudDragging) return;
-        e.preventDefault();
+        if (e.cancelable) e.preventDefault();
         let clientX = e.touches ? e.touches[0].clientX : e.clientX;
         let clientY = e.touches ? e.touches[0].clientY : e.clientY;
         hudX = clientX - hudStartX;
@@ -7796,10 +7803,7 @@ def admin_clean_trains():
     def is_bad_train(bid_str, line_str):
         if bid_str.startswith("-"): return True
         if _name_suggests_train(line_str): return True
-        digits = ''.join(filter(str.isdigit, line_str))
-        if digits and len(digits) < 6:
-            return True
-        return False
+        return line_str.startswith(("Os ", "Sp ", "R ", "Ex ", "IC ", "EC ", "SC ", "rj ", "RJ "))
 
     deleted_cache = 0
     deleted_hist = 0
