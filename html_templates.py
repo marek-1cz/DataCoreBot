@@ -928,31 +928,92 @@ HTML_NOTIFICATIONS = """
 </div>
 
 <div class="section-title" style="margin-top: 40px;"><i class="fas fa-bullhorn" style="color:#ef4444;"></i> Globální Oznámení na Webu</div>
-<div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 14px; padding: 24px; max-width: 600px;">
-  <p style="color: #94a3b8; font-size: 13px; margin-top: 0;">Zde můžete nastavit oznámení, které se zobrazí uživatelům na zvolené stránce (např. varování, informace o údržbě apod.).</p>
-  <form action="/dashboard/set_announcement" method="POST" style="display:flex; flex-direction:column; gap:15px;">
-    <div>
-      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Aktivovat Oznámení</label>
-      <select name="announcement_active" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white;">
-        <option value="false" {% if a_active != 'true' %}selected{% endif %}>🔴 Vypnuto</option>
-        <option value="true" {% if a_active == 'true' %}selected{% endif %}>🟢 Zapnuto (Zobrazuje se)</option>
-      </select>
-    </div>
-    <div>
-      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Zobrazit na URL (např. /mapa nebo /download nebo /)</label>
-      <input type="text" name="announcement_url" value="{{ a_url }}" placeholder="/mapa" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
-    </div>
-    <div>
-      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Volitelný nadpis (nech prázdné pro výchozí)</label>
-      <input type="text" name="announcement_title" value="{{ a_title }}" placeholder="Nouzový Režim!" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
-    </div>
-    <div>
-      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Text oznámení (nové řádky se zachovají, HTML funguje)</label>
-      <textarea name="announcement_text" rows="4" placeholder="Nějaký problém s mapou..." style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; font-family:sans-serif; box-sizing:border-box;">{{ a_text }}</textarea>
-    </div>
-    <button type="submit" class="btn btn-warning" style="margin-top:5px; width: 100%;"><i class="fas fa-save"></i> Uložit oznámení</button>
+<div id="announcement-app" style="max-width: 800px;">
+  <p style="color: #94a3b8; font-size: 13px; margin-top: 0;">Zde můžete nastavit více oznámení pro různé URL adresy.</p>
+  
+  <div id="announcement-list" style="display:flex; flex-direction:column; gap:20px; margin-bottom:20px;"></div>
+  
+  <button type="button" onclick="addAnnouncement()" class="btn btn-dark" style="margin-bottom: 20px;"><i class="fas fa-plus"></i> Přidat další oznámení</button>
+
+  <form action="/dashboard/set_announcement" method="POST" id="announcement-form">
+    <input type="hidden" name="announcements_json" id="announcements_json">
+    <button type="button" onclick="saveAnnouncements()" class="btn btn-warning" style="width: 100%;"><i class="fas fa-save"></i> Uložit všechna oznámení</button>
   </form>
 </div>
+
+<script>
+let announcements = {{ announcements_json | safe }};
+if (!Array.isArray(announcements)) announcements = [];
+
+function renderAnnouncements() {
+    const list = document.getElementById('announcement-list');
+    list.innerHTML = '';
+    announcements.forEach((a, index) => {
+        list.innerHTML += `
+        <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 14px; padding: 24px; position:relative;">
+            <button type="button" onclick="removeAnnouncement(${index})" style="position:absolute; top:15px; right:15px; background:rgba(239,68,68,0.2); color:#ef4444; border:none; border-radius:5px; padding:5px 10px; cursor:pointer; font-size: 12px;"><i class="fas fa-trash"></i> Smazat</button>
+            
+            <div style="display:flex; flex-direction:column; gap:15px;">
+                <div>
+                  <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Aktivovat Oznámení</label>
+                  <select onchange="updateAnnouncement(${index}, 'active', this.value === 'true')" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white;">
+                    <option value="false" ${!a.active ? 'selected' : ''}>🔴 Vypnuto</option>
+                    <option value="true" ${a.active ? 'selected' : ''}>🟢 Zapnuto (Zobrazuje se)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Zobrazit na URL (oddělujte čárkou, např. /mapa,/download)</label>
+                  <input type="text" onchange="updateAnnouncement(${index}, 'urls', this.value)" value="${a.urls || ''}" placeholder="/mapa, /download" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
+                </div>
+                <div>
+                  <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Volitelný nadpis (nech prázdné pro výchozí)</label>
+                  <input type="text" onchange="updateAnnouncement(${index}, 'title', this.value)" value="${a.title || ''}" placeholder="Nouzový Režim!" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
+                </div>
+                <div>
+                  <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Text oznámení (nové řádky se zachovají, HTML funguje)</label>
+                  <textarea onchange="updateAnnouncement(${index}, 'text', this.value)" rows="4" placeholder="Nějaký problém s mapou..." style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; font-family:sans-serif; box-sizing:border-box;">${a.text || ''}</textarea>
+                </div>
+            </div>
+        </div>
+        `;
+    });
+}
+
+function updateAnnouncement(index, field, value) {
+    announcements[index][field] = value;
+}
+
+function addAnnouncement() {
+    announcements.push({
+        id: Date.now().toString(),
+        active: false,
+        urls: '/',
+        title: '',
+        text: ''
+    });
+    renderAnnouncements();
+}
+
+function removeAnnouncement(index) {
+    if(confirm('Opravdu smazat toto oznámení?')) {
+        announcements.splice(index, 1);
+        renderAnnouncements();
+    }
+}
+
+function saveAnnouncements() {
+    document.getElementById('announcements_json').value = JSON.stringify(announcements);
+    document.getElementById('announcement-form').submit();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (announcements.length === 0) {
+        addAnnouncement();
+    } else {
+        renderAnnouncements();
+    }
+});
+</script>
 
 <script>
 function toggleTargetData(){const t=document.getElementById('target_type').value,c=document.getElementById('target_data_container'),i=document.getElementById('target_data');if(t==='GLOBAL'){c.style.display='none';i.removeAttribute('required');}else{c.style.display='block';i.setAttribute('required','true');}}

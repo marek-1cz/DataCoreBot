@@ -130,34 +130,62 @@ def add_security_headers(response):
 def inject_announcement(response):
     if response.content_type and 'text/html' in response.content_type:
         path = request.path
-        a_url = get_cached_setting('announcement_url', '')
-        a_text = get_cached_setting('announcement_text', '')
-        a_title = get_cached_setting('announcement_title', 'Oznámení od Administrace')
-        a_active = get_cached_setting('announcement_active', 'false')
-        
-        if a_active == 'true' and a_url and a_text and path.startswith(a_url):
-            try:
-                html = response.get_data(as_text=True)
+        try:
+            a_data_str = get_cached_setting('announcement_data', '')
+            active_announcements = []
+            
+            if a_data_str:
+                import json
+                a_data = json.loads(a_data_str)
+                for a in a_data:
+                    if a.get('active'):
+                        urls = [u.strip() for u in a.get('urls', '').split(',')]
+                        for u in urls:
+                            if u and path.startswith(u):
+                                active_announcements.append(a)
+                                break
+            else:
+                a_url = get_cached_setting('announcement_url', '')
+                a_text = get_cached_setting('announcement_text', '')
+                a_title = get_cached_setting('announcement_title', 'Oznámení od Administrace')
+                a_active = get_cached_setting('announcement_active', 'false')
                 
-                # Replace newlines with <br> and sanitize title if empty
-                a_text_html = a_text.replace('\n', '<br>')
-                disp_title = a_title if a_title else "Oznámení od Administrace"
+                if a_active == 'true' and a_url and a_text:
+                    urls = [u.strip() for u in a_url.split(',')]
+                    for u in urls:
+                        if u and path.startswith(u):
+                            active_announcements.append({"title": a_title, "text": a_text, "id": "legacy"})
+                            break
 
-                banner = f"""
-                <div id="sys-announcement" style="position:fixed; top:90px; left:50%; transform:translateX(-50%); background:rgba(15, 23, 42, 0.95); color:white; padding:15px 30px; border-radius:8px; box-shadow:0 15px 35px rgba(0,0,0,0.6); z-index:99999; text-align:center; font-family:sans-serif; backdrop-filter:blur(12px); border:1px solid #334155; max-width:80%; animation: slideDown 0.5s ease-out; overflow:hidden;">
-                  <div style="position:absolute; top:0; left:0; right:0; height:4px; background: repeating-linear-gradient(-45deg, #fbbf24, #fbbf24 15px, #0f172a 15px, #0f172a 30px);"></div>
-                  <h3 style="margin:8px 0 5px 0;font-size:15px;color:#fbbf24;text-transform:uppercase;letter-spacing:1px;"><i class="fas fa-exclamation-triangle"></i> {disp_title}</h3>
-                  <p style="margin:0;font-size:14px;color:#e2e8f0;">{a_text_html}</p>
-                  <button onclick="document.getElementById('sys-announcement').style.display='none'" style="position:absolute; top:10px; right:10px; background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:18px; transition:0.2s;" onmouseover="this.style.color='white'" onmouseout="this.style.color='#94a3b8'">&times;</button>
-                </div>
-                <style>@keyframes slideDown {{ from {{ top: -100px; }} to {{ top: 90px; }} }}</style>
-                """
-                if '</body>' in html:
-                    html = html.replace('</body>', banner + '</body>')
-                else:
-                    html += banner
-                response.set_data(html)
-            except: pass
+            if active_announcements:
+                html = response.get_data(as_text=True)
+                banners_html = ""
+                offset = 90
+                
+                for i, a in enumerate(active_announcements):
+                    a_text_html = a.get('text', '').replace('\n', '<br>')
+                    disp_title = a.get('title') if a.get('title') else "Oznámení od Administrace"
+                    a_id = f"sys-announcement-{a.get('id', i)}"
+                    
+                    banners_html += f"""
+                    <div id="{a_id}" style="position:fixed; top:{offset}px; left:50%; transform:translateX(-50%); background:rgba(15, 23, 42, 0.95); color:white; padding:15px 30px; border-radius:8px; box-shadow:0 15px 35px rgba(0,0,0,0.6); z-index:99999; text-align:center; font-family:sans-serif; backdrop-filter:blur(12px); border:1px solid #334155; max-width:80%; animation: slideDown 0.5s ease-out; overflow:hidden;">
+                      <div style="position:absolute; top:0; left:0; right:0; height:4px; background: repeating-linear-gradient(-45deg, #fbbf24, #fbbf24 15px, #0f172a 15px, #0f172a 30px);"></div>
+                      <h3 style="margin:8px 0 5px 0;font-size:15px;color:#fbbf24;text-transform:uppercase;letter-spacing:1px;"><i class="fas fa-exclamation-triangle"></i> {disp_title}</h3>
+                      <p style="margin:0;font-size:14px;color:#e2e8f0;">{a_text_html}</p>
+                      <button onclick="let el=document.getElementById('{a_id}'); el.style.animation='slideUp 0.4s ease-in forwards'; setTimeout(()=>el.style.display='none', 400);" style="position:absolute; top:10px; right:10px; background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:18px; transition:0.2s;" onmouseover="this.style.color='white'" onmouseout="this.style.color='#94a3b8'">&times;</button>
+                    </div>
+                    """
+                    offset += 120 # Space out if multiple banners match
+                
+                if banners_html:
+                    banners_html += "<style>@keyframes slideDown { from { top: -100px; opacity: 0; } to { opacity: 1; } } @keyframes slideUp { from { transform:translateX(-50%) translateY(0); opacity: 1; } to { transform:translateX(-50%) translateY(-50px); opacity: 0; } }</style>"
+                    if '</body>' in html:
+                        html = html.replace('</body>', banners_html + '</body>')
+                    else:
+                        html += banners_html
+                    response.set_data(html)
+        except Exception as e: 
+            print("Banner inject error:", e)
     return response
 
 def get_prague_time():
@@ -3036,18 +3064,13 @@ def toggle_launcher():
 @app.route('/dashboard/set_announcement', methods=['POST'])
 @require_dash_level('superadmin')
 def set_announcement():
-    a_url = request.form.get('announcement_url', '').strip()
-    a_text = request.form.get('announcement_text', '').strip()
-    a_title = request.form.get('announcement_title', '').strip()
-    a_active = request.form.get('announcement_active', 'false')
+    announcements_json = request.form.get('announcements_json', '[]').strip()
     db = get_db()
     if db:
-        set_setting_db(db, "announcement_url", a_url)
-        set_setting_db(db, "announcement_text", a_text)
-        set_setting_db(db, "announcement_title", a_title)
-        set_setting_db(db, "announcement_active", a_active)
-        flash('Oznámení bylo uloženo.', 'success')
-        send_log("📣 Změna Oznámení", f"**Uživatel:** {session.get('discord_nick')}\n**Aktivní:** {a_active}\n**URL:** {a_url}\n**Text:** {a_text}", 0x38bdf8)
+        set_setting_db(db, "announcement_data", announcements_json)
+        # Clear legacy values just to be clean, or leave them. Let's just set the new key.
+        flash('Oznámení byla uložena.', 'success')
+        send_log("📣 Změna Globálních Oznámení", f"**Uživatel:** {session.get('discord_nick')}\nByla upravena globální oznámení.", 0x38bdf8)
     return redirect(url_for('dashboard_notifications'))
 
 @app.route('/dashboard/toggle_software', methods=['POST'])
@@ -3149,16 +3172,29 @@ def mapa_admin_redirect():
 def dashboard_notifications():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     messages = []
+    announcements_json = '[]'
+    
+    # Legacy fallbacks
     a_url = ''; a_text = ''; a_active = 'false'; a_title = ''
     try:
         db = get_db()
         if db:
-            s_resp = db.table("settings").select("*").in_("setting_key", ["announcement_url", "announcement_text", "announcement_title", "announcement_active"]).execute().data or []
+            s_resp = db.table("settings").select("*").in_("setting_key", ["announcement_data", "announcement_url", "announcement_text", "announcement_title", "announcement_active"]).execute().data or []
+            has_data = False
             for s in s_resp:
-                if s['setting_key'] == 'announcement_url': a_url = s['setting_value']
+                if s['setting_key'] == 'announcement_data': 
+                    announcements_json = s['setting_value']
+                    has_data = True
+                elif s['setting_key'] == 'announcement_url': a_url = s['setting_value']
                 elif s['setting_key'] == 'announcement_text': a_text = s['setting_value']
                 elif s['setting_key'] == 'announcement_title': a_title = s['setting_value']
                 elif s['setting_key'] == 'announcement_active': a_active = str(s['setting_value']).lower()
+            
+            if not has_data and a_url and a_text:
+                # Migrate legacy to JSON format if present
+                import json
+                fallback = [{"id": "1", "active": (a_active == 'true'), "urls": a_url, "title": a_title, "text": a_text}]
+                announcements_json = json.dumps(fallback)
                 
             msgs = db.table("app_messages").select("*").order("created_at", desc=True).execute().data or []
             now = get_prague_time().replace(tzinfo=None)
@@ -3176,7 +3212,7 @@ def dashboard_notifications():
                 m['repeat'] = str(m.get('repeat')).lower() == 'true'
             messages = msgs
     except: pass
-    return render_dashboard(HTML_NOTIFICATIONS, messages=messages, deploy_time=DEPLOY_TIME, a_url=a_url, a_text=a_text, a_active=a_active, a_title=a_title)
+    return render_dashboard(HTML_NOTIFICATIONS, messages=messages, deploy_time=DEPLOY_TIME, announcements_json=announcements_json)
 
 @app.route('/dashboard/send_app_message', methods=['POST'])
 def send_app_message():
