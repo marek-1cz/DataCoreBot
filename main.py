@@ -181,31 +181,53 @@ def inject_announcement(response):
 
             if active_announcements:
                 html = response.get_data(as_text=True)
-                banners_html = ""
-                offset = 90
                 
+                banners_html = '<div class="sys-announcement-wrapper">'
                 for i, a in enumerate(active_announcements):
                     a_text_html = a.get('text', '').replace('\n', '<br>')
                     disp_title = a.get('title') if a.get('title') else "Oznámení od Administrace"
                     a_id = f"sys-announcement-{a.get('id', i)}"
                     
+                    # z-index goes down so the first one is on top for mobile stack
                     banners_html += f"""
-                    <div id="{a_id}" style="position:fixed; top:{offset}px; left:50%; transform:translateX(-50%); background:rgba(15, 23, 42, 0.95); color:white; padding:15px 30px; border-radius:8px; box-shadow:0 15px 35px rgba(0,0,0,0.6); z-index:99999; text-align:center; font-family:sans-serif; backdrop-filter:blur(12px); border:1px solid #334155; max-width:80%; animation: slideDown 0.5s ease-out; overflow:hidden;">
+                    <div id="{a_id}" class="sys-banner" style="z-index:{999 - i};">
                       <div style="position:absolute; top:0; left:0; right:0; height:4px; background: repeating-linear-gradient(-45deg, #fbbf24, #fbbf24 15px, #0f172a 15px, #0f172a 30px);"></div>
                       <h3 style="margin:8px 0 5px 0;font-size:15px;color:#fbbf24;text-transform:uppercase;letter-spacing:1px;"><i class="fas fa-exclamation-triangle"></i> {disp_title}</h3>
                       <p style="margin:0;font-size:14px;color:#e2e8f0;">{a_text_html}</p>
-                      <button onclick="let el=document.getElementById('{a_id}'); el.style.animation='slideUp 0.4s ease-in forwards'; setTimeout(()=>el.style.display='none', 400);" style="position:absolute; top:10px; right:10px; background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:18px; transition:0.2s;" onmouseover="this.style.color='white'" onmouseout="this.style.color='#94a3b8'">&times;</button>
+                      <button onclick="let el=document.getElementById('{a_id}'); el.style.opacity='0'; el.style.transform='translateY(-20px)'; setTimeout(()=>el.style.display='none', 300);" style="position:absolute; top:10px; right:10px; background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:18px; transition:0.2s;" onmouseover="this.style.color='white'" onmouseout="this.style.color='#94a3b8'">&times;</button>
                     </div>
                     """
-                    offset += 120 # Space out if multiple banners match
                 
-                if banners_html:
-                    banners_html += "<style>@keyframes slideDown { from { top: -100px; opacity: 0; } to { opacity: 1; } } @keyframes slideUp { from { transform:translateX(-50%) translateY(0); opacity: 1; } to { transform:translateX(-50%) translateY(-50px); opacity: 0; } }</style>"
-                    if '</body>' in html:
-                        html = html.replace('</body>', banners_html + '</body>')
-                    else:
-                        html += banners_html
-                    response.set_data(html)
+                banners_html += "</div>"
+                
+                css = """
+                <style>
+                .sys-announcement-wrapper {
+                    position: fixed; top: 90px; left: 50%; transform: translateX(-50%);
+                    z-index: 99999; display: flex; justify-content: center; gap: 20px;
+                    width: 90%; max-width: 1200px; pointer-events: none;
+                }
+                .sys-banner {
+                    pointer-events: auto; background: #0f172a; color: white; padding: 15px 30px;
+                    border-radius: 8px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); text-align: center;
+                    font-family: sans-serif; border: 1px solid #334155; position: relative;
+                    flex: 1; min-width: 250px; overflow: hidden;
+                    animation: sysBannerFadeIn 0.5s ease-out; transition: opacity 0.3s, transform 0.3s;
+                }
+                @media (max-width: 768px) {
+                    .sys-announcement-wrapper { display: block; }
+                    .sys-banner { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 100%; box-sizing: border-box; }
+                }
+                @keyframes sysBannerFadeIn { from { top: -50px; opacity: 0; } to { opacity: 1; } }
+                </style>
+                """
+                
+                banners_html += css
+                if '</body>' in html:
+                    html = html.replace('</body>', banners_html + '</body>')
+                else:
+                    html += banners_html
+                response.set_data(html)
         except Exception as e: 
             print("Banner inject error:", e)
     return response
