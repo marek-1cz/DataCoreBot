@@ -126,6 +126,33 @@ def add_security_headers(response):
     response.headers['Content-Security-Policy'] = "default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval';"
     return response
 
+@app.after_request
+def inject_announcement(response):
+    if response.content_type and 'text/html' in response.content_type:
+        path = request.path
+        a_url = get_cached_setting('announcement_url', '')
+        a_text = get_cached_setting('announcement_text', '')
+        a_active = get_cached_setting('announcement_active', 'false')
+        
+        if a_active == 'true' and a_url and a_text and path.startswith(a_url):
+            try:
+                html = response.get_data(as_text=True)
+                banner = f"""
+                <div id="sys-announcement" style="position:fixed; top:20px; left:50%; transform:translateX(-50%); background:rgba(239, 68, 68, 0.9); color:white; padding:15px 30px; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.5); z-index:99999; text-align:center; font-family:sans-serif; backdrop-filter:blur(10px); border:1px solid #fca5a5; max-width:80%; animation: slideDown 0.5s ease-out;">
+                  <h3 style="margin:0 0 5px 0;font-size:16px;"><i class="fas fa-bullhorn"></i> Oznámení od Administrace</h3>
+                  <p style="margin:0;font-size:14px;">{a_text}</p>
+                  <button onclick="document.getElementById('sys-announcement').style.display='none'" style="position:absolute; top:5px; right:10px; background:transparent; border:none; color:white; cursor:pointer; font-size:16px;">&times;</button>
+                </div>
+                <style>@keyframes slideDown {{ from {{ top: -100px; }} to {{ top: 20px; }} }}</style>
+                """
+                if '</body>' in html:
+                    html = html.replace('</body>', banner + '</body>')
+                else:
+                    html += banner
+                response.set_data(html)
+            except: pass
+    return response
+
 def get_prague_time():
     return datetime.now(ZoneInfo('Europe/Prague')).replace(tzinfo=None)
 
@@ -268,37 +295,35 @@ def check_egress_quota():
         with _ur.urlopen(req, timeout=10) as resp:
             data = _json.loads(resp.read())
 
-        # Hledáme egress metriku
+        # Hledáme egress a log_ingestion
         egress_bytes = 0
+        logs_bytes = 0
         for item in (data.get("usages") or data.get("metrics") or []):
             name = (item.get("metric") or item.get("name") or "").lower()
             if "egress" in name or "bandwidth" in name:
                 egress_bytes = item.get("usage") or item.get("value") or 0
-                break
+            if "log_ingestion" in name or "logs" in name:
+                logs_bytes = item.get("usage") or item.get("value") or 0
 
-        if egress_bytes:
-            EGRESS_USED_GB = egress_bytes / (1024 ** 3)
-        else:
-            # Fallback: zkus přečíst z naší settings tabulky (ručně nastavená hodnota)
-            val = get_cached_setting("egress_used_gb", "0", ttl=0)
-            try:
-                EGRESS_USED_GB = float(val)
-            except Exception:
-                EGRESS_USED_GB = 0.0
+        if egress_bytes: EGRESS_USED_GB = egress_bytes / (1024 ** 3)
+        LOGS_USED_GB = logs_bytes / (1024 ** 3) if logs_bytes else 0
 
     except Exception as e:
-        print(f"[EGRESS] Nepodařilo se načíst usage: {e}", flush=True)
-        # Fallback: přečti z DB settings
-        try:
-            val = get_cached_setting("egress_used_gb", "0", ttl=0)
-            EGRESS_USED_GB = float(val)
-        except Exception:
-            pass
+        print(f"[QUOTA] Nepodařilo se načíst usage: {e}", flush=True)
+        LOGS_USED_GB = 0
 
     # Rozhodnutí o šetřícím režimu
     pct = (EGRESS_USED_GB / EGRESS_LIMIT_GB * 100) if EGRESS_LIMIT_GB > 0 else 0
+    logs_pct = (LOGS_USED_GB / 1.0 * 100)  # Free tier logs limit is usually 1 GB
+    
     old_mode = EGRESS_SAVE_MODE
     EGRESS_SAVE_MODE = pct >= EGRESS_WARN_PCT
+
+    # Upozorneni pro Log Ingestion
+    if logs_pct > 80:
+        pings = ["👑| Project Owner", "-Executive Board-", "web-sa"] if logs_pct > 95 else []
+        msg = f"⚠️ **POZOR!** Supabase Log Ingestion dosáhl **{LOGS_USED_GB:.2f} GB** z 1.0 GB ({logs_pct:.1f}%)."
+        send_log("🚨 Log Quota Varování", msg, 0xef4444, pings=pings)
 
     if EGRESS_SAVE_MODE != old_mode:
         mode_str = "AKTIVOVÁN" if EGRESS_SAVE_MODE else "DEAKTIVOVÁN"
@@ -316,15 +341,16 @@ def check_egress_quota():
             
         try:
             if EGRESS_SAVE_MODE:
+                pings = ["👑| Project Owner", "-Executive Board-", "web-sa"] if pct > 90 else []
                 msg = f"⚠️ **UPOZORNĚNÍ:** Supabase Egress dosáhl **{EGRESS_USED_GB:.2f} GB** z {EGRESS_LIMIT_GB} GB ({pct:.1f}%).\nSystém automaticky **AKTIVOVAL** šetřící režim (delší intervaly aktualizací)!"
-                send_log("🚨 Egress Limit Varování", msg, 0xef4444)
+                send_log("🚨 Egress Limit Varování", msg, 0xef4444, pings=pings)
             else:
                 msg = f"✅ Supabase Egress klesl pod limit na **{EGRESS_USED_GB:.2f} GB** ({pct:.1f}%).\nSystém **DEAKTIVOVAL** šetřící režim (plný výkon)."
                 send_log("🟢 Egress V Normě", msg, 0x10b981)
         except Exception:
             pass
 
-    print(f"[EGRESS] Check: {EGRESS_USED_GB:.2f} GB / {EGRESS_LIMIT_GB} GB ({pct:.1f}%) – šetřící režim: {EGRESS_SAVE_MODE}", flush=True)
+    print(f"[QUOTA] Check: Egress {EGRESS_USED_GB:.2f} GB ({pct:.1f}%) | Logs {LOGS_USED_GB:.2f} GB ({logs_pct:.1f}%) – šetřící režim: {EGRESS_SAVE_MODE}", flush=True)
 
 def _egress_monitor_loop():
     """Background thread – kontroluje Egress každou hodinu."""
@@ -719,18 +745,27 @@ async def announce_new_supporter(discord_nick, amount_str, message, role_names_l
             except: pass
             break
 
-async def async_send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacore-logs"):
+async def async_send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacore-logs", pings=None):
     if not bot.is_ready(): return
     for guild in bot.guilds:
         channel = discord.utils.get(guild.channels, name=channel_name)
         if channel:
-            try: await channel.send(embed=discord.Embed(title=title, description=description, color=color, timestamp=get_prague_time()))
+            content_str = ""
+            if pings:
+                roles_to_ping = []
+                for r in guild.roles:
+                    if r.name in pings:
+                        roles_to_ping.append(r.mention)
+                if roles_to_ping:
+                    content_str = " ".join(roles_to_ping) + " ⚠️ **Kritické upozornění!**"
+            try: await channel.send(content=content_str, embed=discord.Embed(title=title, description=description, color=color, timestamp=get_prague_time()))
             except: pass
             break
 
-def send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacore-logs"):
+def send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacore-logs", pings=None):
     if bot.loop and bot.loop.is_running() and bot.is_ready():
-        asyncio.run_coroutine_threadsafe(async_send_log(title, description, color, channel_name), bot.loop)
+        asyncio.run_coroutine_threadsafe(async_send_log(title, description, color, channel_name, pings), bot.loop)
+
 
 def _cors_jsonify(data):
     return jsonify(data)
@@ -2911,19 +2946,24 @@ def edit_user():
 def dashboard_app_management():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     db = get_db(); soft_enabled = True; launcher_enabled = True; dl_enabled = True; web_login_enabled = True; map_enabled = True; web_maintenance = False
+    a_url = ''; a_text = ''; a_active = 'false'
     try:
         if db:
-            s_resp = db.table("settings").select("*").in_("setting_key", ["software_enabled", "launcher_enabled", "downloads_enabled", "web_login_enabled", "map_enabled", "web_maintenance"]).execute().data or []
+            s_resp = db.table("settings").select("*").in_("setting_key", ["software_enabled", "launcher_enabled", "downloads_enabled", "web_login_enabled", "map_enabled", "web_maintenance", "announcement_url", "announcement_text", "announcement_active"]).execute().data or []
             for s in s_resp:
-                k = s['setting_key']; v = str(s['setting_value']).lower()
-                if k == 'software_enabled': soft_enabled = v != 'false'
-                elif k == 'launcher_enabled': launcher_enabled = v != 'false'
-                elif k == 'downloads_enabled': dl_enabled = v != 'false'
-                elif k == 'web_login_enabled': web_login_enabled = v != 'false'
-                elif k == 'map_enabled': map_enabled = v != 'false'
-                elif k == 'web_maintenance': web_maintenance = v == 'true'
+                k = s['setting_key']; v = str(s['setting_value'])
+                vl = v.lower()
+                if k == 'software_enabled': soft_enabled = vl != 'false'
+                elif k == 'launcher_enabled': launcher_enabled = vl != 'false'
+                elif k == 'downloads_enabled': dl_enabled = vl != 'false'
+                elif k == 'web_login_enabled': web_login_enabled = vl != 'false'
+                elif k == 'map_enabled': map_enabled = vl != 'false'
+                elif k == 'web_maintenance': web_maintenance = vl == 'true'
+                elif k == 'announcement_url': a_url = v
+                elif k == 'announcement_text': a_text = v
+                elif k == 'announcement_active': a_active = vl
     except: pass
-    return render_dashboard(HTML_APP_MANAGEMENT, soft_enabled=soft_enabled, launcher_enabled=launcher_enabled, dl_enabled=dl_enabled, web_login_enabled=web_login_enabled, map_enabled=map_enabled, web_maintenance=web_maintenance, deploy_time=DEPLOY_TIME)
+    return render_dashboard(HTML_APP_MANAGEMENT, soft_enabled=soft_enabled, launcher_enabled=launcher_enabled, dl_enabled=dl_enabled, web_login_enabled=web_login_enabled, map_enabled=map_enabled, web_maintenance=web_maintenance, deploy_time=DEPLOY_TIME, a_url=a_url, a_text=a_text, a_active=a_active)
 
 async def _trigger_status_update():
     try:
@@ -2984,6 +3024,21 @@ def toggle_launcher():
         flash(f'Stav Launcheru: {"ZAPNUT" if new_status.lower() == "true" else "VYPNUT"}', 'success')
         send_log("🚀 Zámek Launcheru", f"**Uživatel:** {session.get('discord_nick')}\n**Nový stav:** {'ZAPNUTO' if new_status.lower() == 'true' else 'VYPNUTO'}", 0xf59e0b)
         trigger_status_channel_update()
+    return redirect(url_for('dashboard_app_management'))
+
+@app.route('/dashboard/set_announcement', methods=['POST'])
+@require_dash_level('superadmin')
+def set_announcement():
+    a_url = request.form.get('announcement_url', '').strip()
+    a_text = request.form.get('announcement_text', '').strip()
+    a_active = request.form.get('announcement_active', 'false')
+    db = get_db()
+    if db:
+        set_setting_db(db, "announcement_url", a_url)
+        set_setting_db(db, "announcement_text", a_text)
+        set_setting_db(db, "announcement_active", a_active)
+        flash('Oznámení bylo uloženo.', 'success')
+        send_log("📣 Změna Oznámení", f"**Uživatel:** {session.get('discord_nick')}\n**Aktivní:** {a_active}\n**URL:** {a_url}\n**Text:** {a_text}", 0x38bdf8)
     return redirect(url_for('dashboard_app_management'))
 
 @app.route('/dashboard/toggle_software', methods=['POST'])
