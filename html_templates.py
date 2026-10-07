@@ -961,6 +961,18 @@ function renderAnnouncements() {
                     <option value="true" ${a.active ? 'selected' : ''}>🟢 Zapnuto (Zobrazuje se)</option>
                   </select>
                 </div>
+                
+                <div style="display:flex; gap:15px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:200px;">
+                        <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Zapnout od (volitelné)</label>
+                        <input type="datetime-local" onchange="updateAnnouncement(${index}, 'start_time', this.value)" value="${a.start_time || ''}" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
+                    </div>
+                    <div style="flex:1; min-width:200px;">
+                        <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Vypnout do (volitelné)</label>
+                        <input type="datetime-local" onchange="updateAnnouncement(${index}, 'end_time', this.value)" value="${a.end_time || ''}" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
+                    </div>
+                </div>
+
                 <div>
                   <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Zobrazit na URL (oddělujte čárkou, např. /mapa,/download)</label>
                   <input type="text" onchange="updateAnnouncement(${index}, 'urls', this.value)" value="${a.urls || ''}" placeholder="/mapa, /download" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
@@ -989,7 +1001,9 @@ function addAnnouncement() {
         active: false,
         urls: '/',
         title: '',
-        text: ''
+        text: '',
+        start_time: '',
+        end_time: ''
     });
     renderAnnouncements();
 }

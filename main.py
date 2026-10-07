@@ -137,13 +137,35 @@ def inject_announcement(response):
             if a_data_str:
                 import json
                 a_data = json.loads(a_data_str)
+                now = get_prague_time().replace(tzinfo=None)
+                
                 for a in a_data:
-                    if a.get('active'):
-                        urls = [u.strip() for u in a.get('urls', '').split(',')]
-                        for u in urls:
-                            if u and path.startswith(u):
-                                active_announcements.append(a)
-                                break
+                    if not a.get('active'):
+                        continue
+                        
+                    # Check schedule
+                    skip = False
+                    st_str = a.get('start_time')
+                    en_str = a.get('end_time')
+                    if st_str:
+                        try:
+                            st_dt = datetime.strptime(st_str, "%Y-%m-%dT%H:%M")
+                            if now < st_dt: skip = True
+                        except: pass
+                    if en_str:
+                        try:
+                            en_dt = datetime.strptime(en_str, "%Y-%m-%dT%H:%M")
+                            if now > en_dt: skip = True
+                        except: pass
+                        
+                    if skip:
+                        continue
+                        
+                    urls = [u.strip() for u in a.get('urls', '').split(',')]
+                    for u in urls:
+                        if u and path.startswith(u):
+                            active_announcements.append(a)
+                            break
             else:
                 a_url = get_cached_setting('announcement_url', '')
                 a_text = get_cached_setting('announcement_text', '')
