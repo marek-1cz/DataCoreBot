@@ -4972,8 +4972,11 @@ def background_map_worker():
                         lng1 = bus1.get("lng", 0)
                         delay = int(bus1.get("delay", 0)) if bus1.get("delay") is not None else 0
                         dest1 = str(bus1.get("finalStopName", "")).strip()
-                        if dest1 == "-1":
-                            dest1 = "Neznámý"
+                        if dest1 == "-1" or not dest1:
+                            if bus_id in GLOBAL_BUS_CACHE and GLOBAL_BUS_CACHE[bus_id].get("destination") and GLOBAL_BUS_CACHE[bus_id]["destination"] != "Neznámý":
+                                dest1 = GLOBAL_BUS_CACHE[bus_id]["destination"]
+                            else:
+                                dest1 = "Neznámý"
                         traction = str(bus1.get("traction", "BUS")).upper()
                         is_train = bool(int(bus_id) < 0 or traction in ["TRAIN"] or _name_suggests_train(line) or line.startswith(("Os ", "Sp ", "R ", "Ex ", "IC ", "EC ", "SC ", "rj ", "RJ ")))
 
