@@ -205,18 +205,18 @@ def inject_announcement(response):
                 .sys-announcement-wrapper {
                     position: fixed; top: 90px; left: 50%; transform: translateX(-50%);
                     z-index: 99999; display: flex; justify-content: center; gap: 20px;
-                    width: 90%; max-width: 1200px; pointer-events: none;
+                    width: max-content; max-width: 90%; pointer-events: none;
                 }
                 .sys-banner {
-                    pointer-events: auto; background: #0f172a; color: white; padding: 15px 30px;
+                    pointer-events: auto; background: #0f172a; color: white; padding: 15px 45px 15px 30px;
                     border-radius: 8px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); text-align: center;
                     font-family: sans-serif; border: 1px solid #334155; position: relative;
-                    flex: 1; min-width: 250px; overflow: hidden;
+                    min-width: 250px; max-width: 600px; overflow: hidden;
                     animation: sysBannerFadeIn 0.5s ease-out; transition: opacity 0.3s, transform 0.3s;
                 }
                 @media (max-width: 768px) {
-                    .sys-announcement-wrapper { display: block; }
-                    .sys-banner { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 100%; box-sizing: border-box; }
+                    .sys-announcement-wrapper { display: block; width: 90%; }
+                    .sys-banner { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 100%; box-sizing: border-box; max-width: none; }
                 }
                 @keyframes sysBannerFadeIn { from { top: -50px; opacity: 0; } to { opacity: 1; } }
                 </style>
