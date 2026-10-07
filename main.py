@@ -138,12 +138,13 @@ def inject_announcement(response):
             try:
                 html = response.get_data(as_text=True)
                 banner = f"""
-                <div id="sys-announcement" style="position:fixed; top:20px; left:50%; transform:translateX(-50%); background:rgba(239, 68, 68, 0.9); color:white; padding:15px 30px; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.5); z-index:99999; text-align:center; font-family:sans-serif; backdrop-filter:blur(10px); border:1px solid #fca5a5; max-width:80%; animation: slideDown 0.5s ease-out;">
-                  <h3 style="margin:0 0 5px 0;font-size:16px;"><i class="fas fa-bullhorn"></i> Oznámení od Administrace</h3>
-                  <p style="margin:0;font-size:14px;">{a_text}</p>
-                  <button onclick="document.getElementById('sys-announcement').style.display='none'" style="position:absolute; top:5px; right:10px; background:transparent; border:none; color:white; cursor:pointer; font-size:16px;">&times;</button>
+                <div id="sys-announcement" style="position:fixed; top:90px; left:50%; transform:translateX(-50%); background:rgba(15, 23, 42, 0.95); color:white; padding:15px 30px; border-radius:8px; box-shadow:0 15px 35px rgba(0,0,0,0.6); z-index:99999; text-align:center; font-family:sans-serif; backdrop-filter:blur(12px); border:1px solid #334155; max-width:80%; animation: slideDown 0.5s ease-out; overflow:hidden;">
+                  <div style="position:absolute; top:0; left:0; right:0; height:4px; background: repeating-linear-gradient(-45deg, #fbbf24, #fbbf24 15px, #0f172a 15px, #0f172a 30px);"></div>
+                  <h3 style="margin:8px 0 5px 0;font-size:15px;color:#fbbf24;text-transform:uppercase;letter-spacing:1px;"><i class="fas fa-exclamation-triangle"></i> Oznámení od Administrace</h3>
+                  <p style="margin:0;font-size:14px;color:#e2e8f0;">{a_text}</p>
+                  <button onclick="document.getElementById('sys-announcement').style.display='none'" style="position:absolute; top:10px; right:10px; background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:18px; transition:0.2s;" onmouseover="this.style.color='white'" onmouseout="this.style.color='#94a3b8'">&times;</button>
                 </div>
-                <style>@keyframes slideDown {{ from {{ top: -100px; }} to {{ top: 20px; }} }}</style>
+                <style>@keyframes slideDown {{ from {{ top: -100px; }} to {{ top: 90px; }} }}</style>
                 """
                 if '</body>' in html:
                     html = html.replace('</body>', banner + '</body>')
@@ -3039,7 +3040,7 @@ def set_announcement():
         set_setting_db(db, "announcement_active", a_active)
         flash('Oznámení bylo uloženo.', 'success')
         send_log("📣 Změna Oznámení", f"**Uživatel:** {session.get('discord_nick')}\n**Aktivní:** {a_active}\n**URL:** {a_url}\n**Text:** {a_text}", 0x38bdf8)
-    return redirect(url_for('dashboard_app_management'))
+    return redirect(url_for('dashboard_notifications'))
 
 @app.route('/dashboard/toggle_software', methods=['POST'])
 @require_dash_level('superadmin')
@@ -3140,9 +3141,16 @@ def mapa_admin_redirect():
 def dashboard_notifications():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     messages = []
+    a_url = ''; a_text = ''; a_active = 'false'
     try:
         db = get_db()
         if db:
+            s_resp = db.table("settings").select("*").in_("setting_key", ["announcement_url", "announcement_text", "announcement_active"]).execute().data or []
+            for s in s_resp:
+                if s['setting_key'] == 'announcement_url': a_url = s['setting_value']
+                elif s['setting_key'] == 'announcement_text': a_text = s['setting_value']
+                elif s['setting_key'] == 'announcement_active': a_active = str(s['setting_value']).lower()
+                
             msgs = db.table("app_messages").select("*").order("created_at", desc=True).execute().data or []
             now = get_prague_time().replace(tzinfo=None)
             for m in msgs:
@@ -3159,7 +3167,7 @@ def dashboard_notifications():
                 m['repeat'] = str(m.get('repeat')).lower() == 'true'
             messages = msgs
     except: pass
-    return render_dashboard(HTML_NOTIFICATIONS, messages=messages, deploy_time=DEPLOY_TIME)
+    return render_dashboard(HTML_NOTIFICATIONS, messages=messages, deploy_time=DEPLOY_TIME, a_url=a_url, a_text=a_text, a_active=a_active)
 
 @app.route('/dashboard/send_app_message', methods=['POST'])
 def send_app_message():

@@ -898,29 +898,6 @@ HTML_APP_MANAGEMENT = """
     </form>
   </div>
 </div>
-
-<div class="section-title" style="margin-top: 40px;"><i class="fas fa-bullhorn" style="color:#ef4444;"></i> Globální Oznámení na Webu</div>
-<div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 14px; padding: 24px; max-width: 600px;">
-  <p style="color: #94a3b8; font-size: 13px; margin-top: 0;">Zde můžete nastavit oznámení, které se zobrazí uživatelům na zvolené stránce (např. varování, informace o údržbě apod.).</p>
-  <form action="/dashboard/set_announcement" method="POST" style="display:flex; flex-direction:column; gap:15px;">
-    <div>
-      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Aktivovat Oznámení</label>
-      <select name="announcement_active" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white;">
-        <option value="false" {% if a_active != 'true' %}selected{% endif %}>🔴 Vypnuto</option>
-        <option value="true" {% if a_active == 'true' %}selected{% endif %}>🟢 Zapnuto (Zobrazuje se)</option>
-      </select>
-    </div>
-    <div>
-      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Zobrazit na URL (např. /mapa nebo /download nebo /)</label>
-      <input type="text" name="announcement_url" value="{{ a_url }}" placeholder="/mapa" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
-    </div>
-    <div>
-      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Text oznámení (podporuje HTML!)</label>
-      <textarea name="announcement_text" rows="4" placeholder="Nějaký problém s mapou..." style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; font-family:sans-serif; box-sizing:border-box;">{{ a_text }}</textarea>
-    </div>
-    <button type="submit" class="btn-primary" style="margin-top:5px;"><i class="fas fa-save"></i> Uložit oznámení</button>
-  </form>
-</div>
 """
 
 HTML_NOTIFICATIONS = """
@@ -949,6 +926,30 @@ HTML_NOTIFICATIONS = """
         </div>
     </div>
 </div>
+
+<div class="section-title" style="margin-top: 40px;"><i class="fas fa-bullhorn" style="color:#ef4444;"></i> Globální Oznámení na Webu</div>
+<div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 14px; padding: 24px; max-width: 600px;">
+  <p style="color: #94a3b8; font-size: 13px; margin-top: 0;">Zde můžete nastavit oznámení, které se zobrazí uživatelům na zvolené stránce (např. varování, informace o údržbě apod.).</p>
+  <form action="/dashboard/set_announcement" method="POST" style="display:flex; flex-direction:column; gap:15px;">
+    <div>
+      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Aktivovat Oznámení</label>
+      <select name="announcement_active" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white;">
+        <option value="false" {% if a_active != 'true' %}selected{% endif %}>🔴 Vypnuto</option>
+        <option value="true" {% if a_active == 'true' %}selected{% endif %}>🟢 Zapnuto (Zobrazuje se)</option>
+      </select>
+    </div>
+    <div>
+      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Zobrazit na URL (např. /mapa nebo /download nebo /)</label>
+      <input type="text" name="announcement_url" value="{{ a_url }}" placeholder="/mapa" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Text oznámení (podporuje HTML!)</label>
+      <textarea name="announcement_text" rows="4" placeholder="Nějaký problém s mapou..." style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; font-family:sans-serif; box-sizing:border-box;">{{ a_text }}</textarea>
+    </div>
+    <button type="submit" class="btn-primary" style="margin-top:5px;"><i class="fas fa-save"></i> Uložit oznámení</button>
+  </form>
+</div>
+
 <script>
 function toggleTargetData(){const t=document.getElementById('target_type').value,c=document.getElementById('target_data_container'),i=document.getElementById('target_data');if(t==='GLOBAL'){c.style.display='none';i.removeAttribute('required');}else{c.style.display='block';i.setAttribute('required','true');}}
 </script>
