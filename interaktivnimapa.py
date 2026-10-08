@@ -5221,7 +5221,7 @@ def background_map_worker():
                             bc["spz_stable_ticks"] = 0
 
             # ── Offline + timeouty ────────────────────────────────────────────────────────
-                        for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
+            for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
                 om = (now - c["last_inflow_seen"]).total_seconds() / 60.0
                 tm = (now - c["first_seen"]).total_seconds() / 60.0
                 
@@ -6208,7 +6208,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
             continue
 
         # Načti info o uživateli (discord_id, email) z cache nebo DB
-                if user_session not in _user_cache:
+        if user_session not in _user_cache:
             try:
                 if str(user_session).startswith("admin_direct_email_"):
                     _user_cache[user_session] = {"discord_id": None, "email": user_session.replace("admin_direct_email_", "")}
