@@ -3366,8 +3366,8 @@ async function fetchBuses(){
         </div>
         <div class="pb">
           ${bugW}${orangeW}${depotW}
-          ${(bus.admin_note && typeof bus.admin_note === 'string' && bus.admin_note.trim() !== '')?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
-          ${(bus.admin_driver && typeof bus.admin_driver === 'string' && bus.admin_driver.trim() !== '')?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
+          ${(bus.admin_note && typeof bus.admin_note === 'string' && bus.admin_note.trim() !== '' && !bus.is_train)?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
+          ${(bus.admin_driver && typeof bus.admin_driver === 'string' && bus.admin_driver.trim() !== '' && !bus.is_train)?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
           <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination||'Neznamy'}</span></div>
           ${spzH}${invTxt}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
@@ -3377,7 +3377,7 @@ async function fetchBuses(){
           ${histBtn}
           <button id="route-btn-${bus.id}" class="pa pa-d" style="margin-top:5px;${rA?'background:#1e40af;':''}" onclick="toggleRoute('${bus.id}')">${rA?'🗺️ Skryt trasu':'🗺️ Zobrazit trasu'}</button>
           <div style="display:flex;gap:5px;margin-top:5px;">
-            <button class="pa" style="flex:1;background:#7c3aed;color:#fff;border-color:#6d28d9;" onclick="openNotifModal('${bus.id}')">🔔 Notifikace</button>
+            ${bus.is_train ? '' : `<button class="pa" style="flex:1;background:#7c3aed;color:#fff;border-color:#6d28d9;" onclick="openNotifModal('${bus.id}')">🔔 Notifikace</button>`}
             <button class="pa" style="flex:1;background:#0369a1;color:#fff;border-color:#075985;" onclick="shareBus('${bus.id}')">📤 Sdílet</button>
           </div>
         </div>`;
@@ -3427,7 +3427,7 @@ async function fetchBuses(){
             <strong style="color:#38bdf8;font-size:12px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
             <div style="color:#94a3b8;font-size:10px;margin-top:2px;font-family:monospace;word-break:break-all;">ID vozu: ${bus.id}</div>
             
-            <div style="display:flex;gap:6px;margin-top:8px;">
+            ${bus.is_train ? '' : `<div style="display:flex;gap:6px;margin-top:8px;">
               <input type="text" id="adm_spz_${bus.id}" value="${cSpz}" data-orig="${oSpz}" placeholder="SPZ" class="adm-inp" style="flex:2;margin-top:0;">
               <button onclick="adminSetSPZ('${bus.id}')" style="flex:1;background:#10b981;color:white;border:none;border-radius:5px;font-size:13px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">💾 Uložit</button>
             </div>
@@ -3437,7 +3437,7 @@ async function fetchBuses(){
               <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔍 Hledat</button>
               <button onclick="adminAction('force_refresh','${bus.id}')" style="flex:1;background:#7c3aed;color:#fff;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔄 T. Refresh</button>
               <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🗑️ Smazat</button>
-            </div>
+            </div>`}
             
             <button class="adm-toggle-btn" onclick="let el=document.getElementById('adm_grafika_${bus.id}'); if(el.style.display==='none'){el.style.display='block';this.innerText='🔼 Skrýt vzhled a úpravy';}else{el.style.display='none';this.innerText='🎨 Vzhled a další úpravy';}">🎨 Vzhled a další úpravy</button>
             
@@ -3454,8 +3454,8 @@ async function fetchBuses(){
                 <option value="bg-orange" ${bus.color_class==='bg-orange'?'selected':''}>Oranžová</option>
                 <option value="bg-bug" ${bus.color_class==='bg-bug'?'selected':''}>Označeno jako BUG</option>
               </select>
-              <input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznámka..." class="adm-inp" style="margin-top:6px;">
-              <input type="text" id="adm_driver_${bus.id}" value="${cDriver}" data-orig="${bus.admin_driver||''}" placeholder="Jméno řidiče..." class="adm-inp" style="margin-top:6px;">
+              ${bus.is_train ? '' : `<input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznámka..." class="adm-inp" style="margin-top:6px;">
+              <input type="text" id="adm_driver_${bus.id}" value="${cDriver}" data-orig="${bus.admin_driver||''}" placeholder="Jméno řidiče..." class="adm-inp" style="margin-top:6px;">`}
               <div style="display:flex;gap:6px;margin-top:8px;">
                 <button onclick="adminSaveAll('${bus.id}',true)" class="adm-btn" style="flex:1;background:#1e40af;color:white;">📌 Uložit natrvalo</button>
                 <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏱️ Dočasně</button>
@@ -5221,9 +5221,17 @@ def background_map_worker():
                             bc["spz_stable_ticks"] = 0
 
             # ── Offline + timeouty ────────────────────────────────────────────────────────
-            for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
+                        for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
                 om = (now - c["last_inflow_seen"]).total_seconds() / 60.0
                 tm = (now - c["first_seen"]).total_seconds() / 60.0
+                
+                # VLAK CLEANUP RULE
+                if c.get("is_train"):
+                    inact = (now - c.get("last_moved", c["first_seen"])).total_seconds() / 60.0
+                    if c.get("color_class") == "bg-bug" or inact > 60:
+                        del GLOBAL_BUS_CACHE[bus_id]
+                        continue
+
                 if tm > 1200 and not c["actual_end_time"] and not c.get("is_offline"):
                     c["actual_end_time"] = now.strftime('%H:%M')
                     c["status"] = "Timeout"
@@ -6200,11 +6208,15 @@ def _check_and_fire_notifications(db_client, bus_cache):
             continue
 
         # Načti info o uživateli (discord_id, email) z cache nebo DB
-        if user_session not in _user_cache:
+                if user_session not in _user_cache:
             try:
-                uid = int(user_session) if str(user_session).isdigit() else user_session
-                u_res = db_client.table("users").select("discord_id, email").eq("id", uid).execute()
-                _user_cache[user_session] = u_res.data[0] if u_res.data else {}
+                if str(user_session).startswith("admin_direct_email_"):
+                    _user_cache[user_session] = {"discord_id": None, "email": user_session.replace("admin_direct_email_", "")}
+                elif str(user_session).startswith("admin_direct_discord_"):
+                    _user_cache[user_session] = {"discord_id": user_session.replace("admin_direct_discord_", ""), "email": None}
+                else:
+                    u_res = db_client.table("users").select("discord_id, email").eq("web_session_token", user_session).execute()
+                    _user_cache[user_session] = u_res.data[0] if u_res.data else {}
             except Exception:
                 _user_cache[user_session] = {}
         u_info = _user_cache[user_session]
@@ -7814,6 +7826,8 @@ def admin_clean_trains():
     def is_bad_train(bid_str, line_str):
         if bid_str.startswith("-"): return True
         if _name_suggests_train(line_str): return True
+        s = str(line_str) + str(bid_str)
+        if "1093" in s or "1081" in s or "7265" in s: return True
         return line_str.startswith(("Os ", "Sp ", "R ", "Ex ", "IC ", "EC ", "SC ", "rj ", "RJ "))
 
     deleted_cache = 0
