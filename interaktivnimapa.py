@@ -795,31 +795,33 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
         </div>
       </div>
 
-      <!-- Způsob doručení - automaticky z profilu -->
+      <!-- Způsob doručení - automaticky z profilu nebo podle admin cíle -->
       <div style="margin-bottom:18px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.3);border-radius:10px;padding:12px 14px;">
         <div style="color:#38bdf8;font-size:12px;font-weight:bold;text-transform:uppercase;margin-bottom:8px;">📬 Kam přijde upozornění?</div>
         <div id="notif-delivery-info" style="color:#e2e8f0;font-size:13px;line-height:1.6;">
-          Vyberte si kam upozornění odeslat:<br>
+          <span id="notif-delivery-heading">Vyberte si kam upozornění odeslat:</span><br>
           <label id="notif-delivery-discord" style="display:none; cursor:pointer; align-items:center; gap:6px; margin-top:4px;">
             <input type="checkbox" id="nt-deliv-discord">
-            <b>Discord DM</b> – zpráva od bota přímo do DM
+            <b>Discord DM</b> – <span id="nt-deliv-discord-lbl">zpráva od bota přímo do DM</span>
           </label>
           <label id="notif-delivery-email" style="display:none; cursor:pointer; align-items:center; gap:6px; margin-top:4px;">
             <input type="checkbox" id="nt-deliv-email">
-            <b>E-mail</b> – odeslání na tvůj registrovaný e-mail
+            <b>E-mail</b> – <span id="nt-deliv-email-lbl">odeslání na tvůj registrovaný e-mail</span>
           </label>
           <span id="notif-delivery-none" style="color:#f59e0b;display:none; margin-top:4px; display:inline-block;">⚠️ Tvůj účet nemá Discord ani e-mail – nejprve je přidej v nastavení účtu.</span>
+          <div id="notif-admin-auto-channel-info" style="display:none; margin-top:8px; padding:7px 12px; border-radius:6px; font-size:12px;"></div>
         </div>
       </div>
 
       <!-- Admin target user -->
       <div id="notif-admin-target-container" style="margin-bottom:18px; display:none; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.3); border-radius:10px; padding:12px 14px;">
         <label class="notif-check-row" style="cursor:pointer; display:flex; align-items:center; gap:8px;">
-          <input type="checkbox" id="nt-admin-override" onchange="document.getElementById('notif-admin-target-input-box').style.display = this.checked ? 'block' : 'none'; if(!this.checked) document.getElementById('notif-admin-target').value='';">
+          <input type="checkbox" id="nt-admin-override" onchange="window.updateAdminTargetChannel && window.updateAdminTargetChannel();">
           <span style="color:#ef4444; font-weight:bold;">Poslat jinému uživateli (ADMIN ONLY)</span>
         </label>
         <div id="notif-admin-target-input-box" style="display:none; margin-top:10px;">
-          <input id="notif-admin-target" type="text" placeholder="Discord ID nebo E-mail uživatele" style="width:100%;padding:9px 12px;background:rgba(239,68,68,0.1);color:white;border:1px solid rgba(239,68,68,0.4);border-radius:8px;font-size:14px;box-sizing:border-box;">
+          <input id="notif-admin-target" type="text" placeholder="Discord ID nebo E-mail uživatele" oninput="window.updateAdminTargetChannel && window.updateAdminTargetChannel();" style="width:100%;padding:9px 12px;background:rgba(239,68,68,0.1);color:white;border:1px solid rgba(239,68,68,0.4);border-radius:8px;font-size:14px;box-sizing:border-box;">
+          <div style="color:#94a3b8; font-size:11px; margin-top:4px;">💡 Zadej Discord ID (číslo) pro DM nebo e-mail uživatele. Kanál se vybere automaticky.</div>
         </div>
       </div>
 
@@ -1875,6 +1877,7 @@ window.openNotifModal = function(busId) {
   }
   // Načti info o doručení (discord/email) z API
   fetch('/api/notifications/delivery_info').then(r=>r.json()).then(d=>{
+    window._deliveryInfo = d;
     let dd = document.getElementById('notif-delivery-discord');
     let de = document.getElementById('notif-delivery-email');
     let dn = document.getElementById('notif-delivery-none');
@@ -1895,7 +1898,89 @@ window.openNotifModal = function(busId) {
     if(dn) dn.style.display = (!d.has_discord && !d.has_email) ? 'inline-block' : 'none';
     let adm = document.getElementById('notif-admin-target-container');
     if(adm) adm.style.display = d.is_admin ? 'block' : 'none';
+    if(window.updateAdminTargetChannel) window.updateAdminTargetChannel();
   }).catch(()=>{});
+
+  window.updateAdminTargetChannel = function() {
+    let isOverride = !!document.getElementById('nt-admin-override')?.checked;
+    let targetBox = document.getElementById('notif-admin-target-input-box');
+    if (targetBox) targetBox.style.display = isOverride ? 'block' : 'none';
+
+    let targetInput = document.getElementById('notif-admin-target');
+    let targetVal = (targetInput?.value || '').trim();
+    
+    let dd = document.getElementById('notif-delivery-discord');
+    let de = document.getElementById('notif-delivery-email');
+    let dn = document.getElementById('notif-delivery-none');
+    let autoInfo = document.getElementById('notif-admin-auto-channel-info');
+    let cbDiscord = document.getElementById('nt-deliv-discord');
+    let cbEmail = document.getElementById('nt-deliv-email');
+    let dLbl = document.getElementById('nt-deliv-discord-lbl');
+    let eLbl = document.getElementById('nt-deliv-email-lbl');
+
+    if (isOverride) {
+      if (dn) dn.style.display = 'none';
+
+      let isDiscordId = /^\\d{15,22}$/.test(targetVal);
+      let isEmail = targetVal.includes('@');
+
+      if (isDiscordId) {
+        if (dd) dd.style.display = 'flex';
+        if (de) de.style.display = 'none';
+        if (cbDiscord) cbDiscord.checked = true;
+        if (cbEmail) cbEmail.checked = false;
+        if (dLbl) dLbl.textContent = `zpráva přímo do DM uživatele (${targetVal})`;
+        if (autoInfo) {
+          autoInfo.style.display = 'block';
+          autoInfo.style.background = 'rgba(88,101,242,0.15)';
+          autoInfo.style.border = '1px solid rgba(88,101,242,0.4)';
+          autoInfo.style.color = '#a5b4fc';
+          autoInfo.innerHTML = `🤖 <b>Automaticky vybráno:</b> Discord DM pro ID <code>${targetVal}</code>`;
+        }
+      } else if (isEmail) {
+        if (dd) dd.style.display = 'none';
+        if (de) de.style.display = 'flex';
+        if (cbDiscord) cbDiscord.checked = false;
+        if (cbEmail) cbEmail.checked = true;
+        if (eLbl) eLbl.textContent = `odeslání na e-mail (${targetVal})`;
+        if (autoInfo) {
+          autoInfo.style.display = 'block';
+          autoInfo.style.background = 'rgba(234,179,8,0.15)';
+          autoInfo.style.border = '1px solid rgba(234,179,8,0.4)';
+          autoInfo.style.color = '#fde047';
+          autoInfo.innerHTML = `📧 <b>Automaticky vybráno:</b> E-mail na <code>${targetVal}</code>`;
+        }
+      } else {
+        if (dd) dd.style.display = 'flex';
+        if (de) de.style.display = 'flex';
+        if (dLbl) dLbl.textContent = 'zpráva od bota přímo do DM';
+        if (eLbl) eLbl.textContent = 'odeslání na e-mail uživatele';
+        if (autoInfo) {
+          autoInfo.style.display = 'block';
+          autoInfo.style.background = 'rgba(56,189,248,0.1)';
+          autoInfo.style.border = '1px solid rgba(56,189,248,0.3)';
+          autoInfo.style.color = '#38bdf8';
+          autoInfo.innerHTML = `💡 Zadej Discord ID (číslo) nebo e-mail uživatele – kanál se spáruje sám.`;
+        }
+      }
+    } else {
+      if (targetInput) targetInput.value = '';
+      if (autoInfo) autoInfo.style.display = 'none';
+      if (dLbl) dLbl.textContent = 'zpráva od bota přímo do DM';
+      if (eLbl) eLbl.textContent = 'odeslání na tvůj registrovaný e-mail';
+      let d = window._deliveryInfo || {};
+      if (dd) {
+        dd.style.display = d.has_discord ? 'flex' : 'none';
+        if (cbDiscord) cbDiscord.checked = !!d.has_discord;
+      }
+      if (de) {
+        de.style.display = d.has_email ? 'flex' : 'none';
+        if (cbEmail) cbEmail.checked = (!d.has_discord && !!d.has_email);
+      }
+      if (dn) dn.style.display = (!d.has_discord && !d.has_email) ? 'inline-block' : 'none';
+    }
+  };
+
   // Načti vozovny do selectboxů
   fetch('/api/depot_zones').then(r=>r.json()).then(d=>{
     if(d.zones) {
@@ -1941,8 +2026,18 @@ async function loadNotifRules() {
       if(t.delay_change) t_list.push("Změna zpoždění");
       let t_str = t_list.join(", ") || "Žádné";
 
+      let uTag = '';
+      if (rule.user_session) {
+        let us = String(rule.user_session);
+        if (us.startsWith('admin_direct_discord_')) {
+          uTag = `<span style="background:rgba(88,101,242,0.2);color:#818cf8;border:1px solid rgba(88,101,242,0.4);border-radius:4px;padding:2px 6px;font-size:10px;margin-left:6px;">DM: ${us.replace('admin_direct_discord_','')}</span>`;
+        } else if (us.startsWith('admin_direct_email_')) {
+          uTag = `<span style="background:rgba(234,179,8,0.2);color:#fbbf24;border:1px solid rgba(234,179,8,0.4);border-radius:4px;padding:2px 6px;font-size:10px;margin-left:6px;">E-mail: ${us.replace('admin_direct_email_','')}</span>`;
+        }
+      }
+
       row.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;">
-        <span style="color:#e2e8f0;"><b>${rule.label||rule.identifier}</b> <span style="color:#64748b;">(${rule.identifier})</span> <span style="color:#38bdf8;margin-left:6px;">🔔 ${fired}x</span></span>
+        <span style="color:#e2e8f0;"><b>${rule.label||rule.identifier}</b> <span style="color:#64748b;">(${rule.identifier})</span>${uTag} <span style="color:#38bdf8;margin-left:6px;">🔔 ${fired}x</span></span>
         <span style="color:#94a3b8;font-size:11px;">Události: ${t_str}</span>
         </div>
         <button onclick="deleteNotifRule('${rule.id}')" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid #ef4444;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;align-self:flex-start;">✕</button>`;
@@ -1991,15 +2086,35 @@ async function saveNotifRule(isOneTime = true) {
     delay_threshold: document.getElementById('nt-delay-thresh')?.checked ? parseInt(document.getElementById('nt-delay-val')?.value || '0') : false,
     delay_change: document.getElementById('nt-delay-change')?.checked || false,
   };
+  let isOverride = !!document.getElementById('nt-admin-override')?.checked;
+  let targetUser = isOverride && document.getElementById('notif-admin-target') ? document.getElementById('notif-admin-target').value.trim() : "";
+
   let deliveryChannels = [];
   if (document.getElementById('nt-deliv-discord')?.checked) deliveryChannels.push('discord');
   if (document.getElementById('nt-deliv-email')?.checked) deliveryChannels.push('email');
   
-  let targetUser = document.getElementById('notif-admin-target') ? document.getElementById('notif-admin-target').value.trim() : "";
+  if (targetUser) {
+    if (/^\\d{15,22}$/.test(targetUser) && !deliveryChannels.includes('discord')) {
+      deliveryChannels.push('discord');
+    } else if (targetUser.includes('@') && !deliveryChannels.includes('email')) {
+      deliveryChannels.push('email');
+    }
+    if (deliveryChannels.length === 0) {
+      if (/^\\d+$/.test(targetUser)) deliveryChannels.push('discord');
+      else if (targetUser.includes('@')) deliveryChannels.push('email');
+    }
+  }
 
   if(!identifier) { showNotifMsg('Zadej SPZ nebo Bus ID', false); return; }
   if(!Object.values(triggers).some(v => v && v !== '')) { showNotifMsg('Vyber alespoň jeden trigger', false); return; }
-  if(deliveryChannels.length === 0) { showNotifMsg('Vyber alespoň jeden kanál pro doručení', false); return; }
+  if(deliveryChannels.length === 0) {
+    if (isOverride && !targetUser) {
+      showNotifMsg('Zadej Discord ID nebo e-mail cílového uživatele', false);
+    } else {
+      showNotifMsg('Vyber alespoň jeden kanál pro doručení', false);
+    }
+    return;
+  }
   
   showNotifMsg('⏳ Ukládám...', true);
   try {
@@ -2013,6 +2128,7 @@ async function saveNotifRule(isOneTime = true) {
       let sn=document.getElementById('nt-stop-name'); if(sn) sn.value='';
       let sc=document.getElementById('nt-stop-container'); if(sc) sc.style.display='none';
       let tu=document.getElementById('notif-admin-target'); if(tu) tu.value='';
+      let ao=document.getElementById('nt-admin-override'); if(ao) { ao.checked=false; window.updateAdminTargetChannel && window.updateAdminTargetChannel(); }
     } else {
       showNotifMsg('❌ ' + (d.message||'Chyba'), false);
     }
@@ -6648,24 +6764,38 @@ def api_notif_create():
     
     if is_admin and target_user:
         target_res = db.table("users").select("id, discord_id, email").or_(f"discord_id.eq.{target_user},email.eq.{target_user}").execute()
-        if not target_res.data:
-            return jsonify({"status": "error", "message": f"Cílový uživatel '{target_user}' nebyl nalezen."}), 400
-        t_u = target_res.data[0]
-        user_session_val = str(t_u["id"])
-        discord_id = t_u.get("discord_id")
-        email = t_u.get("email")
+        if target_res.data:
+            t_u = target_res.data[0]
+            user_session_val = str(t_u["id"])
+            discord_id = t_u.get("discord_id")
+            email = t_u.get("email")
+        else:
+            if target_user.isdigit():
+                user_session_val = f"admin_direct_discord_{target_user}"
+                discord_id = target_user
+                email = None
+            elif "@" in target_user:
+                user_session_val = f"admin_direct_email_{target_user}"
+                discord_id = None
+                email = target_user
+            else:
+                return jsonify({"status": "error", "message": f"Cílový uživatel '{target_user}' nebyl nalezen v databázi a není to platné Discord ID (číslo) ani e-mail."}), 400
 
     if not user_session_val:
         return jsonify({"status": "error", "message": "Neplatná session pro vytváření notifikací."}), 401
 
     if not discord_id and not email:
-        return jsonify({"status": "error", "message": "Tvůj účet (nebo cílový účet) nemá připojen Discord ani e-mail. Nemáme kam notifikaci poslat!"}), 400
+        return jsonify({"status": "error", "message": "Nemáme kam notifikaci poslat – zadejte Discord ID nebo e-mail uživatele."}), 400
 
     identifier = str(data.get("identifier", "")).strip()
     identifier_type = data.get("identifier_type", "spz")
     triggers = data.get("triggers", {})
     label = str(data.get("label", "")).strip()[:80]
     delivery_channels = data.get("delivery_channels", [])
+    if isinstance(delivery_channels, str):
+        delivery_channels = [delivery_channels]
+    if not isinstance(delivery_channels, list):
+        delivery_channels = []
     is_one_time = bool(data.get("is_one_time", True))
 
     if not identifier:
@@ -6689,6 +6819,18 @@ def api_notif_create():
             else:
                 print(f"[ADMIN ERROR] Duplicitní SPZ na mapě pro {identifier}. Nalezeno {len(matched_buses)}x.", flush=True)
                 return jsonify({"status": "error", "message": "⚠️ Na mapě je aktuálně více autobusů s touto SPZ. Zvolte prosím sledování pomocí Bus ID."}), 400
+
+    # Auto-doplnění kanálu pokud admin zadal cíl
+    if is_admin and target_user:
+        if target_user.isdigit() and "discord" not in delivery_channels:
+            delivery_channels.append("discord")
+        elif "@" in target_user and "email" not in delivery_channels:
+            delivery_channels.append("email")
+        if not delivery_channels:
+            if discord_id:
+                delivery_channels.append("discord")
+            elif email:
+                delivery_channels.append("email")
 
     if not any(triggers.values()):
         return jsonify({"status": "error", "message": "⚠️ Vyberte alespoň jednu událost."}), 400
@@ -6717,9 +6859,10 @@ def api_notif_create():
             "is_one_time": is_one_time,
         }).execute()
         channels_text = []
-        if "discord" in delivery_channels and discord_id: channels_text.append("Discord")
-        if "email" in delivery_channels and email: channels_text.append("e-mail")
-        return jsonify({"status": "success", "message": f"✅ Upozornění je nastaveno! Až událost nastane, pošleme vám zprávu na: {', '.join(channels_text)}{warning_msg}"})
+        if "discord" in delivery_channels and discord_id: channels_text.append(f"Discord ({discord_id})")
+        if "email" in delivery_channels and email: channels_text.append(f"e-mail ({email})")
+        target_info = f" pro uživatele {target_user}" if (is_admin and target_user) else ""
+        return jsonify({"status": "success", "message": f"✅ Upozornění je nastaveno! Až událost nastane, pošleme zprávu na: {', '.join(channels_text)}{target_info}{warning_msg}"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -6736,17 +6879,31 @@ def api_notif_list():
         return jsonify({"status": "error", "rules": []})
     try:
         user_session_val = None
+        is_admin = False
         if cookie_token:
-            user_res = db.table("users").select("id").eq("web_session_token", cookie_token).execute()
+            user_res = db.table("users").select("id, role").eq("web_session_token", cookie_token).execute()
             if user_res.data:
                 user_session_val = str(user_res.data[0]["id"])
-        if not user_session_val and admin_discord_id:
-            adm_res = db.table("users").select("id").eq("discord_id", admin_discord_id).execute()
+                role = user_res.data[0].get("role") or ""
+                if 'SA' in role or 'DEV' in role:
+                    is_admin = True
+        if admin_discord_id:
+            adm_res = db.table("users").select("id, role").eq("discord_id", admin_discord_id).execute()
             if adm_res.data:
-                user_session_val = str(adm_res.data[0]["id"])
-        if not user_session_val:
+                if not user_session_val:
+                    user_session_val = str(adm_res.data[0]["id"])
+                role = adm_res.data[0].get("role") or ""
+                if 'SA' in role or 'DEV' in role:
+                    is_admin = True
+        if not user_session_val and not is_admin:
             return jsonify({"status": "error", "rules": []})
-        res = db.table("bus_notifications").select("id, identifier, identifier_type, triggers, label, is_active, fired_count, last_fired_at, created_at").eq("user_session", user_session_val).order("created_at", desc=True).limit(20).execute()
+
+        if is_admin and user_session_val:
+            res = db.table("bus_notifications").select("id, identifier, identifier_type, triggers, label, is_active, fired_count, last_fired_at, created_at, user_session").or_(f"user_session.eq.{user_session_val},user_session.like.admin_direct_%").order("created_at", desc=True).limit(30).execute()
+        elif user_session_val:
+            res = db.table("bus_notifications").select("id, identifier, identifier_type, triggers, label, is_active, fired_count, last_fired_at, created_at, user_session").eq("user_session", user_session_val).order("created_at", desc=True).limit(20).execute()
+        else:
+            return jsonify({"status": "error", "rules": []})
         return jsonify({"status": "success", "rules": res.data or []})
     except Exception as e:
         return jsonify({"status": "error", "rules": [], "message": str(e)})

@@ -896,6 +896,7 @@ window.openNotifModal = function(busId) {
   }
   // Načti info o doručení (discord/email) z API
   fetch('/api/notifications/delivery_info').then(r=>r.json()).then(d=>{
+    window._deliveryInfo = d;
     let dd = document.getElementById('notif-delivery-discord');
     let de = document.getElementById('notif-delivery-email');
     let dn = document.getElementById('notif-delivery-none');
@@ -906,15 +907,99 @@ window.openNotifModal = function(busId) {
     if(dd) { 
       dd.style.display = d.has_discord ? 'flex' : 'none'; 
       if (!d.has_discord && cbDiscord) cbDiscord.checked = false;
+      else if (d.has_discord && cbDiscord && !cbEmail?.checked) cbDiscord.checked = true;
     }
     if(de) { 
       de.style.display = d.has_email ? 'flex' : 'none'; 
       if (!d.has_email && cbEmail) cbEmail.checked = false;
+      else if (d.has_email && cbEmail && !d.has_discord) cbEmail.checked = true;
     }
     if(dn) dn.style.display = (!d.has_discord && !d.has_email) ? 'inline-block' : 'none';
     let adm = document.getElementById('notif-admin-target-container');
     if(adm) adm.style.display = d.is_admin ? 'block' : 'none';
+    if(window.updateAdminTargetChannel) window.updateAdminTargetChannel();
   }).catch(()=>{});
+
+  window.updateAdminTargetChannel = function() {
+    let isOverride = !!document.getElementById('nt-admin-override')?.checked;
+    let targetBox = document.getElementById('notif-admin-target-input-box');
+    if (targetBox) targetBox.style.display = isOverride ? 'block' : 'none';
+
+    let targetInput = document.getElementById('notif-admin-target');
+    let targetVal = (targetInput?.value || '').trim();
+    
+    let dd = document.getElementById('notif-delivery-discord');
+    let de = document.getElementById('notif-delivery-email');
+    let dn = document.getElementById('notif-delivery-none');
+    let autoInfo = document.getElementById('notif-admin-auto-channel-info');
+    let cbDiscord = document.getElementById('nt-deliv-discord');
+    let cbEmail = document.getElementById('nt-deliv-email');
+    let dLbl = document.getElementById('nt-deliv-discord-lbl');
+    let eLbl = document.getElementById('nt-deliv-email-lbl');
+
+    if (isOverride) {
+      if (dn) dn.style.display = 'none';
+
+      let isDiscordId = /^\d{15,22}$/.test(targetVal);
+      let isEmail = targetVal.includes('@');
+
+      if (isDiscordId) {
+        if (dd) dd.style.display = 'flex';
+        if (de) de.style.display = 'none';
+        if (cbDiscord) cbDiscord.checked = true;
+        if (cbEmail) cbEmail.checked = false;
+        if (dLbl) dLbl.textContent = `zpráva přímo do DM uživatele (${targetVal})`;
+        if (autoInfo) {
+          autoInfo.style.display = 'block';
+          autoInfo.style.background = 'rgba(88,101,242,0.15)';
+          autoInfo.style.border = '1px solid rgba(88,101,242,0.4)';
+          autoInfo.style.color = '#a5b4fc';
+          autoInfo.innerHTML = `🤖 <b>Automaticky vybráno:</b> Discord DM pro ID <code>${targetVal}</code>`;
+        }
+      } else if (isEmail) {
+        if (dd) dd.style.display = 'none';
+        if (de) de.style.display = 'flex';
+        if (cbDiscord) cbDiscord.checked = false;
+        if (cbEmail) cbEmail.checked = true;
+        if (eLbl) eLbl.textContent = `odeslání na e-mail (${targetVal})`;
+        if (autoInfo) {
+          autoInfo.style.display = 'block';
+          autoInfo.style.background = 'rgba(234,179,8,0.15)';
+          autoInfo.style.border = '1px solid rgba(234,179,8,0.4)';
+          autoInfo.style.color = '#fde047';
+          autoInfo.innerHTML = `📧 <b>Automaticky vybráno:</b> E-mail na <code>${targetVal}</code>`;
+        }
+      } else {
+        if (dd) dd.style.display = 'flex';
+        if (de) de.style.display = 'flex';
+        if (dLbl) dLbl.textContent = 'zpráva od bota přímo do DM';
+        if (eLbl) eLbl.textContent = 'odeslání na e-mail uživatele';
+        if (autoInfo) {
+          autoInfo.style.display = 'block';
+          autoInfo.style.background = 'rgba(56,189,248,0.1)';
+          autoInfo.style.border = '1px solid rgba(56,189,248,0.3)';
+          autoInfo.style.color = '#38bdf8';
+          autoInfo.innerHTML = `💡 Zadej Discord ID (číslo) nebo e-mail uživatele – kanál se spáruje sám.`;
+        }
+      }
+    } else {
+      if (targetInput) targetInput.value = '';
+      if (autoInfo) autoInfo.style.display = 'none';
+      if (dLbl) dLbl.textContent = 'zpráva od bota přímo do DM';
+      if (eLbl) eLbl.textContent = 'odeslání na tvůj registrovaný e-mail';
+      let d = window._deliveryInfo || {};
+      if (dd) {
+        dd.style.display = d.has_discord ? 'flex' : 'none';
+        if (cbDiscord) cbDiscord.checked = !!d.has_discord;
+      }
+      if (de) {
+        de.style.display = d.has_email ? 'flex' : 'none';
+        if (cbEmail) cbEmail.checked = (!d.has_discord && !!d.has_email);
+      }
+      if (dn) dn.style.display = (!d.has_discord && !d.has_email) ? 'inline-block' : 'none';
+    }
+  };
+
   // Načti vozovny do selectboxů
   fetch('/api/depot_zones').then(r=>r.json()).then(d=>{
     if(d.zones) {
@@ -960,8 +1045,18 @@ async function loadNotifRules() {
       if(t.delay_change) t_list.push("Změna zpoždění");
       let t_str = t_list.join(", ") || "Žádné";
 
+      let uTag = '';
+      if (rule.user_session) {
+        let us = String(rule.user_session);
+        if (us.startsWith('admin_direct_discord_')) {
+          uTag = `<span style="background:rgba(88,101,242,0.2);color:#818cf8;border:1px solid rgba(88,101,242,0.4);border-radius:4px;padding:2px 6px;font-size:10px;margin-left:6px;">DM: ${us.replace('admin_direct_discord_','')}</span>`;
+        } else if (us.startsWith('admin_direct_email_')) {
+          uTag = `<span style="background:rgba(234,179,8,0.2);color:#fbbf24;border:1px solid rgba(234,179,8,0.4);border-radius:4px;padding:2px 6px;font-size:10px;margin-left:6px;">E-mail: ${us.replace('admin_direct_email_','')}</span>`;
+        }
+      }
+
       row.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;">
-        <span style="color:#e2e8f0;"><b>${rule.label||rule.identifier}</b> <span style="color:#64748b;">(${rule.identifier})</span> <span style="color:#38bdf8;margin-left:6px;">🔔 ${fired}x</span></span>
+        <span style="color:#e2e8f0;"><b>${rule.label||rule.identifier}</b> <span style="color:#64748b;">(${rule.identifier})</span>${uTag} <span style="color:#38bdf8;margin-left:6px;">🔔 ${fired}x</span></span>
         <span style="color:#94a3b8;font-size:11px;">Události: ${t_str}</span>
         </div>
         <button onclick="deleteNotifRule('${rule.id}')" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid #ef4444;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;align-self:flex-start;">✕</button>`;
@@ -1010,15 +1105,35 @@ async function saveNotifRule(isOneTime = true) {
     delay_threshold: document.getElementById('nt-delay-thresh')?.checked ? parseInt(document.getElementById('nt-delay-val')?.value || '0') : false,
     delay_change: document.getElementById('nt-delay-change')?.checked || false,
   };
+  let isOverride = !!document.getElementById('nt-admin-override')?.checked;
+  let targetUser = isOverride && document.getElementById('notif-admin-target') ? document.getElementById('notif-admin-target').value.trim() : "";
+
   let deliveryChannels = [];
   if (document.getElementById('nt-deliv-discord')?.checked) deliveryChannels.push('discord');
   if (document.getElementById('nt-deliv-email')?.checked) deliveryChannels.push('email');
   
-  let targetUser = document.getElementById('notif-admin-target') ? document.getElementById('notif-admin-target').value.trim() : "";
+  if (targetUser) {
+    if (/^\d{15,22}$/.test(targetUser) && !deliveryChannels.includes('discord')) {
+      deliveryChannels.push('discord');
+    } else if (targetUser.includes('@') && !deliveryChannels.includes('email')) {
+      deliveryChannels.push('email');
+    }
+    if (deliveryChannels.length === 0) {
+      if (/^\d+$/.test(targetUser)) deliveryChannels.push('discord');
+      else if (targetUser.includes('@')) deliveryChannels.push('email');
+    }
+  }
 
   if(!identifier) { showNotifMsg('Zadej SPZ nebo Bus ID', false); return; }
   if(!Object.values(triggers).some(v => v && v !== '')) { showNotifMsg('Vyber alespoň jeden trigger', false); return; }
-  if(deliveryChannels.length === 0) { showNotifMsg('Vyber alespoň jeden kanál pro doručení', false); return; }
+  if(deliveryChannels.length === 0) {
+    if (isOverride && !targetUser) {
+      showNotifMsg('Zadej Discord ID nebo e-mail cílového uživatele', false);
+    } else {
+      showNotifMsg('Vyber alespoň jeden kanál pro doručení', false);
+    }
+    return;
+  }
   
   showNotifMsg('⏳ Ukládám...', true);
   try {
@@ -1032,6 +1147,7 @@ async function saveNotifRule(isOneTime = true) {
       let sn=document.getElementById('nt-stop-name'); if(sn) sn.value='';
       let sc=document.getElementById('nt-stop-container'); if(sc) sc.style.display='none';
       let tu=document.getElementById('notif-admin-target'); if(tu) tu.value='';
+      let ao=document.getElementById('nt-admin-override'); if(ao) { ao.checked=false; window.updateAdminTargetChannel && window.updateAdminTargetChannel(); }
     } else {
       showNotifMsg('❌ ' + (d.message||'Chyba'), false);
     }
