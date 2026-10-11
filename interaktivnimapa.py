@@ -40,7 +40,7 @@ SPZ_BEARING_MAX_DIFF     = 75      # max rozdil smer (deg) pro bearing bonus fak
 SPZ_MIN_MOVE_MINUTES     = 2       # bus musi jet alespon N minut nez se provede prvni SPZ parovani
 SPZ_CACHE_FLUSH_SEC      = 300     # jak casto zapisovat spz_cache do Supabase (sekundy) - 5 min
 # Stavy (color_class), pri kterych se ZAKAZUJE hledani nove SPZ z Arrivy
-SPZ_BLOCKED_COLORS = frozenset({'bg-bug', 'bg-blue', 'bg-purple', 'bg-gray'})
+SPZ_BLOCKED_COLORS = frozenset({'bg-bug', 'bg-blue', 'bg-purple', 'bg-gray', 'bg-lastpos'})
 GHOST_MAX_OFFLINE_MIN = 20
 GHOST_DIST_STRICT     = 0.010
 DUPLICATE_GRACE_SEC   = 120
@@ -417,6 +417,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 .pr:last-child{border-bottom:none;}
 .pl{color:#94a3b8;font-weight:600;}.pv{font-weight:bold;text-align:right;max-width:60%;word-wrap:break-word;}
 .spz-b{background:#f59e0b;color:#0f172a;padding:2px 6px;border-radius:4px;font-size:12px;border:1px solid #d97706;}
+.bg-lastpos{background:linear-gradient(135deg,#181820 0%,#2a1f2d 100%) !important;border:1.5px solid #f472b6 !important;color:#fbcfe8 !important;box-shadow:0 0 10px rgba(244,114,182,0.35) !important;}
 .pa{background:#38bdf8;color:#0f172a;border:none;padding:8px;width:100%;border-radius:5px;font-weight:bold;cursor:pointer;transition:.2s;margin-top:7px;display:block;text-align:center;font-size:12px;}
 .pa:hover{background:#0284c7;color:#fff;}
 .pa-d{background:#334155;color:#fff;}.pa-d:hover{background:#475569;}
@@ -658,7 +659,8 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
       <span style="color:#ef4444;">● Červená:</span> Zpoždění 5 minut a více<br>
       <span style="color:#a855f7;">● Fialová:</span> Vozidlo dojelo na konečnou zastávku<br>
       <span style="color:#94a3b8;">● Šedá:</span> Vozidlo je aktuálně odstaveno<br>
-      <span style="color:#facc15;">● Žlutá:</span> Vozidlo se nachází ve vozovně (depu)<br><br>
+      <span style="color:#facc15;">● Žlutá:</span> Vozidlo se nachází ve vozovně (depu)<br>
+      <span style="color:#f472b6;">● Černo-šedo-růžová:</span> Poslední známá poloha (vůz zmizel z mapy pvvd.idpk.cz)<br><br>
       <b>Tipy a triky pro uživatele:</b><br>
       V detailu každého vozidla (po kliknutí na jeho ikonu) naleznete přímý odkaz na jeho kartu na webu <b>seznam-autobusu.cz</b>.<br><br>
       Zajímá vás aktuální dění ve vozovnách? Připojte se na náš <b>Discord</b>, kde je vyhrazen speciální kanál 🅿️・vozovna.
@@ -2127,7 +2129,8 @@ function updateHud(b){
   }
   else{se.innerHTML='<span style="color:#64748b;">Ceka...</span>';}
   let de=document.getElementById('h-delay'),dv=parseInt(b.delay);
-  if(b.color_class==='bg-blue'){let dm=Math.abs(dv),dh=Math.floor(dm/60),dmin=dm%60;de.innerHTML=`<span style="color:#3b82f6;">Odjezd za ${dh>0?dh+'h ':''} ${dmin}min</span>`;}
+  if(b.color_class==='bg-lastpos')de.innerHTML=`<span style="color:#f472b6;font-weight:bold;">Poslední poloha</span>`;
+  else if(b.color_class==='bg-blue'){let dm=Math.abs(dv),dh=Math.floor(dm/60),dmin=dm%60;de.innerHTML=`<span style="color:#3b82f6;">Odjezd za ${dh>0?dh+'h ':''} ${dmin}min</span>`;}
   else if(b.color_class==='bg-darkblue')de.innerHTML=`<span style="color:#60a5fa;">Naskok ${Math.abs(dv)} min</span>`;
   else if(b.color_class==='bg-orange')de.innerHTML=`<span style="color:#f59e0b;">Vyzkum</span>`;
   else if(dv>=5)de.innerHTML=`<span style="color:#ef4444;">+${dv} min</span>`;
@@ -2159,13 +2162,37 @@ function checkSW(uptimeSec){
 
 // === SVG MARKER ===
 function buildMarkerSvg(mc,bearing,lineText,isTrain){
-  const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151'};
+  const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151','bg-lastpos':'#1a1820'};
   let bgC=cM[mc]||'#64748b';
   const cx=18,cy=18;
   
   if (isTrain) {
     let tr = 11;
-    let si = `<rect x="${cx-tr}" y="${cy-tr}" width="${tr*2}" height="${tr*2}" rx="3" fill="${bgC}" stroke="white" stroke-width="2" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.6));"/>`;
+    let sCol = mc === 'bg-lastpos' ? '#f472b6' : 'white';
+    let si = `<rect x="${cx-tr}" y="${cy-tr}" width="${tr*2}" height="${tr*2}" rx="3" fill="${bgC}" stroke="${sCol}" stroke-width="2" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.6));"/>`;
+    return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
+  }
+
+  // Speciální černo-šedo-růžový marker pro poslední známou polohu
+  if (mc === 'bg-lastpos') {
+    let lC=String(lineText||'').split('/')[0].trim().replace(/[^0-9]/g,'');
+    let lD=lC.length>=4?lC.slice(-3):lC;
+    const r=12;
+    let si=`<circle cx="${cx+1}" cy="${cy+1}" r="${r}" fill="rgba(0,0,0,0.55)"/>`;
+    // Černé jádro s výrazným růžovým okrajem a jemnou září
+    si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#1a1820" stroke="#f472b6" stroke-width="2.4" style="filter: drop-shadow(0 0 4px rgba(244,114,182,0.6));"/>`;
+    // Vnitřní šedý kroužek
+    si+=`<circle cx="${cx}" cy="${cy}" r="${r-3.2}" fill="none" stroke="#64748b" stroke-width="1.2" stroke-dasharray="2.5,1.8" opacity="0.9"/>`;
+    if(lD){
+      if(lD.length>3){
+        si+=`<text x="${cx}" y="${cy-2.5}" dominant-baseline="middle" text-anchor="middle" fill="#fbcfe8" font-weight="900" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(0,3)}</text>`;
+        si+=`<text x="${cx}" y="${cy+5.5}" dominant-baseline="middle" text-anchor="middle" fill="#fbcfe8" font-weight="900" font-size="6" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(3)}</text>`;
+      }else{
+        si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="#fbcfe8" font-weight="900" font-size="8" font-family="'Segoe UI',system-ui,sans-serif">${lD}</text>`;
+      }
+    }else{
+      si+=`<circle cx="${cx}" cy="${cy}" r="3" fill="#f472b6"/>`;
+    }
     return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
   }
 
@@ -2174,7 +2201,7 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain){
   let lD=lC.length>=4?lC.slice(-3):lC;
   const r=12;
   let si='';
-  const hB=bearing!==null&&bearing!==undefined&&!['bg-gray','bg-purple','bg-bug'].includes(mc);
+  const hB=bearing!==null&&bearing!==undefined&&!['bg-gray','bg-purple','bg-bug','bg-lastpos'].includes(mc);
   if(hB){
     const rad=(bearing*Math.PI)/180;
     const tX=+(cx+Math.sin(rad)*(r+10)).toFixed(2),tY=+(cy-Math.cos(rad)*(r+10)).toFixed(2);
@@ -2540,7 +2567,7 @@ function _renderRoute(busId,data,btn){
   let bus=lastArr.find(b=>b.id===busId);
   let delay=bus?parseInt(bus.delay||0):0;
   let status=bus?bus.color_class:'bg-gray';
-  let isBug=status==='bg-bug'||status==='bg-gray';
+  let isBug=status==='bg-bug'||status==='bg-gray'||status==='bg-lastpos';
   let isFinished=status==='bg-purple';
   let futColor = isFinished ? '#a855f7' : isBug ? '#64748b' : delay >= 5 ? '#ef4444' : '#3b82f6';
   let pastColor=isBug||isFinished?'#6b7280':'#64748b';
@@ -3265,7 +3292,7 @@ function spzSearch(val){
   if(val.length<2){box.innerHTML='';return;}
   let matches=lastArr.filter(b=>b.spz&&b.spz!=='Neznama'&&b.spz.toUpperCase().includes(val));
   if(matches.length===0){box.innerHTML='<div style="padding:10px;color:#64748b;font-size:12px;text-align:center;">Zadne vysledky</div>';return;}
-  const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151'};
+  const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151','bg-lastpos':'#f472b6'};
   box.innerHTML=matches.slice(0,8).map(b=>`<div class="sr-item" onclick="zoomToSpz(${b.lat},${b.lng},'${b.id}')"><div style="width:10px;height:10px;border-radius:50%;background:${cM[b.color_class]||'#64748b'};flex-shrink:0;"></div><div><strong style="color:#f59e0b;">${b.spz}</strong><span style="color:#94a3b8;margin-left:5px;">L${b.line||'?'}</span><br><span style="color:#64748b;font-size:10px;">${b.status||''}</span></div></div>`).join('');
 }
 function zoomToSpz(lat,lng,busId){
@@ -3306,7 +3333,8 @@ async function fetchBuses(){
       if(!bus.lat||!bus.lng)return;
       currentBusIds.add(bus.id);
       let mc=bus.color_class,dv=parseInt(bus.delay),dTxt='';
-      if(mc==='bg-gray'||mc==='bg-bug')dTxt='<span style="color:#94a3b8;">N/A</span>';
+      if(mc==='bg-lastpos')dTxt='<span style="color:#f472b6;font-weight:bold;">Poslední poloha</span>';
+      else if(mc==='bg-gray'||mc==='bg-bug')dTxt='<span style="color:#94a3b8;">N/A</span>';
       else if(mc==='bg-purple')dTxt='<span style="color:#a855f7;">Konečná</span>';
       else if(mc==='bg-orange')dTxt='<span style="color:#f59e0b;">Vyzkum</span>';
       else if(mc==='bg-blue'){let dm=Math.abs(dv),dh=Math.floor(dm/60),dmn=dm%60;dTxt=`<span style="color:#3b82f6;">Za ${dh>0?dh+'h '+dmn+'m':dmn+' min'}</span>`;}
@@ -3314,9 +3342,9 @@ async function fetchBuses(){
       else if(dv>=5)dTxt=`<span style="color:#ef4444;">Zpozdeni ${dv} min</span>`;
       else dTxt=`<span style="color:#10b981;">+${dv} min</span>`;
 
-      // Barveni markeru: depot_color ma prednost pred color_class
+      // Barveni markeru: depot_color ma prednost pred color_class (krome bg-lastpos)
       let markerColor=mc;
-      if(bus.in_depot){
+      if(bus.in_depot && markerColor !== 'bg-lastpos'){
         markerColor='bg-yellow';
       }
       let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,bus.is_train),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
@@ -3337,6 +3365,11 @@ async function fetchBuses(){
         }
         else spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Ceka na overeni</span></div>`;
       }
+      let lastposW='';
+      if(mc==='bg-lastpos'||bus.status==='Poslední známá poloha'){
+        let tOffline = bus.offline_since_time ? ` v ${bus.offline_since_time}` : '';
+        lastposW=`<div style="background:linear-gradient(135deg,rgba(24,24,32,0.95),rgba(45,30,45,0.95));border:1.5px solid #f472b6;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 10px rgba(244,114,182,0.25);"><b style="color:#f472b6;font-size:12px;letter-spacing:0.5px;">📍 POSLEDNÍ ZNÁMÁ POLOHA</b><br><span style="color:#cbd5e1;font-size:10px;">Vůz zmizel z mapy pvvd.idpk.cz${tOffline}. Ponechán na stejné pozici, než se znovu objeví.</span></div>`;
+      }
       let bugW='';
       if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#3f0000;border:2px solid #ef4444;border-radius:5px;padding:8px;margin:5px 0;font-size:11px;text-align:center;"><b style="color:#ef4444;font-size:13px;letter-spacing:.5px;">\u26d4 NEN\u00cd RE\u00c1LN\u00c1 POLOHA</b><br><span style="color:#fca5a5;font-weight:bold;">PRAVD\u011aPODOBN\u011a BUG NEBO POSLEDN\u00cd ZN\u00c1M\u00c1 POZICE</span><br><span style="color:#94a3b8;font-size:10px;">Pravd\u011bpodobn\u011b SPZ <b style="color:#fbbf24;">${bS}</b> \u2013 pozice nemus\u00ed odpov\u00eddat realit\u011b</span></div>`;}
       let orangeW='';
@@ -3346,7 +3379,8 @@ async function fetchBuses(){
       if(bus.in_depot&&bus.depot_name){let dCol=bus.depot_color||'#facc15';depotW=`<div style="background:rgba(${hexToRgb(dCol)},0.12);border:1px solid ${dCol};border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:${dCol};"><b>🅿️ ${bus.depot_name}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny</span></div>`;}
       else if(mc==='bg-yellow'||bus.status?.startsWith('Vozovna'))depotW=`<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🅿️ ${bus.status||'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny</span></div>`;
       let sc='#10b981';
-      if(mc==='bg-bug')sc='#6b7280';else if(mc==='bg-orange')sc='#f59e0b';
+      if(mc==='bg-lastpos'||bus.status==='Poslední známá poloha')sc='#f472b6';
+      else if(mc==='bg-bug')sc='#6b7280';else if(mc==='bg-orange')sc='#f59e0b';
       else if(mc==='bg-yellow')sc='#facc15';
       else if(bus.status?.includes('prilis'))sc='#94a3b8';else if(bus.status?.includes('Stoji'))sc='#ef4444';
       else if(bus.status?.includes('Konečná')||bus.status?.includes('Ztrata'))sc='#a855f7';
@@ -3360,14 +3394,14 @@ async function fetchBuses(){
       let rA=(activeRouteId===bus.id);
 
       let popH=`
-        <div class="ph" style="${mc==='bg-bug'?'background:#1f2937;':''}${mc==='bg-orange'?'background:#1c1400;':''}">
-          <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}${mc==='bg-orange'?'color:#f59e0b;':''}; display:flex; justify-content:space-between; align-items:center;">
+        <div class="ph" style="${mc==='bg-bug'?'background:#1f2937;':''}${mc==='bg-orange'?'background:#1c1400;':''}${mc==='bg-lastpos'?'background:linear-gradient(90deg,#181820,#2e1e2c);border-bottom:1px solid #f472b6;':''}">
+          <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}${mc==='bg-orange'?'color:#f59e0b;':''}${mc==='bg-lastpos'?'color:#fbcfe8;':''}; display:flex; justify-content:space-between; align-items:center;">
             <span>Spoj: ${bus.real_linka_spoj || bus.line}${afH}</span>
             <span style="font-size:10px; color:#64748b; font-weight:normal; letter-spacing:0.5px;">#${bus.id}</span>
           </h3>
         </div>
         <div class="pb">
-          ${bugW}${orangeW}${depotW}
+          ${lastposW}${bugW}${orangeW}${depotW}
           ${(bus.admin_note && typeof bus.admin_note === 'string' && bus.admin_note.trim() !== '' && !bus.is_train)?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
           ${(bus.admin_driver && typeof bus.admin_driver === 'string' && bus.admin_driver.trim() !== '' && !bus.is_train)?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
           <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination||'Neznamy'}</span></div>
@@ -3447,6 +3481,7 @@ async function fetchBuses(){
               <input type="text" id="adm_st_${bus.id}" value="${cSt}" data-orig="${bus.status}" placeholder="Status text..." class="adm-inp">
               <select id="adm_col_${bus.id}" class="adm-inp" style="margin-top:6px;">
                 <option value="">-- Výchozí barva --</option>
+                <option value="bg-lastpos" ${bus.color_class==='bg-lastpos'?'selected':''}>Černo-šedo-růžová (Poslední známá poloha)</option>
                 <option value="bg-gray" ${bus.color_class==='bg-gray'?'selected':''}>Šedá</option>
                 <option value="bg-blue" ${bus.color_class==='bg-blue'?'selected':''}>Světle modrá</option>
                 <option value="bg-darkblue" ${bus.color_class==='bg-darkblue'?'selected':''}>Tmavě modrá</option>
@@ -4819,8 +4854,8 @@ def background_map_worker():
                     admin_verified=row.get("admin_verified", False)
                 )
                 ghost_entry["is_offline"] = True
-                ghost_entry["color_class"] = row.get("color_class") or "bg-gray"
-                ghost_entry["status"] = row.get("status_text") or "Obnoven po restartu"
+                ghost_entry["color_class"] = row.get("color_class") or "bg-lastpos"
+                ghost_entry["status"] = row.get("status_text") or "Poslední známá poloha"
                 ghost_entry["admin_note"] = row.get("admin_note") or ""
                 ghost_entry["admin_driver"] = row.get("admin_driver") or ""
                 ghost_entry["admin_flag"] = row.get("admin_flag", False)
@@ -5001,7 +5036,7 @@ def background_map_worker():
                                 if not (gc.get("is_offline") and gc.get("spz") and gc["spz"] != "Nezn\u00e1m\u00e1"):
                                     continue
                                 oa_min = (now - gc["last_inflow_seen"]).total_seconds() / 60.0
-                                if oa_min > 1080:
+                                if oa_min > 4320:
                                     continue
                                 gd = math.hypot(lat1 - gc["lat"], lng1 - gc["lng"])
                                 lm = is_same_line(line, gc["line"])
@@ -5037,9 +5072,9 @@ def background_map_worker():
                                 nb["admin_driver"] = ghost_admin_driver
                                 nb["admin_flag"] = ghost_admin_flag
                                 nb["manual_spz"] = ghost_manual_spz
-                                if ghost_color_class and ghost_color_class != "bg-gray":
+                                if ghost_color_class and ghost_color_class not in ("bg-gray", "bg-lastpos"):
                                     nb["color_class"] = ghost_color_class
-                                if ghost_status and ghost_status != "Načítání...":
+                                if ghost_status and ghost_status not in ("Načítání...", "Poslední známá poloha"):
                                     nb["status"] = ghost_status
                             
                             if bus_id in ADMIN_SPZ_LOCKS:
@@ -5065,6 +5100,11 @@ def background_map_worker():
                             c["is_offline"] = False
                             c["raw_delay"] = delay
                             c["is_train"] = is_train
+                            c.pop("offline_since_time", None)
+                            if c.get("color_class") == "bg-lastpos":
+                                c["color_class"] = "bg-green"
+                            if c.get("status") == "Poslední známá poloha":
+                                c["status"] = "Jízda"
                             if "last_moved_lat" not in c:
                                 c["last_moved_lat"] = c["lat"]
                                 c["last_moved_lng"] = c["lng"]
@@ -5222,6 +5262,23 @@ def background_map_worker():
                             bc["investigation_start"] = None
                             bc["spz_stable_ticks"] = 0
 
+            # ── Odstraneni starych offline zaznamu, pokud se vuz objevil zive na mape ──
+            active_spzs = {
+                bc["spz"]: bid for bid, bc in GLOBAL_BUS_CACHE.items()
+                if not bc.get("is_offline") and bc.get("spz") and bc["spz"] not in ("Neznámá", "Nezn\u00e1m\u00e1")
+            }
+            for bid, bc in list(GLOBAL_BUS_CACHE.items()):
+                if bc.get("is_offline") and bc.get("spz") in active_spzs:
+                    new_active_bid = active_spzs[bc["spz"]]
+                    if new_active_bid != bid:
+                        nbc = GLOBAL_BUS_CACHE.get(new_active_bid)
+                        if nbc and bc.get("admin_flag") and not nbc.get("admin_flag"):
+                            nbc["admin_flag"] = True
+                            nbc["admin_note"] = bc.get("admin_note", "")
+                            nbc["admin_driver"] = bc.get("admin_driver", "")
+                            nbc["admin_spz_verified"] = bc.get("admin_spz_verified", False)
+                        del GLOBAL_BUS_CACHE[bid]
+
             # ── Offline + timeouty ────────────────────────────────────────────────────────
             for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
                 om = (now - c["last_inflow_seen"]).total_seconds() / 60.0
@@ -5248,7 +5305,8 @@ def background_map_worker():
                     del GLOBAL_BUS_CACHE[bus_id]
                     continue
                 if bus_id not in current_inflow_ids:
-                    if om > 1080:
+                    # Po 7 dnech (10080 min) neaktivity bez signalu teprve cisti z cache
+                    if om > 10080:
                         upsert_to_history(db_client, c)
                         if bus_id in DEPOT_ACTIVE_SESSIONS:
                             try:
@@ -5258,38 +5316,32 @@ def background_map_worker():
                             DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
                         del GLOBAL_BUS_CACHE[bus_id]
                         continue
+
                     c["is_offline"] = True
-                    spz_ok = bool(c.get("spz") and c.get("spz") != "Nezn\u00e1m\u00e1")
+                    spz_ok = bool(c.get("spz") and c.get("spz") not in ("Neznámá", "Nezn\u00e1m\u00e1"))
                     # === SPZ MEMORY: uloz posledni PVVD pozici pro offline bus ===
                     if spz_ok and c.get("spz") in SPZ_MEMORY:
                         SPZ_MEMORY[c["spz"]]["last_pvvd_lat"] = c["lat"]
                         SPZ_MEMORY[c["spz"]]["last_pvvd_lng"] = c["lng"]
                         SPZ_MEMORY[c["spz"]]["last_pvvd_time"] = now
                         SPZ_MEMORY[c["spz"]]["last_pvvd_bus_id"] = bus_id
-                    if om >= 120:
-                        c["status"] = "Stoj\u00ed v depu / Vozovn\u011b"
-                        c["color_class"] = "bg-gray"
-                        c["raw_delay"] = 0
-                        c["spz_locked"] = True
-                        if spz_ok:
-                            c["spz_frozen"] = True   # máme SPZ - zamraž ji, bude vidět i v depu
-                    elif om >= 15:
-                        c["status"] = "Odstaven (Bez sign\u00e1lu)"
-                        c["color_class"] = "bg-gray"
-                        c["raw_delay"] = 0
-                        c["spz_locked"] = True
-                        if spz_ok:
-                            c["spz_frozen"] = True
-                    elif om > 2:
-                        if not c["actual_end_time"]:
+
+                    if om >= 2.0:
+                        if not c.get("offline_since_time"):
+                            c["offline_since_time"] = now.strftime('%H:%M')
+                        if not c.get("actual_end_time"):
                             c["actual_end_time"] = now.strftime('%H:%M')
-                        c["status"] = f"Odstaven ({int(om)} min)"
-                        c["color_class"] = "bg-gray"
+                        
+                        if not c.get("admin_lock_display"):
+                            c["status"] = "Poslední známá poloha"
+                            c["color_class"] = "bg-lastpos"
+                        
                         c["raw_delay"] = 0
+                        c["final_delay_display"] = 0
                         c["spz_locked"] = True
                         if spz_ok:
                             c["spz_frozen"] = True
-                        if om < 4:
+                        if om < 4.0:
                             upsert_to_history(db_client, c)
 
             # ── Statusy, barvy, SPZ parovani ─────────────────────────────────────────────
@@ -5460,7 +5512,8 @@ def background_map_worker():
                         "admin_flag": c.get("admin_flag", False), "admin_note": c.get("admin_note", ""), "admin_driver": c.get("admin_driver", ""),
                         "in_depot": c.get("_in_depot", False),
                         "depot_name": c.get("_depot_name"),
-                        "depot_color": c.get("_depot_color")
+                        "depot_color": c.get("_depot_color"),
+                        "offline_since_time": c.get("offline_since_time", "")
                     })
                     continue
 
@@ -5867,6 +5920,11 @@ def background_map_worker():
                     depot_name = c.get("_depot_name", "Vozovna")
                     c["color_class"] = "bg-yellow"
                     c["status"] = f"Vozovna: {depot_name}"
+                elif c.get("is_offline"):
+                    if not c.get("admin_lock_display"):
+                        c["status"] = "Poslední známá poloha"
+                        c["color_class"] = "bg-lastpos"
+                    c["final_delay_display"] = 0
                 else:
                     is_before_departure = False
                     time_to_dep = 0
