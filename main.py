@@ -128,6 +128,11 @@ def add_security_headers(response):
 
 @app.after_request
 def inject_announcement(response):
+    try:
+        from daily_reporter import TRACKER
+        TRACKER.record_request(response.status_code, request.path)
+    except Exception:
+        pass
     if response.content_type and 'text/html' in response.content_type:
         path = request.path
         try:
@@ -161,9 +166,9 @@ def inject_announcement(response):
                     if skip:
                         continue
                         
-                    urls = [u.strip() for u in a.get('urls', '').split(',')]
+                    urls = [u.strip() for u in a.get('urls', '').split(',') if u.strip()]
                     for u in urls:
-                        if u and path.startswith(u):
+                        if u in ('*', 'all', 'vse') or path == u or path.startswith(u) or (not u.startswith('/') and path.startswith('/' + u)):
                             active_announcements.append(a)
                             break
             else:
@@ -173,9 +178,9 @@ def inject_announcement(response):
                 a_active = get_cached_setting('announcement_active', 'false')
                 
                 if a_active == 'true' and a_url and a_text:
-                    urls = [u.strip() for u in a_url.split(',')]
+                    urls = [u.strip() for u in a_url.split(',') if u.strip()]
                     for u in urls:
-                        if u and path.startswith(u):
+                        if u in ('*', 'all', 'vse') or path == u or path.startswith(u) or (not u.startswith('/') and path.startswith('/' + u)):
                             active_announcements.append({"title": a_title, "text": a_text, "id": "legacy"})
                             break
 
@@ -246,6 +251,11 @@ def handle_exception(e):
     err_str = str(e)
     tb = traceback.format_exc()
     print('[ERROR 500]', tb, flush=True)
+    try:
+        from daily_reporter import TRACKER
+        TRACKER.record_request(500, request.path, err_str)
+    except Exception:
+        pass
     
     # Zalogovat na discord (max 2000 znaků pro Discord embed description)
     try:
@@ -3978,8 +3988,16 @@ async def check_notification_queue():
                     else:
                         await user.send(dm_text)
                     print(f"[NOTIF DM] Odesláno DM uživateli {discord_id}", flush=True)
+                    try:
+                        from daily_reporter import TRACKER
+                        TRACKER.record_notification("discord", True)
+                    except Exception: pass
                 except Exception as e:
                     print(f"[NOTIF DM] Chyba při odesílání DM {discord_id}: {e}", flush=True)
+                    try:
+                        from daily_reporter import TRACKER
+                        TRACKER.record_notification("discord", False, str(e))
+                    except Exception: pass
             
             # Pošli Email
             email = item.get("email")
@@ -3987,8 +4005,16 @@ async def check_notification_queue():
                 try:
                     await asyncio.to_thread(send_notification_email_sync, email, embed_data, dm_text)
                     print(f"[NOTIF EMAIL] Odeslán e-mail uživateli {email}", flush=True)
+                    try:
+                        from daily_reporter import TRACKER
+                        TRACKER.record_notification("email", True)
+                    except Exception: pass
                 except Exception as e:
                     print(f"[NOTIF EMAIL] Chyba při odesílání emailu {email}: {e}", flush=True)
+                    try:
+                        from daily_reporter import TRACKER
+                        TRACKER.record_notification("email", False, str(e))
+                    except Exception: pass
     except Exception as e:
         print(f"[NOTIF DM] Chyba fronty: {e}", flush=True)
 
@@ -4153,6 +4179,55 @@ async def keepalive_ping():
         await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
     except: pass
 
+_LAST_DAILY_REPORT_DATE = None
+
+@tasks.loop(minutes=1)
+async def check_daily_report_schedule():
+    """Každý den ve 23:59 odesílá denní AI report celého systému do logu."""
+    global _LAST_DAILY_REPORT_DATE
+    try:
+        now_prague = get_prague_time()
+        today_str = now_prague.strftime("%Y-%m-%d")
+        if now_prague.hour == 23 and now_prague.minute >= 59 and _LAST_DAILY_REPORT_DATE != today_str:
+            _LAST_DAILY_REPORT_DATE = today_str
+            from daily_reporter import generate_ai_daily_report
+            rep = generate_ai_daily_report()
+            em_data = rep.get("embed")
+            
+            if em_data:
+                em = discord.Embed(
+                    title=em_data.get("title", "📊 Denní Systémový Report"),
+                    description=em_data.get("description", ""),
+                    color=em_data.get("color", 0x10b981),
+                    timestamp=now_prague
+                )
+                for f in em_data.get("fields", []):
+                    em.add_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+                if em_data.get("footer"):
+                    em.set_footer(text=em_data["footer"].get("text", "DataCoreBot"))
+                
+                for guild in bot.guilds:
+                    channel = discord.utils.get(guild.channels, name="🖥️・datacore-logs")
+                    if channel:
+                        try:
+                            await channel.send(embed=em)
+                            break
+                        except Exception as e:
+                            print(f"[DAILY REPORT] Chyba pri odesilani do Discord kanalu: {e}", flush=True)
+
+            try:
+                from interaktivnimapa import sys_log
+                sys_log(f"REPORT DENNÍ: Celková spolehlivost {rep['health']['overall_pct']}% | AI: {rep['ai_summary']}")
+            except Exception:
+                pass
+
+            try:
+                print(rep.get("text_log", ""), flush=True)
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[DAILY REPORT ERROR] {e}", flush=True)
+
 @bot.event
 async def on_ready():
     await _trigger_status_update()
@@ -4204,6 +4279,7 @@ async def on_ready():
     if not keepalive_ping.is_running(): keepalive_ping.start()
     if not check_depot_queue.is_running(): check_depot_queue.start()
     if not check_notification_queue.is_running(): check_notification_queue.start()
+    if not check_daily_report_schedule.is_running(): check_daily_report_schedule.start()
 
     import asyncio
     async def initial_depot_update():
@@ -4915,6 +4991,40 @@ async def cmd_data(ctx, arg: str = None):
             await ctx.send(msg)
     except Exception as e:
         await ctx.send(f"Chyba při čtení dat: {e}")
+
+@bot.command(name="dailyreport", aliases=["report", "dennireport", "statusreport"])
+async def cmd_dailyreport(ctx):
+    """Ruční vyvolání denního reportu a AI zhodnocení systému v procentech."""
+    try:
+        from daily_reporter import generate_ai_daily_report
+        await ctx.send("⏳ Generuji aktuální systémový report a AI analýzu...")
+        rep = generate_ai_daily_report()
+        em_data = rep.get("embed")
+        if em_data:
+            em = discord.Embed(
+                title=em_data.get("title", "📊 Denní Systémový Report"),
+                description=em_data.get("description", ""),
+                color=em_data.get("color", 0x10b981),
+                timestamp=get_prague_time()
+            )
+            for f in em_data.get("fields", []):
+                em.add_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+            if em_data.get("footer"):
+                em.set_footer(text=em_data["footer"].get("text", "DataCoreBot"))
+            await ctx.send(embed=em)
+        else:
+            await ctx.send(f"```\n{rep.get('text_log', 'Report vygenerován.')}\n```")
+    except Exception as e:
+        await ctx.send(f"Chyba při generování reportu: {e}")
+
+@app.route('/api/admin/daily_report', methods=['GET'])
+def api_admin_daily_report_main():
+    try:
+        from daily_reporter import generate_ai_daily_report
+        rep = generate_ai_daily_report()
+        return jsonify({"status": "success", "report": rep})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 # ═══════════════════════════════════════════════════════════════════════════════
 # STARTUP
 # ═══════════════════════════════════════════════════════════════════════════════

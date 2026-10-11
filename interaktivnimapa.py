@@ -1883,10 +1883,12 @@ window.openNotifModal = function(busId) {
     if(dd) { 
       dd.style.display = d.has_discord ? 'flex' : 'none'; 
       if (!d.has_discord && cbDiscord) cbDiscord.checked = false;
+      else if (d.has_discord && cbDiscord && !cbEmail?.checked) cbDiscord.checked = true;
     }
     if(de) { 
       de.style.display = d.has_email ? 'flex' : 'none'; 
       if (!d.has_email && cbEmail) cbEmail.checked = false;
+      else if (d.has_email && cbEmail && !d.has_discord) cbEmail.checked = true;
     }
     if(dn) dn.style.display = (!d.has_discord && !d.has_email) ? 'inline-block' : 'none';
     let adm = document.getElementById('notif-admin-target-container');
@@ -6069,6 +6071,14 @@ def background_map_worker():
                             pass
 
 
+            # ── Metriky pro denní report ────────────────────────────────
+            try:
+                from daily_reporter import TRACKER
+                bug_c = sum(1 for b in GLOBAL_BUS_CACHE.values() if "BUG" in str(b.get("status", "")).upper())
+                TRACKER.record_map_tick(len(GLOBAL_BUS_CACHE), bug_count=bug_c)
+            except Exception:
+                pass
+
             # ── Notifikace: zkontroluj triggery (kazdych 30s) ─────────────
             global _last_notification_check
             if db_client and (not _last_notification_check or
@@ -6215,8 +6225,29 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 elif str(user_session).startswith("admin_direct_discord_"):
                     _user_cache[user_session] = {"discord_id": user_session.replace("admin_direct_discord_", ""), "email": None}
                 else:
-                    u_res = db_client.table("users").select("discord_id, email").eq("web_session_token", user_session).execute()
-                    _user_cache[user_session] = u_res.data[0] if u_res.data else {}
+                    u_data = None
+                    try:
+                        uid = int(user_session) if str(user_session).isdigit() else user_session
+                        u_res = db_client.table("users").select("discord_id, email").eq("id", uid).execute()
+                        if u_res.data:
+                            u_data = u_res.data[0]
+                    except Exception:
+                        pass
+                    if not u_data:
+                        try:
+                            u_res = db_client.table("users").select("discord_id, email").eq("web_session_token", user_session).execute()
+                            if u_res.data:
+                                u_data = u_res.data[0]
+                        except Exception:
+                            pass
+                    if not u_data:
+                        try:
+                            u_res = db_client.table("users").select("discord_id, email").eq("discord_id", user_session).execute()
+                            if u_res.data:
+                                u_data = u_res.data[0]
+                        except Exception:
+                            pass
+                    _user_cache[user_session] = u_data or {}
             except Exception:
                 _user_cache[user_session] = {}
         u_info = _user_cache[user_session]
@@ -6639,16 +6670,24 @@ def api_notif_create():
 def api_notif_list():
     """Vrátí pravidla notifikací přihlášeného uživatele."""
     cookie_token = request.cookies.get('web_session_token')
-    if not cookie_token:
+    admin_discord_id = session.get('discord_id') if session.get('logged_in') else None
+    if not cookie_token and not admin_discord_id:
         return jsonify({"status": "error", "rules": []})
     db = get_db_client()
     if not db:
         return jsonify({"status": "error", "rules": []})
     try:
-        user_res = db.table("users").select("id").eq("web_session_token", cookie_token).execute()
-        if not user_res.data:
+        user_session_val = None
+        if cookie_token:
+            user_res = db.table("users").select("id").eq("web_session_token", cookie_token).execute()
+            if user_res.data:
+                user_session_val = str(user_res.data[0]["id"])
+        if not user_session_val and admin_discord_id:
+            adm_res = db.table("users").select("id").eq("discord_id", admin_discord_id).execute()
+            if adm_res.data:
+                user_session_val = str(adm_res.data[0]["id"])
+        if not user_session_val:
             return jsonify({"status": "error", "rules": []})
-        user_session_val = str(user_res.data[0]["id"])
         res = db.table("bus_notifications").select("id, identifier, identifier_type, triggers, label, is_active, fired_count, last_fired_at, created_at").eq("user_session", user_session_val).order("created_at", desc=True).limit(20).execute()
         return jsonify({"status": "success", "rules": res.data or []})
     except Exception as e:
@@ -6657,18 +6696,34 @@ def api_notif_list():
 
 @mapa_bp.route('/api/notifications/delete', methods=['POST'])
 def api_notif_delete():
-    """Smaže pravidlo notifikace (pouze vlastní)."""
+    """Smaže pravidlo notifikace (pouze vlastní nebo admin)."""
     cookie_token = request.cookies.get('web_session_token')
-    if not cookie_token:
+    admin_discord_id = session.get('discord_id') if session.get('logged_in') else None
+    if not cookie_token and not admin_discord_id:
         return jsonify({"status": "error", "message": "Musíš být přihlášen/a"}), 401
     db = get_db_client()
     if not db:
         return jsonify({"status": "error", "message": "DB nedostupná"}), 500
     try:
-        user_res = db.table("users").select("id").eq("web_session_token", cookie_token).execute()
-        if not user_res.data:
+        user_session_val = None
+        is_admin = False
+        if cookie_token:
+            user_res = db.table("users").select("id, role").eq("web_session_token", cookie_token).execute()
+            if user_res.data:
+                user_session_val = str(user_res.data[0]["id"])
+                role = user_res.data[0].get("role") or ""
+                if 'SA' in role or 'DEV' in role:
+                    is_admin = True
+        if admin_discord_id:
+            adm_res = db.table("users").select("id, role").eq("discord_id", admin_discord_id).execute()
+            if adm_res.data:
+                if not user_session_val:
+                    user_session_val = str(adm_res.data[0]["id"])
+                role = adm_res.data[0].get("role") or ""
+                if 'SA' in role or 'DEV' in role:
+                    is_admin = True
+        if not user_session_val and not is_admin:
             return jsonify({"status": "error", "message": "Neplatná session"}), 401
-        user_session_val = str(user_res.data[0]["id"])
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
     data = request.get_json(silent=True) or {}
@@ -6676,7 +6731,10 @@ def api_notif_delete():
     if not rule_id:
         return jsonify({"status": "error", "message": "Chybí ID pravidla"}), 400
     try:
-        db.table("bus_notifications").delete().eq("id", rule_id).eq("user_session", user_session_val).execute()
+        q = db.table("bus_notifications").delete().eq("id", rule_id)
+        if not is_admin:
+            q = q.eq("user_session", user_session_val)
+        q.execute()
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -7753,6 +7811,16 @@ def api_admin_report_situace():
 def api_admin_system_logs():
     """Vrati zaznamy o kritickych chybach a padech ze systemu."""
     return jsonify({"status": "success", "logs": list(SYSTEM_LOGS)})
+
+@mapa_bp.route('/api/admin/daily_report')
+def api_admin_daily_report_mapa():
+    """Vrati denni AI report a procentualni zhodnoceni systemu."""
+    try:
+        from daily_reporter import generate_ai_daily_report
+        rep = generate_ai_daily_report()
+        return jsonify({"status": "success", "report": rep})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @mapa_bp.route('/api/admin/spz_debug')
 def api_admin_spz_debug():
