@@ -831,18 +831,21 @@ window.openNotifModal = function(busId) {
   let destination = bus.destination;
 
   _notifCurrentBusId = busId;
-  _notifCurrentSpz = spz;
+  _notifCurrentSpz = (spz && spz !== 'Neznama' && spz !== 'Neznámá') ? spz : '';
   let info = document.getElementById('notif-bus-info');
-  if(info) info.innerHTML = `<b>Linka ${line}</b> → ${destination}${spz&&spz!=='Neznama'?' &nbsp;|&nbsp; SPZ: <b>'+spz+'</b>':''}`;
-  // Předvyplň identifikátor
+  if(info) info.innerHTML = `<b>Linka ${line}</b> → ${destination}${_notifCurrentSpz ? ' &nbsp;|&nbsp; SPZ: <b>'+_notifCurrentSpz+'</b>' : ''} &nbsp;|&nbsp; ID: <code>${busId}</code>`;
+  // Předvyplň identifikátor - nejspecifičtější a nejspolehlivější způsob je unikátní Bus ID, ale SPZ je zachována v popisku i datech
   let inp = document.getElementById('notif-identifier');
   if(inp) {
-    if(spz && spz !== 'Neznama') {
-      inp.value = spz;
-      let r = document.getElementById('notif-type-spz'); if(r) r.checked = true;
+    inp.value = busId;
+    let r = document.getElementById('notif-type-busid'); if(r) r.checked = true;
+  }
+  let lbl = document.getElementById('notif-label');
+  if(lbl) {
+    if (_notifCurrentSpz) {
+      lbl.value = `SPZ: ${_notifCurrentSpz} (Linka ${line})`;
     } else {
-      inp.value = busId;
-      let r = document.getElementById('notif-type-busid'); if(r) r.checked = true;
+      lbl.value = `Linka ${line} (Bus ${busId})`;
     }
   }
   document.getElementById('notif-modal').style.display = 'block';
@@ -1137,7 +1140,7 @@ async function saveNotifRule(isOneTime = true) {
   
   showNotifMsg('⏳ Ukládám...', true);
   try {
-    let r = await fetch('/api/notifications/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({identifier, identifier_type: idType, triggers, label, delivery_channels: deliveryChannels, is_one_time: isOneTime, target_user: targetUser})});
+    let r = await fetch('/api/notifications/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({identifier, identifier_type: idType, bus_id: _notifCurrentBusId, spz: _notifCurrentSpz, triggers, label, delivery_channels: deliveryChannels, is_one_time: isOneTime, target_user: targetUser})});
     let d = await r.json();
     if(d.status==='success') {
       showNotifMsg(d.message || '✅ Pravidlo uloženo!', true);

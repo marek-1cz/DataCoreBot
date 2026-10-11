@@ -28,6 +28,8 @@ except ImportError:
     HAS_SUPABASE = False
     print("[MAPA-WARN] Modul 'supabase' neni dostupny!")
 
+from session_manager import find_user_by_session_token
+
 mapa_bp = Blueprint('mapa_bp', __name__)
 
 SPZ_HOLD_MINUTES      = 8
@@ -1812,18 +1814,21 @@ window.openNotifModal = function(busId) {
   let destination = bus.destination;
 
   _notifCurrentBusId = busId;
-  _notifCurrentSpz = spz;
+  _notifCurrentSpz = (spz && spz !== 'Neznámá' && spz !== 'Neznama') ? spz : '';
   let info = document.getElementById('notif-bus-info');
-  if(info) info.innerHTML = `<b>Linka ${line}</b> → ${destination}${spz&&spz!=='Neznámá'?' &nbsp;|&nbsp; SPZ: <b>'+spz+'</b>':''}`;
-  // Předvyplň identifikátor
+  if(info) info.innerHTML = `<b>Linka ${line}</b> → ${destination}${_notifCurrentSpz ? ' &nbsp;|&nbsp; SPZ: <b>'+_notifCurrentSpz+'</b>' : ''} &nbsp;|&nbsp; ID: <code>${busId}</code>`;
+  // Předvyplň identifikátor - nejspecifičtější a nejspolehlivější způsob je unikátní Bus ID, ale SPZ je zachována v popisku i datech
   let inp = document.getElementById('notif-identifier');
   if(inp) {
-    if(spz && spz !== 'Neznámá') {
-      inp.value = spz;
-      let r = document.getElementById('notif-type-spz'); if(r) r.checked = true;
+    inp.value = busId;
+    let r = document.getElementById('notif-type-busid'); if(r) r.checked = true;
+  }
+  let lbl = document.getElementById('notif-label');
+  if(lbl) {
+    if (_notifCurrentSpz) {
+      lbl.value = `SPZ: ${_notifCurrentSpz} (Linka ${line})`;
     } else {
-      inp.value = busId;
-      let r = document.getElementById('notif-type-busid'); if(r) r.checked = true;
+      lbl.value = `Linka ${line} (Bus ${busId})`;
     }
   }
   document.getElementById('notif-modal').style.display = 'block';
@@ -2118,7 +2123,7 @@ async function saveNotifRule(isOneTime = true) {
   
   showNotifMsg('⏳ Ukládám...', true);
   try {
-    let r = await fetch('/api/notifications/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({identifier, identifier_type: idType, triggers, label, delivery_channels: deliveryChannels, is_one_time: isOneTime, target_user: targetUser})});
+    let r = await fetch('/api/notifications/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({identifier, identifier_type: idType, bus_id: _notifCurrentBusId, spz: _notifCurrentSpz, triggers, label, delivery_channels: deliveryChannels, is_one_time: isOneTime, target_user: targetUser})});
     let d = await r.json();
     if(d.status==='success') {
       showNotifMsg(d.message || '✅ Pravidlo uloženo!', true);
@@ -6286,7 +6291,21 @@ _NOTIF_STATE_CACHE = {}  # {notif_id: {trigger_key: last_state_value}}
 
 def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
     """Sestaví text notifikace a Discord embed."""
-    spz = bus_data.get("spz", "Nezn\u00e1m\u00e1")
+    spz = bus_data.get("spz")
+    if not spz or spz in ("Nezn\u00e1m\u00e1", "Neznama", "?", "", "None"):
+        if rule.get("identifier_type") == "spz" and rule.get("identifier"):
+            spz = rule.get("identifier")
+        else:
+            lbl = rule.get("label", "") or ""
+            m = re.search(r'SPZ\s*[:\-]?\s*([A-Za-z0-9 ]+)', lbl, re.IGNORECASE)
+            if m:
+                spz = m.group(1).split("(")[0].split("|")[0].split("-")[0].strip()
+            else:
+                b_id = str(bus_data.get("id") or rule.get("identifier"))
+                if b_id in GLOBAL_BUS_CACHE and GLOBAL_BUS_CACHE[b_id].get("spz"):
+                    spz = GLOBAL_BUS_CACHE[b_id].get("spz")
+    if not spz or spz in ("None", ""):
+        spz = "Nezn\u00e1m\u00e1"
     line = bus_data.get("line", "?")
     dest = bus_data.get("destination", "?")
     bus_id = bus_data.get("id", rule.get("identifier", "?"))
@@ -6409,9 +6428,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                         pass
                     if not u_data:
                         try:
-                            u_res = db_client.table("users").select("discord_id, email").eq("web_session_token", user_session).execute()
-                            if u_res.data:
-                                u_data = u_res.data[0]
+                            u_data = find_user_by_session_token(db_client, user_session)
                         except Exception:
                             pass
                     if not u_data:
@@ -6439,15 +6456,22 @@ def _check_and_fire_notifications(db_client, bus_cache):
 
         # Najdi autobus v cache
         bus_data = None
-        for bus_id, bc in bus_cache.items():
-            if id_type == "spz" and bc.get("spz", "") == identifier:
-                bus_data = dict(bc)
-                bus_data["id"] = bus_id
-                break
-            elif id_type == "bus_id" and str(bus_id) == str(identifier):
-                bus_data = dict(bc)
-                bus_data["id"] = bus_id
-                break
+        if id_type == "spz":
+            matched = []
+            for bus_id, bc in bus_cache.items():
+                if bc.get("spz", "") == identifier:
+                    b_item = dict(bc)
+                    b_item["id"] = bus_id
+                    matched.append(b_item)
+            if matched:
+                active = [b for b in matched if "BUG" not in b.get("status", "").upper() and "ODSTAVEN" not in b.get("status", "").upper()]
+                bus_data = active[0] if active else matched[0]
+        elif id_type == "bus_id":
+            for bus_id, bc in bus_cache.items():
+                if str(bus_id) == str(identifier):
+                    bus_data = dict(bc)
+                    bus_data["id"] = bus_id
+                    break
 
         if not bus_data:
             print(f"\033[35m[NOTIF DEBUG] Pravidlo {rule_id[:8]} nenalezlo aktivní bus ({id_type}={identifier})\033[0m", flush=True)
@@ -6696,9 +6720,8 @@ def api_notif_delivery_info():
                     is_admin = True
                     
         if cookie_token:
-            user_res = db.table("users").select("discord_id, email, role").eq("web_session_token", cookie_token).execute()
-            if user_res.data:
-                u = user_res.data[0]
+            u = find_user_by_session_token(db, cookie_token)
+            if u:
                 role = u.get("role", "") or ""
                 if 'SA' in role or 'DEV' in role:
                     is_admin = True
@@ -6747,9 +6770,8 @@ def api_notif_create():
                     email = a_u.get("email")
                     
         if cookie_token:
-            user_res = db.table("users").select("id, nick, discord_id, email, role").eq("web_session_token", cookie_token).execute()
-            if user_res.data:
-                u = user_res.data[0]
+            u = find_user_by_session_token(db, cookie_token)
+            if u:
                 user_session_val = str(u["id"])
                 discord_id = u.get("discord_id")
                 email = u.get("email")
@@ -6801,24 +6823,46 @@ def api_notif_create():
     if not identifier:
         return jsonify({"status": "error", "message": "⚠️ Zadejte SPZ nebo ID autobusu."}), 400
         
+    passed_bus_id = data.get("bus_id")
+    passed_spz = str(data.get("spz", "")).strip()
+
     if identifier_type == "spz":
         matched_buses = [
-            {"id": bus_id, "status": bc.get("status", "")}
+            {"id": bus_id, "status": bc.get("status", ""), "spz": bc.get("spz", "")}
             for bus_id, bc in GLOBAL_BUS_CACHE.items()
             if bc.get("spz") == identifier
         ]
         
         if len(matched_buses) > 1:
-            bugged = [b for b in matched_buses if "BUG" in b["status"].upper()]
-            moving = [b for b in matched_buses if "BUG" not in b["status"].upper()]
+            chosen_bus = None
+            if passed_bus_id:
+                for b in matched_buses:
+                    if str(b["id"]) == str(passed_bus_id):
+                        chosen_bus = b
+                        break
+            if not chosen_bus:
+                moving = [b for b in matched_buses if "BUG" not in b["status"].upper() and "ODSTAVEN" not in b["status"].upper()]
+                if moving:
+                    chosen_bus = moving[0]
+                else:
+                    chosen_bus = matched_buses[0]
             
-            if len(bugged) > 0 and len(moving) == 1:
-                identifier_type = "bus_id"
-                identifier = moving[0]["id"]
-                label = f"{label} (Auto-fixed to ID)" if label else f"Bus ID: {identifier}"
-            else:
-                print(f"[ADMIN ERROR] Duplicitní SPZ na mapě pro {identifier}. Nalezeno {len(matched_buses)}x.", flush=True)
-                return jsonify({"status": "error", "message": "⚠️ Na mapě je aktuálně více autobusů s touto SPZ. Zvolte prosím sledování pomocí Bus ID."}), 400
+            identifier_type = "bus_id"
+            identifier = chosen_bus["id"]
+            if not label:
+                label = f"SPZ {data.get('identifier', '')} (Bus ID: {identifier})"
+            elif "SPZ" not in label.upper():
+                label = f"SPZ {data.get('identifier', '')} | {label}"
+        elif len(matched_buses) == 1:
+            if not label:
+                label = f"SPZ {identifier}"
+    elif identifier_type == "bus_id":
+        found_spz = passed_spz or GLOBAL_BUS_CACHE.get(identifier, {}).get("spz")
+        if found_spz and found_spz not in ("Neznámá", "Neznama", "?", ""):
+            if not label:
+                label = f"SPZ: {found_spz} (Bus ID: {identifier})"
+            elif "SPZ" not in label.upper():
+                label = f"SPZ: {found_spz} - {label}"
 
     # Auto-doplnění kanálu pokud admin zadal cíl
     if is_admin and target_user:
@@ -6881,10 +6925,10 @@ def api_notif_list():
         user_session_val = None
         is_admin = False
         if cookie_token:
-            user_res = db.table("users").select("id, role").eq("web_session_token", cookie_token).execute()
-            if user_res.data:
-                user_session_val = str(user_res.data[0]["id"])
-                role = user_res.data[0].get("role") or ""
+            u = find_user_by_session_token(db, cookie_token)
+            if u:
+                user_session_val = str(u["id"])
+                role = u.get("role") or ""
                 if 'SA' in role or 'DEV' in role:
                     is_admin = True
         if admin_discord_id:
@@ -6923,10 +6967,10 @@ def api_notif_delete():
         user_session_val = None
         is_admin = False
         if cookie_token:
-            user_res = db.table("users").select("id, role").eq("web_session_token", cookie_token).execute()
-            if user_res.data:
-                user_session_val = str(user_res.data[0]["id"])
-                role = user_res.data[0].get("role") or ""
+            u = find_user_by_session_token(db, cookie_token)
+            if u:
+                user_session_val = str(u["id"])
+                role = u.get("role") or ""
                 if 'SA' in role or 'DEV' in role:
                     is_admin = True
         if admin_discord_id:
@@ -7033,9 +7077,8 @@ def _get_avatar_html(req):
     if cookie_token and HAS_SUPABASE:
         try:
             db = get_db_client()
-            user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
-            if user:
-                u = user[0]
+            u = find_user_by_session_token(db, cookie_token)
+            if u:
 
                 avatar_src = u.get('avatar_url')
                 img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>'
@@ -8102,8 +8145,8 @@ def admin_clean_trains():
         return jsonify({"error": "unauthorized"}), 401
     
     db = get_db_client()
-    user_res = db.table("users").select("role").eq("web_session_token", cookie_token).execute()
-    if not user_res.data or user_res.data[0].get("role") not in ["DEV", "SA"]:
+    u = find_user_by_session_token(db, cookie_token)
+    if not u or u.get("role") not in ["DEV", "SA"]:
         return jsonify({"error": "unauthorized"}), 401
 
     def is_bad_train(bid_str, line_str):

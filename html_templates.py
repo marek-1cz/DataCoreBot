@@ -1789,6 +1789,18 @@ HTML_UCET = """
     </div>
     
     <div class="link-section">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:10px; margin-bottom:15px;">
+        <h3 style="margin:0; font-size:16px; color:white; display:flex; align-items:center; gap:8px;">
+          <i class="fas fa-desktop" style="color:#38bdf8;"></i> Přihlášená zařízení (__SESSIONS_COUNT__)
+        </h3>
+        <button onclick="revokeOtherSessions()" class="btn-link" style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); color:#ef4444; font-size:11px; padding:4px 8px; cursor:pointer;" title="Odhlásit všechna ostatní zařízení kromě tohoto">
+          <i class="fas fa-sign-out-alt"></i> Odhlásit ostatní
+        </button>
+      </div>
+      __SESSIONS_LIST__
+    </div>
+
+    <div class="link-section">
       <h3>Moje upozornění na spoje</h3>
       __NOTIFICATIONS__
     </div>
@@ -1796,6 +1808,43 @@ HTML_UCET = """
 </div>
 
 <script>
+function deleteSession(sessionId, isCurrent) {
+    if (isCurrent) {
+        if (!confirm("Toto je vaše aktuální zařízení. Pokud ho smažete, budete odhlášeni. Pokračovat?")) return;
+    } else {
+        if (!confirm("Opravdu chcete odhlásit toto zařízení?")) return;
+    }
+    fetch('/api/ucet/sessions/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({session_id: sessionId})
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'success') {
+            if (isCurrent) {
+                window.location.href = '/login';
+            } else {
+                location.reload();
+            }
+        } else {
+            alert('Chyba: ' + (data.message || 'Nepodařilo se smazat zařízení'));
+        }
+    }).catch(e => alert('Chyba spojení'));
+}
+
+function revokeOtherSessions() {
+    if (!confirm("Opravdu chcete odhlásit všechna ostatní zařízení kromě tohoto?")) return;
+    fetch('/api/ucet/sessions/revoke_others', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'success') {
+            location.reload();
+        } else {
+            alert('Chyba: ' + (data.message || 'Nepodařilo se odhlásit ostatní zařízení'));
+        }
+    }).catch(e => alert('Chyba spojení'));
+}
+
 function deleteNotificationRule(ruleId) {
     if(!confirm("Opravdu chcete toto upozornění smazat?")) return;
     fetch('/api/notifications/delete', {
