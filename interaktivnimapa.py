@@ -2184,10 +2184,10 @@ window.shareBus = function(busId) {
     <div style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:15px;font-size:13px;line-height:1.6;margin-bottom:15px;white-space:pre-wrap;">${shareText.replace(/</g, "&lt;")}</div>
     
     <div style="display:flex;flex-direction:column;gap:12px;">
-      <button onclick="navigator.clipboard.writeText(\`${shareText}\`).then(()=>showMapToast('📋 Zkopírováno!'));this.parentElement.parentElement.parentElement.remove()" style="background:#10b981;color:white;border:none;padding:15px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:15px;box-shadow:0 4px 6px rgba(0,0,0,0.2);text-transform:uppercase;">📋 KOPÍROVAT ODKAZ A TEXT</button>
+      <button onclick="navigator.clipboard.writeText(\\x60${shareText}\\x60).then(()=>showMapToast('📋 Zkopírováno!'));this.parentElement.parentElement.parentElement.remove()" style="background:#10b981;color:white;border:none;padding:15px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:15px;box-shadow:0 4px 6px rgba(0,0,0,0.2);text-transform:uppercase;">📋 KOPÍROVAT ODKAZ A TEXT</button>
       
       <div id="share-api-btn-container" style="display:none; text-align:center;">
-        <button onclick="navigator.share({title:'Sdílet spoj', text:\`${shareText}\`})" style="background:#8b5cf6;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 6px rgba(0,0,0,0.2);">📲 Sdílet na Messenger, IG, TikTok...</button>
+        <button onclick="navigator.share({title:'Sdílet spoj', text:\\x60${shareText}\\x60})" style="background:#8b5cf6;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 6px rgba(0,0,0,0.2);">📲 Sdílet na Messenger, IG, TikTok...</button>
       </div>
       
       <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background:#475569;color:white;border:none;padding:12px;border-radius:8px;cursor:pointer;width:100%;font-size:14px;font-weight:bold;">Zavřít</button>
@@ -2281,16 +2281,45 @@ function checkSW(uptimeSec){
   }else{sw.style.display='none';swShown=false;}
 }
 
+// === POMOCNÁ DETEKCE VLAKU PRO FRONTEND ===
+function isTrainVehicle(bus) {
+  if (!bus) return false;
+  if (bus.is_train) return true;
+  let bid = String(bus.id || '').trim();
+  if (bid.startsWith('-')) return true;
+  let l = String(bus.line || bus.real_linka_spoj || '').trim();
+  if (/^(Os|Sp|R|Ex|IC|EC|SC|rj|RJ|EN|LE|TL|TLX|GWTR|Vlak)\b/i.test(l)) return true;
+  if (/^(P[1-9]|P[1-3][0-9])\b/i.test(l)) return true;
+  let s = l + ' ' + bid;
+  if (/1093|1081|7265|1094|7512|7430|554|27849|27828|750|7280/.test(s)) return true;
+  return false;
+}
+
 // === SVG MARKER ===
-function buildMarkerSvg(mc,bearing,lineText,isTrain){
+function buildMarkerSvg(mc,bearing,lineText,isTrain,busId){
   const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151','bg-lastpos':'#1a1820'};
   let bgC=cM[mc]||'#64748b';
   const cx=18,cy=18;
   
-  if (isTrain) {
+  let reallyTrain = Boolean(isTrain);
+  if (!reallyTrain) {
+    let bid = String(busId || '').trim();
+    let l = String(lineText || '').trim();
+    if (bid.startsWith('-') || /^(Os|Sp|R|Ex|IC|EC|SC|rj|RJ|EN|LE|TL|TLX|GWTR|Vlak)\b/i.test(l) || /^(P[1-9]|P[1-3][0-9])\b/i.test(l) || /1093|1081|7265|1094|7512|7430|554|27849|27828|750|7280/.test(l + ' ' + bid)) {
+      reallyTrain = true;
+    }
+  }
+
+  if (reallyTrain) {
     let tr = 11;
     let sCol = mc === 'bg-lastpos' ? '#f472b6' : 'white';
-    let si = `<rect x="${cx-tr}" y="${cy-tr}" width="${tr*2}" height="${tr*2}" rx="3" fill="${bgC}" stroke="${sCol}" stroke-width="2" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.6));"/>`;
+    let lClean = String(lineText || '').trim();
+    let lShort = lClean.length > 5 ? lClean.slice(0, 4) : lClean;
+    let si = `<rect x="${cx-tr+1}" y="${cy-tr+1}" width="${tr*2}" height="${tr*2}" rx="3" fill="rgba(0,0,0,0.3)"/>`;
+    si += `<rect x="${cx-tr}" y="${cy-tr}" width="${tr*2}" height="${tr*2}" rx="3" fill="${bgC}" stroke="${sCol}" stroke-width="2" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.6));"/>`;
+    if (lShort) {
+      si += `<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="#fff" font-weight="bold" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lShort}</text>`;
+    }
     return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
   }
 
@@ -2418,7 +2447,7 @@ function startEditRouteRoads() {
   showAdminToast('Přesuňte zastávky pro úpravu jejich pozice na trase. Pro autobusy lze měnit i tvar čáry.', true);
   
   let bus = lastArr.find(b=>b.id===window.currentRouteBusId);
-  let isTrain = bus && bus.is_train;
+  let isTrain = Boolean(bus && isTrainVehicle(bus));
 
   if (isTrain) {
     let routeCoords = waypoints.map(wp => [wp.lat, wp.lng]);
@@ -2796,7 +2825,7 @@ function _renderRoute(busId,data,btn){
   } else {
     let waypoints = pts.filter(s=>s.lat&&s.lng).map(s=>L.latLng(s.lat, s.lng));
     if(waypoints.length >= 2) {
-      if (bus && bus.is_train) {
+      if (bus && isTrainVehicle(bus)) {
         let routeCoords = waypoints.map(wp => [wp.lat, wp.lng]);
         routeLayer.addLayer(L.polyline(routeCoords,{color:futColor,weight:14,opacity:bgOp,lineCap:'round',lineJoin:'round'}));
         let shapePoly = L.polyline(routeCoords, {color: futColor, weight: 7, opacity: futFgOp, lineCap: 'round', lineJoin: 'round', className: 'route-line-past'});
@@ -2843,7 +2872,8 @@ function _renderRoute(busId,data,btn){
     else if(stop.approx||lowConf)warnHtml='<br><span style="color:#f59e0b;font-size:10px;">⚠️ přibl.</span>';
     
     let icon;
-    let br = (bus && bus.is_train) ? '4px' : '50%';
+    let isTrStop = Boolean(bus && isTrainVehicle(bus));
+    let br = isTrStop ? '4px' : '50%';
     if(isFinal){
       let fc=isFinished?'#a855f7':futColor;
       icon=L.divIcon({className:'',iconSize:[24,24],iconAnchor:[12,12],html:'<div style="width:22px;height:22px;background:'+fc+';border:3px solid #fff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 0 12px '+fc+',0 2px 8px rgba(0,0,0,.8);">🏁</div>'});
@@ -2867,7 +2897,7 @@ function _renderRoute(busId,data,btn){
     let typeLabel='';
     if (isWaiting && i === 0) typeLabel = ' — ⏳ <b>Počáteční zastávka</b>';
     else typeLabel = isFinal?' — 🏁 <b>Konečná</b>':isNext?' ← <b>Následující zastávka</b>':isBusPos?(isAtStop?' ← <b>Aktuální zastávka</b>':' ← <b>Poslední potvrzená zastávka</b>'):'';
-    let emj = (bus && bus.is_train) ? '🚂' : '🚏';
+    let emj = isTrStop ? '🚂' : '🚏';
     m.bindTooltip('<span style="font-size:12px;">'+emj+' '+stopDisplayName(stop)+'</span>'+timeStr+typeLabel+warnHtml,{direction:'top',className:'dark-popup'});
 
     routeLayer.addLayer(m);
@@ -3468,9 +3498,10 @@ async function fetchBuses(){
       if(bus.in_depot && markerColor !== 'bg-lastpos'){
         markerColor='bg-yellow';
       }
-      let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,bus.is_train),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
+      let isTrain = isTrainVehicle(bus);
+      let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,isTrain,bus.id),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
       let spzH='',invTxt='',histBtn='';
-      if(!bus.is_train){
+      if(!isTrain){
         if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
         else if(bus.spz&&bus.spz!=='Neznama'){
           let seznamBtn = '';
@@ -3492,7 +3523,7 @@ async function fetchBuses(){
         lastposW=`<div style="background:linear-gradient(135deg,rgba(24,24,32,0.95),rgba(45,30,45,0.95));border:1.5px solid #f472b6;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 10px rgba(244,114,182,0.25);"><b style="color:#f472b6;font-size:12px;letter-spacing:0.5px;">📍 POSLEDNÍ ZNÁMÁ POLOHA</b><br><span style="color:#cbd5e1;font-size:10px;">Vůz zmizel z mapy pvvd.idpk.cz${tOffline}. Ponechán na stejné pozici, než se znovu objeví.</span></div>`;
       }
       let bugW='';
-      if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#3f0000;border:2px solid #ef4444;border-radius:5px;padding:8px;margin:5px 0;font-size:11px;text-align:center;"><b style="color:#ef4444;font-size:13px;letter-spacing:.5px;">\u26d4 NEN\u00cd RE\u00c1LN\u00c1 POLOHA</b><br><span style="color:#fca5a5;font-weight:bold;">PRAVD\u011aPODOBN\u011a BUG NEBO POSLEDN\u00cd ZN\u00c1M\u00c1 POZICE</span><br><span style="color:#94a3b8;font-size:10px;">Pravd\u011bpodobn\u011b SPZ <b style="color:#fbbf24;">${bS}</b> \u2013 pozice nemus\u00ed odpov\u00eddat realit\u011b</span></div>`;}
+      if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#3f0000;border:2px solid #ef4444;border-radius:5px;padding:8px;margin:5px 0;font-size:11px;text-align:center;"><b style="color:#ef4444;font-size:13px;letter-spacing:.5px;">⛔ NENÍ REÁLNÁ POLOHA</b><br><span style="color:#fca5a5;font-weight:bold;">PRAVDĚPODOBNĚ BUG NEBO POSLEDNÍ ZNÁMÁ POZICE</span><br><span style="color:#94a3b8;font-size:10px;">Pravděpodobně SPZ <b style="color:#fbbf24;">${bS}</b> – pozice nemusí odpovídat realitě</span></div>`;}
       let orangeW='';
       if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>🔍 Vyzkum - bus byl zasekly, nyni jede</b></div>`;
       let depotW='';
@@ -3523,8 +3554,8 @@ async function fetchBuses(){
         </div>
         <div class="pb">
           ${lastposW}${bugW}${orangeW}${depotW}
-          ${(bus.admin_note && typeof bus.admin_note === 'string' && bus.admin_note.trim() !== '' && !bus.is_train)?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
-          ${(bus.admin_driver && typeof bus.admin_driver === 'string' && bus.admin_driver.trim() !== '' && !bus.is_train)?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
+          ${(bus.admin_note && typeof bus.admin_note === 'string' && bus.admin_note.trim() !== '' && !isTrain)?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
+          ${(bus.admin_driver && typeof bus.admin_driver === 'string' && bus.admin_driver.trim() !== '' && !isTrain)?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
           <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination||'Neznamy'}</span></div>
           ${spzH}${invTxt}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
@@ -3534,7 +3565,7 @@ async function fetchBuses(){
           ${histBtn}
           <button id="route-btn-${bus.id}" class="pa pa-d" style="margin-top:5px;${rA?'background:#1e40af;':''}" onclick="toggleRoute('${bus.id}')">${rA?'🗺️ Skryt trasu':'🗺️ Zobrazit trasu'}</button>
           <div style="display:flex;gap:5px;margin-top:5px;">
-            ${bus.is_train ? '' : `<button class="pa" style="flex:1;background:#7c3aed;color:#fff;border-color:#6d28d9;" onclick="openNotifModal('${bus.id}')">🔔 Notifikace</button>`}
+            ${isTrain ? '' : `<button class="pa" style="flex:1;background:#7c3aed;color:#fff;border-color:#6d28d9;" onclick="openNotifModal('${bus.id}')">🔔 Notifikace</button>`}
             <button class="pa" style="flex:1;background:#0369a1;color:#fff;border-color:#075985;" onclick="shareBus('${bus.id}')">📤 Sdílet</button>
           </div>
         </div>`;
@@ -3584,7 +3615,7 @@ async function fetchBuses(){
             <strong style="color:#38bdf8;font-size:12px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
             <div style="color:#94a3b8;font-size:10px;margin-top:2px;font-family:monospace;word-break:break-all;">ID vozu: ${bus.id}</div>
             
-            ${bus.is_train ? '' : `<div style="display:flex;gap:6px;margin-top:8px;">
+            ${isTrain ? '' : `<div style="display:flex;gap:6px;margin-top:8px;">
               <input type="text" id="adm_spz_${bus.id}" value="${cSpz}" data-orig="${oSpz}" placeholder="SPZ" class="adm-inp" style="flex:2;margin-top:0;">
               <button onclick="adminSetSPZ('${bus.id}')" style="flex:1;background:#10b981;color:white;border:none;border-radius:5px;font-size:13px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">💾 Uložit</button>
             </div>
@@ -3612,7 +3643,7 @@ async function fetchBuses(){
                 <option value="bg-orange" ${bus.color_class==='bg-orange'?'selected':''}>Oranžová</option>
                 <option value="bg-bug" ${bus.color_class==='bg-bug'?'selected':''}>Označeno jako BUG</option>
               </select>
-              ${bus.is_train ? '' : `<input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznámka..." class="adm-inp" style="margin-top:6px;">
+              ${isTrain ? '' : `<input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznámka..." class="adm-inp" style="margin-top:6px;">
               <input type="text" id="adm_driver_${bus.id}" value="${cDriver}" data-orig="${bus.admin_driver||''}" placeholder="Jméno řidiče..." class="adm-inp" style="margin-top:6px;">`}
               <div style="display:flex;gap:6px;margin-top:8px;">
                 <button onclick="adminSaveAll('${bus.id}',true)" class="adm-btn" style="flex:1;background:#1e40af;color:white;">📌 Uložit natrvalo</button>
@@ -3679,14 +3710,16 @@ async function fetchBuses(){
 
     // Komplexní logování stavu mapy
     if(IS_ADMIN){
-      let total=data.buses.length;
-      let noSpz=data.buses.filter(b=>!b.spz||b.spz==='Neznama').length;
-      let verified=data.buses.filter(b=>b.spz_verified).length;
-      let bug=data.buses.filter(b=>b.color_class==='bg-bug').length;
-      appLog(`Mapa: ${total} busů | SPZ: ${verified}✅ ${total-noSpz-verified}⏳ ${noSpz}❓${bug?' '+bug+'🐛':''}`, 'info');
+      let onlyBuses=data.buses.filter(b=>!isTrainVehicle(b));
+      let total=onlyBuses.length;
+      let noSpz=onlyBuses.filter(b=>!b.spz||b.spz==='Neznama'||b.spz==='Neznámá').length;
+      let verified=onlyBuses.filter(b=>b.spz_verified).length;
+      let bug=onlyBuses.filter(b=>b.color_class==='bg-bug').length;
+      let trainCnt=data.buses.length - total;
+      appLog(`Mapa: ${total} busů (${trainCnt} vlaků) | SPZ: ${verified}✅ ${total-noSpz-verified}⏳ ${noSpz}❓${bug?' '+bug+'🐛':''}`, 'info');
       // SPZ log — loguj jen změny stavu, ne každý tik
       data.buses.forEach(b=>{
-        if(b.is_train)return;
+        if(isTrainVehicle(b))return;
         let prev=window._spzPrev&&window._spzPrev[b.id];
         let cur=`${b.spz||'?'}|${b.spz_verified?'ok':'pending'}`;
         if(!prev){window._spzPrev=window._spzPrev||{};window._spzPrev[b.id]=cur;return;}
@@ -4288,6 +4321,85 @@ def _name_suggests_train(name):
     return any(w in norm for w in _TRAIN_HINT_WORDS)
 
 
+def is_train_vehicle(bus_id, line="", traction=""):
+    """Spolehlivě určí, zda jde o vlak (vlaky nesmí dostávat SPZ, poznámky ani být považovány za busy)."""
+    bid_str = str(bus_id or "").strip()
+    if bid_str.startswith("-"):
+        return True
+    try:
+        if int(bid_str) < 0:
+            return True
+    except (ValueError, TypeError):
+        pass
+    if str(traction or "").upper() == "TRAIN":
+        return True
+    l_str = str(line or "").strip()
+    if re.match(r'^P\d{1,2}\b', l_str, re.IGNORECASE):
+        return True
+    if l_str.startswith(("Os ", "Sp ", "R ", "Ex ", "IC ", "EC ", "SC ", "rj ", "RJ ", "EN ", "LE ", "TL ", "TLX ", "GWTR ", "Os", "Sp", "Ex", "Vlak")):
+        return True
+    if re.search(r'\b(vlak|train|rychlik|osobak|spech)\b', l_str, re.IGNORECASE):
+        return True
+    s = f"{l_str} {bid_str}"
+    if any(k in s for k in ("1093", "1081", "7265", "1094", "7512", "7430", "554", "27849", "27828", "750", "7280")):
+        return True
+    return False
+
+
+def _purge_trains_everywhere(db_client=None):
+    """Kompletně smaže všechny vlaky z cache a databáze, které by se tvářily jako busy."""
+    to_delete = []
+    for bid, c in list(GLOBAL_BUS_CACHE.items()):
+        line = str(c.get("line") or c.get("real_linka_spoj") or "")
+        if is_train_vehicle(str(bid), line):
+            if c.get("is_offline") or c.get("color_class") == "bg-lastpos" or c.get("status") == "Poslední známá poloha":
+                to_delete.append(bid)
+            else:
+                c["is_train"] = True
+                c["spz"] = "Neznámá"
+                c["admin_note"] = ""
+                c["admin_driver"] = ""
+                c["admin_flag"] = False
+                c["admin_spz_verified"] = False
+                c["spz_verified"] = False
+                c["manual_spz"] = False
+                c["skip_spz"] = True
+                c["spz_frozen"] = True
+                c["spz_locked"] = True
+    for bid in to_delete:
+        GLOBAL_BUS_CACHE.pop(bid, None)
+    
+    for bid in list(ADMIN_SPZ_LOCKS.keys()):
+        if is_train_vehicle(bid):
+            ADMIN_SPZ_LOCKS.pop(bid, None)
+
+    try:
+        from local_db import local_spz_purge_trains
+        local_spz_purge_trains()
+    except Exception:
+        pass
+
+    if db_client:
+        try:
+            cache_res = db_client.table("spz_cache").select("bus_id, linka").execute()
+            for r in (cache_res.data or []):
+                bid = str(r.get("bus_id", ""))
+                line = str(r.get("linka") or "")
+                if is_train_vehicle(bid, line):
+                    db_client.table("spz_cache").delete().eq("bus_id", bid).execute()
+        except Exception:
+            pass
+        try:
+            hist_res = db_client.table("bus_history").select("id, bus_id, linka").order("created_at", desc=True).limit(3000).execute()
+            for r in (hist_res.data or []):
+                bid = str(r.get("bus_id") or "")
+                line = str(r.get("linka") or "")
+                if is_train_vehicle(bid, line):
+                    db_client.table("bus_history").delete().eq("id", r["id"]).execute()
+        except Exception:
+            pass
+
+
 def _load_gtfs():
     """Nacte gtfs_stops_idpk.db do pameti. Vola se jednou pri startu workeru."""
     global GTFS_LOADED, GTFS_STOPS, GTFS_NAME_IDX, GTFS_GRID, GTFS_STOP_CNT
@@ -4750,12 +4862,17 @@ def get_db_client():
 
 def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
                      ghost_spz=None, ghost_verified=False, admin_verified=False):
+    if is_train or is_train_vehicle(bus_id, line):
+        is_train = True
+        ghost_spz = "Neznámá"
+        ghost_verified = False
+        admin_verified = False
     return {
         "trip_id": trip_id, "inflow_id": bus_id, "lat": lat, "lng": lng, "bearing": None,
         "line": line, "real_linka_spoj": None, "real_zastavka": None, "nearest_stop": None, "destination": dest, "is_train": is_train,
-        "raw_delay": delay, "spz": ghost_spz, "spz_verified": ghost_verified,
-        "spz_locked": False, "manual_spz": False, "spz_stable_ticks": 0,
-        "spz_last_verified": now if ghost_verified else None, "investigating": False, "investigation_spz": None,
+        "raw_delay": delay, "spz": "Neznámá" if is_train else ghost_spz, "spz_verified": False if is_train else ghost_verified,
+        "spz_locked": True if is_train else False, "manual_spz": False, "spz_stable_ticks": 0,
+        "spz_last_verified": None if is_train else (now if ghost_verified else None), "investigating": False, "investigation_spz": None,
         "investigation_start": None, "first_seen": now, "last_inflow_seen": now,
         "last_moved": now, "created_at": now, "actual_start_time": None,
         "actual_end_time": None, "first_dep_time": None, "last_dep_time": None,
@@ -4767,21 +4884,11 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "bug_locked": False, "admin_lock_display": False, "admin_lock_permanent": False,
         "admin_note": "",
         "admin_driver": "",
-        # admin_spz_verified: absolutni admin lock - automatikaprestane hledat jinou SPZ.
-        # Nastavuje se tlacitkem 'Overit SPZ adminem' v Admin Panelu.
-        "admin_spz_verified": admin_verified,
-        # _first_move_time: kdy se bus poprve fyzicky pohnul (pro SPZ_MIN_MOVE_MINUTES).
-        # SPZ se nezacne hledat dokud bus nejede alespon SPZ_MIN_MOVE_MINUTES minut.
+        "admin_spz_verified": False if is_train else admin_verified,
         "_first_move_time": None,
-        # spz_frozen: tvrdy zamek SPZ kdyz bus dojede na konecnou / do depa -
-        # narozdil od beznych spz_locked/spz_verified (ktere se behem jizdy
-        # porad prubezne re-auditujeji kvuli samoopravnosti) tohle uz system
-        # vubec nezkousi menit, dokud nezacne genuinly novy spoj (zmena linky).
-        "spz_frozen": False,
-        # spz_last_audit_check: kdy byla naposledy provedena re-audit kontrola
-        # jiz zamknute/overene SPZ - u overenych (fajfka) se kontroluje jen
-        # obcas (nizsi priorita), ne kazdy tik jako u jeste neovere
+        "spz_frozen": True if is_train else False,
         "spz_last_audit_check": None,
+        "skip_spz": True if is_train else False,
     }
 
 
@@ -4879,7 +4986,7 @@ def _is_tracked_line(linka_str):
 
 def upsert_to_history(db, c):
     global TRACKED_SPZS
-    if c.get("is_train") or not db:
+    if c.get("is_train") or is_train_vehicle(c.get("inflow_id") or c.get("bus_id") or "", c.get("line") or "") or not db:
         return
     spz = c.get("spz")
     if not spz or spz == "Neznámá":
@@ -4955,14 +5062,23 @@ def background_map_worker():
                 
                 # Uloz admin verified do pameti natrvalo
                 if row.get("admin_verified") and bid and spz:
-                    ADMIN_SPZ_LOCKS[bid] = {
-                        "spz": spz,
-                        "admin_note": row.get("admin_note", ""),
-                        "admin_driver": row.get("admin_driver", ""),
-                        "color_class": row.get("color_class", "bg-darkblue")
-                    }
+                    if not is_train_vehicle(bid, row.get("linka") or ""):
+                        ADMIN_SPZ_LOCKS[bid] = {
+                            "spz": spz,
+                            "admin_note": row.get("admin_note", ""),
+                            "admin_driver": row.get("admin_driver", ""),
+                            "color_class": row.get("color_class", "bg-darkblue")
+                        }
                     
-                if not bid or not spz or spz == "Nezn\u00e1m\u00e1":
+                if not bid or not spz or spz in ("Nezn\u00e1m\u00e1", "Neznama"):
+                    continue
+                # NIKDY neobnovuj vlaky jako busy!
+                if is_train_vehicle(bid, row.get("linka") or ""):
+                    if db_client:
+                        try:
+                            db_client.table("spz_cache").delete().eq("bus_id", bid).execute()
+                        except Exception:
+                            pass
                     continue
                 if bid in GLOBAL_BUS_CACHE:
                     continue  # bus uz je zivý, cache ho neprepis
@@ -4998,6 +5114,7 @@ def background_map_worker():
                 }
                 restored += 1
             print(f"[SPZ CACHE] Obnoveno {restored} zaznamu z predchoziho behu.", flush=True)
+            _purge_trains_everywhere(db_client)
         except Exception as e_cache:
             print(f"[SPZ CACHE] Chyba pri obnove: {e_cache}", flush=True)
 
@@ -5136,7 +5253,7 @@ def background_map_worker():
                             else:
                                 dest1 = "Neznámý"
                         traction = str(bus1.get("traction", "BUS")).upper()
-                        is_train = bool(int(bus_id) < 0 or traction in ["TRAIN"] or _name_suggests_train(line) or line.startswith(("Os ", "Sp ", "R ", "Ex ", "IC ", "EC ", "SC ", "rj ", "RJ ")))
+                        is_train = is_train_vehicle(bus_id, line=line, traction=traction)
 
                         if bus_id in ADMIN_DELETED_BUSES:
                             if not is_same_line(line, ADMIN_DELETED_BUSES[bus_id]):
@@ -5148,72 +5265,92 @@ def background_map_worker():
                         current_inflow_ids.add(bus_id)
 
                         if bus_id not in GLOBAL_BUS_CACHE:
-                            TRIP_COUNTER += 1
-                            ghost_spz = None
-                            ghost_verified = False
-                            ghost_trip_id = f"TRIP-{TRIP_COUNTER}"
-                            gc_list = []
-                            for gid, gc in list(GLOBAL_BUS_CACHE.items()):
-                                if not (gc.get("is_offline") and gc.get("spz") and gc["spz"] != "Nezn\u00e1m\u00e1"):
-                                    continue
-                                oa_min = (now - gc["last_inflow_seen"]).total_seconds() / 60.0
-                                if oa_min > 4320:
-                                    continue
-                                gd = math.hypot(lat1 - gc["lat"], lng1 - gc["lng"])
-                                lm = is_same_line(line, gc["line"])
-                                if lm and gd < 0.08:
-                                    gc_list.append((gid, gc, gd, gd + oa_min * 0.0001 - 0.05))
-                                elif gd < GHOST_DIST_STRICT and oa_min <= GHOST_MAX_OFFLINE_MIN:
-                                    gc_list.append((gid, gc, gd, gd + oa_min * 0.0005))
-                            if gc_list:
-                                gc_list.sort(key=lambda x: x[3])
-                                best_gid, best_gc, _, _ = gc_list[0]
-                                ghost_spz = best_gc["spz"]
-                                if is_same_line(line, best_gc["line"]):
-                                    ghost_trip_id = best_gc["trip_id"]
-                                    ghost_verified = best_gc.get("spz_verified", False)
-                                    ghost_admin_verified = best_gc.get("admin_spz_verified", False)
-                                    ghost_admin_note = best_gc.get("admin_note", "")
-                                    ghost_admin_driver = best_gc.get("admin_driver", "")
-                                    ghost_admin_flag = best_gc.get("admin_flag", False)
-                                    ghost_color_class = best_gc.get("color_class")
-                                    ghost_status = best_gc.get("status")
-                                    ghost_manual_spz = best_gc.get("manual_spz", False)
-                                del GLOBAL_BUS_CACHE[best_gid]
-                                if db_client and ghost_spz and ghost_spz != "Neznámá":
-                                    close_previous_trips(db_client, ghost_spz, ghost_trip_id, now.strftime('%H:%M'))
-                            
-                            nb = new_cache_entry(
-                                bus_id, ghost_trip_id, lat1, lng1, line, dest1, is_train, delay, now,
-                                ghost_spz, ghost_verified, ghost_admin_verified if 'ghost_admin_verified' in locals() else False)
-                            
-                            if 'ghost_admin_note' in locals():
-                                nb["admin_note"] = ghost_admin_note
-                            if 'ghost_admin_driver' in locals():
-                                nb["admin_driver"] = ghost_admin_driver
-                                nb["admin_flag"] = ghost_admin_flag
-                                nb["manual_spz"] = ghost_manual_spz
-                                if ghost_color_class and ghost_color_class not in ("bg-gray", "bg-lastpos"):
-                                    nb["color_class"] = ghost_color_class
-                                if ghost_status and ghost_status not in ("Načítání...", "Poslední známá poloha"):
-                                    nb["status"] = ghost_status
-                            
-                            if bus_id in ADMIN_SPZ_LOCKS:
-                                lock = ADMIN_SPZ_LOCKS[bus_id]
-                                nb["spz"] = lock["spz"]
-                                nb["admin_spz_verified"] = True
-                                nb["admin_flag"] = True
-                                nb["spz_verified"] = True
-                                nb["manual_spz"] = True
-                                nb["spz_locked"] = True
+                            if is_train:
+                                nb = new_cache_entry(
+                                    bus_id, f"TRAIN-{bus_id}", lat1, lng1, line, dest1, True, delay, now,
+                                    ghost_spz="Neznámá", ghost_verified=False, admin_verified=False)
+                                nb["is_train"] = True
+                                nb["spz"] = "Neznámá"
+                                nb["admin_note"] = ""
+                                nb["admin_driver"] = ""
+                                nb["admin_flag"] = False
+                                nb["manual_spz"] = False
+                                nb["admin_spz_verified"] = False
+                                nb["spz_verified"] = False
                                 nb["spz_frozen"] = True
-                                nb["color_class"] = lock.get("color_class", "bg-darkblue")
-                                if "admin_note" in lock:
-                                    nb["admin_note"] = lock["admin_note"]
-                                if "admin_driver" in lock:
-                                    nb["admin_driver"] = lock["admin_driver"]
-                            
-                            GLOBAL_BUS_CACHE[bus_id] = nb
+                                nb["spz_locked"] = True
+                                nb["skip_spz"] = True
+                                GLOBAL_BUS_CACHE[bus_id] = nb
+                                ADMIN_SPZ_LOCKS.pop(bus_id, None)
+                            else:
+                                TRIP_COUNTER += 1
+                                ghost_spz = None
+                                ghost_verified = False
+                                ghost_trip_id = f"TRIP-{TRIP_COUNTER}"
+                                gc_list = []
+                                for gid, gc in list(GLOBAL_BUS_CACHE.items()):
+                                    if gc.get("is_train") or is_train_vehicle(gid, gc.get("line")):
+                                        continue
+                                    if not (gc.get("is_offline") and gc.get("spz") and gc["spz"] not in ("Neznámá", "Neznama")):
+                                        continue
+                                    oa_min = (now - gc["last_inflow_seen"]).total_seconds() / 60.0
+                                    if oa_min > 4320:
+                                        continue
+                                    gd = math.hypot(lat1 - gc["lat"], lng1 - gc["lng"])
+                                    lm = is_same_line(line, gc["line"])
+                                    if lm and gd < 0.08:
+                                        gc_list.append((gid, gc, gd, gd + oa_min * 0.0001 - 0.05))
+                                    elif gd < GHOST_DIST_STRICT and oa_min <= GHOST_MAX_OFFLINE_MIN:
+                                        gc_list.append((gid, gc, gd, gd + oa_min * 0.0005))
+                                if gc_list:
+                                    gc_list.sort(key=lambda x: x[3])
+                                    best_gid, best_gc, _, _ = gc_list[0]
+                                    ghost_spz = best_gc["spz"]
+                                    if is_same_line(line, best_gc["line"]):
+                                        ghost_trip_id = best_gc["trip_id"]
+                                        ghost_verified = best_gc.get("spz_verified", False)
+                                        ghost_admin_verified = best_gc.get("admin_spz_verified", False)
+                                        ghost_admin_note = best_gc.get("admin_note", "")
+                                        ghost_admin_driver = best_gc.get("admin_driver", "")
+                                        ghost_admin_flag = best_gc.get("admin_flag", False)
+                                        ghost_color_class = best_gc.get("color_class")
+                                        ghost_status = best_gc.get("status")
+                                        ghost_manual_spz = best_gc.get("manual_spz", False)
+                                    del GLOBAL_BUS_CACHE[best_gid]
+                                    if db_client and ghost_spz and ghost_spz != "Neznámá":
+                                        close_previous_trips(db_client, ghost_spz, ghost_trip_id, now.strftime('%H:%M'))
+                                
+                                nb = new_cache_entry(
+                                    bus_id, ghost_trip_id, lat1, lng1, line, dest1, False, delay, now,
+                                    ghost_spz, ghost_verified, ghost_admin_verified if 'ghost_admin_verified' in locals() else False)
+                                
+                                if 'ghost_admin_note' in locals():
+                                    nb["admin_note"] = ghost_admin_note
+                                if 'ghost_admin_driver' in locals():
+                                    nb["admin_driver"] = ghost_admin_driver
+                                    nb["admin_flag"] = ghost_admin_flag
+                                    nb["manual_spz"] = ghost_manual_spz
+                                    if ghost_color_class and ghost_color_class not in ("bg-gray", "bg-lastpos"):
+                                        nb["color_class"] = ghost_color_class
+                                    if ghost_status and ghost_status not in ("Načítání...", "Poslední známá poloha"):
+                                        nb["status"] = ghost_status
+                                
+                                if bus_id in ADMIN_SPZ_LOCKS:
+                                    lock = ADMIN_SPZ_LOCKS[bus_id]
+                                    nb["spz"] = lock["spz"]
+                                    nb["admin_spz_verified"] = True
+                                    nb["admin_flag"] = True
+                                    nb["spz_verified"] = True
+                                    nb["manual_spz"] = True
+                                    nb["spz_locked"] = True
+                                    nb["spz_frozen"] = True
+                                    nb["color_class"] = lock.get("color_class", "bg-darkblue")
+                                    if "admin_note" in lock:
+                                        nb["admin_note"] = lock["admin_note"]
+                                    if "admin_driver" in lock:
+                                        nb["admin_driver"] = lock["admin_driver"]
+                                
+                                GLOBAL_BUS_CACHE[bus_id] = nb
 
                         else:
                             c = GLOBAL_BUS_CACHE[bus_id]
@@ -5221,6 +5358,18 @@ def background_map_worker():
                             c["is_offline"] = False
                             c["raw_delay"] = delay
                             c["is_train"] = is_train
+                            if is_train:
+                                c["spz"] = "Neznámá"
+                                c["admin_note"] = ""
+                                c["admin_driver"] = ""
+                                c["admin_flag"] = False
+                                c["manual_spz"] = False
+                                c["admin_spz_verified"] = False
+                                c["spz_verified"] = False
+                                c["spz_frozen"] = True
+                                c["spz_locked"] = True
+                                c["skip_spz"] = True
+                                ADMIN_SPZ_LOCKS.pop(bus_id, None)
                             c.pop("offline_since_time", None)
                             if c.get("color_class") == "bg-lastpos":
                                 c["color_class"] = "bg-green"
@@ -5236,7 +5385,7 @@ def background_map_worker():
                                 c["line"] = line
                                 # Ignoruj prni nesoulad linky pri nacteni z db
 
-                            if bus_id in ADMIN_SPZ_LOCKS:
+                            if not is_train and bus_id in ADMIN_SPZ_LOCKS:
                                 lock = ADMIN_SPZ_LOCKS[bus_id]
                                 c["spz"] = lock["spz"]
                                 c["admin_spz_verified"] = True
@@ -5405,12 +5554,25 @@ def background_map_worker():
                 om = (now - c["last_inflow_seen"]).total_seconds() / 60.0
                 tm = (now - c["first_seen"]).total_seconds() / 60.0
                 
-                # VLAK CLEANUP RULE
-                if c.get("is_train"):
-                    inact = (now - c.get("last_moved", c["first_seen"])).total_seconds() / 60.0
-                    if c.get("color_class") == "bg-bug" or inact > 60:
-                        del GLOBAL_BUS_CACHE[bus_id]
+                # VLAKY: Absolutně striktní pravidlo - vlaky NIKDY nesmí být offline / poslední známá poloha!
+                # Jakmile vlak zmizí z aktuálního inflow feedu, je okamžitě a bezpodmínečně smazán z cache!
+                if c.get("is_train") or is_train_vehicle(bus_id, c.get("line")):
+                    if bus_id not in current_inflow_ids or c.get("color_class") == "bg-bug":
+                        GLOBAL_BUS_CACHE.pop(bus_id, None)
                         continue
+                    # Živý vlak na mapě: striktně bez SPZ, poznámek, řidiče či admin zámků
+                    c["is_train"] = True
+                    c["spz"] = "Neznámá"
+                    c["spz_verified"] = False
+                    c["admin_spz_verified"] = False
+                    c["admin_note"] = ""
+                    c["admin_driver"] = ""
+                    c["admin_flag"] = False
+                    c["manual_spz"] = False
+                    c["skip_spz"] = True
+                    c["spz_frozen"] = True
+                    c["spz_locked"] = True
+                    continue
 
                 if tm > 1200 and not c["actual_end_time"] and not c.get("is_offline"):
                     c["actual_end_time"] = now.strftime('%H:%M')
@@ -5620,12 +5782,15 @@ def background_map_worker():
                         TT_FETCH_QUEUE.put((4, bus_id, c))
 
                 if c.get("is_offline"):
-                    fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c.get("is_train") else "Nezn\u00e1m\u00e1")
+                    if c.get("is_train") or is_train_vehicle(bus_id, c.get("line")):
+                        GLOBAL_BUS_CACHE.pop(bus_id, None)
+                        continue
+                    fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c.get("is_train") else "Neznámá")
                     new_live_data.append({
                         "id": bus_id, "trip_id": c.get("trip_id"), "lat": c.get("lat"), "lng": c.get("lng"),
                         "bearing": c.get("bearing"), "line": fld, "delay": 0,
-                        "destination": c.get("destination"), "spz": c.get("spz") or "Nezn\u00e1m\u00e1",
-                        "spz_verified": c.get("spz_verified", False), "is_train": c.get("is_train"),
+                        "destination": c.get("destination"), "spz": c.get("spz") or "Neznámá",
+                        "spz_verified": c.get("spz_verified", False), "is_train": False,
                         "status": c.get("status"), "color_class": c.get("color_class"),
                         "inactive_minutes": inact,
                         "last_updated": c["last_moved"].strftime("%H:%M:%S") if c.get("last_moved") else "N/A",
@@ -5639,7 +5804,18 @@ def background_map_worker():
                     continue
 
                 lat1 = c["lat"]; lng1 = c["lng"]; line = c["line"]
-                dest1 = c["destination"]; is_train = c["is_train"]
+                dest1 = c["destination"]; is_train = bool(c.get("is_train") or is_train_vehicle(bus_id, line))
+                if is_train:
+                    c["is_train"] = True
+                    c["spz"] = "Neznámá"
+                    c["spz_verified"] = False
+                    c["admin_spz_verified"] = False
+                    c["admin_note"] = ""
+                    c["admin_driver"] = ""
+                    c["admin_flag"] = False
+                    c["skip_spz"] = True
+                    c["spz_frozen"] = True
+                    c["spz_locked"] = True
                 is_moving = inact < 1
                 delay_val = c["raw_delay"]
 
@@ -6142,23 +6318,35 @@ def background_map_worker():
                             c["_end_written"] = True
                             close_previous_trips(db_client, c.get("spz"), c["trip_id"], c["actual_end_time"])
 
-                fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c["is_train"] else "Nezn\u00e1m\u00e1")
+                is_train_final = bool(c.get("is_train") or is_train_vehicle(bus_id, c.get("line")))
+                if is_train_final:
+                    c["is_train"] = True
+                    c["spz"] = "Neznámá"
+                    c["spz_verified"] = False
+                    c["admin_spz_verified"] = False
+                    c["admin_note"] = ""
+                    c["admin_driver"] = ""
+                    c["admin_flag"] = False
+
+                fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if is_train_final else "Neznámá")
                 new_live_data.append({
                     "id": bus_id, "trip_id": c["trip_id"], "lat": c["lat"], "lng": c["lng"],
                     "bearing": c.get("bearing"), "line": fld, "real_linka_spoj": c.get("real_linka_spoj"), "delay": c.get("final_delay_display", 0),
-                    "destination": c["destination"], "spz": c["spz"] or "Nezn\u00e1m\u00e1",
-                    "spz_verified": c.get("spz_verified", False), "is_train": c["is_train"],
+                    "destination": c["destination"], "spz": "Neznámá" if is_train_final else (c["spz"] or "Neznámá"),
+                    "spz_verified": False if is_train_final else c.get("spz_verified", False), "is_train": is_train_final,
                     "status": c["status"], "color_class": c["color_class"], "inactive_minutes": inact,
                     "last_updated": c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A",
-                    "investigating": c.get("investigating", False),
-                    "investigation_spz": c.get("investigation_spz", ""),
-                    "admin_flag": c.get("admin_flag", False), "admin_note": c.get("admin_note", ""), "admin_driver": c.get("admin_driver", ""),
-                    "admin_spz_verified": c.get("admin_spz_verified", False),
-                    "admin_spz_bug": c.get("admin_spz_bug", False),
-                    "admin_spz_conflict": c.get("admin_spz_conflict", False),
+                    "investigating": False if is_train_final else c.get("investigating", False),
+                    "investigation_spz": "" if is_train_final else c.get("investigation_spz", ""),
+                    "admin_flag": False if is_train_final else c.get("admin_flag", False),
+                    "admin_note": "" if is_train_final else c.get("admin_note", ""),
+                    "admin_driver": "" if is_train_final else c.get("admin_driver", ""),
+                    "admin_spz_verified": False if is_train_final else c.get("admin_spz_verified", False),
+                    "admin_spz_bug": False if is_train_final else c.get("admin_spz_bug", False),
+                    "admin_spz_conflict": False if is_train_final else c.get("admin_spz_conflict", False),
                     "real_zastavka": c.get("real_zastavka"),
                     "nearest_stop": c.get("nearest_stop"),
-                    "last_stop_name": c.get("last_stop_name")
+                    "last_stop_name": "" if is_train_final else c.get("last_stop_name")
                 })
 
             global LIVE_BUSES_DATA, _last_spz_auto_refresh
@@ -6201,8 +6389,10 @@ def background_map_worker():
                 last_spz_cache_flush = now
                 cache_rows = []
                 for bid, bc in list(GLOBAL_BUS_CACHE.items()):
+                    if bc.get("is_train") or is_train_vehicle(bid, bc.get("line")):
+                        continue
                     spz_v = bc.get("spz")
-                    if not spz_v or spz_v in ("Nezn\u00e1m\u00e1", "Neznámá"):
+                    if not spz_v or spz_v in ("Neznámá", "Neznama"):
                         continue
                     cache_rows.append({
                         "bus_id": bid,
@@ -7461,13 +7651,24 @@ def api_live_buses():
     uptime = (now - WORKER_START_TIME).total_seconds() if WORKER_START_TIME else 9999
     
     is_admin = bool(session.get('logged_in'))
-    buses_to_send = LIVE_BUSES_DATA
-    if not is_admin:
-        buses_to_send = []
-        for b in LIVE_BUSES_DATA:
-            b_copy = dict(b)
+    buses_to_send = []
+    for b in LIVE_BUSES_DATA:
+        b_copy = dict(b)
+        is_tr = bool(b_copy.get("is_train") or is_train_vehicle(b_copy.get("id"), b_copy.get("line")))
+        if is_tr:
+            # Vlaky NIKDY nesmí být na mapě jako offline/poslední známá poloha!
+            if b_copy.get("color_class") == "bg-lastpos" or b_copy.get("status") == "Poslední známá poloha":
+                continue
+            b_copy["is_train"] = True
+            b_copy["spz"] = "Neznámá"
+            b_copy["spz_verified"] = False
+            b_copy["admin_spz_verified"] = False
+            b_copy["admin_note"] = ""
+            b_copy["admin_driver"] = ""
+            b_copy["admin_flag"] = False
+        elif not is_admin:
             b_copy.pop("admin_driver", None)
-            buses_to_send.append(b_copy)
+        buses_to_send.append(b_copy)
             
     return jsonify({
         "status": "success", "server_time": now.strftime('%H:%M:%S'),
@@ -8149,43 +8350,9 @@ def admin_clean_trains():
     if not u or u.get("role") not in ["DEV", "SA"]:
         return jsonify({"error": "unauthorized"}), 401
 
-    def is_bad_train(bid_str, line_str):
-        if bid_str.startswith("-"): return True
-        if _name_suggests_train(line_str): return True
-        s = str(line_str) + str(bid_str)
-        if "1093" in s or "1081" in s or "7265" in s: return True
-        return line_str.startswith(("Os ", "Sp ", "R ", "Ex ", "IC ", "EC ", "SC ", "rj ", "RJ "))
-
-    deleted_cache = 0
-    deleted_hist = 0
     try:
-        # 1. Clean spz_cache
-        cache_res = db.table("spz_cache").select("*").execute()
-        for r in cache_res.data:
-            bid = str(r.get("bus_id", ""))
-            line = str(r.get("line") or "")
-            if is_bad_train(bid, line):
-                db.table("spz_cache").delete().eq("bus_id", bid).execute()
-                deleted_cache += 1
-
-        # 2. Clean bus_history (jen cast)
-        hist_res = db.table("bus_history").select("id, bus_id, linka, spz").order("created_at", desc=True).limit(3000).execute()
-        for r in hist_res.data:
-            bid = str(r.get("bus_id") or r.get("id") or "")
-            line = str(r.get("linka") or "")
-            if is_bad_train(bid, line):
-                db.table("bus_history").delete().eq("id", r["id"]).execute()
-                deleted_hist += 1
-                
-        # 3. Vymyzat errory z aktualni pameti
-        for bid, c in GLOBAL_BUS_CACHE.items():
-            line = str(c.get("line") or c.get("real_linka_spoj") or "")
-            if is_bad_train(str(bid), line):
-                c["spz"] = "Neznámá"
-                c["skip_spz"] = True
-                c["is_train"] = True
-                
-        return jsonify({"status": "ok", "deleted_cache": deleted_cache, "deleted_hist": deleted_hist})
+        _purge_trains_everywhere(db)
+        return jsonify({"status": "ok", "message": "Trains cleaned everywhere"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

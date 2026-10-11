@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import sqlite3
 import threading
@@ -75,10 +76,21 @@ def init_local_db():
 def local_spz_upsert(rows: list):
     if not rows:
         return
+    filtered_rows = []
+    for r in rows:
+        bid = str(r.get("bus_id", "")).strip()
+        linka = str(r.get("linka", "")).strip()
+        if bid.startswith("-"):
+            continue
+        if linka.startswith(("Os", "Sp", "R ", "Ex", "IC", "EC", "SC", "rj", "RJ", "EN", "LE", "TL", "Vlak")) or re.match(r'^P\d{1,2}\b', linka, re.IGNORECASE):
+            continue
+        filtered_rows.append(r)
+    if not filtered_rows:
+        return
     try:
         with _local_db_lock:
             with _get_local_conn() as conn:
-                for row in rows:
+                for row in filtered_rows:
                     conn.execute("""
                         INSERT INTO spz_cache_local
                             (bus_id, spz, linka, lat, lng, spz_verified, admin_verified,
@@ -124,6 +136,19 @@ def local_spz_upsert(rows: list):
                 conn.commit()
     except Exception as e:
         print(f"[LOCAL DB] Chyba zapisu SPZ: {e}", flush=True)
+
+def local_spz_purge_trains():
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                conn.execute("DELETE FROM spz_cache_local WHERE bus_id LIKE '-%'")
+                train_prefixes = ["Os%", "Sp%", "R %", "Ex%", "IC%", "EC%", "SC%", "rj%", "RJ%", "EN%", "LE%", "TL%", "Vlak%", "P1%", "P2%", "P3%", "P4%", "P5%", "P11%", "P12%", "P21%", "P22%"]
+                for pref in train_prefixes:
+                    conn.execute("DELETE FROM spz_cache_local WHERE linka LIKE ?", (pref,))
+                conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba cisteni vlaku: {e}", flush=True)
+
 
 def local_spz_get_all() -> list:
     try:
