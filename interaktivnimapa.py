@@ -5122,71 +5122,85 @@ def fetch_tt_bg(bus_id, cached_dict):
         hdr = {'User-Agent': 'Mozilla/5.0', 'X-Requested-With': 'XMLHttpRequest',
                'Referer': 'https://pvvd.idpk.cz/', 'Cache-Control': 'no-cache'}
                
-        # Jízdní řád a Destinace má nejvyšší prioritu
+        # 1. Informační okno vozidla z PVVD (OpenInfoWindow) - obsahuje PŘESNÝ TYP VOZIDLA i LINKU A SPOJ!
+        try:
+            with opener.open(urllib.request.Request(
+                    f"https://pvvd.idpk.cz/Ajax/OpenInfoWindow?id={bus_id}&_={cb}",
+                    headers=hdr), timeout=3) as r_info:
+                info_raw = r_info.read().decode('utf-8')
+            info_unescaped = _html.unescape(info_raw)
+
+            # Typ vozidla: <dt>Vozidlo</dt><dd>Setra S 416 LE Business</dd>
+            mv = re.search(r'<dt>\s*Vozidlo\s*</dt>\s*<dd>\s*(.*?)\s*</dd>', info_unescaped, re.IGNORECASE | re.DOTALL)
+            if mv:
+                vt_clean = re.sub(r'<[^>]+>', '', mv.group(1)).strip()
+                if vt_clean and len(vt_clean) > 2:
+                    cached_dict["vehicle_type"] = vt_clean
+
+            # Linka a spoj: <dt>Linka / spoj</dt><dd>490745 / 23</dd>
+            mls = re.search(r'<dt>\s*Linka\s*/\s*spoj\s*</dt>\s*<dd>\s*([0-9]+)\s*/\s*([0-9]+)\s*</dd>', info_unescaped, re.IGNORECASE)
+            if mls:
+                r_linka = mls.group(1).strip()
+                r_spoj = mls.group(2).strip()
+                cached_dict["real_linka_spoj"] = f"{r_linka} / {r_spoj}"
+                cached_dict["spoj_num"] = r_spoj
+                cached_dict["last_known_spoj"] = r_spoj
+
+            # Zastávka: <dt>Zastávka</dt><dd>Přimda,Velké Dvorce</dd>
+            mz = re.search(r'<dt>\s*Zast[aá]vka\s*</dt>\s*<dd>\s*(.*?)\s*</dd>', info_unescaped, re.IGNORECASE | re.DOTALL)
+            if mz:
+                z_clean = re.sub(r'<[^>]+>', '', mz.group(1)).strip()
+                if z_clean:
+                    cached_dict["real_zastavka"] = z_clean
+        except Exception as e_info:
+            pass
+
+        # 2. Jízdní řád a Destinace z GetTimetable
         with opener.open(urllib.request.Request(
                 f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={bus_id}&currentStopId=0&_={cb}",
                 headers=hdr), timeout=4) as r:
             tt = r.read().decode('utf-8')
             
-        import html as _html
         tt_unescaped = _html.unescape(tt)
         
-        # Extrahuj Linka/Spoj z GetTimetable
-        # 1. PVVD standardní formát: <p class="ride-caption">Linka 440523, spoj 23</p>
-        m_cap = re.search(r'class=[\"\']ride-caption[\"\'][^>]*>\s*Linka\s*([0-9]+)[,\s]+spoj\s*([0-9]+)', tt_unescaped, re.IGNORECASE)
-        if m_cap:
-            r_linka = m_cap.group(1).strip()
-            r_spoj = m_cap.group(2).strip()
-            cached_dict["real_linka_spoj"] = f"{r_linka} / {r_spoj}"
-            cached_dict["spoj_num"] = r_spoj
-            cached_dict["last_known_spoj"] = r_spoj
-        else:
-            m_cap2 = re.search(r'Linka\s*([0-9]{3,7})[,\s/]+spoj\s*([0-9]{1,4})', tt_unescaped, re.IGNORECASE)
-            if m_cap2:
-                r_linka = m_cap2.group(1).strip()
-                r_spoj = m_cap2.group(2).strip()
+        # Extrahuj Linka/Spoj z GetTimetable jako fallback pokud OpenInfoWindow selhal
+        if not cached_dict.get("spoj_num"):
+            m_cap = re.search(r'class=[\"\']ride-caption[\"\'][^>]*>\s*Linka\s*([0-9]+)[,\s]+spoj\s*([0-9]+)', tt_unescaped, re.IGNORECASE)
+            if m_cap:
+                r_linka = m_cap.group(1).strip()
+                r_spoj = m_cap.group(2).strip()
                 cached_dict["real_linka_spoj"] = f"{r_linka} / {r_spoj}"
                 cached_dict["spoj_num"] = r_spoj
                 cached_dict["last_known_spoj"] = r_spoj
             else:
-                m_cap3 = re.search(r'(?:Linka\s*/\s*spoj|Linka\s*a\s*spoj)[^0-9]*([0-9]{3,7})\s*/\s*([0-9]{1,4})', tt_unescaped, re.IGNORECASE)
-                if not m_cap3:
-                    m_cap3 = re.search(r'\b([0-9]{6})\s*/\s*([0-9]{1,4})\b', tt_unescaped)
-                if m_cap3:
-                    r_linka = m_cap3.group(1).strip()
-                    r_spoj = m_cap3.group(2).strip()
+                m_cap2 = re.search(r'Linka\s*([0-9]{3,7})[,\s/]+spoj\s*([0-9]{1,4})', tt_unescaped, re.IGNORECASE)
+                if m_cap2:
+                    r_linka = m_cap2.group(1).strip()
+                    r_spoj = m_cap2.group(2).strip()
                     cached_dict["real_linka_spoj"] = f"{r_linka} / {r_spoj}"
                     cached_dict["spoj_num"] = r_spoj
                     cached_dict["last_known_spoj"] = r_spoj
                 else:
-                    ml = re.search(r'<span id="currentLineRouteLabel">\s*(.*?)\s*</span>', tt_unescaped, re.IGNORECASE | re.DOTALL)
-                if ml:
-                    ls_val = ml.group(1).strip()
-                    if ls_val and ls_val != "-- / --" and ls_val != "":
-                        cached_dict["real_linka_spoj"] = ls_val
-                        if "/" in ls_val:
-                            parts = ls_val.split("/")
-                            if len(parts) == 2 and parts[1].strip():
-                                cached_dict["spoj_num"] = parts[1].strip()
-                                cached_dict["last_known_spoj"] = parts[1].strip()
-
-        # Extrahuj typ vozidla (vehicle_type) - napr. 'Iveco Crossway LE LINE 10.8M'
-        mv = re.search(r'<span[^>]*id=["\']?vehicleType["\']?[^>]*>\s*(.*?)\s*</span>', tt_unescaped, re.IGNORECASE | re.DOTALL)
-        if not mv:
-            # Zkus alternativni selektory
-            mv = re.search(r'class=["\'][^"\']*(vehicle.type|bus.type|typ.vozidla)[^"\'][^>]*>\s*(.*?)\s*<', tt_unescaped, re.IGNORECASE | re.DOTALL)
-        if mv:
-            vt_raw = mv.group(mv.lastindex).strip()
-            vt_clean = re.sub(r'<[^>]+>', '', vt_raw).strip()
-            if vt_clean and len(vt_clean) > 3:
-                cached_dict["vehicle_type"] = vt_clean
-        # Alternativne zkus hledat v metadatech jizdy
-        if not cached_dict.get("vehicle_type"):
-            mv2 = re.search(r'Typ vozidla[^<]*:\s*</[^>]+>\s*<[^>]+>\s*(.*?)\s*<', tt_unescaped, re.IGNORECASE)
-            if mv2:
-                vt2 = re.sub(r'<[^>]+>', '', mv2.group(1)).strip()
-                if vt2:
-                    cached_dict["vehicle_type"] = vt2
+                    m_cap3 = re.search(r'(?:Linka\s*/\s*spoj|Linka\s*a\s*spoj)[^0-9]*([0-9]{3,7})\s*/\s*([0-9]{1,4})', tt_unescaped, re.IGNORECASE)
+                    if not m_cap3:
+                        m_cap3 = re.search(r'\b([0-9]{6})\s*/\s*([0-9]{1,4})\b', tt_unescaped)
+                    if m_cap3:
+                        r_linka = m_cap3.group(1).strip()
+                        r_spoj = m_cap3.group(2).strip()
+                        cached_dict["real_linka_spoj"] = f"{r_linka} / {r_spoj}"
+                        cached_dict["spoj_num"] = r_spoj
+                        cached_dict["last_known_spoj"] = r_spoj
+                    else:
+                        ml = re.search(r'<span id="currentLineRouteLabel">\s*(.*?)\s*</span>', tt_unescaped, re.IGNORECASE | re.DOTALL)
+                    if ml:
+                        ls_val = ml.group(1).strip()
+                        if ls_val and ls_val != "-- / --" and ls_val != "":
+                            cached_dict["real_linka_spoj"] = ls_val
+                            if "/" in ls_val:
+                                parts = ls_val.split("/")
+                                if len(parts) == 2 and parts[1].strip():
+                                    cached_dict["spoj_num"] = parts[1].strip()
+                                    cached_dict["last_known_spoj"] = parts[1].strip()
             
         # Extrahuj casy
         times = re.findall(r'\b\d{2}:\d{2}\b', tt)
