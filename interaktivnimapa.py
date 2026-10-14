@@ -3725,38 +3725,71 @@ async function fetchBuses(){
       else if(bus.status?.includes('Vozovna'))sc='#facc15';
       let fTxt=(followId===bus.id)?'✖️ Zrusit sledovani':'📡 Sledovat';
       let fSt=(followId===bus.id)?'background:#ef4444;color:#fff;':'background:#3b82f6;color:#fff;';
-      let afH=bus.admin_flag?'<span style="background:#1e40af;color:#93c5fd;padding:2px 7px;border-radius:10px;font-size:10px;margin-left:6px;font-weight:bold;">Admin uprava</span>':'';
+      let afH=bus.admin_flag
+        ? `<div style="margin-top:6px;display:flex;align-items:center;">
+             <span style="background:rgba(30,64,175,0.7);color:#93c5fd;border:1px solid #3b82f6;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:4px;letter-spacing:0.3px;">
+               <i class="fas fa-user-shield" style="font-size:9px;"></i> Admin úprava
+             </span>
+           </div>`
+        : '';
       let rA=(activeRouteId===bus.id);
 
       // === LINKA/SPOJ FORMATTING ===
-      let _linkaNum = bus.line || '';
+      let _rawLine = String(bus.line || '').trim();
+      let _linkaNum = _rawLine;
       let _spojNum = null;
-      if (bus.spoj_num) {
-        _spojNum = String(bus.spoj_num).trim();
-      } else if (bus.real_linka_spoj) {
-        let _ls = String(bus.real_linka_spoj);
-        let _slashIdx = _ls.indexOf('/');
-        if (_slashIdx >= 0) {
-          _linkaNum = _ls.substring(0, _slashIdx).trim();
-          let _sRaw = _ls.substring(_slashIdx + 1).trim();
-          if (_sRaw) _spojNum = _sRaw;
-        } else {
-          _linkaNum = _ls.trim();
+
+      if (bus.spoj_num !== undefined && bus.spoj_num !== null) {
+        let _s = String(bus.spoj_num).trim();
+        if (_s !== '' && _s !== '?' && _s !== '-' && _s.toLowerCase() !== 'null' && _s.toLowerCase() !== 'undefined' && _s.toLowerCase() !== 'neznámý' && _s.toLowerCase() !== 'neznamy') {
+          _spojNum = _s;
         }
       }
+
+      if (_linkaNum.includes('/')) {
+        let _p = _linkaNum.split('/');
+        _linkaNum = _p[0].trim();
+        let _sFromLine = _p.slice(1).join('/').trim();
+        if (!_spojNum && _sFromLine && _sFromLine !== '?' && _sFromLine !== '-' && _sFromLine.toLowerCase() !== 'null') {
+          _spojNum = _sFromLine;
+        }
+      }
+
+      if (bus.real_linka_spoj) {
+        let _ls = String(bus.real_linka_spoj).trim();
+        if (_ls.includes('/')) {
+          let _p = _ls.split('/');
+          if (!_linkaNum) _linkaNum = _p[0].trim();
+          let _sFromLs = _p.slice(1).join('/').trim();
+          if (!_spojNum && _sFromLs && _sFromLs !== '?') {
+            _spojNum = _sFromLs;
+          }
+        } else if (!_linkaNum) {
+          _linkaNum = _ls;
+        }
+      }
+
+      if (_spojNum && (_spojNum === '?' || _spojNum === '-' || _spojNum.toLowerCase() === 'neznámý' || _spojNum.toLowerCase() === 'neznamy')) {
+        _spojNum = null;
+      }
+
       if (_spojNum && window.requestedSpojeMap) {
         delete window.requestedSpojeMap[bus.id];
       }
+
       let _hlavickaSpoj = _spojNum
-        ? `LINKA: ${_linkaNum} <span style="color:#38bdf8;font-size:11px;font-weight:700;">SPOJ: ${_spojNum}</span>`
-        : `LINKA: ${_linkaNum}`;
+        ? `LINKOSPOJ: ${_linkaNum || '?'}/${_spojNum}`
+        : `LINKA: ${_linkaNum || 'Neznámá'} <span style="color:#94a3b8;font-size:11px;font-weight:600;margin-left:3px;">(SPOJ NEZNÁMÝ)</span>`;
       
       let popH=`
         <div class="ph" style="${mc==='bg-bug'?'background:#1f2937;':''}${mc==='bg-orange'?'background:#1c1400;':''}${mc==='bg-lastpos'?'background:linear-gradient(90deg,#181820,#2e1e2c);border-bottom:1px solid #f472b6;':''}">
-          <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}${mc==='bg-orange'?'color:#f59e0b;':''}${mc==='bg-lastpos'?'color:#fbcfe8;':''}; display:flex; justify-content:space-between; align-items:center;">
-            <span>${_hlavickaSpoj}${afH}</span>
-            <span style="font-size:10px; color:#64748b; font-weight:normal; letter-spacing:0.5px;">#${bus.id}</span>
-          </h3>
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+            <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;'':''}${mc==='bg-orange'?'color:#f59e0b;'':''}${mc==='bg-lastpos'?'color:#fbcfe8;'':''}; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0;">
+              ${_hlavickaSpoj}
+            </h3>
+            <span style="font-size:10px; color:#64748b; font-weight:normal; letter-spacing:0.5px; white-space:nowrap; flex-shrink:0;">#${bus.id}</span>
+          </div>
+          ${afH}
         </div>
         <div class="pb">
           ${withdrawnW}${lastposW}${bugW}${orangeW}${depotW}
