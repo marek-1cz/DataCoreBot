@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import asyncio
 import uuid
+import ipaddress
 import urllib.request
 import http.cookiejar
 import json
@@ -318,6 +319,175 @@ def get_db():
 _AUTH_CACHE = {}      # {discord_id: (timestamp, role, is_banned)}
 _SESSION_CACHE = {}   # {web_session_token: (timestamp, user_dict)}
 _SETTINGS_CACHE = {}  # {setting_key: (timestamp, value)}
+_IP_GEO_CACHE = {}     # {ip: (timestamp, dict)}
+_RECENT_WEB_VISITS = {} # {ip: last_timestamp}
+
+# Jednorázové promazání starých chybných dat tabulky page_visits podle požadavku
+try:
+    _flag_file = os.path.join(os.path.dirname(__file__), ".page_visits_reset_v2")
+    if not os.path.exists(_flag_file):
+        _db_init = get_db()
+        if _db_init:
+            print("[STATS] Jednorázové promazávání starých dat tabulky page_visits...", flush=True)
+            _db_init.table("page_visits").delete().neq("id", 0).execute()
+            with open(_flag_file, "w") as _f:
+                _f.write("reset_done")
+            print("[STATS] Tabulka page_visits byla úspěšně vyprázdněna.", flush=True)
+except Exception as _e_clear:
+    print(f"[STATS] Upozornění při promazávání page_visits: {_e_clear}", flush=True)
+
+def get_real_client_ip(req):
+    """Získá skutečnou veřejnou IP adresu klienta z proxy hlaviček (Koyeb, Cloudflare apod.)."""
+    headers_order = ('CF-Connecting-IP', 'True-Client-IP', 'X-Real-IP')
+    for h in headers_order:
+        val = req.headers.get(h)
+        if val:
+            ip_cand = val.split(',')[0].strip()
+            if ip_cand:
+                try:
+                    obj = ipaddress.ip_address(ip_cand)
+                    if not (obj.is_private or obj.is_loopback or obj.is_link_local):
+                        return str(obj)
+                except ValueError:
+                    pass
+
+    xff = req.headers.get('X-Forwarded-For')
+    if xff:
+        for part in xff.split(','):
+            ip_cand = part.strip()
+            if not ip_cand:
+                continue
+            if ':' in ip_cand and not ip_cand.startswith('[') and ip_cand.count(':') == 1:
+                ip_cand = ip_cand.split(':')[0]
+            try:
+                obj = ipaddress.ip_address(ip_cand)
+                if not (obj.is_private or obj.is_loopback or obj.is_link_local):
+                    return str(obj)
+            except ValueError:
+                pass
+
+    if req.remote_addr:
+        return req.remote_addr.strip()
+    return '127.0.0.1'
+
+def resolve_ip_geo(ip, cf_hint=None):
+    """Určí zemi, region, město a kód vlajky pro IP adresu s paměťovou mezipamětí."""
+    now = time.time()
+    if ip in _IP_GEO_CACHE:
+        ts, cached = _IP_GEO_CACHE[ip]
+        if now - ts < 86400 * 7:
+            return cached
+
+    country_code = (cf_hint or "").lower().strip()
+    if country_code in ('neznámá', 'unknown', 'none', ''):
+        country_code = 'cz'
+    country_name = "Česká republika" if country_code == 'cz' else country_code.upper()
+    region = ""
+    city = ""
+
+    try:
+        ip_obj = ipaddress.ip_address(ip)
+        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
+            res = {
+                "country_code": "cz",
+                "country_name": "Lokální síť",
+                "region": "Vývoj",
+                "city": "Localhost",
+                "flag": "https://flagcdn.com/24x18/cz.png"
+            }
+            _IP_GEO_CACHE[ip] = (now, res)
+            return res
+    except Exception:
+        pass
+
+    found = False
+    try:
+        url = f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,regionName,city"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+        with urllib.request.urlopen(req, timeout=2.5) as response:
+            g = json.loads(response.read().decode())
+            if g.get("status") == "success":
+                country_code = (g.get("countryCode") or country_code).lower()
+                country_name = g.get("country") or country_name
+                region = g.get("regionName") or ""
+                city = g.get("city") or ""
+                found = True
+    except Exception:
+        pass
+
+    if not found:
+        try:
+            url = f"https://freeipapi.com/api/json/{ip}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            with urllib.request.urlopen(req, timeout=2.5) as response:
+                g = json.loads(response.read().decode())
+                if g.get("countryCode"):
+                    country_code = (g.get("countryCode") or country_code).lower()
+                    country_name = g.get("countryName") or country_name
+                    region = g.get("regionName") or ""
+                    city = g.get("cityName") or ""
+                    found = True
+        except Exception:
+            pass
+
+    flag = f"https://flagcdn.com/24x18/{country_code}.png" if country_code and country_code != 'xx' else "https://flagcdn.com/24x18/cz.png"
+
+    res = {
+        "country_code": country_code,
+        "country_name": country_name,
+        "region": region,
+        "city": city,
+        "flag": flag
+    }
+    _IP_GEO_CACHE[ip] = (now, res)
+    return res
+
+def log_web_visit_async(ip, cf_hint, path):
+    """Zaznamená návštěvu webu na pozadí, max 1x za 15 minut na stejnou IP."""
+    def _worker():
+        try:
+            if not ip:
+                return
+            now_ts = time.time()
+            last_ts = _RECENT_WEB_VISITS.get(ip, 0)
+            if now_ts - last_ts < 900:
+                return
+            _RECENT_WEB_VISITS[ip] = now_ts
+
+            db = get_db()
+            if not db:
+                return
+
+            geo = resolve_ip_geo(ip, cf_hint)
+            now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+            clean_path = (path or "/").split("?")[0][:60]
+            combined = f"{geo['country_code']}|{geo['country_name']}|{geo['region']}|{geo['city']}|{clean_path}"
+            db.table("page_visits").insert({
+                "ip": ip,
+                "country": combined,
+                "visited_at": now_str
+            }).execute()
+        except Exception:
+            pass
+
+    Thread(target=_worker, daemon=True).start()
+
+@app.before_request
+def track_web_visitors():
+    try:
+        if request.method == 'GET':
+            p = request.path
+            # Ignorovat assety, API, interní routy
+            if not p.startswith(('/static/', '/api/', '/dashboard', '/debug', '/favicon', '/robots', '/.well-known')):
+                ua = request.headers.get('User-Agent', '').lower()
+                if not any(b in ua for b in ['bot', 'crawl', 'spider', 'slurp', 'mediapartners', 'lighthouse', 'headless']):
+                    ip = get_real_client_ip(request)
+                    cf = request.headers.get('CF-IPCountry')
+                    log_web_visit_async(ip, cf, p)
+    except Exception:
+        pass
+
+
 
 def _invalidate_session_cache(token=None, user_id=None):
     """Vymaže relaci nebo všechny relace daného uživatele z paměťové cache."""
@@ -1514,42 +1684,6 @@ def api_download_launcher(token):
 
 @app.route('/')
 def home():
-    def log_visit(ip, cf_country):
-        try:
-            if not ip or ip in ["127.0.0.1", "::1", "0.0.0.0"]: return
-            clean_ip = ip.split(',')[0].strip()
-            db = get_db()
-            if not db: return
-            today_str = get_prague_time().strftime("%d.%m.%Y")
-            now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
-            existing = db.table("page_visits").select("visited_at").eq("ip", clean_ip).execute().data or []
-            for record in existing:
-                if record.get("visited_at", "").startswith(today_str): return
-            if not cf_country or cf_country.lower() in ["neznámá", "unknown", "none"]: return
-            country_name = cf_country; region = ""; country_code = ""
-            try:
-                url = f"http://ip-api.com/json/{clean_ip}"
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=2) as response:
-                    geo_data = json.loads(response.read().decode())
-                    if geo_data.get("status") == "success":
-                        country_name = geo_data.get("country", country_name)
-                        region = geo_data.get("regionName", "")
-                        country_code = geo_data.get("countryCode", "").lower()
-            except: pass
-            
-            # Use CF-IPCountry as a reliable fallback if ip-api fails or returns empty
-            if not country_code:
-                if cf_country.lower() != "neznámá":
-                    country_code = "us" if cf_country.lower() == "us" else "cz" # simplified
-            
-            if not country_code or country_code.lower() == 'us': return
-            combined_location = f"{country_code}|{country_name}|{region}"
-            db.table("page_visits").insert({"ip": clean_ip, "country": combined_location, "visited_at": now_str}).execute()
-        except: pass
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    country = request.headers.get('CF-IPCountry', 'Neznámá')
-    Thread(target=log_visit, args=(ip, country)).start()
     return render_public(HTML_HOME)
 
 
@@ -3102,45 +3236,224 @@ def api_ucet_update():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
-@app.route('/dashboard/stats', methods=['GET'], strict_slashes=False)
-def dashboard_stats():
-    if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    total_visits = 0; last_7_days = 0; country_totals = {}; region_totals = {}
-    dates_7_days = [(get_prague_time().replace(tzinfo=None) - timedelta(days=i)).strftime("%d.%m.") for i in range(6, -1, -1)]
-    chart_data_7d = {d: 0 for d in dates_7_days}
-    chart_data_24h = {f"{i:02d}:00": 0 for i in range(24)}
+@app.route('/dashboard/stats/clear_web', methods=['POST'])
+def dashboard_stats_clear_web():
+    if not session.get('logged_in'):
+        return redirect(url_for('dashboard_main'))
     try:
         db = get_db()
         if db:
-            visits = db.table("page_visits").select("*").order("id", desc=True).limit(1500).execute().data or []
-            total_visits = len(visits)
-            now = get_prague_time().replace(tzinfo=None)
+            db.table("page_visits").delete().neq("id", 0).execute()
+            flash("Data historie webových návštěv byla úspěšně vymazána.", "success")
+    except Exception as e:
+        flash(f"Chyba při mazání historie webu: {e}", "error")
+    return redirect(url_for('dashboard_stats'))
+
+@app.route('/dashboard/stats', methods=['GET'], strict_slashes=False)
+def dashboard_stats():
+    if not session.get('logged_in'):
+        return redirect(url_for('dashboard_main'))
+
+    now_dt = get_prague_time().replace(tzinfo=None)
+    dates_7_days = [(now_dt - timedelta(days=i)).strftime("%d.%m.") for i in range(6, -1, -1)]
+
+    # 1. Metriky WEBU
+    web_total_visits = 0
+    web_last_7_days = 0
+    web_today_visits = 0
+    country_totals = {}
+    region_totals = {}
+    recent_web_visits = []
+    web_chart_7d = {d: 0 for d in dates_7_days}
+    web_chart_24h = {f"{i:02d}:00": 0 for i in range(24)}
+
+    # 2. Metriky APLIKACE
+    app_total_launches = 0
+    app_last_7_days = 0
+    app_today_launches = 0
+    app_online_users = []
+    app_total_hours = 0
+    recent_app_sessions = []
+    top_active_users = []
+    app_chart_7d = {d: 0 for d in dates_7_days}
+    app_chart_24h = {f"{i:02d}:00": 0 for i in range(24)}
+
+    try:
+        db = get_db()
+        if db:
+            # ── Načtení návštěvnosti WEBU ──
+            visits = db.table("page_visits").select("*").order("id", desc=True).limit(2000).execute().data or []
+            web_total_visits = len(visits)
+
             for v in visits:
-                c_raw = v.get('country', '')
-                if not c_raw or any(x in c_raw.lower() for x in ['neznámá', 'unknown', 'none', 'us']): continue
+                c_raw = (v.get('country') or '').strip()
                 parts = c_raw.split('|')
-                cc = parts[0] if len(parts) > 0 else ""
-                c_name = parts[1] if len(parts) > 1 else c_raw
-                reg = parts[2] if len(parts) > 2 else ""
-                if not cc or cc == 'us': continue
+                cc = parts[0].lower().strip() if len(parts) > 0 and parts[0] else "cz"
+                c_name = parts[1].strip() if len(parts) > 1 and parts[1] else "Česká republika"
+                reg = parts[2].strip() if len(parts) > 2 else ""
+                city = parts[3].strip() if len(parts) > 3 else ""
+                path = parts[4].strip() if len(parts) > 4 else "/"
+
                 flag_url = f"https://flagcdn.com/24x18/{cc}.png"
-                if cc not in country_totals: country_totals[cc] = {"name": c_name, "count": 0, "flag": flag_url}
+                if cc not in country_totals:
+                    country_totals[cc] = {"name": c_name, "count": 0, "flag": flag_url}
                 country_totals[cc]["count"] += 1
-                display_name = f"{c_name} - {reg}" if reg else c_name
-                if display_name not in region_totals: region_totals[display_name] = {"count": 0, "flag": flag_url}
-                region_totals[display_name]["count"] += 1
+
+                loc_label = f"{c_name} - {reg}" if reg else c_name
+                if loc_label not in region_totals:
+                    region_totals[loc_label] = {"count": 0, "flag": flag_url, "city": city}
+                region_totals[loc_label]["count"] += 1
+
+                v_time_str = v.get('visited_at', '')
                 try:
-                    v_time = datetime.strptime(v['visited_at'], "%d.%m.%Y %H:%M")
-                    if (now - v_time).days <= 7: last_7_days += 1
-                    day_str = v_time.strftime("%d.%m.")
-                    hour_str = v_time.strftime("%H:00")
-                    if day_str in chart_data_7d: chart_data_7d[day_str] += 1
-                    if v_time.date() == now.date():
-                        if hour_str in chart_data_24h: chart_data_24h[hour_str] += 1
-                except: pass
-    except Exception as e: flash(f"Chyba při načítání statistik: {e}", "error")
+                    v_time = datetime.strptime(v_time_str, "%d.%m.%Y %H:%M")
+                    if (now_dt - v_time).days <= 7:
+                        web_last_7_days += 1
+                    if v_time.date() == now_dt.date():
+                        web_today_visits += 1
+                        h_str = v_time.strftime("%H:00")
+                        if h_str in web_chart_24h:
+                            web_chart_24h[h_str] += 1
+                    d_str = v_time.strftime("%d.%m.")
+                    if d_str in web_chart_7d:
+                        web_chart_7d[d_str] += 1
+                except Exception:
+                    pass
+
+                if len(recent_web_visits) < 25:
+                    recent_web_visits.append({
+                        "ip": v.get("ip", "Neznámá"),
+                        "country_name": c_name,
+                        "flag": flag_url,
+                        "location": f"{city}, {reg}" if (city and reg) else (reg or city or c_name),
+                        "path": path,
+                        "visited_at": v_time_str
+                    })
+
+            # ── Načtení dat APLIKACE ──
+            all_users = db.table("users").select("id, discord_id, nick, avatar_url, role, is_online, last_active, total_time, launch_count").execute().data or []
+            user_map = {}
+            total_mins = 0
+            for u in all_users:
+                d_id = str(u.get("discord_id") or "")
+                u_id = str(u.get("id") or "")
+                if d_id:
+                    user_map[d_id] = u
+                if u_id:
+                    user_map[f"email-{u_id}"] = u
+
+                if u.get("is_online"):
+                    la_str = u.get("last_active")
+                    is_active = True
+                    if la_str:
+                        try:
+                            la_dt = datetime.strptime(la_str, "%d.%m.%Y %H:%M:%S" if la_str.count(':') == 2 else "%d.%m.%Y %H:%M")
+                            if (now_dt - la_dt).total_seconds() > 180:
+                                is_active = False
+                        except Exception:
+                            pass
+                    if is_active:
+                        app_online_users.append(u)
+
+                try:
+                    total_mins += int(u.get("total_time") or 0)
+                    app_total_launches += int(u.get("launch_count") or 0)
+                except Exception:
+                    pass
+
+            app_total_hours = round(total_mins / 60, 1)
+
+            # Relace aplikace z app_sessions
+            app_sessions_raw = db.table("app_sessions").select("*").order("id", desc=True).limit(1000).execute().data or []
+            for s in app_sessions_raw:
+                st_str = s.get("start_time") or ""
+                et_str = s.get("end_time") or ""
+                d_id = str(s.get("discord_id") or "")
+                u_obj = user_map.get(d_id, {})
+
+                try:
+                    fmt = "%d.%m.%Y %H:%M:%S" if st_str.count(':') == 2 else "%d.%m.%Y %H:%M"
+                    st_dt = datetime.strptime(st_str, fmt)
+                    if (now_dt - st_dt).days <= 7:
+                        app_last_7_days += 1
+                    if st_dt.date() == now_dt.date():
+                        app_today_launches += 1
+                        h_str = st_dt.strftime("%H:00")
+                        if h_str in app_chart_24h:
+                            app_chart_24h[h_str] += 1
+                    d_str = st_dt.strftime("%d.%m.")
+                    if d_str in app_chart_7d:
+                        app_chart_7d[d_str] += 1
+                except Exception:
+                    pass
+
+                duration_str = "Neznámá"
+                is_active_session = False
+                if st_str and et_str:
+                    try:
+                        fmt_s = "%d.%m.%Y %H:%M:%S" if st_str.count(':') == 2 else "%d.%m.%Y %H:%M"
+                        fmt_e = "%d.%m.%Y %H:%M:%S" if et_str.count(':') == 2 else "%d.%m.%Y %H:%M"
+                        s_dt = datetime.strptime(st_str, fmt_s)
+                        e_dt = datetime.strptime(et_str, fmt_e)
+                        dur_sec = max(0, int((e_dt - s_dt).total_seconds()))
+                        if dur_sec < 60:
+                            duration_str = f"{dur_sec}s"
+                        elif dur_sec < 3600:
+                            duration_str = f"{dur_sec // 60}m"
+                        else:
+                            duration_str = f"{dur_sec // 3600}h {(dur_sec % 3600) // 60}m"
+
+                        if (now_dt - e_dt).total_seconds() < 90 and u_obj.get("is_online"):
+                            is_active_session = True
+                    except Exception:
+                        pass
+
+                if len(recent_app_sessions) < 20:
+                    recent_app_sessions.append({
+                        "user_nick": u_obj.get("nick") or d_id or "Neznámý hráč",
+                        "avatar_url": u_obj.get("avatar_url") or "",
+                        "role": u_obj.get("role") or "User",
+                        "start_time": st_str,
+                        "duration": duration_str,
+                        "is_active": is_active_session
+                    })
+
+            # Top aktivní hráči
+            valid_users = [u for u in all_users if (u.get("total_time") or 0) > 0 or (u.get("launch_count") or 0) > 0]
+            valid_users.sort(key=lambda x: int(x.get("total_time") or 0), reverse=True)
+            top_active_users = valid_users[:7]
+
+    except Exception as e:
+        flash(f"Chyba při načítání statistik: {e}", "error")
+
     gc.collect()
-    return render_dashboard(HTML_STATS, total_visits=total_visits, last_7_days=last_7_days, country_totals=country_totals, region_totals=region_totals, labels_7d=json.dumps(list(chart_data_7d.keys())), data_7d=json.dumps(list(chart_data_7d.values())), labels_24h=json.dumps(list(chart_data_24h.keys())), data_24h=json.dumps(list(chart_data_24h.values())), deploy_time=DEPLOY_TIME)
+    return render_dashboard(
+        HTML_STATS,
+        web_total_visits=web_total_visits,
+        web_last_7_days=web_last_7_days,
+        web_today_visits=web_today_visits,
+        country_totals=country_totals,
+        region_totals=region_totals,
+        recent_web_visits=recent_web_visits,
+        web_labels_7d=json.dumps(list(web_chart_7d.keys())),
+        web_data_7d=json.dumps(list(web_chart_7d.values())),
+        web_labels_24h=json.dumps(list(web_chart_24h.keys())),
+        web_data_24h=json.dumps(list(web_chart_24h.values())),
+        
+        app_total_launches=app_total_launches,
+        app_last_7_days=app_last_7_days,
+        app_today_launches=app_today_launches,
+        app_online_count=len(app_online_users),
+        app_online_users=app_online_users,
+        app_total_hours=app_total_hours,
+        recent_app_sessions=recent_app_sessions,
+        top_active_users=top_active_users,
+        app_labels_7d=json.dumps(list(app_chart_7d.keys())),
+        app_data_7d=json.dumps(list(app_chart_7d.values())),
+        app_labels_24h=json.dumps(list(app_chart_24h.keys())),
+        app_data_24h=json.dumps(list(app_chart_24h.values())),
+        deploy_time=DEPLOY_TIME
+    )
 
 @app.route('/dashboard', methods=['GET', 'POST'], strict_slashes=False)
 def dashboard_main():

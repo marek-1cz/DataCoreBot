@@ -235,7 +235,7 @@ DASHBOARD_LAYOUT = """
 <div class="sidebar-menu">
 <a href="/" class="sidebar-link" style="color: #10b981; border-bottom: 1px solid #334155; margin-bottom: 5px;"><i class="fas fa-globe"></i> Veřejný Web (Bypass)</a>
 <a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a>
-<a href="/dashboard/stats" class="sidebar-link"><i class="fas fa-chart-bar"></i> Statistiky Webu</a>
+<a href="/dashboard/stats" class="sidebar-link"><i class="fas fa-chart-line"></i> Statistiky Webu & Aplikace</a>
 <a href="/dashboard/app_management" class="sidebar-link"><i class="fas fa-desktop"></i> Správa Aplikace</a>
 <a href="/dashboard/sprava-notifikaci" class="sidebar-link" style="color: #a78bfa; font-weight: 600;"><i class="fas fa-paper-plane"></i> Správa Notifikací & Zprávy</a>
 <a href="/dashboard/notifications" class="sidebar-link" style="color: #f59e0b;"><i class="fas fa-bell"></i> Oznámení</a>
@@ -774,31 +774,558 @@ HTML_CLAIM = """
 """
 
 HTML_STATS = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-chart-line" style="color:var(--blue-main);"></i> Statistiky Webu</h2>
-    <div style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;"><i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Automaticky aktualizováno</div>
-</div>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px;">
-    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--blue-main); text-align: center;"><h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Unikátní zobrazení (Celkem)</h3><div style="font-size: 40px; font-weight: 900; color: var(--text-main);">{{ total_visits }}</div></div>
-    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--success); text-align: center;"><h3 style="color: var(--text-muted); font-size: 14px; margin-top: 0; text-transform: uppercase;">Zobrazení za 7 dní</h3><div style="font-size: 40px; font-weight: 900; color: var(--success);">{{ last_7_days }}</div></div>
-</div>
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px;"><h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-calendar-week"></i> Návštěvnost za posledních 7 dní</h3><div style="position: relative; height: 250px; width: 100%;"><canvas id="chart7d"></canvas></div></div>
-    <div style="background: var(--bg-panel); padding: 20px; border-radius: 10px;"><h3 style="color: var(--blue-main); margin-top: 0;"><i class="fas fa-clock"></i> Dnešní aktivita po hodinách</h3><div style="position: relative; height: 250px; width: 100%;"><canvas id="chart24h"></canvas></div></div>
-</div>
-<div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-    <h3 style="color: var(--warning); margin-top: 0;"><i class="fas fa-globe"></i> Návštěvnost podle států</h3>
-    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-        {% for cc, data in country_totals.items() %}<div style="background: rgba(0,0,0,0.3); border: 1px solid #334155; padding: 10px 20px; border-radius: 8px; display: flex; align-items: center; gap: 10px;"><img src="{{ data.flag }}" alt="" style="border-radius: 3px;"><span style="color: var(--text-main); font-weight: bold;">{{ data.name }}</span><span style="background: var(--blue-main); color: #000; padding: 2px 8px; border-radius: 12px; font-weight: 900; font-size: 12px;">{{ data.count }}</span></div>{% else %}<div style="color: var(--text-muted);">Zatím žádná data.</div>{% endfor %}
+<style>
+.stats-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+.tab-btn {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid #334155;
+  color: #94a3b8;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+.tab-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+.tab-btn.active {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #38bdf8;
+  box-shadow: 0 0 15px rgba(2, 132, 199, 0.4);
+}
+.pulse-online {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background-color: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulse-dot 1.8s infinite;
+}
+@keyframes pulse-dot {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.stats-table th {
+  text-align: left;
+  padding: 10px 12px;
+  color: #64748b;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #334155;
+}
+.stats-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  color: #e2e8f0;
+}
+.stats-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+.badge-path {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+}
+.badge-role {
+  background: rgba(139, 92, 246, 0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
+}
+</style>
+
+<div class="stats-header-bar">
+  <div>
+    <h2 style="margin: 0; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+      <i class="fas fa-chart-line" style="color:var(--blue-main);"></i> Statistiky Návštěvnosti
+    </h2>
+    <div style="color: #94a3b8; font-size: 12px; margin-top: 4px;">
+      Přehled v reálném čase pro Veřejný Web i Desktopovou Aplikaci (OIS IDPK)
     </div>
+  </div>
+  <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+    <div style="display: flex; background: rgba(0,0,0,0.4); padding: 4px; border-radius: 10px; border: 1px solid #334155;">
+      <button type="button" class="tab-btn active" id="tab-all" onclick="switchStatsView('all')"><i class="fas fa-columns"></i> Vše vedle sebe</button>
+      <button type="button" class="tab-btn" id="tab-web" onclick="switchStatsView('web')"><i class="fas fa-globe"></i> Pouze Web</button>
+      <button type="button" class="tab-btn" id="tab-app" onclick="switchStatsView('app')"><i class="fas fa-desktop"></i> Pouze Aplikace</button>
+    </div>
+    <form action="/dashboard/stats/clear_web" method="POST" style="margin:0;" onsubmit="return confirm('OPRAVDU SMAZAT HISTORII NÁVŠTĚV WEBU?\\n\\nTato akce vymaže pouze staré záznamy zobrazení webu. Data hráčů, herní statistiky a relace aplikace zůstanou 100% zachovány! Pokračovat?');">
+      <button type="submit" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Smazat dosavadní záznamy návštěv webu">
+        <i class="fas fa-trash-alt"></i> Vymazat historii webu
+      </button>
+    </form>
+    <button onclick="location.reload()" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.25)';" onmouseout="this.style.background='rgba(56, 189, 248, 0.15)';" title="Znovu načíst data">
+      <i class="fas fa-sync-alt"></i> Obnovit
+    </button>
+  </div>
 </div>
+
+<!-- HLAVNÍ METRIKY (KPI KARTY) -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
+  <!-- Web Celkem -->
+  <div style="background: var(--bg-panel); padding: 18px 20px; border-radius: 12px; border: 1px solid #334155; border-top: 4px solid #38bdf8; display: flex; align-items: center; justify-content: space-between;">
+    <div>
+      <div style="color: #94a3b8; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Web: Unikátní zobrazení</div>
+      <div style="font-size: 32px; font-weight: 900; color: #f8fafc; margin-top: 4px;">{{ web_total_visits }}</div>
+      <div style="color: #38bdf8; font-size: 11px; margin-top: 2px;">Dnes: <b>{{ web_today_visits }}</b></div>
+    </div>
+    <div style="width: 48px; height: 48px; border-radius: 10px; background: rgba(56, 189, 248, 0.12); display: flex; align-items: center; justify-content: center; color: #38bdf8; font-size: 22px;">
+      <i class="fas fa-globe"></i>
+    </div>
+  </div>
+
+  <!-- Web za 7 dní -->
+  <div style="background: var(--bg-panel); padding: 18px 20px; border-radius: 12px; border: 1px solid #334155; border-top: 4px solid #10b981; display: flex; align-items: center; justify-content: space-between;">
+    <div>
+      <div style="color: #94a3b8; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Web: Za posledních 7 dní</div>
+      <div style="font-size: 32px; font-weight: 900; color: #10b981; margin-top: 4px;">{{ web_last_7_days }}</div>
+      <div style="color: #64748b; font-size: 11px; margin-top: 2px;">Aktivita návštěvníků</div>
+    </div>
+    <div style="width: 48px; height: 48px; border-radius: 10px; background: rgba(16, 185, 129, 0.12); display: flex; align-items: center; justify-content: center; color: #10b981; font-size: 22px;">
+      <i class="fas fa-calendar-week"></i>
+    </div>
+  </div>
+
+  <!-- App Celkem -->
+  <div style="background: var(--bg-panel); padding: 18px 20px; border-radius: 12px; border: 1px solid #334155; border-top: 4px solid #8b5cf6; display: flex; align-items: center; justify-content: space-between;">
+    <div>
+      <div style="color: #94a3b8; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Aplikace: Spuštění celkem</div>
+      <div style="font-size: 32px; font-weight: 900; color: #c4b5fd; margin-top: 4px;">{{ app_total_launches }}</div>
+      <div style="color: #a78bfa; font-size: 11px; margin-top: 2px;">Dnes spuštěno: <b>{{ app_today_launches }}x</b></div>
+    </div>
+    <div style="width: 48px; height: 48px; border-radius: 10px; background: rgba(139, 92, 246, 0.12); display: flex; align-items: center; justify-content: center; color: #a78bfa; font-size: 22px;">
+      <i class="fas fa-rocket"></i>
+    </div>
+  </div>
+
+  <!-- App Online -->
+  <div style="background: var(--bg-panel); padding: 18px 20px; border-radius: 12px; border: 1px solid #334155; border-top: 4px solid #f59e0b; display: flex; align-items: center; justify-content: space-between;">
+    <div>
+      <div style="color: #94a3b8; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+        <span class="pulse-online"></span> Aplikace: Hráči Online
+      </div>
+      <div style="font-size: 32px; font-weight: 900; color: #f59e0b; margin-top: 4px;">{{ app_online_count }}</div>
+      <div style="color: #94a3b8; font-size: 11px; margin-top: 2px;">Odehráno: <b>{{ app_total_hours }}h</b></div>
+    </div>
+    <div style="width: 48px; height: 48px; border-radius: 10px; background: rgba(245, 158, 11, 0.12); display: flex; align-items: center; justify-content: center; color: #f59e0b; font-size: 22px;">
+      <i class="fas fa-gamepad"></i>
+    </div>
+  </div>
+</div>
+
+<!-- DVA HLAVNÍ SLOUPCE: WEB (VLEVO) A APLIKACE (VPRAVO) -->
+<div id="stats-grid-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; align-items: start;">
+
+  <!-- ═══════════════ SLOUPEC 1: STATISTIKY WEBU ═══════════════ -->
+  <div id="col-web" style="display: flex; flex-direction: column; gap: 20px;">
+    
+    <!-- Hlavička sekce Web -->
+    <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 10px; padding: 12px 18px; display: flex; align-items: center; gap: 10px;">
+      <i class="fas fa-globe" style="color: #38bdf8; font-size: 18px;"></i>
+      <h3 style="margin: 0; color: #ffffff; font-size: 15px; font-weight: bold;">Statistiky Veřejného Webu</h3>
+      <span style="margin-left: auto; background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-size: 11px; padding: 2px 8px; border-radius: 12px; font-weight: bold;">Reálné IP & Lokace</span>
+    </div>
+
+    <!-- Grafy webu -->
+    <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 20px;">
+      <h4 style="margin: 0 0 14px 0; color: #38bdf8; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-calendar-week"></i> Návštěvnost webu za 7 dní
+      </h4>
+      <div style="position: relative; height: 210px; width: 100%;">
+        <canvas id="chartWeb7d"></canvas>
+      </div>
+    </div>
+
+    <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 20px;">
+      <h4 style="margin: 0 0 14px 0; color: #38bdf8; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-clock"></i> Dnešní návštěvy webu po hodinách
+      </h4>
+      <div style="position: relative; height: 180px; width: 100%;">
+        <canvas id="chartWeb24h"></canvas>
+      </div>
+    </div>
+
+    <!-- Návštěvnost podle států -->
+    <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 20px;">
+      <h4 style="margin: 0 0 14px 0; color: #f59e0b; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-flag"></i> Návštěvníci podle států a regionů
+      </h4>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        {% for cc, data in country_totals.items() %}
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; padding: 8px 14px; border-radius: 8px; display: flex; align-items: center; gap: 8px;">
+          <img src="{{ data.flag }}" alt="" style="width: 20px; height: 15px; border-radius: 2px; object-fit: cover;">
+          <span style="color: #ffffff; font-weight: 600; font-size: 13px;">{{ data.name }}</span>
+          <span style="background: #0284c7; color: #ffffff; padding: 1px 7px; border-radius: 10px; font-weight: 900; font-size: 11px;">{{ data.count }}</span>
+        </div>
+        {% else %}
+        <div style="color: #64748b; font-size: 13px;">Zatím žádná zaznamenaná data.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Tabulka posledních návštěv webu -->
+    <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 20px;">
+      <h4 style="margin: 0 0 14px 0; color: #e2e8f0; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-list"></i> Poslední návštěvníci webu
+      </h4>
+      <div style="overflow-x: auto; max-height: 380px;">
+        <table class="stats-table">
+          <thead>
+            <tr>
+              <th>Čas vstupu</th>
+              <th>Stát & Region</th>
+              <th>Stránka</th>
+              <th>IP adresa</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in recent_web_visits %}
+            <tr>
+              <td style="color:#38bdf8; font-weight:600; white-space:nowrap;">{{ v.visited_at }}</td>
+              <td style="white-space:nowrap;">
+                <span style="display:inline-flex; align-items:center; gap:6px;">
+                  <img src="{{ v.flag }}" alt="" style="width:18px; height:13px; border-radius:2px;">
+                  <span>{{ v.location }}</span>
+                </span>
+              </td>
+              <td><span class="badge-path">{{ v.path }}</span></td>
+              <td style="color:#64748b; font-family:monospace; font-size:11px;">{{ v.ip }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="4" style="text-align:center; color:#64748b; padding:20px;">Zatím žádní zaznamenaní návštěvníci webu.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════ SLOUPEC 2: STATISTIKY APLIKACE ═══════════════ -->
+  <div id="col-app" style="display: flex; flex-direction: column; gap: 20px;">
+
+    <!-- Hlavička sekce Aplikace -->
+    <div style="background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 10px; padding: 12px 18px; display: flex; align-items: center; gap: 10px;">
+      <i class="fas fa-desktop" style="color: #a78bfa; font-size: 18px;"></i>
+      <h3 style="margin: 0; color: #ffffff; font-size: 15px; font-weight: bold;">Statistiky Aplikace & Hráčů</h3>
+      <span style="margin-left: auto; background: rgba(16, 185, 129, 0.2); color: #10b981; font-size: 11px; padding: 2px 8px; border-radius: 12px; font-weight: bold; display: flex; align-items: center; gap: 5px;">
+        <span class="pulse-online"></span> {{ app_online_count }} ve hře
+      </span>
+    </div>
+
+    <!-- Hráči právě online -->
+    <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 18px 20px;">
+      <h4 style="margin: 0 0 12px 0; color: #10b981; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+        <span class="pulse-online"></span> Hráči právě připojení v aplikaci ({{ app_online_count }})
+      </h4>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        {% for u in app_online_users %}
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+          {% if u.avatar_url %}
+          <img src="{{ u.avatar_url }}" alt="" style="width: 26px; height: 26px; border-radius: 50%;">
+          {% else %}
+          <i class="fas fa-user-circle" style="color:#10b981; font-size:24px;"></i>
+          {% endif %}
+          <div>
+            <div style="color: #ffffff; font-weight: bold; font-size: 12px;">{{ u.nick or u.discord_id }}</div>
+            <div style="color: #10b981; font-size: 10px;">{{ u.role or 'User' }} &bull; Aktivní</div>
+          </div>
+        </div>
+        {% else %}
+        <div style="color: #64748b; font-size: 12px;">V aplikaci momentálně není nikdo aktivní.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Grafy aplikace -->
+    <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 20px;">
+      <h4 style="margin: 0 0 14px 0; color: #a78bfa; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-calendar-week"></i> Spuštění aplikace za 7 dní
+      </h4>
+      <div style="position: relative; height: 210px; width: 100%;">
+        <canvas id="chartApp7d"></canvas>
+      </div>
+    </div>
+
+    <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 20px;">
+      <h4 style="margin: 0 0 14px 0; color: #a78bfa; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-clock"></i> Dnešní spuštění aplikace po hodinách
+      </h4>
+      <div style="position: relative; height: 180px; width: 100%;">
+        <canvas id="chartApp24h"></canvas>
+      </div>
+    </div>
+
+    <!-- Tabulka posledních relací aplikace -->
+    <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 20px;">
+      <h4 style="margin: 0 0 14px 0; color: #e2e8f0; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-history"></i> Poslední spuštění aplikace (relace)
+      </h4>
+      <div style="overflow-x: auto; max-height: 380px;">
+        <table class="stats-table">
+          <thead>
+            <tr>
+              <th>Hráč</th>
+              <th>Čas spuštění</th>
+              <th>Doba trvání</th>
+              <th>Stav</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in recent_app_sessions %}
+            <tr>
+              <td style="white-space:nowrap;">
+                <span style="display:inline-flex; align-items:center; gap:8px;">
+                  {% if s.avatar_url %}
+                  <img src="{{ s.avatar_url }}" alt="" style="width:22px; height:22px; border-radius:50%;">
+                  {% else %}
+                  <i class="fas fa-user-circle" style="color:#94a3b8; font-size:20px;"></i>
+                  {% endif %}
+                  <span style="color:#ffffff; font-weight:600;">{{ s.user_nick }}</span>
+                  <span class="badge-role">{{ s.role }}</span>
+                </span>
+              </td>
+              <td style="color:#94a3b8; font-size:11px; white-space:nowrap;">{{ s.start_time }}</td>
+              <td style="color:#e2e8f0; font-weight:600;">{{ s.duration }}</td>
+              <td>
+                {% if s.is_active %}
+                <span style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid #10b981; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:bold;">🟢 Hraje</span>
+                {% else %}
+                <span style="color:#64748b; font-size:11px;">Ukončeno</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="4" style="text-align:center; color:#64748b; padding:20px;">Zatím žádné zaznamenané relace aplikace.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Žebříček nejaktivnějších hráčů -->
+    <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 20px;">
+      <h4 style="margin: 0 0 14px 0; color: #f59e0b; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-trophy"></i> Nejaktivnější hráči v aplikaci
+      </h4>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        {% for u in top_active_users %}
+        <div style="background:rgba(15,23,42,0.6); border:1px solid #334155; border-radius:8px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-weight:900; color:{% if loop.index == 1 %}#f59e0b{% elif loop.index == 2 %}#cbd5e1{% elif loop.index == 3 %}#d97706{% else %}#64748b{% endif %}; font-size:13px; width:20px;">#{{ loop.index }}</span>
+            {% if u.avatar_url %}
+            <img src="{{ u.avatar_url }}" alt="" style="width:24px; height:24px; border-radius:50%;">
+            {% else %}
+            <i class="fas fa-user-circle" style="color:#94a3b8; font-size:22px;"></i>
+            {% endif %}
+            <span style="color:#ffffff; font-weight:bold; font-size:13px;">{{ u.nick or u.discord_id }}</span>
+            <span class="badge-role">{{ u.role }}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; font-size:12px;">
+            <span style="color:#38bdf8; font-weight:bold;" title="Počet spuštění"><i class="fas fa-play" style="font-size:10px;"></i> {{ u.launch_count or 0 }}x</span>
+            <span style="color:#10b981; font-weight:bold;" title="Celkový čas"><i class="fas fa-clock" style="font-size:10px;"></i> {{ (u.total_time or 0) // 60 }}h {{ (u.total_time or 0) % 60 }}m</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
 <script>
-    const labels7d = {{ labels_7d | safe }};
-    const data7d = {{ data_7d | safe }};
-    const labels24h = {{ labels_24h | safe }};
-    const data24h = {{ data_24h | safe }};
-    new Chart(document.getElementById('chart7d').getContext('2d'), { type: 'line', data: { labels: labels7d, datasets: [{ label: 'Počet návštěv', data: data7d, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)', borderWidth: 3, tension: 0.3, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8' }, grid: { display: false } } } } });
-    new Chart(document.getElementById('chart24h').getContext('2d'), { type: 'bar', data: { labels: labels24h, datasets: [{ label: 'Dnešní návštěvy', data: data24h, backgroundColor: '#38bdf8', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { display: false } } } } });
+function switchStatsView(mode) {
+  const container = document.getElementById('stats-grid-container');
+  const colWeb = document.getElementById('col-web');
+  const colApp = document.getElementById('col-app');
+  const tabAll = document.getElementById('tab-all');
+  const tabWeb = document.getElementById('tab-web');
+  const tabApp = document.getElementById('tab-app');
+
+  [tabAll, tabWeb, tabApp].forEach(t => t.classList.remove('active'));
+
+  if (mode === 'all') {
+    tabAll.classList.add('active');
+    container.style.gridTemplateColumns = '1fr 1fr';
+    colWeb.style.display = 'flex';
+    colApp.style.display = 'flex';
+  } else if (mode === 'web') {
+    tabWeb.classList.add('active');
+    container.style.gridTemplateColumns = '1fr';
+    colWeb.style.display = 'flex';
+    colApp.style.display = 'none';
+  } else if (mode === 'app') {
+    tabApp.classList.add('active');
+    container.style.gridTemplateColumns = '1fr';
+    colWeb.style.display = 'none';
+    colApp.style.display = 'flex';
+  }
+}
+
+// Responzivní přizpůsobení pro mobily
+function handleResize() {
+  if (window.innerWidth < 1000) {
+    const container = document.getElementById('stats-grid-container');
+    if (container && document.getElementById('tab-all').classList.contains('active')) {
+      container.style.gridTemplateColumns = '1fr';
+    }
+  } else {
+    const container = document.getElementById('stats-grid-container');
+    if (container && document.getElementById('tab-all').classList.contains('active')) {
+      container.style.gridTemplateColumns = '1fr 1fr';
+    }
+  }
+}
+window.addEventListener('resize', handleResize);
+handleResize();
+
+// Inicializace Chart.js grafů
+const webLabels7d = {{ web_labels_7d | safe }};
+const webData7d = {{ web_data_7d | safe }};
+const webLabels24h = {{ web_labels_24h | safe }};
+const webData24h = {{ web_data_24h | safe }};
+
+const appLabels7d = {{ app_labels_7d | safe }};
+const appData7d = {{ app_data_7d | safe }};
+const appLabels24h = {{ app_labels_24h | safe }};
+const appData24h = {{ app_data_24h | safe }};
+
+// 1. Web 7d
+new Chart(document.getElementById('chartWeb7d').getContext('2d'), {
+  type: 'line',
+  data: {
+    labels: webLabels7d,
+    datasets: [{
+      label: 'Návštěvy webu',
+      data: webData7d,
+      borderColor: '#38bdf8',
+      backgroundColor: 'rgba(56, 189, 248, 0.15)',
+      borderWidth: 3,
+      tension: 0.35,
+      fill: true,
+      pointBackgroundColor: '#38bdf8',
+      pointRadius: 4
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } },
+      x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+    }
+  }
+});
+
+// 2. Web 24h
+new Chart(document.getElementById('chartWeb24h').getContext('2d'), {
+  type: 'bar',
+  data: {
+    labels: webLabels24h,
+    datasets: [{
+      label: 'Dnešní návštěvy',
+      data: webData24h,
+      backgroundColor: '#38bdf8',
+      borderRadius: 4
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } },
+      x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { display: false } }
+    }
+  }
+});
+
+// 3. App 7d
+new Chart(document.getElementById('chartApp7d').getContext('2d'), {
+  type: 'line',
+  data: {
+    labels: appLabels7d,
+    datasets: [{
+      label: 'Spuštění aplikace',
+      data: appData7d,
+      borderColor: '#a78bfa',
+      backgroundColor: 'rgba(139, 92, 246, 0.15)',
+      borderWidth: 3,
+      tension: 0.35,
+      fill: true,
+      pointBackgroundColor: '#a78bfa',
+      pointRadius: 4
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } },
+      x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+    }
+  }
+});
+
+// 4. App 24h
+new Chart(document.getElementById('chartApp24h').getContext('2d'), {
+  type: 'bar',
+  data: {
+    labels: appLabels24h,
+    datasets: [{
+      label: 'Dnešní spuštění',
+      data: appData24h,
+      backgroundColor: '#a78bfa',
+      borderRadius: 4
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } },
+      x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { display: false } }
+    }
+  }
+});
 </script>
 """
 
