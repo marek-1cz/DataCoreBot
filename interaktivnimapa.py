@@ -3784,7 +3784,7 @@ async function fetchBuses(){
       let popH=`
         <div class="ph" style="${mc==='bg-bug'?'background:#1f2937;':''}${mc==='bg-orange'?'background:#1c1400;':''}${mc==='bg-lastpos'?'background:linear-gradient(90deg,#181820,#2e1e2c);border-bottom:1px solid #f472b6;':''}">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-            <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;'':''}${mc==='bg-orange'?'color:#f59e0b;'':''}${mc==='bg-lastpos'?'color:#fbcfe8;'':''}; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0;">
+            <h3 class="ph-t" style="${mc==='bg-bug'?'color:#9ca3af;':''}${mc==='bg-orange'?'color:#f59e0b;':''}${mc==='bg-lastpos'?'color:#fbcfe8;':''}; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0;">
               ${_hlavickaSpoj}
             </h3>
             <span style="font-size:10px; color:#64748b; font-weight:normal; letter-spacing:0.5px; white-space:nowrap; flex-shrink:0;">#${bus.id}</span>
