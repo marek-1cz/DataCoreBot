@@ -651,111 +651,598 @@ document.addEventListener("DOMContentLoaded", function() {
 
 HTML_SUPPORTERS = """
 <style>
-/* Hero Section */
-.supporters-hero { position: relative; text-align: center; padding: 60px 20px; margin-bottom: 50px; border-radius: 20px; background: radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.15), transparent 60%); }
-.hero-glow-1 { position: absolute; top: -50px; left: 10%; width: 300px; height: 300px; background: rgba(245, 158, 11, 0.3); filter: blur(120px); z-index: -1; }
-.hero-glow-2 { position: absolute; bottom: -50px; right: 10%; width: 300px; height: 300px; background: rgba(239, 68, 68, 0.3); filter: blur(120px); z-index: -1; }
-.hero-title { position: relative; z-index: 1; color: var(--warning); font-size: 52px; font-weight: 900; text-transform: uppercase; text-shadow: 0 0 30px rgba(245, 158, 11, 0.8); margin-bottom: 20px; line-height: 1.1; }
-.hero-desc { position: relative; z-index: 1; color: #cbd5e1; font-size: 20px; max-width: 800px; margin: 0 auto 40px auto; line-height: 1.6; }
+/* === PODPOROVATELÉ - MODERNÍ REDESIGN === */
+.supporters-page-wrap {
+  max-width: 1140px;
+  margin: 0 auto 60px auto;
+  padding: 0 15px;
+}
 
-/* Premium Button */
-.btn-premium { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 15px; background: linear-gradient(135deg, #f59e0b, #ea580c); color: white; padding: 20px 60px; font-size: 26px; font-weight: 900; border-radius: 50px; text-decoration: none; text-transform: uppercase; border: 2px solid rgba(255,255,255,0.4); box-shadow: 0 10px 40px rgba(234, 88, 12, 0.5), inset 0 2px 10px rgba(255,255,255,0.4); overflow: hidden; transition: all 0.4s ease; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
-.btn-premium:hover { transform: translateY(-5px) scale(1.05); box-shadow: 0 20px 50px rgba(234, 88, 12, 0.8), inset 0 2px 10px rgba(255,255,255,0.6); }
-.btn-premium::after { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(to right, transparent, rgba(255,255,255,0.4), transparent); transform: skewX(-25deg); animation: premiumShine 4s infinite; }
+/* Hero Section */
+.supporters-hero {
+  position: relative;
+  text-align: center;
+  padding: 50px 30px;
+  margin-bottom: 35px;
+  border-radius: 24px;
+  background: radial-gradient(circle at 50% 20%, rgba(245, 158, 11, 0.12), rgba(15, 23, 42, 0.8) 70%);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.hero-glow-1 {
+  position: absolute;
+  top: -60px;
+  left: 20%;
+  width: 250px;
+  height: 250px;
+  background: rgba(245, 158, 11, 0.2);
+  filter: blur(100px);
+  pointer-events: none;
+}
+.hero-glow-2 {
+  position: absolute;
+  bottom: -60px;
+  right: 20%;
+  width: 250px;
+  height: 250px;
+  background: rgba(239, 68, 68, 0.18);
+  filter: blur(100px);
+  pointer-events: none;
+}
+
+.hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 50px;
+  color: #fcd34d;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+
+.hero-title {
+  position: relative;
+  z-index: 1;
+  color: #ffffff;
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  margin: 0 0 16px 0;
+  line-height: 1.2;
+}
+.hero-title i {
+  color: var(--warning);
+  filter: drop-shadow(0 0 15px rgba(245, 158, 11, 0.6));
+}
+
+.hero-desc {
+  position: relative;
+  z-index: 1;
+  color: #94a3b8;
+  font-size: 16px;
+  max-width: 740px;
+  margin: 0 auto 30px auto;
+  line-height: 1.65;
+}
+
+/* Action Buttons */
+.hero-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.btn-premium {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #ffffff;
+  padding: 14px 32px;
+  font-size: 16px;
+  font-weight: 800;
+  border-radius: 12px;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 8px 24px rgba(217, 119, 6, 0.35);
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+.btn-premium:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(217, 119, 6, 0.55);
+  color: #ffffff;
+}
+.btn-premium::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255,255,255,0.35), transparent);
+  transform: skewX(-25deg);
+  animation: premiumShine 4s infinite;
+}
 @keyframes premiumShine { 0% { left: -100%; } 20% { left: 200%; } 100% { left: 200%; } }
 
-/* Grid Layout */
-.supporters-grid { display: flex; flex-direction: column; align-items: center; gap: 30px; max-width: 800px; margin: 0 auto; padding: 0 20px 60px 20px; }
+.btn-claim {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(30, 41, 59, 0.85);
+  color: #e2e8f0;
+  padding: 14px 26px;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 12px;
+  text-decoration: none;
+  border: 1px solid #334155;
+  transition: all 0.25s ease;
+}
+.btn-claim:hover {
+  background: #334155;
+  color: #38bdf8;
+  transform: translateY(-2px);
+  border-color: #38bdf8;
+}
+
+/* === TIERS PREVIEW CARDS === */
+.tiers-section {
+  margin-bottom: 45px;
+}
+.section-heading-wrap {
+  text-align: center;
+  margin-bottom: 25px;
+}
+.section-title {
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 6px 0;
+}
+.section-subtitle {
+  color: #64748b;
+  font-size: 14px;
+  margin: 0;
+}
+
+.tiers-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+.tier-preview-card {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid #334155;
+  border-radius: 16px;
+  padding: 22px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: all 0.25s ease;
+}
+.tier-preview-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+}
+.tier-preview-card.tier-preview-3 {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: linear-gradient(180deg, rgba(127, 29, 29, 0.25), rgba(30, 41, 59, 0.6) 80%);
+}
+.tier-preview-card.tier-preview-2 {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: linear-gradient(180deg, rgba(180, 83, 9, 0.2), rgba(30, 41, 59, 0.6) 80%);
+}
+.tier-preview-card.tier-preview-1 {
+  border-color: rgba(56, 189, 248, 0.3);
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.15), rgba(30, 41, 59, 0.6) 80%);
+}
+
+.tier-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.tier-pill.badge-mega { background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5); }
+.tier-pill.badge-velky { background: rgba(245, 158, 11, 0.25); color: #fde68a; border: 1px solid rgba(245, 158, 11, 0.5); }
+.tier-pill.badge-normal { background: rgba(56, 189, 248, 0.2); color: #bae6fd; border: 1px solid rgba(56, 189, 248, 0.4); }
+
+.tier-val {
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 14px;
+}
+.tier-perks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 14px;
+}
+.tier-perk-item {
+  font-size: 13px;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+  text-align: left;
+}
+.tier-perk-item i {
+  color: var(--success);
+  font-size: 11px;
+}
+
+/* === SUPPORTERS WALL (SÍŇ SLÁVY) === */
+.supporters-wall-section {
+  margin-top: 10px;
+}
+.supporters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
 
 /* Glassmorphism Cards */
-.supp-card { position: relative; border-radius: 20px; padding: 30px; width: 100%; display: flex; flex-direction: column; justify-content: space-between; align-items: center; text-align: center; overflow: hidden; backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); transition: all 0.4s ease; box-sizing: border-box; }
-.supp-card:hover { transform: translateY(-10px); z-index: 10; }
+.supp-card {
+  position: relative;
+  background: rgba(30, 41, 59, 0.7);
+  border-radius: 16px;
+  padding: 22px;
+  border: 1px solid #334155;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.25s ease;
+  overflow: hidden;
+}
+.supp-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 35px rgba(0, 0, 0, 0.5);
+}
 
-/* Tiers */
-.tier-3 { grid-column: 1 / -1; background: linear-gradient(135deg, rgba(127, 29, 29, 0.4), rgba(15, 23, 42, 0.8)); border: 1px solid rgba(239, 68, 68, 0.3); box-shadow: 0 15px 35px rgba(220, 38, 38, 0.15), inset 0 0 40px rgba(220, 38, 38, 0.05); }
-.tier-3:hover { box-shadow: 0 25px 50px rgba(220, 38, 38, 0.4), inset 0 0 60px rgba(220, 38, 38, 0.1); border-color: rgba(239, 68, 68, 0.8); }
-.tier-3 .supp-badge { background: linear-gradient(135deg, #ef4444, #991b1b); color: white; border: 1px solid #fca5a5; text-shadow: 0 0 10px rgba(255,255,255,0.5); }
-.tier-3 .supp-name { color: #fca5a5; font-size: 38px; text-shadow: 0 0 20px rgba(252, 165, 165, 0.6); margin-bottom: 15px; }
+/* Tier specific card styles */
+.supp-card.tier-3 {
+  background: linear-gradient(135deg, rgba(127, 29, 29, 0.35), rgba(15, 23, 42, 0.85));
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 10px 30px rgba(220, 38, 38, 0.2);
+}
+.supp-card.tier-3:hover {
+  border-color: rgba(239, 68, 68, 0.85);
+  box-shadow: 0 16px 40px rgba(220, 38, 38, 0.35);
+}
 
-.tier-2 { background: linear-gradient(135deg, rgba(180, 83, 9, 0.4), rgba(15, 23, 42, 0.8)); border: 1px solid rgba(245, 158, 11, 0.3); box-shadow: 0 10px 25px rgba(245, 158, 11, 0.1), inset 0 0 30px rgba(245, 158, 11, 0.05); }
-.tier-2:hover { box-shadow: 0 20px 40px rgba(245, 158, 11, 0.3), inset 0 0 40px rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.8); }
-.tier-2 .supp-badge { background: linear-gradient(135deg, #f59e0b, #b45309); color: white; border: 1px solid #fde68a; }
-.tier-2 .supp-name { color: #fde68a; font-size: 30px; text-shadow: 0 0 15px rgba(253, 230, 138, 0.4); margin-bottom: 15px; }
+.supp-card.tier-2 {
+  background: linear-gradient(135deg, rgba(180, 83, 9, 0.3), rgba(15, 23, 42, 0.85));
+  border-color: rgba(245, 158, 11, 0.45);
+  box-shadow: 0 10px 30px rgba(245, 158, 11, 0.15);
+}
+.supp-card.tier-2:hover {
+  border-color: rgba(245, 158, 11, 0.8);
+  box-shadow: 0 16px 35px rgba(245, 158, 11, 0.3);
+}
 
-.tier-1 { background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(15, 23, 42, 0.8)); border: 1px solid rgba(56, 189, 248, 0.2); box-shadow: 0 10px 25px rgba(56, 189, 248, 0.05); }
-.tier-1:hover { box-shadow: 0 20px 40px rgba(56, 189, 248, 0.2); border-color: rgba(56, 189, 248, 0.6); }
-.tier-1 .supp-badge { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: white; border: 1px solid #bae6fd; }
-.tier-1 .supp-name { color: #bae6fd; font-size: 26px; margin-bottom: 15px; }
+.supp-card.tier-1 {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.15), rgba(15, 23, 42, 0.85));
+  border-color: rgba(56, 189, 248, 0.3);
+}
+.supp-card.tier-1:hover {
+  border-color: rgba(56, 189, 248, 0.6);
+}
 
-/* Elements */
-.supp-header { display: flex; flex-direction: column; justify-content: center; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 20px; width: 100%; }
-.supp-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 30px; font-size: 13px; font-weight: 900; letter-spacing: 1px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
-.supp-name { margin: 15px 0 15px 0; font-weight: 900; text-transform: uppercase; line-height: 1.1; }
-.supp-amount { font-size: 28px; font-weight: 900; background: rgba(0,0,0,0.4); padding: 12px 25px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); color: #fcd34d; display: inline-block; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 0 15px rgba(252, 211, 77, 0.3); white-space: nowrap; animation: pulseAmount 2s infinite alternate; }
-@keyframes pulseAmount { from { text-shadow: 0 0 5px rgba(252, 211, 77, 0.3); box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 0 10px rgba(252, 211, 77, 0.2); } to { text-shadow: 0 0 15px rgba(252, 211, 77, 0.8); box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 0 25px rgba(252, 211, 77, 0.6); border-color: rgba(252, 211, 77, 0.4); } }
-.supp-msg { position: relative; font-size: 16px; color: #cbd5e1; font-style: italic; background: rgba(0,0,0,0.3); padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px solid rgba(255,255,255,0.05); line-height: 1.6; max-width: 600px; }
-.supp-msg::before { content: '\\f10d'; font-family: 'Font Awesome 5 Free'; font-weight: 900; font-size: 20px; color: rgba(255,255,255,0.2); display: block; margin-bottom: 10px; }
-.supp-footer { display: flex; justify-content: center; align-items: center; margin-top: auto; width: 100%; }
-.supp-date { color: #64748b; font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
+/* Supporter Card Header */
+.supp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  width: 100%;
+}
+.supp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+.tier-3 .supp-badge { background: linear-gradient(135deg, #ef4444, #991b1b); color: #fff; }
+.tier-2 .supp-badge { background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; }
+.tier-1 .supp-badge { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #fff; }
 
-.tier-3-glow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; height: 100%; background: radial-gradient(circle, rgba(239, 68, 68, 0.15) 0%, transparent 70%); pointer-events: none; }
+.supp-date {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Supporter Body */
+.supp-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.supp-user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.supp-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+.tier-3 .supp-avatar { background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5); }
+.tier-2 .supp-avatar { background: rgba(245, 158, 11, 0.25); color: #fde68a; border: 1px solid rgba(245, 158, 11, 0.5); }
+.tier-1 .supp-avatar { background: rgba(56, 189, 248, 0.2); color: #bae6fd; border: 1px solid rgba(56, 189, 248, 0.4); }
+
+.supp-name {
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tier-3 .supp-name { color: #fca5a5; text-shadow: 0 0 12px rgba(252, 165, 165, 0.4); }
+.tier-2 .supp-name { color: #fde68a; }
+.tier-1 .supp-name { color: #bae6fd; }
+
+.supp-amount {
+  font-size: 15px;
+  font-weight: 800;
+  background: rgba(15, 23, 42, 0.7);
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fcd34d;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Supporter Message */
+.supp-msg {
+  position: relative;
+  font-size: 13.5px;
+  color: #cbd5e1;
+  font-style: italic;
+  background: rgba(15, 23, 42, 0.45);
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  line-height: 1.5;
+  margin-top: 6px;
+}
+.supp-msg i {
+  color: rgba(255, 255, 255, 0.25);
+  margin-right: 6px;
+}
+
+/* Empty State */
+.supporters-empty {
+  text-align: center;
+  padding: 50px 20px;
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 20px;
+  border: 1px dashed #334155;
+  margin: 20px 0;
+}
+.empty-icon-wrap {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  color: var(--warning);
+  margin: 0 auto 18px auto;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.empty-title {
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+.empty-text {
+  color: #94a3b8;
+  font-size: 15px;
+  max-width: 500px;
+  margin: 0 auto 24px auto;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .tiers-preview-grid {
+    grid-template-columns: 1fr;
+  }
+}
 @media (max-width: 768px) {
-  .supporters-hero { padding: 30px 10px; margin-bottom: 30px; }
-  .hero-title { font-size: 32px; }
-  .hero-desc { font-size: 16px; margin-bottom: 20px; }
-  .btn-premium { padding: 15px 25px; font-size: 16px; border-radius: 30px; }
-  .supp-card { padding: 20px; }
-  .tier-3 .supp-name { font-size: 28px; }
-  .tier-2 .supp-name { font-size: 24px; }
-  .tier-1 .supp-name { font-size: 20px; }
-  .supp-amount { font-size: 22px; padding: 10px 15px; }
-  .supp-msg { font-size: 14px; padding: 15px; }
-  .supporters-grid { padding: 0 10px 30px 10px; }
+  .supporters-hero {
+    padding: 35px 18px;
+    margin-bottom: 25px;
+  }
+  .hero-title {
+    font-size: 28px;
+  }
+  .hero-desc {
+    font-size: 14.5px;
+  }
+  .btn-premium, .btn-claim {
+    width: 100%;
+    justify-content: center;
+    padding: 13px 20px;
+  }
+  .supporters-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
 
-<div class="supporters-hero">
+<div class="supporters-page-wrap">
+  <!-- Hero Section -->
+  <div class="supporters-hero">
     <div class="hero-glow-1"></div>
     <div class="hero-glow-2"></div>
+    <div class="hero-chip"><i class="fas fa-crown"></i> Podpora komunity</div>
     <h1 class="hero-title"><i class="fas fa-crown"></i> Podporovatelé Projektu</h1>
     <p class="hero-desc">Tenhle projekt tvořím ve svém volném čase a je kompletně zdarma pro všechny. Podpora je čistě dobrovolná a nesmírně mi pomáhá hradit náklady na servery a tvořit pro vás neustále nové skvělé aktualizace.</p>
-    <a href="https://buymeacoffee.com/marekk_czz" target="_blank" class="btn-premium">
-        <i class="fas fa-coffee" style="text-shadow: 0 0 10px rgba(255,255,255,0.5);"></i> Stát se VIP Podporovatelem
-    </a>
-</div>
+    
+    <div class="hero-actions">
+      <a href="https://buymeacoffee.com/marekk_czz" target="_blank" class="btn-premium">
+        <i class="fas fa-coffee"></i> Stát se VIP Podporovatelem
+      </a>
+      <a href="/claim" class="btn-claim">
+        <i class="fas fa-gift"></i> Vyzvednout VIP roli
+      </a>
+    </div>
+  </div>
 
-<div class="supporters-grid">
-    {% for s in supporters %}
+  <!-- Tiers Preview Section -->
+  <div class="tiers-section">
+    <div class="section-heading-wrap">
+      <h2 class="section-title"><i class="fas fa-gem" style="color:var(--warning);"></i> Úrovně podpory a odměny</h2>
+      <p class="section-subtitle">Každý příspěvek pomáhá udržet projekt v chodu a přináší ti výhody</p>
+    </div>
+    
+    <div class="tiers-preview-grid">
+      <!-- Tier 3 -->
+      <div class="tier-preview-card tier-preview-3">
+        <div class="tier-pill badge-mega"><i class="fas fa-gem"></i> MEGA PODPOROVATEL</div>
+        <div class="tier-val">od 325 Kč</div>
+        <div class="tier-perks-list">
+          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Rubínové zvýraznění v Síni slávy</span></div>
+          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Speciální role na Discordu & webu</span></div>
+          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Plný přístup do Beta Tester verze</span></div>
+        </div>
+      </div>
+
+      <!-- Tier 2 -->
+      <div class="tier-preview-card tier-preview-2">
+        <div class="tier-pill badge-velky"><i class="fas fa-star"></i> VELKÝ PODPOROVATEL</div>
+        <div class="tier-val">od 195 Kč</div>
+        <div class="tier-perks-list">
+          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Zlaté zvýraznění v Síni slávy</span></div>
+          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>VIP Role na Discordu & webu</span></div>
+          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Přístup k Beta Tester novinkám</span></div>
+        </div>
+      </div>
+
+      <!-- Tier 1 -->
+      <div class="tier-preview-card tier-preview-1">
+        <div class="tier-pill badge-normal"><i class="fas fa-medal"></i> PODPOROVATEL</div>
+        <div class="tier-val">Libovolný příspěvek</div>
+        <div class="tier-perks-list">
+          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Čestný zápis do Síně slávy</span></div>
+          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Role Podporovatele na Discordu</span></div>
+          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Poděkování a podpora chodu serveru</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supporters Wall / Síň slávy -->
+  <div class="supporters-wall-section">
+    <div class="section-heading-wrap" style="text-align:left; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <div>
+        <h2 class="section-title"><i class="fas fa-award" style="color:#f59e0b;"></i> Síň slávy</h2>
+        <p class="section-subtitle">Děkujeme všem, kteří podpořili rozvoj projektu OIS IDPK</p>
+      </div>
+      <a href="https://buymeacoffee.com/marekk_czz" target="_blank" style="color:#f59e0b; font-size:13px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:5px;">
+        Podpořit na Buy Me a Coffee <i class="fas fa-arrow-right"></i>
+      </a>
+    </div>
+
+    <div class="supporters-grid">
+      {% for s in supporters %}
         {% set tier_class = 'tier-3' if s.tier == 3 else ('tier-2' if s.tier == 2 else 'tier-1') %}
         {% set icon = 'fa-gem' if s.tier == 3 else ('fa-star' if s.tier == 2 else 'fa-medal') %}
         {% set badge_text = 'MEGA PODPOROVATEL' if s.tier == 3 else ('VELKÝ PODPOROVATEL' if s.tier == 2 else 'PODPOROVATEL') %}
+        {% set initial = (s.get('name', 'A')[:1]|upper) if s.get('name') else 'A' %}
         
         <div class="supp-card {{ tier_class }}">
-            {% if s.tier == 3 %}<div class="tier-3-glow"></div>{% endif %}
-            <div style="position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; width: 100%;">
-                <div class="supp-header">
-                    <div class="supp-badge"><i class="fas {{ icon }}"></i> {{ badge_text }}</div>
-                    <h3 class="supp-name">{{ s.get('name', 'Anonym') }}</h3>
-                    <div class="supp-amount">{{ s.get('amount', '') }}</div>
-                </div>
-                
-                {% if s.get('message') %}
-                <div class="supp-msg">
-                    {{ s.get('message') }}
-                </div>
-                {% endif %}
-                
-                <div class="supp-footer">
-                    <div class="supp-date"><i class="fas fa-clock"></i> Přidáno: {{ s.get('created_at', '') }}</div>
-                </div>
+          <div>
+            <div class="supp-header">
+              <div class="supp-badge"><i class="fas {{ icon }}"></i> {{ badge_text }}</div>
+              <div class="supp-date"><i class="fas fa-clock"></i> {{ s.get('created_at', '') }}</div>
             </div>
+            
+            <div class="supp-body">
+              <div class="supp-user-info">
+                <div class="supp-avatar">{{ initial }}</div>
+                <h3 class="supp-name">{{ s.get('name', 'Anonym') }}</h3>
+              </div>
+              <div class="supp-amount">{{ s.get('amount', '') }}</div>
+            </div>
+          </div>
+          
+          {% if s.get('message') %}
+          <div class="supp-msg">
+            <i class="fas fa-quote-left"></i> {{ s.get('message') }}
+          </div>
+          {% endif %}
         </div>
-    {% else %}
-        <div style="grid-column: 1 / -1; text-align: center; padding: 60px; background: var(--bg-panel); border-radius: 20px; border: 1px dashed #334155; color: #64748b; font-size: 20px;">
-            <i class="fas fa-sad-tear" style="font-size: 50px; margin-bottom: 20px; opacity: 0.5;"></i><br>
-            Zatím zde nejsou žádní podporovatelé. Buďte ten první, kdo vstoupí do Síně slávy!
+      {% else %}
+        <div style="grid-column: 1 / -1;">
+          <div class="supporters-empty">
+            <div class="empty-icon-wrap"><i class="fas fa-crown"></i></div>
+            <h3 class="empty-title">Síň slávy zatím čeká na svého prvního hrdinu</h3>
+            <p class="empty-text">Zatím zde nejsou žádní podporovatelé. Buďte ten první, kdo vstoupí do Síně slávy!</p>
+            <a href="https://buymeacoffee.com/marekk_czz" target="_blank" class="btn-premium">
+              <i class="fas fa-coffee"></i> Stát se VIP Podporovatelem
+            </a>
+          </div>
         </div>
-    {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
 </div>
 """
 
