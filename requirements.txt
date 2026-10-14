@@ -4,3 +4,4 @@ supabase
 flask-cors
 
 bcrypt
+tzdata

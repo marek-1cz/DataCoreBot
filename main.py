@@ -3915,10 +3915,6 @@ def update_statuses():
     return redirect(url_for('dashboard_app_management'))
 
 
-@app.route('/dashboard/notifications')
-def dashboard_notifications():
-    return redirect('/admin/notifications')
-
 # ─── Správa dashboard adminů ─────────────────────────────────────────────────
 
 @app.route('/dashboard/admins', methods=['GET'], strict_slashes=False)
@@ -5185,8 +5181,9 @@ def run_web():
 
 def exit_handler():
     try:
-        from interaktivnimapa import GLOBAL_BUS_CACHE, db_client
+        from interaktivnimapa import GLOBAL_BUS_CACHE, get_db_client
         from zoneinfo import ZoneInfo
+        db_client = get_db_client()
         if db_client:
             now = datetime.now(ZoneInfo("Europe/Prague"))
             cache_rows = []
