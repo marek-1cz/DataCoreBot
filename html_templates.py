@@ -237,6 +237,7 @@ DASHBOARD_LAYOUT = """
 <a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a>
 <a href="/dashboard/stats" class="sidebar-link"><i class="fas fa-chart-bar"></i> Statistiky Webu</a>
 <a href="/dashboard/app_management" class="sidebar-link"><i class="fas fa-desktop"></i> Správa Aplikace</a>
+<a href="/dashboard/sprava-notifikaci" class="sidebar-link" style="color: #a78bfa; font-weight: 600;"><i class="fas fa-paper-plane"></i> Správa Notifikací & Zprávy</a>
 <a href="/dashboard/notifications" class="sidebar-link" style="color: #f59e0b;"><i class="fas fa-bell"></i> Oznámení</a>
 <a href="/dashboard/downloads" class="sidebar-link"><i class="fas fa-code-branch"></i> Správa Verzí a Přístupů</a>
 <a href="/dashboard/pending_roles" class="sidebar-link" style="color: #10b981;"><i class="fas fa-ticket-alt"></i> Rezervace Rolí</a>
@@ -901,8 +902,12 @@ HTML_APP_MANAGEMENT = """
 """
 
 HTML_NOTIFICATIONS = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-bell" style="color:#f59e0b;"></i> Systém Oznámení</h2>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-bell" style="color:#f59e0b;"></i> Systém Oznámení Webu</h2>
+    <div style="display: flex; gap: 10px;">
+        <a href="/dashboard/notifications" class="btn" style="background: #f59e0b; color: #000; font-weight: bold; font-size: 13px;"><i class="fas fa-bullhorn"></i> Web Oznámení</a>
+        <a href="/dashboard/sprava-notifikaci" class="btn btn-dark" style="color: #a78bfa; font-size: 13px;"><i class="fas fa-paper-plane"></i> Notifikace Busů & Přímé Zprávy</a>
+    </div>
 </div>
 <div style="display: flex; gap: 20px; flex-wrap: wrap;">
     <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--warning);">
@@ -1375,9 +1380,12 @@ HTML_IDS = """
 """
 
 HTML_DASHBOARD_MAIN = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
     <h2 style="margin: 0; color: var(--text-main);">{{ title }}</h2>
-    <div id="refresh-timer" style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;"><i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Aktualizace za: <span id="timer-sec" style="color: white;">60</span>s</div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+        <a href="/dashboard/sprava-notifikaci" class="btn" style="background: linear-gradient(135deg, #7c3aed, #4f46e5); color: white; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; padding: 7px 15px; border-radius: 8px; font-weight: 600; font-size: 13px; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);"><i class="fas fa-paper-plane"></i> Správa Notifikací & Zprávy</a>
+        <div id="refresh-timer" style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;"><i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Aktualizace za: <span id="timer-sec" style="color: white;">60</span>s</div>
+    </div>
 </div>
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
     <table id="usersTable">
@@ -2102,3 +2110,378 @@ fetch('/api/admin/check').then(r=>r.json()).then(d=>{
 </body>
 </html>
 """
+
+HTML_DASHBOARD_NOTIFICATIONS_MGMT = """
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px;">
+  <div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="background: rgba(124, 58, 237, 0.25); color: #c084fc; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; border: 1px solid #7c3aed;">
+        <i class="fas fa-paper-plane"></i>
+      </div>
+      <div>
+        <h2 style="margin: 0; color: var(--text-main); font-size: 22px;">Správa Notifikací & Zprávy</h2>
+        <div style="color: var(--text-muted); font-size: 13px;">Přímé zprávy na Discord / E-mail, centrální audit a správa pravidel</div>
+      </div>
+    </div>
+  </div>
+  <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+    <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; padding: 6px 14px; border-radius: 8px; font-size: 13px;">
+      <span style="color: var(--text-muted);">Administrátor:</span> <strong style="color: #38bdf8;">{{ admin_nick }}</strong>
+    </div>
+    <a href="/sprava-notifikaci" target="_blank" class="btn btn-dark" style="font-size: 12px; padding: 7px 14px; display: flex; align-items: center; gap: 6px;">
+      <i class="fas fa-external-link-alt"></i> Otevřít celou stránku
+    </a>
+  </div>
+</div>
+
+<!-- Záložky -->
+<div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 12px; flex-wrap: wrap;">
+  <button type="button" id="tab-btn-direct" onclick="switchDashTab('direct')" class="btn" style="background: #7c3aed; color: white; font-weight: bold; font-size: 13px; padding: 8px 18px;">
+    <i class="fas fa-paper-plane"></i> Přímá zpráva na ID / E-mail
+  </button>
+  <button type="button" id="tab-btn-rules" onclick="switchDashTab('rules')" class="btn btn-dark" style="color: var(--text-muted); font-size: 13px; padding: 8px 18px;">
+    <i class="fas fa-list-ul"></i> Aktivní pravidla (<span id="d-rules-cnt">0</span>)
+  </button>
+  <button type="button" id="tab-btn-hist" onclick="switchDashTab('hist')" class="btn btn-dark" style="color: var(--text-muted); font-size: 13px; padding: 8px 18px;">
+    <i class="fas fa-history"></i> Historie odeslaných (<span id="d-hist-cnt">0</span>)
+  </button>
+</div>
+
+<!-- SEKVENCE TAB 1: PŘÍMÁ ZPRÁVA -->
+<div id="tab-content-direct" style="display: block;">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+    <div style="background-color: var(--bg-panel); padding: 25px; border-radius: 12px; border-top: 4px solid #7c3aed; border-left: 1px solid #334155; border-right: 1px solid #334155; border-bottom: 1px solid #334155;">
+      <h3 style="margin-top: 0; color: #c084fc; font-size: 17px; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-envelope-open-text"></i> Odeslat zprávu od Administrátora
+      </h3>
+      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px;">
+        Zpráva se doručí přímo do soukromé Discord zprávy (DM) nebo na zadaný e-mail s oficiálním označením správce.
+      </p>
+
+      <form onsubmit="handleSendDirectMsg(event)">
+        <div style="margin-bottom: 15px;">
+          <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">
+            Cílové Discord ID nebo E-mail: <span style="color:#ef4444;">*</span>
+          </label>
+          <input type="text" id="direct-target" placeholder="Např. 714856037042585641 nebo uzivatel@email.cz" required style="margin: 0; padding: 11px 14px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px;">
+          <div style="color: #64748b; font-size: 11px; margin-top: 4px;">U Discord ID zadejte číselné ID uživatele (17–20 cifer).</div>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">
+            Nadpis / Předmět:
+          </label>
+          <input type="text" id="direct-title" placeholder="🔔 Zpráva administrátora DataCore" value="🔔 Zpráva administrátora DataCore" style="margin: 0; padding: 11px 14px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px;">
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">
+            Text zprávy: <span style="color:#ef4444;">*</span>
+          </label>
+          <textarea id="direct-message" rows="5" placeholder="Napište text zprávy pro uživatele..." required style="margin: 0; padding: 12px 14px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px; resize: vertical;"></textarea>
+        </div>
+
+        <div style="background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: 8px; padding: 12px 15px; margin-bottom: 20px; font-size: 12px; color: #c4b5fd;">
+          <div style="font-weight: bold; margin-bottom: 4px;">🔍 Stopa administrátora v odeslané zprávě:</div>
+          <div>Odesílatel: <strong>Administrátor ({{ admin_nick }})</strong></div>
+          <div>Auditní stopa: Zaznamenáno do Discord logů a historie notifikací</div>
+        </div>
+
+        <button type="submit" id="btn-submit-direct" class="btn" style="width: 100%; background: linear-gradient(135deg, #7c3aed, #4f46e5); color: white; padding: 12px; font-size: 14px; font-weight: 700; border-radius: 8px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);">
+          <i class="fas fa-paper-plane"></i> Odeslat zprávu uživateli
+        </button>
+      </form>
+
+      <div id="direct-msg-status" style="margin-top: 15px; display: none;"></div>
+    </div>
+
+    <!-- Nápověda a rychlé info -->
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <div style="background-color: var(--bg-panel); padding: 25px; border-radius: 12px; border: 1px solid #334155;">
+        <h4 style="margin-top: 0; color: #38bdf8; font-size: 15px;"><i class="fas fa-info-circle"></i> Jak funguje přímé doručení?</h4>
+        <ul style="color: var(--text-muted); font-size: 13px; line-height: 1.7; padding-left: 20px; margin: 0;">
+          <li><strong>Discord DM:</strong> Zpráva je odeslána robotem <em>OIS IDPK</em> přímo do soukromé konverzace uživatele. Uživatel musí mít povolené soukromé zprávy.</li>
+          <li><strong>E-mail:</strong> Pokud zadáte e-mailovou adresu, zpráva je odeslána v oficiální HTML šabloně ze systémového SMTP.</li>
+          <li><strong>Audit log:</strong> Každé odeslání zprávy je automaticky zaznamenáno s vaším jménem do Discord kanálu <code>🖥️・datacore-logs</code>.</li>
+        </ul>
+      </div>
+
+      <div style="background-color: var(--bg-panel); padding: 25px; border-radius: 12px; border: 1px solid #334155;">
+        <h4 style="margin-top: 0; color: #10b981; font-size: 15px;"><i class="fas fa-shield-alt"></i> Bezpečnost & Práva</h4>
+        <p style="color: var(--text-muted); font-size: 13px; line-height: 1.6; margin: 0;">
+          Tato funkce je zabezpečena rolí <strong>ADMIN</strong>. Všechny operace jsou kryptograficky a databázově chráněny.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SEKVENCE TAB 2: AKTIVNÍ PRAVIDLA -->
+<div id="tab-content-rules" style="display: none;">
+  <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 12px; border: 1px solid #334155;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+      <h3 style="margin: 0; color: var(--text-main); font-size: 16px;"><i class="fas fa-satellite-dish" style="color: #38bdf8;"></i> Všechna aktivní pravidla v systému</h3>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <input type="text" id="dash-rules-filter" oninput="filterDashRules()" placeholder="Hledat pravidlo / SPZ / uživatele..." style="margin: 0; padding: 7px 12px; width: 250px; font-size: 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 6px;">
+        <button type="button" onclick="loadDashRules()" class="btn btn-dark" style="font-size: 12px; padding: 7px 12px;"><i class="fas fa-sync-alt"></i></button>
+      </div>
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="border-bottom: 2px solid #334155; font-size: 12px; color: var(--blue-main);">
+            <th style="padding: 10px; text-align: left;">ID</th>
+            <th style="padding: 10px; text-align: left;">Cíl / Typ</th>
+            <th style="padding: 10px; text-align: left;">Název</th>
+            <th style="padding: 10px; text-align: left;">Spouštěče</th>
+            <th style="padding: 10px; text-align: left;">Kanál</th>
+            <th style="padding: 10px; text-align: left;">Uživatel</th>
+            <th style="padding: 10px; text-align: right;">Akce</th>
+          </tr>
+        </thead>
+        <tbody id="dash-rules-tbody" style="font-size: 13px;">
+          <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 25px;"><i class="fas fa-spinner fa-spin"></i> Načítání pravidel...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- SEKVENCE TAB 3: HISTORIE -->
+<div id="tab-content-hist" style="display: none;">
+  <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 12px; border: 1px solid #334155;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+      <h3 style="margin: 0; color: var(--text-main); font-size: 16px;"><i class="fas fa-history" style="color: #a78bfa;"></i> Celosystémová historie odeslaných zpráv</h3>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <input type="text" id="dash-hist-filter" oninput="filterDashHist()" placeholder="Hledat v historii..." style="margin: 0; padding: 7px 12px; width: 250px; font-size: 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 6px;">
+        <button type="button" onclick="loadDashHist()" class="btn btn-dark" style="font-size: 12px; padding: 7px 12px;"><i class="fas fa-sync-alt"></i></button>
+      </div>
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="border-bottom: 2px solid #334155; font-size: 12px; color: #a78bfa;">
+            <th style="padding: 10px; text-align: left;">Čas</th>
+            <th style="padding: 10px; text-align: left;">Příjemce</th>
+            <th style="padding: 10px; text-align: left;">Pravidlo / Typ</th>
+            <th style="padding: 10px; text-align: left;">Spouštěč</th>
+            <th style="padding: 10px; text-align: left;">Kanál</th>
+            <th style="padding: 10px; text-align: left;">Obsah zprávy</th>
+          </tr>
+        </thead>
+        <tbody id="dash-hist-tbody" style="font-size: 13px;">
+          <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 25px;"><i class="fas fa-spinner fa-spin"></i> Načítání historie...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let _dashRules = [];
+let _dashHist = [];
+
+function switchDashTab(tab) {
+  document.getElementById('tab-content-direct').style.display = tab === 'direct' ? 'block' : 'none';
+  document.getElementById('tab-content-rules').style.display = tab === 'rules' ? 'block' : 'none';
+  document.getElementById('tab-content-hist').style.display = tab === 'hist' ? 'block' : 'none';
+
+  const btnDirect = document.getElementById('tab-btn-direct');
+  const btnRules = document.getElementById('tab-btn-rules');
+  const btnHist = document.getElementById('tab-btn-hist');
+
+  btnDirect.style.background = tab === 'direct' ? '#7c3aed' : '#334155';
+  btnDirect.style.color = tab === 'direct' ? 'white' : 'var(--text-muted)';
+
+  btnRules.style.background = tab === 'rules' ? '#7c3aed' : '#334155';
+  btnRules.style.color = tab === 'rules' ? 'white' : 'var(--text-muted)';
+
+  btnHist.style.background = tab === 'hist' ? '#7c3aed' : '#334155';
+  btnHist.style.color = tab === 'hist' ? 'white' : 'var(--text-muted)';
+
+  if (tab === 'rules' && _dashRules.length === 0) loadDashRules();
+  if (tab === 'hist' && _dashHist.length === 0) loadDashHist();
+}
+
+async function handleSendDirectMsg(e) {
+  e.preventDefault();
+  const target = document.getElementById('direct-target').value.trim();
+  const title = document.getElementById('direct-title').value.trim();
+  const message = document.getElementById('direct-message').value.trim();
+  const statusEl = document.getElementById('direct-msg-status');
+  const btn = document.getElementById('btn-submit-direct');
+
+  if (!target || !message) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Odesílám...';
+  statusEl.style.display = 'block';
+  statusEl.className = 'alert alert-info';
+  statusEl.innerHTML = 'Zařazuji zprávu do odesílací fronty...';
+
+  try {
+    const res = await fetch('/api/admin/notifications/send_direct', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ target, title, message })
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      statusEl.className = 'alert alert-success';
+      statusEl.innerHTML = '<i class="fas fa-check-circle"></i> ' + (data.message || 'Zpráva byla úspěšně odeslána!');
+      document.getElementById('direct-message').value = '';
+      loadDashHist();
+    } else {
+      statusEl.className = 'alert alert-danger';
+      statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> ' + (data.message || 'Chyba při odesílání');
+    }
+  } catch (err) {
+    statusEl.className = 'alert alert-danger';
+    statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Chyba spojení se serverem: ' + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Odeslat zprávu uživateli';
+  }
+}
+
+async function loadDashRules() {
+  const tbody = document.getElementById('dash-rules-tbody');
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 25px;"><i class="fas fa-spinner fa-spin"></i> Načítání pravidel...</td></tr>';
+  try {
+    const res = await fetch('/api/admin/notifications/all_rules');
+    const data = await res.json();
+    _dashRules = data.rules || [];
+    document.getElementById('d-rules-cnt').innerText = _dashRules.length;
+    renderDashRules(_dashRules);
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #ef4444; padding: 25px;">Chyba při načítání pravidel: ' + err.message + '</td></tr>';
+  }
+}
+
+function renderDashRules(rules) {
+  const tbody = document.getElementById('dash-rules-tbody');
+  tbody.innerHTML = '';
+  if (!rules || rules.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 25px;">Žádná aktivní pravidla v systému.</td></tr>';
+    return;
+  }
+
+  rules.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid #334155';
+    let triggersArr = [];
+    if (r.triggers) {
+      for (const [k, v] of Object.entries(r.triggers)) {
+        if (v && v !== 'none' && v !== false) triggersArr.push(k);
+      }
+    }
+    const trigStr = triggersArr.join(', ') || '-';
+    const channels = Array.isArray(r.delivery_channels) ? r.delivery_channels.join(', ') : (r.channel || 'discord');
+
+    tr.innerHTML = `
+      <td style="padding: 10px; color: #64748b; font-family: monospace;">#${String(r.id).slice(0, 8)}</td>
+      <td style="padding: 10px; font-weight: bold; color: var(--blue-main);">${r.identifier || '-'} <span style="font-size: 11px; color: var(--text-muted);">(${r.identifier_type || 'spz'})</span></td>
+      <td style="padding: 10px; color: var(--text-main);">${r.label || '-'}</td>
+      <td style="padding: 10px; color: #c4b5fd; font-size: 12px;">${trigStr}</td>
+      <td style="padding: 10px;"><span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${channels}</span></td>
+      <td style="padding: 10px; color: #94a3b8; font-size: 12px;">${r.user_session || '-'}</td>
+      <td style="padding: 10px; text-align: right;">
+        <button type="button" class="btn btn-danger" onclick="deleteDashRule('${r.id}')" style="padding: 4px 8px; font-size: 11px;">
+          <i class="fas fa-trash"></i> Smazat
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filterDashRules() {
+  const q = document.getElementById('dash-rules-filter').value.toLowerCase();
+  if (!q) return renderDashRules(_dashRules);
+  const filtered = _dashRules.filter(r => 
+    String(r.identifier || '').toLowerCase().includes(q) ||
+    String(r.label || '').toLowerCase().includes(q) ||
+    String(r.user_session || '').toLowerCase().includes(q) ||
+    String(r.id || '').toLowerCase().includes(q)
+  );
+  renderDashRules(filtered);
+}
+
+async function deleteDashRule(id) {
+  if (!confirm('Opravdu chcete toto pravidlo trvale smazat?')) return;
+  try {
+    const res = await fetch('/api/admin/notifications/delete_rule', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ id })
+    });
+    const d = await res.json();
+    if (d.status === 'success') {
+      _dashRules = _dashRules.filter(r => r.id !== id);
+      document.getElementById('d-rules-cnt').innerText = _dashRules.length;
+      renderDashRules(_dashRules);
+    } else {
+      alert('Chyba: ' + (d.message || 'Nepodařilo se smazat pravidlo'));
+    }
+  } catch (e) {
+    alert('Chyba spojení: ' + e.message);
+  }
+}
+
+async function loadDashHist() {
+  const tbody = document.getElementById('dash-hist-tbody');
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 25px;"><i class="fas fa-spinner fa-spin"></i> Načítání historie...</td></tr>';
+  try {
+    const res = await fetch('/api/admin/notifications/history');
+    const data = await res.json();
+    _dashHist = data.history || [];
+    document.getElementById('d-hist-cnt').innerText = _dashHist.length;
+    renderDashHist(_dashHist);
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #ef4444; padding: 25px;">Chyba: ' + err.message + '</td></tr>';
+  }
+}
+
+function renderDashHist(hist) {
+  const tbody = document.getElementById('dash-hist-tbody');
+  tbody.innerHTML = '';
+  if (!hist || hist.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 25px;">Zatím žádná zaznamenaná historie.</td></tr>';
+    return;
+  }
+
+  hist.forEach(h => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid #334155';
+    tr.innerHTML = `
+      <td style="padding: 10px; color: #64748b; font-size: 11px; white-space: nowrap;">${h.time || '-'}</td>
+      <td style="padding: 10px; font-weight: bold; color: var(--blue-main);">${h.target || '-'}</td>
+      <td style="padding: 10px; color: var(--text-main);">${h.rule_id || '-'}</td>
+      <td style="padding: 10px; color: #c4b5fd;">${h.trigger || '-'}</td>
+      <td style="padding: 10px;"><span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${h.channel || 'DM'}</span></td>
+      <td style="padding: 10px; color: #94a3b8; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${h.message || '-'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filterDashHist() {
+  const q = document.getElementById('dash-hist-filter').value.toLowerCase();
+  if (!q) return renderDashHist(_dashHist);
+  const filtered = _dashHist.filter(h => 
+    String(h.target || '').toLowerCase().includes(q) ||
+    String(h.rule_id || '').toLowerCase().includes(q) ||
+    String(h.trigger || '').toLowerCase().includes(q) ||
+    String(h.message || '').toLowerCase().includes(q)
+  );
+  renderDashHist(filtered);
+}
+
+// Inicializace počtů při načtení
+loadDashRules();
+loadDashHist();
+</script>
+"""
+

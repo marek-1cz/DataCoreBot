@@ -7766,8 +7766,10 @@ def stranka_mapa_admin():
 
 @mapa_bp.route('/api/admin/map_action', methods=['POST'])
 def api_admin_map_action():
-    if not session.get('logged_in'):
-        return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
+    is_admin, admin_name = _check_admin_request()
+    if not is_admin:
+        return jsonify({"status": "error", "message": "Neautorizováno"}), 401
+    admin_name = admin_name or "marekk_czz"
     data = request.get_json(silent=True) or {}
     action = data.get("action")
     bus_id = str(data.get("bus_id", ""))
@@ -7788,6 +7790,10 @@ def api_admin_map_action():
             del DEPOT_ACTIVE_SESSIONS[bus_id]
             DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
         del GLOBAL_BUS_CACHE[bus_id]
+        try:
+            from main import send_log
+            send_log("🗑️ Skrytí Autobusu z Mapy", f"**Administrátor:** {admin_name}\n**MAP ID:** {bus_id}\n**Linka:** {c.get('line') or '-'}", 0xef4444)
+        except Exception: pass
 
     elif action == "edit_spz":
         new_spz = str(data.get("spz", "")).strip()
@@ -7810,6 +7816,10 @@ def api_admin_map_action():
                 "is_locked_by_admin": True,
             }
             log_spz_change(bus_id, old_spz, new_spz, reason="admin_edit", admin_note=c.get("admin_note", ""))
+            try:
+                from main import send_log
+                send_log("🚌 Úprava SPZ Autobusu", f"**Administrátor:** {admin_name}\n**MAP ID:** {bus_id}\n**Nová SPZ:** {new_spz}\n**Původní SPZ:** {old_spz or 'Neznámá'}\n**Linka:** {c.get('line') or '-'}\n**Poznámka:** {c.get('admin_note') or '-'}", 0x38bdf8)
+            except Exception: pass
 
     elif action == "recheck_spz":
         c["spz_locked"] = False
@@ -7822,6 +7832,10 @@ def api_admin_map_action():
         c["spz_last_audit_check"] = None
         c["investigating"] = False
         c["spz_stable_ticks"] = 0
+        try:
+            from main import send_log
+            send_log("🔄 Odemčení / Reset SPZ", f"**Administrátor:** {admin_name}\n**MAP ID:** {bus_id}", 0xf59e0b)
+        except Exception: pass
 
     elif action == "force_refresh":
         c["spz_locked"] = False
@@ -7854,6 +7868,10 @@ def api_admin_map_action():
             ADMIN_SPZ_LOCKS.pop(int(bus_id), None)
         except ValueError:
             pass
+        try:
+            from main import send_log
+            send_log("🧹 Vyčištění Dat Autobusu", f"**Administrátor:** {admin_name}\n**MAP ID:** {bus_id}", 0xf59e0b)
+        except Exception: pass
 
     elif action == "edit_status":
         new_st = str(data.get("status", "")).strip()
@@ -7862,6 +7880,10 @@ def api_admin_map_action():
             c["status"] = new_st
             c["admin_status_override"] = new_st
             c["admin_lock_display"] = True
+            try:
+                from main import send_log
+                send_log("⚙️ Změna Stavu Autobusu", f"**Administrátor:** {admin_name}\n**MAP ID:** {bus_id}\n**Nový stav:** {new_st}", 0x38bdf8)
+            except Exception: pass
         if new_col and new_col not in ("", "\u2500\u2500"):
             c["color_class"] = new_col
             c["admin_color_override"] = new_col
@@ -8026,8 +8048,10 @@ def api_admin_map_action():
 
 @mapa_bp.route('/api/admin/approve_conflict_spz', methods=['POST'])
 def api_admin_approve_conflict_spz():
-    if not session.get('logged_in'):
-        return jsonify({"status": "error", "message": "Neopravneny pristup"}), 401
+    is_admin, admin_name = _check_admin_request()
+    if not is_admin:
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
+    admin_name = admin_name or "marekk_czz"
         
     data = request.json or {}
     bus_id = data.get("bus_id")
@@ -8075,6 +8099,10 @@ def api_admin_approve_conflict_spz():
         print(f"[ADMIN-VERIFY] Chyba zapisu spz_cache: {e_av}", flush=True)
 
     print(f"[ADMIN-VERIFY] Konflikt vyresen, Bus {bus_id} dostal SPZ lock", flush=True)
+    try:
+        from main import send_log
+        send_log("✅ Schválení SPZ Konfliktu", f"**Administrátor:** {admin_name}\n**MAP ID:** {bus_id}\n**SPZ:** {spz}", 0x10b981)
+    except Exception: pass
     return jsonify({"status": "success"})
 
 
@@ -9393,10 +9421,15 @@ def api_notif_user_history():
 # === ADMIN PANEL NOTIFIKACÍ (OD NULY) ===
 
 def _check_admin_request():
-    """Ověří administrátorská práva napříč všemi přihlašovacími metodami."""
-    # 1. Map admin heslo
-    if session.get('logged_in'):
-        return True, "map_admin"
+    """Ověří administrátorská práva napříč všemi přihlašovacími metodami a vrátí (is_admin, admin_name)."""
+    admin_name = None
+    # 1. Zkus session nick/username
+    for k in ('discord_nick', 'nick', 'username', 'admin_user'):
+        val = session.get(k)
+        if val and str(val).strip() and str(val).lower() not in ('none', 'unknown', 'neznámý', 'map_admin'):
+            admin_name = str(val).strip()
+            break
+
     # 2. Web session token
     cookie_token = request.cookies.get('web_session_token')
     if cookie_token:
@@ -9406,12 +9439,36 @@ def _check_admin_request():
                 u = find_user_by_session_token(db, cookie_token)
                 if u:
                     role = str(u.get("role") or "").upper()
-                    if "SA" in role or "DEV" in role or "ADMIN" in role:
-                        return True, str(u.get("id"))
+                    if "SA" in role or "DEV" in role or "ADMIN" in role or u.get("dashboard_access"):
+                        resolved_name = u.get("nick") or u.get("username") or u.get("email") or admin_name or "marekk_czz"
+                        return True, resolved_name
         except Exception: pass
+
     # 3. Superadmin discord
-    if session.get('discord_id') in ("714856037042585641", "1219661445763661854") or session.get('is_superadmin'):
-        return True, str(session.get('discord_id'))
+    did = str(session.get('discord_id') or "")
+    if did in ("714856037042585641", "1219661445763661854") or session.get('is_superadmin'):
+        if not admin_name and did:
+            try:
+                db = get_db_client()
+                if db:
+                    u_res = db.table("users").select("nick, email, username").eq("discord_id", did).execute().data
+                    if u_res:
+                        admin_name = u_res[0].get("nick") or u_res[0].get("username") or u_res[0].get("email")
+            except Exception: pass
+        return True, admin_name or "marekk_czz"
+
+    # 4. Map admin heslo nebo dashboard session
+    if session.get('logged_in'):
+        if not admin_name and did:
+            try:
+                db = get_db_client()
+                if db:
+                    u_res = db.table("users").select("nick, email, username").eq("discord_id", did).execute().data
+                    if u_res:
+                        admin_name = u_res[0].get("nick") or u_res[0].get("username") or u_res[0].get("email")
+            except Exception: pass
+        return True, admin_name or "marekk_czz"
+
     return False, None
 
 
@@ -9908,7 +9965,7 @@ def admin_notifications_page():
 @mapa_bp.route('/api/admin/notifications/send_direct', methods=['POST'])
 def api_admin_notif_send_direct():
     """Umožní administrátorovi odeslat zprávu na jakékoliv Discord ID nebo E-mail přímo z rozhraní."""
-    is_admin, admin_id = _check_admin_request()
+    is_admin, admin_name = _check_admin_request()
     if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizováno - vyžadována administrátorská práva"}), 401
 
@@ -9929,21 +9986,22 @@ def api_admin_notif_send_direct():
         return jsonify({"status": "error", "message": f"'{target}' není platné Discord ID (číslo) ani e-mail"}), 400
 
     now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+    admin_display_name = admin_name or "marekk_czz"
     
     # Zařazení do odesílací fronty
     NOTIFICATION_DM_QUEUE.put({
         "discord_id": target if is_discord else None,
         "email": target if is_email else None,
-        "dm_text": message,
+        "dm_text": f"🔔 **{title}**\n\n{message}\n\n*Odesílatel: Administrátor ({admin_display_name}) • {now_str}*",
         "embed": {
             "title": title,
             "description": message,
             "color": 0x8b5cf6,
             "fields": [
-                {"name": "Odesílatel", "value": f"Administrátor ({admin_id})", "inline": True},
+                {"name": "Odesílatel", "value": f"Administrátor ({admin_display_name})", "inline": True},
                 {"name": "Čas", "value": now_str, "inline": True}
             ],
-            "footer": {"text": "DataCore Admin Notification System"}
+            "footer": {"text": f"Odeslal administrátor {admin_display_name} • DataCore OIS IDPK"}
         },
         "rule_id": f"admin_direct_{int(time.time())}",
         "trigger": "admin_direct_message",
@@ -9953,14 +10011,22 @@ def api_admin_notif_send_direct():
     try:
         from local_db import local_notif_log_history
         channel_name = "email" if is_email else "discord"
-        local_notif_log_history(target, f"admin_direct", "DIRECT_MSG", "admin_message", channel_name, message)
+        local_notif_log_history(target, f"admin_{admin_display_name}", "DIRECT_MSG", "admin_message", channel_name, message)
     except Exception:
         pass
 
-    sys_log(f"[ADMIN NOTIF] Přímá zpráva zařazena k odeslání pro: {target} (admin: {admin_id})")
+    sys_log(f"[ADMIN NOTIF] Přímá zpráva zařazena k odeslání pro: {target} (admin: {admin_display_name})")
+
+    # Discord audit log
+    try:
+        from main import send_log
+        send_log("✉️ Přímá Zpráva Administrátora", f"**Odesílatel:** {admin_display_name}\n**Příjemce:** `{target}` ({'E-mail' if is_email else 'Discord DM'})\n**Předmět:** {title}\n**Zpráva:**\n{message[:400]}", 0x8b5cf6)
+    except Exception:
+        pass
+
     return jsonify({
         "status": "success",
-        "message": f"Zpráva byla úspěšně zařazena do odesílací fronty pro {target} ({'E-mail' if is_email else 'Discord DM'})"
+        "message": f"Zpráva byla úspěšně odeslána od {admin_display_name} pro {target} ({'E-mail' if is_email else 'Discord DM'})"
     })
 
 

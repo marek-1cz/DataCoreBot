@@ -42,7 +42,8 @@ _template_names = [
     'HTML_TEAM', 'HTML_PUBLIC_STATS', 'HTML_CLAIM', 'HTML_STATS', 'HTML_APP_MANAGEMENT',
     'HTML_NOTIFICATIONS', 'HTML_DOWNLOADS_MGMT', 'HTML_PENDING_ROLES', 'HTML_TEAM_ADD',
     'HTML_IDS', 'HTML_DASHBOARD_MAIN', 'HTML_SUPPORTERS', 'HTML_SUPPORTERS_MGMT',
-    'HTML_FEEDBACK', 'HTML_WAIT_AUTH', 'HTML_LOGIN', 'HTML_PROVOZ_IDPK', 'HTML_REGISTER', 'HTML_UCET'
+    'HTML_FEEDBACK', 'HTML_WAIT_AUTH', 'HTML_LOGIN', 'HTML_PROVOZ_IDPK', 'HTML_REGISTER', 'HTML_UCET',
+    'HTML_DASHBOARD_NOTIFICATIONS_MGMT'
 ]
 for _name in _template_names:
     if _name not in globals():
@@ -860,6 +861,57 @@ def send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacor
         asyncio.run_coroutine_threadsafe(async_send_log(title, description, color, channel_name, pings), bot.loop)
 
 
+def get_current_admin_name():
+    """Vrátí spolehlivě nick/jméno přihlášeného administrátora pro audit logy a notifikace."""
+    try:
+        from flask import session, request
+        # 1. Nejprve zkus session hodnoty
+        for k in ('discord_nick', 'nick', 'username', 'admin_user'):
+            val = session.get(k)
+            if val and str(val).strip() and str(val).strip().lower() not in ('none', 'unknown', 'neznámý', 'map_admin'):
+                return str(val).strip()
+
+        # 2. Zkus najít podle discord_id v databázi
+        did = session.get('discord_id')
+        if did:
+            try:
+                db = get_db()
+                if db:
+                    u_res = db.table("users").select("nick, email, username").eq("discord_id", str(did)).execute().data
+                    if u_res:
+                        found_name = u_res[0].get("nick") or u_res[0].get("username") or u_res[0].get("email")
+                        if found_name:
+                            session['discord_nick'] = str(found_name).strip()
+                            return str(found_name).strip()
+            except Exception:
+                pass
+            if str(did) in ("714856037042585641", "1219661445763661854"):
+                return "marekk_czz"
+            return str(did)
+
+        # 3. Zkus web_session_token z cookie
+        try:
+            cookie_token = request.cookies.get('web_session_token') if request else None
+            if cookie_token:
+                db = get_db()
+                if db:
+                    from session_manager import find_user_by_session_token
+                    u = find_user_by_session_token(db, cookie_token)
+                    if u:
+                        found_name = u.get("nick") or u.get("username") or u.get("email")
+                        if found_name:
+                            return str(found_name).strip()
+        except Exception:
+            pass
+
+        # 4. Pokud je přihlášen v session (offline mód / mapa)
+        if session.get('logged_in'):
+            return "marekk_czz"
+    except Exception:
+        pass
+    return "marekk_czz"
+
+
 def _cors_jsonify(data):
     return jsonify(data)
 
@@ -1050,13 +1102,17 @@ def check_session_validity():
                     role, is_banned = get_cached_user_role(discord_id)
                     db = get_db()
                     if db:
-                        users_data = db.table("users").select("dashboard_access, is_deleted").eq("discord_id", discord_id).execute().data
+                        users_data = db.table("users").select("dashboard_access, is_deleted, nick, email, role, dashboard_level").eq("discord_id", discord_id).execute().data
                         if users_data:
                             user = users_data[0]
                             if not user.get("dashboard_access") or is_banned or user.get("is_deleted"):
                                 session.clear()
                                 flash('Váš přístup byl zablokován.', 'error')
                                 return redirect(url_for('dashboard_main'))
+                            if not session.get('discord_nick'):
+                                session['discord_nick'] = user.get('nick') or user.get('email') or str(discord_id)
+                                session['nick'] = user.get('nick')
+                                session['dashboard_level'] = user.get('dashboard_level') or 'admin'
                 except:
                     pass
 
@@ -2352,7 +2408,7 @@ def login_finalize():
     db = get_db()
     if db and discord_id:
         import time as _t
-        user = db.table("users").select("login_token, login_token_expires_at, dashboard_access").eq("discord_id", discord_id).execute().data
+        user = db.table("users").select("login_token, login_token_expires_at, dashboard_access, nick, email, role, dashboard_level").eq("discord_id", discord_id).execute().data
         if user:
             u = user[0]
             # Ověřit: token, expiry a dashboard_access
@@ -2366,6 +2422,11 @@ def login_finalize():
                 session.permanent = True
                 session['logged_in'] = True
                 session['discord_id'] = discord_id
+                session['discord_nick'] = u.get('nick') or u.get('email') or str(discord_id)
+                session['nick'] = u.get('nick')
+                session['email'] = u.get('email')
+                session['role'] = u.get('role')
+                session['dashboard_level'] = u.get('dashboard_level') or 'admin'
                 
                 if token_val == "approved":
                     db.table("users").update({"login_token": "used", "login_token_expires_at": int(_t.time()) + 10}).eq("discord_id", discord_id).execute()
@@ -3155,10 +3216,12 @@ def edit_user():
                 for t in ["user_stats_lines", "user_stats_stops", "app_sessions", "download_logs", "feedback", "read_messages"]:
                     try: build_delete_query(t).execute()
                     except: pass
-                res = build_delete_query("users").execute()
                 if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl nalezen pro permanentní smazání.", "error")
                 else: flash('Účet a všechna jeho data byla trvale smazána.', 'dark')
                 if valid_discord_id and str(session.get('discord_id')) == str(valid_discord_id): session.clear()
+            
+            adm = get_current_admin_name()
+            send_log(f"👤 Úprava Uživatele ({action.upper()})", f"**Správce:** {adm}\n**Cíl:** `{target_identifier}` ({nick or ''})\n**Akce:** `{action}`", 0x38bdf8)
         except Exception as e:
             flash(f"Chyba při úpravě uživatele (akce {action}): {e}", "error")
     return redirect(url_for('dashboard_main'))
@@ -3243,7 +3306,8 @@ def toggle_launcher():
     if db:
         set_setting_db(db, "launcher_enabled", new_status)
         flash(f'Stav Launcheru: {"ZAPNUT" if new_status.lower() == "true" else "VYPNUT"}', 'success')
-        send_log("🚀 Zámek Launcheru", f"**Uživatel:** {session.get('discord_nick')}\n**Nový stav:** {'ZAPNUTO' if new_status.lower() == 'true' else 'VYPNUTO'}", 0xf59e0b)
+        adm = get_current_admin_name()
+        send_log("🚀 Zámek Launcheru", f"**Uživatel:** {adm}\n**Nový stav:** {'ZAPNUTO' if new_status.lower() == 'true' else 'VYPNUTO'}", 0xf59e0b)
         trigger_status_channel_update()
     return redirect(url_for('dashboard_app_management'))
 
@@ -3254,9 +3318,9 @@ def set_announcement():
     db = get_db()
     if db:
         set_setting_db(db, "announcement_data", announcements_json)
-        # Clear legacy values just to be clean, or leave them. Let's just set the new key.
         flash('Oznámení byla uložena.', 'success')
-        send_log("📣 Změna Globálních Oznámení", f"**Uživatel:** {session.get('discord_nick')}\nByla upravena globální oznámení.", 0x38bdf8)
+        adm = get_current_admin_name()
+        send_log("📣 Změna Globálních Oznámení", f"**Uživatel:** {adm}\nByla upravena globální oznámení.", 0x38bdf8)
     return redirect(url_for('dashboard_notifications'))
 
 @app.route('/dashboard/toggle_software', methods=['POST'])
@@ -3267,7 +3331,8 @@ def toggle_software():
     if db:
         set_setting_db(db, "software_enabled", new_status)
         flash(f'Stav softwaru: {"ZAPNUT" if new_status.lower() == "true" else "VYPNUT"}', 'success')
-        send_log("💻 Software / Spouštění hry", f"**Uživatel:** {session.get('discord_nick')}\n**Nový stav:** {'ZAPNUTO' if new_status.lower() == 'true' else 'VYPNUTO'}", 0xf59e0b)
+        adm = get_current_admin_name()
+        send_log("💻 Software / Spouštění hry", f"**Uživatel:** {adm}\n**Nový stav:** {'ZAPNUTO' if new_status.lower() == 'true' else 'VYPNUTO'}", 0xf59e0b)
         trigger_status_channel_update()
     return redirect(url_for('dashboard_app_management'))
 
@@ -3279,7 +3344,8 @@ def toggle_downloads():
     if db:
         set_setting_db(db, "downloads_enabled", new_status)
         flash(f'Stahování: {"POVOLENO" if new_status.lower() == "true" else "ZAKÁZÁNO"}', 'success')
-        send_log("⬇️ Stahování hry v Launcheru", f"**Uživatel:** {session.get('discord_nick')}\n**Nový stav:** {'POVOLENO' if new_status.lower() == 'true' else 'ZAKÁZÁNO'}", 0x3b82f6)
+        adm = get_current_admin_name()
+        send_log("⬇️ Stahování hry v Launcheru", f"**Uživatel:** {adm}\n**Nový stav:** {'POVOLENO' if new_status.lower() == 'true' else 'ZAKÁZÁNO'}", 0x3b82f6)
         trigger_setup_messages_update()
         trigger_status_channel_update()
     ret = request.form.get('return_to', 'app_management')
@@ -3292,7 +3358,8 @@ def toggle_web_login():
     db = get_db()
     if db:
         set_setting_db(db, "web_login_enabled", new_status)
-        send_log("🔐 Přihlašování na Web", f"Přihlašování na web bylo **{'POVOLENO' if new_status.lower() == 'true' else 'ZABLOKOVANÉ'}** přes dashboard.", 0xf59e0b)
+        adm = get_current_admin_name()
+        send_log("🔐 Přihlašování na Web", f"**Uživatel:** {adm}\nPřihlašování na web bylo **{'POVOLENO' if new_status.lower() == 'true' else 'ZABLOKOVANÉ'}** přes dashboard.", 0xf59e0b)
         flash(f'Přihlašování na web: {"POVOLENO" if new_status.lower() == "true" else "ZABLOKOVANÉ"}', 'success')
         trigger_status_channel_update()
     return redirect(url_for('dashboard_app_management'))
@@ -3304,7 +3371,8 @@ def toggle_map():
     db = get_db()
     if db:
         if set_setting_db(db, "map_enabled", new_status):
-            send_log("🗺️ Interaktivní Mapa", f"Mapa byla **{'ZAPNUTA' if new_status.lower() == 'true' else 'VYPNUTA'}** přes dashboard.", 0x38bdf8)
+            adm = get_current_admin_name()
+            send_log("🗺️ Interaktivní Mapa", f"**Uživatel:** {adm}\nMapa byla **{'ZAPNUTA' if new_status.lower() == 'true' else 'VYPNUTA'}** přes dashboard.", 0x38bdf8)
             flash(f'Mapa: {"ZAPNUTA" if new_status.lower() == "true" else "VYPNUTA"}', 'success')
             trigger_status_channel_update()
         else:
@@ -3318,10 +3386,11 @@ def toggle_maintenance():
     db = get_db()
     if db:
         if set_setting_db(db, "web_maintenance", new_status):
+            adm = get_current_admin_name()
             if new_status.lower() == 'true':
-                send_log("🚧 Maintenance Mode ZAPNUT", "Web byl přepnut do maintenance módu. Probíhá přesměrování všech návštěvníků na /blocked.", 0xef4444)
+                send_log("🚧 Maintenance Mode ZAPNUT", f"**Uživatel:** {adm}\nWeb byl přepnut do maintenance módu. Probíhá přesměrování všech návštěvníků na /blocked.", 0xef4444)
             else:
-                send_log("✅ Maintenance Mode VYPNUT", "Web byl obnoven z maintenance módu.", 0x10b981)
+                send_log("✅ Maintenance Mode VYPNUT", f"**Uživatel:** {adm}\nWeb byl obnoven z maintenance módu.", 0x10b981)
             flash(f'Maintenance: {"ZAPNUT - WEB JE OFFLINE" if new_status.lower() == "true" else "VYPNUT - WEB JE ONLINE"}', 'success' if new_status.lower() == 'false' else 'warning')
             trigger_status_channel_update()
         else:
@@ -3400,6 +3469,13 @@ def dashboard_notifications():
     except: pass
     return render_dashboard(HTML_NOTIFICATIONS, messages=messages, deploy_time=DEPLOY_TIME, announcements_json=announcements_json)
 
+@app.route('/dashboard/sprava-notifikaci', methods=['GET'], strict_slashes=False)
+@app.route('/dashboard/notifikace', methods=['GET'], strict_slashes=False)
+@require_dash_level('admin')
+def dashboard_notifications_management():
+    admin_nick = get_current_admin_name()
+    return render_dashboard(HTML_DASHBOARD_NOTIFICATIONS_MGMT, admin_nick=admin_nick, deploy_time=DEPLOY_TIME)
+
 @app.route('/dashboard/send_app_message', methods=['POST'])
 def send_app_message():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
@@ -3460,7 +3536,8 @@ def dashboard_update_launcher_url():
         else:
             db.table("settings").insert({"setting_key": "launcher_download_url", "setting_value": new_url}).execute()
         flash('Odkaz na Launcher byl úspěšně aktualizován.', 'success')
-        send_log("🔗 Změna odkazu Launcheru", f"**Uživatel:** {session.get('discord_nick')}\n**Nový odkaz:** {new_url}", 0x3b82f6)
+        adm = get_current_admin_name()
+        send_log("🔗 Změna odkazu Launcheru", f"**Uživatel:** {adm}\n**Nový odkaz:** {new_url}", 0x3b82f6)
     return redirect(url_for('dashboard_downloads'))
 
 @app.route('/dashboard/add_version', methods=['POST'])
@@ -3481,7 +3558,8 @@ def add_version():
         }
         db.table("software_versions").insert(row).execute()
         flash('Nová verze vydána!', 'success')
-        send_log("🚀 Vydána nová verze", f"**Uživatel:** {session.get('discord_nick')}\n**Název:** {row['version_name']}\n**Role:** {row['target_role']}", 0x10b981)
+        adm = get_current_admin_name()
+        send_log("🚀 Vydána nová verze", f"**Uživatel:** {adm}\n**Název:** {row['version_name']}\n**Role:** {row['target_role']}", 0x10b981)
         trigger_setup_messages_update()
     except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
@@ -3504,7 +3582,8 @@ def edit_version():
         }
         db.table("software_versions").update(row).eq("id", request.form.get("version_id")).execute()
         flash('Verze upravena.', 'success')
-        send_log("✏️ Úprava verze", f"**Uživatel:** {session.get('discord_nick')}\n**Název:** {row['version_name']}\n**Aktivní:** {'Ano' if row['is_active'] else 'Ne'}", 0xf59e0b)
+        adm = get_current_admin_name()
+        send_log("✏️ Úprava verze", f"**Uživatel:** {adm}\n**Název:** {row['version_name']}\n**Aktivní:** {'Ano' if row['is_active'] else 'Ne'}", 0xf59e0b)
         trigger_setup_messages_update()
     except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
@@ -3626,7 +3705,8 @@ def delete_version():
         vid = request.form.get("version_id")
         get_db().table("software_versions").delete().eq("id", vid).execute()
         flash('Verze smazána.', 'success')
-        send_log("🗑️ Smazána verze aplikace", f"**Uživatel:** {session.get('discord_nick')}\n**ID verze:** {vid}", 0xef4444)
+        adm = get_current_admin_name()
+        send_log("🗑️ Smazána verze aplikace", f"**Uživatel:** {adm}\n**ID verze:** {vid}", 0xef4444)
         trigger_setup_messages_update()
     except: pass
     return redirect(url_for('dashboard_downloads'))
@@ -3911,6 +3991,8 @@ def update_statuses():
             if check: db.table("settings").update({"setting_value": json.dumps(statuses)}).eq("setting_key", "system_statuses").execute()
             else: db.table("settings").insert({"setting_key": "system_statuses", "setting_value": json.dumps(statuses)}).execute()
             flash('Statusy uloženy!', 'success')
+            adm = get_current_admin_name()
+            send_log("📡 Změna Systémových Statusů", f"**Uživatel:** {adm}\nByly upraveny statusy systému.", 0x38bdf8)
         except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_app_management'))
 
@@ -3945,7 +4027,8 @@ def dashboard_admins_grant():
         flash(f'Uživatel s Discord ID {discord_id} nenalezen v databázi.', 'error')
         return redirect(url_for('dashboard_admins'))
     db.table('users').update({'dashboard_access': True, 'dashboard_level': level}).eq('discord_id', discord_id).execute()
-    send_log('🔑 Dashboard přístup udělen', f'Uživateli **{user[0].get("nick", discord_id)}** (`{discord_id}`) byl udělen přístup do dashboardu se úrovní **{level}**.', 0x38bdf8)
+    adm = get_current_admin_name()
+    send_log('🔑 Dashboard přístup udělen', f'**Správce:** {adm}\nUživateli **{user[0].get("nick", discord_id)}** (`{discord_id}`) byl udělen přístup do dashboardu se úrovní **{level}**.', 0x38bdf8)
     flash(f'Přístup udělen: {user[0].get("nick", discord_id)} → {level}', 'success')
     return redirect(url_for('dashboard_admins'))
 
@@ -3964,7 +4047,8 @@ def dashboard_admins_revoke():
     user = db.table('users').select('discord_id, nick').eq('discord_id', discord_id).execute().data
     db.table('users').update({'dashboard_access': False, 'dashboard_level': ''}).eq('discord_id', discord_id).execute()
     nick = user[0].get('nick', discord_id) if user else discord_id
-    send_log('🔒 Dashboard přístup odebrán', f'Uživateli **{nick}** (`{discord_id}`) byl odebrán dashboard přístup.', 0xef4444)
+    adm = get_current_admin_name()
+    send_log('🔒 Dashboard přístup odebrán', f'**Správce:** {adm}\nUživateli **{nick}** (`{discord_id}`) byl odebrán dashboard přístup.', 0xef4444)
     flash(f'Přístup odebrán: {nick}', 'success')
     return redirect(url_for('dashboard_admins'))
 
@@ -3981,6 +4065,8 @@ def dashboard_admins_change_level():
     db = get_db()
     if db and discord_id:
         db.table('users').update({'dashboard_level': level}).eq('discord_id', discord_id).execute()
+        adm = get_current_admin_name()
+        send_log('🛡️ Změna Admin Úrovně', f'**Správce:** {adm}\nUživateli `{discord_id}` byla nastavena úroveň **{level}**.', 0x38bdf8)
         flash(f'Úroveň změněna na {level}.', 'success')
     return redirect(url_for('dashboard_admins'))
 
