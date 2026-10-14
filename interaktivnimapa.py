@@ -376,6 +376,36 @@ body.nav-static #nav-handle, body.nav-glass:not(.nav-glass-hide) #nav-handle { d
   box-shadow: 0 0 12px rgba(245,158,11,0.2) !important;
 }
 
+/* Notifikace Admin Button - Solid Purple Theme with high visibility in Glass & Dark modes */
+#notif-admin-btn {
+  background: linear-gradient(#0e0a1f, #0e0a1f) padding-box,
+              linear-gradient(135deg, rgba(168,85,247,0.85), rgba(124,58,237,0.95)) border-box !important;
+  color: #f3e8ff !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(124,58,237,0.35) !important;
+  padding: 6px 14px !important;
+  font-size: 12px !important;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+#notif-admin-btn:hover {
+  background: linear-gradient(rgba(124,58,237,0.3), rgba(168,85,247,0.3)) padding-box,
+              linear-gradient(135deg, #c084fc, #9333ea) border-box !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 20px rgba(168,85,247,0.6), 0 4px 14px rgba(0,0,0,0.6) !important;
+  transform: translateY(-2px);
+}
+
 /* Lines overlay buttons in legend */
 #lines-legend>div:hover{background:rgba(56,189,248,.08);}
 
@@ -506,7 +536,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
 @media(max-width:768px){
   #top-nav{gap:4px;padding:6px 4px;height:auto;min-height:50px;flex-wrap:wrap;justify-content:center;align-items:center;z-index:4800 !important;width: 100% !important; border-radius: 0;}
   .n-title,.n-warn,.n-clock,.n-sp{display:none !important;}
-  .n-btn, #pub-stops-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #depot-toggle-btn, #log-toggle-btn, #nav-pin-btn { font-size: clamp(8px, 2.8vw, 11px) !important; padding: 4px clamp(4px, 1.5vw, 8px) !important; flex: 1 1 auto; text-align: center; white-space: nowrap; }
+  .n-btn, #pub-stops-btn, #nt-toggle-btn, #nt-add-btn, #le-toggle-btn, #depot-toggle-btn, #log-toggle-btn, #nav-pin-btn, #notif-admin-btn { font-size: clamp(8px, 2.8vw, 11px) !important; padding: 4px clamp(4px, 1.5vw, 8px) !important; flex: 1 1 auto; text-align: center; white-space: nowrap; }
   #spz-search-inp{width:clamp(65px, 20vw, 90px) !important;font-size:10px !important;padding:4px 6px !important; flex: 1 1 auto;}
   #spz-search-wrap{flex: 1 1 auto; display: flex; justify-content: center;}
   #admin-mode-badge{font-size: 9px !important; padding: 2px 4px !important;}
@@ -649,7 +679,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <button id="nt-add-btn" onclick="startNtAdd()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:14px;flex-shrink:0;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;" title="Přidat zastávku">＋</button>
     <button id="le-toggle-btn" onclick="toggleLineEditor()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #a855f7;background:transparent;color:#a855f7;cursor:pointer;" title="Editor linek"><i class="fas fa-edit"></i> Edit</button>
     <button id="depot-toggle-btn" onclick="document.getElementById('depot-admin-panel').style.display=document.getElementById('depot-admin-panel').style.display==='none'?'block':'none'" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #b45309;background:transparent;color:#fcd34d;cursor:pointer;" title="Správa vozoven">🅿️ Vozovny</button>
-    <a id="notif-admin-btn" href="/admin/notifications" target="_blank" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #7c3aed;background:transparent;color:#c4b5fd;text-decoration:none;cursor:pointer;" title="Admin správa notifikací">🔔 Notifikace</a>
+    <a id="notif-admin-btn" href="/sprava-notifikaci" target="_blank" class="n-btn" style="display:none;" title="Admin správa notifikací">🔔 Notifikace</a>
     <!-- lines-overlay-btn-pub is already in nav for everyone -->
     <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋</button>
     __AVATAR__
@@ -3743,7 +3773,7 @@ async function fetchBuses(){
               ) :
               (window.requestedSpojeMap && window.requestedSpojeMap[bus.id] && (Date.now() - window.requestedSpojeMap[bus.id] < 60000)) ?
                 `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#38bdf8;font-weight:bold;font-size:11px;"><i class="fas fa-spinner fa-spin"></i> Čeká se na zjištění spoje...</span></div>` :
-                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;"><span id="spoj-status-${bus.id}">Spoj není známý</span> <button id="req-spoj-${bus.id}" onclick="requestSpoj('${bus.id}',this)" style="background:#0f172a;border:1px solid #38bdf8;color:#38bdf8;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;margin-left:4px;transition:.2s;font-weight:600;">⚡ Vyžádat spoj</button></span></div>`
+                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;"><span id="spoj-status-${bus.id}">Spoj není známý</span> <button id="req-spoj-${bus.id}" onclick="requestSpoj('${bus.id}',this)" style="background:linear-gradient(135deg,#0284c7,#0369a1);border:1px solid #38bdf8;color:#ffffff;padding:2px 9px;border-radius:5px;font-size:10px;cursor:pointer;margin-left:5px;transition:.2s;font-weight:700;box-shadow:0 2px 6px rgba(2,132,199,0.4);">⚡ Vyžádat spoj</button></span></div>`
             ) : ''
           }
           ${(!isTrain) ? `<div class="pr"><span class="pl">Vozidlo:</span><span class="pv" style="color:${bus.vehicle_type ? '#e2e8f0' : '#64748b'};font-size:11px;font-weight:${bus.vehicle_type ? '600' : 'normal'};">${bus.vehicle_type || 'Nezjištěno'}</span></div>` : ''}
@@ -9386,6 +9416,7 @@ def _check_admin_request():
 
 
 @mapa_bp.route('/admin/notifications')
+@mapa_bp.route('/sprava-notifikaci')
 def admin_notifications_page():
     """Kompletní Admin Panel pro správu notifikací od nuly."""
     is_admin, admin_id = _check_admin_request()

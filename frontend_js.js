@@ -2663,7 +2663,7 @@ async function fetchBuses() {
               ) :
               (window.requestedSpojeMap && window.requestedSpojeMap[bus.id] && (Date.now() - window.requestedSpojeMap[bus.id] < 60000)) ?
                 `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#38bdf8;font-weight:bold;font-size:11px;"><i class="fas fa-spinner fa-spin"></i> Čeká se na zjištění spoje...</span></div>` :
-                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;"><span id="spoj-status-${bus.id}">Spoj není známý</span> <button id="req-spoj-${bus.id}" onclick="requestSpoj('${bus.id}',this)" style="background:#0f172a;border:1px solid #38bdf8;color:#38bdf8;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;margin-left:4px;transition:.2s;font-weight:600;">⚡ Vyžádat spoj</button></span></div>`
+                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;"><span id="spoj-status-${bus.id}">Spoj není známý</span> <button id="req-spoj-${bus.id}" onclick="requestSpoj('${bus.id}',this)" style="background:linear-gradient(135deg,#0284c7,#0369a1);border:1px solid #38bdf8;color:#ffffff;padding:2px 9px;border-radius:5px;font-size:10px;cursor:pointer;margin-left:5px;transition:.2s;font-weight:700;box-shadow:0 2px 6px rgba(2,132,199,0.4);">⚡ Vyžádat spoj</button></span></div>`
             ) : ''
           }
           ${(!isTrain) ? `<div class="pr"><span class="pl">Vozidlo:</span><span class="pv" style="color:${bus.vehicle_type ? '#e2e8f0' : '#64748b'};font-size:11px;font-weight:${bus.vehicle_type ? '600' : 'normal'};">${bus.vehicle_type || 'Nezjištěno'}</span></div>` : ''}
