@@ -658,37 +658,15 @@ HTML_SUPPORTERS = """
   padding: 0 15px;
 }
 
-/* Hero Section */
+/* Hero Section - Čistý a bezešvý, bez oříznutých rámečků a bez oranžovo-červeného oparu */
 .supporters-hero {
   position: relative;
   text-align: center;
-  padding: 50px 30px;
+  padding: 40px 20px 35px 20px;
   margin-bottom: 35px;
-  border-radius: 24px;
-  background: radial-gradient(circle at 50% 20%, rgba(245, 158, 11, 0.12), rgba(15, 23, 42, 0.8) 70%);
-  border: 1px solid rgba(245, 158, 11, 0.25);
-  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-}
-.hero-glow-1 {
-  position: absolute;
-  top: -60px;
-  left: 20%;
-  width: 250px;
-  height: 250px;
-  background: rgba(245, 158, 11, 0.2);
-  filter: blur(100px);
-  pointer-events: none;
-}
-.hero-glow-2 {
-  position: absolute;
-  bottom: -60px;
-  right: 20%;
-  width: 250px;
-  height: 250px;
-  background: rgba(239, 68, 68, 0.18);
-  filter: blur(100px);
-  pointer-events: none;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .hero-chip {
@@ -696,8 +674,8 @@ HTML_SUPPORTERS = """
   align-items: center;
   gap: 8px;
   padding: 6px 16px;
-  background: rgba(245, 158, 11, 0.15);
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
   border-radius: 50px;
   color: #fcd34d;
   font-size: 13px;
@@ -709,22 +687,19 @@ HTML_SUPPORTERS = """
 
 .hero-title {
   position: relative;
-  z-index: 1;
   color: #ffffff;
-  font-size: 40px;
-  font-weight: 900;
+  font-size: 38px;
+  font-weight: 800;
   letter-spacing: -0.5px;
   margin: 0 0 16px 0;
   line-height: 1.2;
 }
 .hero-title i {
-  color: var(--warning);
-  filter: drop-shadow(0 0 15px rgba(245, 158, 11, 0.6));
+  color: #f59e0b;
 }
 
 .hero-desc {
   position: relative;
-  z-index: 1;
   color: #94a3b8;
   font-size: 16px;
   max-width: 740px;
@@ -735,7 +710,6 @@ HTML_SUPPORTERS = """
 /* Action Buttons */
 .hero-actions {
   position: relative;
-  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -750,33 +724,20 @@ HTML_SUPPORTERS = """
   gap: 10px;
   background: linear-gradient(135deg, #f59e0b, #d97706);
   color: #ffffff;
-  padding: 14px 32px;
-  font-size: 16px;
+  padding: 13px 28px;
+  font-size: 15px;
   font-weight: 800;
   border-radius: 12px;
   text-decoration: none;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 8px 24px rgba(217, 119, 6, 0.35);
-  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 16px rgba(217, 119, 6, 0.25);
   transition: all 0.25s ease;
 }
 .btn-premium:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(217, 119, 6, 0.55);
+  box-shadow: 0 8px 24px rgba(217, 119, 6, 0.4);
   color: #ffffff;
 }
-.btn-premium::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 50%;
-  height: 100%;
-  background: linear-gradient(to right, transparent, rgba(255,255,255,0.35), transparent);
-  transform: skewX(-25deg);
-  animation: premiumShine 4s infinite;
-}
-@keyframes premiumShine { 0% { left: -100%; } 20% { left: 200%; } 100% { left: 200%; } }
 
 .btn-claim {
   display: inline-flex;
@@ -784,7 +745,7 @@ HTML_SUPPORTERS = """
   gap: 8px;
   background: rgba(30, 41, 59, 0.85);
   color: #e2e8f0;
-  padding: 14px 26px;
+  padding: 13px 24px;
   font-size: 15px;
   font-weight: 700;
   border-radius: 12px;
@@ -828,7 +789,7 @@ HTML_SUPPORTERS = """
   gap: 18px;
 }
 .tier-preview-card {
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 41, 59, 0.5);
   border: 1px solid #334155;
   border-radius: 16px;
   padding: 22px 20px;
@@ -843,16 +804,16 @@ HTML_SUPPORTERS = """
   box-shadow: 0 10px 25px rgba(0,0,0,0.4);
 }
 .tier-preview-card.tier-preview-3 {
-  border-color: rgba(239, 68, 68, 0.4);
-  background: linear-gradient(180deg, rgba(127, 29, 29, 0.25), rgba(30, 41, 59, 0.6) 80%);
+  border-color: rgba(239, 68, 68, 0.35);
+  background: linear-gradient(180deg, rgba(127, 29, 29, 0.15), rgba(30, 41, 59, 0.5) 80%);
 }
 .tier-preview-card.tier-preview-2 {
-  border-color: rgba(245, 158, 11, 0.4);
-  background: linear-gradient(180deg, rgba(180, 83, 9, 0.2), rgba(30, 41, 59, 0.6) 80%);
+  border-color: rgba(245, 158, 11, 0.35);
+  background: linear-gradient(180deg, rgba(180, 83, 9, 0.15), rgba(30, 41, 59, 0.5) 80%);
 }
 .tier-preview-card.tier-preview-1 {
-  border-color: rgba(56, 189, 248, 0.3);
-  background: linear-gradient(180deg, rgba(14, 165, 233, 0.15), rgba(30, 41, 59, 0.6) 80%);
+  border-color: rgba(56, 189, 248, 0.25);
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.1), rgba(30, 41, 59, 0.5) 80%);
 }
 
 .tier-pill {
@@ -867,9 +828,9 @@ HTML_SUPPORTERS = """
   text-transform: uppercase;
   margin-bottom: 12px;
 }
-.tier-pill.badge-mega { background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5); }
-.tier-pill.badge-velky { background: rgba(245, 158, 11, 0.25); color: #fde68a; border: 1px solid rgba(245, 158, 11, 0.5); }
-.tier-pill.badge-normal { background: rgba(56, 189, 248, 0.2); color: #bae6fd; border: 1px solid rgba(56, 189, 248, 0.4); }
+.tier-pill.badge-mega { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); }
+.tier-pill.badge-velky { background: rgba(245, 158, 11, 0.2); color: #fde68a; border: 1px solid rgba(245, 158, 11, 0.4); }
+.tier-pill.badge-normal { background: rgba(56, 189, 248, 0.15); color: #bae6fd; border: 1px solid rgba(56, 189, 248, 0.3); }
 
 .tier-val {
   font-size: 20px;
@@ -1029,7 +990,7 @@ HTML_SUPPORTERS = """
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tier-3 .supp-name { color: #fca5a5; text-shadow: 0 0 12px rgba(252, 165, 165, 0.4); }
+.tier-3 .supp-name { color: #fca5a5; }
 .tier-2 .supp-name { color: #fde68a; }
 .tier-1 .supp-name { color: #bae6fd; }
 
@@ -1067,23 +1028,23 @@ HTML_SUPPORTERS = """
 .supporters-empty {
   text-align: center;
   padding: 50px 20px;
-  background: rgba(30, 41, 59, 0.5);
-  border-radius: 20px;
-  border: 1px dashed #334155;
-  margin: 20px 0;
+  background: rgba(30, 41, 59, 0.4);
+  border-radius: 18px;
+  border: 1px solid #334155;
+  margin: 10px 0 30px 0;
 }
 .empty-icon-wrap {
-  width: 70px;
-  height: 70px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
-  background: rgba(245, 158, 11, 0.15);
+  background: rgba(245, 158, 11, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
-  color: var(--warning);
-  margin: 0 auto 18px auto;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  font-size: 28px;
+  color: #f59e0b;
+  margin: 0 auto 16px auto;
+  border: 1px solid rgba(245, 158, 11, 0.2);
 }
 .empty-title {
   color: #ffffff;
@@ -1095,7 +1056,7 @@ HTML_SUPPORTERS = """
   color: #94a3b8;
   font-size: 15px;
   max-width: 500px;
-  margin: 0 auto 24px auto;
+  margin: 0 auto 22px auto;
   line-height: 1.5;
 }
 
@@ -1106,7 +1067,7 @@ HTML_SUPPORTERS = """
 }
 @media (max-width: 768px) {
   .supporters-hero {
-    padding: 35px 18px;
+    padding: 30px 15px 20px 15px;
     margin-bottom: 25px;
   }
   .hero-title {
@@ -1129,8 +1090,6 @@ HTML_SUPPORTERS = """
 <div class="supporters-page-wrap">
   <!-- Hero Section -->
   <div class="supporters-hero">
-    <div class="hero-glow-1"></div>
-    <div class="hero-glow-2"></div>
     <div class="hero-chip"><i class="fas fa-crown"></i> Podpora komunity</div>
     <h1 class="hero-title"><i class="fas fa-crown"></i> Podporovatelé Projektu</h1>
     <p class="hero-desc">Tenhle projekt tvořím ve svém volném čase a je kompletně zdarma pro všechny. Podpora je čistě dobrovolná a nesmírně mi pomáhá hradit náklady na servery a tvořit pro vás neustále nové skvělé aktualizace.</p>
