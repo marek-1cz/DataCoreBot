@@ -7554,6 +7554,7 @@ def api_notif_create():
             "label": label,
             "delivery_channels": delivery_channels,
             "is_one_time": is_one_time,
+            "created_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
         }).execute()
         channels_text = []
         if "discord" in delivery_channels and discord_id: channels_text.append(f"Discord ({discord_id})")
@@ -9672,12 +9673,14 @@ def admin_notifications_page():
                 <th style="padding:10px;">Režim</th>
                 <th style="padding:10px;">Sledovaný cíl</th>
                 <th style="padding:10px;">Nastavené události</th>
+                <th style="padding:10px;">Zahájeno</th>
+                <th style="padding:10px;">Poslední zpráva</th>
                 <th style="padding:10px;">Spuštěno</th>
                 <th style="padding:10px;text-align:right;">Akce</th>
               </tr>
             </thead>
             <tbody id="admin-rules-tbody">
-              <tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b;">Načítám pravidla...</td></tr>
+              <tr><td colspan="9" style="text-align:center;padding:20px;color:#64748b;">Načítám pravidla...</td></tr>
             </tbody>
           </table>
         </div>
@@ -9707,6 +9710,24 @@ def admin_notifications_page():
     let currentTab = 'repeat';
     let cachedRules = [];
     let cachedHistory = [];
+
+    function formatCzechDateTime(isoStr) {
+      if (!isoStr) return null;
+      try {
+        let d = new Date(isoStr);
+        if (isNaN(d.getTime())) {
+          return String(isoStr).replace('T', ' ').split('.')[0];
+        }
+        let dd = String(d.getDate()).padStart(2, '0');
+        let mm = String(d.getMonth() + 1).padStart(2, '0');
+        let yyyy = d.getFullYear();
+        let hh = String(d.getHours()).padStart(2, '0');
+        let min = String(d.getMinutes()).padStart(2, '0');
+        return `${dd}.${mm}.${yyyy} ${hh}:${min}`;
+      } catch(e) {
+        return String(isoStr);
+      }
+    }
 
     function setAdminFormMode(mode) {
       if (mode === 'rule') {
@@ -9789,14 +9810,21 @@ def admin_notifications_page():
         if (currentTab === 'repeat' && rule.is_one_time) return false;
         if (currentTab === 'once' && !rule.is_one_time) return false;
         if (search) {
-          let sText = (rule.user_session + ' ' + rule.identifier + ' ' + (rule.label || '')).toLowerCase();
+          let sText = (
+            String(rule.user_session || '') + ' ' +
+            String(rule.user_nick || '') + ' ' +
+            String(rule.user_discord_id || '') + ' ' +
+            String(rule.user_email || '') + ' ' +
+            String(rule.identifier || '') + ' ' +
+            String(rule.label || '')
+          ).toLowerCase();
           if (!sText.includes(search)) return false;
         }
         return true;
       });
 
       if (!filtered.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b;">Žádná odpovídající pravidla nenalezena.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:#64748b;">Žádná odpovídající pravidla nenalezena.</td></tr>';
         return;
       }
 
@@ -9820,13 +9848,66 @@ def admin_notifications_page():
           ? '<span style="background:rgba(124,58,237,0.25);color:#c4b5fd;border:1px solid #7c3aed;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">⚡ Jednorázové</span>'
           : '<span style="background:rgba(2,132,199,0.25);color:#38bdf8;border:1px solid #0284c7;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">🔁 Opakující se</span>';
 
+        let uNick = rule.user_nick || '';
+        let uDid = rule.user_discord_id || '';
+        let uEmail = rule.user_email || '';
+        let uRole = rule.user_role || '';
+        let uSess = String(rule.user_session || '');
+
+        let mainName = uNick;
+        if (!mainName) {
+          if (uSess.startsWith('admin_direct_discord_')) mainName = 'Discord DM #' + uSess.replace('admin_direct_discord_', '');
+          else if (uSess.startsWith('admin_direct_email_')) mainName = 'E-mail ' + uSess.replace('admin_direct_email_', '');
+          else if (uSess) mainName = 'Uživatel #' + uSess;
+          else mainName = 'Neznámý';
+        }
+
+        let subDetails = [];
+        if (uDid && uDid !== mainName) subDetails.push(`<span title="Discord ID" style="display:inline-flex;align-items:center;gap:3px;"><i class="fab fa-discord" style="color:#5865F2;"></i> ${uDid}</span>`);
+        if (uEmail && uEmail !== mainName) subDetails.push(`<span title="E-mail" style="display:inline-flex;align-items:center;gap:3px;"><i class="fas fa-envelope" style="color:#38bdf8;"></i> ${uEmail}</span>`);
+        if (uSess && !uSess.startsWith('admin_direct_')) subDetails.push(`<span style="color:#64748b;">(ID: ${uSess})</span>`);
+
+        let userHtml = `
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong style="color:#f8fafc;font-size:13px;">${mainName}</strong>
+              ${uRole ? `<span style="background:rgba(59,130,246,0.2);color:#93c5fd;border:1px solid rgba(59,130,246,0.35);padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;">${uRole}</span>` : ''}
+            </div>
+            ${subDetails.length ? `<div style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${subDetails.join('')}</div>` : ''}
+          </div>
+        `;
+
+        let createdStr = formatCzechDateTime(rule.created_at);
+        let lastFiredStr = formatCzechDateTime(rule.last_fired_at);
+
         tr.innerHTML = `
           <td style="padding:10px;color:#64748b;font-family:monospace;">${String(rule.id).slice(0,8)}</td>
-          <td style="padding:10px;font-weight:bold;color:#e2e8f0;">${rule.user_session || '-'}</td>
+          <td style="padding:10px;">${userHtml}</td>
           <td style="padding:10px;">${modeBadge}</td>
-          <td style="padding:10px;"><b style="color:#38bdf8;">${rule.identifier || '-'}</b> (${rule.identifier_type || 'spz'})</td>
-          <td style="padding:10px;color:#94a3b8;">${t_str}</td>
-          <td style="padding:10px;"><b style="color:#10b981;">${rule.fired_count || 0}x</b></td>
+          <td style="padding:10px;">
+            <b style="color:#38bdf8;">${rule.identifier || '-'}</b> <span style="color:#94a3b8;font-size:11px;">(${rule.identifier_type || 'spz'})</span>
+            ${rule.label ? `<div style="font-size:10px;color:#94a3b8;margin-top:2px;">${rule.label}</div>` : ''}
+          </td>
+          <td style="padding:10px;color:#cbd5e1;font-size:11px;">${t_str}</td>
+          <td style="padding:10px;white-space:nowrap;">
+            ${createdStr ? `
+              <div style="display:flex;align-items:center;gap:5px;color:#e2e8f0;font-size:11px;font-weight:600;">
+                <i class="far fa-calendar-alt" style="color:#94a3b8;"></i>
+                <span>${createdStr}</span>
+              </div>
+            ` : '<span style="color:#64748b;font-size:11px;">-</span>'}
+          </td>
+          <td style="padding:10px;white-space:nowrap;">
+            ${lastFiredStr ? `
+              <div style="display:flex;align-items:center;gap:5px;color:#38bdf8;font-size:11px;font-weight:600;">
+                <i class="fas fa-paper-plane" style="color:#0284c7;"></i>
+                <span>${lastFiredStr}</span>
+              </div>
+            ` : `
+              <span style="color:#64748b;font-size:11px;font-style:italic;">Zatím neodesláno</span>
+            `}
+          </td>
+          <td style="padding:10px;"><b style="color:#10b981;font-size:12px;">${rule.fired_count || 0}x</b></td>
           <td style="padding:10px;text-align:right;">
             <button onclick="deleteAdminRule('${rule.id}')" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid #ef4444;border-radius:5px;padding:4px 8px;font-size:11px;cursor:pointer;">🗑️ Smazat</button>
           </td>
@@ -10065,7 +10146,7 @@ def api_admin_notif_send_direct():
 
 @mapa_bp.route('/api/admin/notifications/all_rules')
 def api_admin_notif_all_rules():
-    """Vrátí všechna aktivní pravidla v systému pro administraci."""
+    """Vrátí všechna aktivní pravidla v systému pro administraci obohacená o detailní údaje o uživatelích."""
     is_admin, _ = _check_admin_request()
     if not is_admin:
         return jsonify({"status": "error", "rules": []}), 401
@@ -10075,8 +10156,59 @@ def api_admin_notif_all_rules():
         return jsonify({"status": "error", "rules": [], "message": "DB nedostupná"})
 
     try:
-        res = db.table("bus_notifications").select("*").execute()
-        return jsonify({"status": "success", "rules": res.data or []})
+        try:
+            res = db.table("bus_notifications").select("*").order("created_at", desc=True).execute()
+        except Exception:
+            res = db.table("bus_notifications").select("*").execute()
+        rules = res.data or []
+
+        user_ids = []
+        for r in rules:
+            us = str(r.get("user_session") or "").strip()
+            if us.isdigit():
+                try:
+                    user_ids.append(int(us))
+                except Exception:
+                    pass
+
+        users_map = {}
+        if user_ids:
+            try:
+                unique_ids = list(set(user_ids))
+                u_res = db.table("users").select("id, nick, username, discord_id, email, role").in_("id", unique_ids).execute()
+                for u in (u_res.data or []):
+                    users_map[str(u.get("id"))] = u
+            except Exception as e_u:
+                print(f"[ADMIN NOTIF] Chyba načtení uživatelů: {e_u}", flush=True)
+
+        for r in rules:
+            us = str(r.get("user_session") or "").strip()
+            user_info = users_map.get(us)
+            if user_info:
+                nick = user_info.get("nick") or user_info.get("username") or f"Uživatel #{us}"
+                r["user_nick"] = nick
+                r["user_discord_id"] = str(user_info.get("discord_id") or "")
+                r["user_email"] = str(user_info.get("email") or "")
+                r["user_role"] = str(user_info.get("role") or "")
+            elif us.startswith("admin_direct_discord_"):
+                did = us.replace("admin_direct_discord_", "")
+                r["user_nick"] = f"Discord #{did}"
+                r["user_discord_id"] = did
+                r["user_email"] = ""
+                r["user_role"] = "Direct DM"
+            elif us.startswith("admin_direct_email_"):
+                em = us.replace("admin_direct_email_", "")
+                r["user_nick"] = em
+                r["user_discord_id"] = ""
+                r["user_email"] = em
+                r["user_role"] = "Direct Email"
+            else:
+                r["user_nick"] = f"Uživatel #{us}" if us.isdigit() else (us if us else "Neznámý")
+                r["user_discord_id"] = ""
+                r["user_email"] = ""
+                r["user_role"] = ""
+
+        return jsonify({"status": "success", "rules": rules})
     except Exception as e:
         return jsonify({"status": "error", "rules": [], "message": str(e)})
 

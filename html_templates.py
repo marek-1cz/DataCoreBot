@@ -2232,16 +2232,18 @@ HTML_DASHBOARD_NOTIFICATIONS_MGMT = """
         <thead>
           <tr style="border-bottom: 2px solid #334155; font-size: 12px; color: var(--blue-main);">
             <th style="padding: 10px; text-align: left;">ID</th>
+            <th style="padding: 10px; text-align: left;">Komu / Uživatel</th>
             <th style="padding: 10px; text-align: left;">Cíl / Typ</th>
-            <th style="padding: 10px; text-align: left;">Název</th>
-            <th style="padding: 10px; text-align: left;">Spouštěče</th>
+            <th style="padding: 10px; text-align: left;">Události</th>
             <th style="padding: 10px; text-align: left;">Kanál</th>
-            <th style="padding: 10px; text-align: left;">Uživatel</th>
+            <th style="padding: 10px; text-align: left;">Zahájeno</th>
+            <th style="padding: 10px; text-align: left;">Poslední zpráva</th>
+            <th style="padding: 10px; text-align: left;">Spuštěno</th>
             <th style="padding: 10px; text-align: right;">Akce</th>
           </tr>
         </thead>
         <tbody id="dash-rules-tbody" style="font-size: 13px;">
-          <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 25px;"><i class="fas fa-spinner fa-spin"></i> Načítání pravidel...</td></tr>
+          <tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 25px;"><i class="fas fa-spinner fa-spin"></i> Načítání pravidel...</td></tr>
         </tbody>
       </table>
     </div>
@@ -2346,9 +2348,25 @@ async function handleSendDirectMsg(e) {
   }
 }
 
+function formatCzechDateTime(isoStr) {
+  if (!isoStr) return null;
+  try {
+    let d = new Date(isoStr);
+    if (isNaN(d.getTime())) return String(isoStr).replace('T', ' ').split('.')[0];
+    let dd = String(d.getDate()).padStart(2, '0');
+    let mm = String(d.getMonth() + 1).padStart(2, '0');
+    let yyyy = d.getFullYear();
+    let hh = String(d.getHours()).padStart(2, '0');
+    let min = String(d.getMinutes()).padStart(2, '0');
+    return `${dd}.${mm}.${yyyy} ${hh}:${min}`;
+  } catch(e) {
+    return String(isoStr);
+  }
+}
+
 async function loadDashRules() {
   const tbody = document.getElementById('dash-rules-tbody');
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 25px;"><i class="fas fa-spinner fa-spin"></i> Načítání pravidel...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 25px;"><i class="fas fa-spinner fa-spin"></i> Načítání pravidel...</td></tr>';
   try {
     const res = await fetch('/api/admin/notifications/all_rules');
     const data = await res.json();
@@ -2356,7 +2374,7 @@ async function loadDashRules() {
     document.getElementById('d-rules-cnt').innerText = _dashRules.length;
     renderDashRules(_dashRules);
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #ef4444; padding: 25px;">Chyba při načítání pravidel: ' + err.message + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #ef4444; padding: 25px;">Chyba při načítání pravidel: ' + err.message + '</td></tr>';
   }
 }
 
@@ -2364,7 +2382,7 @@ function renderDashRules(rules) {
   const tbody = document.getElementById('dash-rules-tbody');
   tbody.innerHTML = '';
   if (!rules || rules.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 25px;">Žádná aktivní pravidla v systému.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 25px;">Žádná aktivní pravidla v systému.</td></tr>';
     return;
   }
 
@@ -2380,13 +2398,54 @@ function renderDashRules(rules) {
     const trigStr = triggersArr.join(', ') || '-';
     const channels = Array.isArray(r.delivery_channels) ? r.delivery_channels.join(', ') : (r.channel || 'discord');
 
+    let uNick = r.user_nick || '';
+    let uDid = r.user_discord_id || '';
+    let uEmail = r.user_email || '';
+    let uRole = r.user_role || '';
+    let uSess = String(r.user_session || '');
+
+    let mainName = uNick;
+    if (!mainName) {
+      if (uSess.startsWith('admin_direct_discord_')) mainName = 'Discord DM #' + uSess.replace('admin_direct_discord_', '');
+      else if (uSess.startsWith('admin_direct_email_')) mainName = 'E-mail ' + uSess.replace('admin_direct_email_', '');
+      else if (uSess) mainName = 'Uživatel #' + uSess;
+      else mainName = 'Neznámý';
+    }
+
+    let subDetails = [];
+    if (uDid && uDid !== mainName) subDetails.push(`<span title="Discord ID" style="display:inline-flex;align-items:center;gap:3px;"><i class="fab fa-discord" style="color:#5865F2;"></i> ${uDid}</span>`);
+    if (uEmail && uEmail !== mainName) subDetails.push(`<span title="E-mail" style="display:inline-flex;align-items:center;gap:3px;"><i class="fas fa-envelope" style="color:#38bdf8;"></i> ${uEmail}</span>`);
+    if (uSess && !uSess.startsWith('admin_direct_')) subDetails.push(`<span style="color:#64748b;">(ID: ${uSess})</span>`);
+
+    let userHtml = `
+      <div style="display:flex;flex-direction:column;gap:3px;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <strong style="color:#f8fafc;font-size:13px;">${mainName}</strong>
+          ${uRole ? `<span style="background:rgba(59,130,246,0.2);color:#93c5fd;border:1px solid rgba(59,130,246,0.35);padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;">${uRole}</span>` : ''}
+        </div>
+        ${subDetails.length ? `<div style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${subDetails.join('')}</div>` : ''}
+      </div>
+    `;
+
+    let createdStr = formatCzechDateTime(r.created_at);
+    let lastFiredStr = formatCzechDateTime(r.last_fired_at);
+
     tr.innerHTML = `
       <td style="padding: 10px; color: #64748b; font-family: monospace;">#${String(r.id).slice(0, 8)}</td>
-      <td style="padding: 10px; font-weight: bold; color: var(--blue-main);">${r.identifier || '-'} <span style="font-size: 11px; color: var(--text-muted);">(${r.identifier_type || 'spz'})</span></td>
-      <td style="padding: 10px; color: var(--text-main);">${r.label || '-'}</td>
+      <td style="padding: 10px;">${userHtml}</td>
+      <td style="padding: 10px; font-weight: bold; color: var(--blue-main);">
+        ${r.identifier || '-'} <span style="font-size: 11px; color: var(--text-muted);">(${r.identifier_type || 'spz'})</span>
+        ${r.label ? `<div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${r.label}</div>` : ''}
+      </td>
       <td style="padding: 10px; color: #c4b5fd; font-size: 12px;">${trigStr}</td>
       <td style="padding: 10px;"><span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${channels}</span></td>
-      <td style="padding: 10px; color: #94a3b8; font-size: 12px;">${r.user_session || '-'}</td>
+      <td style="padding: 10px; white-space: nowrap;">
+        ${createdStr ? `<span style="color: #cbd5e1; font-size: 11px;"><i class="far fa-calendar-alt" style="color: #94a3b8; margin-right: 4px;"></i>${createdStr}</span>` : '<span style="color: #64748b; font-size: 11px;">-</span>'}
+      </td>
+      <td style="padding: 10px; white-space: nowrap;">
+        ${lastFiredStr ? `<span style="color: #38bdf8; font-size: 11px;"><i class="fas fa-paper-plane" style="color: #0284c7; margin-right: 4px;"></i>${lastFiredStr}</span>` : '<span style="color: #64748b; font-size: 11px; font-style: italic;">Zatím neodesláno</span>'}
+      </td>
+      <td style="padding: 10px;"><b style="color: #10b981; font-size: 12px;">${r.fired_count || 0}x</b></td>
       <td style="padding: 10px; text-align: right;">
         <button type="button" class="btn btn-danger" onclick="deleteDashRule('${r.id}')" style="padding: 4px 8px; font-size: 11px;">
           <i class="fas fa-trash"></i> Smazat
@@ -2404,8 +2463,13 @@ function filterDashRules() {
     String(r.identifier || '').toLowerCase().includes(q) ||
     String(r.label || '').toLowerCase().includes(q) ||
     String(r.user_session || '').toLowerCase().includes(q) ||
+    String(r.user_nick || '').toLowerCase().includes(q) ||
+    String(r.user_discord_id || '').toLowerCase().includes(q) ||
+    String(r.user_email || '').toLowerCase().includes(q) ||
     String(r.id || '').toLowerCase().includes(q)
   );
+  renderDashRules(filtered);
+}
   renderDashRules(filtered);
 }
 
