@@ -61,6 +61,23 @@ try:
 except AttributeError:
     pass
 
+# Automatické načtení lokálního .env souboru pro localhost vývoj
+_env_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(_env_path):
+    try:
+        with open(_env_path, "r", encoding="utf-8") as _ef:
+            for _line in _ef:
+                _line = _line.strip()
+                if _line and not _line.startswith("#") and "=" in _line:
+                    _k, _v = _line.split("=", 1)
+                    _k = _k.strip()
+                    _v = _v.strip().strip("'").strip('"')
+                    if _k and _k not in os.environ:
+                        os.environ[_k] = _v
+        print("[ENV] Lokální konfigurace z .env byla úspěšně načtena.", flush=True)
+    except Exception as _e_env:
+        print(f"[ENV] Chyba při čtení .env: {_e_env}", flush=True)
+
 print("=== START PROJEKTU OIS IDPK ===", flush=True)
 
 try:
