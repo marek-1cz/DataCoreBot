@@ -3666,8 +3666,8 @@ async function fetchBuses(){
       }
       let withdrawnW='';
       if(bus.is_withdrawn || bus.status === 'Odstáven' || bus.status === 'Odstaven'){
-        let tOff = bus.offline_since_time ? (' v ' + bus.offline_since_time) : '';
-        withdrawnW = `<div style="background:linear-gradient(135deg,rgba(20,20,25,0.97),rgba(30,25,30,0.97));border:1.5px solid #6b7280;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 8px rgba(107,114,128,0.3);"><b style="color:#9ca3af;font-size:12px;letter-spacing:0.5px;">⏸️ ODSTÁVEN</b><br><span style="color:#94a3b8;font-size:10px;">Vůz zmizel z mapy pvvd.idpk.cz${tOff}. Parkování nebo mimo provoz.</span></div>`;
+        let tOff = bus.offline_since_time || (bus.last_updated && bus.last_updated !== 'N/A' ? bus.last_updated.substring(0,5) : '') || '--:--';
+        withdrawnW = `<div style="background:linear-gradient(135deg,rgba(20,20,25,0.97),rgba(30,25,30,0.97));border:1.5px solid #6b7280;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 8px rgba(107,114,128,0.3);"><b style="color:#9ca3af;font-size:12px;letter-spacing:0.5px;">⏸️ ODSTÁVEN</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.45;display:inline-block;margin-top:3px;">Vůz neodesílá data.<br>poslední známá poloha ${tOff}.<br>pravděpodobně autobus parkuje a nebo je odstaven</span></div>`;
       }
       let lastposW='';
       if(mc==='bg-lastpos'||bus.status==='Poslední známá poloha'){
