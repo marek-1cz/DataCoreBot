@@ -5,3 +5,4 @@ flask-cors
 
 bcrypt
 tzdata
+requests
