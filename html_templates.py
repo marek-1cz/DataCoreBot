@@ -1797,15 +1797,20 @@ HTML_UCET = """
     </div>
     
     <div class="link-section">
-      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:10px; margin-bottom:15px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:10px; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
         <h3 style="margin:0; font-size:16px; color:white; display:flex; align-items:center; gap:8px;">
-          <i class="fas fa-desktop" style="color:#38bdf8;"></i> Přihlášená zařízení (__SESSIONS_COUNT__)
+          <i class="fas fa-desktop" style="color:#38bdf8;"></i> Přihlášená zařízení (<span id="sessions-count">__SESSIONS_COUNT__</span>)
+          <button type="button" onclick="refreshSessionsList(true)" id="btn-refresh-sessions" style="background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); color:#38bdf8; border-radius:6px; cursor:pointer; font-size:11px; padding:3px 8px; display:inline-flex; align-items:center; gap:4px; transition:0.2s;" onmouseover="this.style.background='rgba(56,189,248,0.2)';" onmouseout="this.style.background='rgba(56,189,248,0.1)';" title="Zkontrolovat nově přihlášená zařízení">
+            <i class="fas fa-sync-alt" id="icon-refresh-sessions"></i> Obnovit
+          </button>
         </h3>
-        <button onclick="revokeOtherSessions()" class="btn-link" style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); color:#ef4444; font-size:11px; padding:4px 8px; cursor:pointer;" title="Odhlásit všechna ostatní zařízení kromě tohoto">
+        <button id="btn-revoke-others" onclick="revokeOtherSessions()" class="btn-link" style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); color:#ef4444; font-size:11px; padding:4px 8px; cursor:pointer; display:__REVOKE_BTN_DISPLAY__;" title="Odhlásit všechna ostatní zařízení kromě tohoto">
           <i class="fas fa-sign-out-alt"></i> Odhlásit ostatní
         </button>
       </div>
-      __SESSIONS_LIST__
+      <div id="sessions-list-container">
+        __SESSIONS_LIST__
+      </div>
     </div>
 
     <div class="link-section">
@@ -1816,12 +1821,78 @@ HTML_UCET = """
 </div>
 
 <script>
+function renderSessionCardHtml(s) {
+    const isCurr = !!s.is_current;
+    const currBadge = isCurr ? '<span style="background:rgba(16,185,129,0.2); border:1px solid #10b981; color:#10b981; font-size:10px; padding:2px 8px; border-radius:12px; font-weight:bold; letter-spacing:0.5px;">TOTO ZAŘÍZENÍ</span>' : '';
+    const safeId = s.id;
+    const devName = s.device || 'Neznámé zařízení';
+    const icon = s.icon || 'fa-desktop';
+    const lastActive = s.last_active || 'Neznámé';
+    const createdAt = s.created_at || 'Neznámé';
+    const ip = s.ip || 'Neznámá';
+
+    return `
+    <div id="session-card-${safeId}" class="session-card" data-is-current="${isCurr}" style="background: rgba(0,0,0,0.35); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center; transition: all 0.3s ease;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="width:42px; height:42px; border-radius:10px; background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); display:flex; align-items:center; justify-content:center; color:#38bdf8; font-size:18px; flex-shrink:0;">
+          <i class="fas ${icon}"></i>
+        </div>
+        <div>
+          <div style="color:white; font-size:14px; font-weight:bold; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            ${devName} ${currBadge}
+          </div>
+          <div style="color:#94a3b8; font-size:12px; margin-top:2px;">
+            Naposledy aktivní: <span style="color:#38bdf8; font-weight:600;">${lastActive}</span>
+          </div>
+          <div style="color:#64748b; font-size:11px; margin-top:1px;">
+            Přihlášeno: ${createdAt} &bull; IP: ${ip}
+          </div>
+        </div>
+      </div>
+      <div>
+        <button onclick="deleteSession('${safeId}', ${isCurr})" style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.35); color:#ef4444; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold; transition:0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.15)'; this.style.color='#ef4444';" title="Odhlásit toto zařízení">
+          <i class="fas fa-trash-alt"></i> Smazat
+        </button>
+      </div>
+    </div>
+    `;
+}
+
+function updateSessionsCountAndUI() {
+    const container = document.getElementById('sessions-list-container');
+    const cards = container ? container.querySelectorAll('.session-card') : [];
+    const cnt = cards.length;
+    const countEl = document.getElementById('sessions-count');
+    if (countEl) countEl.innerText = cnt;
+
+    const revokeBtn = document.getElementById('btn-revoke-others');
+    if (revokeBtn) {
+        let hasOther = false;
+        cards.forEach(c => {
+            if (c.getAttribute('data-is-current') !== 'true') hasOther = true;
+        });
+        revokeBtn.style.display = hasOther ? 'inline-flex' : 'none';
+    }
+
+    if (cnt === 0 && container) {
+        container.innerHTML = '<div style="color:#64748b; font-size:13px; text-align:center; padding:15px; background:rgba(0,0,0,0.2); border-radius:8px;">Žádná aktivní přihlášená zařízení.</div>';
+    }
+}
+
 function deleteSession(sessionId, isCurrent) {
     if (isCurrent) {
         if (!confirm("Toto je vaše aktuální zařízení. Pokud ho smažete, budete odhlášeni. Pokračovat?")) return;
     } else {
         if (!confirm("Opravdu chcete odhlásit toto zařízení?")) return;
     }
+    
+    const card = document.getElementById('session-card-' + sessionId);
+    const delBtn = card ? card.querySelector('button') : null;
+    if (delBtn) {
+        delBtn.disabled = true;
+        delBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+
     fetch('/api/ucet/sessions/delete', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -1830,28 +1901,145 @@ function deleteSession(sessionId, isCurrent) {
         if (data.status === 'success') {
             if (isCurrent) {
                 window.location.href = '/login';
+                return;
+            }
+            if (card) {
+                card.style.transition = 'all 0.3s ease';
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(25px) scale(0.95)';
+                setTimeout(() => {
+                    card.remove();
+                    updateSessionsCountAndUI();
+                }, 300);
             } else {
-                location.reload();
+                refreshSessionsList(false);
             }
         } else {
+            if (delBtn) {
+                delBtn.disabled = false;
+                delBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Smazat';
+            }
             alert('Chyba: ' + (data.message || 'Nepodařilo se smazat zařízení'));
         }
-    }).catch(e => alert('Chyba spojení'));
+    }).catch(e => {
+        if (delBtn) {
+            delBtn.disabled = false;
+            delBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Smazat';
+        }
+        alert('Chyba spojení');
+    });
 }
 
 function revokeOtherSessions() {
     if (!confirm("Opravdu chcete odhlásit všechna ostatní zařízení kromě tohoto?")) return;
+    const btn = document.getElementById('btn-revoke-others');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Odhlašuji...';
+    }
+
     fetch('/api/ucet/sessions/revoke_others', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'}
     }).then(r => r.json()).then(data => {
         if (data.status === 'success') {
-            location.reload();
+            const container = document.getElementById('sessions-list-container');
+            const cards = container ? container.querySelectorAll('.session-card') : [];
+            cards.forEach(c => {
+                if (c.getAttribute('data-is-current') !== 'true') {
+                    c.style.transition = 'all 0.3s ease';
+                    c.style.opacity = '0';
+                    c.style.transform = 'translateX(25px) scale(0.95)';
+                    setTimeout(() => c.remove(), 300);
+                }
+            });
+            setTimeout(() => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Odhlásit ostatní';
+                }
+                updateSessionsCountAndUI();
+            }, 320);
         } else {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Odhlásit ostatní';
+            }
             alert('Chyba: ' + (data.message || 'Nepodařilo se odhlásit ostatní zařízení'));
         }
-    }).catch(e => alert('Chyba spojení'));
+    }).catch(e => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Odhlásit ostatní';
+        }
+        alert('Chyba spojení');
+    });
 }
+
+let isRefreshingSessions = false;
+function refreshSessionsList(isManual = false) {
+    if (isRefreshingSessions) return;
+    isRefreshingSessions = true;
+
+    const refreshIcon = document.getElementById('icon-refresh-sessions');
+    if (refreshIcon) refreshIcon.classList.add('fa-spin');
+
+    fetch('/api/ucet/sessions')
+    .then(r => {
+        if (!r.ok) throw new Error('Nelze načíst');
+        return r.json();
+    })
+    .then(data => {
+        if (data.status === 'success' && Array.isArray(data.sessions)) {
+            const container = document.getElementById('sessions-list-container');
+            if (container) {
+                const currentCards = Array.from(container.querySelectorAll('.session-card'));
+                const currentIds = currentCards.map(c => c.id.replace('session-card-', '')).join(',');
+                const newIds = data.sessions.map(s => s.id).join(',');
+
+                if (currentIds !== newIds || isManual) {
+                    let newHtml = '';
+                    if (data.sessions.length === 0) {
+                        newHtml = '<div style="color:#64748b; font-size:13px; text-align:center; padding:15px; background:rgba(0,0,0,0.2); border-radius:8px;">Žádná aktivní přihlášená zařízení.</div>';
+                    } else {
+                        data.sessions.forEach(s => {
+                            newHtml += renderSessionCardHtml(s);
+                        });
+                    }
+                    container.innerHTML = newHtml;
+                    updateSessionsCountAndUI();
+                }
+            }
+        }
+    })
+    .catch(err => {
+        if (isManual) console.warn('Chyba při obnově zařízení:', err);
+    })
+    .finally(() => {
+        isRefreshingSessions = false;
+        if (refreshIcon) {
+            setTimeout(() => {
+                refreshIcon.classList.remove('fa-spin');
+            }, 300);
+        }
+    });
+}
+
+// Automatická synchronizace relací na pozadí (každé 4 sekundy pokud je okno aktivní)
+setInterval(() => {
+    if (!document.hidden) {
+        refreshSessionsList(false);
+    }
+}, 4000);
+
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        refreshSessionsList(false);
+    }
+});
+window.addEventListener('focus', () => {
+    refreshSessionsList(false);
+});
 
 function deleteNotificationRule(ruleId) {
     if(!confirm("Opravdu chcete toto upozornění smazat?")) return;

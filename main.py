@@ -319,8 +319,18 @@ _AUTH_CACHE = {}      # {discord_id: (timestamp, role, is_banned)}
 _SESSION_CACHE = {}   # {web_session_token: (timestamp, user_dict)}
 _SETTINGS_CACHE = {}  # {setting_key: (timestamp, value)}
 
-def _invalidate_session_cache(token):
-    _SESSION_CACHE.pop(token, None)
+def _invalidate_session_cache(token=None, user_id=None):
+    """Vymaže relaci nebo všechny relace daného uživatele z paměťové cache."""
+    if token:
+        entry = _SESSION_CACHE.pop(token, None)
+        if entry and len(entry) > 1 and entry[1] and user_id is None:
+            user_id = entry[1].get("id")
+    if user_id is not None:
+        u_id_str = str(user_id)
+        keys_to_remove = [k for k, v in list(_SESSION_CACHE.items()) if v and len(v) > 1 and v[1] and str(v[1].get("id")) == u_id_str]
+        for k in keys_to_remove:
+            _SESSION_CACHE.pop(k, None)
+
 
 def get_cached_session_user(token):
     """Vrátí uživatele podle session tokenu s 2min cache (avatar/web) a podporou více zařízení."""
@@ -2634,6 +2644,7 @@ def web_auth_status():
                 perm_token = str(uuid.uuid4())
                 from session_manager import add_user_session
                 add_user_session(db, u, perm_token, request)
+                _invalidate_session_cache(user_id=u.get("id"))
                 _SESSION_CACHE[perm_token] = (time.time(), u)
                 return jsonify({"status": "approved", "token": perm_token})
             elif t == "rejected":
@@ -2668,6 +2679,7 @@ def web_auth_finalize():
             perm_token = _secrets.token_hex(32)
             from session_manager import add_user_session
             add_user_session(db, u, perm_token, request)
+            _invalidate_session_cache(user_id=u.get("id"))
             _SESSION_CACHE[perm_token] = (time.time(), u)
             
             status_text = "PŘIHLÁŠENO DO APLIKACE I NA WEB" if intent == 'app_login' else "PŘIHLÁŠENO NA WEB"
@@ -2838,6 +2850,14 @@ def stranka_ucet():
     else:
         app_id_badge = '<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(100,116,139,0.1);border:1px solid #334155;border-radius:20px;padding:4px 12px;font-size:12px;color:#64748b;margin-top:5px;"><i class="fas fa-clock"></i> App ID přidělováno...</div>'
 
+    try:
+        fresh_u = db.table("users").select("*").eq("id", u["id"]).execute().data
+        if fresh_u:
+            u = fresh_u[0]
+            _SESSION_CACHE[cookie_token] = (time.time(), u)
+    except Exception:
+        pass
+
     from session_manager import get_user_sessions
     user_sessions = get_user_sessions(u)
     sessions_count = len(user_sessions)
@@ -2856,7 +2876,7 @@ def stranka_ucet():
         curr_badge = '<span style="background:rgba(16,185,129,0.2); border:1px solid #10b981; color:#10b981; font-size:10px; padding:2px 8px; border-radius:12px; font-weight:bold; letter-spacing:0.5px;">TOTO ZAŘÍZENÍ</span>' if is_curr else ''
         
         sessions_html += f"""
-        <div style="background: rgba(0,0,0,0.35); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center;">
+        <div id="session-card-{s_id}" class="session-card" data-is-current="{str(is_curr).lower()}" style="background: rgba(0,0,0,0.35); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center; transition: all 0.3s ease;">
           <div style="display:flex; align-items:center; gap:12px;">
             <div style="width:42px; height:42px; border-radius:10px; background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); display:flex; align-items:center; justify-content:center; color:#38bdf8; font-size:18px; flex-shrink:0;">
               <i class="fas {icon}"></i>
@@ -2880,6 +2900,8 @@ def stranka_ucet():
           </div>
         </div>
         """
+    if not sessions_html:
+        sessions_html = '<div style="color:#64748b; font-size:13px; text-align:center; padding:15px; background:rgba(0,0,0,0.2); border-radius:8px;">Žádná aktivní přihlášená zařízení.</div>'
 
     try:
         notif_res = db.table("bus_notifications").select("*").eq("user_session", str(u["id"])).execute().data or []
@@ -2962,6 +2984,7 @@ def stranka_ucet():
     else:
         notif_html += '<div style="color:#64748b; font-size:12px; text-align:center; padding:10px;">Zatím žádná zaznamenaná historie.</div>'
 
+    revoke_btn_display = "inline-flex" if sessions_count > 1 else "none"
     html = HTML_UCET.replace('__AVATAR_IMG__', avatar_img_html)
     html = html.replace('__NICK__', nick)
     html = html.replace('__AVATAR_URL__', avatar_url)
@@ -2971,11 +2994,39 @@ def stranka_ucet():
     html = html.replace('__EMAIL_BTN__', email_btn)
     html = html.replace('__APP_ID_BADGE__', app_id_badge)
     html = html.replace('__SESSIONS_COUNT__', str(sessions_count))
+    html = html.replace('__REVOKE_BTN_DISPLAY__', revoke_btn_display)
     html = html.replace('__SESSIONS_LIST__', sessions_html)
     html = html.replace('__NOTIFICATIONS__', notif_html)
     html += link_scripts
     
     return render_public(html)
+
+@app.route('/api/ucet/sessions', methods=['GET'])
+def api_ucet_sessions_get():
+    cookie_token = request.cookies.get('web_session_token')
+    db = get_db()
+    if not cookie_token or not db:
+        return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
+    from session_manager import find_user_by_session_token, get_user_sessions
+    u = find_user_by_session_token(db, cookie_token)
+    if not u:
+        return jsonify({"status": "error", "message": "Uživatel nenalezen"}), 401
+    
+    _SESSION_CACHE[cookie_token] = (time.time(), u)
+    user_sessions = get_user_sessions(u)
+    result = []
+    for s in user_sessions:
+        s_token = s.get("token", "")
+        result.append({
+            "id": s.get("id", ""),
+            "device": s.get("device", "Neznámé zařízení"),
+            "icon": s.get("icon", "fa-desktop"),
+            "ip": s.get("ip", "Neznámá"),
+            "created_at": s.get("created_at", "Neznámé"),
+            "last_active": s.get("last_active", "Neznámé"),
+            "is_current": bool(s_token == cookie_token)
+        })
+    return jsonify({"status": "success", "sessions": result, "count": len(result)})
 
 @app.route('/api/ucet/sessions/delete', methods=['POST'])
 def api_ucet_session_delete():
@@ -2996,8 +3047,9 @@ def api_ucet_session_delete():
     if not ok:
         return jsonify({"status": "error", "message": "Relaci se nepodařilo smazat"}), 400
     
-    if removed_token:
-        _invalidate_session_cache(removed_token)
+    # Okamžitě vymazat cache pro daného uživatele i smazaný token
+    _invalidate_session_cache(token=removed_token, user_id=u["id"])
+    _invalidate_session_cache(token=cookie_token, user_id=u["id"])
     
     resp = jsonify({"status": "success"})
     if removed_token and removed_token == cookie_token:
@@ -3018,6 +3070,8 @@ def api_ucet_sessions_revoke_others():
     ok = revoke_all_other_sessions(db, u["id"], cookie_token)
     if not ok:
         return jsonify({"status": "error", "message": "Nepodařilo se odhlásit ostatní zařízení"}), 500
+    
+    _invalidate_session_cache(token=cookie_token, user_id=u["id"])
     return jsonify({"status": "success"})
 
 @app.route('/api/ucet/update', methods=['POST'])
