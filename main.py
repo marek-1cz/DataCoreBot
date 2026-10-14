@@ -2826,43 +2826,80 @@ def stranka_ucet():
         notif_res = []
         
     notif_html = ""
-    if not notif_res:
-        notif_html = '<div style="color:#64748b; font-size:14px; text-align:center; margin-top:20px;">Zatím nemáte žádná aktivní upozornění na spoje. Můžete si je nastavit přímo na mapě kliknutím na autobus.</div>'
-    else:
-        for r in notif_res:
-            n_id = r.get("id")
-            label = r.get("label") or f"Bus {r.get('identifier')}"
-            typ = "Jednorázové" if r.get("is_one_time") else "Trvalé"
-            cnt = r.get("fired_count") or 0
-            
-            triggers = r.get("triggers", {})
-            t_texts = []
-            if triggers.get("terminal"): t_texts.append("Konečná")
-            if triggers.get("new_line"): t_texts.append("Změna linky")
-            if triggers.get("depot_in"):
-                dpt = triggers.get("depot_in")
-                t_texts.append(f"Do vozovny ({'Všechny' if dpt=='all' else dpt})")
-            if triggers.get("depot_out"): t_texts.append("Z vozovny")
-            if triggers.get("trip_change"): t_texts.append("Přepnutí spoje")
-            if triggers.get("started_moving"): t_texts.append("Rozjetí")
-            if triggers.get("stop_near"): t_texts.append(f"Zastávka: {triggers.get('stop_near')}")
-            if triggers.get("delay_threshold"): t_texts.append(f"Zpoždění přes {triggers.get('delay_threshold')} min")
-            if triggers.get("delay_change"): t_texts.append("Skok zpoždění o 3+ min")
-            trig_str = ", ".join(t_texts)
-            
+    once_rules = [r for r in notif_res if r.get("is_one_time")]
+    repeat_rules = [r for r in notif_res if not r.get("is_one_time")]
+
+    try:
+        from local_db import local_notif_get_history
+        u_history = local_notif_get_history(user_session=str(u["id"]), limit=15)
+    except Exception:
+        u_history = []
+
+    def _render_rule_card(r, is_once):
+        n_id = r.get("id")
+        label = r.get("label") or f"Bus {r.get('identifier')}"
+        typ_badge = '<span style="background:rgba(124,58,237,0.25);color:#c4b5fd;border:1px solid #7c3aed;padding:2px 7px;border-radius:4px;font-weight:bold;font-size:11px;">⚡ Jednorázové</span>' if is_once else '<span style="background:rgba(2,132,199,0.25);color:#38bdf8;border:1px solid #0284c7;padding:2px 7px;border-radius:4px;font-weight:bold;font-size:11px;">🔁 Opakující se</span>'
+        cnt = r.get("fired_count") or 0
+        triggers = r.get("triggers", {})
+        t_texts = []
+        if triggers.get("terminal"): t_texts.append("Konečná")
+        if triggers.get("new_line"): t_texts.append("Změna linky")
+        if triggers.get("depot_in"):
+            dpt = triggers.get("depot_in")
+            t_texts.append(f"Do vozovny ({'Všechny' if dpt=='all' else dpt})")
+        if triggers.get("depot_out"): t_texts.append("Z vozovny")
+        if triggers.get("trip_change"): t_texts.append("Přepnutí spoje")
+        if triggers.get("started_moving"): t_texts.append("Rozjetí")
+        if triggers.get("stop_near"): t_texts.append(f"Zastávka: {triggers.get('stop_near')}")
+        if triggers.get("delay_threshold"): t_texts.append(f"Zpoždění > {triggers.get('delay_threshold')} min")
+        if triggers.get("delay_change"): t_texts.append("Skok zpoždění")
+        trig_str = ", ".join(t_texts) or "Událost"
+        return f"""
+        <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+              <span style="color:white; font-weight:bold; font-size:14px;">{label}</span>
+              {typ_badge}
+            </div>
+            <div style="color:#94a3b8; font-size:12px; margin-bottom:4px;">Události: {trig_str}</div>
+            <div style="color:#64748b; font-size:11px;">Odesláno: {cnt}x</div>
+          </div>
+          <button onclick="deleteNotificationRule('{n_id}')" style="background:transparent; border:none; color:#ef4444; font-size:18px; cursor:pointer; padding:10px;" title="Smazat upozornění"><i class="fas fa-trash"></i></button>
+        </div>
+        """
+
+    # 1. Opakující se pravidla
+    if repeat_rules:
+        notif_html += '<div style="color:#38bdf8;font-size:13px;font-weight:bold;margin:12px 0 6px 0;display:flex;align-items:center;gap:6px;">🔁 Opakující se pravidla (' + str(len(repeat_rules)) + ')</div>'
+        for r in repeat_rules:
+            notif_html += _render_rule_card(r, False)
+
+    # 2. Jednorázová upozornění
+    if once_rules:
+        notif_html += '<div style="color:#a78bfa;font-size:13px;font-weight:bold;margin:12px 0 6px 0;display:flex;align-items:center;gap:6px;">⚡ Jednorázová upozornění (' + str(len(once_rules)) + ')</div>'
+        for r in once_rules:
+            notif_html += _render_rule_card(r, True)
+
+    if not once_rules and not repeat_rules:
+        notif_html += '<div style="color:#64748b; font-size:13px; text-align:center; padding:15px; background:rgba(0,0,0,0.2); border-radius:8px;">Zatím nemáte žádná aktivní upozornění na spoje. Můžete si je nastavit přímo na mapě kliknutím na autobus.</div>'
+
+    # 3. Historie proběhlých notifikací
+    notif_html += '<div style="color:#e2e8f0;font-size:13px;font-weight:bold;margin:20px 0 8px 0;border-top:1px solid #334155;padding-top:14px;display:flex;align-items:center;gap:6px;">📜 Historie odeslaných notifikací</div>'
+    if u_history:
+        notif_html += '<div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;">'
+        for h in u_history:
             notif_html += f"""
-            <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center;">
+            <div style="background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:6px;padding:8px 12px;font-size:11px;display:flex;justify-content:space-between;align-items:center;">
               <div>
-                <div style="color:white; font-weight:bold; font-size:15px; margin-bottom:4px;">{label}</div>
-                <div style="color:#94a3b8; font-size:12px; margin-bottom:4px;">Události: {trig_str}</div>
-                <div style="display:flex; gap:10px; font-size:11px;">
-                   <span style="color: {'#a78bfa' if not r.get('is_one_time') else '#7c3aed'}; font-weight:bold;">{typ}</span>
-                   <span style="color: #64748b;">Spuštěno: {cnt}x</span>
-                </div>
+                <div style="color:#e2e8f0;font-weight:600;">{h.get('message') or h.get('trigger')}</div>
+                <div style="color:#64748b;font-size:10px;">{h.get('fired_at', '')} &bull; Kanál: {h.get('channel', 'DM')}</div>
               </div>
-              <button onclick="deleteNotificationRule('{n_id}')" style="background:transparent; border:none; color:#ef4444; font-size:18px; cursor:pointer; padding:10px;" title="Smazat upozornění"><i class="fas fa-trash"></i></button>
+              <span style="background:rgba(16,185,129,0.15);color:#10b981;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">Odesláno</span>
             </div>
             """
+        notif_html += '</div>'
+    else:
+        notif_html += '<div style="color:#64748b; font-size:12px; text-align:center; padding:10px;">Zatím žádná zaznamenaná historie.</div>'
 
     html = HTML_UCET.replace('__AVATAR_IMG__', avatar_img_html)
     html = html.replace('__NICK__', nick)
@@ -3878,6 +3915,10 @@ def update_statuses():
     return redirect(url_for('dashboard_app_management'))
 
 
+@app.route('/dashboard/notifications')
+def dashboard_notifications():
+    return redirect('/admin/notifications')
+
 # ─── Správa dashboard adminů ─────────────────────────────────────────────────
 
 @app.route('/dashboard/admins', methods=['GET'], strict_slashes=False)
@@ -4283,7 +4324,8 @@ async def check_daily_report_schedule():
     try:
         now_prague = get_prague_time()
         today_str = now_prague.strftime("%Y-%m-%d")
-        if now_prague.hour == 23 and now_prague.minute >= 59 and _LAST_DAILY_REPORT_DATE != today_str:
+        # Spustime spolehlive v rozmezi 23:50 az 23:59 v timezone Europe/Prague
+        if now_prague.hour == 23 and now_prague.minute >= 50 and _LAST_DAILY_REPORT_DATE != today_str:
             _LAST_DAILY_REPORT_DATE = today_str
             from daily_reporter import generate_ai_daily_report
             rep = generate_ai_daily_report()

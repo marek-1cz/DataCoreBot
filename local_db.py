@@ -51,6 +51,7 @@ def init_local_db():
                     admin_verified INTEGER DEFAULT 0,
                     admin_flag INTEGER DEFAULT 0,
                     manual_spz INTEGER DEFAULT 0,
+                    is_locked_by_admin INTEGER DEFAULT 0,
                     trip_id TEXT,
                     color_class TEXT,
                     status_text TEXT,
@@ -58,6 +59,23 @@ def init_local_db():
                     admin_driver TEXT DEFAULT '',
                     updated_at TEXT,
                     synced_to_supabase INTEGER DEFAULT 0
+                )
+            """)
+            # Migration check pro existujici tabulky
+            try:
+                conn.execute("ALTER TABLE spz_cache_local ADD COLUMN is_locked_by_admin INTEGER DEFAULT 0")
+            except Exception:
+                pass
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS bus_notifications_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_session TEXT,
+                    rule_id TEXT,
+                    identifier TEXT,
+                    trigger TEXT,
+                    channel TEXT,
+                    message TEXT,
+                    fired_at TEXT
                 )
             """)
             conn.execute("""
@@ -69,7 +87,7 @@ def init_local_db():
                 )
             """)
             conn.commit()
-        print("[LOCAL DB] Inicializovana: datacore_local.db", flush=True)
+        print("[LOCAL DB] Inicializovana: datacore_local.db (vcetne is_locked_by_admin a history)", flush=True)
     except Exception as e:
         print(f"[LOCAL DB] Chyba inicializace: {e}", flush=True)
 
@@ -91,24 +109,48 @@ def local_spz_upsert(rows: list):
         with _local_db_lock:
             with _get_local_conn() as conn:
                 for row in filtered_rows:
+                    is_lock = 1 if (row.get("is_locked_by_admin") or row.get("admin_verified")) else 0
                     conn.execute("""
                         INSERT INTO spz_cache_local
                             (bus_id, spz, linka, lat, lng, spz_verified, admin_verified,
-                             admin_flag, manual_spz, trip_id, color_class, status_text,
+                             admin_flag, manual_spz, is_locked_by_admin, trip_id, color_class, status_text,
                              admin_note, admin_driver, updated_at, synced_to_supabase)
                         VALUES
                             (:bus_id, :spz, :linka, :lat, :lng, :spz_verified, :admin_verified,
-                             :admin_flag, :manual_spz, :trip_id, :color_class, :status_text,
+                             :admin_flag, :manual_spz, :is_locked_by_admin, :trip_id, :color_class, :status_text,
                              :admin_note, :admin_driver, :updated_at, 0)
                         ON CONFLICT(bus_id) DO UPDATE SET
-                            spz = excluded.spz,
+                            spz = CASE
+                                WHEN spz_cache_local.is_locked_by_admin = 1 OR spz_cache_local.admin_verified = 1
+                                THEN spz_cache_local.spz
+                                WHEN excluded.spz IS NOT NULL AND excluded.spz != 'Neznámá' AND excluded.spz != 'Neznama' AND excluded.spz != ''
+                                THEN excluded.spz
+                                ELSE spz_cache_local.spz
+                            END,
                             linka = excluded.linka,
                             lat = excluded.lat,
                             lng = excluded.lng,
-                            spz_verified = excluded.spz_verified,
-                            admin_verified = excluded.admin_verified,
+                            spz_verified = CASE
+                                WHEN spz_cache_local.is_locked_by_admin = 1 OR spz_cache_local.admin_verified = 1
+                                THEN 1
+                                ELSE excluded.spz_verified
+                            END,
+                            admin_verified = CASE
+                                WHEN spz_cache_local.is_locked_by_admin = 1 OR spz_cache_local.admin_verified = 1
+                                THEN 1
+                                ELSE excluded.admin_verified
+                            END,
+                            is_locked_by_admin = CASE
+                                WHEN spz_cache_local.is_locked_by_admin = 1 OR excluded.is_locked_by_admin = 1 OR excluded.admin_verified = 1
+                                THEN 1
+                                ELSE 0
+                            END,
                             admin_flag = excluded.admin_flag,
-                            manual_spz = excluded.manual_spz,
+                            manual_spz = CASE
+                                WHEN spz_cache_local.is_locked_by_admin = 1
+                                THEN 1
+                                ELSE excluded.manual_spz
+                            END,
                             trip_id = excluded.trip_id,
                             color_class = excluded.color_class,
                             status_text = excluded.status_text,
@@ -126,6 +168,7 @@ def local_spz_upsert(rows: list):
                         "admin_verified": 1 if row.get("admin_verified") else 0,
                         "admin_flag": 1 if row.get("admin_flag") else 0,
                         "manual_spz": 1 if row.get("manual_spz") else 0,
+                        "is_locked_by_admin": is_lock,
                         "trip_id": row.get("trip_id", ""),
                         "color_class": row.get("color_class", ""),
                         "status_text": row.get("status_text", ""),
@@ -136,6 +179,44 @@ def local_spz_upsert(rows: list):
                 conn.commit()
     except Exception as e:
         print(f"[LOCAL DB] Chyba zapisu SPZ: {e}", flush=True)
+
+def local_notif_log_history(user_session: str, rule_id: str, identifier: str, trigger: str, channel: str, message: str, fired_at: str = None):
+    """Zaznamena odpalenou notifikaci do lokalni historie."""
+    try:
+        if not fired_at:
+            fired_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                conn.execute("""
+                    INSERT INTO bus_notifications_history (user_session, rule_id, identifier, trigger, channel, message, fired_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (str(user_session), str(rule_id), str(identifier), str(trigger), str(channel), str(message), str(fired_at)))
+                conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba zapisu historie notifikace: {e}", flush=True)
+
+def local_notif_get_history(user_session: str = None, limit: int = 50) -> list:
+    """Vrati historii notifikaci pro daneho uzivatele nebo pro cely system (pokud user_session je None)."""
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                if user_session:
+                    rows = conn.execute("""
+                        SELECT id, user_session, rule_id, identifier, trigger, channel, message, fired_at
+                        FROM bus_notifications_history
+                        WHERE user_session = ?
+                        ORDER BY id DESC LIMIT ?
+                    """, (str(user_session), limit)).fetchall()
+                else:
+                    rows = conn.execute("""
+                        SELECT id, user_session, rule_id, identifier, trigger, channel, message, fired_at
+                        FROM bus_notifications_history
+                        ORDER BY id DESC LIMIT ?
+                    """, (limit,)).fetchall()
+                return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba cteni historie notifikaci: {e}", flush=True)
+        return []
 
 def local_spz_purge_trains():
     try:
@@ -231,6 +312,7 @@ def try_sync_to_supabase(db_client, force: bool = False):
                 "admin_verified": bool(row["admin_verified"]),
                 "admin_flag": bool(row["admin_flag"]),
                 "manual_spz": bool(row["manual_spz"]),
+                "is_locked_by_admin": bool(row.get("is_locked_by_admin") or row.get("admin_verified")),
                 "trip_id": row["trip_id"],
                 "color_class": row["color_class"],
                 "status_text": row["status_text"],
@@ -238,7 +320,14 @@ def try_sync_to_supabase(db_client, force: bool = False):
                 "admin_driver": row["admin_driver"],
                 "updated_at": row["updated_at"],
             }
-            db_client.table("spz_cache").upsert(payload).execute()
+            try:
+                db_client.table("spz_cache").upsert(payload).execute()
+            except Exception as e_sup:
+                if "is_locked_by_admin" in str(e_sup) or "PGRST204" in str(e_sup):
+                    payload.pop("is_locked_by_admin", None)
+                    db_client.table("spz_cache").upsert(payload).execute()
+                else:
+                    raise e_sup
             synced_ids.append(row["bus_id"])
         except Exception:
             errors += 1
