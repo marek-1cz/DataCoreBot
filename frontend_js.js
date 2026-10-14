@@ -1161,6 +1161,47 @@ async function saveNotifRule(isOneTime = true) {
   } catch (e) { showNotifMsg('❌ Chyba spojení', false); }
 }
 
+// === VYŽÁDÁNÍ SPOJE (Prioritní fronta) ===
+window.requestedSpojeMap = window.requestedSpojeMap || {};  // {bus_id: timestamp}
+window.requestSpoj = async function(busId, btn) {
+  const now = Date.now();
+  const last = window.requestedSpojeMap[busId] || 0;
+  if (now - last < 30000) {
+    if (btn) { btn.textContent = '⏳ Čekej...'; btn.disabled = true; }
+    return;
+  }
+  window.requestedSpojeMap[busId] = now;
+  
+  // Změna textu v UI na "Čeká se na zjištění spoje..."
+  let stEl = document.getElementById('spoj-status-' + busId);
+  if (stEl) {
+    stEl.innerHTML = '<span style="color:#38bdf8;font-weight:bold;font-size:11px;"><i class="fas fa-spinner fa-spin"></i> Čeká se na zjištění spoje...</span>';
+  }
+  if (btn) {
+    btn.style.display = 'none';
+  }
+  showMapToast('⚡ Požadavek na zjištění spoje odeslán do prioritní fronty!');
+  
+  try {
+    let r = await fetch('/api/priority_spoj/' + busId, {method: 'POST'});
+    let data = await r.json();
+    if (data.status === 'rate_limited') {
+      showMapToast('⏳ ' + (data.message || 'Příliš mnoho požadavků'));
+    } else if (data.status === 'error' || data.status === 'not_found' || data.status === 'skip') {
+      showMapToast('❌ ' + (data.message || 'Nelze vyžádat spoj'));
+      delete window.requestedSpojeMap[busId];
+      if (stEl) stEl.innerHTML = '<span style="color:#ef4444;font-size:11px;">' + (data.message || 'Nelze vyžádat') + '</span>';
+      if (btn) { btn.style.display = 'inline-block'; btn.disabled = false; btn.textContent = '⚡ Vyžádat spoj'; }
+    } else {
+      setTimeout(() => { if (typeof fetchBuses === 'function') fetchBuses(); }, 1200);
+      setTimeout(() => { if (typeof fetchBuses === 'function') fetchBuses(); }, 3500);
+    }
+  } catch(e) {
+    console.warn('[requestSpoj] fetch chyba:', e);
+    if (btn) { btn.style.display = 'inline-block'; btn.disabled = false; }
+  }
+};
+
 // === SDÍLENÍ AUTOBUSU ===
 window.shareBus = function (busId) {
   let trackUrl = location.origin + '/mapa?track=' + busId;
@@ -1317,7 +1358,7 @@ function isTrainVehicle(bus) {
 }
 
 // === SVG MARKER ===
-function buildMarkerSvg(mc, bearing, lineText, isTrain, busId) {
+function buildMarkerSvg(mc, bearing, lineText, isTrain, busId, isWithdrawn = false) {
   const cM = { 'bg-green': '#10b981', 'bg-red': '#ef4444', 'bg-blue': '#3b82f6', 'bg-darkblue': '#1e3a8a', 'bg-gray': '#64748b', 'bg-purple': '#a855f7', 'bg-orange': '#f59e0b', 'bg-yellow': '#facc15', 'bg-bug': '#374151', 'bg-lastpos': '#1a1820' };
   let bgC = cM[mc] || '#64748b';
   const cx = 18, cy = 18;
@@ -1344,14 +1385,16 @@ function buildMarkerSvg(mc, bearing, lineText, isTrain, busId) {
     return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
   }
 
-  // Speciální černo-šedo-růžový marker pro poslední známou polohu
-  if (mc === 'bg-lastpos') {
+  // === ODSTAVENÝ VŮZ / POSLEDNÍ ZNÁMÁ POLOHA (Design: Tělo černé/tmavě šedé, UVNITŘ RŮŽOVÁ PŘERUŠOVANÁ ČÁRA) ===
+  if (isWithdrawn || mc === 'bg-withdrawn' || mc === 'bg-lastpos' || (mc === 'bg-gray' && !reallyTrain)) {
     let lC = String(lineText || '').split('/')[0].trim().replace(/[^0-9]/g, '');
     let lD = lC.length >= 4 ? lC.slice(-3) : lC;
     const r = 12;
     let si = `<circle cx="${cx + 1}" cy="${cy + 1}" r="${r}" fill="rgba(0,0,0,0.55)"/>`;
-    si += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#1a1820" stroke="#f472b6" stroke-width="2.4" style="filter: drop-shadow(0 0 4px rgba(244,114,182,0.6));"/>`;
-    si += `<circle cx="${cx}" cy="${cy}" r="${r - 3.2}" fill="none" stroke="#64748b" stroke-width="1.2" stroke-dasharray="2.5,1.8" opacity="0.9"/>`;
+    // Černé/tmavě šedé tělo s decentním šedým okrajem (ŽÁDNÝ růžový vnější kruh)
+    si += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#18181b" stroke="#4b5563" stroke-width="2.2" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.7));"/>`;
+    // Vnitřní kroužek: JASNÁ RŮŽOVÁ PŘERUŠOVANÁ ČÁRA (#f472b6)
+    si += `<circle cx="${cx}" cy="${cy}" r="${r - 3.2}" fill="none" stroke="#f472b6" stroke-width="1.6" stroke-dasharray="2.8,1.8" opacity="1.0"/>`;
     if (lD) {
       if (lD.length > 3) {
         si += `<text x="${cx}" y="${cy - 2.5}" dominant-baseline="middle" text-anchor="middle" fill="#fbcfe8" font-weight="900" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(0, 3)}</text>`;
@@ -1360,7 +1403,7 @@ function buildMarkerSvg(mc, bearing, lineText, isTrain, busId) {
         si += `<text x="${cx}" y="${cy + 1}" dominant-baseline="middle" text-anchor="middle" fill="#fbcfe8" font-weight="900" font-size="8" font-family="'Segoe UI',system-ui,sans-serif">${lD}</text>`;
       }
     } else {
-      si += `<circle cx="${cx}" cy="${cy}" r="3" fill="#f472b6"/>`;
+      si += `<circle cx="${cx}" cy="${cy}" r="2.5" fill="#f472b6"/>`;
     }
     return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
   }
@@ -2527,7 +2570,9 @@ async function fetchBuses() {
       if (bus.in_depot && markerColor !== 'bg-lastpos') {
         markerColor = 'bg-yellow';
       }
-      let icon = L.divIcon({ className: '', html: buildMarkerSvg(markerColor, bus.bearing, bus.line, bus.is_train), iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20] });
+      let isTrain = (typeof isTrainVehicle === 'function') ? isTrainVehicle(bus) : Boolean(bus.is_train);
+      let isWithdrawn = Boolean(bus.is_withdrawn || bus.is_offline || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-lastpos' || bus.color_class === 'bg-gray');
+      let icon = L.divIcon({ className: '', html: buildMarkerSvg(markerColor, bus.bearing, bus.line, isTrain, bus.id, isWithdrawn), iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20] });
       let spzH = '', invTxt = '', histBtn = '';
       if (!bus.is_train) {
         if (bus.investigating) { spzH = `<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`; invTxt = `<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`; }
@@ -2573,10 +2618,33 @@ async function fetchBuses() {
       let afH = bus.admin_flag ? '<span style="background:#1e40af;color:#93c5fd;padding:2px 7px;border-radius:10px;font-size:10px;margin-left:6px;font-weight:bold;">Admin uprava</span>' : '';
       let rA = (activeRouteId === bus.id);
 
+      // === LINKA/SPOJ FORMATTING ===
+      let _linkaNum = bus.line || '';
+      let _spojNum = null;
+      if (bus.spoj_num) {
+        _spojNum = String(bus.spoj_num).trim();
+      } else if (bus.real_linka_spoj) {
+        let _ls = String(bus.real_linka_spoj);
+        let _slashIdx = _ls.indexOf('/');
+        if (_slashIdx >= 0) {
+          _linkaNum = _ls.substring(0, _slashIdx).trim();
+          let _sRaw = _ls.substring(_slashIdx + 1).trim();
+          if (_sRaw) _spojNum = _sRaw;
+        } else {
+          _linkaNum = _ls.trim();
+        }
+      }
+      if (_spojNum && window.requestedSpojeMap) {
+        delete window.requestedSpojeMap[bus.id];
+      }
+      let _hlavickaSpoj = _spojNum
+        ? `LINKA: ${_linkaNum} <span style="color:#38bdf8;font-size:11px;font-weight:700;">SPOJ: ${_spojNum}</span>`
+        : `LINKA: ${_linkaNum}`;
+
       let popH = `
         <div class="ph" style="${mc === 'bg-bug' ? 'background:#1f2937;' : ''}${mc === 'bg-orange' ? 'background:#1c1400;' : ''}${mc === 'bg-lastpos' ? 'background:linear-gradient(90deg,#181820,#2e1e2c);border-bottom:1px solid #f472b6;' : ''}">
           <h3 class="ph-t" style="${mc === 'bg-bug' ? 'color:#9ca3af;' : ''}${mc === 'bg-orange' ? 'color:#f59e0b;' : ''}${mc === 'bg-lastpos' ? 'color:#fbcfe8;' : ''}; display:flex; justify-content:space-between; align-items:center;">
-            <span>Spoj: ${bus.real_linka_spoj || bus.line}${afH}</span>
+            <span>${_hlavickaSpoj}${afH}</span>
             <span style="font-size:10px; color:#64748b; font-weight:normal; letter-spacing:0.5px;">#${bus.id}</span>
           </h3>
         </div>
@@ -2586,6 +2654,18 @@ async function fetchBuses() {
           ${(bus.admin_driver && typeof bus.admin_driver === 'string' && bus.admin_driver.trim() !== '') ? `<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>` : ''}
           <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination || 'Neznamy'}</span></div>
           ${spzH}${invTxt}
+          ${
+            (!isTrain) ? (
+              _spojNum ? `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#38bdf8;font-weight:bold;">${_spojNum}</span></div>` :
+              (bus.is_offline || bus.is_withdrawn || bus.status === 'Poslední známá poloha' || bus.status === 'Odstáven' || bus.status === 'Odstaven' || bus.color_class === 'bg-lastpos' || bus.color_class === 'bg-gray' || bus.status === 'Timeout') ? (
+                bus.last_known_spoj ? `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#94a3b8;">Poslední známý: <b style="color:#e2e8f0;">${bus.last_known_spoj}</b></span></div>` :
+                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;font-size:11px;">Nezjištěno (vůz není na mapě PVVD)</span></div>`
+              ) :
+              (window.requestedSpojeMap && window.requestedSpojeMap[bus.id] && (Date.now() - window.requestedSpojeMap[bus.id] < 60000)) ?
+                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#38bdf8;font-weight:bold;font-size:11px;"><i class="fas fa-spinner fa-spin"></i> Čeká se na zjištění spoje...</span></div>` :
+                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;"><span id="spoj-status-${bus.id}">Spoj není známý</span> <button id="req-spoj-${bus.id}" onclick="requestSpoj('${bus.id}',this)" style="background:#0f172a;border:1px solid #38bdf8;color:#38bdf8;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;margin-left:4px;transition:.2s;font-weight:600;">⚡ Vyžádat spoj</button></span></div>`
+            ) : ''
+          }
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
           <div class="pr" style="border:none;"><span class="pl">JR:</span><span class="pv">${dTxt}</span></div>
           <button class="pa" onclick="showTT('${bus.id}')">📋 Zobrazit jízdní řád</button>

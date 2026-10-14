@@ -648,6 +648,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <button id="nt-add-btn" onclick="startNtAdd()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:14px;flex-shrink:0;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;" title="Přidat zastávku">＋</button>
     <button id="le-toggle-btn" onclick="toggleLineEditor()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #a855f7;background:transparent;color:#a855f7;cursor:pointer;" title="Editor linek"><i class="fas fa-edit"></i> Edit</button>
     <button id="depot-toggle-btn" onclick="document.getElementById('depot-admin-panel').style.display=document.getElementById('depot-admin-panel').style.display==='none'?'block':'none'" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #b45309;background:transparent;color:#fcd34d;cursor:pointer;" title="Správa vozoven">🅿️ Vozovny</button>
+    <a id="notif-admin-btn" href="/admin/notifications" target="_blank" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #7c3aed;background:transparent;color:#c4b5fd;text-decoration:none;cursor:pointer;" title="Admin správa notifikací">🔔 Notifikace</a>
     <!-- lines-overlay-btn-pub is already in nav for everyone -->
     <button id="log-toggle-btn" onclick="toggleLogPanel()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;">📋</button>
     __AVATAR__
@@ -847,16 +848,6 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
           </div>
         </div>
 
-        <!-- Admin Override Target -->
-        <div id="notif-admin-target-container" style="margin-bottom:16px; display:none; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.3); border-radius:10px; padding:10px 12px;">
-          <label style="cursor:pointer; display:flex; align-items:center; gap:8px;">
-            <input type="checkbox" id="nt-admin-override" onchange="window.updateAdminTargetChannel && window.updateAdminTargetChannel();">
-            <span style="color:#ef4444; font-weight:bold; font-size:12px;">Poslat jinému uživateli (ADMIN ONLY)</span>
-          </label>
-          <div id="notif-admin-target-input-box" style="display:none; margin-top:8px;">
-            <input id="notif-admin-target" type="text" placeholder="Discord ID nebo E-mail uživatele" style="width:100%;padding:8px 10px;background:rgba(239,68,68,0.12);color:white;border:1px solid rgba(239,68,68,0.4);border-radius:6px;font-size:12px;box-sizing:border-box;">
-          </div>
-        </div>
 
         <div id="notif-modal-msg" style="font-size:13px;min-height:18px;margin-bottom:12px;text-align:center;"></div>
         
@@ -1434,7 +1425,7 @@ nav.addEventListener('mouseleave',()=>{if(!navPinned)hideT=setTimeout(hideNav,60
 document.addEventListener('touchstart',e=>{if(e.touches[0].clientY<35){showNav(4500);}else if(!nav.contains(e.target)&&!navPinned){clearTimeout(hideT);hideT=setTimeout(hideNav,400);}},{passive:true});
 showNav(4000);
 // Smart pan handlers registered after map init below
-if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let leb=document.getElementById('le-toggle-btn');if(leb)leb.style.display='inline-block';let dtb=document.getElementById('depot-toggle-btn');if(dtb)dtb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';}
+if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let leb=document.getElementById('le-toggle-btn');if(leb)leb.style.display='inline-block';let dtb=document.getElementById('depot-toggle-btn');if(dtb)dtb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';let anob=document.getElementById('notif-admin-btn');if(anob)anob.style.display='inline-block';}
 
 // === MAP ===
 var dLat=49.7384,dLng=13.3736,dZoom=12;
@@ -2248,8 +2239,6 @@ async function saveNotifRule(isOneTime = true) {
       ['nt-terminal','nt-new-line','nt-depot-in','nt-depot-out','nt-trip-change','nt-started-moving','nt-stop-near','nt-delay-thresh','nt-delay-change'].forEach(id => { let el=document.getElementById(id); if(el) el.checked=false; }); if(document.getElementById('nt-deliv-email')) document.getElementById('nt-deliv-email').disabled=false;
       let sn=document.getElementById('nt-stop-name'); if(sn) sn.value='';
       let sc=document.getElementById('nt-stop-container'); if(sc) sc.style.display='none';
-      let tu=document.getElementById('notif-admin-target'); if(tu) tu.value='';
-      let ao=document.getElementById('nt-admin-override'); if(ao) { ao.checked=false; window.updateAdminTargetChannel && window.updateAdminTargetChannel(); }
     } else {
       showNotifMsg('❌ ' + (d.message||'Chyba'), false);
     }
@@ -2257,35 +2246,44 @@ async function saveNotifRule(isOneTime = true) {
 }
 
 // === VYŽÁDÁNÍ SPOJE (Prioritní fronta) ===
-const _requestSpojCooldown = {};  // {bus_id: timestamp}
+window.requestedSpojeMap = window.requestedSpojeMap || {};  // {bus_id: timestamp}
 window.requestSpoj = async function(busId, btn) {
   const now = Date.now();
-  const last = _requestSpojCooldown[busId] || 0;
+  const last = window.requestedSpojeMap[busId] || 0;
   if (now - last < 30000) {
     if (btn) { btn.textContent = '⏳ Čekej...'; btn.disabled = true; }
     return;
   }
-  _requestSpojCooldown[busId] = now;
+  window.requestedSpojeMap[busId] = now;
   
-  // Změna textu v UI na "Spoj se brzy zobrazí"
+  // Změna textu v UI na "Čeká se na zjištění spoje..."
   let stEl = document.getElementById('spoj-status-' + busId);
   if (stEl) {
-    stEl.textContent = 'Spoj se brzy zobrazí';
-    stEl.style.color = '#38bdf8';
-    stEl.style.fontWeight = 'bold';
+    stEl.innerHTML = '<span style="color:#38bdf8;font-weight:bold;font-size:11px;"><i class="fas fa-spinner fa-spin"></i> Čeká se na zjištění spoje...</span>';
   }
   if (btn) {
     btn.style.display = 'none';
   }
-  showMapToast('⚡ Požadavek na dotažení spoje odeslán do prioritní fronty!');
+  showMapToast('⚡ Požadavek na zjištění spoje odeslán do prioritní fronty!');
   
   try {
     let r = await fetch('/api/priority_spoj/' + busId, {method: 'POST'});
     let data = await r.json();
     if (data.status === 'rate_limited') {
       showMapToast('⏳ ' + (data.message || 'Příliš mnoho požadavků'));
+    } else if (data.status === 'error' || data.status === 'not_found' || data.status === 'skip') {
+      showMapToast('❌ ' + (data.message || 'Nelze vyžádat spoj'));
+      delete window.requestedSpojeMap[busId];
+      if (stEl) stEl.innerHTML = '<span style="color:#ef4444;font-size:11px;">' + (data.message || 'Nelze vyžádat') + '</span>';
+      if (btn) { btn.style.display = 'inline-block'; btn.disabled = false; btn.textContent = '⚡ Vyžádat spoj'; }
+    } else {
+      setTimeout(() => { if (typeof fetchBuses === 'function') fetchBuses(); }, 1200);
+      setTimeout(() => { if (typeof fetchBuses === 'function') fetchBuses(); }, 3500);
     }
-  } catch(e) { console.warn('[requestSpoj] fetch chyba:', e); }
+  } catch(e) {
+    console.warn('[requestSpoj] fetch chyba:', e);
+    if (btn) { btn.style.display = 'inline-block'; btn.disabled = false; }
+  }
 };
 
 // === SDÍLENÍ AUTOBUSU ===
@@ -2471,40 +2469,16 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false){
     return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
   }
 
-  // === ODSTAVENÝ VŮZ (Design dle požadavku: zrušen růžový kruh, tělo černé/šedé, uvnitř decentní růžová) ===
-  if (isWithdrawn || mc === 'bg-withdrawn') {
+  // === ODSTAVENÝ VŮZ / POSLEDNÍ ZNÁMÁ POLOHA (Design: Tělo černé/tmavě šedé, UVNITŘ RŮŽOVÁ PŘERUŠOVANÁ ČÁRA) ===
+  if (isWithdrawn || mc === 'bg-withdrawn' || mc === 'bg-lastpos' || (mc === 'bg-gray' && !reallyTrain)) {
     let lC=String(lineText||'').split('/')[0].trim().replace(/[^0-9]/g,'');
     let lD=lC.length>=4?lC.slice(-3):lC;
     const r=12;
     let si=`<circle cx="${cx+1}" cy="${cy+1}" r="${r}" fill="rgba(0,0,0,0.55)"/>`;
     // Černé/tmavě šedé tělo s decentním šedým okrajem (ŽÁDNÝ růžový vnější kruh)
     si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#18181b" stroke="#4b5563" stroke-width="2.2" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.7));"/>`;
-    // Vnitřní kroužek: decentní růžová přerušovaná čára
-    si+=`<circle cx="${cx}" cy="${cy}" r="${r-3.2}" fill="none" stroke="#f472b6" stroke-width="1.3" stroke-dasharray="2.5,1.8" opacity="0.95"/>`;
-    if(lD){
-      if(lD.length>3){
-        si+=`<text x="${cx}" y="${cy-2.5}" dominant-baseline="middle" text-anchor="middle" fill="#cbd5e1" font-weight="900" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(0,3)}</text>`;
-        si+=`<text x="${cx}" y="${cy+5.5}" dominant-baseline="middle" text-anchor="middle" fill="#cbd5e1" font-weight="900" font-size="6" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(3)}</text>`;
-      }else{
-        si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="#cbd5e1" font-weight="900" font-size="8" font-family="'Segoe UI',system-ui,sans-serif">${lD}</text>`;
-      }
-    }else{
-      si+=`<circle cx="${cx}" cy="${cy}" r="2.5" fill="#f472b6"/>`;
-    }
-    return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
-  }
-
-
-  // Speciální černo-šedo-růžový marker pro poslední známou polohu
-  if (mc === 'bg-lastpos') {
-    let lC=String(lineText||'').split('/')[0].trim().replace(/[^0-9]/g,'');
-    let lD=lC.length>=4?lC.slice(-3):lC;
-    const r=12;
-    let si=`<circle cx="${cx+1}" cy="${cy+1}" r="${r}" fill="rgba(0,0,0,0.55)"/>`;
-    // Černé jádro s výrazným růžovým okrajem a jemnou září
-    si+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#1a1820" stroke="#f472b6" stroke-width="2.4" style="filter: drop-shadow(0 0 4px rgba(244,114,182,0.6));"/>`;
-    // Vnitřní šedý kroužek
-    si+=`<circle cx="${cx}" cy="${cy}" r="${r-3.2}" fill="none" stroke="#64748b" stroke-width="1.2" stroke-dasharray="2.5,1.8" opacity="0.9"/>`;
+    // Vnitřní kroužek: JASNÁ RŮŽOVÁ PŘERUŠOVANÁ ČÁRA (#f472b6)
+    si+=`<circle cx="${cx}" cy="${cy}" r="${r-3.2}" fill="none" stroke="#f472b6" stroke-width="1.6" stroke-dasharray="2.8,1.8" opacity="1.0"/>`;
     if(lD){
       if(lD.length>3){
         si+=`<text x="${cx}" y="${cy-2.5}" dominant-baseline="middle" text-anchor="middle" fill="#fbcfe8" font-weight="900" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lD.substring(0,3)}</text>`;
@@ -2513,7 +2487,7 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false){
         si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="#fbcfe8" font-weight="900" font-size="8" font-family="'Segoe UI',system-ui,sans-serif">${lD}</text>`;
       }
     }else{
-      si+=`<circle cx="${cx}" cy="${cy}" r="3" fill="#f472b6"/>`;
+      si+=`<circle cx="${cx}" cy="${cy}" r="2.5" fill="#f472b6"/>`;
     }
     return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
   }
@@ -3671,7 +3645,8 @@ async function fetchBuses(){
         markerColor='bg-yellow';
       }
       let isTrain = isTrainVehicle(bus);
-      let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,isTrain,bus.id,Boolean(bus.is_withdrawn || bus.status === "Odstáven" || bus.status === "Odstaven")),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
+      let isWithdrawn = Boolean(bus.is_withdrawn || bus.is_offline || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-lastpos' || bus.color_class === 'bg-gray');
+      let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,isTrain,bus.id,isWithdrawn),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
       let spzH='',invTxt='',histBtn='';
       if(!isTrain){
         if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
@@ -3723,26 +3698,26 @@ async function fetchBuses(){
       let rA=(activeRouteId===bus.id);
 
       // === LINKA/SPOJ FORMATTING ===
-      // real_linka_spoj format: "490722 / 19" or "490722" or null
       let _linkaNum = bus.line || '';
       let _spojNum = null;
-      if (bus.real_linka_spoj && bus.real_linka_spoj !== bus.line) {
+      if (bus.spoj_num) {
+        _spojNum = String(bus.spoj_num).trim();
+      } else if (bus.real_linka_spoj) {
         let _ls = String(bus.real_linka_spoj);
         let _slashIdx = _ls.indexOf('/');
         if (_slashIdx >= 0) {
           _linkaNum = _ls.substring(0, _slashIdx).trim();
           let _sRaw = _ls.substring(_slashIdx + 1).trim();
-          // Spoj je odlisny od linky -> zobraz
-          if (_sRaw && _sRaw !== _linkaNum && _sRaw.replace(/[^0-9]/g,'') !== _linkaNum.replace(/[^0-9]/g,'')) {
-            _spojNum = _sRaw;
-          }
+          if (_sRaw) _spojNum = _sRaw;
         } else {
-          // Zadny lomitko - cely retezec je linka
           _linkaNum = _ls.trim();
         }
       }
+      if (_spojNum && window.requestedSpojeMap) {
+        delete window.requestedSpojeMap[bus.id];
+      }
       let _hlavickaSpoj = _spojNum
-        ? `LINKA: ${_linkaNum} <span style="color:#94a3b8;font-size:11px;font-weight:500;">SPOJ: ${_spojNum}</span>`
+        ? `LINKA: ${_linkaNum} <span style="color:#38bdf8;font-size:11px;font-weight:700;">SPOJ: ${_spojNum}</span>`
         : `LINKA: ${_linkaNum}`;
       
       let popH=`
@@ -3759,8 +3734,16 @@ async function fetchBuses(){
           <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination||'Neznamy'}</span></div>
           ${spzH}${invTxt}
           ${
-            (!isTrain && !_spojNum) ? `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;"><span id="spoj-status-${bus.id}">Spoj není známý</span> <button id="req-spoj-${bus.id}" onclick="requestSpoj('${bus.id}',this)" style="background:#0f172a;border:1px solid #38bdf8;color:#38bdf8;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;margin-left:4px;transition:.2s;font-weight:600;">⚡ Vyžádat spoj</button></span></div>` :
-            _spojNum ? `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#10b981;font-weight:bold;">${_spojNum}</span></div>` : ''
+            (!isTrain) ? (
+              _spojNum ? `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#38bdf8;font-weight:bold;">${_spojNum}</span></div>` :
+              (bus.is_offline || bus.is_withdrawn || bus.status === 'Poslední známá poloha' || bus.status === 'Odstáven' || bus.status === 'Odstaven' || bus.color_class === 'bg-lastpos' || bus.color_class === 'bg-gray' || bus.status === 'Timeout') ? (
+                bus.last_known_spoj ? `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#94a3b8;">Poslední známý: <b style="color:#e2e8f0;">${bus.last_known_spoj}</b></span></div>` :
+                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;font-size:11px;">Nezjištěno (vůz není na mapě PVVD)</span></div>`
+              ) :
+              (window.requestedSpojeMap && window.requestedSpojeMap[bus.id] && (Date.now() - window.requestedSpojeMap[bus.id] < 60000)) ?
+                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#38bdf8;font-weight:bold;font-size:11px;"><i class="fas fa-spinner fa-spin"></i> Čeká se na zjištění spoje...</span></div>` :
+                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;"><span id="spoj-status-${bus.id}">Spoj není známý</span> <button id="req-spoj-${bus.id}" onclick="requestSpoj('${bus.id}',this)" style="background:#0f172a;border:1px solid #38bdf8;color:#38bdf8;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;margin-left:4px;transition:.2s;font-weight:600;">⚡ Vyžádat spoj</button></span></div>`
+            ) : ''
           }
           ${(bus.vehicle_type && !isTrain) ? `<div class="pr"><span class="pl">Vozidlo:</span><span class="pv" style="color:#94a3b8;font-size:11px;">${bus.vehicle_type}</span></div>` : ''}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
@@ -5101,11 +5084,23 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
 
 
 TT_FETCH_QUEUE = queue.PriorityQueue()
+_tt_seq_counter = 0
+
+def queue_tt_fetch(priority, bus_id, cached_dict):
+    global _tt_seq_counter
+    _tt_seq_counter += 1
+    TT_FETCH_QUEUE.put((priority, _tt_seq_counter, bus_id, cached_dict))
+
 
 def _tt_fetch_worker():
     while True:
         try:
-            priority, bus_id, cached_dict = TT_FETCH_QUEUE.get()
+            item = TT_FETCH_QUEUE.get()
+            if len(item) == 4:
+                priority, _, bus_id, cached_dict = item
+            else:
+                priority, bus_id, cached_dict = item
+
             if not cached_dict.get("is_offline"):
                 success = fetch_tt_bg(bus_id, cached_dict)
                 if not success:
@@ -5136,13 +5131,44 @@ def fetch_tt_bg(bus_id, cached_dict):
         import html as _html
         tt_unescaped = _html.unescape(tt)
         
-        # Extrahuj Linka/Spoj (místo OpenInfoWindow)
-        ml = re.search(r'<span id="currentLineRouteLabel">\s*(.*?)\s*</span>', tt_unescaped, re.IGNORECASE | re.DOTALL)
-        if ml:
-            ls_val = ml.group(1).strip()
-            if ls_val and ls_val != "-- / --" and ls_val != "" :
-                # Validace: spoj musi byt cislo odlisne od linky
-                cached_dict["real_linka_spoj"] = ls_val
+        # Extrahuj Linka/Spoj z GetTimetable
+        # 1. PVVD standardní formát: <p class="ride-caption">Linka 440523, spoj 23</p>
+        m_cap = re.search(r'class=[\"\']ride-caption[\"\'][^>]*>\s*Linka\s*([0-9]+)[,\s]+spoj\s*([0-9]+)', tt_unescaped, re.IGNORECASE)
+        if m_cap:
+            r_linka = m_cap.group(1).strip()
+            r_spoj = m_cap.group(2).strip()
+            cached_dict["real_linka_spoj"] = f"{r_linka} / {r_spoj}"
+            cached_dict["spoj_num"] = r_spoj
+            cached_dict["last_known_spoj"] = r_spoj
+        else:
+            m_cap2 = re.search(r'Linka\s*([0-9]{3,7})[,\s/]+spoj\s*([0-9]{1,4})', tt_unescaped, re.IGNORECASE)
+            if m_cap2:
+                r_linka = m_cap2.group(1).strip()
+                r_spoj = m_cap2.group(2).strip()
+                cached_dict["real_linka_spoj"] = f"{r_linka} / {r_spoj}"
+                cached_dict["spoj_num"] = r_spoj
+                cached_dict["last_known_spoj"] = r_spoj
+            else:
+                m_cap3 = re.search(r'(?:Linka\s*/\s*spoj|Linka\s*a\s*spoj)[^0-9]*([0-9]{3,7})\s*/\s*([0-9]{1,4})', tt_unescaped, re.IGNORECASE)
+                if not m_cap3:
+                    m_cap3 = re.search(r'\b([0-9]{6})\s*/\s*([0-9]{1,4})\b', tt_unescaped)
+                if m_cap3:
+                    r_linka = m_cap3.group(1).strip()
+                    r_spoj = m_cap3.group(2).strip()
+                    cached_dict["real_linka_spoj"] = f"{r_linka} / {r_spoj}"
+                    cached_dict["spoj_num"] = r_spoj
+                    cached_dict["last_known_spoj"] = r_spoj
+                else:
+                    ml = re.search(r'<span id="currentLineRouteLabel">\s*(.*?)\s*</span>', tt_unescaped, re.IGNORECASE | re.DOTALL)
+                if ml:
+                    ls_val = ml.group(1).strip()
+                    if ls_val and ls_val != "-- / --" and ls_val != "":
+                        cached_dict["real_linka_spoj"] = ls_val
+                        if "/" in ls_val:
+                            parts = ls_val.split("/")
+                            if len(parts) == 2 and parts[1].strip():
+                                cached_dict["spoj_num"] = parts[1].strip()
+                                cached_dict["last_known_spoj"] = parts[1].strip()
 
         # Extrahuj typ vozidla (vehicle_type) - napr. 'Iveco Crossway LE LINE 10.8M'
         mv = re.search(r'<span[^>]*id=["\']?vehicleType["\']?[^>]*>\s*(.*?)\s*</span>', tt_unescaped, re.IGNORECASE | re.DOTALL)
@@ -6078,7 +6104,7 @@ def background_map_worker():
                     if tt_age > retry_lim and not c.get("tt_is_fetching"):
                         c["tt_last_fetch"] = now
                         c["tt_is_fetching"] = True
-                        TT_FETCH_QUEUE.put((4, bus_id, c))
+                        queue_tt_fetch(4, bus_id, c)
 
                 if c.get("is_offline"):
                     if c.get("is_train") or is_train_vehicle(bus_id, c.get("line")):
@@ -6098,7 +6124,13 @@ def background_map_worker():
                         "in_depot": c.get("_in_depot", False),
                         "depot_name": c.get("_depot_name"),
                         "depot_color": c.get("_depot_color"),
-                        "offline_since_time": c.get("offline_since_time", "")
+                        "offline_since_time": c.get("offline_since_time", ""),
+                        "is_offline": True,
+                        "is_withdrawn": bool(c.get("is_withdrawn", False) or c.get("status") in ("Odstáven", "Odstaven") or c.get("color_class") == "bg-gray"),
+                        "real_linka_spoj": c.get("real_linka_spoj"),
+                        "spoj_num": c.get("spoj_num"),
+                        "last_known_spoj": c.get("last_known_spoj") or c.get("spoj_num"),
+                        "vehicle_type": c.get("vehicle_type"),
                     })
                     continue
 
@@ -6497,7 +6529,7 @@ def background_map_worker():
                                     pri = 2
                                 elif inact > 2:
                                     pri = 3
-                            TT_FETCH_QUEUE.put((pri, bus_id, c))
+                            queue_tt_fetch(pri, bus_id, c)
 
                 # ── Barvy + status ────────────────────────────────────────────────────────
                 old_status = c.get("status", "")
@@ -6519,8 +6551,13 @@ def background_map_worker():
                     c["status"] = f"Vozovna: {depot_name}"
                 elif c.get("is_offline"):
                     if not c.get("admin_lock_display"):
-                        c["status"] = "Poslední známá poloha"
-                        c["color_class"] = "bg-lastpos"
+                        if c.get("is_withdrawn") or c.get("status") in ("Odstáven", "Odstaven") or c.get("color_class") == "bg-gray":
+                            c["status"] = "Odstáven"
+                            c["color_class"] = "bg-gray"
+                            c["is_withdrawn"] = True
+                        else:
+                            c["status"] = "Poslední známá poloha"
+                            c["color_class"] = "bg-lastpos"
                     c["final_delay_display"] = 0
                 else:
                     is_before_departure = False
@@ -6651,6 +6688,9 @@ def background_map_worker():
                     "last_stop_name": "" if is_train_final else c.get("last_stop_name"),
                     "vehicle_type": None if is_train_final else c.get("vehicle_type"),
                     "is_withdrawn": c.get("is_withdrawn", False),  # 'Odstaven' - zmizel z PVVD > 10 min
+                    "is_offline": False,
+                    "spoj_num": c.get("spoj_num"),
+                    "last_known_spoj": c.get("last_known_spoj") or c.get("spoj_num"),
                 })
 
             global LIVE_BUSES_DATA, _last_spz_auto_refresh
@@ -7415,7 +7455,7 @@ def api_notif_create():
                 if not _bc.get("tt_is_fetching"):
                     _bc["tt_is_fetching"] = True
                     _bc["tt_last_fetch"] = None
-                    TT_FETCH_QUEUE.put((0, str(identifier), _bc))
+                    queue_tt_fetch(0, str(identifier), _bc)
                     sys_log(f"[PRIORITY] Auto-zarazeni busu {identifier} do prioritni fronty pri vytvoreni notifikace")
 
         db.table("bus_notifications").insert({
@@ -8021,21 +8061,26 @@ def api_priority_spoj(bus_id):
 
     # Zkontroluj ze bus existuje v cache
     if bus_id not in GLOBAL_BUS_CACHE:
-        return jsonify({"status": "not_found", "message": "Bus neni aktivni na mape"}), 404
+        return jsonify({"status": "not_found", "message": "Bus není aktivní na mapě"}), 404
 
     c = GLOBAL_BUS_CACHE[bus_id]
     if c.get("is_train"):
-        return jsonify({"status": "skip", "message": "Vlaky nemaji spoj"}), 400
+        return jsonify({"status": "skip", "message": "Vlaky nemají spoj"}), 400
+
+    # Spoj lze vyžádat POUZE když je vůz aktivní na PVVD (status jízda, zpoždění, čeká na spoj, konečná atd.)
+    # Pokud vůz zmizel z PVVD (offline, odstaven, poslední známá poloha), vyžádání nelze spustit.
+    if c.get("is_offline") or c.get("is_withdrawn") or c.get("color_class") in ("bg-lastpos", "bg-gray") or c.get("status") in ("Poslední známá poloha", "Odstáven", "Odstaven", "Timeout"):
+        return jsonify({"status": "error", "message": "Vůz není aktivní na mapě PVVD, spoj nelze vyžádat."}), 400
 
     # Zaradi bus do prioritni fronty (priorita 0 = nejvyssi)
     if not c.get("tt_is_fetching"):
         c["tt_is_fetching"] = True
         c["tt_last_fetch"] = None  # Vynuti refetch
-        TT_FETCH_QUEUE.put((0, bus_id, c))
+        queue_tt_fetch(0, bus_id, c)
         sys_log(f"[PRIORITY] Bus {bus_id} pridan do prioritni fronty spoje (IP={client_ip})")
-        return jsonify({"status": "queued", "message": "Bus zaraden do prioritni fronty"})
+        return jsonify({"status": "queued", "message": "Požadavek na zjištění spoje byl zařazen do prioritní fronty"})
     else:
-        return jsonify({"status": "already_fetching", "message": "Jiz se stahuje"})
+        return jsonify({"status": "already_fetching", "message": "Spoj se již stahuje"})
 
 
 @mapa_bp.route('/api/live_buses')
@@ -9329,14 +9374,14 @@ def admin_notifications_page():
         </div>""", 403
 
     html_content = """
-    <div style="max-width:1100px;margin:30px auto;padding:0 20px;">
+    <div style="max-width:1150px;margin:30px auto;padding:0 20px;font-family:system-ui,-apple-system,sans-serif;">
       <!-- Horní navigační lišta -->
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;border-bottom:1px solid #334155;padding-bottom:15px;">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <div style="background:rgba(124,58,237,0.25);color:#a78bfa;width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;border:1px solid #7c3aed;">🔔</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;border-bottom:1px solid #334155;padding-bottom:15px;flex-wrap:wrap;gap:12px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div style="background:rgba(124,58,237,0.25);color:#a78bfa;width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;border:1px solid #7c3aed;">🔔</div>
           <div>
-            <h1 style="color:white;font-size:22px;margin:0;font-weight:800;">Správa a Administrace Notifikací</h1>
-            <div style="color:#94a3b8;font-size:12px;">Kompletní kontrola nad pravidly, odesíláním a doručováním zpráv</div>
+            <h1 style="color:white;font-size:22px;margin:0;font-weight:800;">Admin Panel Notifikací</h1>
+            <div style="color:#94a3b8;font-size:12px;">Centrální správa pravidel, jednorázových upozornění a doručování zpráv</div>
           </div>
         </div>
         <div style="display:flex;gap:10px;">
@@ -9347,77 +9392,140 @@ def admin_notifications_page():
 
       <!-- Statistické karty -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px;margin-bottom:25px;">
-        <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;">
-          <div style="color:#94a3b8;font-size:11px;font-weight:bold;text-transform:uppercase;">Celkem aktivních pravidel</div>
-          <div id="stat-total-rules" style="color:white;font-size:28px;font-weight:bold;margin-top:6px;">--</div>
+        <div onclick="switchRulesTab('repeat')" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px;cursor:pointer;transition:.2s;">
+          <div style="color:#38bdf8;font-size:11px;font-weight:bold;text-transform:uppercase;">🔁 Opakující se pravidla</div>
+          <div id="stat-repeat-rules" style="color:white;font-size:28px;font-weight:bold;margin-top:6px;">--</div>
+          <div style="color:#64748b;font-size:10px;margin-top:4px;">Kliknutím zobrazit v tabulce</div>
         </div>
-        <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;">
+        <div onclick="switchRulesTab('once')" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px;cursor:pointer;transition:.2s;">
           <div style="color:#c4b5fd;font-size:11px;font-weight:bold;text-transform:uppercase;">⚡ Jednorázová upozornění</div>
           <div id="stat-once-rules" style="color:#a78bfa;font-size:28px;font-weight:bold;margin-top:6px;">--</div>
+          <div style="color:#64748b;font-size:10px;margin-top:4px;">Upozornění zadaná uživateli</div>
         </div>
-        <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;">
-          <div style="color:#38bdf8;font-size:11px;font-weight:bold;text-transform:uppercase;">🔁 Opakující se pravidla</div>
-          <div id="stat-repeat-rules" style="color:#38bdf8;font-size:28px;font-weight:bold;margin-top:6px;">--</div>
+        <div onclick="switchRulesTab('all')" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px;cursor:pointer;transition:.2s;">
+          <div style="color:#94a3b8;font-size:11px;font-weight:bold;text-transform:uppercase;">Celkem aktivních pravidel</div>
+          <div id="stat-total-rules" style="color:white;font-size:28px;font-weight:bold;margin-top:6px;">--</div>
+          <div style="color:#64748b;font-size:10px;margin-top:4px;">Všechna pravidla dohromady</div>
         </div>
-        <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;">
-          <div style="color:#34d399;font-size:11px;font-weight:bold;text-transform:uppercase;">Odeslaných notifikací</div>
+        <div onclick="switchRulesTab('history')" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px;cursor:pointer;transition:.2s;">
+          <div style="color:#34d399;font-size:11px;font-weight:bold;text-transform:uppercase;">📜 Historie odeslání</div>
           <div id="stat-sent-cnt" style="color:#10b981;font-size:28px;font-weight:bold;margin-top:6px;">--</div>
+          <div style="color:#64748b;font-size:10px;margin-top:4px;">Doručené notifikace</div>
         </div>
       </div>
 
-      <!-- Blok: Přímé odeslání zprávy (Direct Sender pro admina) -->
+      <!-- Blok: Vytvoření notifikace / Odeslání zprávy -->
       <div style="background:#1e293b;border:1px solid #7c3aed;border-radius:14px;padding:22px;margin-bottom:30px;box-shadow:0 10px 30px rgba(0,0,0,0.4);">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px;">
-          <span style="font-size:20px;">🚀</span>
-          <div>
-            <h3 style="color:white;margin:0;font-size:16px;">Přímé odeslání zprávy uživateli</h3>
-            <div style="color:#94a3b8;font-size:11px;">Administrátor může odeslat přímou zprávu na libovolné Discord ID nebo E-mail</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:20px;">🚀</span>
+            <div>
+              <h3 style="color:white;margin:0;font-size:16px;">Vytvořit notifikaci nebo odeslat zprávu</h3>
+              <div style="color:#94a3b8;font-size:11px;">Zadejte cíl (Discord ID nebo E-mail) a nastavte pravidlo nebo odešlete přímou zprávu</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button id="admin-mode-rule-btn" onclick="setAdminFormMode('rule')" style="padding:6px 14px;background:#7c3aed;color:white;border:1px solid #7c3aed;border-radius:6px;font-size:12px;cursor:pointer;font-weight:bold;">🔔 Pravidlo sledování vozu</button>
+            <button id="admin-mode-direct-btn" onclick="setAdminFormMode('direct')" style="padding:6px 14px;background:#0f172a;color:#94a3b8;border:1px solid #334155;border-radius:6px;font-size:12px;cursor:pointer;font-weight:bold;">💬 Přímá zpráva</button>
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:12px;">
-          <div>
-            <label style="color:#cbd5e1;font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Cílové Discord ID nebo E-mail *</label>
-            <input id="direct-target" type="text" placeholder="Např. 714856037042585641 nebo uzivatel@email.cz" style="width:100%;padding:10px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:13px;box-sizing:border-box;">
+        <!-- Společné pole: Komu a kam -->
+        <div style="margin-bottom:15px;">
+          <label style="color:#cbd5e1;font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Komu a kam (podle ID Discord a nebo E-mail) *</label>
+          <input id="admin-target" type="text" placeholder="Např. 714856037042585641 nebo uzivatel@email.cz" style="width:100%;padding:10px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:13px;box-sizing:border-box;">
+        </div>
+
+        <!-- Sekce 1: Pravidlo sledování vozu -->
+        <div id="admin-form-rule-section">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:14px;">
+            <div>
+              <label style="color:#cbd5e1;font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Sledovaný cíl (SPZ nebo číslo vozu) *</label>
+              <input id="admin-rule-ident" type="text" placeholder="Např. 3P98542 nebo 2" style="width:100%;padding:10px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:13px;box-sizing:border-box;">
+            </div>
+            <div>
+              <label style="color:#cbd5e1;font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Režim upozornění</label>
+              <select id="admin-rule-mode" style="width:100%;padding:10px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:13px;box-sizing:border-box;">
+                <option value="once">⚡ Jednorázové (smaže se po doručení)</option>
+                <option value="repeat">🔁 Opakující se pravidlo</option>
+              </select>
+            </div>
           </div>
-          <div>
+
+          <div style="margin-bottom:15px;">
+            <label style="color:#cbd5e1;font-size:12px;font-weight:bold;display:block;margin-bottom:8px;">Kdy odeslat notifikaci (vyberte události):</label>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;font-size:12px;color:#e2e8f0;">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="trig-terminal" checked> 🏁 Konečná zastávka</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="trig-newline" checked> 🔄 Změna / nová linka</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="trig-depotin" checked> 🅿️ Vjezd do vozovny</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="trig-depotout" checked> 🚀 Výjezd z vozovny</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="trig-moving"> 🟢 Rozjezd z klidu</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="trig-delay"> ⏱️ Zpoždění > 5 min</label>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div id="admin-rule-status" style="font-size:13px;font-weight:600;"></div>
+            <button onclick="createAdminRule()" style="padding:10px 24px;background:#7c3aed;color:white;border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:13px;box-shadow:0 4px 12px rgba(124,58,237,0.4);transition:.2s;">
+              💾 Vytvořit notifikaci pro uživatele
+            </button>
+          </div>
+        </div>
+
+        <!-- Sekce 2: Přímá zpráva -->
+        <div id="admin-form-direct-section" style="display:none;">
+          <div style="margin-bottom:12px;">
             <label style="color:#cbd5e1;font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Předmět / Titulek zprávy</label>
             <input id="direct-title" type="text" placeholder="🔔 Upozornění z DataCore" value="🔔 Zpráva administrátora" style="width:100%;padding:10px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:13px;box-sizing:border-box;">
           </div>
-        </div>
-
-        <div style="margin-bottom:14px;">
-          <label style="color:#cbd5e1;font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Obsah zprávy *</label>
-          <textarea id="direct-msg" rows="3" placeholder="Sem zadejte text zprávy, který bude odeslán příjemci..." style="width:100%;padding:10px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:13px;box-sizing:border-box;font-family:system-ui,sans-serif;"></textarea>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div id="direct-status" style="font-size:13px;font-weight:600;"></div>
-          <button onclick="sendDirectMessage()" style="padding:10px 24px;background:#7c3aed;color:white;border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:13px;box-shadow:0 4px 12px rgba(124,58,237,0.4);transition:.2s;">
-            🚀 Odeslat zprávu
-          </button>
+          <div style="margin-bottom:14px;">
+            <label style="color:#cbd5e1;font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Obsah zprávy *</label>
+            <textarea id="direct-msg" rows="3" placeholder="Sem zadejte text zprávy, který bude odeslán příjemci na Discord nebo E-mail..." style="width:100%;padding:10px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:13px;box-sizing:border-box;font-family:system-ui,sans-serif;"></textarea>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div id="direct-status" style="font-size:13px;font-weight:600;"></div>
+            <button onclick="sendDirectMessage()" style="padding:10px 24px;background:#7c3aed;color:white;border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:13px;box-shadow:0 4px 12px rgba(124,58,237,0.4);transition:.2s;">
+              🚀 Odeslat přímou zprávu
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- Tabulka všech aktivních pravidel v systému -->
+      <!-- Přehled s přepínáním záložek (TABS) -->
       <div style="background:#1e293b;border:1px solid #334155;border-radius:14px;padding:22px;margin-bottom:30px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
-          <div>
-            <h3 style="color:white;margin:0;font-size:16px;">Všechna aktivní pravidla v systému</h3>
-            <div style="color:#94a3b8;font-size:11px;">Přehled a správa všech notifikačních triggerů všech uživatelů</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px;">
+          <!-- Tlačítka záložek -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;" id="tabs-container">
+            <button id="tab-btn-repeat" onclick="switchRulesTab('repeat')" style="padding:8px 16px;background:#0f172a;color:#38bdf8;border:1px solid #38bdf8;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">
+              🔁 Opakující se pravidla <span id="badge-repeat" style="background:rgba(56,189,248,0.2);padding:2px 7px;border-radius:10px;font-size:11px;margin-left:4px;">0</span>
+            </button>
+            <button id="tab-btn-once" onclick="switchRulesTab('once')" style="padding:8px 16px;background:#0f172a;color:#94a3b8;border:1px solid #334155;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">
+              ⚡ Jednorázová upozornění <span id="badge-once" style="background:rgba(196,181,253,0.2);color:#c4b5fd;padding:2px 7px;border-radius:10px;font-size:11px;margin-left:4px;">0</span>
+            </button>
+            <button id="tab-btn-all" onclick="switchRulesTab('all')" style="padding:8px 16px;background:#0f172a;color:#94a3b8;border:1px solid #334155;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">
+              📜 Všechna pravidla <span id="badge-all" style="background:rgba(148,163,184,0.2);color:#94a3b8;padding:2px 7px;border-radius:10px;font-size:11px;margin-left:4px;">0</span>
+            </button>
+            <button id="tab-btn-history" onclick="switchRulesTab('history')" style="padding:8px 16px;background:#0f172a;color:#94a3b8;border:1px solid #334155;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">
+              📨 Historie odeslaných <span id="badge-history" style="background:rgba(16,185,129,0.2);color:#34d399;padding:2px 7px;border-radius:10px;font-size:11px;margin-left:4px;">0</span>
+            </button>
           </div>
-          <button onclick="loadAdminRules()" style="padding:6px 12px;background:#0f172a;color:#38bdf8;border:1px solid #334155;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">🔄 Obnovit</button>
+
+          <div style="display:flex;gap:10px;align-items:center;">
+            <input id="admin-search-filter" oninput="filterCurrentTable()" type="text" placeholder="🔍 Rychlé hledání..." style="padding:6px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:12px;width:150px;">
+            <button onclick="refreshCurrentTab()" style="padding:6px 12px;background:#0f172a;color:#38bdf8;border:1px solid #334155;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">🔄 Obnovit</button>
+          </div>
         </div>
 
-        <div style="overflow-x:auto;">
+        <!-- Tabulka pravidel -->
+        <div id="table-rules-wrap" style="overflow-x:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:12px;color:#e2e8f0;">
             <thead>
               <tr style="border-bottom:2px solid #334155;text-align:left;color:#94a3b8;">
                 <th style="padding:10px;">ID</th>
-                <th style="padding:10px;">Uživatel / Cíl</th>
+                <th style="padding:10px;">Komu / Uživatel</th>
                 <th style="padding:10px;">Režim</th>
                 <th style="padding:10px;">Sledovaný cíl</th>
-                <th style="padding:10px;">Události</th>
+                <th style="padding:10px;">Nastavené události</th>
                 <th style="padding:10px;">Spuštěno</th>
                 <th style="padding:10px;text-align:right;">Akce</th>
               </tr>
@@ -9427,19 +9535,9 @@ def admin_notifications_page():
             </tbody>
           </table>
         </div>
-      </div>
 
-      <!-- Systémová historie notifikací -->
-      <div style="background:#1e293b;border:1px solid #334155;border-radius:14px;padding:22px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
-          <div>
-            <h3 style="color:white;margin:0;font-size:16px;">Historie odeslaných upozornění</h3>
-            <div style="color:#94a3b8;font-size:11px;">Poslední záznamy o doručených notifikacích</div>
-          </div>
-          <button onclick="loadAdminHistory()" style="padding:6px 12px;background:#0f172a;color:#a78bfa;border:1px solid #334155;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">🔄 Obnovit</button>
-        </div>
-
-        <div style="overflow-x:auto;">
+        <!-- Tabulka historie -->
+        <div id="table-history-wrap" style="overflow-x:auto;display:none;">
           <table style="width:100%;border-collapse:collapse;font-size:12px;color:#e2e8f0;">
             <thead>
               <tr style="border-bottom:2px solid #334155;text-align:left;color:#94a3b8;">
@@ -9460,66 +9558,139 @@ def admin_notifications_page():
     </div>
 
     <script>
+    let currentTab = 'repeat';
+    let cachedRules = [];
+    let cachedHistory = [];
+
+    function setAdminFormMode(mode) {
+      if (mode === 'rule') {
+        document.getElementById('admin-form-rule-section').style.display = 'block';
+        document.getElementById('admin-form-direct-section').style.display = 'none';
+        document.getElementById('admin-mode-rule-btn').style.background = '#7c3aed';
+        document.getElementById('admin-mode-rule-btn').style.color = 'white';
+        document.getElementById('admin-mode-rule-btn').style.borderColor = '#7c3aed';
+        document.getElementById('admin-mode-direct-btn').style.background = '#0f172a';
+        document.getElementById('admin-mode-direct-btn').style.color = '#94a3b8';
+        document.getElementById('admin-mode-direct-btn').style.borderColor = '#334155';
+      } else {
+        document.getElementById('admin-form-rule-section').style.display = 'none';
+        document.getElementById('admin-form-direct-section').style.display = 'block';
+        document.getElementById('admin-mode-direct-btn').style.background = '#7c3aed';
+        document.getElementById('admin-mode-direct-btn').style.color = 'white';
+        document.getElementById('admin-mode-direct-btn').style.borderColor = '#7c3aed';
+        document.getElementById('admin-mode-rule-btn').style.background = '#0f172a';
+        document.getElementById('admin-mode-rule-btn').style.color = '#94a3b8';
+        document.getElementById('admin-mode-rule-btn').style.borderColor = '#334155';
+      }
+    }
+
+    function switchRulesTab(tab) {
+      currentTab = tab;
+      ['repeat', 'once', 'all', 'history'].forEach(t => {
+        let btn = document.getElementById('tab-btn-' + t);
+        if (btn) {
+          if (t === tab) {
+            btn.style.borderColor = (t === 'history') ? '#10b981' : ((t === 'once') ? '#c4b5fd' : '#38bdf8');
+            btn.style.color = (t === 'history') ? '#34d399' : ((t === 'once') ? '#c4b5fd' : '#38bdf8');
+          } else {
+            btn.style.borderColor = '#334155';
+            btn.style.color = '#94a3b8';
+          }
+        }
+      });
+
+      if (tab === 'history') {
+        document.getElementById('table-rules-wrap').style.display = 'none';
+        document.getElementById('table-history-wrap').style.display = 'block';
+        renderHistoryTable();
+      } else {
+        document.getElementById('table-rules-wrap').style.display = 'block';
+        document.getElementById('table-history-wrap').style.display = 'none';
+        renderRulesTable();
+      }
+    }
+
     async function loadAdminRules() {
       try {
         let r = await fetch('/api/admin/notifications/all_rules');
         let data = await r.json();
-        let tbody = document.getElementById('admin-rules-tbody');
-        if (!data.rules || !data.rules.length) {
-          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b;">Žádná aktivní pravidla v databázi.</td></tr>';
-          document.getElementById('stat-total-rules').textContent = '0';
-          document.getElementById('stat-once-rules').textContent = '0';
-          document.getElementById('stat-repeat-rules').textContent = '0';
-          return;
-        }
+        cachedRules = data.rules || [];
 
         let onceCnt = 0, repeatCnt = 0;
-        tbody.innerHTML = '';
-        data.rules.forEach(rule => {
+        cachedRules.forEach(rule => {
           if (rule.is_one_time) onceCnt++; else repeatCnt++;
-          let tr = document.createElement('tr');
-          tr.style.borderBottom = '1px solid #334155';
-          
-          let t_list = [];
-          let t = rule.triggers || {};
-          if(t.terminal) t_list.push("Konečná");
-          if(t.new_line) t_list.push("Nová linka");
-          if(t.depot_in) t_list.push("Vozovna IN");
-          if(t.depot_out) t_list.push("Vozovna OUT");
-          if(t.started_moving) t_list.push("Rozjezd");
-          if(t.stop_near) t_list.push("Zastávka");
-          if(t.delay_threshold) t_list.push("Zpoždění > " + t.delay_threshold);
-          if(t.delay_change) t_list.push("Skok zpoždění");
-          let t_str = t_list.join(", ") || "-";
-
-          let modeBadge = rule.is_one_time
-            ? '<span style="background:rgba(124,58,237,0.25);color:#c4b5fd;border:1px solid #7c3aed;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">⚡ Jednorázové</span>'
-            : '<span style="background:rgba(2,132,199,0.25);color:#38bdf8;border:1px solid #0284c7;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">🔁 Opakující se</span>';
-
-          tr.innerHTML = `
-            <td style="padding:10px;color:#64748b;font-family:monospace;">${String(rule.id).slice(0,8)}</td>
-            <td style="padding:10px;font-weight:bold;color:#e2e8f0;">${rule.user_session || '-'}</td>
-            <td style="padding:10px;">${modeBadge}</td>
-            <td style="padding:10px;"><b style="color:#38bdf8;">${rule.identifier || '-'}</b> (${rule.identifier_type || 'spz'})</td>
-            <td style="padding:10px;color:#94a3b8;">${t_str}</td>
-            <td style="padding:10px;"><b style="color:#10b981;">${rule.fired_count || 0}x</b></td>
-            <td style="padding:10px;text-align:right;">
-              <button onclick="deleteAdminRule('${rule.id}')" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid #ef4444;border-radius:5px;padding:4px 8px;font-size:11px;cursor:pointer;">Smazat</button>
-            </td>
-          `;
-          tbody.appendChild(tr);
         });
 
-        document.getElementById('stat-total-rules').textContent = data.rules.length;
+        document.getElementById('stat-total-rules').textContent = cachedRules.length;
         document.getElementById('stat-once-rules').textContent = onceCnt;
         document.getElementById('stat-repeat-rules').textContent = repeatCnt;
+
+        document.getElementById('badge-repeat').textContent = repeatCnt;
+        document.getElementById('badge-once').textContent = onceCnt;
+        document.getElementById('badge-all').textContent = cachedRules.length;
+
+        if (currentTab !== 'history') renderRulesTable();
       } catch(e) {
         console.error(e);
       }
     }
 
+    function renderRulesTable() {
+      let tbody = document.getElementById('admin-rules-tbody');
+      let search = (document.getElementById('admin-search-filter').value || '').toLowerCase();
+      
+      let filtered = cachedRules.filter(rule => {
+        if (currentTab === 'repeat' && rule.is_one_time) return false;
+        if (currentTab === 'once' && !rule.is_one_time) return false;
+        if (search) {
+          let sText = (rule.user_session + ' ' + rule.identifier + ' ' + (rule.label || '')).toLowerCase();
+          if (!sText.includes(search)) return false;
+        }
+        return true;
+      });
+
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b;">Žádná odpovídající pravidla nenalezena.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = '';
+      filtered.forEach(rule => {
+        let tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #334155';
+        
+        let t_list = [];
+        let t = rule.triggers || {};
+        if(t.terminal) t_list.push("🏁 Konečná");
+        if(t.new_line) t_list.push("🔄 Linka");
+        if(t.depot_in) t_list.push("🅿️ Vozovna IN");
+        if(t.depot_out) t_list.push("🚀 Vozovna OUT");
+        if(t.started_moving) t_list.push("🟢 Rozjezd");
+        if(t.stop_near) t_list.push("🚏 Zastávka");
+        if(t.delay_threshold) t_list.push("⏱️ Zpoždění > " + t.delay_threshold);
+        let t_str = t_list.join(", ") || "-";
+
+        let modeBadge = rule.is_one_time
+          ? '<span style="background:rgba(124,58,237,0.25);color:#c4b5fd;border:1px solid #7c3aed;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">⚡ Jednorázové</span>'
+          : '<span style="background:rgba(2,132,199,0.25);color:#38bdf8;border:1px solid #0284c7;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">🔁 Opakující se</span>';
+
+        tr.innerHTML = `
+          <td style="padding:10px;color:#64748b;font-family:monospace;">${String(rule.id).slice(0,8)}</td>
+          <td style="padding:10px;font-weight:bold;color:#e2e8f0;">${rule.user_session || '-'}</td>
+          <td style="padding:10px;">${modeBadge}</td>
+          <td style="padding:10px;"><b style="color:#38bdf8;">${rule.identifier || '-'}</b> (${rule.identifier_type || 'spz'})</td>
+          <td style="padding:10px;color:#94a3b8;">${t_str}</td>
+          <td style="padding:10px;"><b style="color:#10b981;">${rule.fired_count || 0}x</b></td>
+          <td style="padding:10px;text-align:right;">
+            <button onclick="deleteAdminRule('${rule.id}')" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid #ef4444;border-radius:5px;padding:4px 8px;font-size:11px;cursor:pointer;">🗑️ Smazat</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
     async function deleteAdminRule(ruleId) {
-      if (!confirm('Opravdu chcete toto pravidlo smazat?')) return;
+      if (!confirm('Opravdu chcete toto notifikační pravidlo smazat?')) return;
       try {
         let r = await fetch('/api/admin/notifications/delete_rule', {
           method: 'POST',
@@ -9532,13 +9703,65 @@ def admin_notifications_page():
       } catch(e) { alert('Chyba spojení'); }
     }
 
+    async function createAdminRule() {
+      let targetUser = document.getElementById('admin-target').value.trim();
+      let ident = document.getElementById('admin-rule-ident').value.trim();
+      let mode = document.getElementById('admin-rule-mode').value;
+      let stEl = document.getElementById('admin-rule-status');
+
+      if (!targetUser) { stEl.innerHTML = '<span style="color:#ef4444;">❌ Vyplňte pole Komu a kam (Discord ID nebo E-mail)</span>'; return; }
+      if (!ident) { stEl.innerHTML = '<span style="color:#ef4444;">❌ Zadejte sledovaný cíl (SPZ nebo číslo vozu)</span>'; return; }
+
+      let triggers = {
+        terminal: document.getElementById('trig-terminal').checked,
+        new_line: document.getElementById('trig-newline').checked,
+        depot_in: document.getElementById('trig-depotin').checked,
+        depot_out: document.getElementById('trig-depotout').checked,
+        started_moving: document.getElementById('trig-moving').checked,
+        delay_threshold: document.getElementById('trig-delay').checked ? 5 : null
+      };
+
+      if (!triggers.terminal && !triggers.new_line && !triggers.depot_in && !triggers.depot_out && !triggers.started_moving && !triggers.delay_threshold) {
+        stEl.innerHTML = '<span style="color:#ef4444;">❌ Vyberte alespoň jednu událost</span>';
+        return;
+      }
+
+      stEl.innerHTML = '<span style="color:#38bdf8;">⏳ Vytvářím pravidlo...</span>';
+
+      let idType = (ident.length <= 4 && !isNaN(ident)) ? 'bus_id' : 'spz';
+
+      try {
+        let r = await fetch('/api/notifications/create', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            target_user: targetUser,
+            identifier: ident,
+            identifier_type: idType,
+            is_one_time: (mode === 'once'),
+            triggers: triggers
+          })
+        });
+        let d = await r.json();
+        if (d.status === 'success') {
+          stEl.innerHTML = `<span style="color:#10b981;">✅ Pravidlo pro ${targetUser} úspěšně vytvořeno!</span>`;
+          document.getElementById('admin-rule-ident').value = '';
+          loadAdminRules();
+        } else {
+          stEl.innerHTML = `<span style="color:#ef4444;">❌ ${d.message || 'Chyba vytvoření'}</span>`;
+        }
+      } catch(e) {
+        stEl.innerHTML = '<span style="color:#ef4444;">❌ Chyba spojení</span>';
+      }
+    }
+
     async function sendDirectMessage() {
-      let target = document.getElementById('direct-target').value.trim();
+      let target = document.getElementById('admin-target').value.trim();
       let title = document.getElementById('direct-title').value.trim();
       let msg = document.getElementById('direct-msg').value.trim();
       let stEl = document.getElementById('direct-status');
 
-      if (!target) { stEl.innerHTML = '<span style="color:#ef4444;">❌ Vyplňte cíl (Discord ID nebo E-mail)</span>'; return; }
+      if (!target) { stEl.innerHTML = '<span style="color:#ef4444;">❌ Vyplňte pole Komu a kam (Discord ID nebo E-mail)</span>'; return; }
       if (!msg) { stEl.innerHTML = '<span style="color:#ef4444;">❌ Vyplňte text zprávy</span>'; return; }
 
       stEl.innerHTML = '<span style="color:#38bdf8;">⏳ Odesílám zprávu...</span>';
@@ -9566,32 +9789,57 @@ def admin_notifications_page():
       try {
         let r = await fetch('/api/admin/notifications/history');
         let data = await r.json();
-        let tbody = document.getElementById('admin-history-tbody');
-        if (!data.history || !data.history.length) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#64748b;">Žádná historie zatím nezaznamenána.</td></tr>';
-          document.getElementById('stat-sent-cnt').textContent = '0';
-          return;
-        }
-
-        document.getElementById('stat-sent-cnt').textContent = data.history.length;
-        tbody.innerHTML = '';
-        data.history.slice(0, 30).forEach(h => {
-          let tr = document.createElement('tr');
-          tr.style.borderBottom = '1px solid #334155';
-          tr.innerHTML = `
-            <td style="padding:8px;color:#64748b;font-size:11px;">${h.fired_at || '-'}</td>
-            <td style="padding:8px;font-weight:600;color:#e2e8f0;">${h.user_session || '-'}</td>
-            <td style="padding:8px;color:#38bdf8;">${h.identifier || '-'}</td>
-            <td style="padding:8px;color:#c4b5fd;">${h.trigger || '-'}</td>
-            <td style="padding:8px;"><span style="background:rgba(56,189,248,0.15);color:#38bdf8;padding:2px 6px;border-radius:4px;font-size:10px;">${h.channel || 'DM'}</span></td>
-            <td style="padding:8px;color:#94a3b8;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h.message || '-'}</td>
-          `;
-          tbody.appendChild(tr);
-        });
+        cachedHistory = data.history || [];
+        document.getElementById('stat-sent-cnt').textContent = cachedHistory.length;
+        document.getElementById('badge-history').textContent = cachedHistory.length;
+        if (currentTab === 'history') renderHistoryTable();
       } catch(e) {}
     }
 
-    // Inicializace
+    function renderHistoryTable() {
+      let tbody = document.getElementById('admin-history-tbody');
+      let search = (document.getElementById('admin-search-filter').value || '').toLowerCase();
+
+      let filtered = cachedHistory.filter(h => {
+        if (search) {
+          let sText = (h.user_session + ' ' + h.identifier + ' ' + (h.message || '')).toLowerCase();
+          if (!sText.includes(search)) return false;
+        }
+        return true;
+      });
+
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b;">Žádná historie záznamů nenalezena.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = '';
+      filtered.slice(0, 50).forEach(h => {
+        let tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #334155';
+        tr.innerHTML = `
+          <td style="padding:8px;color:#64748b;font-size:11px;">${h.fired_at || '-'}</td>
+          <td style="padding:8px;font-weight:600;color:#e2e8f0;">${h.user_session || '-'}</td>
+          <td style="padding:8px;color:#38bdf8;">${h.identifier || '-'}</td>
+          <td style="padding:8px;color:#c4b5fd;">${h.trigger || '-'}</td>
+          <td style="padding:8px;"><span style="background:rgba(56,189,248,0.15);color:#38bdf8;padding:2px 6px;border-radius:4px;font-size:10px;">${h.channel || 'DM'}</span></td>
+          <td style="padding:8px;color:#94a3b8;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h.message || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function filterCurrentTable() {
+      if (currentTab === 'history') renderHistoryTable();
+      else renderRulesTable();
+    }
+
+    function refreshCurrentTab() {
+      loadAdminRules();
+      loadAdminHistory();
+    }
+
+    // Spuštění inicializace
     loadAdminRules();
     loadAdminHistory();
     </script>
