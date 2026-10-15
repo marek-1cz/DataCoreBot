@@ -662,10 +662,13 @@ HTML_SUPPORTERS = """
 .supporters-hero {
   position: relative;
   text-align: center;
-  padding: 45px 25px 35px 25px;
+  padding: 40px 25px 30px 25px;
   margin-bottom: 40px;
-  background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.08) 0%, rgba(15, 23, 42, 0) 70%);
+  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 24px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .hero-chip {
@@ -1100,36 +1103,60 @@ HTML_SUPPORTERS = """
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.6);
 }
 
-/* Tier 3 Epic Card */
+/* Tier 3 Epic Card - MEGA PODPOROVATEL */
 .epic-card.epic-tier-3 {
-  background: linear-gradient(135deg, rgba(127, 29, 29, 0.4) 0%, rgba(15, 23, 42, 0.95) 75%);
-  border: 1.5px solid rgba(239, 68, 68, 0.6);
-  box-shadow: 0 12px 35px rgba(220, 38, 38, 0.25);
+  background: radial-gradient(circle at 50% 0%, rgba(220, 38, 38, 0.38) 0%, rgba(35, 15, 25, 0.96) 65%, rgba(15, 23, 42, 0.98) 100%);
+  border: 2px solid rgba(239, 68, 68, 0.85);
+  box-shadow: 0 16px 45px rgba(220, 38, 38, 0.35), 0 0 35px rgba(239, 68, 68, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.epic-card.epic-tier-3::after {
+  content: '👑';
+  position: absolute;
+  right: 16px;
+  bottom: 8px;
+  font-size: 80px;
+  opacity: 0.12;
+  pointer-events: none;
+  line-height: 1;
 }
 .epic-card.epic-tier-3:hover {
-  border-color: rgba(239, 68, 68, 1);
-  box-shadow: 0 20px 50px rgba(220, 38, 38, 0.45);
+  transform: translateY(-7px) scale(1.01);
+  border-color: #f87171;
+  box-shadow: 0 24px 60px rgba(220, 38, 38, 0.55), 0 0 50px rgba(239, 68, 68, 0.35);
 }
 
-/* Tier 2 Epic Card */
+/* Tier 2 Epic Card - VELKÝ PODPOROVATEL */
 .epic-card.epic-tier-2 {
-  background: linear-gradient(135deg, rgba(180, 83, 9, 0.35) 0%, rgba(15, 23, 42, 0.95) 75%);
-  border: 1.5px solid rgba(245, 158, 11, 0.55);
-  box-shadow: 0 12px 35px rgba(245, 158, 11, 0.2);
+  background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.32) 0%, rgba(35, 25, 20, 0.96) 65%, rgba(15, 23, 42, 0.98) 100%);
+  border: 2px solid rgba(245, 158, 11, 0.8);
+  box-shadow: 0 14px 40px rgba(245, 158, 11, 0.25), 0 0 25px rgba(245, 158, 11, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.epic-card.epic-tier-2::after {
+  content: '🚀';
+  position: absolute;
+  right: 16px;
+  bottom: 8px;
+  font-size: 75px;
+  opacity: 0.1;
+  pointer-events: none;
+  line-height: 1;
 }
 .epic-card.epic-tier-2:hover {
-  border-color: rgba(245, 158, 11, 0.95);
-  box-shadow: 0 20px 45px rgba(245, 158, 11, 0.4);
+  transform: translateY(-6px) scale(1.01);
+  border-color: #fbbf24;
+  box-shadow: 0 20px 50px rgba(245, 158, 11, 0.45), 0 0 40px rgba(245, 158, 11, 0.25);
 }
 
-/* Tier 1 Epic Card */
+/* Tier 1 Card - Clean & Basic */
 .epic-card.epic-tier-1 {
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.2) 0%, rgba(15, 23, 42, 0.95) 75%);
-  border: 1.5px solid rgba(56, 189, 248, 0.35);
+  background: rgba(20, 28, 45, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
 .epic-card.epic-tier-1:hover {
-  border-color: rgba(56, 189, 248, 0.75);
-  box-shadow: 0 18px 40px rgba(14, 165, 233, 0.25);
+  transform: translateY(-4px);
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
 }
 
 .epic-card-header {
@@ -1146,51 +1173,66 @@ HTML_SUPPORTERS = """
   gap: 7px;
   padding: 5px 14px;
   border-radius: 20px;
-  font-size: 11.5px;
-  font-weight: 900;
   letter-spacing: 0.6px;
   text-transform: uppercase;
 }
 .epic-badge.tier-3-badge {
-  background: linear-gradient(135deg, #ef4444, #991b1b);
+  background: linear-gradient(90deg, #ef4444, #dc2626);
   color: #ffffff;
-  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.35);
+  font-size: 12.5px;
+  font-weight: 950;
+  padding: 6px 16px;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.6);
 }
 .epic-badge.tier-2-badge {
-  background: linear-gradient(135deg, #f59e0b, #b45309);
-  color: #ffffff;
-  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.35);
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 950;
+  padding: 6px 15px;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.55);
 }
 .epic-badge.tier-1-badge {
-  background: linear-gradient(135deg, #0ea5e9, #0369a1);
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.3);
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 12px;
 }
 
 .epic-amount-pill {
-  font-size: 14px;
-  font-weight: 800;
-  padding: 5px 12px;
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #fcd34d;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
 }
 .tier-3-amount {
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.65);
+  background: rgba(25, 12, 18, 0.9);
+  color: #fecaca;
+  font-size: 15px;
+  font-weight: 900;
+  padding: 6px 14px;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
 }
 .tier-2-amount {
-  border-color: rgba(245, 158, 11, 0.4);
+  border: 1px solid rgba(245, 158, 11, 0.65);
+  background: rgba(25, 18, 12, 0.9);
   color: #fde68a;
+  font-size: 14px;
+  font-weight: 900;
+  padding: 6px 13px;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
 }
 .tier-1-amount {
-  border-color: rgba(56, 189, 248, 0.4);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: rgba(15, 23, 42, 0.75);
   color: #bae6fd;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 5px 12px;
 }
 
 /* BIG SUPPORTER NAME */
@@ -1198,29 +1240,40 @@ HTML_SUPPORTERS = """
   margin-bottom: 12px;
 }
 .epic-supp-name {
-  font-size: 26px;
   font-weight: 900;
-  line-height: 1.25;
+  line-height: 1.2;
   margin: 0;
   word-break: break-word;
-  letter-spacing: -0.5px;
 }
 
+/* Tier 3 Name: Colossal 34px with Radiant Fiery Gold/Crimson */
 .epic-tier-3 .epic-supp-name {
-  background: linear-gradient(135deg, #ffffff 0%, #fef08a 40%, #f87171 100%);
+  font-size: 34px;
+  font-weight: 950;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #ffffff 0%, #fef08a 30%, #fca5a5 65%, #ef4444 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 16px rgba(239, 68, 68, 0.5));
+  filter: drop-shadow(0 0 22px rgba(239, 68, 68, 0.8)) drop-shadow(0 0 40px rgba(245, 158, 11, 0.45));
 }
+
+/* Tier 2 Name: Huge 28px with Glowing Amber/Gold */
 .epic-tier-2 .epic-supp-name {
-  background: linear-gradient(135deg, #ffffff 0%, #fde68a 60%, #f59e0b 100%);
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -0.3px;
+  background: linear-gradient(135deg, #ffffff 0%, #fde68a 45%, #f59e0b 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 14px rgba(245, 158, 11, 0.4));
+  filter: drop-shadow(0 0 18px rgba(245, 158, 11, 0.65));
 }
+
+/* Tier 1 Name: Clean, basic, crisp 21px */
 .epic-tier-1 .epic-supp-name {
+  font-size: 21px;
+  font-weight: 700;
   color: #f8fafc;
-  text-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
 .epic-supp-date {
@@ -1321,8 +1374,14 @@ HTML_SUPPORTERS = """
   .epic-supporters-grid {
     grid-template-columns: 1fr;
   }
-  .epic-supp-name {
-    font-size: 22px;
+  .epic-tier-3 .epic-supp-name {
+    font-size: 28px;
+  }
+  .epic-tier-2 .epic-supp-name {
+    font-size: 24px;
+  }
+  .epic-tier-1 .epic-supp-name {
+    font-size: 19px;
   }
 }
 </style>
@@ -1330,8 +1389,7 @@ HTML_SUPPORTERS = """
 <div class="supporters-page-wrap">
   <!-- Hero Section -->
   <div class="supporters-hero">
-    <div class="hero-chip"><i class="fas fa-heart"></i> Podpora projektu OIS IDPK</div>
-    <h1 class="hero-title">About marekk_czz – Projekt OIS IDPK</h1>
+    <h1 class="hero-title"><i class="fas fa-heart" style="color: #ef4444; margin-right: 8px;"></i> Podpora projektu OIS IDPK</h1>
     <div class="hero-subtitle">Neoficiální software inspirovaný reálnou předlohou.</div>
     <p class="hero-desc">Vítejte na stránce podpory projektu OIS IDPK. Pokud chcete projekt podpořit, můžete si vybrat jednu z možností níže. Každá podpora mi pomáhá pokračovat ve vývoji a přinášet nové funkce.</p>
 
