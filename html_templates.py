@@ -1342,17 +1342,14 @@ HTML_SUPPORTERS = """
         <div><b>Trvalé výhody:</b> Podpora je jednorázová a všechny získané výhody vám zůstávají napořád.</div>
       </div>
       <div class="notice-box box-blue">
-        <i class="fas fa-exclamation-circle"></i>
-        <div><b>Aktivace:</b> Po odeslání podpory přejděte na stránku <a href="/claim" class="notice-link">Projekt OIS IDPK</a>, kde si propojíte svůj Discord účet.</div>
+        <i class="fab fa-discord"></i>
+        <div><b>Předání výhod:</b> Role a přístupy na Discordu vám po odeslání podpory nastaví majitel projektu osobně.</div>
       </div>
     </div>
     
     <div class="hero-actions">
       <a href="https://buymeacoffee.com/marekk_czz" target="_blank" class="btn-premium">
         <i class="fas fa-coffee"></i> Podpořit na Buy Me a Coffee
-      </a>
-      <a href="/claim" class="btn-claim">
-        <i class="fas fa-gift"></i> Vyzvednout / Propojit VIP roli
       </a>
     </div>
   </div>
@@ -1503,7 +1500,7 @@ HTML_SUPPORTERS = """
             <h3 class="empty-title">Síň slávy zatím čeká na svého prvního hrdinu</h3>
             <p class="empty-text">Zatím zde nejsou žádní zapsaní podporovatelé. Buďte první, jehož jméno bude navždy vyryto v Síni slávy projektu OIS IDPK!</p>
             <a href="https://buymeacoffee.com/marekk_czz" target="_blank" class="btn-premium">
-              <i class="fas fa-coffee"></i> Stát se VIP Podporovatelem
+              <i class="fas fa-coffee"></i> Podpořit na Buy Me a Coffee
             </a>
           </div>
         </div>
