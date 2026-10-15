@@ -3695,31 +3695,31 @@ async function fetchBuses(){
         bgGrad = 'linear-gradient(135deg, #10b981 0%, #047857 100%)';
         txt = 'Načas';
         borderCol = '#059669';
-      } else if (ad >= 1 && ad <= 4) {
-        if (ad <= 2) {
+      } else if (ad >= 1 && ad <= 9) {
+        if (ad <= 3) {
+          bgGrad = 'linear-gradient(135deg, #10b981 0%, #84cc16 100%)';
+          borderCol = '#16a34a';
+          textCol = '#ffffff';
+          textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.5);';
+        } else if (ad <= 6) {
           bgGrad = 'linear-gradient(135deg, #84cc16 0%, #eab308 100%)';
           borderCol = '#ca8a04';
           textCol = '#0f172a';
         } else {
-          bgGrad = 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)';
-          borderCol = '#c2410c';
+          bgGrad = 'linear-gradient(135deg, #eab308 0%, #f97316 100%)';
+          borderCol = '#ea580c';
           textCol = '#ffffff';
-          textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.6);';
+          textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.5);';
         }
         txt = `+${ad} min`;
-      } else if (ad >= 5 && ad <= 9) {
-        bgGrad = 'linear-gradient(135deg, #ef4444 0%, #991b1b 100%)';
-        txt = `+${ad} min`;
-        borderCol = '#b91c1c';
-        textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.6);';
       } else if (ad >= 10 && ad <= 19) {
-        bgGrad = 'linear-gradient(135deg, #b91c1c 0%, #450a0a 100%)';
-        txt = `+${ad} min`;
-        borderCol = '#7f1d1d';
+        bgGrad = 'linear-gradient(135deg, #ef4444 0%, #991b1b 100%)';
+        txt = `<i class="fas fa-exclamation-triangle" style="font-size:10px;margin-right:2px;"></i>+${ad} min`;
+        borderCol = '#b91c1c';
         textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.6);';
       } else {
         bgGrad = 'linear-gradient(135deg, #7f1d1d 0%, #050101 100%)';
-        txt = `+${ad} min`;
+        txt = `<i class="fas fa-exclamation-triangle" style="font-size:10px;margin-right:2px;"></i>+${ad} min`;
         borderCol = '#991b1b';
         textCol = '#fca5a5';
         textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.6);';
@@ -3780,20 +3780,27 @@ async function fetchBuses(){
         return `<div class="pr" style="border:none;"><span class="pl">Bez zpoždění:</span><span class="pv"><span style="background:${bgGrad};color:#ffffff;border:1px solid #059669;padding:3px 10px;border-radius:6px;font-weight:900;font-size:13px;letter-spacing:0.3px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(0,0,0,0.35);text-shadow:0 1px 2px rgba(0,0,0,0.5);"><i class="fas fa-check" style="font-size:10px;"></i>jízda na čas</span></span></div>`;
       }
 
-      if (d >= 1 && d <= 4) {
+      if (d >= 1 && d <= 9) {
         let bgGrad = '';
         let borderCol = '';
         let textCol = '#ffffff';
         let textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.6);';
-        if (d <= 2) {
+
+        if (d <= 3) {
+          bgGrad = 'linear-gradient(135deg, #10b981 0%, #84cc16 100%)';
+          borderCol = '#16a34a';
+          textCol = '#ffffff';
+          textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.5);';
+        } else if (d <= 6) {
           bgGrad = 'linear-gradient(135deg, #84cc16 0%, #eab308 100%)';
           borderCol = '#ca8a04';
           textCol = '#0f172a';
           textShadow = '';
         } else {
-          bgGrad = 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)';
-          borderCol = '#c2410c';
+          bgGrad = 'linear-gradient(135deg, #eab308 0%, #f97316 100%)';
+          borderCol = '#ea580c';
           textCol = '#ffffff';
+          textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.5);';
         }
         return `<div class="pr" style="border:none;"><span class="pl">Mírné zpoždění:</span><span class="pv"><span style="background:${bgGrad};color:${textCol};border:1px solid ${borderCol};padding:3px 10px;border-radius:6px;font-weight:900;font-size:13px;letter-spacing:0.3px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(0,0,0,0.35);${textShadow}">+${d} min</span></span></div>`;
       }
@@ -3801,14 +3808,11 @@ async function fetchBuses(){
       let bgGrad = '';
       let borderCol = '';
       let textCol = '#ffffff';
-      let iconHtml = '<i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>';
+      let iconHtml = '<i class="fas fa-exclamation-triangle" style="font-size:10px;margin-right:2px;"></i>';
 
-      if (d >= 5 && d <= 9) {
+      if (d >= 10 && d <= 19) {
         bgGrad = 'linear-gradient(135deg, #ef4444 0%, #991b1b 100%)';
         borderCol = '#b91c1c';
-      } else if (d >= 10 && d <= 19) {
-        bgGrad = 'linear-gradient(135deg, #b91c1c 0%, #450a0a 100%)';
-        borderCol = '#7f1d1d';
       } else {
         bgGrad = 'linear-gradient(135deg, #7f1d1d 0%, #050101 100%)';
         borderCol = '#991b1b';
@@ -7003,7 +7007,7 @@ def background_map_worker():
                         c["status"] = "Jízda" if is_moving else "Stojí"
                         c["color_class"] = "bg-green"
 
-                    elif delay_val >= 5:
+                    elif delay_val >= 10:
                         c["status"] = f"Jízda (Zpoždění {delay_val} min)" if is_moving else f"Stojí (Zpoždění {delay_val} min)"
                         c["color_class"] = "bg-red"
 
