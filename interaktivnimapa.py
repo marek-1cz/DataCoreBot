@@ -4572,6 +4572,11 @@ _last_spz_auto_refresh = None   # kdy byl naposledy proveden automaticky reset S
 SPZ_MEMORY = {}  # spz -> dict
 SPZ_MEMORY_MAX_AGE_HOURS = 24  # jak dlouho pamatovat SPZ bez aktualizace
 
+# === DIAGNOSTIKA & SPRÁVA SPZ (BOD 2, 3, 4, 5) ===
+SPZ_CONFLICT_PROPOSALS = {}      # prop_id -> dict návrhu řešení konfliktu
+INVALID_VERIFICATIONS_LOG = []   # list chyb při admin-ověření Neznámé SPZ (Bod 3)
+AUTO_RESOLVE_SPZ = False         # False = manuální schvalování adminem v dashboardu, True = automatické rozluštění
+
 # ── GTFS zastavky v pameti ───────────────────────────────────────────────────
 GTFS_LOADED    = False
 GTFS_STOPS     = []          # list of (name, lat, lon)
@@ -5304,15 +5309,21 @@ def get_db_client():
 
 
 def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
-                     ghost_spz=None, ghost_verified=False, admin_verified=False):
+                     ghost_spz=None, ghost_verified=False, admin_verified=False,
+                     ghost_vehicle_type=None, ghost_real_linka_spoj=None, ghost_spoj_num=None):
     if is_train or is_train_vehicle(bus_id, line):
         is_train = True
         ghost_spz = "Neznámá"
         ghost_verified = False
         admin_verified = False
+        ghost_vehicle_type = None
+        ghost_real_linka_spoj = None
+        ghost_spoj_num = None
     return {
         "trip_id": trip_id, "inflow_id": bus_id, "lat": lat, "lng": lng, "bearing": None,
-        "line": line, "real_linka_spoj": None, "real_zastavka": None, "nearest_stop": None, "destination": dest, "is_train": is_train,
+        "line": line, "real_linka_spoj": None if is_train else ghost_real_linka_spoj,
+        "spoj_num": None if is_train else ghost_spoj_num,
+        "real_zastavka": None, "nearest_stop": None, "destination": dest, "is_train": is_train,
         "raw_delay": delay, "spz": "Neznámá" if is_train else ghost_spz, "spz_verified": False if is_train else ghost_verified,
         "spz_locked": True if is_train else False, "manual_spz": False, "spz_stable_ticks": 0,
         "spz_last_verified": None if is_train else (now if ghost_verified else None), "investigating": False, "investigation_spz": None,
@@ -5334,7 +5345,7 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "spz_frozen": True if is_train else False,
         "spz_last_audit_check": None,
         "skip_spz": True if is_train else False,
-        "vehicle_type": None,  # Typ vozidla z PVVD (napr. 'Iveco Crossway LE LINE 10.8M')
+        "vehicle_type": None if is_train else ghost_vehicle_type,  # Typ vozidla z PVVD / cache
     }
 
 
@@ -5485,12 +5496,184 @@ def fetch_tt_bg(bus_id, cached_dict):
         except Exception as e_tt:
             print(f"[PVVD GetTimetable WARN] Bus {bus_id}: {e_tt}", flush=True)
 
+        _c_spz = cached_dict.get("spz")
+        if _c_spz and _c_spz not in ("Neznámá", "Neznama", "?", "", "None"):
+            if _c_spz not in SPZ_MEMORY:
+                SPZ_MEMORY[_c_spz] = {}
+            if cached_dict.get("vehicle_type"):
+                SPZ_MEMORY[_c_spz]["vehicle_type"] = cached_dict["vehicle_type"]
+            if cached_dict.get("real_linka_spoj"):
+                SPZ_MEMORY[_c_spz]["real_linka_spoj"] = cached_dict["real_linka_spoj"]
+            if cached_dict.get("spoj_num"):
+                SPZ_MEMORY[_c_spz]["spoj_num"] = cached_dict["spoj_num"]
+
         return success or bool(cached_dict.get("spoj_num") or cached_dict.get("vehicle_type"))
     except Exception as e:
         print(f"[PVVD FETCH ERROR] Nepodarilo se ziskat spoj pro {bus_id}: {e}", flush=True)
         return False
     finally:
         cached_dict["tt_is_fetching"] = False
+
+
+def point_in_polygon(lat, lng, poly):
+    """Jednoduchý ray-casting test zda bod (lat, lng) leží uvnitř polygonu [[lat, lng], ...]."""
+    if not poly or len(poly) < 3:
+        return False
+    inside = False
+    n = len(poly)
+    p1x, p1y = poly[0]
+    for i in range(n + 1):
+        p2x, p2y = poly[i % n]
+        if min(p1x, p2x) < lat <= max(p1x, p2x):
+            if lng <= max(p1y, p2y):
+                if p1x != p2x:
+                    xinters = (lat - p1x) * (p2y - p1y) / (p2x - p1x) + p1y
+                if p1y == p2y or lng <= xinters:
+                    inside = not inside
+        p1x, p1y = p2x, p2y
+    return inside
+
+
+def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
+    """
+    Diagnostikuje anomálie, neznámé SPZ, duplicity a podezření na chybné SPZ (Body 2, 3, 5).
+    Generuje návrhy do SPZ_CONFLICT_PROPOSALS a čistí neplatné stavy.
+    """
+    global SPZ_CONFLICT_PROPOSALS, INVALID_VERIFICATIONS_LOG, AUTO_RESOLVE_SPZ
+    now = datetime.now(ZoneInfo("Europe/Prague"))
+    now_str = now.strftime("%H:%M:%S")
+
+    # ── 1. Bod 3: Automatické zrušení neplatného admin-ověření pro "NEZNÁMÁ" ──
+    for bid, c in list(GLOBAL_BUS_CACHE.items()):
+        spz_val = str(c.get("spz") or "").strip()
+        is_admin_v = bool(c.get("admin_spz_verified") or c.get("admin_flag"))
+        if is_admin_v and (spz_val.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "", "NONE")):
+            c["admin_spz_verified"] = False
+            c["admin_flag"] = False
+            c["manual_spz"] = False
+            c["is_locked_by_admin"] = False
+            c["spz_verified"] = False
+            c["spz_locked"] = False
+            ADMIN_SPZ_LOCKS.pop(bid, None)
+            ADMIN_SPZ_LOCKS.pop(str(bid), None)
+
+            # Záznam do logu neplatných ověření pro dashboard
+            if not any(x.get("bus_id") == bid for x in INVALID_VERIFICATIONS_LOG[:10]):
+                INVALID_VERIFICATIONS_LOG.insert(0, {
+                    "time": now_str,
+                    "bus_id": bid,
+                    "line": c.get("line") or "?",
+                    "destination": c.get("destination") or "Neznámý cíl",
+                    "reason": "Admin ověřil SPZ jako NEZNÁMÁ. Status byl automaticky zrušen a opraven."
+                })
+                if len(INVALID_VERIFICATIONS_LOG) > 60:
+                    INVALID_VERIFICATIONS_LOG.pop()
+
+    # ── 2. Bod 2: Detekce a řešení duplicit v SPZ (stolen SPZ) ──
+    spz_groups = {}
+    for bid, c in GLOBAL_BUS_CACHE.items():
+        if c.get("is_withdrawn") or c.get("is_train"):
+            continue
+        spz_val = str(c.get("spz") or "").strip()
+        if not spz_val or spz_val.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE"):
+            continue
+        spz_groups.setdefault(spz_val, []).append((bid, c))
+
+    for spz_val, buses in spz_groups.items():
+        if len(buses) > 1:
+            def _score_bus(item):
+                b_id, b_c = item
+                score = 0
+                if b_c.get("admin_spz_verified"): score += 100
+                if b_c.get("spz_verified"): score += 50
+                if b_c.get("spz_stable_ticks", 0) >= 3: score += 20
+                mem = SPZ_MEMORY.get(spz_val) or {}
+                if b_c.get("line") and mem.get("line") and b_c.get("line") == mem.get("line"): score += 30
+                if b_c.get("raw_delay") is not None: score += 10
+                return score
+
+            sorted_buses = sorted(buses, key=_score_bus, reverse=True)
+            legit_bid, legit_c = sorted_buses[0]
+            for thief_bid, thief_c in sorted_buses[1:]:
+                prop_id = f"dup_{spz_val}_{thief_bid}"
+                existing_prop = SPZ_CONFLICT_PROPOSALS.get(prop_id)
+                if existing_prop and existing_prop.get("status") in ("rejected", "resolved", "auto_resolved"):
+                    continue
+
+                reason = (f"Duplicitní SPZ '{spz_val}': Vůz #{thief_bid} (linka {thief_c.get('line') or '?'}) "
+                          f"stál blízko vozu #{legit_bid} (linka {legit_c.get('line') or '?'}) a neoprávněně převzal jeho SPZ. "
+                          f"Reálný vlastník je vůz #{legit_bid}.")
+
+                proposal = {
+                    "id": prop_id,
+                    "type": "duplicate",
+                    "spz": spz_val,
+                    "bus_id": thief_bid,
+                    "line": thief_c.get("line") or "?",
+                    "destination": thief_c.get("destination") or "Neznámý cíl",
+                    "current_spz": spz_val,
+                    "proposed_spz": "Neznámá",
+                    "conflict_with_id": legit_bid,
+                    "conflict_with_line": legit_c.get("line") or "?",
+                    "reason": reason,
+                    "status": "pending",
+                    "created_at": now_str
+                }
+
+                if auto_resolve or AUTO_RESOLVE_SPZ:
+                    # Automatické rozluštění: uvolni kradenou SPZ zloději
+                    thief_c["spz"] = "Neznámá"
+                    thief_c["spz_verified"] = False
+                    thief_c["spz_locked"] = False
+                    thief_c["manual_spz"] = False
+                    thief_c["admin_spz_verified"] = False
+                    thief_c["admin_flag"] = False
+                    proposal["status"] = "auto_resolved"
+                    proposal["resolution_note"] = f"Systém automaticky uvolnil duplicitní SPZ {spz_val} od vozu #{thief_bid} ve prospěch #{legit_bid}."
+                    print(f"[AUTO-RESOLVE SPZ] {proposal['resolution_note']}", flush=True)
+
+                SPZ_CONFLICT_PROPOSALS[prop_id] = proposal
+
+    # ── 3. Bod 5: Systém má podezření, že ověřená SPZ je špatná ──
+    for bid, c in GLOBAL_BUS_CACHE.items():
+        if c.get("is_withdrawn") or c.get("is_train"):
+            continue
+        current_spz = str(c.get("spz") or "").strip()
+        if not current_spz or current_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE"):
+            continue
+
+        if c.get("spz_verified") or c.get("admin_spz_verified"):
+            mem = SPZ_MEMORY.get(current_spz)
+            if mem:
+                mem_lat = mem.get("last_arriva_lat") or 0
+                mem_lng = mem.get("last_arriva_lng") or 0
+                mem_line = str(mem.get("line") or "").strip()
+                c_lat = c.get("lat") or 0
+                c_lng = c.get("lng") or 0
+                c_line = str(c.get("line") or "").strip()
+
+                if mem_lat and c_lat and mem_line and c_line and mem_line != c_line:
+                    dist = haversine_m(c_lat, c_lng, mem_lat, mem_lng)
+                    if dist > 12000:  # Vzdálenost více než 12 km na jiné lince
+                        prop_id = f"mismatch_{bid}_{current_spz}"
+                        existing_prop = SPZ_CONFLICT_PROPOSALS.get(prop_id)
+                        if not existing_prop or existing_prop.get("status") not in ("rejected", "resolved"):
+                            reason = (f"Vůz #{bid} jezdí na lince {c_line}, ale SPZ '{current_spz}' byla zaznamenána "
+                                      f"na lince {mem_line} ve vzdálenosti {dist/1000:.1f} km. "
+                                      f"Systém vyhodnotil, že tato ověřená SPZ neodpovídá realitě.")
+                            SPZ_CONFLICT_PROPOSALS[prop_id] = {
+                                "id": prop_id,
+                                "type": "verified_doubt",
+                                "spz": current_spz,
+                                "bus_id": bid,
+                                "line": c_line,
+                                "destination": c.get("destination") or "Neznámý cíl",
+                                "current_spz": current_spz,
+                                "proposed_spz": "Neznámá",
+                                "reason": reason,
+                                "status": "pending",
+                                "created_at": now_str
+                            }
 
 # Rate-limiting pro /api/priority_spoj endpoint
 _PRIORITY_SPOJ_RATE = {}  # {bus_id: timestamp}
@@ -5701,6 +5884,12 @@ def background_map_worker():
                 ghost_entry["spz_frozen"] = True  # zamkni - je z cache, nechceme okamzite prepsat
                 ghost_entry["_is_restored"] = True
                 ghost_entry["spz_locked"] = True
+                if row.get("vehicle_type"):
+                    ghost_entry["vehicle_type"] = row.get("vehicle_type")
+                if row.get("real_linka_spoj"):
+                    ghost_entry["real_linka_spoj"] = row.get("real_linka_spoj")
+                if row.get("spoj_num"):
+                    ghost_entry["spoj_num"] = row.get("spoj_num")
                 if ghost_entry["admin_spz_verified"]:
                     ghost_entry["manual_spz"] = True
                 GLOBAL_BUS_CACHE[bid] = ghost_entry
@@ -5711,6 +5900,9 @@ def background_map_worker():
                     "line": row.get("linka") or "",
                     "destination": "",
                     "verified": row.get("spz_verified", False),
+                    "vehicle_type": row.get("vehicle_type") or None,
+                    "real_linka_spoj": row.get("real_linka_spoj") or None,
+                    "spoj_num": row.get("spoj_num") or None,
                 }
                 restored += 1
             print(f"[SPZ CACHE] Obnoveno {restored} zaznamu z predchoziho behu.", flush=True)
@@ -5823,7 +6015,8 @@ def background_map_worker():
                 b_line = str(b_a.get("linkNumber") or b_a.get("linkNumberAlias") or "").strip()
                 b_dest = str(b_a.get("destinationName") or "").strip()
                 b_last_stop = str(b_a.get("lastStopName") or "").strip()
-                # aktualizuj/pridej do pameti
+                # aktualizuj/pridej do pameti (zachovej model a spoj)
+                _old_mem = SPZ_MEMORY.get(b_spz) or {}
                 SPZ_MEMORY[b_spz] = {
                     "last_arriva_lat": b_lat,
                     "last_arriva_lng": b_lon,
@@ -5831,7 +6024,10 @@ def background_map_worker():
                     "line": b_line,
                     "destination": b_dest,
                     "last_stop_name": b_last_stop,
-                    "verified": False,  # bude nastaveno pri 3-faktor match
+                    "verified": _old_mem.get("verified", False),
+                    "vehicle_type": _old_mem.get("vehicle_type"),
+                    "real_linka_spoj": _old_mem.get("real_linka_spoj"),
+                    "spoj_num": _old_mem.get("spoj_num"),
                 }
 
             current_inflow_ids = set()
@@ -5922,15 +6118,37 @@ def background_map_worker():
                                         ghost_color_class = best_gc.get("color_class")
                                         ghost_status = best_gc.get("status")
                                         ghost_manual_spz = best_gc.get("manual_spz", False)
+                                        ghost_vehicle_type = best_gc.get("vehicle_type")
+                                        ghost_real_linka_spoj = best_gc.get("real_linka_spoj")
+                                        ghost_spoj_num = best_gc.get("spoj_num")
                                     del GLOBAL_BUS_CACHE[best_gid]
                                     if db_client and ghost_spz and ghost_spz != "Neznámá":
                                         close_previous_trips(db_client, ghost_spz, ghost_trip_id, now.strftime('%H:%M'))
                                 
                                 nb = new_cache_entry(
                                     bus_id, ghost_trip_id, lat1, lng1, line, dest1, False, delay, now,
-                                    ghost_spz, ghost_verified, ghost_admin_verified if 'ghost_admin_verified' in locals() else False)
+                                    ghost_spz, ghost_verified, ghost_admin_verified if 'ghost_admin_verified' in locals() else False,
+                                    ghost_vehicle_type=ghost_vehicle_type if 'ghost_vehicle_type' in locals() else None,
+                                    ghost_real_linka_spoj=ghost_real_linka_spoj if 'ghost_real_linka_spoj' in locals() else None,
+                                    ghost_spoj_num=ghost_spoj_num if 'ghost_spoj_num' in locals() else None)
                                 nb["is_withdrawn"] = False
                                 nb["delay_unknown"] = delay_unknown
+                                
+                                if 'ghost_vehicle_type' in locals() and ghost_vehicle_type:
+                                    nb["vehicle_type"] = ghost_vehicle_type
+                                if 'ghost_real_linka_spoj' in locals() and ghost_real_linka_spoj:
+                                    nb["real_linka_spoj"] = ghost_real_linka_spoj
+                                if 'ghost_spoj_num' in locals() and ghost_spoj_num:
+                                    nb["spoj_num"] = ghost_spoj_num
+
+                                if ghost_spz and ghost_spz in SPZ_MEMORY:
+                                    _mem = SPZ_MEMORY[ghost_spz]
+                                    if not nb.get("vehicle_type") and _mem.get("vehicle_type"):
+                                        nb["vehicle_type"] = _mem.get("vehicle_type")
+                                    if not nb.get("real_linka_spoj") and _mem.get("real_linka_spoj"):
+                                        nb["real_linka_spoj"] = _mem.get("real_linka_spoj")
+                                    if not nb.get("spoj_num") and _mem.get("spoj_num"):
+                                        nb["spoj_num"] = _mem.get("spoj_num")
                                 
                                 if 'ghost_admin_note' in locals():
                                     nb["admin_note"] = ghost_admin_note
@@ -6835,6 +7053,12 @@ def background_map_worker():
                                     SPZ_MEMORY[best_spz]["last_pvvd_bus_id"] = bus_id
                                     SPZ_MEMORY[best_spz]["last_pvvd_time"] = now
                                     SPZ_MEMORY[best_spz]["trip_id"] = c.get("trip_id")
+                                    if c.get("vehicle_type"):
+                                        SPZ_MEMORY[best_spz]["vehicle_type"] = c.get("vehicle_type")
+                                    if c.get("real_linka_spoj"):
+                                        SPZ_MEMORY[best_spz]["real_linka_spoj"] = c.get("real_linka_spoj")
+                                    if c.get("spoj_num"):
+                                        SPZ_MEMORY[best_spz]["spoj_num"] = c.get("spoj_num")
                                     if is_3f:
                                         SPZ_MEMORY[best_spz]["verified"] = True
                         else:
@@ -7176,6 +7400,9 @@ def background_map_worker():
                         "admin_driver": bc.get("admin_driver", ""),
                         "admin_flag": bc.get("admin_flag", False),
                         "manual_spz": bc.get("manual_spz", False),
+                        "vehicle_type": bc.get("vehicle_type") or "",
+                        "real_linka_spoj": bc.get("real_linka_spoj") or "",
+                        "spoj_num": str(bc.get("spoj_num") or ""),
                         "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
                     })
                 if cache_rows:
@@ -7224,6 +7451,12 @@ def background_map_worker():
                     _check_and_fire_notifications(db_client, GLOBAL_BUS_CACHE)
                 except Exception as _notif_err:
                     print(f"[NOTIF] Chyba pri kontrole notifikaci: {_notif_err}", flush=True)
+
+            # ── SPZ Anomálie a Konflikty (Body 2, 3, 5) ───────────────────
+            try:
+                analyze_spz_anomalies_and_conflicts(auto_resolve=AUTO_RESOLVE_SPZ)
+            except Exception as _anom_err:
+                print(f"[SPZ ANOMALY] Chyba pri analyze anomalii: {_anom_err}", flush=True)
 
             time.sleep(10)
 
@@ -8165,6 +8398,8 @@ def api_admin_map_action():
 
     elif action == "edit_spz":
         new_spz = str(data.get("spz", "")).strip()
+        if new_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", ""):
+            return jsonify({"status": "error", "message": "Nelze nastavit admin-ověření pro Neznámou SPZ! Pro odstranění SPZ použijte reset."}), 400
         if new_spz:
             old_spz = c.get("spz")
             c["spz"] = new_spz
@@ -8469,6 +8704,411 @@ def api_admin_approve_conflict_spz():
         send_log("✅ Schválení SPZ Konfliktu", f"**Administrátor:** {admin_name}\n**MAP ID:** {bus_id}\n**SPZ:** {spz}", 0x10b981)
     except Exception: pass
     return jsonify({"status": "success"})
+
+
+
+def get_spz_control_dashboard_data():
+    """
+    Sestaví kompletní diagnostická data pro dashboard 'Interaktivní mapa' (Body 2, 3, 4, 5).
+    """
+    now = datetime.now(ZoneInfo("Europe/Prague"))
+    now_str = now.strftime("%H:%M:%S")
+
+    # Spustíme rychlou analýzu a očistu
+    analyze_spz_anomalies_and_conflicts(auto_resolve=AUTO_RESOLVE_SPZ)
+
+    unknown_buses = []
+    unverified_buses = []
+    duplicate_buses = []
+    verified_buses = []
+
+    # Mapování četností SPZ pro detekci duplicit
+    spz_counts = {}
+    for bid, c in GLOBAL_BUS_CACHE.items():
+        if c.get("is_withdrawn") or c.get("is_train"):
+            continue
+        spz = str(c.get("spz") or "").strip()
+        if spz and spz.upper() not in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE"):
+            spz_counts[spz] = spz_counts.get(spz, 0) + 1
+
+    for bid, c in GLOBAL_BUS_CACHE.items():
+        if c.get("is_withdrawn") or c.get("is_train"):
+            continue
+
+        spz = str(c.get("spz") or "").strip()
+        line = str(c.get("line") or "").strip()
+        dest = str(c.get("destination") or "").strip()
+        v_type = c.get("vehicle_type") or "Neznámý model"
+        r_spoj = c.get("real_linka_spoj") or (f"Spoj {c.get('spoj_num')}" if c.get("spoj_num") else "Bez spoje")
+        delay = c.get("raw_delay")
+        delay_txt = f"{delay:+d} min" if delay is not None else "Neznámé"
+        lat = c.get("lat")
+        lng = c.get("lng")
+        is_admin_v = bool(c.get("admin_spz_verified") or c.get("admin_flag"))
+        is_sys_v = bool(c.get("spz_verified"))
+
+        in_depot = False
+        try:
+            if DEPOT_ZONES and lat and lng:
+                for dz in DEPOT_ZONES:
+                    poly = dz.get("polygon", [])
+                    if len(poly) >= 3 and point_in_polygon(lat, lng, poly):
+                        in_depot = True
+                        break
+        except Exception:
+            pass
+
+        bus_entry = {
+            "bus_id": bid,
+            "line": line or "?",
+            "destination": dest or "Neznámý cíl",
+            "spz": spz or "Neznámá",
+            "vehicle_type": v_type,
+            "real_linka_spoj": r_spoj,
+            "delay_text": delay_txt,
+            "lat": lat,
+            "lng": lng,
+            "admin_verified": is_admin_v,
+            "spz_verified": is_sys_v,
+            "admin_note": c.get("admin_note", ""),
+            "admin_driver": c.get("admin_driver", ""),
+            "status": c.get("status") or "Aktivní",
+            "reason": ""
+        }
+
+        # Neznámá SPZ
+        if not spz or spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE"):
+            if in_depot:
+                bus_entry["reason"] = "Vozidlo stojí ve vozovně/depu – telemetrie nepřiřazena"
+            elif c.get("spz_stable_ticks", 0) < 3:
+                bus_entry["reason"] = "Nově zachycený spoj v GTFS/Inflow – čeká na Arriva lokalizaci"
+            elif line and line not in [mem.get("line") for mem in SPZ_MEMORY.values()]:
+                bus_entry["reason"] = f"V Arriva telemetrii nebyla nalezena žádná volná SPZ pro linku {line}"
+            else:
+                bus_entry["reason"] = "Žádný Arriva vysílač v toleranci vzdálenosti a směru jízdy"
+            unknown_buses.append(bus_entry)
+
+        # Duplicitní SPZ
+        elif spz_counts.get(spz, 0) > 1:
+            bus_entry["reason"] = f"Duplicitní SPZ: {spz_counts[spz]} autobusy sdílí SPZ '{spz}'. Pravděpodobně ukradena při stání na terminálu."
+            duplicate_buses.append(bus_entry)
+
+        # Neověřená SPZ
+        elif not is_admin_v and not is_sys_v:
+            ticks = c.get("spz_stable_ticks", 0)
+            if ticks < 3:
+                bus_entry["reason"] = f"Probíhá stabilizace pozice ({ticks}/3 kontrol)"
+            elif in_depot:
+                bus_entry["reason"] = "Vozidlo parkuje ve vozovně, čeká na vyjetí na linku"
+            else:
+                bus_entry["reason"] = "Čeká na 3-faktorové ověření (poloha, směr, cíl linky)"
+            unverified_buses.append(bus_entry)
+
+        # Ověřená SPZ
+        else:
+            bus_entry["reason"] = "Ověřeno administrátorem" if is_admin_v else "3-faktorově ověřeno systémem"
+            verified_buses.append(bus_entry)
+
+    # 5. Seznam všech jmen a poznámek zadaných adminem (Bod 4)
+    admin_drivers_notes = []
+    seen_keys = set()
+
+    for bid, c in GLOBAL_BUS_CACHE.items():
+        drv = str(c.get("admin_driver") or "").strip()
+        nte = str(c.get("admin_note") or "").strip()
+        if drv or nte:
+            spz_v = c.get("spz") or "?"
+            key = (str(bid), drv, nte, spz_v)
+            if key not in seen_keys:
+                seen_keys.add(key)
+                admin_drivers_notes.append({
+                    "bus_id": str(bid),
+                    "driver_name": drv or "—",
+                    "note": nte or "—",
+                    "spz": spz_v,
+                    "line": c.get("line") or "?",
+                    "vehicle_type": c.get("vehicle_type") or "Neznámý",
+                    "is_online": True,
+                    "updated_at": "Nyní online na mapě"
+                })
+
+    for bid, lk in ADMIN_SPZ_LOCKS.items():
+        drv = str(lk.get("admin_driver") or "").strip()
+        nte = str(lk.get("admin_note") or "").strip()
+        if drv or nte:
+            spz_v = lk.get("spz") or "?"
+            key = (str(bid), drv, nte, spz_v)
+            if key not in seen_keys:
+                seen_keys.add(key)
+                admin_drivers_notes.append({
+                    "bus_id": str(bid),
+                    "driver_name": drv or "—",
+                    "note": nte or "—",
+                    "spz": spz_v,
+                    "line": "?",
+                    "vehicle_type": "Uloženo v zámcích",
+                    "is_online": str(bid) in GLOBAL_BUS_CACHE,
+                    "updated_at": lk.get("timestamp") or "V zámcích"
+                })
+
+    try:
+        from local_db import get_local_db
+        with get_local_db() as conn:
+            cur = conn.execute("""
+                SELECT bus_id, spz, linka, admin_driver, admin_note, vehicle_type, updated_at
+                FROM spz_cache_local
+                WHERE (admin_driver IS NOT NULL AND admin_driver != '')
+                   OR (admin_note IS NOT NULL AND admin_note != '')
+                ORDER BY updated_at DESC LIMIT 150
+            """)
+            for row in cur.fetchall():
+                bid = str(row[0])
+                spz_v = row[1] or "?"
+                drv = str(row[3] or "").strip()
+                nte = str(row[4] or "").strip()
+                v_tp = row[5] or "Neznámý"
+                upd = row[6] or ""
+                key = (bid, drv, nte, spz_v)
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    admin_drivers_notes.append({
+                        "bus_id": bid,
+                        "driver_name": drv or "—",
+                        "note": nte or "—",
+                        "spz": spz_v,
+                        "line": row[2] or "?",
+                        "vehicle_type": v_tp,
+                        "is_online": bid in GLOBAL_BUS_CACHE,
+                        "updated_at": upd[:19].replace("T", " ") if upd else "Uloženo v DB"
+                    })
+    except Exception as e_sql:
+        print(f"[SPZ CONTROL] Chyba dotazu na SQLite pro ridice: {e_sql}", flush=True)
+
+    # 6. Návrhy systému k vyřešení (Bod 5)
+    proposals_list = list(SPZ_CONFLICT_PROPOSALS.values())
+    proposals_list.sort(key=lambda x: (0 if x.get("status") == "pending" else 1, x.get("created_at", "")), reverse=False)
+
+    return {
+        "status": "success",
+        "timestamp": now_str,
+        "auto_resolve": AUTO_RESOLVE_SPZ,
+        "stats": {
+            "unknown_count": len(unknown_buses),
+            "duplicate_count": len(duplicate_buses),
+            "unverified_count": len(unverified_buses),
+            "verified_count": len(verified_buses),
+            "total_active": len(GLOBAL_BUS_CACHE),
+            "drivers_notes_count": len(admin_drivers_notes),
+            "pending_proposals_count": sum(1 for p in proposals_list if p.get("status") == "pending"),
+            "invalid_verifications_count": len(INVALID_VERIFICATIONS_LOG)
+        },
+        "unknown_buses": unknown_buses,
+        "duplicate_buses": duplicate_buses,
+        "unverified_buses": unverified_buses,
+        "verified_buses": verified_buses[:60],
+        "proposals": proposals_list,
+        "admin_drivers_and_notes": admin_drivers_notes,
+        "invalid_verifications": INVALID_VERIFICATIONS_LOG
+    }
+
+
+@mapa_bp.route('/api/admin/spz_control_data', methods=['GET'])
+def api_admin_spz_control_data():
+    is_admin, admin_name = _check_admin_request()
+    if not is_admin and not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
+    return jsonify(get_spz_control_dashboard_data())
+
+
+@mapa_bp.route('/api/admin/spz_resolve_proposal', methods=['POST'])
+def api_admin_spz_resolve_proposal():
+    is_admin, admin_name = _check_admin_request()
+    if not is_admin and not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
+    admin_name = admin_name or session.get("nick") or "Admin"
+
+    data = request.json or {}
+    proposal_id = data.get("proposal_id")
+    action = data.get("action")  # "accept" (Ano máš pravdu systéme) | "reject" (Zachovat tak jak je)
+
+    if not proposal_id or proposal_id not in SPZ_CONFLICT_PROPOSALS:
+        return jsonify({"status": "error", "message": "Návrh nebyl nalezen"}), 404
+
+    prop = SPZ_CONFLICT_PROPOSALS[proposal_id]
+    bus_id = prop.get("bus_id")
+
+    if action == "accept":
+        proposed_spz = prop.get("proposed_spz", "Neznámá")
+        if bus_id in GLOBAL_BUS_CACHE:
+            c = GLOBAL_BUS_CACHE[bus_id]
+            c["spz"] = proposed_spz
+            if proposed_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", ""):
+                c["spz_verified"] = False
+                c["admin_spz_verified"] = False
+                c["is_locked_by_admin"] = False
+                c["manual_spz"] = False
+                c["spz_locked"] = False
+                ADMIN_SPZ_LOCKS.pop(bus_id, None)
+            else:
+                c["spz_verified"] = True
+                c["admin_spz_verified"] = True
+                c["is_locked_by_admin"] = True
+                c["manual_spz"] = True
+                ADMIN_SPZ_LOCKS[bus_id] = {
+                    "spz": proposed_spz,
+                    "admin_note": c.get("admin_note", ""),
+                    "admin_driver": c.get("admin_driver", ""),
+                    "is_locked_by_admin": True
+                }
+
+        prop["status"] = "accepted"
+        prop["resolved_by"] = admin_name
+        prop["resolved_at"] = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M:%S")
+        msg = f"Návrh schválen: SPZ u vozu #{bus_id} opravena na '{proposed_spz}'."
+        print(f"[SPZ-PROPOSAL] {msg} (schválil {admin_name})", flush=True)
+        return jsonify({"status": "success", "message": msg})
+
+    elif action == "reject":
+        if bus_id in GLOBAL_BUS_CACHE:
+            c = GLOBAL_BUS_CACHE[bus_id]
+            c["admin_spz_verified"] = True
+            c["is_locked_by_admin"] = True
+            c["spz_locked"] = True
+            c["spz_frozen"] = True
+
+        prop["status"] = "rejected"
+        prop["resolved_by"] = admin_name
+        prop["resolved_at"] = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M:%S")
+        msg = f"Návrh zamítnut: Původní SPZ '{prop.get('current_spz')}' u vozu #{bus_id} zachována beze změn."
+        print(f"[SPZ-PROPOSAL] {msg} (rozhodl {admin_name})", flush=True)
+        return jsonify({"status": "success", "message": msg})
+
+    return jsonify({"status": "error", "message": "Neznámá akce"}), 400
+
+
+@mapa_bp.route('/api/admin/spz_quick_edit', methods=['POST'])
+def api_admin_spz_quick_edit():
+    is_admin, admin_name = _check_admin_request()
+    if not is_admin and not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
+    admin_name = admin_name or session.get("nick") or "Admin"
+
+    data = request.json or {}
+    bus_id = str(data.get("bus_id", "")).strip()
+    new_spz = str(data.get("new_spz", "")).strip()
+    is_verified = bool(data.get("is_verified", False))
+
+    if not bus_id or bus_id not in GLOBAL_BUS_CACHE:
+        return jsonify({"status": "error", "message": "Vůz nebyl nalezen v aktivní mapě"}), 404
+
+    c = GLOBAL_BUS_CACHE[bus_id]
+
+    # Bod 3: Zákaz admin ověření pro Neznámou SPZ
+    if new_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", ""):
+        if is_verified:
+            return jsonify({
+                "status": "error",
+                "message": "CHYBA: Nelze nastavit admin-ověření pro Neznámou SPZ! (Bod 3)"
+            }), 400
+        c["spz"] = "Neznámá"
+        c["spz_verified"] = False
+        c["admin_spz_verified"] = False
+        c["is_locked_by_admin"] = False
+        c["manual_spz"] = False
+        c["spz_locked"] = False
+        ADMIN_SPZ_LOCKS.pop(bus_id, None)
+        msg = f"Vůz #{bus_id} nastaven na SPZ 'Neznámá'."
+    else:
+        c["spz"] = new_spz
+        if is_verified:
+            c["admin_spz_verified"] = True
+            c["is_locked_by_admin"] = True
+            c["spz_verified"] = True
+            c["manual_spz"] = True
+            c["spz_locked"] = True
+            c["spz_frozen"] = True
+            ADMIN_SPZ_LOCKS[bus_id] = {
+                "spz": new_spz,
+                "admin_note": c.get("admin_note", ""),
+                "admin_driver": c.get("admin_driver", ""),
+                "is_locked_by_admin": True,
+                "timestamp": datetime.now(ZoneInfo("Europe/Prague")).strftime("%d.%m.%Y %H:%M")
+            }
+            msg = f"Vůz #{bus_id} úspěšně změněn na SPZ '{new_spz}' s admin-ověřením."
+        else:
+            c["admin_spz_verified"] = False
+            c["is_locked_by_admin"] = False
+            c["spz_verified"] = False
+            ADMIN_SPZ_LOCKS.pop(bus_id, None)
+            msg = f"Vůz #{bus_id} změněn na SPZ '{new_spz}' (neověřeno)."
+
+    if new_spz and new_spz.upper() not in ("NEZNÁMÁ", "NEZNAMA", "?", ""):
+        if new_spz not in SPZ_MEMORY:
+            SPZ_MEMORY[new_spz] = {}
+        SPZ_MEMORY[new_spz]["verified"] = is_verified
+        if c.get("vehicle_type"):
+            SPZ_MEMORY[new_spz]["vehicle_type"] = c.get("vehicle_type")
+        if c.get("real_linka_spoj"):
+            SPZ_MEMORY[new_spz]["real_linka_spoj"] = c.get("real_linka_spoj")
+
+    try:
+        from local_db import local_spz_upsert
+        local_spz_upsert([{
+            "bus_id": bus_id,
+            "spz": c.get("spz"),
+            "linka": c.get("line") or "",
+            "lat": c.get("lat"),
+            "lng": c.get("lng"),
+            "spz_verified": c.get("spz_verified", False),
+            "admin_verified": c.get("admin_spz_verified", False),
+            "is_locked_by_admin": bool(c.get("is_locked_by_admin")),
+            "trip_id": c.get("trip_id"),
+            "color_class": c.get("color_class"),
+            "status_text": c.get("status"),
+            "admin_note": c.get("admin_note", ""),
+            "admin_driver": c.get("admin_driver", ""),
+            "vehicle_type": c.get("vehicle_type") or "",
+            "real_linka_spoj": c.get("real_linka_spoj") or "",
+            "spoj_num": str(c.get("spoj_num") or ""),
+            "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
+        }])
+    except Exception:
+        pass
+
+    return jsonify({"status": "success", "message": msg})
+
+
+@mapa_bp.route('/api/admin/toggle_auto_resolve', methods=['POST'])
+def api_admin_toggle_auto_resolve():
+    global AUTO_RESOLVE_SPZ
+    is_admin, admin_name = _check_admin_request()
+    if not is_admin and not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
+
+    AUTO_RESOLVE_SPZ = not AUTO_RESOLVE_SPZ
+    if AUTO_RESOLVE_SPZ:
+        analyze_spz_anomalies_and_conflicts(auto_resolve=True)
+
+    mode_text = "Automatické rozluštění ZAPNUTO" if AUTO_RESOLVE_SPZ else "Manuální schvalování ZAPNUTO"
+    return jsonify({
+        "status": "success",
+        "auto_resolve": AUTO_RESOLVE_SPZ,
+        "message": f"Režim změněn: {mode_text}"
+    })
+
+
+@mapa_bp.route('/api/admin/trigger_spz_analysis', methods=['POST'])
+def api_admin_trigger_spz_analysis():
+    is_admin, admin_name = _check_admin_request()
+    if not is_admin and not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
+
+    analyze_spz_anomalies_and_conflicts(auto_resolve=AUTO_RESOLVE_SPZ)
+    return jsonify({
+        "status": "success",
+        "message": "Diagnostika SPZ a kontrola anomálií proběhla úspěšně.",
+        "data": get_spz_control_dashboard_data()
+    })
 
 
 

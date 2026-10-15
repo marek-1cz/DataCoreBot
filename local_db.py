@@ -58,7 +58,10 @@ def init_local_db():
                     admin_note TEXT DEFAULT '',
                     admin_driver TEXT DEFAULT '',
                     updated_at TEXT,
-                    synced_to_supabase INTEGER DEFAULT 0
+                    synced_to_supabase INTEGER DEFAULT 0,
+                    vehicle_type TEXT DEFAULT '',
+                    real_linka_spoj TEXT DEFAULT '',
+                    spoj_num TEXT DEFAULT ''
                 )
             """)
             # Migration check pro existujici tabulky
@@ -66,6 +69,15 @@ def init_local_db():
                 conn.execute("ALTER TABLE spz_cache_local ADD COLUMN is_locked_by_admin INTEGER DEFAULT 0")
             except Exception:
                 pass
+            for _c_def in [
+                "vehicle_type TEXT DEFAULT ''",
+                "real_linka_spoj TEXT DEFAULT ''",
+                "spoj_num TEXT DEFAULT ''"
+            ]:
+                try:
+                    conn.execute(f"ALTER TABLE spz_cache_local ADD COLUMN {_c_def}")
+                except Exception:
+                    pass
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS bus_notifications_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,11 +126,13 @@ def local_spz_upsert(rows: list):
                         INSERT INTO spz_cache_local
                             (bus_id, spz, linka, lat, lng, spz_verified, admin_verified,
                              admin_flag, manual_spz, is_locked_by_admin, trip_id, color_class, status_text,
-                             admin_note, admin_driver, updated_at, synced_to_supabase)
+                             admin_note, admin_driver, updated_at, synced_to_supabase,
+                             vehicle_type, real_linka_spoj, spoj_num)
                         VALUES
                             (:bus_id, :spz, :linka, :lat, :lng, :spz_verified, :admin_verified,
                              :admin_flag, :manual_spz, :is_locked_by_admin, :trip_id, :color_class, :status_text,
-                             :admin_note, :admin_driver, :updated_at, 0)
+                             :admin_note, :admin_driver, :updated_at, 0,
+                             :vehicle_type, :real_linka_spoj, :spoj_num)
                         ON CONFLICT(bus_id) DO UPDATE SET
                             spz = CASE
                                 WHEN spz_cache_local.is_locked_by_admin = 1 OR spz_cache_local.admin_verified = 1
@@ -157,7 +171,10 @@ def local_spz_upsert(rows: list):
                             admin_note = excluded.admin_note,
                             admin_driver = excluded.admin_driver,
                             updated_at = excluded.updated_at,
-                            synced_to_supabase = 0
+                            synced_to_supabase = 0,
+                            vehicle_type = CASE WHEN excluded.vehicle_type != '' THEN excluded.vehicle_type ELSE spz_cache_local.vehicle_type END,
+                            real_linka_spoj = CASE WHEN excluded.real_linka_spoj != '' THEN excluded.real_linka_spoj ELSE spz_cache_local.real_linka_spoj END,
+                            spoj_num = CASE WHEN excluded.spoj_num != '' THEN excluded.spoj_num ELSE spz_cache_local.spoj_num END
                     """, {
                         "bus_id": row.get("bus_id", ""),
                         "spz": row.get("spz", ""),
@@ -175,6 +192,9 @@ def local_spz_upsert(rows: list):
                         "admin_note": row.get("admin_note", ""),
                         "admin_driver": row.get("admin_driver", ""),
                         "updated_at": row.get("updated_at") or datetime.now().isoformat(),
+                        "vehicle_type": row.get("vehicle_type", "") or "",
+                        "real_linka_spoj": row.get("real_linka_spoj", "") or "",
+                        "spoj_num": str(row.get("spoj_num", "") or ""),
                     })
                 conn.commit()
     except Exception as e:

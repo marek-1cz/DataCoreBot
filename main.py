@@ -3860,6 +3860,13 @@ def dashboard_notifications_management():
     admin_nick = get_current_admin_name()
     return render_dashboard(HTML_DASHBOARD_NOTIFICATIONS_MGMT, admin_nick=admin_nick, deploy_time=DEPLOY_TIME)
 
+
+@app.route('/dashboard/interaktivni-mapa', methods=['GET'], strict_slashes=False)
+@require_dash_level('admin')
+def dashboard_interaktivni_mapa():
+    admin_nick = get_current_admin_name()
+    return render_dashboard(HTML_INTERAKTIVNI_MAPA_DASHBOARD, admin_nick=admin_nick, deploy_time=DEPLOY_TIME)
+
 @app.route('/dashboard/send_app_message', methods=['POST'])
 def send_app_message():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
