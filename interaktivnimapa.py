@@ -2501,7 +2501,7 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false){
   }
 
   // === ODSTAVENÝ VŮZ / POSLEDNÍ ZNÁMÁ POLOHA (Design: Tělo černé/tmavě šedé, UVNITŘ RŮŽOVÁ PŘERUŠOVANÁ ČÁRA) ===
-  if (isWithdrawn || mc === 'bg-withdrawn' || mc === 'bg-lastpos' || (mc === 'bg-gray' && !reallyTrain)) {
+  if (isWithdrawn || mc === 'bg-withdrawn' || mc === 'bg-lastpos') {
     let lC=String(lineText||'').split('/')[0].trim().replace(/[^0-9]/g,'');
     let lD=lC.length>=4?lC.slice(-3):lC;
     const r=12;
@@ -3661,14 +3661,16 @@ async function fetchBuses(){
       if(!bus.lat||!bus.lng)return;
       currentBusIds.add(bus.id);
       let mc=bus.color_class,dv=parseInt(bus.delay),dTxt='';
+      if(isNaN(dv)) dv = 0;
       if(mc==='bg-lastpos')dTxt='<span style="color:#f472b6;font-weight:bold;">Poslední poloha</span>';
       else if(mc==='bg-gray'||mc==='bg-bug')dTxt='<span style="color:#94a3b8;">N/A</span>';
       else if(mc==='bg-purple')dTxt='<span style="color:#a855f7;">Konečná</span>';
-      else if(mc==='bg-orange')dTxt='<span style="color:#f59e0b;">Vyzkum</span>';
+      else if(mc==='bg-orange')dTxt='<span style="color:#f59e0b;">Výzkum</span>';
       else if(mc==='bg-blue'){let dm=Math.abs(dv),dh=Math.floor(dm/60),dmn=dm%60;dTxt=`<span style="color:#3b82f6;">Za ${dh>0?dh+'h '+dmn+'m':dmn+' min'}</span>`;}
-      else if(mc==='bg-darkblue')dTxt=`<span style="color:#60a5fa;">Naskok ${Math.abs(dv)} min</span>`;
-      else if(dv>=5)dTxt=`<span style="color:#ef4444;">Zpozdeni ${dv} min</span>`;
-      else dTxt=`<span style="color:#10b981;">+${dv} min</span>`;
+      else if(dv<=-2)dTxt=`<span style="color:#60a5fa;font-weight:bold;">Náskok ${Math.abs(dv)} min</span>`;
+      else if(dv>=5)dTxt=`<span style="color:#ef4444;font-weight:bold;">Zpoždění ${dv} min</span>`;
+      else if(dv>0)dTxt=`<span style="color:#10b981;">+${dv} min</span>`;
+      else dTxt='<span style="color:#10b981;font-weight:600;">Načas</span>';
 
       // Barveni markeru: depot_color ma prednost pred color_class (krome bg-lastpos)
       let markerColor=mc;
@@ -3676,7 +3678,7 @@ async function fetchBuses(){
         markerColor='bg-yellow';
       }
       let isTrain = isTrainVehicle(bus);
-      let isWithdrawn = Boolean(bus.is_withdrawn || bus.is_offline || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-lastpos' || bus.color_class === 'bg-gray');
+      let isWithdrawn = Boolean(bus.is_offline && (bus.is_withdrawn || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-gray'));
       let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,isTrain,bus.id,isWithdrawn),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
       let spzH='',invTxt='',histBtn='';
       if(!isTrain){
@@ -3696,12 +3698,12 @@ async function fetchBuses(){
         else spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Ceka na overeni</span></div>`;
       }
       let withdrawnW='';
-      if(bus.is_withdrawn || bus.status === 'Odstáven' || bus.status === 'Odstaven'){
+      if(bus.is_offline && (bus.is_withdrawn || bus.status === 'Odstáven' || bus.status === 'Odstaven')){
         let tOff = bus.offline_since_time || (bus.last_updated && bus.last_updated !== 'N/A' ? bus.last_updated.substring(0,5) : '') || '--:--';
         withdrawnW = `<div style="background:linear-gradient(135deg,rgba(20,20,25,0.97),rgba(30,25,30,0.97));border:1.5px solid #6b7280;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 8px rgba(107,114,128,0.3);"><b style="color:#9ca3af;font-size:12px;letter-spacing:0.5px;">⏸️ ODSTÁVEN</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.45;display:inline-block;margin-top:3px;">Vůz neodesílá data.<br>poslední známá poloha ${tOff}.<br>pravděpodobně autobus parkuje a nebo je odstaven</span></div>`;
       }
       let lastposW='';
-      if(mc==='bg-lastpos'||bus.status==='Poslední známá poloha'){
+      if(bus.is_offline && (mc==='bg-lastpos'||bus.status==='Poslední známá poloha')){
         let tOffline = bus.offline_since_time ? ` v ${bus.offline_since_time}` : '';
         lastposW=`<div style="background:linear-gradient(135deg,rgba(24,24,32,0.95),rgba(45,30,45,0.95));border:1.5px solid #f472b6;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 10px rgba(244,114,182,0.25);"><b style="color:#f472b6;font-size:12px;letter-spacing:0.5px;">📍 POSLEDNÍ ZNÁMÁ POLOHA</b><br><span style="color:#cbd5e1;font-size:10px;">Vůz zmizel z mapy pvvd.idpk.cz${tOffline}. Ponechán na stejné pozici, než se znovu objeví.</span></div>`;
       }
@@ -3715,14 +3717,15 @@ async function fetchBuses(){
       else if(mc==='bg-yellow'||bus.status?.startsWith('Vozovna'))depotW=`<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🅿️ ${bus.status||'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny</span></div>`;
       let sc='#10b981';
       if(mc==='bg-lastpos'||bus.status==='Poslední známá poloha')sc='#f472b6';
-      else if(mc==='bg-bug')sc='#6b7280';else if(mc==='bg-orange')sc='#f59e0b';
-      else if(mc==='bg-yellow')sc='#facc15';
-      else if(bus.status?.includes('prilis'))sc='#94a3b8';else if(bus.status?.includes('Stoji'))sc='#ef4444';
+      else if(mc==='bg-bug')sc='#6b7280';
+      else if(mc==='bg-orange')sc='#f59e0b';
+      else if(mc==='bg-yellow'||bus.status?.includes('Vozovna'))sc='#facc15';
+      else if(mc==='bg-red'||(bus.status&&bus.status.includes('Zpoždění'))||(bus.status&&bus.status.includes('Zpozdeni')))sc='#ef4444';
+      else if(mc==='bg-darkblue'||(bus.status&&bus.status.includes('Náskok'))||(bus.status&&bus.status.includes('Naskok')))sc='#60a5fa';
+      else if(mc==='bg-blue'||(bus.status&&bus.status.includes('Čeká'))||(bus.status&&bus.status.includes('Ceka'))||(bus.status&&bus.status.includes('Zacatek')))sc='#3b82f6';
       else if(bus.status?.includes('Konečná')||bus.status?.includes('Ztrata'))sc='#a855f7';
-      else if(bus.status?.includes('Ceka')||bus.status?.includes('Zacatek'))sc='#3b82f6';
-      else if(bus.status?.includes('Odstaven')||bus.status?.includes('signal'))sc='#94a3b8';
-      else if(bus.status?.includes('Naskok'))sc='#60a5fa';
-      else if(bus.status?.includes('Vozovna'))sc='#facc15';
+      else if(bus.status?.includes('prilis')||bus.status?.includes('Odstaven')||bus.status?.includes('Odstáven')||bus.status?.includes('signal'))sc='#94a3b8';
+      else if(bus.status?.includes('Stojí')||bus.status?.includes('Stoji'))sc='#94a3b8';
       let fTxt=(followId===bus.id)?'✖️ Zrusit sledovani':'📡 Sledovat';
       let fSt=(followId===bus.id)?'background:#ef4444;color:#fff;':'background:#3b82f6;color:#fff;';
       let afH=bus.admin_flag
@@ -3800,9 +3803,9 @@ async function fetchBuses(){
           ${
             (!isTrain) ? (
               _spojNum ? `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#38bdf8;font-weight:bold;">${_spojNum}</span></div>` :
-              (bus.is_offline || bus.is_withdrawn || bus.status === 'Poslední známá poloha' || bus.status === 'Odstáven' || bus.status === 'Odstaven' || bus.color_class === 'bg-lastpos' || bus.color_class === 'bg-gray' || bus.status === 'Timeout') ? (
+              (bus.is_offline) ? (
                 bus.last_known_spoj ? `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#94a3b8;">Poslední známý: <b style="color:#e2e8f0;">${bus.last_known_spoj}</b></span></div>` :
-                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;font-size:11px;">Nezjištěno (vůz není na mapě PVVD)</span></div>`
+                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;font-size:11px;">Nezjištěno (vůz je offline)</span></div>`
               ) :
               (window.requestedSpojeMap && window.requestedSpojeMap[bus.id] && (Date.now() - window.requestedSpojeMap[bus.id] < 60000)) ?
                 `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#38bdf8;font-weight:bold;font-size:11px;"><i class="fas fa-spinner fa-spin"></i> Čeká se na zjištění spoje...</span></div>` :
@@ -5130,7 +5133,7 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "last_moved": now, "created_at": now, "actual_start_time": None,
         "actual_end_time": None, "first_dep_time": None, "last_dep_time": None,
         "tt_last_fetch": None, "tt_is_fetching": False,
-        "status": "Načítání...", "color_class": "bg-gray", "is_offline": False,
+        "status": "Načítání...", "color_class": "bg-green", "is_offline": False, "is_withdrawn": False, "delay_unknown": False,
         "db_first_upsert": False, "_last_db_status": None, "_last_db_linka": None,
         "_end_written": False, "_was_long_stationary": False, "final_delay_display": 0,
         "admin_color_override": None, "admin_status_override": None, "admin_flag": False,
@@ -5466,7 +5469,6 @@ def background_map_worker():
                             "spz": spz,
                             "admin_note": row.get("admin_note", ""),
                             "admin_driver": row.get("admin_driver", ""),
-                            "color_class": row.get("color_class", "bg-darkblue")
                         }
                     
                 if not bid or not spz or spz in ("Nezn\u00e1m\u00e1", "Neznama"):
@@ -5644,7 +5646,13 @@ def background_map_worker():
                         line = str(bus1.get("text", "")).strip()
                         lat1 = bus1.get("lat", 0)
                         lng1 = bus1.get("lng", 0)
-                        delay = int(bus1.get("delay", 0)) if bus1.get("delay") is not None else 0
+                        raw_d = bus1.get("delay")
+                        if raw_d is not None and int(raw_d) > -10000:
+                            delay = int(raw_d)
+                            delay_unknown = False
+                        else:
+                            delay = 0
+                            delay_unknown = True
                         dest1 = str(bus1.get("finalStopName", "")).strip()
                         if dest1 == "-1" or not dest1:
                             if bus_id in GLOBAL_BUS_CACHE and GLOBAL_BUS_CACHE[bus_id].get("destination") and GLOBAL_BUS_CACHE[bus_id]["destination"] != "Neznámý":
@@ -5722,6 +5730,8 @@ def background_map_worker():
                                 nb = new_cache_entry(
                                     bus_id, ghost_trip_id, lat1, lng1, line, dest1, False, delay, now,
                                     ghost_spz, ghost_verified, ghost_admin_verified if 'ghost_admin_verified' in locals() else False)
+                                nb["is_withdrawn"] = False
+                                nb["delay_unknown"] = delay_unknown
                                 
                                 if 'ghost_admin_note' in locals():
                                     nb["admin_note"] = ghost_admin_note
@@ -5731,7 +5741,7 @@ def background_map_worker():
                                     nb["manual_spz"] = ghost_manual_spz
                                     if ghost_color_class and ghost_color_class not in ("bg-gray", "bg-lastpos"):
                                         nb["color_class"] = ghost_color_class
-                                    if ghost_status and ghost_status not in ("Načítání...", "Poslední známá poloha"):
+                                    if ghost_status and ghost_status not in ("Načítání...", "Poslední známá poloha", "Odstáven", "Odstaven", "Timeout"):
                                         nb["status"] = ghost_status
                                 
                                 if bus_id in ADMIN_SPZ_LOCKS:
@@ -5743,7 +5753,6 @@ def background_map_worker():
                                     nb["manual_spz"] = True
                                     nb["spz_locked"] = True
                                     nb["spz_frozen"] = True
-                                    nb["color_class"] = lock.get("color_class", "bg-darkblue")
                                     if "admin_note" in lock:
                                         nb["admin_note"] = lock["admin_note"]
                                     if "admin_driver" in lock:
@@ -5755,7 +5764,9 @@ def background_map_worker():
                             c = GLOBAL_BUS_CACHE[bus_id]
                             c["last_inflow_seen"] = now
                             c["is_offline"] = False
+                            c["is_withdrawn"] = False
                             c["raw_delay"] = delay
+                            c["delay_unknown"] = delay_unknown
                             c["is_train"] = is_train
                             if is_train:
                                 c["spz"] = "Neznámá"
@@ -5771,9 +5782,9 @@ def background_map_worker():
                                 c["skip_spz"] = True
                                 ADMIN_SPZ_LOCKS.pop(bus_id, None)
                             c.pop("offline_since_time", None)
-                            if c.get("color_class") == "bg-lastpos":
+                            if c.get("color_class") in ("bg-lastpos", "bg-gray") and not c.get("admin_lock_display"):
                                 c["color_class"] = "bg-green"
-                            if c.get("status") == "Poslední známá poloha":
+                            if c.get("status") in ("Poslední známá poloha", "Odstáven", "Odstaven", "Timeout"):
                                 c["status"] = "Jízda"
                             if "last_moved_lat" not in c:
                                 c["last_moved_lat"] = c["lat"]
@@ -5794,7 +5805,6 @@ def background_map_worker():
                                 c["manual_spz"] = True
                                 c["spz_locked"] = True
                                 c["spz_frozen"] = True
-                                c["color_class"] = lock.get("color_class", "bg-darkblue")
                                 if "admin_note" in lock:
                                     c["admin_note"] = lock["admin_note"]
                                 if "admin_driver" in lock:
@@ -6238,6 +6248,7 @@ def background_map_worker():
                     c["spz_locked"] = True
                 is_moving = inact < 1
                 delay_val = c["raw_delay"]
+                delay_unknown = bool(c.get("delay_unknown", False))
 
                 # ══════════════════════════════════════════════════════════════════
                 # SPZ PAROVANI – kontinualni, samoopravne
@@ -6648,9 +6659,10 @@ def background_map_worker():
                             c["color_class"] = "bg-lastpos"
                     c["final_delay_display"] = 0
                 else:
+                    c["is_withdrawn"] = False
                     is_before_departure = False
                     time_to_dep = 0
-                    if c["first_dep_time"]:
+                    if not is_moving and c.get("first_dep_time"):
                         try:
                             dh, dm_ = map(int, c["first_dep_time"].split(':'))
                             dep_total = dh * 60 + dm_
@@ -6667,52 +6679,45 @@ def background_map_worker():
                     if is_before_departure:
                         c["actual_end_time"] = None
                         if time_to_dep <= 240:
-                            c["status"] = f"\u010cek\u00e1 na odjezd ({time_to_dep} min)"
+                            c["status"] = f"Čeká na odjezd ({time_to_dep} min)"
                             c["color_class"] = "bg-blue"
                         else:
-                            c["status"] = "\u010cek\u00e1 na spoj (>4h)"
+                            c["status"] = "Čeká na spoj (>4h)"
                             c["color_class"] = "bg-gray"
-                        delay_val = -time_to_dep
+                        delay_val = 0
 
-                    elif delay_val <= -10000:
-                        if inact > 10:
-                            c["status"] = "Odstaven"
-                            c["color_class"] = "bg-gray"
-                            c["spz_locked"] = True
-                            c["spz_frozen"] = True
-                        else:
-                            c["status"] = "Kone\u010dn\u00e1 zast\u00e1vka"
-                            c["color_class"] = "bg-purple"
-                            c["spz_locked"] = True
-                            c["spz_frozen"] = True
-                            if not c["actual_end_time"]:
-                                c["actual_end_time"] = now.strftime('%H:%M')
-                                c["_end_written"] = False
-                            if c.get("admin_lock_display") and not c.get("admin_lock_permanent"):
-                                c["admin_lock_display"] = False
-                                c["admin_color_override"] = None
-                                c["admin_status_override"] = None
+                    elif delay_unknown:
+                        delay_val = 0
+                        c["status"] = "Jízda" if is_moving else "Stojí"
+                        c["color_class"] = "bg-green"
 
-                    elif delay_val < -1 and c.get("actual_start_time"):
-                        c["status"] = "J\u00edzda (N\u00e1skok)" if is_moving else "Stoj\u00ed (N\u00e1skok)"
+                    elif delay_val >= 5:
+                        c["status"] = f"Jízda (Zpoždění {delay_val} min)" if is_moving else f"Stojí (Zpoždění {delay_val} min)"
+                        c["color_class"] = "bg-red"
+
+                    elif delay_val <= -2:
+                        c["status"] = f"Jízda (Náskok {abs(delay_val)} min)" if is_moving else f"Stojí (Náskok {abs(delay_val)} min)"
                         c["color_class"] = "bg-darkblue"
 
                     else:
-                        c["status"] = "J\u00edzda" if is_moving else "Stoj\u00ed"
-                        c["color_class"] = "bg-red" if delay_val >= 5 else "bg-green"
+                        if delay_val > 0:
+                            c["status"] = f"Jízda (+{delay_val} min)" if is_moving else f"Stojí (+{delay_val} min)"
+                        else:
+                            c["status"] = "Jízda (Načas)" if is_moving else "Stojí (Načas)"
+                        c["color_class"] = "bg-green"
 
                     if (not is_moving and inact > 10 and c.get("actual_start_time")
-                            and c["color_class"] not in ("bg-purple", "bg-gray", "bg-bug", "bg-blue", "bg-orange")):
-                        c["status"] = f"Stoj\u00ed p\u0159\u00edli\u0161 dlouho ({int(inact)} min)"
+                            and c["color_class"] not in ("bg-purple", "bg-gray", "bg-bug", "bg-blue", "bg-orange", "bg-yellow")):
+                        c["status"] = f"Stojí příliš dlouho ({int(inact)} min)"
                         c["color_class"] = "bg-gray"
                         c["_was_long_stationary"] = True
                         # Zamkni SPZ POUZE pokud uz ji mame - nema smysl zamykat "Neznama".
                         # Kdyz SPZ jeste neni, necháme ji odemcenou at ji muzeme najit pozdeji.
-                        if c.get("spz") and c["spz"] != "Nezn\u00e1m\u00e1":
+                        if c.get("spz") and c["spz"] != "Neznámá":
                             c["spz_locked"] = True
                     elif is_moving and c.get("_was_long_stationary") and c["color_class"] not in ("bg-bug", "bg-blue"):
                         c["color_class"] = "bg-orange"
-                        c["status"] = "V\u00fdzkum \u2013 Reaktivace po dlouh\u00e9m st\u00e1n\u00ed"
+                        c["status"] = "Výzkum – Reaktivace po dlouhém stání"
                         c["_was_long_stationary"] = False
 
                 if is_moving and not c["actual_start_time"] and not is_train:
@@ -6775,7 +6780,7 @@ def background_map_worker():
                     "nearest_stop": c.get("nearest_stop"),
                     "last_stop_name": "" if is_train_final else c.get("last_stop_name"),
                     "vehicle_type": None if is_train_final else c.get("vehicle_type"),
-                    "is_withdrawn": c.get("is_withdrawn", False),  # 'Odstaven' - zmizel z PVVD > 10 min
+                    "is_withdrawn": False,  # Online vuz neni nikdy odstaven
                     "is_offline": False,
                     "spoj_num": c.get("spoj_num"),
                     "last_known_spoj": c.get("last_known_spoj") or c.get("spoj_num"),
@@ -7846,7 +7851,6 @@ def api_admin_map_action():
                 "spz": new_spz,
                 "admin_note": c.get("admin_note", ""),
                 "admin_driver": c.get("admin_driver", ""),
-                "color_class": c.get("color_class", "bg-darkblue"),
                 "is_locked_by_admin": True,
             }
             log_spz_change(bus_id, old_spz, new_spz, reason="admin_edit", admin_note=c.get("admin_note", ""))
@@ -7983,7 +7987,6 @@ def api_admin_map_action():
                 "spz": c["spz"],
                 "admin_note": c.get("admin_note", ""),
                 "admin_driver": c.get("admin_driver", ""),
-                "color_class": c.get("color_class", "bg-darkblue")
             }
             ADMIN_SPZ_LOCKS[bus_id]["is_locked_by_admin"] = True
             log_spz_change(bus_id, old_spz, c["spz"], reason="admin_verify", admin_note=c.get("admin_note", ""))
@@ -8106,10 +8109,9 @@ def api_admin_approve_conflict_spz():
     spz = c.get("spz")
     ADMIN_SPZ_LOCKS[bus_id] = {
         "spz": spz,
-        "color_class": c.get("color_class", "bg-darkblue"),
         "timestamp": get_prague_time(),
-        "admin_note": c.get("admin_note", "")
-        ,"admin_driver": c.get("admin_driver", "")
+        "admin_note": c.get("admin_note", ""),
+        "admin_driver": c.get("admin_driver", "")
     }
     
     # Okamzite zapsat do spz_cache s admin_verified=True
@@ -8184,10 +8186,8 @@ def api_priority_spoj(bus_id):
     if c.get("is_train"):
         return jsonify({"status": "skip", "message": "Vlaky nemají spoj"}), 400
 
-    # Spoj lze vyžádat POUZE když je vůz aktivní na PVVD (status jízda, zpoždění, čeká na spoj, konečná atd.)
-    # Pokud vůz zmizel z PVVD (offline, odstaven, poslední známá poloha), vyžádání nelze spustit.
-    if c.get("is_offline") or c.get("is_withdrawn") or c.get("color_class") in ("bg-lastpos", "bg-gray") or c.get("status") in ("Poslední známá poloha", "Odstáven", "Odstaven", "Timeout"):
-        return jsonify({"status": "error", "message": "Vůz není aktivní na mapě PVVD, spoj nelze vyžádat."}), 400
+    if c.get("is_offline"):
+        return jsonify({"status": "error", "message": "Vůz je momentálně offline, spoj nelze vyžádat."}), 400
 
     # Zaradi bus do prioritni fronty (priorita 0 = nejvyssi)
     if not c.get("tt_is_fetching"):

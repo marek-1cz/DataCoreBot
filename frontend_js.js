@@ -1386,7 +1386,7 @@ function buildMarkerSvg(mc, bearing, lineText, isTrain, busId, isWithdrawn = fal
   }
 
   // === ODSTAVENÝ VŮZ / POSLEDNÍ ZNÁMÁ POLOHA (Design: Tělo černé/tmavě šedé, UVNITŘ RŮŽOVÁ PŘERUŠOVANÁ ČÁRA) ===
-  if (isWithdrawn || mc === 'bg-withdrawn' || mc === 'bg-lastpos' || (mc === 'bg-gray' && !reallyTrain)) {
+  if (isWithdrawn || mc === 'bg-withdrawn' || mc === 'bg-lastpos') {
     let lC = String(lineText || '').split('/')[0].trim().replace(/[^0-9]/g, '');
     let lD = lC.length >= 4 ? lC.slice(-3) : lC;
     const r = 12;
@@ -2556,14 +2556,16 @@ async function fetchBuses() {
       if (!bus.lat || !bus.lng) return;
       currentBusIds.add(bus.id);
       let mc = bus.color_class, dv = parseInt(bus.delay), dTxt = '';
+      if (isNaN(dv)) dv = 0;
       if (mc === 'bg-lastpos') dTxt = '<span style="color:#f472b6;font-weight:bold;">Poslední poloha</span>';
       else if (mc === 'bg-gray' || mc === 'bg-bug') dTxt = '<span style="color:#94a3b8;">N/A</span>';
       else if (mc === 'bg-purple') dTxt = '<span style="color:#a855f7;">Konečná</span>';
-      else if (mc === 'bg-orange') dTxt = '<span style="color:#f59e0b;">Vyzkum</span>';
+      else if (mc === 'bg-orange') dTxt = '<span style="color:#f59e0b;">Výzkum</span>';
       else if (mc === 'bg-blue') { let dm = Math.abs(dv), dh = Math.floor(dm / 60), dmn = dm % 60; dTxt = `<span style="color:#3b82f6;">Za ${dh > 0 ? dh + 'h ' + dmn + 'm' : dmn + ' min'}</span>`; }
-      else if (mc === 'bg-darkblue') dTxt = `<span style="color:#60a5fa;">Naskok ${Math.abs(dv)} min</span>`;
-      else if (dv >= 5) dTxt = `<span style="color:#ef4444;">Zpozdeni ${dv} min</span>`;
-      else dTxt = `<span style="color:#10b981;">+${dv} min</span>`;
+      else if (dv <= -2) dTxt = `<span style="color:#60a5fa;font-weight:bold;">Náskok ${Math.abs(dv)} min</span>`;
+      else if (dv >= 5) dTxt = `<span style="color:#ef4444;font-weight:bold;">Zpoždění ${dv} min</span>`;
+      else if (dv > 0) dTxt = `<span style="color:#10b981;">+${dv} min</span>`;
+      else dTxt = '<span style="color:#10b981;font-weight:600;">Načas</span>';
 
       // Barveni markeru: depot_color ma prednost pred color_class (krome bg-lastpos)
       let markerColor = mc;
@@ -2571,7 +2573,7 @@ async function fetchBuses() {
         markerColor = 'bg-yellow';
       }
       let isTrain = (typeof isTrainVehicle === 'function') ? isTrainVehicle(bus) : Boolean(bus.is_train);
-      let isWithdrawn = Boolean(bus.is_withdrawn || bus.is_offline || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-lastpos' || bus.color_class === 'bg-gray');
+      let isWithdrawn = Boolean(bus.is_offline && (bus.is_withdrawn || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-gray'));
       let icon = L.divIcon({ className: '', html: buildMarkerSvg(markerColor, bus.bearing, bus.line, isTrain, bus.id, isWithdrawn), iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20] });
       let spzH = '', invTxt = '', histBtn = '';
       if (!bus.is_train) {
@@ -2590,8 +2592,13 @@ async function fetchBuses() {
         }
         else spzH = `<div class="pr"><span class="pl">SPZ:</span><span class="pv" style="color:#64748b;">Ceka na overeni</span></div>`;
       }
+      let withdrawnW = '';
+      if (bus.is_offline && (bus.is_withdrawn || bus.status === 'Odstáven' || bus.status === 'Odstaven')) {
+        let tOff = bus.offline_since_time || (bus.last_updated && bus.last_updated !== 'N/A' ? bus.last_updated.substring(0, 5) : '') || '--:--';
+        withdrawnW = `<div style="background:linear-gradient(135deg,rgba(20,20,25,0.97),rgba(30,25,30,0.97));border:1.5px solid #6b7280;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 8px rgba(107,114,128,0.3);"><b style="color:#9ca3af;font-size:12px;letter-spacing:0.5px;">⏸️ ODSTÁVEN</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.45;display:inline-block;margin-top:3px;">Vůz neodesílá data.<br>poslední známá poloha ${tOff}.<br>pravděpodobně autobus parkuje a nebo je odstaven</span></div>`;
+      }
       let lastposW = '';
-      if (mc === 'bg-lastpos' || bus.status === 'Poslední známá poloha') {
+      if (bus.is_offline && (mc === 'bg-lastpos' || bus.status === 'Poslední známá poloha')) {
         let tOffline = bus.offline_since_time ? ` v ${bus.offline_since_time}` : '';
         lastposW = `<div style="background:linear-gradient(135deg,rgba(24,24,32,0.95),rgba(45,30,45,0.95));border:1.5px solid #f472b6;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 10px rgba(244,114,182,0.25);"><b style="color:#f472b6;font-size:12px;letter-spacing:0.5px;">📍 POSLEDNÍ ZNÁMÁ POLOHA</b><br><span style="color:#cbd5e1;font-size:10px;">Vůz zmizel z mapy pvvd.idpk.cz${tOffline}. Ponechán na stejné pozici, než se znovu objeví.</span></div>`;
       }
@@ -2605,14 +2612,15 @@ async function fetchBuses() {
       else if (mc === 'bg-yellow' || bus.status?.startsWith('Vozovna')) depotW = `<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🅿️ ${bus.status || 'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny</span></div>`;
       let sc = '#10b981';
       if (mc === 'bg-lastpos' || bus.status === 'Poslední známá poloha') sc = '#f472b6';
-      else if (mc === 'bg-bug') sc = '#6b7280'; else if (mc === 'bg-orange') sc = '#f59e0b';
-      else if (mc === 'bg-yellow') sc = '#facc15';
-      else if (bus.status?.includes('prilis')) sc = '#94a3b8'; else if (bus.status?.includes('Stoji')) sc = '#ef4444';
+      else if (mc === 'bg-bug') sc = '#6b7280';
+      else if (mc === 'bg-orange') sc = '#f59e0b';
+      else if (mc === 'bg-yellow' || bus.status?.includes('Vozovna')) sc = '#facc15';
+      else if (mc === 'bg-red' || (bus.status && bus.status.includes('Zpoždění')) || (bus.status && bus.status.includes('Zpozdeni'))) sc = '#ef4444';
+      else if (mc === 'bg-darkblue' || (bus.status && bus.status.includes('Náskok')) || (bus.status && bus.status.includes('Naskok'))) sc = '#60a5fa';
+      else if (mc === 'bg-blue' || (bus.status && bus.status.includes('Čeká')) || (bus.status && bus.status.includes('Ceka')) || (bus.status && bus.status.includes('Zacatek'))) sc = '#3b82f6';
       else if (bus.status?.includes('Konečná') || bus.status?.includes('Ztrata')) sc = '#a855f7';
-      else if (bus.status?.includes('Ceka') || bus.status?.includes('Zacatek')) sc = '#3b82f6';
-      else if (bus.status?.includes('Odstaven') || bus.status?.includes('signal')) sc = '#94a3b8';
-      else if (bus.status?.includes('Naskok')) sc = '#60a5fa';
-      else if (bus.status?.includes('Vozovna')) sc = '#facc15';
+      else if (bus.status?.includes('prilis') || bus.status?.includes('Odstaven') || bus.status?.includes('Odstáven') || bus.status?.includes('signal')) sc = '#94a3b8';
+      else if (bus.status?.includes('Stojí') || bus.status?.includes('Stoji')) sc = '#94a3b8';
       let fTxt = (followId === bus.id) ? '✖️ Zrusit sledovani' : '📡 Sledovat';
       let fSt = (followId === bus.id) ? 'background:#ef4444;color:#fff;' : 'background:#3b82f6;color:#fff;';
       let afH = bus.admin_flag
@@ -2682,7 +2690,7 @@ async function fetchBuses() {
           ${afH}
         </div>
         <div class="pb">
-          ${lastposW}${bugW}${orangeW}${depotW}
+          ${withdrawnW}${lastposW}${bugW}${orangeW}${depotW}
           ${(bus.admin_note && typeof bus.admin_note === 'string' && bus.admin_note.trim() !== '') ? `<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>` : ''}
           ${(bus.admin_driver && typeof bus.admin_driver === 'string' && bus.admin_driver.trim() !== '') ? `<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>` : ''}
           <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination || 'Neznamy'}</span></div>
@@ -2690,9 +2698,9 @@ async function fetchBuses() {
           ${
             (!isTrain) ? (
               _spojNum ? `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#38bdf8;font-weight:bold;">${_spojNum}</span></div>` :
-              (bus.is_offline || bus.is_withdrawn || bus.status === 'Poslední známá poloha' || bus.status === 'Odstáven' || bus.status === 'Odstaven' || bus.color_class === 'bg-lastpos' || bus.color_class === 'bg-gray' || bus.status === 'Timeout') ? (
+              (bus.is_offline) ? (
                 bus.last_known_spoj ? `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#94a3b8;">Poslední známý: <b style="color:#e2e8f0;">${bus.last_known_spoj}</b></span></div>` :
-                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;font-size:11px;">Nezjištěno (vůz není na mapě PVVD)</span></div>`
+                `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;font-size:11px;">Nezjištěno (vůz je offline)</span></div>`
               ) :
               (window.requestedSpojeMap && window.requestedSpojeMap[bus.id] && (Date.now() - window.requestedSpojeMap[bus.id] < 60000)) ?
                 `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#38bdf8;font-weight:bold;font-size:11px;"><i class="fas fa-spinner fa-spin"></i> Čeká se na zjištění spoje...</span></div>` :
