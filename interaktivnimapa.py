@@ -3683,11 +3683,11 @@ async function fetchBuses(){
       let bgGrad = '';
       let txt = '';
       let textCol = '#ffffff';
-      let borderCol = 'rgba(255,255,255,0.2)';
-      let shadow = '0 0 8px rgba(0,0,0,0.3)';
+      let borderCol = '#059669';
+      let textShadow = '';
 
       if (ad <= -1) {
-        bgGrad = 'linear-gradient(135deg, #1d4ed8 0%, #172554 100%)';
+        bgGrad = 'linear-gradient(135deg, #1e40af 0%, #172554 100%)';
         txt = `Náskok ${Math.abs(ad)} min`;
         textCol = '#bfdbfe';
         borderCol = '#2563eb';
@@ -3696,28 +3696,36 @@ async function fetchBuses(){
         txt = 'Načas';
         borderCol = '#059669';
       } else if (ad >= 1 && ad <= 4) {
-        bgGrad = ad <= 2 ? 'linear-gradient(135deg, #84cc16 0%, #eab308 100%)' : 'linear-gradient(135deg, #eab308 0%, #ea580c 100%)';
+        if (ad <= 2) {
+          bgGrad = 'linear-gradient(135deg, #84cc16 0%, #eab308 100%)';
+          borderCol = '#ca8a04';
+          textCol = '#0f172a';
+        } else {
+          bgGrad = 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)';
+          borderCol = '#c2410c';
+          textCol = '#ffffff';
+          textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.6);';
+        }
         txt = `+${ad} min`;
-        textCol = '#0f172a';
       } else if (ad >= 5 && ad <= 9) {
         bgGrad = 'linear-gradient(135deg, #ef4444 0%, #991b1b 100%)';
         txt = `+${ad} min`;
-        borderCol = '#dc2626';
-        shadow = '0 0 10px rgba(239,68,68,0.4)';
+        borderCol = '#b91c1c';
+        textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.6);';
       } else if (ad >= 10 && ad <= 19) {
         bgGrad = 'linear-gradient(135deg, #b91c1c 0%, #450a0a 100%)';
         txt = `+${ad} min`;
-        borderCol = '#ef4444';
-        shadow = '0 0 12px rgba(185,28,28,0.5)';
+        borderCol = '#7f1d1d';
+        textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.6);';
       } else {
         bgGrad = 'linear-gradient(135deg, #7f1d1d 0%, #050101 100%)';
         txt = `+${ad} min`;
-        borderCol = '#ef4444';
+        borderCol = '#991b1b';
         textCol = '#fca5a5';
-        shadow = '0 0 16px rgba(220,38,38,0.7)';
+        textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.6);';
       }
 
-      return `<div class="pr" style="border:none;"><span class="pl">Zpoždění při příjezdu:</span><span class="pv"><span style="background:${bgGrad};color:${textCol};border:1px solid ${borderCol};padding:2px 8px;border-radius:6px;font-weight:900;font-size:11px;display:inline-flex;align-items:center;gap:3px;box-shadow:${shadow};"><i class="fas fa-flag-checkered" style="font-size:9px;margin-right:2px;"></i>${txt}</span></span></div>`;
+      return `<div class="pr" style="border:none;"><span class="pl">Zpoždění při příjezdu:</span><span class="pv"><span style="background:${bgGrad};color:${textCol};border:1px solid ${borderCol};padding:3px 10px;border-radius:6px;font-weight:900;font-size:13px;letter-spacing:0.3px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(0,0,0,0.35);${textShadow}"><i class="fas fa-flag-checkered" style="font-size:10px;margin-right:2px;"></i>${txt}</span></span></div>`;
     }
 
     function renderDelayRowHtml(bus) {
@@ -3734,7 +3742,7 @@ async function fetchBuses(){
           let tMin = bus.time_to_dep;
           let tStr = tMin >= 60 ? `${Math.floor(tMin/60)}h ${tMin%60}m` : `${tMin} min`;
           let bgGrad = 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)';
-          return `<div class="pr" style="border:none;"><span class="pl">Odjezd za:</span><span class="pv"><span style="background:${bgGrad};color:#ffffff;border:1px solid rgba(56,189,248,0.5);padding:2px 8px;border-radius:6px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(2,132,199,0.35);"><i class="far fa-clock" style="font-size:10px;"></i>${tStr}</span></span></div>`;
+          return `<div class="pr" style="border:none;"><span class="pl">Odjezd za:</span><span class="pv"><span style="background:${bgGrad};color:#ffffff;border:1px solid #0284c7;padding:3px 10px;border-radius:6px;font-weight:900;font-size:13px;letter-spacing:0.3px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(0,0,0,0.35);text-shadow:0 1px 2px rgba(0,0,0,0.5);"><i class="far fa-clock" style="font-size:10px;"></i>${tStr}</span></span></div>`;
         }
         if (bus.arrival_delay !== undefined && bus.arrival_delay !== null) {
           return buildArrivalDelayRow(bus.arrival_delay);
@@ -3755,7 +3763,7 @@ async function fetchBuses(){
         }
         let tStr = tMin > 0 ? (tMin >= 60 ? `${Math.floor(tMin/60)}h ${tMin%60}m` : `${tMin} min`) : 'Brzy';
         let bgGrad = 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)';
-        return `<div class="pr" style="border:none;"><span class="pl">Odjezd za:</span><span class="pv"><span style="background:${bgGrad};color:#ffffff;border:1px solid rgba(56,189,248,0.5);padding:2px 8px;border-radius:6px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(2,132,199,0.35);"><i class="far fa-clock" style="font-size:10px;"></i>${tStr}</span></span></div>`;
+        return `<div class="pr" style="border:none;"><span class="pl">Odjezd za:</span><span class="pv"><span style="background:${bgGrad};color:#ffffff;border:1px solid #0284c7;padding:3px 10px;border-radius:6px;font-weight:900;font-size:13px;letter-spacing:0.3px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(0,0,0,0.35);text-shadow:0 1px 2px rgba(0,0,0,0.5);"><i class="far fa-clock" style="font-size:10px;"></i>${tStr}</span></span></div>`;
       }
 
       let d = parseInt(bus.delay);
@@ -3763,44 +3771,51 @@ async function fetchBuses(){
 
       if (d <= -1) {
         let absD = Math.abs(d);
-        let bgGrad = 'linear-gradient(135deg, #1d4ed8 0%, #172554 100%)';
-        return `<div class="pr" style="border:none;"><span class="pl">Náskok:</span><span class="pv"><span style="background:${bgGrad};color:#bfdbfe;border:1px solid #2563eb;padding:2px 8px;border-radius:6px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(29,78,216,0.35);"><i class="fas fa-forward" style="font-size:9px;color:#60a5fa;"></i>${absD} min</span></span></div>`;
+        let bgGrad = 'linear-gradient(135deg, #1e40af 0%, #172554 100%)';
+        return `<div class="pr" style="border:none;"><span class="pl">Náskok:</span><span class="pv"><span style="background:${bgGrad};color:#bfdbfe;border:1px solid #2563eb;padding:3px 10px;border-radius:6px;font-weight:900;font-size:13px;letter-spacing:0.3px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(0,0,0,0.35);"><i class="fas fa-forward" style="font-size:10px;color:#60a5fa;"></i>${absD} min</span></span></div>`;
       }
 
       if (d === 0) {
         let bgGrad = 'linear-gradient(135deg, #10b981 0%, #047857 100%)';
-        return `<div class="pr" style="border:none;"><span class="pl">Bez zpoždění:</span><span class="pv"><span style="background:${bgGrad};color:#ffffff;border:1px solid #059669;padding:2px 8px;border-radius:6px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(16,185,129,0.3);"><i class="fas fa-check" style="font-size:9px;"></i>jízda na čas</span></span></div>`;
+        return `<div class="pr" style="border:none;"><span class="pl">Bez zpoždění:</span><span class="pv"><span style="background:${bgGrad};color:#ffffff;border:1px solid #059669;padding:3px 10px;border-radius:6px;font-weight:900;font-size:13px;letter-spacing:0.3px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(0,0,0,0.35);text-shadow:0 1px 2px rgba(0,0,0,0.5);"><i class="fas fa-check" style="font-size:10px;"></i>jízda na čas</span></span></div>`;
       }
 
       if (d >= 1 && d <= 4) {
-        let bgGrad = d <= 2 
-          ? 'linear-gradient(135deg, #84cc16 0%, #eab308 100%)' 
-          : 'linear-gradient(135deg, #eab308 0%, #ea580c 100%)';
-        return `<div class="pr" style="border:none;"><span class="pl">Mírné zpoždění:</span><span class="pv"><span style="background:${bgGrad};color:#0f172a;border:1px solid rgba(255,255,255,0.25);padding:2px 8px;border-radius:6px;font-weight:900;font-size:11px;display:inline-flex;align-items:center;gap:3px;box-shadow:0 0 8px rgba(234,179,8,0.35);">+${d} min</span></span></div>`;
+        let bgGrad = '';
+        let borderCol = '';
+        let textCol = '#ffffff';
+        let textShadow = 'text-shadow: 0 1px 2px rgba(0,0,0,0.6);';
+        if (d <= 2) {
+          bgGrad = 'linear-gradient(135deg, #84cc16 0%, #eab308 100%)';
+          borderCol = '#ca8a04';
+          textCol = '#0f172a';
+          textShadow = '';
+        } else {
+          bgGrad = 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)';
+          borderCol = '#c2410c';
+          textCol = '#ffffff';
+        }
+        return `<div class="pr" style="border:none;"><span class="pl">Mírné zpoždění:</span><span class="pv"><span style="background:${bgGrad};color:${textCol};border:1px solid ${borderCol};padding:3px 10px;border-radius:6px;font-weight:900;font-size:13px;letter-spacing:0.3px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(0,0,0,0.35);${textShadow}">+${d} min</span></span></div>`;
       }
 
       let bgGrad = '';
       let borderCol = '';
       let textCol = '#ffffff';
-      let shadow = '';
-      let iconHtml = '<i class="fas fa-exclamation-triangle" style="font-size:9px;"></i>';
+      let iconHtml = '<i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>';
 
       if (d >= 5 && d <= 9) {
         bgGrad = 'linear-gradient(135deg, #ef4444 0%, #991b1b 100%)';
-        borderCol = '#dc2626';
-        shadow = '0 0 10px rgba(239,68,68,0.4)';
+        borderCol = '#b91c1c';
       } else if (d >= 10 && d <= 19) {
         bgGrad = 'linear-gradient(135deg, #b91c1c 0%, #450a0a 100%)';
-        borderCol = '#ef4444';
-        shadow = '0 0 12px rgba(185,28,28,0.5)';
+        borderCol = '#7f1d1d';
       } else {
         bgGrad = 'linear-gradient(135deg, #7f1d1d 0%, #050101 100%)';
-        borderCol = '#ef4444';
+        borderCol = '#991b1b';
         textCol = '#fca5a5';
-        shadow = '0 0 16px rgba(220,38,38,0.7), inset 0 0 8px rgba(239,68,68,0.4)';
       }
 
-      return `<div class="pr" style="border:none;"><span class="pl">Zpoždění:</span><span class="pv"><span style="background:${bgGrad};color:${textCol};border:1px solid ${borderCol};padding:2px 8px;border-radius:6px;font-weight:900;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:${shadow};">${iconHtml}+${d} min</span></span></div>`;
+      return `<div class="pr" style="border:none;"><span class="pl">Zpoždění:</span><span class="pv"><span style="background:${bgGrad};color:${textCol};border:1px solid ${borderCol};padding:3px 10px;border-radius:6px;font-weight:900;font-size:13px;letter-spacing:0.3px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(0,0,0,0.35);text-shadow:0 1px 2px rgba(0,0,0,0.6);">${iconHtml}+${d} min</span></span></div>`;
     }
 
     data.buses.forEach(bus=>{
