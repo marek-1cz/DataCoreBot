@@ -275,7 +275,11 @@ async function loadDetail(){
       const cd=new Date(trip.created_at),dayStr=cd.toLocaleDateString('cs-CZ');
       let ss=trip.start_actual?trip.start_actual:(trip.start_scheduled?`<span style="color:#94a3b8;">${trip.start_scheduled} (Plan)</span>`:"---");
       let iF=trip.end_actual||trip.status.includes('Timeout');
-      let es=iF?`${trip.end_actual||'Timeout'} <br><span style="font-size:11px;color:#94a3b8;">(${trip.status})</span>`:`<span style="color:#eab308;font-weight:bold;"><i class="fas fa-spinner fa-pulse"></i> Probiha...</span><br><span style="font-size:11px;color:#94a3b8;">${trip.status}</span>`;
+      let stDisp = trip.status;
+      if (stDisp.includes('Příjezd: +')) stDisp = stDisp.replace(/(Příjezd:\\s*\\+\\d+\\s*min)/, '<b style="color:#ef4444;">$1</b>');
+      else if (stDisp.includes('Příjezd: Načas')) stDisp = stDisp.replace(/(Příjezd:\\s*Načas)/, '<b style="color:#10b981;">$1</b>');
+      else if (stDisp.includes('Příjezd: Náskok')) stDisp = stDisp.replace(/(Příjezd:\\s*Náskok\\s*\\d+\\s*min)/, '<b style="color:#60a5fa;">$1</b>');
+      let es=iF?`${trip.end_actual||'Timeout'} <br><span style="font-size:11px;color:#94a3b8;">(${stDisp})</span>`:`<span style="color:#eab308;font-weight:bold;"><i class="fas fa-spinner fa-pulse"></i> Probiha...</span><br><span style="font-size:11px;color:#94a3b8;">${stDisp}</span>`;
       html+=`<tr style="border-color:#334155;"><td style="border-color:#334155;padding:12px;color:#cbd5e1;">${dayStr}</td><td style="border-color:#334155;padding:12px;font-weight:bold;color:white;">${trip.linka}${trip.jr_link?`<br><a href="${trip.jr_link}" target="_blank" style="font-size:11px;color:#38bdf8;">JR <i class="fas fa-external-link-alt"></i></a>`:''}</td><td style="border-color:#334155;padding:12px;color:#10b981;">${ss}</td><td style="border-color:#334155;padding:12px;color:#ef4444;">${es}</td><td style="border-color:#334155;padding:12px;text-align:center;"><a href="/mapa#${trip.last_lat},${trip.last_lng}" style="background:transparent;color:#cbd5e1;border:1px solid #4b5563;padding:5px 10px;border-radius:4px;text-decoration:none;font-size:12px;"><i class="fas fa-map-marker-alt"></i></a></td></tr>`;
     });
     tbody.innerHTML=html;
@@ -3657,35 +3661,146 @@ async function fetchBuses(){
     let currentBusIds = new Set();
     isRefreshing=true;
 
-    function formatBusStatusHtml(status, fallbackColor) {
-      if (!status) return '<span style="color:#94a3b8;">Neznámý</span>';
+    function cleanStatusText(status) {
+      if (!status) return 'Neznámý';
       let s = String(status).trim();
       let match = s.match(/^(.*?)\\s*\\((.*?)\\)$/);
       if (match) {
         let main = match[1].trim();
-        let detail = match[2].trim();
-        let dLower = detail.toLowerCase();
-        let badge = '';
-        if (dLower.includes('zpoždění') || dLower.includes('zpozdeni')) {
-          badge = `<span style="background:rgba(239,68,68,0.22);color:#fca5a5;border:1px solid rgba(239,68,68,0.65);padding:2px 7px;border-radius:5px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(239,68,68,0.3);margin-left:5px;"><i class="fas fa-exclamation-triangle" style="font-size:9px;color:#ef4444;"></i>${detail}</span>`;
-        } else if (detail.startsWith('+')) {
-          badge = `<span style="background:rgba(245,158,11,0.22);color:#fde68a;border:1px solid rgba(245,158,11,0.6);padding:2px 7px;border-radius:5px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:3px;box-shadow:0 0 6px rgba(245,158,11,0.25);margin-left:5px;"><b>${detail}</b></span>`;
-        } else if (dLower.includes('načas') || dLower.includes('nacas') || dLower.includes('včas') || dLower.includes('vcas')) {
-          badge = `<span style="background:rgba(16,185,129,0.22);color:#6ee7b7;border:1px solid rgba(16,185,129,0.6);padding:2px 7px;border-radius:5px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(16,185,129,0.3);margin-left:5px;"><i class="fas fa-check" style="font-size:9px;color:#10b981;"></i>Načas</span>`;
-        } else if (dLower.includes('náskok') || dLower.includes('naskok') || detail.startsWith('-')) {
-          badge = `<span style="background:rgba(59,130,246,0.22);color:#bfdbfe;border:1px solid rgba(59,130,246,0.6);padding:2px 7px;border-radius:5px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 6px rgba(59,130,246,0.25);margin-left:5px;"><i class="fas fa-forward" style="font-size:9px;color:#60a5fa;"></i>${detail}</span>`;
-        } else if (main.toLowerCase().includes('čeká') || main.toLowerCase().includes('ceka')) {
-          badge = `<span style="background:rgba(56,189,248,0.18);color:#bae6fd;border:1px solid rgba(56,189,248,0.45);padding:2px 6px;border-radius:5px;font-weight:700;font-size:11px;display:inline-flex;align-items:center;gap:4px;margin-left:5px;"><i class="far fa-clock" style="font-size:9px;color:#38bdf8;"></i>${detail}</span>`;
-        } else {
-          badge = `<span style="background:rgba(255,255,255,0.08);color:#cbd5e1;border:1px solid rgba(255,255,255,0.15);padding:2px 6px;border-radius:5px;font-weight:700;font-size:11px;margin-left:5px;">${detail}</span>`;
+        let detail = match[2].trim().toLowerCase();
+        if (detail.includes('zpoždění') || detail.includes('zpozdeni') || detail.startsWith('+') || 
+            detail.includes('načas') || detail.includes('nacas') || detail.includes('včas') || 
+            detail.includes('náskok') || detail.includes('naskok') || detail.includes('min')) {
+          return main;
         }
-        return `<span style="color:${fallbackColor};">${main}</span>${badge}`;
       }
-      let sLower = s.toLowerCase();
-      if (sLower === 'načas' || sLower === 'nacas') {
-        return `<span style="background:rgba(16,185,129,0.22);color:#6ee7b7;border:1px solid rgba(16,185,129,0.6);padding:2px 7px;border-radius:5px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(16,185,129,0.3);"><i class="fas fa-check" style="font-size:9px;color:#10b981;"></i>Načas</span>`;
+      return s;
+    }
+
+    function buildArrivalDelayRow(arrDelay) {
+      let ad = parseInt(arrDelay);
+      if (isNaN(ad)) ad = 0;
+      let bgGrad = '';
+      let txt = '';
+      let textCol = '#ffffff';
+      let borderCol = 'rgba(255,255,255,0.2)';
+      let shadow = '0 0 8px rgba(0,0,0,0.3)';
+
+      if (ad <= -1) {
+        bgGrad = 'linear-gradient(135deg, #1d4ed8 0%, #172554 100%)';
+        txt = `Náskok ${Math.abs(ad)} min`;
+        textCol = '#bfdbfe';
+        borderCol = '#2563eb';
+      } else if (ad === 0) {
+        bgGrad = 'linear-gradient(135deg, #10b981 0%, #047857 100%)';
+        txt = 'Načas';
+        borderCol = '#059669';
+      } else if (ad >= 1 && ad <= 4) {
+        bgGrad = ad <= 2 ? 'linear-gradient(135deg, #84cc16 0%, #eab308 100%)' : 'linear-gradient(135deg, #eab308 0%, #ea580c 100%)';
+        txt = `+${ad} min`;
+        textCol = '#0f172a';
+      } else if (ad >= 5 && ad <= 9) {
+        bgGrad = 'linear-gradient(135deg, #ef4444 0%, #991b1b 100%)';
+        txt = `+${ad} min`;
+        borderCol = '#dc2626';
+        shadow = '0 0 10px rgba(239,68,68,0.4)';
+      } else if (ad >= 10 && ad <= 19) {
+        bgGrad = 'linear-gradient(135deg, #b91c1c 0%, #450a0a 100%)';
+        txt = `+${ad} min`;
+        borderCol = '#ef4444';
+        shadow = '0 0 12px rgba(185,28,28,0.5)';
+      } else {
+        bgGrad = 'linear-gradient(135deg, #7f1d1d 0%, #050101 100%)';
+        txt = `+${ad} min`;
+        borderCol = '#ef4444';
+        textCol = '#fca5a5';
+        shadow = '0 0 16px rgba(220,38,38,0.7)';
       }
-      return `<span style="color:${fallbackColor};">${s}</span>`;
+
+      return `<div class="pr" style="border:none;"><span class="pl">Zpoždění při příjezdu:</span><span class="pv"><span style="background:${bgGrad};color:${textCol};border:1px solid ${borderCol};padding:2px 8px;border-radius:6px;font-weight:900;font-size:11px;display:inline-flex;align-items:center;gap:3px;box-shadow:${shadow};"><i class="fas fa-flag-checkered" style="font-size:9px;margin-right:2px;"></i>${txt}</span></span></div>`;
+    }
+
+    function renderDelayRowHtml(bus) {
+      if (bus.is_offline || bus.status === 'Odstáven' || bus.status === 'Odstaven' || bus.status === 'Poslední známá poloha') {
+        if (bus.arrival_delay !== undefined && bus.arrival_delay !== null && bus.locked_arrival_delay) {
+          return buildArrivalDelayRow(bus.arrival_delay);
+        }
+        return '';
+      }
+
+      let inDepot = Boolean(bus.in_depot || (bus.status && bus.status.startsWith('Vozovna')));
+      if (inDepot) {
+        if (bus.time_to_dep > 0) {
+          let tMin = bus.time_to_dep;
+          let tStr = tMin >= 60 ? `${Math.floor(tMin/60)}h ${tMin%60}m` : `${tMin} min`;
+          let bgGrad = 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)';
+          return `<div class="pr" style="border:none;"><span class="pl">Odjezd za:</span><span class="pv"><span style="background:${bgGrad};color:#ffffff;border:1px solid rgba(56,189,248,0.5);padding:2px 8px;border-radius:6px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(2,132,199,0.35);"><i class="far fa-clock" style="font-size:10px;"></i>${tStr}</span></span></div>`;
+        }
+        if (bus.arrival_delay !== undefined && bus.arrival_delay !== null) {
+          return buildArrivalDelayRow(bus.arrival_delay);
+        }
+        return '';
+      }
+
+      let isTerminal = Boolean(bus.locked_arrival_delay || (bus.status && (bus.status.includes('Konečná') || bus.status.includes('Konecna'))));
+      if (isTerminal && bus.arrival_delay !== undefined && bus.arrival_delay !== null) {
+        return buildArrivalDelayRow(bus.arrival_delay);
+      }
+
+      if (bus.is_before_departure || (bus.status && bus.status.includes('Čeká na odjezd'))) {
+        let tMin = bus.time_to_dep || 0;
+        if (!tMin && bus.status) {
+          let m = bus.status.match(/\\((\\d+)\\s*min\\)/);
+          if (m) tMin = parseInt(m[1]);
+        }
+        let tStr = tMin > 0 ? (tMin >= 60 ? `${Math.floor(tMin/60)}h ${tMin%60}m` : `${tMin} min`) : 'Brzy';
+        let bgGrad = 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)';
+        return `<div class="pr" style="border:none;"><span class="pl">Odjezd za:</span><span class="pv"><span style="background:${bgGrad};color:#ffffff;border:1px solid rgba(56,189,248,0.5);padding:2px 8px;border-radius:6px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(2,132,199,0.35);"><i class="far fa-clock" style="font-size:10px;"></i>${tStr}</span></span></div>`;
+      }
+
+      let d = parseInt(bus.delay);
+      if (isNaN(d)) d = 0;
+
+      if (d <= -1) {
+        let absD = Math.abs(d);
+        let bgGrad = 'linear-gradient(135deg, #1d4ed8 0%, #172554 100%)';
+        return `<div class="pr" style="border:none;"><span class="pl">Náskok:</span><span class="pv"><span style="background:${bgGrad};color:#bfdbfe;border:1px solid #2563eb;padding:2px 8px;border-radius:6px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(29,78,216,0.35);"><i class="fas fa-forward" style="font-size:9px;color:#60a5fa;"></i>${absD} min</span></span></div>`;
+      }
+
+      if (d === 0) {
+        let bgGrad = 'linear-gradient(135deg, #10b981 0%, #047857 100%)';
+        return `<div class="pr" style="border:none;"><span class="pl">Bez zpoždění:</span><span class="pv"><span style="background:${bgGrad};color:#ffffff;border:1px solid #059669;padding:2px 8px;border-radius:6px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(16,185,129,0.3);"><i class="fas fa-check" style="font-size:9px;"></i>jízda na čas</span></span></div>`;
+      }
+
+      if (d >= 1 && d <= 4) {
+        let bgGrad = d <= 2 
+          ? 'linear-gradient(135deg, #84cc16 0%, #eab308 100%)' 
+          : 'linear-gradient(135deg, #eab308 0%, #ea580c 100%)';
+        return `<div class="pr" style="border:none;"><span class="pl">Mírné zpoždění:</span><span class="pv"><span style="background:${bgGrad};color:#0f172a;border:1px solid rgba(255,255,255,0.25);padding:2px 8px;border-radius:6px;font-weight:900;font-size:11px;display:inline-flex;align-items:center;gap:3px;box-shadow:0 0 8px rgba(234,179,8,0.35);">+${d} min</span></span></div>`;
+      }
+
+      let bgGrad = '';
+      let borderCol = '';
+      let textCol = '#ffffff';
+      let shadow = '';
+      let iconHtml = '<i class="fas fa-exclamation-triangle" style="font-size:9px;"></i>';
+
+      if (d >= 5 && d <= 9) {
+        bgGrad = 'linear-gradient(135deg, #ef4444 0%, #991b1b 100%)';
+        borderCol = '#dc2626';
+        shadow = '0 0 10px rgba(239,68,68,0.4)';
+      } else if (d >= 10 && d <= 19) {
+        bgGrad = 'linear-gradient(135deg, #b91c1c 0%, #450a0a 100%)';
+        borderCol = '#ef4444';
+        shadow = '0 0 12px rgba(185,28,28,0.5)';
+      } else {
+        bgGrad = 'linear-gradient(135deg, #7f1d1d 0%, #050101 100%)';
+        borderCol = '#ef4444';
+        textCol = '#fca5a5';
+        shadow = '0 0 16px rgba(220,38,38,0.7), inset 0 0 8px rgba(239,68,68,0.4)';
+      }
+
+      return `<div class="pr" style="border:none;"><span class="pl">Zpoždění:</span><span class="pv"><span style="background:${bgGrad};color:${textCol};border:1px solid ${borderCol};padding:2px 8px;border-radius:6px;font-weight:900;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:${shadow};">${iconHtml}+${d} min</span></span></div>`;
     }
 
     data.buses.forEach(bus=>{
@@ -3834,7 +3949,8 @@ async function fetchBuses(){
             ) : ''
           }
           ${(!isTrain) ? `<div class="pr"><span class="pl">Vozidlo:</span><span class="pv" style="color:${bus.vehicle_type ? '#e2e8f0' : '#64748b'};font-size:11px;font-weight:${bus.vehicle_type ? '600' : 'normal'};">${bus.vehicle_type || 'Nezjištěno'}</span></div>` : ''}
-          <div class="pr" style="border:none;"><span class="pl">Status:</span><span class="pv" style="display:inline-flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;">${formatBusStatusHtml(bus.status, sc)}</span></div>
+          <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};font-weight:bold;">${cleanStatusText(bus.status)}</span></div>
+          ${renderDelayRowHtml(bus)}
           <button class="pa" onclick="showTT('${bus.id}')">📋 Zobrazit jízdní řád</button>
           <button class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
           ${histBtn}
@@ -5420,12 +5536,23 @@ def upsert_to_history(db, c):
         return
     TRACKED_SPZS.add(spz)
     jr_l = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={c['inflow_id']}&currentStopId=0"
+    status_to_save = c.get("status") or ""
+    if c.get("actual_end_time") and c.get("arrival_delay") is not None:
+        try:
+            arr_i = int(c["arrival_delay"])
+            if arr_i == 0: arr_txt = "Příjezd: Načas"
+            elif arr_i > 0: arr_txt = f"Příjezd: +{arr_i} min"
+            else: arr_txt = f"Příjezd: Náskok {abs(arr_i)} min"
+            if arr_txt not in status_to_save:
+                status_to_save = f"{status_to_save} ({arr_txt})"
+        except Exception: pass
+
     payload_full = {
         "trip_id": c["trip_id"], "spz": spz, "spz_verified": c.get("spz_verified", False),
         "spz_3factor": c.get("spz_3factor", False), "spz_conflict_warn": c.get("spz_conflict_warn", False),
         "linka": final_linka, "jr_link": jr_l, "start_scheduled": c.get("first_dep_time"),
         "start_actual": c.get("actual_start_time"), "end_actual": c.get("actual_end_time"),
-        "last_lat": c.get("lat"), "last_lng": c.get("lng"), "status": c.get("status"),
+        "last_lat": c.get("lat"), "last_lng": c.get("lng"), "status": status_to_save,
         "created_at": c["created_at"].isoformat(), "updated_at": get_prague_time().isoformat(),
     }
     try:
@@ -6232,6 +6359,10 @@ def background_map_worker():
                     new_live_data.append({
                         "id": bus_id, "trip_id": c.get("trip_id"), "lat": c.get("lat"), "lng": c.get("lng"),
                         "bearing": c.get("bearing"), "line": fld, "delay": 0,
+                        "arrival_delay": c.get("arrival_delay"),
+                        "locked_arrival_delay": bool(c.get("locked_arrival_delay")),
+                        "time_to_dep": 0,
+                        "is_before_departure": False,
                         "destination": c.get("destination"), "spz": c.get("spz") or "Neznámá",
                         "spz_verified": c.get("spz_verified", False), "is_train": False,
                         "status": c.get("status"), "color_class": c.get("color_class"),
@@ -6715,7 +6846,7 @@ def background_map_worker():
                         c["status"] = f"Jízda (Zpoždění {delay_val} min)" if is_moving else f"Stojí (Zpoždění {delay_val} min)"
                         c["color_class"] = "bg-red"
 
-                    elif delay_val <= -2:
+                    elif delay_val <= -1:
                         c["status"] = f"Jízda (Náskok {abs(delay_val)} min)" if is_moving else f"Stojí (Náskok {abs(delay_val)} min)"
                         c["color_class"] = "bg-darkblue"
 
@@ -6743,8 +6874,17 @@ def background_map_worker():
                 if is_moving and not c["actual_start_time"] and not is_train:
                     c["actual_start_time"] = now.strftime('%H:%M')
                     c["_end_written"] = False
+                    c["locked_arrival_delay"] = False
 
                 c["final_delay_display"] = delay_val
+
+                # Zpoždění při příjezdu: aktualizuj průběžně pokud není zamknuto
+                if not c.get("locked_arrival_delay"):
+                    c["arrival_delay"] = delay_val
+
+                # Pokud dojel na konečnou nebo byl ukončen spoj nebo je ve vozovně, zamkni zpoždění
+                if c.get("actual_end_time") or (c.get("status") and ("Konečná" in c["status"] or "Konecna" in c["status"])) or c.get("_in_depot"):
+                    c["locked_arrival_delay"] = True
 
                 if c.get("admin_color_override"):
                     c["color_class"] = c["admin_color_override"]
@@ -6783,6 +6923,12 @@ def background_map_worker():
                 new_live_data.append({
                     "id": bus_id, "trip_id": c["trip_id"], "lat": c["lat"], "lng": c["lng"],
                     "bearing": c.get("bearing"), "line": fld, "real_linka_spoj": c.get("real_linka_spoj"), "delay": c.get("final_delay_display", 0),
+                    "arrival_delay": c.get("arrival_delay"),
+                    "locked_arrival_delay": bool(c.get("locked_arrival_delay")),
+                    "time_to_dep": time_to_dep,
+                    "is_before_departure": bool(is_before_departure),
+                    "in_depot": bool(c.get("_in_depot")),
+                    "depot_name": c.get("_depot_name", ""),
                     "destination": c["destination"], "spz": "Neznámá" if is_train_final else (c["spz"] or "Neznámá"),
                     "spz_verified": False if is_train_final else c.get("spz_verified", False), "is_train": is_train_final,
                     "status": c["status"], "color_class": c["color_class"], "inactive_minutes": inact,
