@@ -3657,20 +3657,41 @@ async function fetchBuses(){
     let currentBusIds = new Set();
     isRefreshing=true;
 
+    function formatBusStatusHtml(status, fallbackColor) {
+      if (!status) return '<span style="color:#94a3b8;">Neznámý</span>';
+      let s = String(status).trim();
+      let match = s.match(/^(.*?)\\s*\\((.*?)\\)$/);
+      if (match) {
+        let main = match[1].trim();
+        let detail = match[2].trim();
+        let dLower = detail.toLowerCase();
+        let badge = '';
+        if (dLower.includes('zpoždění') || dLower.includes('zpozdeni')) {
+          badge = `<span style="background:rgba(239,68,68,0.22);color:#fca5a5;border:1px solid rgba(239,68,68,0.65);padding:2px 7px;border-radius:5px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(239,68,68,0.3);margin-left:5px;"><i class="fas fa-exclamation-triangle" style="font-size:9px;color:#ef4444;"></i>${detail}</span>`;
+        } else if (detail.startsWith('+')) {
+          badge = `<span style="background:rgba(245,158,11,0.22);color:#fde68a;border:1px solid rgba(245,158,11,0.6);padding:2px 7px;border-radius:5px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:3px;box-shadow:0 0 6px rgba(245,158,11,0.25);margin-left:5px;"><b>${detail}</b></span>`;
+        } else if (dLower.includes('načas') || dLower.includes('nacas') || dLower.includes('včas') || dLower.includes('vcas')) {
+          badge = `<span style="background:rgba(16,185,129,0.22);color:#6ee7b7;border:1px solid rgba(16,185,129,0.6);padding:2px 7px;border-radius:5px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(16,185,129,0.3);margin-left:5px;"><i class="fas fa-check" style="font-size:9px;color:#10b981;"></i>Načas</span>`;
+        } else if (dLower.includes('náskok') || dLower.includes('naskok') || detail.startsWith('-')) {
+          badge = `<span style="background:rgba(59,130,246,0.22);color:#bfdbfe;border:1px solid rgba(59,130,246,0.6);padding:2px 7px;border-radius:5px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 6px rgba(59,130,246,0.25);margin-left:5px;"><i class="fas fa-forward" style="font-size:9px;color:#60a5fa;"></i>${detail}</span>`;
+        } else if (main.toLowerCase().includes('čeká') || main.toLowerCase().includes('ceka')) {
+          badge = `<span style="background:rgba(56,189,248,0.18);color:#bae6fd;border:1px solid rgba(56,189,248,0.45);padding:2px 6px;border-radius:5px;font-weight:700;font-size:11px;display:inline-flex;align-items:center;gap:4px;margin-left:5px;"><i class="far fa-clock" style="font-size:9px;color:#38bdf8;"></i>${detail}</span>`;
+        } else {
+          badge = `<span style="background:rgba(255,255,255,0.08);color:#cbd5e1;border:1px solid rgba(255,255,255,0.15);padding:2px 6px;border-radius:5px;font-weight:700;font-size:11px;margin-left:5px;">${detail}</span>`;
+        }
+        return `<span style="color:${fallbackColor};">${main}</span>${badge}`;
+      }
+      let sLower = s.toLowerCase();
+      if (sLower === 'načas' || sLower === 'nacas') {
+        return `<span style="background:rgba(16,185,129,0.22);color:#6ee7b7;border:1px solid rgba(16,185,129,0.6);padding:2px 7px;border-radius:5px;font-weight:800;font-size:11px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(16,185,129,0.3);"><i class="fas fa-check" style="font-size:9px;color:#10b981;"></i>Načas</span>`;
+      }
+      return `<span style="color:${fallbackColor};">${s}</span>`;
+    }
+
     data.buses.forEach(bus=>{
       if(!bus.lat||!bus.lng)return;
       currentBusIds.add(bus.id);
-      let mc=bus.color_class,dv=parseInt(bus.delay),dTxt='';
-      if(isNaN(dv)) dv = 0;
-      if(mc==='bg-lastpos')dTxt='<span style="color:#f472b6;font-weight:bold;">Poslední poloha</span>';
-      else if(mc==='bg-gray'||mc==='bg-bug')dTxt='<span style="color:#94a3b8;">N/A</span>';
-      else if(mc==='bg-purple')dTxt='<span style="color:#a855f7;">Konečná</span>';
-      else if(mc==='bg-orange')dTxt='<span style="color:#f59e0b;">Výzkum</span>';
-      else if(mc==='bg-blue'){let dm=Math.abs(dv),dh=Math.floor(dm/60),dmn=dm%60;dTxt=`<span style="color:#3b82f6;">Za ${dh>0?dh+'h '+dmn+'m':dmn+' min'}</span>`;}
-      else if(dv<=-2)dTxt=`<span style="color:#60a5fa;font-weight:bold;">Náskok ${Math.abs(dv)} min</span>`;
-      else if(dv>=5)dTxt=`<span style="color:#ef4444;font-weight:bold;">Zpoždění ${dv} min</span>`;
-      else if(dv>0)dTxt=`<span style="color:#10b981;">+${dv} min</span>`;
-      else dTxt='<span style="color:#10b981;font-weight:600;">Načas</span>';
+      let mc=bus.color_class;
 
       // Barveni markeru: depot_color ma prednost pred color_class (krome bg-lastpos)
       let markerColor=mc;
@@ -3813,8 +3834,7 @@ async function fetchBuses(){
             ) : ''
           }
           ${(!isTrain) ? `<div class="pr"><span class="pl">Vozidlo:</span><span class="pv" style="color:${bus.vehicle_type ? '#e2e8f0' : '#64748b'};font-size:11px;font-weight:${bus.vehicle_type ? '600' : 'normal'};">${bus.vehicle_type || 'Nezjištěno'}</span></div>` : ''}
-          <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
-          <div class="pr" style="border:none;"><span class="pl">JR:</span><span class="pv">${dTxt}</span></div>
+          <div class="pr" style="border:none;"><span class="pl">Status:</span><span class="pv" style="display:inline-flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;">${formatBusStatusHtml(bus.status, sc)}</span></div>
           <button class="pa" onclick="showTT('${bus.id}')">📋 Zobrazit jízdní řád</button>
           <button class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
           ${histBtn}
