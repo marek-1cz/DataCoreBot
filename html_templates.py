@@ -651,104 +651,158 @@ document.addEventListener("DOMContentLoaded", function() {
 
 HTML_SUPPORTERS = """
 <style>
-/* === PODPOROVATELÉ - MODERNÍ REDESIGN === */
+/* === PODPOROVATELÉ - EPIC PRESTIGE REDESIGN === */
 .supporters-page-wrap {
-  max-width: 1140px;
-  margin: 0 auto 60px auto;
-  padding: 0 15px;
+  max-width: 1180px;
+  margin: 0 auto 70px auto;
+  padding: 0 20px;
 }
 
-/* Hero Section - Čistý a bezešvý, bez oříznutých rámečků a bez oranžovo-červeného oparu */
+/* Hero Section */
 .supporters-hero {
   position: relative;
   text-align: center;
-  padding: 40px 20px 35px 20px;
-  margin-bottom: 35px;
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  padding: 45px 25px 35px 25px;
+  margin-bottom: 40px;
+  background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.08) 0%, rgba(15, 23, 42, 0) 70%);
+  border-radius: 24px;
 }
 
 .hero-chip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 16px;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  padding: 6px 18px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
   border-radius: 50px;
   color: #fcd34d;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.8px;
   text-transform: uppercase;
   margin-bottom: 18px;
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.15);
 }
 
 .hero-title {
-  position: relative;
   color: #ffffff;
   font-size: 38px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  margin: 0 0 16px 0;
+  font-weight: 900;
+  letter-spacing: -0.8px;
+  margin: 0 0 10px 0;
   line-height: 1.2;
 }
-.hero-title i {
-  color: #f59e0b;
+
+.hero-subtitle {
+  color: #38bdf8;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  letter-spacing: 0.2px;
 }
 
 .hero-desc {
-  position: relative;
   color: #94a3b8;
   font-size: 16px;
-  max-width: 740px;
-  margin: 0 auto 30px auto;
+  max-width: 780px;
+  margin: 0 auto 26px auto;
   line-height: 1.65;
+}
+
+/* Notice Cards Grid */
+.hero-notices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+  max-width: 860px;
+  margin: 0 auto 30px auto;
+  text-align: left;
+}
+
+.notice-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.notice-box.box-gold {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #fef3c7;
+}
+.notice-box.box-gold i {
+  color: #f59e0b;
+  font-size: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.notice-box.box-blue {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #e0f2fe;
+}
+.notice-box.box-blue i {
+  color: #38bdf8;
+  font-size: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.notice-link {
+  color: #38bdf8;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.notice-link:hover {
+  color: #7dd3fc;
 }
 
 /* Action Buttons */
 .hero-actions {
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 15px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
 .btn-premium {
-  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
   color: #ffffff;
-  padding: 13px 28px;
-  font-size: 15px;
+  padding: 14px 30px;
+  font-size: 16px;
   font-weight: 800;
-  border-radius: 12px;
+  border-radius: 14px;
   text-decoration: none;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 16px rgba(217, 119, 6, 0.25);
-  transition: all 0.25s ease;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 20px rgba(217, 119, 6, 0.35);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .btn-premium:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(217, 119, 6, 0.4);
+  box-shadow: 0 8px 28px rgba(217, 119, 6, 0.5);
   color: #ffffff;
 }
 
 .btn-claim {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   background: rgba(30, 41, 59, 0.85);
-  color: #e2e8f0;
-  padding: 13px 24px;
-  font-size: 15px;
+  color: #f1f5f9;
+  padding: 14px 26px;
+  font-size: 16px;
   font-weight: 700;
-  border-radius: 12px;
+  border-radius: 14px;
   text-decoration: none;
   border: 1px solid #334155;
   transition: all 0.25s ease;
@@ -756,333 +810,519 @@ HTML_SUPPORTERS = """
 .btn-claim:hover {
   background: #334155;
   color: #38bdf8;
-  transform: translateY(-2px);
   border-color: #38bdf8;
+  transform: translateY(-2px);
 }
 
-/* === TIERS PREVIEW CARDS === */
+/* === TIERS SECTION === */
 .tiers-section {
-  margin-bottom: 45px;
+  margin-bottom: 60px;
 }
 .section-heading-wrap {
   text-align: center;
-  margin-bottom: 25px;
+  margin-bottom: 30px;
 }
 .section-title {
   color: #ffffff;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 800;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  margin: 0 0 6px 0;
+  gap: 12px;
+  margin: 0 0 8px 0;
 }
 .section-subtitle {
   color: #64748b;
-  font-size: 14px;
+  font-size: 15px;
   margin: 0;
 }
 
-.tiers-preview-grid {
+.tiers-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-}
-.tier-preview-card {
-  background: rgba(30, 41, 59, 0.5);
-  border: 1px solid #334155;
-  border-radius: 16px;
-  padding: 22px 20px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  transition: all 0.25s ease;
-}
-.tier-preview-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 25px rgba(0,0,0,0.4);
-}
-.tier-preview-card.tier-preview-3 {
-  border-color: rgba(239, 68, 68, 0.35);
-  background: linear-gradient(180deg, rgba(127, 29, 29, 0.15), rgba(30, 41, 59, 0.5) 80%);
-}
-.tier-preview-card.tier-preview-2 {
-  border-color: rgba(245, 158, 11, 0.35);
-  background: linear-gradient(180deg, rgba(180, 83, 9, 0.15), rgba(30, 41, 59, 0.5) 80%);
-}
-.tier-preview-card.tier-preview-1 {
-  border-color: rgba(56, 189, 248, 0.25);
-  background: linear-gradient(180deg, rgba(14, 165, 233, 0.1), rgba(30, 41, 59, 0.5) 80%);
+  gap: 22px;
+  align-items: stretch;
 }
 
-.tier-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  margin-bottom: 12px;
-}
-.tier-pill.badge-mega { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); }
-.tier-pill.badge-velky { background: rgba(245, 158, 11, 0.2); color: #fde68a; border: 1px solid rgba(245, 158, 11, 0.4); }
-.tier-pill.badge-normal { background: rgba(56, 189, 248, 0.15); color: #bae6fd; border: 1px solid rgba(56, 189, 248, 0.3); }
-
-.tier-val {
-  font-size: 20px;
-  font-weight: 800;
-  color: #ffffff;
-  margin-bottom: 14px;
-}
-.tier-perks-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  border-top: 1px solid rgba(255,255,255,0.06);
-  padding-top: 14px;
-}
-.tier-perk-item {
-  font-size: 13px;
-  color: #cbd5e1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: flex-start;
-  text-align: left;
-}
-.tier-perk-item i {
-  color: var(--success);
-  font-size: 11px;
-}
-
-/* === SUPPORTERS WALL (SÍŇ SLÁVY) === */
-.supporters-wall-section {
-  margin-top: 10px;
-}
-.supporters-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
-  margin-top: 20px;
-}
-
-/* Glassmorphism Cards */
-.supp-card {
+.tier-card {
   position: relative;
-  background: rgba(30, 41, 59, 0.7);
-  border-radius: 16px;
-  padding: 22px;
+  background: rgba(30, 41, 59, 0.55);
   border: 1px solid #334155;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  border-radius: 20px;
+  padding: 28px 24px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: all 0.25s ease;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
-.supp-card:hover {
-  transform: translateY(-4px);
+.tier-card:hover {
+  transform: translateY(-6px);
   box-shadow: 0 16px 35px rgba(0, 0, 0, 0.5);
 }
 
-/* Tier specific card styles */
-.supp-card.tier-3 {
-  background: linear-gradient(135deg, rgba(127, 29, 29, 0.35), rgba(15, 23, 42, 0.85));
+/* Tier 3: Mega */
+.tier-card.tier-card-3 {
   border-color: rgba(239, 68, 68, 0.5);
-  box-shadow: 0 10px 30px rgba(220, 38, 38, 0.2);
+  background: linear-gradient(180deg, rgba(127, 29, 29, 0.25) 0%, rgba(30, 41, 59, 0.6) 80%);
+  box-shadow: 0 8px 28px rgba(220, 38, 38, 0.15);
 }
-.supp-card.tier-3:hover {
+.tier-card.tier-card-3:hover {
   border-color: rgba(239, 68, 68, 0.85);
-  box-shadow: 0 16px 40px rgba(220, 38, 38, 0.35);
+  box-shadow: 0 16px 45px rgba(220, 38, 38, 0.3);
 }
 
-.supp-card.tier-2 {
-  background: linear-gradient(135deg, rgba(180, 83, 9, 0.3), rgba(15, 23, 42, 0.85));
-  border-color: rgba(245, 158, 11, 0.45);
-  box-shadow: 0 10px 30px rgba(245, 158, 11, 0.15);
+/* Tier 2: Velký (Featured) */
+.tier-card.tier-card-2 {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: linear-gradient(180deg, rgba(180, 83, 9, 0.25) 0%, rgba(30, 41, 59, 0.65) 80%);
+  box-shadow: 0 10px 32px rgba(245, 158, 11, 0.2);
+  transform: scale(1.02);
 }
-.supp-card.tier-2:hover {
-  border-color: rgba(245, 158, 11, 0.8);
-  box-shadow: 0 16px 35px rgba(245, 158, 11, 0.3);
-}
-
-.supp-card.tier-1 {
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.15), rgba(15, 23, 42, 0.85));
-  border-color: rgba(56, 189, 248, 0.3);
-}
-.supp-card.tier-1:hover {
-  border-color: rgba(56, 189, 248, 0.6);
+.tier-card.tier-card-2:hover {
+  transform: scale(1.02) translateY(-6px);
+  border-color: rgba(245, 158, 11, 0.9);
+  box-shadow: 0 20px 45px rgba(245, 158, 11, 0.35);
 }
 
-/* Supporter Card Header */
-.supp-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  width: 100%;
+/* Tier 1: Normal */
+.tier-card.tier-card-1 {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.12) 0%, rgba(30, 41, 59, 0.55) 80%);
 }
-.supp-badge {
+.tier-card.tier-card-1:hover {
+  border-color: rgba(56, 189, 248, 0.7);
+  box-shadow: 0 16px 35px rgba(14, 165, 233, 0.2);
+}
+
+.tier-ribbon {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 4px 10px;
+}
+.tier-ribbon.ribbon-mega {
+  background: linear-gradient(90deg, #ef4444, #b91c1c);
+  color: #ffffff;
+}
+
+.tier-top {
+  margin-top: 8px;
+  text-align: center;
+}
+
+.tier-badge-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 5px 14px;
   border-radius: 20px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
 }
-.tier-3 .supp-badge { background: linear-gradient(135deg, #ef4444, #991b1b); color: #fff; }
-.tier-2 .supp-badge { background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; }
-.tier-1 .supp-badge { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #fff; }
+.pill-3 { background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5); }
+.pill-2 { background: rgba(245, 158, 11, 0.25); color: #fde68a; border: 1px solid rgba(245, 158, 11, 0.5); }
+.pill-1 { background: rgba(56, 189, 248, 0.2); color: #bae6fd; border: 1px solid rgba(56, 189, 248, 0.4); }
 
-.supp-date {
+.tier-price {
+  font-size: 26px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+  margin: 0 0 6px 0;
+}
+.tier-approx {
+  font-size: 14px;
+  color: #94a3b8;
+  font-weight: 600;
+  margin: 0 0 20px 0;
+}
+
+.tier-perks-box {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 18px;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+.tier-perk-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13.5px;
+  color: #cbd5e1;
+  line-height: 1.45;
+}
+.tier-perk-row i {
+  color: #10b981;
+  font-size: 13px;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.tier-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+.tier-btn-3 {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.35);
+}
+.tier-btn-3:hover {
+  background: linear-gradient(135deg, #f87171, #dc2626);
+  color: #ffffff;
+  transform: translateY(-2px);
+}
+.tier-btn-2 {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35);
+}
+.tier-btn-2:hover {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #ffffff;
+  transform: translateY(-2px);
+}
+.tier-btn-1 {
+  background: rgba(30, 41, 59, 0.85);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+.tier-btn-1:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #ffffff;
+  border-color: #38bdf8;
+  transform: translateY(-2px);
+}
+
+.thank-you-banner {
+  margin-top: 25px;
+  text-align: center;
+  padding: 16px 20px;
+  background: rgba(30, 41, 59, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  color: #f1f5f9;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* === EPIC SÍŇ SLÁVY (HALL OF FAME) === */
+.supporters-wall-section {
+  margin-top: 15px;
+}
+
+.wall-header-wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.wall-title {
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 900;
+  margin: 0 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.wall-title i {
+  color: #f59e0b;
+}
+.wall-subtitle {
+  color: #94a3b8;
+  font-size: 15px;
+  margin: 0;
+}
+
+.epic-supporters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 24px;
+}
+
+/* Epic Cards (NO AVATARS - HUGE PROMINENT NAMES) */
+.epic-card {
+  position: relative;
+  background: rgba(20, 26, 40, 0.85);
+  border-radius: 20px;
+  padding: 26px;
+  border: 1px solid #334155;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+.epic-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.6);
+}
+
+/* Tier 3 Epic Card */
+.epic-card.epic-tier-3 {
+  background: linear-gradient(135deg, rgba(127, 29, 29, 0.4) 0%, rgba(15, 23, 42, 0.95) 75%);
+  border: 1.5px solid rgba(239, 68, 68, 0.6);
+  box-shadow: 0 12px 35px rgba(220, 38, 38, 0.25);
+}
+.epic-card.epic-tier-3:hover {
+  border-color: rgba(239, 68, 68, 1);
+  box-shadow: 0 20px 50px rgba(220, 38, 38, 0.45);
+}
+
+/* Tier 2 Epic Card */
+.epic-card.epic-tier-2 {
+  background: linear-gradient(135deg, rgba(180, 83, 9, 0.35) 0%, rgba(15, 23, 42, 0.95) 75%);
+  border: 1.5px solid rgba(245, 158, 11, 0.55);
+  box-shadow: 0 12px 35px rgba(245, 158, 11, 0.2);
+}
+.epic-card.epic-tier-2:hover {
+  border-color: rgba(245, 158, 11, 0.95);
+  box-shadow: 0 20px 45px rgba(245, 158, 11, 0.4);
+}
+
+/* Tier 1 Epic Card */
+.epic-card.epic-tier-1 {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.2) 0%, rgba(15, 23, 42, 0.95) 75%);
+  border: 1.5px solid rgba(56, 189, 248, 0.35);
+}
+.epic-card.epic-tier-1:hover {
+  border-color: rgba(56, 189, 248, 0.75);
+  box-shadow: 0 18px 40px rgba(14, 165, 233, 0.25);
+}
+
+.epic-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.epic-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.epic-badge.tier-3-badge {
+  background: linear-gradient(135deg, #ef4444, #991b1b);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.35);
+}
+.epic-badge.tier-2-badge {
+  background: linear-gradient(135deg, #f59e0b, #b45309);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.35);
+}
+.epic-badge.tier-1-badge {
+  background: linear-gradient(135deg, #0ea5e9, #0369a1);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.3);
+}
+
+.epic-amount-pill {
+  font-size: 14px;
+  font-weight: 800;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fcd34d;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.tier-3-amount {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+.tier-2-amount {
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fde68a;
+}
+.tier-1-amount {
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #bae6fd;
+}
+
+/* BIG SUPPORTER NAME */
+.epic-name-box {
+  margin-bottom: 12px;
+}
+.epic-supp-name {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.25;
+  margin: 0;
+  word-break: break-word;
+  letter-spacing: -0.5px;
+}
+
+.epic-tier-3 .epic-supp-name {
+  background: linear-gradient(135deg, #ffffff 0%, #fef08a 40%, #f87171 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 16px rgba(239, 68, 68, 0.5));
+}
+.epic-tier-2 .epic-supp-name {
+  background: linear-gradient(135deg, #ffffff 0%, #fde68a 60%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 14px rgba(245, 158, 11, 0.4));
+}
+.epic-tier-1 .epic-supp-name {
+  color: #f8fafc;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+}
+
+.epic-supp-date {
   color: #64748b;
   font-size: 12px;
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 5px;
-}
-
-/* Supporter Body */
-.supp-body {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.supp-user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-.supp-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: 900;
-  flex-shrink: 0;
-}
-.tier-3 .supp-avatar { background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5); }
-.tier-2 .supp-avatar { background: rgba(245, 158, 11, 0.25); color: #fde68a; border: 1px solid rgba(245, 158, 11, 0.5); }
-.tier-1 .supp-avatar { background: rgba(56, 189, 248, 0.2); color: #bae6fd; border: 1px solid rgba(56, 189, 248, 0.4); }
-
-.supp-name {
-  color: #ffffff;
-  font-size: 18px;
-  font-weight: 800;
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tier-3 .supp-name { color: #fca5a5; }
-.tier-2 .supp-name { color: #fde68a; }
-.tier-1 .supp-name { color: #bae6fd; }
-
-.supp-amount {
-  font-size: 15px;
-  font-weight: 800;
-  background: rgba(15, 23, 42, 0.7);
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fcd34d;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* Supporter Message */
-.supp-msg {
-  position: relative;
-  font-size: 13.5px;
-  color: #cbd5e1;
-  font-style: italic;
-  background: rgba(15, 23, 42, 0.45);
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  line-height: 1.5;
+  gap: 6px;
   margin-top: 6px;
 }
-.supp-msg i {
-  color: rgba(255, 255, 255, 0.25);
+
+.epic-supp-msg {
+  position: relative;
+  font-size: 14px;
+  color: #cbd5e1;
+  font-style: italic;
+  background: rgba(15, 23, 42, 0.55);
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  line-height: 1.5;
+  margin-top: 14px;
+}
+.epic-supp-msg i {
+  color: rgba(255, 255, 255, 0.3);
   margin-right: 6px;
 }
 
 /* Empty State */
 .supporters-empty {
   text-align: center;
-  padding: 50px 20px;
-  background: rgba(30, 41, 59, 0.4);
-  border-radius: 18px;
-  border: 1px solid #334155;
+  padding: 55px 25px;
+  background: rgba(30, 41, 59, 0.35);
+  border-radius: 20px;
+  border: 1px dashed rgba(245, 158, 11, 0.3);
   margin: 10px 0 30px 0;
 }
 .empty-icon-wrap {
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
-  background: rgba(245, 158, 11, 0.1);
+  background: rgba(245, 158, 11, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
+  font-size: 32px;
   color: #f59e0b;
-  margin: 0 auto 16px auto;
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  margin: 0 auto 18px auto;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.2);
 }
 .empty-title {
   color: #ffffff;
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 10px 0;
 }
 .empty-text {
   color: #94a3b8;
   font-size: 15px;
-  max-width: 500px;
-  margin: 0 auto 22px auto;
-  line-height: 1.5;
+  max-width: 540px;
+  margin: 0 auto 24px auto;
+  line-height: 1.6;
 }
 
-@media (max-width: 900px) {
-  .tiers-preview-grid {
+@media (max-width: 960px) {
+  .tiers-grid {
     grid-template-columns: 1fr;
+  }
+  .tier-card.tier-card-2 {
+    transform: none;
+  }
+  .tier-card.tier-card-2:hover {
+    transform: translateY(-6px);
   }
 }
 @media (max-width: 768px) {
   .supporters-hero {
-    padding: 30px 15px 20px 15px;
-    margin-bottom: 25px;
+    padding: 35px 15px 25px 15px;
   }
   .hero-title {
     font-size: 28px;
   }
+  .hero-subtitle {
+    font-size: 16px;
+  }
   .hero-desc {
     font-size: 14.5px;
+  }
+  .hero-notices {
+    grid-template-columns: 1fr;
   }
   .btn-premium, .btn-claim {
     width: 100%;
     justify-content: center;
-    padding: 13px 20px;
   }
-  .supporters-grid {
+  .epic-supporters-grid {
     grid-template-columns: 1fr;
+  }
+  .epic-supp-name {
+    font-size: 22px;
   }
 }
 </style>
@@ -1090,100 +1330,168 @@ HTML_SUPPORTERS = """
 <div class="supporters-page-wrap">
   <!-- Hero Section -->
   <div class="supporters-hero">
-    <div class="hero-chip"><i class="fas fa-crown"></i> Podpora komunity</div>
-    <h1 class="hero-title"><i class="fas fa-crown"></i> Podporovatelé Projektu</h1>
-    <p class="hero-desc">Tenhle projekt tvořím ve svém volném čase a je kompletně zdarma pro všechny. Podpora je čistě dobrovolná a nesmírně mi pomáhá hradit náklady na servery a tvořit pro vás neustále nové skvělé aktualizace.</p>
+    <div class="hero-chip"><i class="fas fa-heart"></i> Podpora projektu OIS IDPK</div>
+    <h1 class="hero-title">About marekk_czz – Projekt OIS IDPK</h1>
+    <div class="hero-subtitle">Neoficiální software inspirovaný reálnou předlohou.</div>
+    <p class="hero-desc">Vítejte na stránce podpory projektu OIS IDPK. Pokud chcete projekt podpořit, můžete si vybrat jednu z možností níže. Každá podpora mi pomáhá pokračovat ve vývoji a přinášet nové funkce.</p>
+
+    <!-- Info & Warning Callout Notices -->
+    <div class="hero-notices">
+      <div class="notice-box box-gold">
+        <i class="fas fa-lightbulb"></i>
+        <div><b>Trvalé výhody:</b> Podpora je jednorázová a všechny získané výhody vám zůstávají napořád.</div>
+      </div>
+      <div class="notice-box box-blue">
+        <i class="fas fa-exclamation-circle"></i>
+        <div><b>Aktivace:</b> Po odeslání podpory přejděte na stránku <a href="/claim" class="notice-link">Projekt OIS IDPK</a>, kde si propojíte svůj Discord účet.</div>
+      </div>
+    </div>
     
     <div class="hero-actions">
       <a href="https://buymeacoffee.com/marekk_czz" target="_blank" class="btn-premium">
-        <i class="fas fa-coffee"></i> Stát se VIP Podporovatelem
+        <i class="fas fa-coffee"></i> Podpořit na Buy Me a Coffee
       </a>
       <a href="/claim" class="btn-claim">
-        <i class="fas fa-gift"></i> Vyzvednout VIP roli
+        <i class="fas fa-gift"></i> Vyzvednout / Propojit VIP roli
       </a>
     </div>
   </div>
 
-  <!-- Tiers Preview Section -->
+  <!-- Tiers Section: Co za podporu získáte -->
   <div class="tiers-section">
     <div class="section-heading-wrap">
-      <h2 class="section-title"><i class="fas fa-gem" style="color:var(--warning);"></i> Úrovně podpory a odměny</h2>
-      <p class="section-subtitle">Každý příspěvek pomáhá udržet projekt v chodu a přináší ti výhody</p>
+      <h2 class="section-title"><i class="fas fa-gem" style="color:#f59e0b;"></i> Co za podporu získáte</h2>
+      <p class="section-subtitle">Každý příspěvek pomáhá pokračovat ve vývoji a přinášet nové funkce</p>
     </div>
     
-    <div class="tiers-preview-grid">
-      <!-- Tier 3 -->
-      <div class="tier-preview-card tier-preview-3">
-        <div class="tier-pill badge-mega"><i class="fas fa-gem"></i> MEGA PODPOROVATEL</div>
-        <div class="tier-val">od 325 Kč</div>
-        <div class="tier-perks-list">
-          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Rubínové zvýraznění v Síni slávy</span></div>
-          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Speciální role na Discordu & webu</span></div>
-          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Plný přístup do Beta Tester verze</span></div>
+    <div class="tiers-grid">
+      <!-- Tier 1: Podporovatel (3 $ / ~65 Kč) -->
+      <div class="tier-card tier-card-1">
+        <div>
+          <div class="tier-top">
+            <div class="tier-badge-pill pill-1"><i class="fas fa-star"></i> PODPOROVATEL</div>
+            <div class="tier-price">3 $</div>
+            <div class="tier-approx">~65 Kč • Jednorázová podpora</div>
+          </div>
+          
+          <div class="tier-perks-box">
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Role <b>Beta Tester</b> na Discordu</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Přístup k novým verzím dříve než ostatní</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Přístup k neveřejným verzím softwaru</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Role <b>PODPOROVATEL</b> na Discordu</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Uvedení jména v softwaru a na stránce projektu</span></div>
+          </div>
         </div>
+        
+        <a href="https://buymeacoffee.com/marekk_czz" target="_blank" class="tier-btn tier-btn-1">
+          <i class="fas fa-coffee"></i> Podpořit 3 $ (~65 Kč)
+        </a>
       </div>
 
-      <!-- Tier 2 -->
-      <div class="tier-preview-card tier-preview-2">
-        <div class="tier-pill badge-velky"><i class="fas fa-star"></i> VELKÝ PODPOROVATEL</div>
-        <div class="tier-val">od 195 Kč</div>
-        <div class="tier-perks-list">
-          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Zlaté zvýraznění v Síni slávy</span></div>
-          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>VIP Role na Discordu & webu</span></div>
-          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Přístup k Beta Tester novinkám</span></div>
+      <!-- Tier 2: Velký podporovatel (9 $ / ~195 Kč) - DOPORUČENO -->
+      <div class="tier-card tier-card-2">
+        <div class="tier-ribbon">🔥 NEJLEPŠÍ POMĚR PODPORY A VÝHOD</div>
+        <div>
+          <div class="tier-top">
+            <div class="tier-badge-pill pill-2"><i class="fas fa-rocket"></i> VELKÝ PODPOROVATEL</div>
+            <div class="tier-price">9 $</div>
+            <div class="tier-approx">~195 Kč • Jednorázová podpora</div>
+          </div>
+          
+          <div class="tier-perks-box">
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Role <b>Beta Tester</b> na Discordu</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Přístup k novým verzím dříve než ostatní</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Přístup k neveřejným verzím softwaru</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Uvedení jména v softwaru a na stránce projektu</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span><b>Vytvoření speciální linky na přání</b> (po domluvě na Discordu)</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Prioritní odpověď na dotazy / pomoc</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Velké poděkování od majitele</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Role <b>VELKÝ PODPOROVATEL</b> na Discordu</span></div>
+          </div>
         </div>
+        
+        <a href="https://buymeacoffee.com/marekk_czz" target="_blank" class="tier-btn tier-btn-2">
+          <i class="fas fa-rocket"></i> Podpořit 9 $ (~195 Kč)
+        </a>
       </div>
 
-      <!-- Tier 1 -->
-      <div class="tier-preview-card tier-preview-1">
-        <div class="tier-pill badge-normal"><i class="fas fa-medal"></i> PODPOROVATEL</div>
-        <div class="tier-val">Libovolný příspěvek</div>
-        <div class="tier-perks-list">
-          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Čestný zápis do Síně slávy</span></div>
-          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Role Podporovatele na Discordu</span></div>
-          <div class="tier-perk-item"><i class="fas fa-check"></i> <span>Poděkování a podpora chodu serveru</span></div>
+      <!-- Tier 3: Mega podporovatel (15 $ / ~325 Kč) -->
+      <div class="tier-card tier-card-3">
+        <div class="tier-ribbon ribbon-mega">👑 PRESTIŽNÍ PODPORA</div>
+        <div>
+          <div class="tier-top">
+            <div class="tier-badge-pill pill-3"><i class="fas fa-crown"></i> MEGA PODPOROVATEL</div>
+            <div class="tier-price">15 $</div>
+            <div class="tier-approx">~325 Kč • Jednorázová podpora</div>
+          </div>
+          
+          <div class="tier-perks-box">
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Role <b>Beta Tester</b> na Discordu</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Přístup k novým verzím dříve než ostatní</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Přístup k neveřejným verzím softwaru</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Uvedení jména v softwaru a na stránce projektu</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span><b>Vytvoření speciální linky na přání</b> (po domluvě na Discordu)</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Prioritní odpověď na dotazy / pomoc</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Velké poděkování od majitele</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span><b>Zvýrazněné jméno mezi hlavními podporovateli</b></span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Osobní poděkování</span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span><b>Možnost spolupráce nebo pomoci na vašem projektu</b></span></div>
+            <div class="tier-perk-row"><i class="fas fa-check-circle"></i> <span>Role <b>MEGA PODPOROVATEL</b> na Discordu</span></div>
+          </div>
         </div>
+        
+        <a href="https://buymeacoffee.com/marekk_czz" target="_blank" class="tier-btn tier-btn-3">
+          <i class="fas fa-crown"></i> Podpořit 15 $ (~325 Kč)
+        </a>
       </div>
+    </div>
+
+    <!-- Thank you footer -->
+    <div class="thank-you-banner">
+      <i class="fas fa-heart" style="color:#ef4444;"></i>
+      <span>Děkuji všem, kteří projekt podporují – bez vás by to nešlo!</span>
     </div>
   </div>
 
   <!-- Supporters Wall / Síň slávy -->
   <div class="supporters-wall-section">
-    <div class="section-heading-wrap" style="text-align:left; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <div class="wall-header-wrap">
       <div>
-        <h2 class="section-title"><i class="fas fa-award" style="color:#f59e0b;"></i> Síň slávy</h2>
-        <p class="section-subtitle">Děkujeme všem, kteří podpořili rozvoj projektu OIS IDPK</p>
+        <h2 class="wall-title"><i class="fas fa-trophy"></i> Síň slávy</h2>
+        <p class="wall-subtitle">Čestné místo pro hrdiny, kteří umožňují vývoj a provoz projektu OIS IDPK</p>
       </div>
-      <a href="https://buymeacoffee.com/marekk_czz" target="_blank" style="color:#f59e0b; font-size:13px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:5px;">
-        Podpořit na Buy Me a Coffee <i class="fas fa-arrow-right"></i>
+      <a href="https://buymeacoffee.com/marekk_czz" target="_blank" style="color:#f59e0b; font-size:14px; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+        Vstoupit do Síně slávy <i class="fas fa-arrow-right"></i>
       </a>
     </div>
 
-    <div class="supporters-grid">
+    <div class="epic-supporters-grid">
       {% for s in supporters %}
-        {% set tier_class = 'tier-3' if s.tier == 3 else ('tier-2' if s.tier == 2 else 'tier-1') %}
-        {% set icon = 'fa-gem' if s.tier == 3 else ('fa-star' if s.tier == 2 else 'fa-medal') %}
+        {% set tier_class = 'epic-tier-3' if s.tier == 3 else ('epic-tier-2' if s.tier == 2 else 'epic-tier-1') %}
+        {% set badge_icon = 'fa-crown' if s.tier == 3 else ('fa-rocket' if s.tier == 2 else 'fa-star') %}
+        {% set badge_class = 'tier-3-badge' if s.tier == 3 else ('tier-2-badge' if s.tier == 2 else 'tier-1-badge') %}
+        {% set amount_class = 'tier-3-amount' if s.tier == 3 else ('tier-2-amount' if s.tier == 2 else 'tier-1-amount') %}
         {% set badge_text = 'MEGA PODPOROVATEL' if s.tier == 3 else ('VELKÝ PODPOROVATEL' if s.tier == 2 else 'PODPOROVATEL') %}
-        {% set initial = (s.get('name', 'A')[:1]|upper) if s.get('name') else 'A' %}
         
-        <div class="supp-card {{ tier_class }}">
+        <div class="epic-card {{ tier_class }}">
           <div>
-            <div class="supp-header">
-              <div class="supp-badge"><i class="fas {{ icon }}"></i> {{ badge_text }}</div>
-              <div class="supp-date"><i class="fas fa-clock"></i> {{ s.get('created_at', '') }}</div>
+            <div class="epic-card-header">
+              <div class="epic-badge {{ badge_class }}"><i class="fas {{ badge_icon }}"></i> {{ badge_text }}</div>
+              {% if s.get('amount') %}
+              <div class="epic-amount-pill {{ amount_class }}">{{ s.get('amount') }}</div>
+              {% endif %}
             </div>
             
-            <div class="supp-body">
-              <div class="supp-user-info">
-                <div class="supp-avatar">{{ initial }}</div>
-                <h3 class="supp-name">{{ s.get('name', 'Anonym') }}</h3>
-              </div>
-              <div class="supp-amount">{{ s.get('amount', '') }}</div>
+            <div class="epic-name-box">
+              <h3 class="epic-supp-name">{{ s.get('name', 'Anonymní Hrdina') }}</h3>
+              {% if s.get('created_at') %}
+              <div class="epic-supp-date"><i class="far fa-calendar-alt"></i> {{ s.get('created_at') }}</div>
+              {% endif %}
             </div>
           </div>
           
           {% if s.get('message') %}
-          <div class="supp-msg">
+          <div class="epic-supp-msg">
             <i class="fas fa-quote-left"></i> {{ s.get('message') }}
           </div>
           {% endif %}
@@ -1191,9 +1499,9 @@ HTML_SUPPORTERS = """
       {% else %}
         <div style="grid-column: 1 / -1;">
           <div class="supporters-empty">
-            <div class="empty-icon-wrap"><i class="fas fa-crown"></i></div>
+            <div class="empty-icon-wrap"><i class="fas fa-trophy"></i></div>
             <h3 class="empty-title">Síň slávy zatím čeká na svého prvního hrdinu</h3>
-            <p class="empty-text">Zatím zde nejsou žádní podporovatelé. Buďte ten první, kdo vstoupí do Síně slávy!</p>
+            <p class="empty-text">Zatím zde nejsou žádní zapsaní podporovatelé. Buďte první, jehož jméno bude navždy vyryto v Síni slávy projektu OIS IDPK!</p>
             <a href="https://buymeacoffee.com/marekk_czz" target="_blank" class="btn-premium">
               <i class="fas fa-coffee"></i> Stát se VIP Podporovatelem
             </a>
