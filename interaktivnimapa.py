@@ -7007,7 +7007,7 @@ def background_map_worker():
                         c["status"] = "Jízda" if is_moving else "Stojí"
                         c["color_class"] = "bg-green"
 
-                    elif delay_val >= 10:
+                    elif delay_val >= 5:
                         c["status"] = f"Jízda (Zpoždění {delay_val} min)" if is_moving else f"Stojí (Zpoždění {delay_val} min)"
                         c["color_class"] = "bg-red"
 
