@@ -4252,7 +4252,7 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
       <i class="fas fa-history"></i> Log automatiky mapy <span id="badge-tab-automation" style="background: #0284c7; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px; margin-left: 5px;">0</span>
     </button>
     <button onclick="switchTab('drivers')" id="tab-btn-drivers" class="dash-tab-btn">
-      <i class="fas fa-user-tag"></i> Zadaná jména & Poznámky <span id="badge-tab-drivers" style="background: #10b981; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px; margin-left: 5px;">0</span>
+      <i class="fas fa-id-card"></i> Přiřazení SPZ <span id="badge-tab-drivers" style="background: #10b981; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px; margin-left: 5px;">0</span>
     </button>
     <button onclick="switchTab('invalid')" id="tab-btn-invalid" class="dash-tab-btn">
       <i class="fas fa-ban"></i> Neplatná ověření Neznámé <span id="badge-tab-invalid" style="background: #64748b; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px; margin-left: 5px;">0</span>
@@ -4355,21 +4355,37 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
     </div>
   </div>
 
-  <!-- TAB 4: ZADANÁ JMÉNA A POZNÁMKY (BOD 4) -->
+  <!-- TAB 4: PŘIŘAZENÍ SPZ (ŘÍDIČI & POZNÁMKY) -->
   <div id="tab-content-drivers" style="display: none;">
     <div style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
         <div>
           <h3 style="color: #34d399; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px;">
-            <i class="fas fa-address-book"></i> Seznam všech zadaných řidičů a poznámek z mapy
+            <i class="fas fa-id-card"></i> Přiřazení SPZ – Řidiči & Poznámky
           </h3>
           <p style="color: var(--text-muted); font-size: 12px; margin: 5px 0 0 0;">
-            Kompletní přehled všech jmen řidičů a poznámek, které jste vložili do interaktivní mapy (zahrnuje živou mapu i trvalou paměť).
+            Jména řidičů a poznámky jsou pevně navázány na SPZ a cestují společně s vozem. Když vůz na mapě není, je označen jako „Není na mapě“. Jakmile vyjede na jakékoliv lince, řidič i poznámka k němu okamžitě samy naskočí.
           </p>
         </div>
-        <div style="position: relative; min-width: 250px;">
-          <input type="text" id="driver-search" oninput="renderDriversTable()" placeholder="Hledat řidiče či poznámku..." style="width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: white; padding: 8px 12px 8px 32px; border-radius: 6px; font-size: 13px;">
-          <i class="fas fa-search" style="position: absolute; left: 10px; top: 11px; color: #64748b; font-size: 12px;"></i>
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <div style="position: relative; min-width: 250px;">
+            <input type="text" id="driver-search" oninput="renderDriversTable()" placeholder="Hledat SPZ, řidiče, poznámku..." style="width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: white; padding: 8px 12px 8px 32px; border-radius: 6px; font-size: 13px;">
+            <i class="fas fa-search" style="position: absolute; left: 10px; top: 11px; color: #64748b; font-size: 12px;"></i>
+          </div>
+          <button onclick="let bx=document.getElementById('add-spz-meta-box'); bx.style.display=bx.style.display==='none'?'block':'none'" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #6ee7b7; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+            <i class="fas fa-plus"></i> Přiřadit novou SPZ
+          </button>
+        </div>
+      </div>
+
+      <!-- Box pro rychlé přiřazení/úpravu SPZ -->
+      <div id="add-spz-meta-box" style="display: none; background: #0f172a; border: 1px solid #059669; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+        <div style="font-weight: bold; color: #6ee7b7; margin-bottom: 10px; font-size: 13px;"><i class="fas fa-plus-circle"></i> Vytvořit nebo upravit přiřazení k SPZ</div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <input type="text" id="new-meta-spz" placeholder="SPZ vozu (např. 3P5 1234)" style="flex: 1; min-width: 140px; background: #1e293b; border: 1px solid #334155; color: white; padding: 8px 12px; border-radius: 6px; font-size: 13px; font-weight: bold;">
+          <input type="text" id="new-meta-driver" placeholder="Jméno řidiče..." style="flex: 1.5; min-width: 180px; background: #1e293b; border: 1px solid #334155; color: white; padding: 8px 12px; border-radius: 6px; font-size: 13px;">
+          <input type="text" id="new-meta-note" placeholder="Poznámka k vozu..." style="flex: 2; min-width: 200px; background: #1e293b; border: 1px solid #334155; color: white; padding: 8px 12px; border-radius: 6px; font-size: 13px;">
+          <button onclick="saveSpzMetaFromForm()" style="background: #10b981; color: white; border: none; padding: 8px 18px; border-radius: 6px; font-weight: bold; font-size: 13px; cursor: pointer;">💾 Uložit k SPZ</button>
         </div>
       </div>
 
@@ -4377,17 +4393,17 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
         <table class="mobile-cards-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
           <thead>
             <tr style="background: #0f172a; border-bottom: 2px solid #334155; text-align: left; color: #94a3b8;">
-              <th style="padding: 12px;">Vůz ID / SPZ</th>
-              <th style="padding: 12px;">Jméno řidiče (Admin)</th>
+              <th style="padding: 12px; width: 140px;">SPZ</th>
+              <th style="padding: 12px;">Přiřazený řidič</th>
               <th style="padding: 12px;">Poznámka vozu</th>
+              <th style="padding: 12px; width: 160px;">Stav na mapě</th>
               <th style="padding: 12px;">Linka & Model</th>
-              <th style="padding: 12px;">Stav</th>
-              <th style="padding: 12px;">Datum / Čas uložení</th>
-              <th style="padding: 12px; text-align: center;">Mapa</th>
+              <th style="padding: 12px;">Datum úpravy</th>
+              <th style="padding: 12px; text-align: center; min-width: 160px;">Akce</th>
             </tr>
           </thead>
           <tbody id="drivers-table-body">
-            <tr><td colspan="7" style="text-align: center; padding: 30px; color: #64748b;"><i class="fas fa-spinner fa-spin"></i> Načítání řidičů a poznámek...</td></tr>
+            <tr><td colspan="7" style="text-align: center; padding: 30px; color: #64748b;"><i class="fas fa-spinner fa-spin"></i> Načítání přiřazení SPZ...</td></tr>
           </tbody>
         </table>
       </div>
@@ -5216,7 +5232,7 @@ async function triggerAnalysis() {
 function renderDriversTable() {
   if (!_dashData) return;
   const tbody = document.getElementById('drivers-table-body');
-  const q = (document.getElementById('driver-search').value || '').toLowerCase().trim();
+  const q = (document.getElementById('driver-search')?.value || '').toLowerCase().trim();
   let list = _dashData.admin_drivers_and_notes || [];
 
   if (q) {
@@ -5225,48 +5241,119 @@ function renderDriversTable() {
       String(d.note || '').toLowerCase().includes(q) ||
       String(d.bus_id || '').toLowerCase().includes(q) ||
       String(d.spz || '').toLowerCase().includes(q) ||
-      String(d.line || '').toLowerCase().includes(q)
+      String(d.line || '').toLowerCase().includes(q) ||
+      String(d.status_text || '').toLowerCase().includes(q)
     );
   }
 
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 30px; color: #64748b;">Nenalezen žádný zadaný řidič ani poznámka.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 30px; color: #64748b;">Nenalezeno žádné přiřazení SPZ. Můžete přiřadit novou SPZ tlačítkem výše.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = list.map(d => {
     const isOnline = Boolean(d.is_online);
+    const trackUrl = d.map_url || (d.bus_id ? `https://datacorebot.koyeb.app/mapa?track=${d.bus_id}` : null);
+    
     const statusBadge = isOnline
-      ? '<span style="color: #10b981; font-weight: bold;"><i class="fas fa-circle" style="font-size: 8px;"></i> Online</span>'
-      : '<span style="color: #64748b;"><i class="fas fa-hdd" style="font-size: 10px;"></i> V paměti</span>';
-    const trackUrl = d.map_url || `https://datacorebot.koyeb.app/mapa?track=${d.bus_id}`;
+      ? `<span style="background: rgba(16, 185, 129, 0.2); color: #86efac; border: 1px solid #10b981; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;"><i class="fas fa-circle" style="font-size: 8px;"></i> Na mapě</span>
+         <div style="font-size: 11px; color: #94a3b8; margin-top: 3px;"><a href="${trackUrl}" target="_blank" class="bus-link">Vůz #${d.bus_id}</a> (L${d.line})</div>`
+      : `<span style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid #475569; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;"><i class="fas fa-times-circle" style="font-size: 9px;"></i> Není na mapě</span>`;
+
+    const spzBadge = `<div style="display:flex;align-items:center;gap:6px;">
+      <span style="background:#0f172a;border:1px solid #0284c7;color:#38bdf8;padding:4px 8px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:13px;">${d.spz}</span>
+      <a href="https://seznam-autobusu.cz/seznam?evcspz=${encodeURIComponent(String(d.spz).replace(/\s+/g,''))}" target="_blank" title="Otevřít na Seznam-Autobusu" style="color:#64748b;font-size:11px;"><i class="fas fa-external-link-alt"></i></a>
+    </div>`;
+
+    const driverCell = d.driver_name && d.driver_name !== '—'
+      ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+           <span style="font-weight:bold;color:#f1f5f9;font-size:13px;"><i class="fas fa-user-circle" style="color:#10b981;"></i> ${d.driver_name}</span>
+           <button onclick="deleteSpzMeta('${d.spz}','driver')" style="background:none;border:none;color:#f87171;cursor:pointer;padding:2px 6px;font-size:12px;" title="Smazat pouze řidiče"><i class="fas fa-times-circle"></i></button>
+         </div>`
+      : `<span style="color:#64748b;font-style:italic;">Bez řidiče</span>`;
+
+    const noteCell = d.note && d.note !== '—'
+      ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+           <span style="background:rgba(245,158,11,0.1);border-left:3px solid #f59e0b;padding:4px 8px;border-radius:4px;color:#cbd5e1;font-size:12px;">${d.note}</span>
+           <button onclick="deleteSpzMeta('${d.spz}','note')" style="background:none;border:none;color:#f87171;cursor:pointer;padding:2px 6px;font-size:12px;" title="Smazat pouze poznámku"><i class="fas fa-times-circle"></i></button>
+         </div>`
+      : `<span style="color:#64748b;font-style:italic;">Bez poznámky</span>`;
 
     return `
       <tr style="border-bottom: 1px solid #334155; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
-        <td data-label="Vůz ID / SPZ" style="padding: 12px;">
-          <div style="font-weight: bold;"><a href="${trackUrl}" target="_blank" class="bus-link">#${d.bus_id}</a></div>
-          <div style="font-family: monospace; font-size: 11px; color: #38bdf8;">${d.spz}</div>
-        </td>
-        <td data-label="Jméno řidiče" style="padding: 12px; font-weight: bold; color: #f1f5f9; font-size: 14px;">
-          <i class="fas fa-user-circle" style="color: #10b981;"></i> ${d.driver_name}
-        </td>
-        <td data-label="Poznámka vozu" style="padding: 12px; color: #cbd5e1; max-width: 280px;">
-          ${d.note !== '—' ? `<span style="background: rgba(245, 158, 11, 0.1); border-left: 3px solid #f59e0b; padding: 4px 8px; border-radius: 4px; display: inline-block;">${d.note}</span>` : '<span style="color: #64748b;">Bez poznámky</span>'}
-        </td>
+        <td data-label="SPZ" style="padding: 12px;">${spzBadge}</td>
+        <td data-label="Jméno řidiče" style="padding: 12px;">${driverCell}</td>
+        <td data-label="Poznámka vozu" style="padding: 12px; max-width: 260px;">${noteCell}</td>
+        <td data-label="Stav na mapě" style="padding: 12px;">${statusBadge}</td>
         <td data-label="Linka & Model" style="padding: 12px;">
           <div style="color: white; font-weight: 500;">Linka ${d.line}</div>
           <div style="color: #94a3b8; font-size: 11px;">${d.vehicle_type}</div>
         </td>
-        <td data-label="Stav" style="padding: 12px;">${statusBadge}</td>
-        <td data-label="Datum / Čas" style="padding: 12px; color: #64748b; font-size: 12px; white-space: nowrap;">${d.updated_at}</td>
-        <td data-label="Mapa" style="padding: 12px; text-align: center;">
-          <a href="${trackUrl}" target="_blank" style="display: inline-block; background: #334155; color: #38bdf8; padding: 6px 10px; border-radius: 6px; text-decoration: none; font-size: 12px;" title="Zobrazit vůz na živé mapě">
-            <i class="fas fa-eye"></i>
-          </a>
+        <td data-label="Datum úpravy" style="padding: 12px; color: #64748b; font-size: 12px; white-space: nowrap;">${d.updated_at}</td>
+        <td data-label="Akce" style="padding: 12px; text-align: center;">
+          <div style="display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap;">
+            ${trackUrl ? `<a href="${trackUrl}" target="_blank" style="background: #1e293b; border: 1px solid #0284c7; color: #38bdf8; padding: 6px 10px; border-radius: 6px; text-decoration: none; font-size: 11px; font-weight: bold;" title="Zobrazit na mapě"><i class="fas fa-map-marker-alt"></i> Mapa</a>` : ''}
+            <button onclick="deleteSpzMeta('${d.spz}','all')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;" title="Smazat řidiče i poznámku pro tuto SPZ"><i class="fas fa-trash-alt"></i> Smazat</button>
+          </div>
         </td>
       </tr>
     `;
   }).join('');
+}
+
+async function deleteSpzMeta(spz, field) {
+  let label = field === 'driver' ? 'řidiče' : (field === 'note' ? 'poznámku' : 'řidiče i poznámku');
+  if (!confirm(`Opravdu chcete smazat ${label} pro SPZ '${spz}'?\n\nZměna se ihned promítne i do živé mapy.`)) return;
+  try {
+    const res = await fetch('/api/admin/spz_meta/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spz, field })
+    });
+    const d = await res.json();
+    if (!res.ok || d.status !== 'success') {
+      showToast(d.message || 'Chyba při mazání', true);
+    } else {
+      showToast(d.message || 'Úspěšně smazáno');
+      loadSpzControlData();
+    }
+  } catch (e) {
+    showToast('Chyba: ' + e.message, true);
+  }
+}
+
+async function saveSpzMetaFromForm() {
+  const spzInp = document.getElementById('new-meta-spz');
+  const drvInp = document.getElementById('new-meta-driver');
+  const nteInp = document.getElementById('new-meta-note');
+  const spz = spzInp ? spzInp.value.trim() : '';
+  const driver = drvInp ? drvInp.value.trim() : '';
+  const note = nteInp ? nteInp.value.trim() : '';
+
+  if (!spz) {
+    showToast('Zadejte prosím SPZ', true);
+    return;
+  }
+  try {
+    const res = await fetch('/api/admin/spz_meta/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spz, driver, note })
+    });
+    const d = await res.json();
+    if (!res.ok || d.status !== 'success') {
+      showToast(d.message || 'Chyba při ukládání', true);
+    } else {
+      showToast(d.message || 'Přiřazení uloženo');
+      if (spzInp) spzInp.value = '';
+      if (drvInp) drvInp.value = '';
+      if (nteInp) nteInp.value = '';
+      document.getElementById('add-spz-meta-box').style.display = 'none';
+      loadSpzControlData();
+    }
+  } catch (e) {
+    showToast('Chyba: ' + e.message, true);
+  }
 }
 
 function renderInvalidLog() {
