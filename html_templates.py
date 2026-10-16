@@ -4268,6 +4268,7 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
           <button onclick="setSpzFilter('duplicate')" class="spz-filter-btn" id="filter-duplicate" style="background: #0f172a; color: #fb923c; border: 1px solid #f97316; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer;">Pouze Duplicity</button>
           <button onclick="setSpzFilter('unknown')" class="spz-filter-btn" id="filter-unknown" style="background: #0f172a; color: #f87171; border: 1px solid #ef4444; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer;">Aktivní hledání</button>
           <button onclick="setSpzFilter('unverified')" class="spz-filter-btn" id="filter-unverified" style="background: #0f172a; color: #fbbf24; border: 1px solid #f59e0b; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer;">Neověřené</button>
+          <button onclick="setSpzFilter('watched')" class="spz-filter-btn" id="filter-watched" style="background: #0f172a; color: #38bdf8; border: 1px solid #38bdf8; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer;"><i class="fas fa-eye"></i> Hlídáno systémem (<span id="stat-watched-badge">0</span>)</button>
         </div>
         <div style="position: relative; min-width: 260px; flex: 1; max-width: 420px;">
           <input type="text" id="spz-search" oninput="renderSpzTable()" placeholder="Hledat vůz ID, linku, SPZ, model, chybu..." style="width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: white; padding: 8px 12px 8px 32px; border-radius: 6px; font-size: 13px;">
@@ -4442,7 +4443,7 @@ function switchTab(tabName) {
 
 function setSpzFilter(filterName) {
   _currentSpzFilter = filterName;
-  ['all', 'unknown', 'duplicate', 'unverified'].forEach(f => {
+  ['all', 'unknown', 'duplicate', 'unverified', 'watched'].forEach(f => {
     const b = document.getElementById('filter-' + f);
     if (!b) return;
     if (f === filterName) {
@@ -4485,6 +4486,10 @@ function renderDashboardUI() {
   document.getElementById('stat-unverified').innerText = s.unverified_count || 0;
   document.getElementById('stat-proposals').innerText = s.pending_proposals_count || 0;
   document.getElementById('stat-automation').innerText = (s.automation_log_count || (_dashData.automation_log || []).length) || 0;
+  const watchedBadge = document.getElementById('stat-watched-badge');
+  if (watchedBadge) {
+    watchedBadge.innerText = s.watched_buses_count || (_dashData.watched_buses || []).length || 0;
+  }
 
   document.getElementById('badge-tab-spz').innerText = (s.unknown_count || 0) + (s.duplicate_count || 0) + (s.unverified_count || 0);
   document.getElementById('badge-tab-proposals').innerText = s.pending_proposals_count || 0;
@@ -4596,6 +4601,8 @@ function renderSpzTable() {
     list = _dashData.unknown_buses || [];
   } else if (_currentSpzFilter === 'unverified') {
     list = _dashData.unverified_buses || [];
+  } else if (_currentSpzFilter === 'watched') {
+    list = [...(_dashData.duplicate_buses || []), ...(_dashData.unknown_buses || []), ...(_dashData.unverified_buses || [])].filter(b => b.is_watched);
   }
 
   if (q) {
@@ -4617,6 +4624,8 @@ function renderSpzTable() {
   tbody.innerHTML = list.map(b => {
     const isSearching = !b.spz || b.spz === 'Aktivní hledání' || b.spz.toUpperCase().includes('NEZNÁMÁ');
     const isDuplicate = (_dashData.duplicate_buses || []).some(d => String(d.bus_id) === String(b.bus_id)) || (b.reason && b.reason.includes('Duplicitní'));
+    const isWatched = Boolean(b.is_watched);
+    const cannotDetermine = Boolean(b.cannot_determine_reason) || (isSearching && !b.candidate_spz);
     const badgeColor = b.admin_verified ? '#10b981' : (b.spz_verified ? '#3b82f6' : (isSearching ? '#38bdf8' : (isDuplicate ? '#f97316' : '#fbbf24')));
     const statusLabel = b.admin_verified ? 'Admin ověřeno' : (b.spz_verified ? '3F Ověřeno' : (isSearching ? 'Aktivní hledání' : (isDuplicate ? 'Duplicita' : 'Neověřeno')));
     const trackUrl = b.map_url || `https://datacorebot.koyeb.app/mapa?track=${b.bus_id}`;
@@ -4626,9 +4635,39 @@ function renderSpzTable() {
       candChip = `<div style="margin-top: 6px;"><button onclick="setQuickInp('${b.bus_id}', '${b.candidate_spz}')" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #86efac; font-size: 11px; padding: 4px 8px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-weight: bold;" title="Klikněte pro vložení nalezené SPZ z Arrivy"><i class="fas fa-magic"></i> Arriva kandidát (${b.candidate_line || b.line}): <b>${b.candidate_spz}</b> (${b.candidate_dist}m)</button></div>`;
     }
 
+    let watchedBadge = '';
+    if (isWatched) {
+      watchedBadge = `<div style="display: inline-block; background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #38bdf8; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; margin-top: 4px;"><i class="fas fa-eye"></i> Systém aktivně hlídá</div>`;
+    }
+
     let reasonContent = `<div style="color: #f1f5f9; font-size: 12px; line-height: 1.4;">${b.reason || 'Důvod nezaznamenán'}</div>`;
-    if (isDuplicate) {
+    if (cannotDetermine && !isDuplicate) {
+      reasonContent = `<div style="color: #fb923c; font-size: 12px; line-height: 1.4; font-weight: 500;"><i class="fas fa-info-circle"></i> Nelze určit SPZ z důvodu, že vůz právě nejede a není na mapě Arriva.</div>`;
+    } else if (isDuplicate) {
       reasonContent = `<div style="display: inline-block; background: rgba(249, 115, 22, 0.2); color: #fb923c; border: 1px solid #f97316; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; margin-bottom: 4px; text-transform: uppercase;"><i class="fas fa-clone"></i> Konflikt duplicity</div>` + reasonContent;
+      if (cannotDetermine) {
+        reasonContent += `<div style="color: #fb923c; font-size: 11px; margin-top: 4px;"><i class="fas fa-info-circle"></i> Nelze určit SPZ z důvodu, že vůz právě nejede a není na mapě Arriva.</div>`;
+      }
+    }
+
+    let watchButton = '';
+    if (isWatched) {
+      watchButton = `
+        <button onclick="toggleWatchBus('${b.bus_id}', false)" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #86efac; font-size: 11px; padding: 5px 10px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-weight: bold; margin-top: 6px;" title="Klikněte pro zrušení hlídání">
+          <i class="fas fa-check-circle"></i> Vůz je aktivně hlídán (přiřadí se po vyjetí)
+        </button>
+      `;
+    } else {
+      watchButton = `
+        <button onclick="toggleWatchBus('${b.bus_id}', true)" style="background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; color: #7dd3fc; font-size: 11px; padding: 5px 10px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-weight: bold; margin-top: 6px;" title="Systém si vůz zapamatuje a jakmile se objeví na mapě Arriva na lince, automaticky mu přiřadí SPZ">
+          <i class="fas fa-eye"></i> Hlídat vůz (přiřadit po vyjetí)
+        </button>
+      `;
+    }
+
+    let cannotHint = '';
+    if (cannotDetermine) {
+      cannotHint = `<div style="font-size: 11px; color: #94a3b8; margin-top: 4px; line-height: 1.3;"><i class="fas fa-info-circle" style="color: #fb923c;"></i> Vůz právě nejede. Klikněte níže na <b>Hlídat vůz</b> a systém mu sám přiřadí SPZ, jakmile vyjede.</div>`;
     }
 
     return `
@@ -4646,6 +4685,7 @@ function renderSpzTable() {
             ${isSearching ? '<i class="fas fa-satellite-dish fa-spin" style="font-size:10px;margin-right:4px;"></i>Aktivní hledání' : b.spz}
           </span>
           <div style="font-size: 10px; color: ${badgeColor}; margin-top: 3px;"><i class="fas fa-shield-alt"></i> ${statusLabel}</div>
+          ${watchedBadge}
           ${candChip}
         </td>
         <td data-label="Důvod chyby" style="padding: 12px; max-width: 320px;">
@@ -4661,6 +4701,8 @@ function renderSpzTable() {
               <i class="fas fa-save"></i> Uložit
             </button>
           </div>
+          ${cannotHint}
+          <div>${watchButton}</div>
         </td>
         <td data-label="Akce" style="padding: 12px; text-align: center;">
           <a href="${trackUrl}" target="_blank" style="display: inline-block; background: #334155; color: #38bdf8; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold;" title="Zobrazit vůz na živé mapě">
@@ -4670,6 +4712,25 @@ function renderSpzTable() {
       </tr>
     `;
   }).join('');
+}
+
+async function toggleWatchBus(busId, doWatch) {
+  try {
+    const res = await fetch('/api/admin/spz_watch_bus', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bus_id: busId, action: doWatch ? 'watch' : 'unwatch' })
+    });
+    const d = await res.json();
+    if (!res.ok || d.status !== 'success') {
+      showToast(d.message || 'Chyba při změně hlídání vozu', true);
+    } else {
+      showToast(d.message || (doWatch ? 'Vůz byl zařazen do hlídání' : 'Vůz byl odebrán ze sledování'));
+      loadSpzControlData();
+    }
+  } catch (err) {
+    showToast('Chyba: ' + err.message, true);
+  }
 }
 
 async function saveQuickSpz(busId) {

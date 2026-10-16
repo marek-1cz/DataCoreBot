@@ -4633,26 +4633,33 @@ SPZ_MEMORY_MAX_AGE_HOURS = 24  # jak dlouho pamatovat SPZ bez aktualizace
 SPZ_CONFLICT_PROPOSALS = {}      # prop_id -> dict návrhu řešení konfliktu
 INVALID_VERIFICATIONS_LOG = []   # list chyb při admin-ověření Neznámé SPZ (Bod 3)
 AUTO_RESOLVE_SPZ = True          # True = automatické rozluštění (Automode), False = manuální schvalování adminem
+WATCHED_SPZ_BUSES = set()        # set ID vozů, které systém aktivně hlídá a přiřadí jim SPZ ihned po vyjetí na Arriva mapu
 
 _SPZ_SETTINGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "spz_settings.json")
 
 def _load_spz_settings():
-    global AUTO_RESOLVE_SPZ
+    global AUTO_RESOLVE_SPZ, WATCHED_SPZ_BUSES
     try:
         if os.path.exists(_SPZ_SETTINGS_PATH):
             with open(_SPZ_SETTINGS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if "auto_resolve" in data:
                     AUTO_RESOLVE_SPZ = bool(data["auto_resolve"])
-                    return
+                if "watched_buses" in data:
+                    WATCHED_SPZ_BUSES = set(str(x) for x in data["watched_buses"])
+                return
     except Exception:
         pass
     AUTO_RESOLVE_SPZ = True
+    WATCHED_SPZ_BUSES = set()
 
 def _save_spz_settings():
     try:
         with open(_SPZ_SETTINGS_PATH, "w", encoding="utf-8") as f:
-            json.dump({"auto_resolve": AUTO_RESOLVE_SPZ}, f)
+            json.dump({
+                "auto_resolve": AUTO_RESOLVE_SPZ,
+                "watched_buses": list(WATCHED_SPZ_BUSES)
+            }, f, indent=2)
     except Exception:
         pass
 
@@ -5974,6 +5981,51 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                                 "status": "pending",
                                 "created_at": now_str
                             }
+
+    # ── 4. Aktivní hlídání vozů (Uživatel zapnul sledování, dokud nevyjedou na Arriva mapu) ──
+    resolved_watched = []
+    for w_bid in list(WATCHED_SPZ_BUSES):
+        w_c = GLOBAL_BUS_CACHE.get(str(w_bid))
+        if not w_c or w_c.get("is_withdrawn") or w_c.get("is_train"):
+            continue
+        w_lat = w_c.get("lat") or 0
+        w_lng = w_c.get("lng") or 0
+        w_line = str(w_c.get("line") or "").strip()
+
+        # Hledáme, zda se na Arriva mapě již objevil vysílač pro tento hlídaný vůz
+        if w_lat and w_lng and w_line and LATEST_ARRIVA_DATA:
+            best_arr_spz = None
+            best_arr_dist = 999999
+            for b_a in LATEST_ARRIVA_DATA:
+                a_spz = (b_a.get("spz") or "").strip()
+                if not a_spz or a_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
+                    continue
+                a_lat = b_a.get("latitude") or 0
+                a_lon = b_a.get("longitude") or 0
+                if not a_lat or not a_lon:
+                    continue
+                if not _arriva_line_matches(w_line, b_a):
+                    continue
+                d_cand = haversine_m(w_lat, w_lng, a_lat, a_lon)
+                if d_cand <= 850 and d_cand < best_arr_dist:
+                    best_arr_dist = d_cand
+                    best_arr_spz = a_spz
+
+            if best_arr_spz:
+                # Vůz vyjel a systém nalezl jeho vysílač na Arriva mapě!
+                w_c["spz"] = best_arr_spz
+                w_c["spz_verified"] = True
+                w_c["spz_locked"] = True
+                w_c["manual_spz"] = False
+                log_spz_change(w_bid, "Aktivní hledání", best_arr_spz, reason="watched_bus_auto_paired", admin_note=f"Hlídaný vůz vyjel na linku {w_line} -> Arriva match {round(best_arr_dist)}m")
+                log_automation_action("watched_bus_resolved", w_bid, f"Hlídaný vůz #{w_bid} vyjel na linku {w_line}", f"Systém úspěšně zachytil vysílač z Arriva mapy a přiřadil SPZ '{best_arr_spz}' ({round(best_arr_dist)}m na lince {w_line}).", spz=best_arr_spz, line=w_line)
+                resolved_watched.append(str(w_bid))
+                print(f"[WATCHED BUS] Vůz #{w_bid} vyjel na linku {w_line}! Přiřazena SPZ {best_arr_spz} ({round(best_arr_dist)}m)", flush=True)
+
+    if resolved_watched:
+        for r_bid in resolved_watched:
+            WATCHED_SPZ_BUSES.discard(r_bid)
+        _save_spz_settings()
 
 # Rate-limiting pro /api/priority_spoj endpoint
 _PRIORITY_SPOJ_RATE = {}  # {bus_id: timestamp}
@@ -7881,10 +7933,10 @@ def background_map_worker():
             except Exception:
                 pass
 
-            # ── Notifikace: zkontroluj triggery (kazdych 30s) ─────────────
+            # ── Notifikace: zkontroluj triggery (každých 10s při každém tiku) ─────────────
             global _last_notification_check
             if db_client and (not _last_notification_check or
-                    (now - _last_notification_check).total_seconds() >= 30):
+                    (now - _last_notification_check).total_seconds() >= 10):
                 _last_notification_check = now
                 try:
                     _check_and_fire_notifications(db_client, GLOBAL_BUS_CACHE)
@@ -8083,12 +8135,16 @@ def _check_and_fire_notifications(db_client, bus_cache):
         if not discord_id and not email:
             continue  # Nemáme kam odesílat
 
-        # Najdi autobus v cache
+        # Najdi autobus v cache (s normalizací SPZ a ID)
+        def _norm_id(s):
+            return "".join(str(s or "").upper().split())
+
+        norm_identifier = _norm_id(identifier)
         bus_data = None
         if id_type == "spz":
             matched = []
             for bus_id, bc in bus_cache.items():
-                if bc.get("spz", "") == identifier:
+                if _norm_id(bc.get("spz")) == norm_identifier or str(bus_id).strip() == str(identifier).strip():
                     b_item = dict(bc)
                     b_item["id"] = bus_id
                     matched.append(b_item)
@@ -8097,39 +8153,30 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 bus_data = active[0] if active else matched[0]
         elif id_type == "bus_id":
             for bus_id, bc in bus_cache.items():
-                if str(bus_id) == str(identifier):
+                if str(bus_id).strip() == str(identifier).strip() or _norm_id(bc.get("spz")) == norm_identifier:
                     bus_data = dict(bc)
                     bus_data["id"] = bus_id
                     break
 
         if not bus_data:
-            print(f"\033[35m[NOTIF DEBUG] Pravidlo {rule_id[:8]} nenalezlo aktivní bus ({id_type}={identifier})\033[0m", flush=True)
             continue
 
-        print(f"\033[35m[NOTIF DEBUG] Vyhodnocuji pravidlo {rule_id[:8]} (bus {bus_data['id']}) - triggers: {triggers}\033[0m", flush=True)
         state = _NOTIF_STATE_CACHE.setdefault(rule_id, {})
 
         def _fire(trigger_key, new_state, context_text=""):
-            if bus_data.get("tt_is_fetching") and trigger_key != "bug_error":
-                print(f"\033[35m[NOTIF DEBUG] Storno FIRE {rule_id[:8]}: Čekám na detail spoje (tt_is_fetching)\033[0m", flush=True)
-                return False
-
-            print(f"\033[35m[NOTIF DEBUG] Pokus o FIRE pravidla {rule_id[:8]} trigger_key='{trigger_key}', new_state='{new_state}'\033[0m", flush=True)
             old = state.get(trigger_key)
             if old == new_state:
-                print(f"\033[35m[NOTIF DEBUG] Storno FIRE {rule_id[:8]}: state se nezměnil ('{old}' == '{new_state}')\033[0m", flush=True)
                 return False
-            # Anti-spam: max 1x za 5 minut na pravidlo
-            last_fired = rule.get("last_fired_at")
-            if last_fired:
+
+            # Anti-spam ochrana: cooldown per trigger_key (různé události jako rozjezd, zastávka, konečná se neblokují navzájem!)
+            trigger_last_fired = state.get(f"_lf_{trigger_key}")
+            if trigger_last_fired:
                 try:
-                    lf = datetime.fromisoformat(last_fired.replace("Z", "+00:00")).replace(tzinfo=None)
-                    if (now - lf).total_seconds() < 300:
-                        print(f"\033[35m[NOTIF DEBUG] Storno FIRE {rule_id[:8]}: Anti-spam 5 min (uplynulo {(now-lf).total_seconds()} s)\033[0m", flush=True)
+                    if (now - trigger_last_fired).total_seconds() < 30:
                         return False
                 except Exception:
                     pass
-            print(f"\033[35m[NOTIF DEBUG] ---> ODPALUJI (FIRE) pravidlo {rule_id[:8]} trigger='{trigger_key}'! <---\033[0m", flush=True)
+
             embed, dm_text = _build_notification_message(rule, trigger_key, bus_data, context_text)
             # Odpal do fronty pro Discord bot (DM)
             NOTIFICATION_DM_QUEUE.put({
@@ -8141,6 +8188,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 "trigger": trigger_key,
             })
             state[trigger_key] = new_state
+            state[f"_lf_{trigger_key}"] = now
             
             is_one_time = rule.get("is_one_time", True)
             try:
@@ -8153,7 +8201,6 @@ def _check_and_fire_notifications(db_client, bus_cache):
                             current_triggers[base_trigger_key] = False
                     
                     rule["triggers"] = current_triggers
-                    
                     has_active = any(bool(v) and v != "none" and v != "" for v in current_triggers.values())
                     if has_active:
                         db_client.table("bus_notifications").update({
@@ -8161,7 +8208,6 @@ def _check_and_fire_notifications(db_client, bus_cache):
                             "last_fired_at": now.isoformat(),
                             "fired_count": (rule.get("fired_count") or 0) + 1
                         }).eq("id", rule_id).execute()
-                        print(f"[NOTIF] Jednorázové pravidlo {rule_id[:8]} částečně splněno (trigger={trigger_key}). Zbývají další.", flush=True)
                     else:
                         db_client.table("bus_notifications").delete().eq("id", rule_id).execute()
                         print(f"[NOTIF] Jednorázové pravidlo {rule_id[:8]} ZCELA splněno a smazáno.", flush=True)
@@ -8172,7 +8218,8 @@ def _check_and_fire_notifications(db_client, bus_cache):
                     }).eq("id", rule_id).execute()
             except Exception:
                 pass
-                        # Zapis do lokalni historie notifikaci
+
+            # Zápis do lokální historie notifikací
             try:
                 from local_db import local_notif_log_history
                 local_notif_log_history(user_session, rule_id, identifier, trigger_key, "/".join(deliv_channels), dm_text or context_text)
@@ -8193,30 +8240,21 @@ def _check_and_fire_notifications(db_client, bus_cache):
         except:
             delay_val = 0
 
+        # Pokud je bus v přechodné telemetrické chybě (BUG), nemažeme pravidlo, pouze přeskočíme tento tik
         if "BUG" in status_text.upper():
-            embed, dm_text = _build_notification_message(rule, "bug_error", bus_data)
-            NOTIFICATION_DM_QUEUE.put({
-                "discord_id": discord_id,
-                "email": email,
-                "dm_text": dm_text,
-                "embed": embed,
-                "rule_id": rule_id,
-                "trigger": "bug_error",
-            })
-            try:
-                db_client.table("bus_notifications").delete().eq("id", rule_id).execute()
-            except Exception: pass
-            print(f"[NOTIF] Pravidlo {rule_id[:8]} smazáno - bus v BUG stavu.", flush=True)
             continue
 
         now_terminal = "Konečná" in status_text or "Konecna" in status_text
-        was_terminal = state.get("_terminal")
+        was_terminal = state.get("_terminal", False)
         if triggers.get("terminal"):
-            if now_terminal and was_terminal is False:
+            if now_terminal and not was_terminal:
                 term_name = status_text.split("Konečná", 1)[-1].strip() if "Konečná" in status_text else ""
                 ctx_text = f"SPZ: {bus_data.get('spz')} | Příjezd: {now_time_str}" + (f" na {term_name}" if term_name else "")
-                _fire("terminal", status_text, ctx_text)
-            
+                if _fire("terminal", status_text, ctx_text):
+                    state["_terminal"] = True
+            elif not now_terminal:
+                state["_terminal"] = False
+
             # Auto cleanup pro delay_change
             if now_terminal and rule.get("is_one_time", True) and triggers.get("delay_change"):
                 try:
@@ -8229,16 +8267,16 @@ def _check_and_fire_notifications(db_client, bus_cache):
                             db_client.table("bus_notifications").update({"triggers": current_triggers}).eq("id", rule_id).execute()
                         else:
                             db_client.table("bus_notifications").delete().eq("id", rule_id).execute()
-                            print(f"[NOTIF] Pravidlo {rule_id[:8]} smazáno - bus dojel na konečnou (delay_change cleanup).", flush=True)
                 except Exception:
                     pass
-        state["_terminal"] = now_terminal
 
         if triggers.get("new_line"):
             prev_line = state.get("_line")
             if prev_line and prev_line != line:
-                _fire("new_line", line, f"SPZ: {bus_data.get('spz')} změnil linku: {prev_line} ➡️ {line}")
-            state["_line"] = line
+                if _fire("new_line", line, f"SPZ: {bus_data.get('spz')} změnil linku: {prev_line} ➡️ {line}"):
+                    state["_line"] = line
+            else:
+                state["_line"] = line
 
         stop_name = triggers.get("stop_near", "")
         if stop_name:
@@ -8255,36 +8293,39 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 b_lat = bus_data.get("lat", 0)
                 b_lon = bus_data.get("lng", 0)
                 if b_lat and b_lon and GTFS_LOADED:
-                    near = _nearest_stop_name(b_lat, b_lon, 250)
+                    near = _nearest_stop_name(b_lat, b_lon, 450)
                     if near and _norm_txt(stop_name) in _norm_txt(near):
                         now_near_stop = True
                         status_val = f"{status_text} ({near})"
                         ctx_text = f"SPZ: {bus_data.get('spz')} | Fyzicky poblíž zastávky: {near} (v {now_time_str})"
             
-            was_near_stop = state.get(f"_stop_near:{stop_name}")
+            was_near_stop = state.get(f"_stop_near:{stop_name}", False)
             if now_near_stop and not was_near_stop:
-                _fire(f"stop_near:{stop_name}", status_val, ctx_text)
-            
-            state[f"_stop_near:{stop_name}"] = now_near_stop
+                if _fire(f"stop_near:{stop_name}", status_val, ctx_text):
+                    state[f"_stop_near:{stop_name}"] = True
+            elif not now_near_stop:
+                state[f"_stop_near:{stop_name}"] = False
 
         now_in_depot = "bg-depot" in color_class or "bg-yellow" in color_class or "Vozovna" in status_text or bool(bus_data.get("in_depot"))
-        was_in_depot = state.get("_in_depot")
-
+        was_in_depot = state.get("_in_depot", False)
 
         depot_name = triggers.get("depot_in", "")
         if depot_name and depot_name != "none":
-            if was_in_depot is False and now_in_depot:
+            if not was_in_depot and now_in_depot:
                 if depot_name == "all" or depot_name == True or depot_name.lower() in status_text.lower():
-                    _fire("depot_in", "in", f"SPZ: {bus_data.get('spz')} přijel do vozovny v {now_time_str}")
+                    if _fire("depot_in", "in", f"SPZ: {bus_data.get('spz')} přijel do vozovny v {now_time_str}"):
+                        state["_in_depot"] = True
+            elif not now_in_depot:
+                state["_in_depot"] = False
 
         depot_out_name = triggers.get("depot_out", "")
         if depot_out_name and depot_out_name != "none":
-            if was_in_depot is True and not now_in_depot:
+            if was_in_depot and not now_in_depot:
                 last_depot = state.get("_depot_name_text", "")
                 if depot_out_name == "all" or depot_out_name == True or depot_out_name.lower() in last_depot.lower():
-                    _fire("depot_out", "out", f"SPZ: {bus_data.get('spz')} vyjel z vozovny ({last_depot}) v {now_time_str}")
-            
-        state["_in_depot"] = now_in_depot
+                    if _fire("depot_out", "out", f"SPZ: {bus_data.get('spz')} vyjel z vozovny ({last_depot}) v {now_time_str}"):
+                        state["_in_depot"] = False
+
         if now_in_depot:
             state["_depot_name_text"] = status_text
 
@@ -8292,52 +8333,44 @@ def _check_and_fire_notifications(db_client, bus_cache):
             prev_dest = state.get("_dest")
             dest = bus_data.get("destination", "")
             if prev_dest and prev_dest != dest:
-                _fire("trip_change", dest, f"SPZ: {bus_data.get('spz')} změnil cíl: {prev_dest} ➡️ {dest}")
-            state["_dest"] = dest
+                if _fire("trip_change", dest, f"SPZ: {bus_data.get('spz')} změnil cíl: {prev_dest} ➡️ {dest}"):
+                    state["_dest"] = dest
+            else:
+                state["_dest"] = dest
 
         if triggers.get("started_moving"):
-            was_stopped = state.get("_stopped")
+            was_stopped = state.get("_stopped", False)
             now_stopped = "stojí" in status_text.lower() or "stoji" in status_text.lower() or "čeká" in status_text.lower() or "konečná" in status_text.lower() or "konecna" in status_text.lower() or "bg-gray" in color_class
-            if was_stopped is True and not now_stopped:
-                _fire("started_moving", status_text, f"SPZ: {bus_data.get('spz')} se dal do pohybu ({now_time_str})")
-            state["_stopped"] = now_stopped
+            if was_stopped and not now_stopped:
+                if _fire("started_moving", status_text, f"SPZ: {bus_data.get('spz')} se dal do pohybu ({now_time_str})"):
+                    state["_stopped"] = False
+            elif now_stopped:
+                state["_stopped"] = True
 
-        # Reset stavu pro spolehlive opakovani pravidel (re-trigger pri dalsim spoji/dni)
-        if not now_terminal:
-            state.pop("terminal", None)
-        if not now_in_depot:
-            state.pop("depot_in", None)
-        if now_in_depot:
-            state.pop("depot_out", None)
-        if now_stopped:
-            state.pop("started_moving", None)
-        if stop_name and not now_near_stop:
-            state.pop(f"stop_near:{stop_name}", None)
-
-            
         # Zpoždění
         is_inactive_for_delay = "odstaven" in status_text.lower() or "bug" in status_text.lower() or "bg-gray" in color_class or "neznám" in status_text.lower()
 
         delay_thresh = triggers.get("delay_threshold")
         if delay_thresh:
-            print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} testuji delay_threshold={delay_thresh}, current_delay={delay_val}\033[0m", flush=True)
             try:
                 dt = int(delay_thresh)
                 prev_delay = state.get("_delay_thresh_val", -1)
-                print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} delay_thresh limit={dt}, current={delay_val}, prev={prev_delay}\033[0m", flush=True)
                 if not is_inactive_for_delay and delay_val >= dt and prev_delay < dt:
-                    _fire(f"delay_threshold:{dt}", str(delay_val), f"SPZ: {bus_data.get('spz')} dosáhl zpoždění {delay_val} min (limit {dt} min)")
-                state["_delay_thresh_val"] = delay_val
+                    if _fire(f"delay_threshold:{dt}", str(delay_val), f"SPZ: {bus_data.get('spz')} dosáhl zpoždění {delay_val} min (limit {dt} min)"):
+                        state["_delay_thresh_val"] = delay_val
+                elif delay_val < dt:
+                    state["_delay_thresh_val"] = delay_val
             except Exception as e:
-                print(f"\033[35m[NOTIF DEBUG] {rule_id[:8]} chyba delay_threshold: {e}\033[0m", flush=True)
+                pass
 
         delay_change = triggers.get("delay_change")
         if delay_change:
             prev_d = state.get("_delay_change_val", None)
             if not is_inactive_for_delay and prev_d is not None and abs(delay_val - prev_d) >= 3:
-                _fire(f"delay_change", str(delay_val), f"SPZ: {bus_data.get('spz')} | Zpoždění se změnilo: {prev_d} min ➡️ {delay_val} min")
-            
-            state["_delay_change_val"] = delay_val
+                if _fire(f"delay_change", str(delay_val), f"SPZ: {bus_data.get('spz')} | Zpoždění se změnilo: {prev_d} min ➡️ {delay_val} min"):
+                    state["_delay_change_val"] = delay_val
+            elif prev_d is None:
+                state["_delay_change_val"] = delay_val
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -9168,7 +9201,7 @@ def get_spz_control_dashboard_data():
         if c.get("is_withdrawn") or c.get("is_train"):
             continue
         spz = str(c.get("spz") or "").strip()
-        if spz and spz.upper() not in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE"):
+        if spz and spz.upper() not in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
             spz_counts[spz] = spz_counts.get(spz, 0) + 1
 
     for bid, c in GLOBAL_BUS_CACHE.items():
@@ -9198,6 +9231,11 @@ def get_spz_control_dashboard_data():
         except Exception:
             pass
 
+        speed = c.get("speed")
+        status_s = str(c.get("status") or "").lower()
+        is_stationary = in_depot or any(w in status_s for w in ("stojí", "stoji", "čeká", "ceka", "odstaven", "konečná", "konecna", "depo", "vozovna")) or (speed is not None and speed <= 2) or (c.get("bearing") is None and not speed)
+        is_watched = str(bid) in WATCHED_SPZ_BUSES
+
         bus_entry = {
             "bus_id": bid,
             "line": line or "?",
@@ -9213,6 +9251,8 @@ def get_spz_control_dashboard_data():
             "admin_note": c.get("admin_note", ""),
             "admin_driver": c.get("admin_driver", ""),
             "status": c.get("status") or "Aktivní",
+            "is_stationary": bool(is_stationary),
+            "is_watched": bool(is_watched),
             "reason": "",
             "map_url": f"https://datacorebot.koyeb.app/mapa?track={bid}"
         }
@@ -9224,7 +9264,7 @@ def get_spz_control_dashboard_data():
         if lat and lng and line and LATEST_ARRIVA_DATA:
             for b_a in LATEST_ARRIVA_DATA:
                 a_spz = (b_a.get("spz") or "").strip()
-                if not a_spz or a_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ"):
+                if not a_spz or a_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
                     continue
                 a_lat = b_a.get("latitude") or 0
                 a_lon = b_a.get("longitude") or 0
@@ -9244,18 +9284,18 @@ def get_spz_control_dashboard_data():
             bus_entry["candidate_line"] = cand_line
 
         # Neznámá SPZ / Aktivní hledání
-        if not spz or spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ"):
+        if not spz or spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
             bus_entry["spz"] = "Aktivní hledání"
-            if in_depot:
-                bus_entry["reason"] = "Vozidlo stojí ve vozovně/depu – telemetrie nepřiřazena"
-            elif c.get("spz_stable_ticks", 0) < 3:
-                bus_entry["reason"] = "Nově zachycený spoj v GTFS/Inflow – čeká na Arriva lokalizaci"
-            elif cand_spz:
+            if cand_spz:
                 bus_entry["reason"] = f"Aktivní hledání: Na Arriva mapě byl na lince {line} detekován spolehlivý kandidát '{cand_spz}' ({round(cand_dist)}m)"
+            elif is_stationary or not cand_spz:
+                bus_entry["reason"] = "Nelze určit SPZ z důvodu, že vůz právě nejede a není na mapě Arriva."
+                bus_entry["cannot_determine_reason"] = "Nelze určit SPZ z důvodu, že vůz právě nejede a není na mapě Arriva."
             elif line and line not in [mem.get("line") for mem in SPZ_MEMORY.values()]:
                 bus_entry["reason"] = f"V Arriva telemetrii nebyla nalezena žádná volná SPZ pro linku {line}"
             else:
-                bus_entry["reason"] = "Žádný Arriva vysílač na dané lince v toleranci vzdálenosti"
+                bus_entry["reason"] = "Nelze určit SPZ z důvodu, že vůz právě nejede a není na mapě Arriva."
+                bus_entry["cannot_determine_reason"] = "Nelze určit SPZ z důvodu, že vůz právě nejede a není na mapě Arriva."
             unknown_buses.append(bus_entry)
 
         # Duplicitní SPZ
@@ -9265,6 +9305,9 @@ def get_spz_control_dashboard_data():
             dup_reason = f"Duplicitní SPZ: Vůz #{bid} sdílí SPZ '{spz}' s {other_str} (celkem {spz_counts[spz]} vozy)."
             if cand_spz and cand_spz != spz:
                 dup_reason += f" Na lince {line} byl na Arriva mapě spolehlivě nalezen alternativní vysílač: '{cand_spz}' ({round(cand_dist)}m)."
+            elif is_stationary or not cand_spz:
+                dup_reason += " Nelze určit SPZ z důvodu, že vůz právě nejede a není na mapě Arriva."
+                bus_entry["cannot_determine_reason"] = "Nelze určit SPZ z důvodu, že vůz právě nejede a není na mapě Arriva."
             bus_entry["reason"] = dup_reason
             bus_entry["conflict_with_ids"] = other_bids
             duplicate_buses.append(bus_entry)
@@ -9380,8 +9423,10 @@ def get_spz_control_dashboard_data():
             "drivers_notes_count": len(admin_drivers_notes),
             "pending_proposals_count": sum(1 for p in proposals_list if p.get("status") == "pending"),
             "invalid_verifications_count": len(INVALID_VERIFICATIONS_LOG),
-            "automation_log_count": len(AUTOMATION_ACTIVITY_LOG)
+            "automation_log_count": len(AUTOMATION_ACTIVITY_LOG),
+            "watched_buses_count": len(WATCHED_SPZ_BUSES)
         },
+        "watched_buses": list(WATCHED_SPZ_BUSES),
         "unknown_buses": unknown_buses,
         "duplicate_buses": duplicate_buses,
         "unverified_buses": unverified_buses,
@@ -9670,6 +9715,37 @@ def api_admin_trigger_spz_analysis():
         "message": "Diagnostika SPZ a kontrola anomálií proběhla úspěšně.",
         "data": get_spz_control_dashboard_data()
     })
+
+
+@mapa_bp.route('/api/admin/spz_watch_bus', methods=['POST'])
+def api_admin_spz_watch_bus():
+    global WATCHED_SPZ_BUSES
+    is_admin, admin_name = _check_admin_request()
+    if not is_admin and not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
+    admin_name = admin_name or session.get("nick") or "Admin"
+
+    data = request.json or {}
+    bus_id = str(data.get("bus_id", "")).strip()
+    action = str(data.get("action", "watch")).lower()  # "watch" or "unwatch"
+
+    if not bus_id:
+        return jsonify({"status": "error", "message": "Chybí bus_id"}), 400
+
+    if action == "unwatch":
+        WATCHED_SPZ_BUSES.discard(bus_id)
+        _save_spz_settings()
+        msg = f"Vůz #{bus_id} byl odebrán ze sledování."
+        log_automation_action("spz_unwatch", bus_id, f"Admin {admin_name} odebral sledování vozu #{bus_id}", msg)
+        return jsonify({"status": "success", "is_watched": False, "message": msg})
+    else:
+        WATCHED_SPZ_BUSES.add(bus_id)
+        _save_spz_settings()
+        # Okamžitě zkusíme provést kontrolu, zda už není na mapě Arriva
+        analyze_spz_anomalies_and_conflicts(auto_resolve=True)
+        msg = f"Vůz #{bus_id} byl přidán do sledování. Jakmile vyjede a objeví se na mapě Arriva na lince, systém mu automaticky spolehlivě přiřadí SPZ."
+        log_automation_action("spz_watch", bus_id, f"Admin {admin_name} nastavil hlídání vozu #{bus_id}", msg)
+        return jsonify({"status": "success", "is_watched": True, "message": msg})
 
 
 
