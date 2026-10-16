@@ -4636,14 +4636,64 @@ function renderProposals() {
   container.innerHTML = proposals.map(p => {
     const isPending = p.status === 'pending';
     const isAuto = p.status === 'auto_resolved';
+    const busUrl = p.map_url_bus || `https://datacorebot.koyeb.app/mapa?track=${p.bus_id}`;
+    const conflictUrl = p.map_url_conflict || (p.conflict_with_id ? `https://datacorebot.koyeb.app/mapa?track=${p.conflict_with_id}` : null);
+
+    if (p.type === 'admin_duplicate_conflict') {
+      const statusBadge = isPending 
+        ? '<span style="background: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid #ef4444; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: bold;"><i class="fas fa-exclamation-triangle"></i> 2x Admin SPZ – Vyžaduje manuální schválení!</span>'
+        : '<span style="background: rgba(16, 185, 129, 0.2); color: #86efac; border: 1px solid #10b981; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Vyřešeno adminem</span>';
+
+      return `
+        <div style="background: #1e1b2e; border: 2px solid #ef4444; border-radius: 10px; padding: 18px; display: flex; justify-content: space-between; align-items: stretch; flex-wrap: wrap; gap: 20px;">
+          <div style="flex: 1; min-width: 300px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap;">
+              <span style="font-size: 16px; font-weight: 800; color: #f87171;"><i class="fas fa-shield-alt"></i> DUPLIKÁT ADMIN-OVĚŘENÉ SPZ: <span style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 4px;">${p.spz}</span></span>
+              ${statusBadge}
+              <span style="color: #64748b; font-size: 11px;">${p.created_at || ''}</span>
+            </div>
+
+            <div style="color: #fca5a5; font-size: 13px; line-height: 1.5; margin-bottom: 14px; background: rgba(239,68,68,0.1); padding: 10px; border-radius: 6px; border: 1px dashed rgba(239,68,68,0.4);">
+              <i class="fas fa-exclamation-circle" style="color: #ef4444;"></i> ${p.reason}
+            </div>
+
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
+              <a href="${busUrl}" target="_blank" style="background: #0f172a; border: 1px solid #38bdf8; color: #38bdf8; padding: 6px 12px; border-radius: 6px; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: bold;">
+                <i class="fas fa-bus"></i> Vůz #${p.bus_id} (L${p.line}) na mapě
+              </a>
+              ${conflictUrl ? `
+              <a href="${conflictUrl}" target="_blank" style="background: #0f172a; border: 1px solid #f59e0b; color: #f59e0b; padding: 6px 12px; border-radius: 6px; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: bold;">
+                <i class="fas fa-bus"></i> Vůz #${p.conflict_with_id} (L${p.conflict_with_line}) na mapě
+              </a>` : ''}
+            </div>
+          </div>
+
+          ${isPending ? `
+          <div style="display: flex; flex-direction: column; justify-content: center; gap: 10px; min-width: 240px;">
+            <button onclick="resolveProposal('${p.id}', 'keep_bus')" style="background: linear-gradient(135deg, #0284c7, #38bdf8); color: #0f172a; border: none; padding: 10px 14px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 10px rgba(56, 189, 248, 0.3);">
+              <i class="fas fa-check"></i> Ponechat pro #${p.bus_id} (L${p.line})
+            </button>
+            <button onclick="resolveProposal('${p.id}', 'keep_conflict')" style="background: linear-gradient(135deg, #d97706, #f59e0b); color: #0f172a; border: none; padding: 10px 14px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3);">
+              <i class="fas fa-check"></i> Ponechat pro #${p.conflict_with_id} (L${p.conflict_with_line})
+            </button>
+            <button onclick="resolveProposal('${p.id}', 'release_both')" style="background: #334155; color: #cbd5e1; border: 1px solid #475569; padding: 8px 12px; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <i class="fas fa-undo"></i> Uvolnit obě vozidla
+            </button>
+          </div>
+          ` : `
+          <div style="display: flex; align-items: center; color: #94a3b8; font-size: 12px; font-style: italic;">
+            ${p.resolution_note || ('Vyřešeno uživatelem ' + (p.resolved_by || 'Admin'))}
+          </div>
+          `}
+        </div>
+      `;
+    }
+
     const statusBadge = isPending 
       ? '<span style="background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #a855f7; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Čeká na schválení adminem</span>'
       : (isAuto ? '<span style="background: rgba(16, 185, 129, 0.2); color: #86efac; border: 1px solid #10b981; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Vyřešeno automaticky</span>'
       : (p.status === 'accepted' ? '<span style="background: rgba(16, 185, 129, 0.2); color: #86efac; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Schváleno adminem</span>'
       : '<span style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Odmítnuto (Ponecháno)</span>'));
-
-    const busUrl = p.map_url_bus || `https://datacorebot.koyeb.app/mapa?track=${p.bus_id}`;
-    const conflictUrl = p.map_url_conflict || (p.conflict_with_id ? `https://datacorebot.koyeb.app/mapa?track=${p.conflict_with_id}` : null);
 
     return `
       <div style="background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 18px; display: flex; justify-content: space-between; align-items: stretch; flex-wrap: wrap; gap: 20px;">

@@ -99,6 +99,17 @@ def init_local_db():
                 )
             """)
             conn.commit()
+            # Automatické pročištění neplatných admin zámků (Neznámá / Aktivní hledání nesmí mít admin zámek)
+            try:
+                conn.execute("""
+                    UPDATE spz_cache_local
+                    SET admin_verified = 0, is_locked_by_admin = 0, manual_spz = 0, spz_verified = 0, admin_flag = 0, spz = 'Aktivní hledání'
+                    WHERE (spz IS NULL OR UPPER(spz) IN ('', 'NEZNÁMÁ', 'NEZNAMA', 'NEZNAMY', '?', 'NONE', 'AKTIVNÍ HLEDÁNÍ', 'AKTIVNI HLEDANI'))
+                      AND (admin_verified = 1 OR is_locked_by_admin = 1);
+                """)
+                conn.commit()
+            except Exception:
+                pass
         print("[LOCAL DB] Inicializovana: datacore_local.db (vcetne is_locked_by_admin a history)", flush=True)
     except Exception as e:
         print(f"[LOCAL DB] Chyba inicializace: {e}", flush=True)
@@ -121,7 +132,10 @@ def local_spz_upsert(rows: list):
         with _local_db_lock:
             with _get_local_conn() as conn:
                 for row in filtered_rows:
-                    is_lock = 1 if (row.get("is_locked_by_admin") or row.get("admin_verified")) else 0
+                    spz_val = str(row.get("spz") or "").strip()
+                    is_invalid_spz = spz_val.upper() in ("", "NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI")
+                    is_lock = 1 if ((row.get("is_locked_by_admin") or row.get("admin_verified")) and not is_invalid_spz) else 0
+                    admin_v = 1 if (row.get("admin_verified") and not is_invalid_spz) else 0
                     conn.execute("""
                         INSERT INTO spz_cache_local
                             (bus_id, spz, linka, lat, lng, spz_verified, admin_verified,
@@ -135,7 +149,8 @@ def local_spz_upsert(rows: list):
                              :vehicle_type, :real_linka_spoj, :spoj_num)
                         ON CONFLICT(bus_id) DO UPDATE SET
                             spz = CASE
-                                WHEN spz_cache_local.is_locked_by_admin = 1 OR spz_cache_local.admin_verified = 1
+                                WHEN (spz_cache_local.is_locked_by_admin = 1 OR spz_cache_local.admin_verified = 1)
+                                     AND UPPER(COALESCE(spz_cache_local.spz, '')) NOT IN ('', 'NEZNÁMÁ', 'NEZNAMA', 'NEZNAMY', '?', 'NONE', 'AKTIVNÍ HLEDÁNÍ', 'AKTIVNI HLEDANI')
                                 THEN spz_cache_local.spz
                                 WHEN excluded.spz IS NOT NULL AND excluded.spz != 'Neznámá' AND excluded.spz != 'Neznama' AND excluded.spz != ''
                                 THEN excluded.spz
@@ -145,17 +160,22 @@ def local_spz_upsert(rows: list):
                             lat = excluded.lat,
                             lng = excluded.lng,
                             spz_verified = CASE
-                                WHEN spz_cache_local.is_locked_by_admin = 1 OR spz_cache_local.admin_verified = 1
+                                WHEN (spz_cache_local.is_locked_by_admin = 1 OR spz_cache_local.admin_verified = 1)
+                                     AND UPPER(COALESCE(spz_cache_local.spz, '')) NOT IN ('', 'NEZNÁMÁ', 'NEZNAMA', 'NEZNAMY', '?', 'NONE', 'AKTIVNÍ HLEDÁNÍ', 'AKTIVNI HLEDANI')
                                 THEN 1
                                 ELSE excluded.spz_verified
                             END,
                             admin_verified = CASE
-                                WHEN spz_cache_local.is_locked_by_admin = 1 OR spz_cache_local.admin_verified = 1
+                                WHEN (spz_cache_local.is_locked_by_admin = 1 OR spz_cache_local.admin_verified = 1)
+                                     AND UPPER(COALESCE(spz_cache_local.spz, '')) NOT IN ('', 'NEZNÁMÁ', 'NEZNAMA', 'NEZNAMY', '?', 'NONE', 'AKTIVNÍ HLEDÁNÍ', 'AKTIVNI HLEDANI')
                                 THEN 1
                                 ELSE excluded.admin_verified
                             END,
                             is_locked_by_admin = CASE
-                                WHEN spz_cache_local.is_locked_by_admin = 1 OR excluded.is_locked_by_admin = 1 OR excluded.admin_verified = 1
+                                WHEN excluded.is_locked_by_admin = 1 OR excluded.admin_verified = 1
+                                THEN 1
+                                WHEN spz_cache_local.is_locked_by_admin = 1
+                                     AND UPPER(COALESCE(spz_cache_local.spz, '')) NOT IN ('', 'NEZNÁMÁ', 'NEZNAMA', 'NEZNAMY', '?', 'NONE', 'AKTIVNÍ HLEDÁNÍ', 'AKTIVNI HLEDANI')
                                 THEN 1
                                 ELSE 0
                             END,
@@ -249,6 +269,29 @@ def local_spz_purge_trains():
                 conn.commit()
     except Exception as e:
         print(f"[LOCAL DB] Chyba cisteni vlaku: {e}", flush=True)
+
+
+def local_spz_purge_invalid_admin(bus_id: str = None):
+    """Kompletně smaže neplatná admin ověření (pro Neznámá / Aktivní hledání / prázdné SPZ) z SQLite."""
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                if bus_id:
+                    conn.execute("""
+                        UPDATE spz_cache_local
+                        SET admin_verified = 0, is_locked_by_admin = 0, manual_spz = 0, spz_verified = 0, admin_flag = 0, spz = 'Aktivní hledání'
+                        WHERE bus_id = ?
+                    """, (str(bus_id),))
+                else:
+                    conn.execute("""
+                        UPDATE spz_cache_local
+                        SET admin_verified = 0, is_locked_by_admin = 0, manual_spz = 0, spz_verified = 0, admin_flag = 0, spz = 'Aktivní hledání'
+                        WHERE (spz IS NULL OR UPPER(spz) IN ('', 'NEZNÁMÁ', 'NEZNAMA', 'NEZNAMY', '?', 'NONE', 'AKTIVNÍ HLEDÁNÍ', 'AKTIVNI HLEDANI'))
+                          AND (admin_verified = 1 OR is_locked_by_admin = 1);
+                    """)
+                conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba purge invalid admin: {e}", flush=True)
 
 
 def local_spz_get_all() -> list:
