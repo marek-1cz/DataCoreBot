@@ -14,12 +14,19 @@ NOTIFICATION_DM_QUEUE = queue.Queue()  # {discord_id, email, message, embed_data
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, Response, request, session, redirect, render_template_string
 from zoneinfo import ZoneInfo
+import uuid
 import math
 import re
 import http.cookiejar
 import sqlite3
 import unicodedata
 import concurrent.futures
+
+def get_prague_time():
+    try:
+        return datetime.now(ZoneInfo('Europe/Prague')).replace(tzinfo=None)
+    except Exception:
+        return datetime.now()
 
 try:
     # pyrefly: ignore [missing-import]

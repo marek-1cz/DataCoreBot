@@ -37,6 +37,8 @@ def _get_local_conn():
     conn.row_factory = sqlite3.Row
     return conn
 
+get_local_db = _get_local_conn
+
 def init_local_db():
     try:
         with _get_local_conn() as conn:
