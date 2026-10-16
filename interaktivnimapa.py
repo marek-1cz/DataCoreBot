@@ -4583,12 +4583,48 @@ _SPZ_DEBUG_LOG_MAX = 500
 _arriva_fetch_stats = {"ok": 0, "fail": 0, "empty": 0, "last_fail_reason": None, "last_ok_cnt": 0}
 
 # === LOG AUTOMATIKY INTERAKTIVNÍ MAPY (BOD 5) ===
-AUTOMATION_ACTIVITY_LOG = []
-_AUTOMATION_ACTIVITY_LOG_MAX = 120
+_AUTOMATION_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "automation_activity_log.json")
+_AUTOMATION_ACTIVITY_LOG_MAX = 150
+
+def _load_automation_log():
+    try:
+        if os.path.exists(_AUTOMATION_LOG_PATH):
+            with open(_AUTOMATION_LOG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data[:_AUTOMATION_ACTIVITY_LOG_MAX]
+    except Exception as e:
+        print(f"[AUTOMATION-LOG] Chyba načtení historie: {e}", flush=True)
+    return []
+
+def _save_automation_log():
+    try:
+        with open(_AUTOMATION_LOG_PATH, "w", encoding="utf-8") as f:
+            json.dump(AUTOMATION_ACTIVITY_LOG[:_AUTOMATION_ACTIVITY_LOG_MAX], f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[AUTOMATION-LOG] Chyba zápisu historie: {e}", flush=True)
+
+AUTOMATION_ACTIVITY_LOG = _load_automation_log()
+if not AUTOMATION_ACTIVITY_LOG:
+    now_p = get_prague_time()
+    AUTOMATION_ACTIVITY_LOG.append({
+        "id": "sysinit",
+        "time": now_p.strftime("%H:%M:%S"),
+        "date": now_p.strftime("%d.%m."),
+        "action_type": "system_init",
+        "bus_id": "",
+        "spz": "",
+        "line": "",
+        "title": "Automatika interaktivní mapy aktivní",
+        "detail": "Systém průběžně monitoruje SPZ, vjezdy/výjezdy z depa, konečné stanice a hlídá vozy zařazené do sledování.",
+        "map_url": "https://datacorebot.koyeb.app/mapa"
+    })
+    _save_automation_log()
+
 LATEST_ARRIVA_DATA = []
 
 def log_automation_action(action_type, bus_id, title, detail="", spz=None, line=None):
-    """Zaznamená automatickou akci systému (přiřazení SPZ, rozluštění duplicity, vozovna, konečná)."""
+    """Zaznamená automatickou akci systému (přiřazení SPZ, rozluštění duplicity, vozovna, konečná, notifikace)."""
     global AUTOMATION_ACTIVITY_LOG
     try:
         now_p = get_prague_time()
@@ -4602,11 +4638,12 @@ def log_automation_action(action_type, bus_id, title, detail="", spz=None, line=
             "line": str(line) if line else "",
             "title": title,
             "detail": detail,
-            "map_url": f"https://datacorebot.koyeb.app/mapa?track={bus_id}" if bus_id else "/mapa"
+            "map_url": f"https://datacorebot.koyeb.app/mapa?track={bus_id}" if bus_id else "https://datacorebot.koyeb.app/mapa"
         }
         AUTOMATION_ACTIVITY_LOG.insert(0, entry)
         if len(AUTOMATION_ACTIVITY_LOG) > _AUTOMATION_ACTIVITY_LOG_MAX:
             AUTOMATION_ACTIVITY_LOG.pop()
+        _save_automation_log()
         sys_log(f"[AUTOMATION-LOG] [{action_type}] {title} (Bus #{bus_id}, SPZ={spz})")
     except Exception as e_log:
         print(f"[AUTOMATION-LOG ERR] {e_log}", flush=True)
@@ -7013,6 +7050,17 @@ def background_map_worker():
                                     except Exception as e:
                                         print(f"[DEPOT] Chyba zapisu DB prijezdu pro bus_id={bus_id}: {e}")
                                 print(f"[DEPOT] Bus {bus_id} ({c.get('spz','?')}) vjel do vozovny '{depot_name}'", flush=True)
+                                try:
+                                    log_automation_action(
+                                        "depot_in",
+                                        bus_id,
+                                        f"Vůz #{bus_id} vjel do vozovny '{depot_name}'",
+                                        f"Linka {c.get('line') or '?'}, SPZ: {spz_val or 'Aktivní hledání'}. Vozidlo detekováno v polygonu depa.",
+                                        spz=spz_val,
+                                        line=c.get("line")
+                                    )
+                                except Exception:
+                                    pass
                             else:
                                 # Aktualizuj barvu i kdyz uz je v depu (mohla se zmenit)
                                 c["_depot_color"] = depot_color or "#facc15"
@@ -7050,6 +7098,17 @@ def background_map_worker():
                                     c["spz_verified"] = False
                                     c["spz_stable_ticks"] = 0
                                 print(f"[DEPOT] Bus {bus_id} opustil vozovnu", flush=True)
+                                try:
+                                    log_automation_action(
+                                        "depot_out",
+                                        bus_id,
+                                        f"Vůz #{bus_id} opustil vozovnu '{old_depot_name or 'Depo'}'",
+                                        f"Linka {c.get('line') or '?'}, SPZ: {c.get('spz') or 'Aktivní hledání'}. Vozidlo vyjelo z areálu depa do provozu.",
+                                        spz=c.get("spz"),
+                                        line=c.get("line")
+                                    )
+                                except Exception:
+                                    pass
 
                 # ── JR fetch pro offline busy ──────────────────────────────────────────────────
                 if c.get("is_offline") and not c.get("is_train"):
@@ -8189,6 +8248,17 @@ def _check_and_fire_notifications(db_client, bus_cache):
             })
             state[trigger_key] = new_state
             state[f"_lf_{trigger_key}"] = now
+            try:
+                log_automation_action(
+                    "notification_fired",
+                    bus_data.get("id"),
+                    f"Odeslána notifikace: {context_text or trigger_key}",
+                    f"Pravidlo #{rule_id[:8]} ({trigger_key}) | Příjemce: {u_info.get('nick') or u_info.get('email') or discord_id or 'Uživatel'}",
+                    spz=bus_data.get("spz"),
+                    line=bus_data.get("line")
+                )
+            except Exception:
+                pass
             
             is_one_time = rule.get("is_one_time", True)
             try:

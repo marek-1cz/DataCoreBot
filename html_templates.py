@@ -5054,6 +5054,22 @@ function renderAutomationLog() {
       actionBadge = '<span style="background:rgba(168,85,247,0.2);color:#c084fc;border:1px solid #a855f7;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-user-shield"></i> Admin úprava</span>';
     } else if (item.action_type === 'spz_verified' || item.action_type === 'spz_match') {
       actionBadge = '<span style="background:rgba(2,132,199,0.2);color:#38bdf8;border:1px solid #0284c7;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-satellite-dish"></i> SPZ ověřena</span>';
+    } else if (item.action_type === 'depot_in') {
+      actionBadge = '<span style="background:rgba(234,179,8,0.2);color:#fde047;border:1px solid #eab308;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-warehouse"></i> Vjezd do depa</span>';
+    } else if (item.action_type === 'depot_out') {
+      actionBadge = '<span style="background:rgba(16,185,129,0.2);color:#86efac;border:1px solid #10b981;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-road"></i> Výjezd z depa</span>';
+    } else if (item.action_type === 'notification_fired') {
+      actionBadge = '<span style="background:rgba(168,85,247,0.25);color:#d8b4fe;border:1px solid #c084fc;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-bell"></i> Notifikace</span>';
+    } else if (item.action_type === 'watched_bus_resolved') {
+      actionBadge = '<span style="background:rgba(16,185,129,0.25);color:#6ee7b7;border:1px solid #10b981;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-eye"></i> Hlídaný vůz</span>';
+    } else if (item.action_type === 'spz_watch') {
+      actionBadge = '<span style="background:rgba(56,189,248,0.2);color:#7dd3fc;border:1px solid #38bdf8;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-binoculars"></i> Sledování</span>';
+    } else if (item.action_type === 'spz_unwatch') {
+      actionBadge = '<span style="background:rgba(148,163,184,0.2);color:#cbd5e1;border:1px solid #64748b;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-eye-slash"></i> Nesledovat</span>';
+    } else if (item.action_type === 'spz_change' || item.action_type === 'spz_assigned') {
+      actionBadge = '<span style="background:rgba(14,165,233,0.2);color:#38bdf8;border:1px solid #0ea5e9;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-exchange-alt"></i> SPZ změněna</span>';
+    } else if (item.action_type === 'system_init') {
+      actionBadge = '<span style="background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid #6366f1;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-info-circle"></i> Systém</span>';
     }
 
     const trackUrl = item.map_url || (item.bus_id ? `https://datacorebot.koyeb.app/mapa?track=${item.bus_id}` : 'https://datacorebot.koyeb.app/mapa');
