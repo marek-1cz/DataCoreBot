@@ -686,6 +686,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <button id="nav-pin-btn" onclick="toggleNavPin()" title="Uzamknout lištu"><i class="fas fa-thumbtack"></i></button>
 
     <!-- Admin nástroje – skryté pro veřejnost -->
+    <a id="dash-spz-btn" href="/dashboard/interaktivni-mapa" target="_blank" style="display:none;padding:5px 10px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #0284c7;background:rgba(56,189,248,0.15);color:#38bdf8;text-decoration:none;cursor:pointer;align-items:center;gap:5px;" title="Správa mapy & Přehled chyb SPZ v Dashboardu"><i class="fas fa-sliders-h"></i> Dashboard správa</a>
     <button id="nt-toggle-btn" onclick="toggleNT()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;">🛠️ NT</button>
     <button id="nt-add-btn" onclick="startNtAdd()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:14px;flex-shrink:0;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;" title="Přidat zastávku">＋</button>
     <button id="le-toggle-btn" onclick="toggleLineEditor()" style="display:none;padding:5px 9px;border-radius:6px;font-weight:bold;font-size:11px;flex-shrink:0;border:1px solid #a855f7;background:transparent;color:#a855f7;cursor:pointer;" title="Editor linek"><i class="fas fa-edit"></i> Edit</button>
@@ -1395,20 +1396,36 @@ function showAdminToast(msg,ok=true){
   clearTimeout(_toastT);_toastT=setTimeout(()=>{t.style.opacity='0';},3500);
 }
 async function adminAction(action,busId,extraData={}){
-  saveAdminInputs();showAdminToast('Odesilam...');
+  saveAdminInputs();showAdminToast('Odesílám...');
   try{
     let res=await fetch('/api/admin/map_action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,bus_id:busId,...extraData})});
     let data=await res.json();
-    if(data.status==='success'){showAdminToast('Uloženo - system zpracovava');setTimeout(()=>{if(action==='reset_admin'||action==='recheck_spz')Object.keys(adminInputCache).forEach(k=>{if(k.endsWith('_'+busId))delete adminInputCache[k];});fetchBuses();},800);}
-    else showAdminToast('Chyba: '+(data.message||'neznama'),false);
-  }catch(e){showAdminToast('Chyba spojení',false);}
+    if(data.status==='success'){
+      showAdminToast(data.message || 'Uloženo - systém zpracovává');
+      if(action==='hard_refresh'){
+        let m=window.busMarkersMap.get(busId);
+        if(m&&map){try{map.removeLayer(m);}catch(e){}}
+        window.busMarkersMap.delete(busId);
+        openPopupBusId=null;
+      }
+      setTimeout(()=>{
+        if(action==='hard_refresh'||action==='active_search_spz'||action==='status_refresh'||action==='reset_admin'||action==='recheck_spz'){
+          Object.keys(adminInputCache).forEach(k=>{if(k.endsWith('_'+busId))delete adminInputCache[k];});
+        }
+        fetchBuses();
+      }, 500);
+    }
+    else showAdminToast('Chyba: '+(data.message||'neznámá'),false);
+  }catch(e){showAdminToast('Chyba spojení: '+e.message,false);}
 }
-window.adminDelete=(id)=>{if(confirm('Smazat tecku? Vrati se az pri novem spoji.')){adminAction('delete',id);openPopupBusId=null;}};
-window.adminRecheck=(id)=>adminAction('recheck_spz',id);
+window.adminDelete=(id)=>{if(confirm('Smazat tečku vozu #'+id+'? Vrátí se až při novém spoji.')){adminAction('delete',id);openPopupBusId=null;}};
+window.adminHardRefresh=(id)=>{if(confirm('Provést HARD REFRESH vozu #'+id+'?\n\nTato akce kompletně smaže SPZ, řidiče, poznámku i status vozu, vymaže cache a ihned vytvoří zbrusu nový čistý záznam z živých dat.')){adminAction('hard_refresh',id);}};
+window.adminStatusRefresh=(id)=>adminAction('status_refresh',id);
+window.adminActiveSearchSpz=(id)=>adminAction('active_search_spz',id);
+window.adminRecheck=(id)=>adminAction('active_search_spz',id);
 window.adminSetSPZ=(id)=>{let spz=document.getElementById('adm_spz_'+id)?.value;if(spz)adminAction('edit_spz',id,{spz});};
 window.adminSaveAll=(id,permanent)=>{
   let st=document.getElementById('adm_st_'+id)?.value?.trim()||'',col=document.getElementById('adm_col_'+id)?.value?.trim()||'',note=document.getElementById('adm_note_'+id)?.value?.trim()||'',driver=document.getElementById('adm_driver_'+id)?.value?.trim()||'';
-  // if(!st&&!col&&!note&&!driver){showAdminToast('Nic k ulozeni',false);return;}
   adminAction('edit_all',id,{status:st,color_class:col,note,driver,permanent});
 };
 
@@ -1467,7 +1484,7 @@ nav.addEventListener('mouseleave',()=>{if(!navPinned)hideT=setTimeout(hideNav,60
 document.addEventListener('touchstart',e=>{if(e.touches[0].clientY<35){showNav(4500);}else if(!nav.contains(e.target)&&!navPinned){clearTimeout(hideT);hideT=setTimeout(hideNav,400);}},{passive:true});
 showNav(4000);
 // Smart pan handlers registered after map init below
-if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let leb=document.getElementById('le-toggle-btn');if(leb)leb.style.display='inline-block';let dtb=document.getElementById('depot-toggle-btn');if(dtb)dtb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';let anob=document.getElementById('notif-admin-btn');if(anob)anob.style.display='inline-block';}
+if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.display='block';let dsb=document.getElementById('dash-spz-btn');if(dsb)dsb.style.display='inline-flex';let ntb=document.getElementById('nt-toggle-btn');if(ntb)ntb.style.display='inline-block';let nab=document.getElementById('nt-add-btn');if(nab)nab.style.display='inline-block';let leb=document.getElementById('le-toggle-btn');if(leb)leb.style.display='inline-block';let dtb=document.getElementById('depot-toggle-btn');if(dtb)dtb.style.display='inline-block';let lgb=document.getElementById('log-toggle-btn');if(lgb)lgb.style.display='inline-block';let anob=document.getElementById('notif-admin-btn');if(anob)anob.style.display='inline-block';}
 
 // === MAP ===
 var dLat=49.7384,dLng=13.3736,dZoom=12;
@@ -3848,8 +3865,16 @@ async function fetchBuses(){
       let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,isTrain,bus.id,isWithdrawn),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
       let spzH='',invTxt='',histBtn='';
       if(!isTrain){
-        if(bus.investigating){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#ef4444;color:#fff;border-color:#b91c1c;">Vyzkum <i class="fas fa-clock"></i></span></div>`;invTxt=`<div style="color:#ef4444;font-size:10px;font-weight:bold;margin:4px 0;">Zjistuji SPZ (${bus.investigation_spz})</div>`;}
-        else if(bus.spz&&bus.spz!=='Neznama'&&bus.spz!=='Neznámá'&&bus.spz!=='Aktivní hledání'){
+        const isSearchingSpz = bus.investigating || !bus.spz || bus.spz==='Neznama' || bus.spz==='Neznámá' || bus.spz==='Aktivní hledání' || bus.spz==='Aktivni hledani';
+        if(isSearchingSpz){
+          spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:linear-gradient(135deg,#0284c7,#0369a1);color:#fff;border-color:#38bdf8;font-weight:bold;"><i class="fas fa-satellite-dish fa-spin" style="font-size:10px;margin-right:4px;"></i>${bus.investigating ? 'Zjišťování SPZ...' : 'Aktivní hledání'}</span></div>`;
+          if(bus.is_watched){
+            invTxt=`<div style="color:#38bdf8;font-size:10px;font-weight:bold;margin:4px 0;"><i class="fas fa-eye"></i> Systém aktivně hlídá vůz (přiřadí po vyjetí)</div>`;
+          } else if(bus.investigating && bus.investigation_spz){
+            invTxt=`<div style="color:#38bdf8;font-size:10px;font-weight:bold;margin:4px 0;"><i class="fas fa-spinner fa-spin"></i> Ověřuji Arriva kandidáta: ${bus.investigation_spz}</div>`;
+          }
+        }
+        else if(bus.spz){
           let seznamBtn = '';
           if (bus.spz_verified || bus.admin_flag) {
               seznamBtn = `<a href="javascript:void(0)" onclick="openSeznamAutobusu('${bus.spz}')" class="pa pa-d" style="margin-top:5px; background: #2563eb; color: #fff; border-color: #1d4ed8;">🚌 Fotografie a informace o vozu</a>`;
@@ -3860,9 +3885,6 @@ async function fetchBuses(){
             histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>${seznamBtn}`;
           } else if(bus.spz_verified){spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" title="SPZ ověřena systémem">${bus.spz} <i class="fas fa-check"></i></span></div>`;histBtn=`<a href="/historie/${bus.spz}" target="_blank" class="pa pa-d" style="margin-top:5px;">📜 Historie vozu</a>${seznamBtn}`;}
           else{spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:#f97316;color:#fff;border-color:#c2410c;">${bus.spz} <i class="fas fa-clock"></i></span></div>`;}
-        }
-        else{
-          spzH=`<div class="pr"><span class="pl">SPZ:</span><span class="pv spz-b" style="background:linear-gradient(135deg,#0284c7,#0369a1);color:#fff;border-color:#38bdf8;font-weight:bold;"><i class="fas fa-satellite-dish fa-spin" style="font-size:10px;margin-right:4px;"></i>Aktivní hledání</span></div>`;
         }
       }
       let withdrawnW='';
@@ -4056,7 +4078,10 @@ async function fetchBuses(){
 }
 </style>
           <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;border-radius: 0 0 5px 5px;">
-            <strong style="color:#38bdf8;font-size:12px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <strong style="color:#38bdf8;font-size:12px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
+              <a href="/dashboard/interaktivni-mapa" target="_blank" style="color:#a855f7;font-size:11px;font-weight:bold;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" title="Otevřít přehled chyb a správu v Dashboardu"><i class="fas fa-sliders-h"></i> Dashboard správa</a>
+            </div>
             <div style="color:#94a3b8;font-size:10px;margin-top:2px;font-family:monospace;word-break:break-all;">ID vozu: ${bus.id}</div>
             
             ${isTrain ? '' : `<div style="display:flex;gap:6px;margin-top:8px;">
@@ -4065,11 +4090,10 @@ async function fetchBuses(){
             </div>
             ${adminLockBtn}
             
-            <div style="display:flex;gap:6px;margin-top:6px;">
-              <button onclick="adminAction('recheck_spz','${bus.id}')" style="flex:1;background:#f59e0b;color:#0f172a;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔍 Hledat</button>
-              <button onclick="adminAction('force_refresh','${bus.id}')" style="flex:1;background:#7c3aed;color:#fff;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🔄 T. Refresh</button>
-              <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">🗑️ Smazat</button>
-            </div>`}
+            <!-- Tlačítko Aktivní hledání SPZ -->
+            <button onclick="adminAction('active_search_spz','${bus.id}')" style="width:100%;margin-top:6px;background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid #0284c7;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:6px;" title="Zahodí stávající SPZ a nastaví Aktivní hledání. Jakmile se vůz objeví na mapě Arriva, systém mu automaticky přiřadí ověřenou SPZ.">
+              <i class="fas fa-satellite-dish fa-spin"></i> Aktivní hledání SPZ
+            </button>`}
             
             <button class="adm-toggle-btn" onclick="let el=document.getElementById('adm_grafika_${bus.id}'); if(el.style.display==='none'){el.style.display='block';this.innerText='🔼 Skrýt vzhled a úpravy';}else{el.style.display='none';this.innerText='🎨 Vzhled a další úpravy';}">🎨 Vzhled a další úpravy</button>
             
@@ -4093,15 +4117,26 @@ async function fetchBuses(){
                 <button onclick="adminSaveAll('${bus.id}',true)" class="adm-btn" style="flex:1;background:#1e40af;color:white;">📌 Uložit natrvalo</button>
                 <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏱️ Dočasně</button>
               </div>
-              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid #1e293b;">
-                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:#93c5fd;flex:1;min-width:100px;touch-action:manipulation;">
-                  <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:18px;height:18px;cursor:pointer;">
+              <div style="display:flex;gap:6px;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid #1e293b;">
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:#93c5fd;flex:1;touch-action:manipulation;">
+                  <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:16px;height:16px;cursor:pointer;">
                   Admin úprava
                 </label>
-                <button onclick="adminAction('mark_bug','${bus.id}')" style="flex:1;background:#3f0000;color:#fca5a5;border:1px solid #ef4444;border-radius:5px;font-size:11px;cursor:pointer;padding:7px;touch-action:manipulation;font-weight:bold;">⛔ BUG</button>
-                <button onclick="adminAction('reset_admin','${bus.id}')" style="flex:1;background:transparent;color:#94a3b8;border:1px solid #334155;border-radius:5px;font-size:11px;cursor:pointer;padding:7px;touch-action:manipulation;">🔄 Reset</button>
-                <button onclick="adminAction('hard_refresh','${bus.id}')" style="flex:1;background:transparent;color:#f87171;border:1px solid #7f1d1d;border-radius:5px;font-size:11px;cursor:pointer;padding:7px;touch-action:manipulation;">♻️ Hard Refresh</button>
+                <button onclick="adminAction('mark_bug','${bus.id}')" style="background:#3f0000;color:#fca5a5;border:1px solid #ef4444;border-radius:5px;font-size:11px;cursor:pointer;padding:6px 10px;touch-action:manipulation;font-weight:bold;" title="Označit polohu jako BUG">⛔ BUG</button>
               </div>
+            </div>
+
+            <!-- NOVÝ SYSTÉM: Spodní akční tlačítka vedle Delete (Status Refresh, Hard Refresh a Smazat) -->
+            <div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
+              <button onclick="adminStatusRefresh('${bus.id}')" style="flex:1;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid #d97706;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Obnoví zaseknutou barvu a status z reálných dat jízdního řádu a zpoždění">
+                <i class="fas fa-palette"></i> Status Refresh
+              </button>
+              <button onclick="adminHardRefresh('${bus.id}')" style="flex:1;background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid #dc2626;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Smaže kolečko, SPZ, řidiče i poznámku jako by vůz přestal existovat a ihned vytvoří zbrusu nový čistý záznam">
+                <i class="fas fa-redo-alt"></i> Hard Refresh
+              </button>
+              <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Skryje tečku vozu z mapy do nového spoje">
+                <i class="fas fa-trash-alt"></i> Smazat
+              </button>
             </div>
           </div>`;
       }
@@ -9050,57 +9085,92 @@ def api_admin_map_action():
                 send_log("🚌 Úprava SPZ Autobusu", f"**Administrátor:** {admin_name}\n**MAP ID:** {bus_id}\n**Nová SPZ:** {new_spz}\n**Původní SPZ:** {old_spz or 'Neznámá'}\n**Linka:** {c.get('line') or '-'}\n**Poznámka:** {c.get('admin_note') or '-'}", 0x38bdf8)
             except Exception: pass
 
-    elif action == "recheck_spz":
+    elif action in ("active_search_spz", "recheck_spz", "force_refresh", "reset_spz"):
+        old_spz = c.get("spz") or "Aktivní hledání"
+        c["spz"] = "Aktivní hledání"
         c["spz_locked"] = False
         c["spz_verified"] = False
-        c["spz"] = None
         c["manual_spz"] = False
-        c["is_locked_by_admin"] = False
-        c["bug_locked"] = False   # Admin explicitne odemkl BUG-zamek
-        c["spz_frozen"] = False   # Admin explicitne odemkl i tvrdy zamek po dojeti
-        c["spz_last_audit_check"] = None
-        c["investigating"] = False
-        c["spz_stable_ticks"] = 0
-        try:
-            from main import send_log
-            send_log("🔄 Odemčení / Reset SPZ", f"**Administrátor:** {admin_name}\n**MAP ID:** {bus_id}", 0xf59e0b)
-        except Exception: pass
-
-    elif action == "force_refresh":
-        c["spz_locked"] = False
-        c["spz_verified"] = False
-        c["spz"] = None
-        c["manual_spz"] = False
+        c["admin_spz_verified"] = False
         c["is_locked_by_admin"] = False
         c["bug_locked"] = False
         c["spz_frozen"] = False
-        c["spz_last_audit_check"] = None
+        c["spz_3factor"] = False
+        c["admin_flag"] = False
         c["investigating"] = False
         c["spz_stable_ticks"] = 0
-        c["status"] = "Neznámý"
-        c["admin_status_override"] = None
-        c["admin_color_override"] = None
-        c["color_class"] = ""
-        c["admin_lock_display"] = False
-        c["admin_flag"] = False
-        c["admin_spz_verified"] = False
-        c["is_locked_by_admin"] = False
-        c["admin_spz_bug"] = False
-        c["admin_note"] = ""
-        c["admin_driver"] = ""
-        c["admin_lock_permanent"] = False
-        c["_in_depot"] = False
-        c["_depot_name"] = None
-        c["_depot_color"] = None
+        c["spz_conflict_warn"] = False
+        c["spz_last_audit_check"] = None
+        
         ADMIN_SPZ_LOCKS.pop(bus_id, None)
+        ADMIN_SPZ_LOCKS.pop(str(bus_id), None)
         try:
-            ADMIN_SPZ_LOCKS.pop(int(bus_id), None)
-        except ValueError:
+            from local_db import local_spz_purge_invalid_admin
+            local_spz_purge_invalid_admin(bus_id)
+        except Exception:
             pass
         try:
-            from main import send_log
-            send_log("🧹 Vyčištění Dat Autobusu", f"**Administrátor:** {admin_name}\n**MAP ID:** {bus_id}", 0xf59e0b)
-        except Exception: pass
+            _db_av = get_db_client()
+            if _db_av:
+                _db_av.table("spz_cache").delete().eq("bus_id", bus_id).execute()
+        except Exception:
+            pass
+
+        WATCHED_SPZ_BUSES.add(str(bus_id))
+        IGNORED_SPZ_ERRORS.discard(str(bus_id))
+        _save_spz_settings()
+
+        log_spz_change(bus_id, old_spz, "Aktivní hledání", reason="admin_active_search", admin_note=f"Aktivní hledání adminem {admin_name}")
+        msg = f"Vůz #{bus_id}: Zahájeno aktivní hledání SPZ. Systém čeká na Arriva vysílač a po vyjetí automaticky přiřadí správnou SPZ."
+        log_automation_action("spz_reset_watch", bus_id, f"Admin {admin_name} zahájil aktivní hledání u #{bus_id}", msg, spz="Aktivní hledání", line=c.get("line"))
+
+        analyze_spz_anomalies_and_conflicts(auto_resolve=True)
+        return jsonify({"status": "success", "message": msg})
+
+    elif action == "status_refresh":
+        c["admin_status_override"] = None
+        c["admin_color_override"] = None
+        c["admin_lock_display"] = False
+        c["bug_locked"] = False
+        c["color_class"] = ""
+        c["status"] = "Aktivní"
+
+        if bus_id in ADMIN_SPZ_LOCKS:
+            ADMIN_SPZ_LOCKS[bus_id].pop("color_class", None)
+
+        try:
+            lat = c.get("lat") or 0.0
+            lng = c.get("lng") or 0.0
+            depot_name, depot_color = _check_depot_zones(lat, lng) if (lat and lng) else (None, None)
+            if depot_name:
+                c["_in_depot"] = True
+                c["_depot_name"] = depot_name
+                c["color_class"] = "bg-yellow"
+                c["status"] = f"Vozovna: {depot_name}"
+            else:
+                c["_in_depot"] = False
+                c["_depot_name"] = None
+                delay_sec = c.get("delay_sec")
+                if delay_sec is None:
+                    try:
+                        delay_sec = int(c.get("delay") or 0)
+                    except Exception:
+                        delay_sec = 0
+                if delay_sec <= -120:
+                    c["color_class"] = "bg-darkblue"
+                    c["status"] = "Jede s náskokem"
+                elif delay_sec <= 240:
+                    c["color_class"] = "bg-green"
+                    c["status"] = "Jede včas"
+                else:
+                    c["color_class"] = "bg-red"
+                    c["status"] = f"Zpoždění {delay_sec // 60} min"
+        except Exception as e_sr:
+            print(f"[STATUS-REFRESH] Chyba přepočtu: {e_sr}", flush=True)
+
+        msg = f"Vůz #{bus_id}: Barva a status byly úspěšně obnoveny ({c.get('status')})."
+        log_automation_action("status_refresh", bus_id, f"Admin {admin_name} provedl Status Refresh vozu #{bus_id}", msg, line=c.get("line"))
+        return jsonify({"status": "success", "message": msg, "status_text": c.get("status"), "color_class": c.get("color_class")})
 
     elif action == "edit_status":
         new_st = str(data.get("status", "")).strip()
@@ -9229,47 +9299,43 @@ def api_admin_map_action():
             pass
         print(f"[ADMIN-VERIFY] Bus {bus_id}: Admin lock SPZ odebran", flush=True)
 
-    elif action == "reset_admin":
-        c["manual_spz"] = False
-        c["admin_spz_verified"] = False
-        c["is_locked_by_admin"] = False
-        c["spz_locked"] = False
-        c["spz_verified"] = False
-        c["spz_stable_ticks"] = 0
-        c["spz_frozen"] = False
-        c["spz_3factor"] = False
-        c["spz_conflict_warn"] = False
-        c["spz_last_audit_check"] = None
-        c["investigating"] = False
-        c["admin_color_override"] = None
-        c["admin_status_override"] = None
-        c["admin_flag"] = False
-        c["bug_locked"] = False
-        c["admin_lock_display"] = False
-        c["admin_lock_permanent"] = False
-        c["admin_note"] = ""
-        c["admin_driver"] = ""
-        c["color_class"] = "bg-gray"
-        c["status"] = "Na\u010d\u00edt\u00e1n\u00ed..."
-        c["admin_spz_bug"] = False
-        c["admin_spz_conflict"] = False
-        ADMIN_SPZ_LOCKS.pop(bus_id, None)
-        try:
-            _db_av = get_db_client()
-            if _db_av:
-                _db_av.table("spz_cache").update({"admin_verified": False}).eq("bus_id", bus_id).execute()
-        except Exception as e_av:
-            pass
-
-    elif action == "hard_refresh":
+    elif action in ("hard_refresh", "reset_admin"):
         GLOBAL_BUS_CACHE.pop(bus_id, None)
         ADMIN_SPZ_LOCKS.pop(bus_id, None)
+        ADMIN_SPZ_LOCKS.pop(str(bus_id), None)
+        try:
+            ADMIN_SPZ_LOCKS.pop(int(bus_id), None)
+        except (ValueError, TypeError):
+            pass
+        ADMIN_DELETED_BUSES.pop(bus_id, None)
+        ADMIN_DELETED_BUSES.pop(str(bus_id), None)
+        WATCHED_SPZ_BUSES.discard(str(bus_id))
+        IGNORED_SPZ_ERRORS.discard(str(bus_id))
+        _save_spz_settings()
+
+        try:
+            from local_db import local_spz_purge_invalid_admin
+            local_spz_purge_invalid_admin(bus_id)
+        except Exception:
+            pass
         try:
             _db_av = get_db_client()
             if _db_av:
                 _db_av.table("spz_cache").delete().eq("bus_id", bus_id).execute()
         except Exception:
             pass
+
+        if bus_id in DEPOT_ACTIVE_SESSIONS:
+            del DEPOT_ACTIVE_SESSIONS[bus_id]
+
+        msg = f"Vůz #{bus_id}: Hard Refresh proběhl úspěšně. Všechna data byla smazána a vytváří se nový čistý záznam."
+        log_automation_action("hard_refresh", bus_id, f"Admin {admin_name} provedl Hard Refresh vozu #{bus_id}", msg)
+        try:
+            from main import send_log
+            send_log("♻️ Hard Refresh Autobusu", f"**Administrátor:** {admin_name}\n**MAP ID:** {bus_id}", 0xef4444)
+        except Exception:
+            pass
+        return jsonify({"status": "success", "message": msg})
 
     return jsonify({"status": "success"})
 
@@ -10045,6 +10111,9 @@ def api_live_buses():
     buses_to_send = []
     for b in LIVE_BUSES_DATA:
         b_copy = dict(b)
+        bid_str = str(b_copy.get("id") or "")
+        b_copy["is_watched"] = bool(bid_str in WATCHED_SPZ_BUSES)
+        b_copy["is_ignored"] = bool(bid_str in IGNORED_SPZ_ERRORS)
         is_tr = bool(b_copy.get("is_train") or is_train_vehicle(b_copy.get("id"), b_copy.get("line")))
         if is_tr:
             # Vlaky NIKDY nesmí být na mapě jako offline/poslední známá poloha!
