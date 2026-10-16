@@ -1419,7 +1419,7 @@ async function adminAction(action,busId,extraData={}){
   }catch(e){showAdminToast('Chyba spojení: '+e.message,false);}
 }
 window.adminDelete=(id)=>{if(confirm('Smazat tečku vozu #'+id+'? Vrátí se až při novém spoji.')){adminAction('delete',id);openPopupBusId=null;}};
-window.adminHardRefresh=(id)=>{if(confirm('Provést HARD REFRESH vozu #'+id+'?\n\nTato akce kompletně smaže SPZ, řidiče, poznámku i status vozu, vymaže cache a ihned vytvoří zbrusu nový čistý záznam z živých dat.')){adminAction('hard_refresh',id);}};
+window.adminHardRefresh=(id)=>{if(confirm('Provést HARD REFRESH vozu #'+id+'?\\n\\nTato akce kompletně smaže SPZ, řidiče, poznámku i status vozu, vymaže cache a ihned vytvoří zbrusu nový čistý záznam z živých dat.')){adminAction('hard_refresh',id);}};
 window.adminStatusRefresh=(id)=>adminAction('status_refresh',id);
 window.adminActiveSearchSpz=(id)=>adminAction('active_search_spz',id);
 window.adminRecheck=(id)=>adminAction('active_search_spz',id);
