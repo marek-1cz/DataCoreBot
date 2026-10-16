@@ -4174,6 +4174,9 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
   <!-- Toast notification banner -->
   <div id="spz-toast" style="display: none; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; transition: all 0.3s ease;"></div>
 
+  <!-- Automode Banner -->
+  <div id="automode-banner-container" style="margin-bottom: 22px;"></div>
+
   <!-- Top Stats Cards -->
   <div class="dash-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px;">
     <!-- Neznámá SPZ -->
@@ -4305,6 +4308,8 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
           </p>
         </div>
       </div>
+      <!-- Proposals sub-filter tabs -->
+      <div id="proposal-filters-bar" style="display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap;"></div>
       <div id="proposals-container" style="display: flex; flex-direction: column; gap: 15px;">
         <div style="text-align: center; padding: 30px; color: #64748b;"><i class="fas fa-spinner fa-spin"></i> Načítání návrhů systému...</div>
       </div>
@@ -4409,6 +4414,7 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
 <script>
 let _dashData = null;
 let _currentSpzFilter = 'all';
+let _currentProposalFilter = 'all';
 
 function showToast(text, isError = false) {
   const t = document.getElementById('spz-toast');
@@ -4450,6 +4456,11 @@ function setSpzFilter(filterName) {
   renderSpzTable();
 }
 
+function setProposalFilter(filterName) {
+  _currentProposalFilter = filterName;
+  renderProposals();
+}
+
 async function loadSpzControlData() {
   const icon = document.getElementById('refresh-icon');
   if (icon) icon.classList.add('fa-spin');
@@ -4481,17 +4492,79 @@ function renderDashboardUI() {
   document.getElementById('badge-tab-drivers').innerText = s.drivers_notes_count || 0;
   document.getElementById('badge-tab-invalid').innerText = s.invalid_verifications_count || 0;
 
-  // Auto-resolve tlačítko
+  // Automode tlačítko v hlavičce
   const autoBtn = document.getElementById('btn-auto-resolve');
   const autoLbl = document.getElementById('auto-resolve-label');
   if (_dashData.auto_resolve) {
     autoBtn.style.background = 'linear-gradient(135deg, #059669, #10b981)';
     autoBtn.style.borderColor = '#10b981';
-    autoLbl.innerText = 'Režim: Automatické řešení ZAPNUTO';
+    autoLbl.innerText = 'Automode: AKTIVNÍ';
   } else {
     autoBtn.style.background = '#334155';
     autoBtn.style.borderColor = '#475569';
-    autoLbl.innerText = 'Režim: Manuální schvalování';
+    autoLbl.innerText = 'Automode: Vypnuto';
+  }
+
+  // Automode status banner (přehledný informační pás)
+  const bannerContainer = document.getElementById('automode-banner-container');
+  if (bannerContainer) {
+    if (_dashData.auto_resolve) {
+      bannerContainer.innerHTML = `
+        <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(6, 78, 59, 0.28)); border: 1px solid #10b981; border-radius: 12px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; box-shadow: 0 4px 20px rgba(16, 185, 129, 0.12);">
+          <div style="display: flex; align-items: flex-start; gap: 14px; max-width: 950px;">
+            <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(16, 185, 129, 0.25); display: flex; align-items: center; justify-content: center; font-size: 22px; color: #34d399; flex-shrink: 0; border: 1px solid rgba(16, 185, 129, 0.4);">
+              <i class="fas fa-robot"></i>
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span style="font-size: 15px; font-weight: 800; color: #6ee7b7; text-transform: uppercase; letter-spacing: 0.5px;">
+                  <i class="fas fa-check-circle" style="color: #10b981;"></i> Automode je AKTIVNÍ – Spolehlivé rozluštění duplicit
+                </span>
+                <span style="background: rgba(16, 185, 129, 0.2); color: #a7f3d0; border: 1px solid #10b981; font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: bold;">
+                  Ověřování linky & polohy Arriva (do 850m)
+                </span>
+              </div>
+              <div style="color: #cbd5e1; font-size: 13px; margin-top: 5px; line-height: 1.5;">
+                Při detekci duplicity systém <b>ponechá SPZ oprávněnému vozu</b>. U duplicitního vozu vyhledá <b>skutečný vysílač z Arriva mapy na shodné lince</b>. Pokud na mapě ještě není, <b>netipuje naslepo</b> cizí vozy a bezpečně nastaví <i>Aktivní hledání</i>.
+                <div style="color: #fca5a5; font-size: 11px; margin-top: 3px;">
+                  <i class="fas fa-shield-alt"></i> Bezpečnostní pojistka: Zjistí-li systém 2x administrátorsky ověřenou SPZ, rozluštění nepřepíše a předá jej k manuálnímu potvrzení dispečerem.
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button onclick="toggleAutoResolve()" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; padding: 8px 14px; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
+              <i class="fas fa-pause"></i> Pozastavit Automode
+            </button>
+          </div>
+        </div>
+      `;
+    } else {
+      bannerContainer.innerHTML = `
+        <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(120, 53, 15, 0.25)); border: 1px solid #f59e0b; border-radius: 12px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; box-shadow: 0 4px 20px rgba(245, 158, 11, 0.12);">
+          <div style="display: flex; align-items: flex-start; gap: 14px; max-width: 950px;">
+            <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(245, 158, 11, 0.25); display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fbbf24; flex-shrink: 0; border: 1px solid rgba(245, 158, 11, 0.4);">
+              <i class="fas fa-user-cog"></i>
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span style="font-size: 15px; font-weight: 800; color: #fde68a; text-transform: uppercase; letter-spacing: 0.5px;">
+                  <i class="fas fa-pause-circle" style="color: #f59e0b;"></i> Automode je POZASTAVEN – Režim manuálního schvalování
+                </span>
+              </div>
+              <div style="color: #cbd5e1; font-size: 13px; margin-top: 5px; line-height: 1.5;">
+                Všechny duplicity a sporné situace vyžadují manuální rozhodnutí dispečera v záložce <i>Návrhy systému k rozluštění</i>.
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button onclick="toggleAutoResolve()" style="background: linear-gradient(135deg, #059669, #10b981); border: none; color: white; padding: 8px 16px; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);">
+              <i class="fas fa-play"></i> Zapnout Automode
+            </button>
+          </div>
+        </div>
+      `;
+    }
   }
 
   renderSpzTable();
@@ -4543,13 +4616,19 @@ function renderSpzTable() {
 
   tbody.innerHTML = list.map(b => {
     const isSearching = !b.spz || b.spz === 'Aktivní hledání' || b.spz.toUpperCase().includes('NEZNÁMÁ');
-    const badgeColor = b.admin_verified ? '#10b981' : (b.spz_verified ? '#3b82f6' : (isSearching ? '#38bdf8' : '#f97316'));
-    const statusLabel = b.admin_verified ? 'Admin ověřeno' : (b.spz_verified ? '3F Ověřeno' : (isSearching ? 'Aktivní hledání' : 'Neověřeno'));
+    const isDuplicate = (_dashData.duplicate_buses || []).some(d => String(d.bus_id) === String(b.bus_id)) || (b.reason && b.reason.includes('Duplicitní'));
+    const badgeColor = b.admin_verified ? '#10b981' : (b.spz_verified ? '#3b82f6' : (isSearching ? '#38bdf8' : (isDuplicate ? '#f97316' : '#fbbf24')));
+    const statusLabel = b.admin_verified ? 'Admin ověřeno' : (b.spz_verified ? '3F Ověřeno' : (isSearching ? 'Aktivní hledání' : (isDuplicate ? 'Duplicita' : 'Neověřeno')));
     const trackUrl = b.map_url || `https://datacorebot.koyeb.app/mapa?track=${b.bus_id}`;
 
     let candChip = '';
     if (b.candidate_spz) {
-      candChip = `<div style="margin-top: 5px;"><button onclick="setQuickInp('${b.bus_id}', '${b.candidate_spz}')" style="background: rgba(2, 132, 199, 0.2); border: 1px solid #0284c7; color: #38bdf8; font-size: 11px; padding: 3px 7px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Klikněte pro vložení navržené SPZ"><i class="fas fa-magic"></i> Navrženo z Arrivy: <b>${b.candidate_spz}</b> (${b.candidate_dist}m)</button></div>`;
+      candChip = `<div style="margin-top: 6px;"><button onclick="setQuickInp('${b.bus_id}', '${b.candidate_spz}')" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #86efac; font-size: 11px; padding: 4px 8px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-weight: bold;" title="Klikněte pro vložení nalezené SPZ z Arrivy"><i class="fas fa-magic"></i> Arriva kandidát (${b.candidate_line || b.line}): <b>${b.candidate_spz}</b> (${b.candidate_dist}m)</button></div>`;
+    }
+
+    let reasonContent = `<div style="color: #f1f5f9; font-size: 12px; line-height: 1.4;">${b.reason || 'Důvod nezaznamenán'}</div>`;
+    if (isDuplicate) {
+      reasonContent = `<div style="display: inline-block; background: rgba(249, 115, 22, 0.2); color: #fb923c; border: 1px solid #f97316; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; margin-bottom: 4px; text-transform: uppercase;"><i class="fas fa-clone"></i> Konflikt duplicity</div>` + reasonContent;
     }
 
     return `
@@ -4570,7 +4649,7 @@ function renderSpzTable() {
           ${candChip}
         </td>
         <td data-label="Důvod chyby" style="padding: 12px; max-width: 320px;">
-          <div style="color: #f1f5f9; font-size: 12px; line-height: 1.4;">${b.reason || 'Důvod nezaznamenán'}</div>
+          ${reasonContent}
         </td>
         <td data-label="Rychlá úprava SPZ" style="padding: 12px;">
           <div class="mobile-edit-box" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
@@ -4620,68 +4699,113 @@ async function saveQuickSpz(busId) {
 function renderProposals() {
   if (!_dashData) return;
   const container = document.getElementById('proposals-container');
-  const proposals = _dashData.proposals || [];
+  const filtersBar = document.getElementById('proposal-filters-bar');
+  const allProposals = _dashData.proposals || [];
 
-  if (proposals.length === 0) {
+  const pendingCount = allProposals.filter(p => p.status === 'pending').length;
+  const autoCount = allProposals.filter(p => p.status === 'auto_resolved').length;
+  const historyCount = allProposals.filter(p => p.status === 'accepted' || p.status === 'rejected' || p.status === 'resolved').length;
+
+  if (filtersBar) {
+    filtersBar.innerHTML = `
+      <button onclick="setProposalFilter('all')" style="background: ${_currentProposalFilter === 'all' ? '#334155' : '#0f172a'}; color: white; border: 1px solid #475569; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: ${_currentProposalFilter === 'all' ? 'bold' : 'normal'}; display: flex; align-items: center; gap: 6px;">
+        Všechny návrhy <span style="background: #475569; padding: 1px 6px; border-radius: 10px; font-size: 10px;">${allProposals.length}</span>
+      </button>
+      <button onclick="setProposalFilter('pending')" style="background: ${_currentProposalFilter === 'pending' ? '#4c1d95' : '#0f172a'}; color: #c084fc; border: 1px solid #a855f7; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: ${_currentProposalFilter === 'pending' ? 'bold' : 'normal'}; display: flex; align-items: center; gap: 6px;">
+        <i class="fas fa-clock"></i> Čeká na schválení <span style="background: ${pendingCount > 0 ? '#ef4444' : '#6b21a8'}; color: white; padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: bold;">${pendingCount}</span>
+      </button>
+      <button onclick="setProposalFilter('auto')" style="background: ${_currentProposalFilter === 'auto' ? '#064e3b' : '#0f172a'}; color: #6ee7b7; border: 1px solid #10b981; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: ${_currentProposalFilter === 'auto' ? 'bold' : 'normal'}; display: flex; align-items: center; gap: 6px;">
+        <i class="fas fa-robot"></i> Vyřešeno automodem <span style="background: #047857; color: white; padding: 1px 6px; border-radius: 10px; font-size: 10px;">${autoCount}</span>
+      </button>
+      <button onclick="setProposalFilter('history')" style="background: ${_currentProposalFilter === 'history' ? '#1e293b' : '#0f172a'}; color: #94a3b8; border: 1px solid #334155; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: ${_currentProposalFilter === 'history' ? 'bold' : 'normal'}; display: flex; align-items: center; gap: 6px;">
+        <i class="fas fa-history"></i> Manuálně vyřešeno <span style="background: #334155; color: white; padding: 1px 6px; border-radius: 10px; font-size: 10px;">${historyCount}</span>
+      </button>
+    `;
+  }
+
+  let list = allProposals;
+  if (_currentProposalFilter === 'pending') {
+    list = allProposals.filter(p => p.status === 'pending');
+  } else if (_currentProposalFilter === 'auto') {
+    list = allProposals.filter(p => p.status === 'auto_resolved');
+  } else if (_currentProposalFilter === 'history') {
+    list = allProposals.filter(p => p.status === 'accepted' || p.status === 'rejected' || p.status === 'resolved');
+  }
+
+  if (list.length === 0) {
     container.innerHTML = `
       <div style="text-align: center; padding: 40px; background: rgba(0,0,0,0.2); border-radius: 8px;">
         <i class="fas fa-check-circle" style="color: #10b981; font-size: 32px; margin-bottom: 10px;"></i>
-        <div style="color: white; font-weight: bold; font-size: 16px;">Všechny SPZ odpovídají telemetrii</div>
-        <div style="color: #94a3b8; font-size: 12px; margin-top: 5px;">Systém v tuto chvíli nezjistil žádné pochybnosti o ověřených SPZ ani nevyřešené duplicity.</div>
+        <div style="color: white; font-weight: bold; font-size: 16px;">V této kategorii nejsou žádné záznamy</div>
+        <div style="color: #94a3b8; font-size: 12px; margin-top: 5px;">Všechny SPZ v pořádku nebo vyřešeny automatikou.</div>
       </div>
     `;
     return;
   }
 
-  container.innerHTML = proposals.map(p => {
+  container.innerHTML = list.map(p => {
     const isPending = p.status === 'pending';
     const isAuto = p.status === 'auto_resolved';
     const busUrl = p.map_url_bus || `https://datacorebot.koyeb.app/mapa?track=${p.bus_id}`;
     const conflictUrl = p.map_url_conflict || (p.conflict_with_id ? `https://datacorebot.koyeb.app/mapa?track=${p.conflict_with_id}` : null);
 
+    // Karta pro 2x Admin duplikát (Vyžaduje manuální schválení)
     if (p.type === 'admin_duplicate_conflict') {
       const statusBadge = isPending 
-        ? '<span style="background: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid #ef4444; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: bold;"><i class="fas fa-exclamation-triangle"></i> 2x Admin SPZ – Vyžaduje manuální schválení!</span>'
+        ? '<span style="background: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid #ef4444; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800;"><i class="fas fa-exclamation-triangle"></i> 2x Admin SPZ – Vyžaduje schválení dispečera!</span>'
         : '<span style="background: rgba(16, 185, 129, 0.2); color: #86efac; border: 1px solid #10b981; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Vyřešeno adminem</span>';
 
       return `
-        <div style="background: #1e1b2e; border: 2px solid #ef4444; border-radius: 10px; padding: 18px; display: flex; justify-content: space-between; align-items: stretch; flex-wrap: wrap; gap: 20px;">
-          <div style="flex: 1; min-width: 300px;">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap;">
-              <span style="font-size: 16px; font-weight: 800; color: #f87171;"><i class="fas fa-shield-alt"></i> DUPLIKÁT ADMIN-OVĚŘENÉ SPZ: <span style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 4px;">${p.spz}</span></span>
+        <div style="background: #1e1b2e; border: 2px solid #ef4444; border-radius: 12px; padding: 18px; box-shadow: 0 4px 20px rgba(239, 68, 68, 0.15);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; border-bottom: 1px solid rgba(239,68,68,0.25); padding-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span style="font-size: 15px; font-weight: 800; color: #f87171;"><i class="fas fa-shield-alt"></i> DUPLIKÁT 2x ADMIN-OVĚŘENÉ SPZ: <span style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 4px; font-family: monospace;">${p.spz}</span></span>
               ${statusBadge}
-              <span style="color: #64748b; font-size: 11px;">${p.created_at || ''}</span>
+            </div>
+            <span style="color: #64748b; font-size: 11px;"><i class="far fa-clock"></i> ${p.created_at || ''}</span>
+          </div>
+
+          <div style="color: #fca5a5; font-size: 13px; line-height: 1.5; margin-bottom: 14px; background: rgba(239,68,68,0.1); padding: 12px; border-radius: 8px; border: 1px dashed rgba(239,68,68,0.4);">
+            <i class="fas fa-exclamation-circle" style="color: #ef4444;"></i> ${p.reason}
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 14px;">
+            <div style="background: #0f172a; border: 1px solid #38bdf8; border-radius: 8px; padding: 12px;">
+              <div style="font-size: 11px; text-transform: uppercase; color: #38bdf8; font-weight: bold; margin-bottom: 4px;"><i class="fas fa-bus"></i> Vozidlo A</div>
+              <div style="font-size: 15px; font-weight: bold; color: white;">Vůz #${p.bus_id} (Linka ${p.line})</div>
+              <div style="margin-top: 8px;">
+                <a href="${busUrl}" target="_blank" style="background: #1e293b; border: 1px solid #38bdf8; color: #38bdf8; padding: 5px 10px; border-radius: 6px; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: bold;">
+                  <i class="fas fa-map-marker-alt"></i> Zobrazit #${p.bus_id} na mapě
+                </a>
+              </div>
             </div>
 
-            <div style="color: #fca5a5; font-size: 13px; line-height: 1.5; margin-bottom: 14px; background: rgba(239,68,68,0.1); padding: 10px; border-radius: 6px; border: 1px dashed rgba(239,68,68,0.4);">
-              <i class="fas fa-exclamation-circle" style="color: #ef4444;"></i> ${p.reason}
-            </div>
-
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
-              <a href="${busUrl}" target="_blank" style="background: #0f172a; border: 1px solid #38bdf8; color: #38bdf8; padding: 6px 12px; border-radius: 6px; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: bold;">
-                <i class="fas fa-bus"></i> Vůz #${p.bus_id} (L${p.line}) na mapě
-              </a>
-              ${conflictUrl ? `
-              <a href="${conflictUrl}" target="_blank" style="background: #0f172a; border: 1px solid #f59e0b; color: #f59e0b; padding: 6px 12px; border-radius: 6px; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: bold;">
-                <i class="fas fa-bus"></i> Vůz #${p.conflict_with_id} (L${p.conflict_with_line}) na mapě
-              </a>` : ''}
+            <div style="background: #0f172a; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px;">
+              <div style="font-size: 11px; text-transform: uppercase; color: #fbbf24; font-weight: bold; margin-bottom: 4px;"><i class="fas fa-bus"></i> Vozidlo B</div>
+              <div style="font-size: 15px; font-weight: bold; color: white;">Vůz #${p.conflict_with_id} (Linka ${p.conflict_with_line})</div>
+              <div style="margin-top: 8px;">
+                ${conflictUrl ? `
+                <a href="${conflictUrl}" target="_blank" style="background: #1e293b; border: 1px solid #f59e0b; color: #fbbf24; padding: 5px 10px; border-radius: 6px; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: bold;">
+                  <i class="fas fa-map-marker-alt"></i> Zobrazit #${p.conflict_with_id} na mapě
+                </a>` : ''}
+              </div>
             </div>
           </div>
 
           ${isPending ? `
-          <div style="display: flex; flex-direction: column; justify-content: center; gap: 10px; min-width: 240px;">
-            <button onclick="resolveProposal('${p.id}', 'keep_bus')" style="background: linear-gradient(135deg, #0284c7, #38bdf8); color: #0f172a; border: none; padding: 10px 14px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 10px rgba(56, 189, 248, 0.3);">
-              <i class="fas fa-check"></i> Ponechat pro #${p.bus_id} (L${p.line})
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);">
+            <button onclick="resolveProposal('${p.id}', 'keep_bus')" style="background: linear-gradient(135deg, #0284c7, #38bdf8); color: #0f172a; border: none; padding: 9px 15px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(56, 189, 248, 0.3);">
+              <i class="fas fa-check"></i> Ponechat SPZ pro #${p.bus_id}
             </button>
-            <button onclick="resolveProposal('${p.id}', 'keep_conflict')" style="background: linear-gradient(135deg, #d97706, #f59e0b); color: #0f172a; border: none; padding: 10px 14px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3);">
-              <i class="fas fa-check"></i> Ponechat pro #${p.conflict_with_id} (L${p.conflict_with_line})
+            <button onclick="resolveProposal('${p.id}', 'keep_conflict')" style="background: linear-gradient(135deg, #d97706, #f59e0b); color: #0f172a; border: none; padding: 9px 15px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3);">
+              <i class="fas fa-check"></i> Ponechat SPZ pro #${p.conflict_with_id}
             </button>
-            <button onclick="resolveProposal('${p.id}', 'release_both')" style="background: #334155; color: #cbd5e1; border: 1px solid #475569; padding: 8px 12px; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <button onclick="resolveProposal('${p.id}', 'release_both')" style="background: #334155; color: #cbd5e1; border: 1px solid #475569; padding: 8px 12px; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
               <i class="fas fa-undo"></i> Uvolnit obě vozidla
             </button>
           </div>
           ` : `
-          <div style="display: flex; align-items: center; color: #94a3b8; font-size: 12px; font-style: italic;">
+          <div style="color: #94a3b8; font-size: 12px; font-style: italic; padding-top: 8px;">
             ${p.resolution_note || ('Vyřešeno uživatelem ' + (p.resolved_by || 'Admin'))}
           </div>
           `}
@@ -4689,11 +4813,83 @@ function renderProposals() {
       `;
     }
 
+    // Karta vyřešená automodem (Přehledná a jasná se dvěma sloupci)
+    if (isAuto) {
+      return `
+        <div style="background: #0f172a; border: 1px solid #10b981; border-radius: 12px; padding: 18px; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.08);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span style="background: rgba(16, 185, 129, 0.2); color: #86efac; border: 1px solid #10b981; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase;">
+                <i class="fas fa-robot"></i> Vyřešeno automodem
+              </span>
+              <span style="font-weight: bold; color: white; font-size: 14px;">
+                Duplicita SPZ: <span style="font-family: monospace; color: #38bdf8; background: #1e293b; padding: 2px 7px; border-radius: 4px; border: 1px solid #334155;">${p.spz}</span>
+              </span>
+            </div>
+            <div style="color: #64748b; font-size: 11px;">
+              <i class="far fa-clock"></i> ${p.created_at || ''}
+            </div>
+          </div>
+
+          <div style="background: rgba(16, 185, 129, 0.08); border-left: 4px solid #10b981; padding: 10px 14px; border-radius: 0 6px 6px 0; font-size: 13px; color: #e2e8f0; margin-bottom: 14px; line-height: 1.5;">
+            <i class="fas fa-check-circle" style="color: #10b981; margin-right: 6px;"></i>
+            ${p.resolution_note || p.reason}
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;">
+            <!-- Box 1: Oprávněný vlastník -->
+            <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 11px; text-transform: uppercase; color: #38bdf8; font-weight: bold;">
+                  <i class="fas fa-shield-alt"></i> Původní / Oprávněný vůz
+                </span>
+                <span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: bold;">
+                  SPZ ponechána
+                </span>
+              </div>
+              <div style="font-size: 15px; font-weight: bold; color: white; margin-bottom: 4px;">
+                Vůz #${p.conflict_with_id || '?'} (Linka ${p.conflict_with_line || '?'})
+              </div>
+              <div style="font-size: 12px; color: #94a3b8; margin-bottom: 10px;">
+                Zachována SPZ: <b style="color: #38bdf8; font-family: monospace;">${p.spz}</b>
+              </div>
+              ${p.map_url_conflict ? `
+              <a href="${p.map_url_conflict}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: #0f172a; border: 1px solid #38bdf8; color: #38bdf8; font-size: 12px; padding: 5px 10px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+                <i class="fas fa-map-marker-alt"></i> Zobrazit #${p.conflict_with_id} na mapě
+              </a>` : ''}
+            </div>
+
+            <!-- Box 2: Duplicitní vůz -->
+            <div style="background: #1e293b; border: 1px solid ${p.has_candidate ? '#10b981' : '#f97316'}; border-radius: 8px; padding: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 11px; text-transform: uppercase; color: ${p.has_candidate ? '#34d399' : '#fb923c'}; font-weight: bold;">
+                  <i class="fas fa-sync-alt"></i> Detekovaný duplikát
+                </span>
+                <span style="background: ${p.has_candidate ? 'rgba(16, 185, 129, 0.2)' : 'rgba(249, 115, 22, 0.2)'}; color: ${p.has_candidate ? '#86efac' : '#fb923c'}; font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: bold;">
+                  ${p.has_candidate ? 'Nalezena Arriva na lince' : 'Uvolněno na hledání'}
+                </span>
+              </div>
+              <div style="font-size: 15px; font-weight: bold; color: white; margin-bottom: 4px;">
+                Vůz #${p.bus_id} (Linka ${p.line || '?'})
+              </div>
+              <div style="font-size: 12px; color: #94a3b8; margin-bottom: 10px;">
+                Nová SPZ: <b style="color: ${p.has_candidate ? '#86efac' : '#fca5a5'}; font-family: monospace;">${p.proposed_spz}</b>
+                ${p.candidate_dist ? ` <span style="font-size: 11px; color: #64748b;">(${p.candidate_dist}m)</span>` : ''}
+              </div>
+              <a href="${busUrl}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: #0f172a; border: 1px solid ${p.has_candidate ? '#10b981' : '#f97316'}; color: ${p.has_candidate ? '#34d399' : '#fb923c'}; font-size: 12px; padding: 5px 10px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+                <i class="fas fa-map-marker-alt"></i> Zobrazit #${p.bus_id} na mapě
+              </a>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Standardní návrh
     const statusBadge = isPending 
       ? '<span style="background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #a855f7; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Čeká na schválení adminem</span>'
-      : (isAuto ? '<span style="background: rgba(16, 185, 129, 0.2); color: #86efac; border: 1px solid #10b981; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Vyřešeno automaticky</span>'
       : (p.status === 'accepted' ? '<span style="background: rgba(16, 185, 129, 0.2); color: #86efac; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Schváleno adminem</span>'
-      : '<span style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Odmítnuto (Ponecháno)</span>'));
+      : '<span style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Odmítnuto (Ponecháno)</span>');
 
     return `
       <div style="background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 18px; display: flex; justify-content: space-between; align-items: stretch; flex-wrap: wrap; gap: 20px;">
@@ -4708,7 +4904,6 @@ function renderProposals() {
             <i class="fas fa-info-circle" style="color: #38bdf8;"></i> ${p.reason}
           </div>
 
-          <!-- Přehled vozů a map links -->
           <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
             <a href="${busUrl}" target="_blank" style="background: #1e293b; border: 1px solid #0284c7; color: #38bdf8; padding: 5px 10px; border-radius: 6px; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;">
               <i class="fas fa-map-marker-alt"></i> Zobrazit vůz #${p.bus_id} na mapě

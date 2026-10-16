@@ -4632,7 +4632,31 @@ SPZ_MEMORY_MAX_AGE_HOURS = 24  # jak dlouho pamatovat SPZ bez aktualizace
 # === DIAGNOSTIKA & SPRÁVA SPZ (BOD 2, 3, 4, 5) ===
 SPZ_CONFLICT_PROPOSALS = {}      # prop_id -> dict návrhu řešení konfliktu
 INVALID_VERIFICATIONS_LOG = []   # list chyb při admin-ověření Neznámé SPZ (Bod 3)
-AUTO_RESOLVE_SPZ = False         # False = manuální schvalování adminem v dashboardu, True = automatické rozluštění
+AUTO_RESOLVE_SPZ = True          # True = automatické rozluštění (Automode), False = manuální schvalování adminem
+
+_SPZ_SETTINGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "spz_settings.json")
+
+def _load_spz_settings():
+    global AUTO_RESOLVE_SPZ
+    try:
+        if os.path.exists(_SPZ_SETTINGS_PATH):
+            with open(_SPZ_SETTINGS_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if "auto_resolve" in data:
+                    AUTO_RESOLVE_SPZ = bool(data["auto_resolve"])
+                    return
+    except Exception:
+        pass
+    AUTO_RESOLVE_SPZ = True
+
+def _save_spz_settings():
+    try:
+        with open(_SPZ_SETTINGS_PATH, "w", encoding="utf-8") as f:
+            json.dump({"auto_resolve": AUTO_RESOLVE_SPZ}, f)
+    except Exception:
+        pass
+
+_load_spz_settings()
 
 # ── GTFS zastavky v pameti ───────────────────────────────────────────────────
 GTFS_LOADED    = False
@@ -5710,12 +5734,35 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
             def _score_bus(item):
                 b_id, b_c = item
                 score = 0
-                if b_c.get("admin_spz_verified"): score += 100
-                if b_c.get("spz_verified"): score += 50
-                if b_c.get("spz_stable_ticks", 0) >= 3: score += 20
+                if b_c.get("admin_spz_verified") or b_c.get("is_locked_by_admin"):
+                    score += 1000
+                if b_c.get("spz_verified"):
+                    score += 200
+                if b_c.get("spz_3factor"):
+                    score += 150
+                if b_c.get("spz_stable_ticks", 0) >= 3:
+                    score += min(b_c.get("spz_stable_ticks", 0) * 10, 100)
                 mem = SPZ_MEMORY.get(spz_val) or {}
-                if b_c.get("line") and mem.get("line") and b_c.get("line") == mem.get("line"): score += 30
-                if b_c.get("raw_delay") is not None: score += 10
+                if b_c.get("line") and mem.get("line") and b_c.get("line") == mem.get("line"):
+                    score += 100
+                if b_c.get("raw_delay") is not None:
+                    score += 10
+                # Živá poloha přímo u vysílače Arriva s touto SPZ a na stejné lince
+                b_lat = b_c.get("lat") or 0
+                b_lng = b_c.get("lng") or 0
+                if b_lat and b_lng and LATEST_ARRIVA_DATA:
+                    for ba in LATEST_ARRIVA_DATA:
+                        if (ba.get("spz") or "").strip() == spz_val:
+                            ba_lat = ba.get("latitude") or 0
+                            ba_lon = ba.get("longitude") or 0
+                            if ba_lat and ba_lon:
+                                dist_to_arr = haversine_m(b_lat, b_lng, ba_lat, ba_lon)
+                                if dist_to_arr <= 500:
+                                    score += 350
+                                elif dist_to_arr <= 1000:
+                                    score += 150
+                                if _arriva_line_matches(b_c.get("line") or "", ba):
+                                    score += 250
                 return score
 
             sorted_buses = sorted(buses, key=_score_bus, reverse=True)
@@ -5723,7 +5770,8 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
             for thief_bid, thief_c in sorted_buses[1:]:
                 prop_id = f"dup_{spz_val}_{thief_bid}"
                 existing_prop = SPZ_CONFLICT_PROPOSALS.get(prop_id)
-                if existing_prop and existing_prop.get("status") in ("rejected", "resolved", "auto_resolved"):
+                # Pokud již bylo vyřešeno a SPZ už duplicitní není, přeskočit
+                if existing_prop and existing_prop.get("status") in ("rejected", "resolved") and thief_c.get("spz") != spz_val:
                     continue
 
                 t_lat = thief_c.get("lat") or 0
@@ -5733,50 +5781,96 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                 l_lng = legit_c.get("lng") or 0
                 dist_between = round(haversine_m(t_lat, t_lng, l_lat, l_lng)) if (t_lat and l_lat) else 0
 
-                # Hledání nejbližšího alternativního vysílače na Arriva mapě pro vůz thief_bid
+                # ── Hledání alternativního vysílače na Arriva mapě pro vůz thief_bid ──
+                # PRAVIDLO: POUZE při shodě linky a spolehlivé jistotě (do 850m)! Žádné tipování naslepo.
                 best_cand_spz = None
                 best_cand_dist = 999999
                 best_cand_line = ""
-                if t_lat and t_lng and LATEST_ARRIVA_DATA:
+                is_reliable = False
+
+                t_dest = str(thief_c.get("destination") or "").strip()
+                t_dest_norm = _norm_txt(t_dest)
+                t_bearing = thief_c.get("bearing")
+                t_inact = (now - thief_c.get("last_inflow_seen")).total_seconds() / 60.0 if thief_c.get("last_inflow_seen") else 99
+
+                # SPZ obsazené jinými ověřenými vozy
+                taken_spzs = {
+                    str(c_other.get("spz")).strip().upper()
+                    for bid_other, c_other in GLOBAL_BUS_CACHE.items()
+                    if bid_other != thief_bid and c_other.get("spz") and c_other.get("spz_verified")
+                }
+
+                if t_lat and t_lng and t_line and t_inact <= 2.5 and LATEST_ARRIVA_DATA:
+                    candidates = []
                     for b_a in LATEST_ARRIVA_DATA:
                         a_spz = (b_a.get("spz") or "").strip()
-                        if not a_spz or a_spz == spz_val or a_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE"):
+                        if not a_spz or a_spz == spz_val or a_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ"):
+                            continue
+                        if a_spz.upper() in taken_spzs:
                             continue
                         a_lat = b_a.get("latitude") or 0
                         a_lon = b_a.get("longitude") or 0
                         if not a_lat or not a_lon:
                             continue
-                        d_cand = haversine_m(t_lat, t_lng, a_lat, a_lon)
-                        a_line = str(b_a.get("linkNumber") or b_a.get("linkNumberAlias") or "").strip()
-                        if _arriva_line_matches(t_line, b_a) and d_cand <= 1200:
-                            if d_cand < best_cand_dist:
-                                best_cand_dist = d_cand
-                                best_cand_spz = a_spz
-                                best_cand_line = a_line
-                        elif d_cand <= 400 and d_cand < best_cand_dist and not best_cand_spz:
-                            best_cand_dist = d_cand
-                            best_cand_spz = a_spz
-                            best_cand_line = a_line
 
-                if best_cand_spz:
+                        # STRIKTNÍ SHODA LINKY (nesmí tipovat jinou linku!)
+                        if not _arriva_line_matches(t_line, b_a):
+                            continue
+
+                        d_cand = haversine_m(t_lat, t_lng, a_lat, a_lon)
+                        if d_cand > 850:
+                            continue
+
+                        a_dest = str(b_a.get("destinationName") or "")
+                        a_dest_norm = _norm_txt(a_dest)
+                        dest_match = bool(t_dest_norm and a_dest_norm and (t_dest_norm in a_dest_norm or a_dest_norm in t_dest_norm))
+                        
+                        a_angle = b_a.get("angle")
+                        bearing_match = False
+                        if t_bearing is not None and a_angle is not None:
+                            bearing_match = (_bearing_diff(t_bearing, a_angle) <= SPZ_BEARING_MAX_DIFF)
+
+                        candidates.append({
+                            "spz": a_spz,
+                            "dist": d_cand,
+                            "line": str(b_a.get("linkNumber") or b_a.get("linkNumberAlias") or t_line).strip(),
+                            "dest_match": dest_match,
+                            "bearing_match": bearing_match
+                        })
+
+                    if candidates:
+                        candidates.sort(key=lambda x: (
+                            0 if (x["dest_match"] or x["bearing_match"] or x["dist"] <= 350) else 1,
+                            x["dist"]
+                        ))
+                        top = candidates[0]
+                        # Spolehlivost: vzdálenost <= 400m, nebo vzdálenost <= 800m se shodou cíle/směru
+                        if top["dist"] <= 400 or (top["dist"] <= 800 and (top["dest_match"] or top["bearing_match"])):
+                            best_cand_spz = top["spz"]
+                            best_cand_dist = top["dist"]
+                            best_cand_line = top["line"]
+                            is_reliable = True
+
+                if is_reliable and best_cand_spz:
                     proposed_spz = best_cand_spz
-                    reason = (f"Vůz #{thief_bid} má chybnou SPZ '{spz_val}' – tato SPZ patří vozu #{legit_bid} (vzdálenost mezi nimi {dist_between}m). "
-                              f"Na Arriva mapě je k vozu #{thief_bid} nejblíže vysílač s SPZ '{best_cand_spz}' ({best_cand_dist:.0f}m) na lince {best_cand_line or t_line}.")
+                    reason = (f"Vůz #{thief_bid} (L{t_line}) měl duplicitní SPZ '{spz_val}' patřící vozu #{legit_bid} ({dist_between}m). "
+                              f"Na Arriva mapě byl pro vůz #{thief_bid} spolehlivě nalezen vysílač s SPZ '{best_cand_spz}' "
+                              f"({best_cand_dist:.0f}m na stejné lince {best_cand_line}).")
                 else:
                     proposed_spz = "Aktivní hledání"
-                    reason = (f"Vůz #{thief_bid} neoprávněně převzal SPZ '{spz_val}' od vozu #{legit_bid} (vzdálenost mezi nimi {dist_between}m). "
-                              f"V Arriva telemetrii pro něj zatím nebyl nalezen žádný jednoznačný vysílač – doporučeno uvolnit na Aktivní hledání.")
+                    reason = (f"Vůz #{thief_bid} (L{t_line}) neoprávněně převzal duplicitní SPZ '{spz_val}' od vozu #{legit_bid} ({dist_between}m). "
+                              f"Na Arriva mapě pro něj zatím nebyl nalezen žádný jistý vysílač na lince {t_line} – bezpečně uvolněno na Aktivní hledání.")
 
                 proposal = {
                     "id": prop_id,
                     "type": "duplicate",
                     "spz": spz_val,
                     "bus_id": thief_bid,
-                    "line": thief_c.get("line") or "?",
+                    "line": t_line or "?",
                     "destination": thief_c.get("destination") or "Neznámý cíl",
                     "current_spz": spz_val,
                     "proposed_spz": proposed_spz,
-                    "has_candidate": bool(best_cand_spz),
+                    "has_candidate": bool(is_reliable and best_cand_spz),
                     "candidate_spz": best_cand_spz or "",
                     "candidate_dist": round(best_cand_dist) if best_cand_spz else None,
                     "conflict_with_id": legit_bid,
@@ -5790,16 +5884,25 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                 }
 
                 if auto_resolve or AUTO_RESOLVE_SPZ:
-                    # Automatické rozluštění
+                    # Automatické rozluštění v reálném čase
                     thief_c["spz"] = proposed_spz
-                    thief_c["spz_verified"] = bool(best_cand_spz)
-                    thief_c["spz_locked"] = bool(best_cand_spz)
+                    thief_c["spz_verified"] = bool(is_reliable and best_cand_spz)
+                    thief_c["spz_locked"] = bool(is_reliable and best_cand_spz)
                     thief_c["manual_spz"] = False
                     thief_c["admin_spz_verified"] = False
                     thief_c["admin_flag"] = False
                     proposal["status"] = "auto_resolved"
-                    proposal["resolution_note"] = f"Systém automaticky uvolnil duplicitní SPZ {spz_val} od vozu #{thief_bid} a nastavil '{proposed_spz}'."
-                    log_automation_action("duplicate_resolved", thief_bid, f"Vyřešena duplicitní SPZ {spz_val}", proposal["resolution_note"], spz=proposed_spz, line=thief_c.get("line"))
+                    if is_reliable and best_cand_spz:
+                        proposal["resolution_note"] = (f"Automode vyřešil duplicitu: SPZ '{spz_val}' ponechána vozu #{legit_bid}. "
+                                                       f"Vůz #{thief_bid} spolehlivě přepnut na SPZ '{best_cand_spz}' nalezenou na Arriva mapě ({best_cand_dist:.0f}m na lince {best_cand_line}).")
+                        log_spz_change(thief_bid, spz_val, best_cand_spz, reason="automode_duplicate_resolved", admin_note=f"Nalezena spolehlivá SPZ z Arrivy ({best_cand_dist:.0f}m na L{best_cand_line})")
+                        log_automation_action("duplicate_resolved", thief_bid, f"Automode vyřešil duplicitu SPZ {spz_val}", proposal["resolution_note"], spz=best_cand_spz, line=t_line)
+                    else:
+                        proposal["resolution_note"] = (f"Automode uvolnil duplicitu: SPZ '{spz_val}' ponechána legitimnímu vozu #{legit_bid}. "
+                                                       f"Vůz #{thief_bid} uvolněn na 'Aktivní hledání' (na Arriva mapě pro něj zatím není spolehlivý vysílač na lince {t_line}).")
+                        log_spz_change(thief_bid, spz_val, "Aktivní hledání", reason="automode_duplicate_released", admin_note=f"Uvolněno z duplicity, čeká se na Arrivu při lince {t_line}")
+                        log_automation_action("duplicate_resolved", thief_bid, f"Automode uvolnil duplicitu SPZ {spz_val}", proposal["resolution_note"], spz="Aktivní hledání", line=t_line)
+
                     print(f"[AUTO-RESOLVE SPZ] {proposal['resolution_note']}", flush=True)
 
                 SPZ_CONFLICT_PROPOSALS[prop_id] = proposal
@@ -9117,7 +9220,8 @@ def get_spz_control_dashboard_data():
         # Zkontroluj, zda v LATEST_ARRIVA_DATA existuje blízký kandidát pro tento bus
         cand_spz = None
         cand_dist = 999999
-        if lat and lng and LATEST_ARRIVA_DATA:
+        cand_line = ""
+        if lat and lng and line and LATEST_ARRIVA_DATA:
             for b_a in LATEST_ARRIVA_DATA:
                 a_spz = (b_a.get("spz") or "").strip()
                 if not a_spz or a_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ"):
@@ -9126,17 +9230,18 @@ def get_spz_control_dashboard_data():
                 a_lon = b_a.get("longitude") or 0
                 if not a_lat or not a_lon:
                     continue
+                # STRIKTNÍ SHODA LINKY (žádné tipování z jiných linek!)
+                if not _arriva_line_matches(line, b_a):
+                    continue
                 d_c = haversine_m(lat, lng, a_lat, a_lon)
-                if _arriva_line_matches(line, b_a) and d_c <= 1200:
-                    if d_c < cand_dist:
-                        cand_dist = d_c
-                        cand_spz = a_spz
-                elif d_c <= 350 and d_c < cand_dist and not cand_spz:
+                if d_c <= 850 and d_c < cand_dist:
                     cand_dist = d_c
                     cand_spz = a_spz
+                    cand_line = str(b_a.get("linkNumber") or b_a.get("linkNumberAlias") or line).strip()
         if cand_spz:
             bus_entry["candidate_spz"] = cand_spz
             bus_entry["candidate_dist"] = round(cand_dist)
+            bus_entry["candidate_line"] = cand_line
 
         # Neznámá SPZ / Aktivní hledání
         if not spz or spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ"):
@@ -9146,19 +9251,22 @@ def get_spz_control_dashboard_data():
             elif c.get("spz_stable_ticks", 0) < 3:
                 bus_entry["reason"] = "Nově zachycený spoj v GTFS/Inflow – čeká na Arriva lokalizaci"
             elif cand_spz:
-                bus_entry["reason"] = f"Aktivní hledání: Na Arriva mapě byl detekován blízký kandidát '{cand_spz}' ({round(cand_dist)}m)"
+                bus_entry["reason"] = f"Aktivní hledání: Na Arriva mapě byl na lince {line} detekován spolehlivý kandidát '{cand_spz}' ({round(cand_dist)}m)"
             elif line and line not in [mem.get("line") for mem in SPZ_MEMORY.values()]:
                 bus_entry["reason"] = f"V Arriva telemetrii nebyla nalezena žádná volná SPZ pro linku {line}"
             else:
-                bus_entry["reason"] = "Žádný Arriva vysílač v toleranci vzdálenosti a směru jízdy"
+                bus_entry["reason"] = "Žádný Arriva vysílač na dané lince v toleranci vzdálenosti"
             unknown_buses.append(bus_entry)
 
         # Duplicitní SPZ
         elif spz_counts.get(spz, 0) > 1:
-            dup_reason = f"Duplicitní SPZ: Vůz #{bid} sdílí SPZ '{spz}' (celkem {spz_counts[spz]} vozy). Pravděpodobně ukradena při stání na terminálu."
+            other_bids = [str(o_bid) for o_bid, o_c in GLOBAL_BUS_CACHE.items() if o_bid != bid and str(o_c.get("spz") or "").strip() == spz]
+            other_str = f"vozem #{', #'.join(other_bids)}" if other_bids else "jiným vozem"
+            dup_reason = f"Duplicitní SPZ: Vůz #{bid} sdílí SPZ '{spz}' s {other_str} (celkem {spz_counts[spz]} vozy)."
             if cand_spz and cand_spz != spz:
-                dup_reason += f" Alternativní volný vysílač: '{cand_spz}' ({round(cand_dist)}m)."
+                dup_reason += f" Na lince {line} byl na Arriva mapě spolehlivě nalezen alternativní vysílač: '{cand_spz}' ({round(cand_dist)}m)."
             bus_entry["reason"] = dup_reason
+            bus_entry["conflict_with_ids"] = other_bids
             duplicate_buses.append(bus_entry)
 
         # Neověřená SPZ
@@ -9257,7 +9365,7 @@ def get_spz_control_dashboard_data():
 
     # 6. Návrhy systému k vyřešení (Bod 5)
     proposals_list = list(SPZ_CONFLICT_PROPOSALS.values())
-    proposals_list.sort(key=lambda x: (0 if x.get("status") == "pending" else 1, x.get("created_at", "")), reverse=False)
+    proposals_list.sort(key=lambda x: (1 if x.get("status") == "pending" else 0, x.get("created_at", "")), reverse=True)
 
     return {
         "status": "success",
@@ -9537,10 +9645,12 @@ def api_admin_toggle_auto_resolve():
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
 
     AUTO_RESOLVE_SPZ = not AUTO_RESOLVE_SPZ
+    _save_spz_settings()
     if AUTO_RESOLVE_SPZ:
         analyze_spz_anomalies_and_conflicts(auto_resolve=True)
 
-    mode_text = "Automatické rozluštění ZAPNUTO" if AUTO_RESOLVE_SPZ else "Manuální schvalování ZAPNUTO"
+    mode_text = "Automatické rozluštění (Automode) ZAPNUTO" if AUTO_RESOLVE_SPZ else "Manuální schvalování ZAPNUTO"
+    log_automation_action("automode_toggle", None, f"Režim rozluštění změněn: {mode_text}", f"Nastavil {admin_name or 'Admin'}")
     return jsonify({
         "status": "success",
         "auto_resolve": AUTO_RESOLVE_SPZ,
