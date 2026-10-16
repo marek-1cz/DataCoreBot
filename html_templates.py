@@ -4076,28 +4076,96 @@ loadDashHist();
 
 
 HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
-<div style="max-width: 1500px; margin: 0 auto; padding-bottom: 50px;">
+<style>
+  .dash-container { max-width: 1500px; margin: 0 auto; padding-bottom: 50px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .dash-top-card { border-radius: 12px; padding: 16px; display: flex; align-items: center; gap: 14px; transition: transform 0.2s; }
+  .dash-top-card:hover { transform: translateY(-2px); }
+  .dash-tabs-bar { display: flex; gap: 6px; border-bottom: 2px solid #334155; margin-bottom: 20px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  .dash-tab-btn { background: transparent; border: none; padding: 12px 18px; color: #94a3b8; border-bottom: 3px solid transparent; font-weight: bold; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; transition: all 0.2s; }
+  .dash-tab-btn.active { color: #38bdf8; border-bottom-color: #38bdf8; }
+  .bus-link { color: #38bdf8; text-decoration: none; font-weight: bold; }
+  .bus-link:hover { text-decoration: underline; color: #7dd3fc; }
+  
+  @media (max-width: 768px) {
+    .dash-header-wrap { flex-direction: column !important; align-items: stretch !important; gap: 14px !important; }
+    .dash-header-actions { flex-direction: column !important; width: 100% !important; gap: 8px !important; }
+    .dash-header-actions button, .dash-header-actions a { width: 100% !important; justify-content: center !important; }
+    .dash-stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+    .dash-stats-grid > div:last-child { grid-column: span 2; }
+    
+    /* Mobilní karty místo tabulek */
+    .mobile-cards-table, .mobile-cards-table thead, .mobile-cards-table tbody, .mobile-cards-table th, .mobile-cards-table td, .mobile-cards-table tr { 
+      display: block !important; 
+    }
+    .mobile-cards-table thead tr { 
+      position: absolute !important; top: -9999px !important; left: -9999px !important; 
+    }
+    .mobile-cards-table tbody tr { 
+      background: #0f172a !important; 
+      border: 1px solid #334155 !important; 
+      border-radius: 10px !important; 
+      margin-bottom: 14px !important; 
+      padding: 14px !important; 
+    }
+    .mobile-cards-table td { 
+      padding: 8px 0 !important; 
+      border: none !important; 
+      border-bottom: 1px dashed rgba(255,255,255,0.08) !important; 
+      display: flex !important; 
+      flex-direction: column !important; 
+      gap: 3px !important; 
+    }
+    .mobile-cards-table td:last-child { 
+      border-bottom: none !important; 
+      padding-top: 10px !important; 
+    }
+    .mobile-cards-table td::before { 
+      content: attr(data-label); 
+      font-size: 11px; 
+      text-transform: uppercase; 
+      color: #94a3b8; 
+      font-weight: 700; 
+      letter-spacing: 0.5px; 
+      margin-bottom: 2px;
+    }
+    .mobile-edit-box {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 8px !important;
+    }
+    .mobile-edit-box input {
+      width: 100% !important;
+      box-sizing: border-box !important;
+    }
+    .mobile-edit-box button {
+      width: 100% !important;
+      padding: 8px 12px !important;
+    }
+  }
+</style>
+
+<div class="dash-container">
   <!-- Header -->
-  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 25px; border-bottom: 1px solid #334155; padding-bottom: 15px;">
+  <div class="dash-header-wrap" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 25px; border-bottom: 1px solid #334155; padding-bottom: 15px;">
     <div>
-      <h1 style="color: var(--blue-main); margin: 0; font-size: 26px; display: flex; align-items: center; gap: 12px;">
-        <i class="fas fa-map-marked-alt"></i> Interaktivní mapa & Diagnostika SPZ
+      <h1 style="color: var(--blue-main); margin: 0; font-size: 24px; display: flex; align-items: center; gap: 12px;">
+        <i class="fas fa-map-marked-alt"></i> Interaktivní mapa & Přehled chyb
       </h1>
       <div style="color: var(--text-muted); font-size: 13px; margin-top: 5px;">
-        Centrální dispečink pro kontrolu neznámých, neověřených a duplicitních SPZ, řešení konfliktů a správu zadaných řidičů a poznámek.
+        Centrální dispečink pro přehled chyb, rozluštění ukradených SPZ, log automatiky a správu zadaných řidičů a poznámek.
       </div>
     </div>
-    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+    <div class="dash-header-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
       <button onclick="triggerAnalysis()" id="btn-trigger-analysis" class="btn" style="background: linear-gradient(135deg, #0284c7, #2563eb); color: white; font-weight: bold; padding: 10px 16px; border-radius: 8px; display: flex; align-items: center; gap: 8px; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);">
         <i class="fas fa-bolt"></i> Spustit rozluštění chyb
       </button>
       <button onclick="toggleAutoResolve()" id="btn-auto-resolve" class="btn" style="background: #334155; color: #f1f5f9; font-weight: bold; padding: 10px 16px; border-radius: 8px; display: flex; align-items: center; gap: 8px; border: 1px solid #475569; cursor: pointer;">
         <i class="fas fa-robot"></i> <span id="auto-resolve-label">Režim: Manuální schvalování</span>
       </button>
-      <button onclick="loadSpzControlData()" class="btn" style="background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 10px 14px; border-radius: 8px; cursor: pointer;">
+      <button onclick="loadSpzControlData()" class="btn" style="background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 10px 14px; border-radius: 8px; cursor: pointer;" title="Obnovit data">
         <i class="fas fa-sync-alt" id="refresh-icon"></i>
       </button>
-      <a href="/interaktivnimapa" target="_blank" class="btn btn-success" style="padding: 10px 16px; border-radius: 8px; display: flex; align-items: center; gap: 8px; text-decoration: none; font-weight: bold;">
+      <a href="https://datacorebot.koyeb.app/mapa" target="_blank" class="btn btn-success" style="padding: 10px 16px; border-radius: 8px; display: flex; align-items: center; gap: 8px; text-decoration: none; font-weight: bold;">
         <i class="fas fa-external-link-alt"></i> Otevřít živou mapu
       </a>
     </div>
@@ -4107,22 +4175,22 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
   <div id="spz-toast" style="display: none; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; transition: all 0.3s ease;"></div>
 
   <!-- Top Stats Cards -->
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 25px;">
+  <div class="dash-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px;">
     <!-- Neznámá SPZ -->
-    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 16px; display: flex; align-items: center; gap: 15px;">
-      <div style="width: 48px; height: 48px; border-radius: 10px; background: rgba(239, 68, 68, 0.2); display: flex; align-items: center; justify-content: center; font-size: 22px; color: #ef4444;">
-        <i class="fas fa-question-circle"></i>
+    <div class="dash-top-card" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);">
+      <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(239, 68, 68, 0.2); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #ef4444;">
+        <i class="fas fa-satellite-dish"></i>
       </div>
       <div>
-        <div style="font-size: 11px; text-transform: uppercase; color: #f87171; font-weight: bold;">Neznámá SPZ</div>
+        <div style="font-size: 11px; text-transform: uppercase; color: #f87171; font-weight: bold;">Aktivní hledání</div>
         <div id="stat-unknown" style="font-size: 24px; font-weight: bold; color: white;">0</div>
-        <div style="font-size: 11px; color: #94a3b8;">Vyžaduje identifikaci</div>
+        <div style="font-size: 11px; color: #94a3b8;">Čeká na jízdu a Arrivu</div>
       </div>
     </div>
 
     <!-- Duplicity SPZ -->
-    <div style="background: rgba(249, 115, 22, 0.1); border: 1px solid rgba(249, 115, 22, 0.3); border-radius: 12px; padding: 16px; display: flex; align-items: center; gap: 15px;">
-      <div style="width: 48px; height: 48px; border-radius: 10px; background: rgba(249, 115, 22, 0.2); display: flex; align-items: center; justify-content: center; font-size: 22px; color: #f97316;">
+    <div class="dash-top-card" style="background: rgba(249, 115, 22, 0.1); border: 1px solid rgba(249, 115, 22, 0.3);">
+      <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(249, 115, 22, 0.2); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #f97316;">
         <i class="fas fa-clone"></i>
       </div>
       <div>
@@ -4133,8 +4201,8 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
     </div>
 
     <!-- Neověřená SPZ -->
-    <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 16px; display: flex; align-items: center; gap: 15px;">
-      <div style="width: 48px; height: 48px; border-radius: 10px; background: rgba(245, 158, 11, 0.2); display: flex; align-items: center; justify-content: center; font-size: 22px; color: #f59e0b;">
+    <div class="dash-top-card" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);">
+      <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(245, 158, 11, 0.2); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #f59e0b;">
         <i class="fas fa-hourglass-half"></i>
       </div>
       <div>
@@ -4145,92 +4213,95 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
     </div>
 
     <!-- Návrhy k řešení -->
-    <div style="background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; padding: 16px; display: flex; align-items: center; gap: 15px;">
-      <div style="width: 48px; height: 48px; border-radius: 10px; background: rgba(168, 85, 247, 0.2); display: flex; align-items: center; justify-content: center; font-size: 22px; color: #a855f7;">
-        <i class="fas fa-lightbulb"></i>
+    <div class="dash-top-card" style="background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.3);">
+      <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(168, 85, 247, 0.2); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #a855f7;">
+        <i class="fas fa-balance-scale"></i>
       </div>
       <div>
         <div style="font-size: 11px; text-transform: uppercase; color: #c084fc; font-weight: bold;">Návrhy k posouzení</div>
         <div id="stat-proposals" style="font-size: 24px; font-weight: bold; color: white;">0</div>
-        <div style="font-size: 11px; color: #94a3b8;">Bod 5: Čeká na verdikt</div>
+        <div style="font-size: 11px; color: #94a3b8;">Rozluštění SPZ</div>
       </div>
     </div>
 
-    <!-- Zadaní řidiči a poznámky -->
-    <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 16px; display: flex; align-items: center; gap: 15px;">
-      <div style="width: 48px; height: 48px; border-radius: 10px; background: rgba(16, 185, 129, 0.2); display: flex; align-items: center; justify-content: center; font-size: 22px; color: #10b981;">
-        <i class="fas fa-id-card"></i>
+    <!-- Log automatiky -->
+    <div class="dash-top-card" style="background: rgba(2, 132, 199, 0.1); border: 1px solid rgba(2, 132, 199, 0.3);">
+      <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(2, 132, 199, 0.2); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #38bdf8;">
+        <i class="fas fa-robot"></i>
       </div>
       <div>
-        <div style="font-size: 11px; text-transform: uppercase; color: #34d399; font-weight: bold;">Řidiči & Poznámky</div>
-        <div id="stat-drivers" style="font-size: 24px; font-weight: bold; color: white;">0</div>
-        <div style="font-size: 11px; color: #94a3b8;">Bod 4: Všechna zadaná jména</div>
+        <div style="font-size: 11px; text-transform: uppercase; color: #38bdf8; font-weight: bold;">Log automatiky</div>
+        <div id="stat-automation" style="font-size: 24px; font-weight: bold; color: white;">0</div>
+        <div style="font-size: 11px; color: #94a3b8;">Zaznamenané akce</div>
       </div>
     </div>
   </div>
 
   <!-- Navigation Tabs -->
-  <div style="display: flex; gap: 8px; border-bottom: 2px solid #334155; margin-bottom: 20px; overflow-x: auto;">
-    <button onclick="switchTab('spz')" id="tab-btn-spz" style="background: transparent; border: none; padding: 12px 20px; color: #38bdf8; border-bottom: 3px solid #38bdf8; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-      <i class="fas fa-exclamation-triangle"></i> Diagnostika & Důvody SPZ <span id="badge-tab-spz" style="background: #ef4444; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px; margin-left: 5px;">0</span>
+  <div class="dash-tabs-bar">
+    <button onclick="switchTab('spz')" id="tab-btn-spz" class="dash-tab-btn active">
+      <i class="fas fa-exclamation-triangle"></i> Přehled chyb <span id="badge-tab-spz" style="background: #ef4444; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px; margin-left: 5px;">0</span>
     </button>
-    <button onclick="switchTab('proposals')" id="tab-btn-proposals" style="background: transparent; border: none; padding: 12px 20px; color: #94a3b8; border-bottom: 3px solid transparent; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-      <i class="fas fa-robot"></i> Návrhy systému k rozluštění <span id="badge-tab-proposals" style="background: #a855f7; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px; margin-left: 5px;">0</span>
+    <button onclick="switchTab('proposals')" id="tab-btn-proposals" class="dash-tab-btn">
+      <i class="fas fa-balance-scale"></i> Návrhy systému k rozluštění <span id="badge-tab-proposals" style="background: #a855f7; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px; margin-left: 5px;">0</span>
     </button>
-    <button onclick="switchTab('drivers')" id="tab-btn-drivers" style="background: transparent; border: none; padding: 12px 20px; color: #94a3b8; border-bottom: 3px solid transparent; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+    <button onclick="switchTab('automation')" id="tab-btn-automation" class="dash-tab-btn">
+      <i class="fas fa-history"></i> Log automatiky mapy <span id="badge-tab-automation" style="background: #0284c7; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px; margin-left: 5px;">0</span>
+    </button>
+    <button onclick="switchTab('drivers')" id="tab-btn-drivers" class="dash-tab-btn">
       <i class="fas fa-user-tag"></i> Zadaná jména & Poznámky <span id="badge-tab-drivers" style="background: #10b981; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px; margin-left: 5px;">0</span>
     </button>
-    <button onclick="switchTab('invalid')" id="tab-btn-invalid" style="background: transparent; border: none; padding: 12px 20px; color: #94a3b8; border-bottom: 3px solid transparent; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+    <button onclick="switchTab('invalid')" id="tab-btn-invalid" class="dash-tab-btn">
       <i class="fas fa-ban"></i> Neplatná ověření Neznámé <span id="badge-tab-invalid" style="background: #64748b; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px; margin-left: 5px;">0</span>
     </button>
   </div>
 
-  <!-- TAB 1: DIAGNOSTIKA & DŮVODY SPZ (BOD 2) -->
+  <!-- TAB 1: PŘEHLED CHYB (BOD 6) -->
   <div id="tab-content-spz">
-    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button onclick="setSpzFilter('all')" class="spz-filter-btn active" id="filter-all" style="background: #334155; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: bold;">Všechny problémové</button>
-          <button onclick="setSpzFilter('unknown')" class="spz-filter-btn" id="filter-unknown" style="background: #0f172a; color: #f87171; border: 1px solid #ef4444; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer;">Pouze Neznámá</button>
+          <button onclick="setSpzFilter('all')" class="spz-filter-btn" id="filter-all" style="background: #334155; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: bold;">Všechny chyby</button>
           <button onclick="setSpzFilter('duplicate')" class="spz-filter-btn" id="filter-duplicate" style="background: #0f172a; color: #fb923c; border: 1px solid #f97316; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer;">Pouze Duplicity</button>
-          <button onclick="setSpzFilter('unverified')" class="spz-filter-btn" id="filter-unverified" style="background: #0f172a; color: #fbbf24; border: 1px solid #f59e0b; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer;">Pouze Neověřené</button>
+          <button onclick="setSpzFilter('unknown')" class="spz-filter-btn" id="filter-unknown" style="background: #0f172a; color: #f87171; border: 1px solid #ef4444; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer;">Aktivní hledání</button>
+          <button onclick="setSpzFilter('unverified')" class="spz-filter-btn" id="filter-unverified" style="background: #0f172a; color: #fbbf24; border: 1px solid #f59e0b; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer;">Neověřené</button>
         </div>
-        <div style="position: relative; min-width: 280px;">
-          <input type="text" id="spz-search" oninput="renderSpzTable()" placeholder="Hledat vůz, linku, SPZ, model či důvod..." style="width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: white; padding: 8px 12px 8px 32px; border-radius: 6px; font-size: 13px;">
+        <div style="position: relative; min-width: 260px; flex: 1; max-width: 420px;">
+          <input type="text" id="spz-search" oninput="renderSpzTable()" placeholder="Hledat vůz ID, linku, SPZ, model, chybu..." style="width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: white; padding: 8px 12px 8px 32px; border-radius: 6px; font-size: 13px;">
           <i class="fas fa-search" style="position: absolute; left: 10px; top: 11px; color: #64748b; font-size: 12px;"></i>
         </div>
       </div>
 
       <div style="overflow-x: auto;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <table class="mobile-cards-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
           <thead>
             <tr style="background: #0f172a; border-bottom: 2px solid #334155; text-align: left; color: #94a3b8;">
               <th style="padding: 12px;">Vůz ID / Linka</th>
               <th style="padding: 12px;">Model vozidla / Spoj</th>
-              <th style="padding: 12px;">Aktuální SPZ</th>
-              <th style="padding: 12px;">Důvod stavu (Proč je toto určeno)</th>
-              <th style="padding: 12px; min-width: 240px;">Rychlá úprava SPZ (Bod 2)</th>
+              <th style="padding: 12px;">Stav SPZ</th>
+              <th style="padding: 12px;">Důvod chyby / Popis</th>
+              <th style="padding: 12px; min-width: 250px;">Rychlá oprava SPZ</th>
               <th style="padding: 12px; text-align: center;">Akce</th>
             </tr>
           </thead>
           <tbody id="spz-table-body">
-            <tr><td colspan="6" style="text-align: center; padding: 30px; color: #64748b;"><i class="fas fa-spinner fa-spin"></i> Načítání vozidel z aktivní mapy...</td></tr>
+            <tr><td colspan="6" style="text-align: center; padding: 30px; color: #64748b;"><i class="fas fa-spinner fa-spin"></i> Načítání chybových vozidel z aktivní mapy...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- TAB 2: NÁVRHY SYSTÉMU K ROZLUŠTĚNÍ (BOD 5) -->
+  <!-- TAB 2: NÁVRHY SYSTÉMU K ROZLUŠTĚNÍ (BOD 3 & 5) -->
   <div id="tab-content-proposals" style="display: none;">
     <div style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <div>
           <h3 style="color: #c084fc; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px;">
-            <i class="fas fa-balance-scale"></i> Posouzení návrhů systému (Bod 5)
+            <i class="fas fa-balance-scale"></i> Rozluštění ukradených a sporných SPZ
           </h3>
           <p style="color: var(--text-muted); font-size: 12px; margin: 5px 0 0 0;">
-            Jakmile systém zjistí nesoulad u ověřené SPZ nebo vyřeší ukradenou SPZ při stání vedle sebe, nabídne vám volbu: potvrdit verdikt systému nebo zachovat stávající stav.
+            Když systém zjistí, že dva busy stály u sebe a jeden ukradl SPZ druhému, najde na Arriva mapě reálné vysílače a nabídne vám přímé rozluštění s klikem na mapu obou vozů.
           </p>
         </div>
       </div>
@@ -4240,13 +4311,50 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
     </div>
   </div>
 
-  <!-- TAB 3: ZADANÁ JMÉNA A POZNÁMKY (BOD 4) -->
+  <!-- TAB 3: LOG AUTOMATIKY MAPY (BOD 5) -->
+  <div id="tab-content-automation" style="display: none;">
+    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+        <div>
+          <h3 style="color: #38bdf8; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-robot"></i> Log automatiky interaktivní mapy
+          </h3>
+          <p style="color: var(--text-muted); font-size: 12px; margin: 5px 0 0 0;">
+            Přehled všech automatických kroků: vyřešení duplicit, přiřazení SPZ, vjezdy do vozoven, příchody na konečné a rozhodnutí dispečinku.
+          </p>
+        </div>
+        <div style="position: relative; min-width: 240px;">
+          <input type="text" id="automation-search" oninput="renderAutomationLog()" placeholder="Filtrovat log automatiky..." style="width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: white; padding: 8px 12px 8px 32px; border-radius: 6px; font-size: 13px;">
+          <i class="fas fa-search" style="position: absolute; left: 10px; top: 11px; color: #64748b; font-size: 12px;"></i>
+        </div>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table class="mobile-cards-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <thead>
+            <tr style="background: #0f172a; border-bottom: 2px solid #334155; text-align: left; color: #94a3b8;">
+              <th style="padding: 12px; width: 90px;">Čas</th>
+              <th style="padding: 12px; width: 140px;">Typ akce</th>
+              <th style="padding: 12px;">Vůz / Linka / SPZ</th>
+              <th style="padding: 12px;">Popis události automatiky</th>
+              <th style="padding: 12px; text-align: center; width: 110px;">Zobrazit</th>
+            </tr>
+          </thead>
+          <tbody id="automation-table-body">
+            <tr><td colspan="5" style="text-align: center; padding: 30px; color: #64748b;"><i class="fas fa-spinner fa-spin"></i> Načítání logu automatiky...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 4: ZADANÁ JMÉNA A POZNÁMKY (BOD 4) -->
   <div id="tab-content-drivers" style="display: none;">
     <div style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
         <div>
           <h3 style="color: #34d399; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px;">
-            <i class="fas fa-address-book"></i> Seznam všech zadaných řidičů a poznámek z mapy (Bod 4)
+            <i class="fas fa-address-book"></i> Seznam všech zadaných řidičů a poznámek z mapy
           </h3>
           <p style="color: var(--text-muted); font-size: 12px; margin: 5px 0 0 0;">
             Kompletní přehled všech jmen řidičů a poznámek, které jste vložili do interaktivní mapy (zahrnuje živou mapu i trvalou paměť).
@@ -4259,7 +4367,7 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
       </div>
 
       <div style="overflow-x: auto;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <table class="mobile-cards-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
           <thead>
             <tr style="background: #0f172a; border-bottom: 2px solid #334155; text-align: left; color: #94a3b8;">
               <th style="padding: 12px;">Vůz ID / SPZ</th>
@@ -4268,25 +4376,26 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
               <th style="padding: 12px;">Linka & Model</th>
               <th style="padding: 12px;">Stav</th>
               <th style="padding: 12px;">Datum / Čas uložení</th>
+              <th style="padding: 12px; text-align: center;">Mapa</th>
             </tr>
           </thead>
           <tbody id="drivers-table-body">
-            <tr><td colspan="6" style="text-align: center; padding: 30px; color: #64748b;"><i class="fas fa-spinner fa-spin"></i> Načítání řidičů a poznámek...</td></tr>
+            <tr><td colspan="7" style="text-align: center; padding: 30px; color: #64748b;"><i class="fas fa-spinner fa-spin"></i> Načítání řidičů a poznámek...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- TAB 4: NEPLATNÁ OVĚŘENÍ NEZNÁMÉ SPZ (BOD 3) -->
+  <!-- TAB 5: NEPLATNÁ OVĚŘENÍ NEZNÁMÉ SPZ (BOD 3) -->
   <div id="tab-content-invalid" style="display: none;">
     <div style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
       <div style="margin-bottom: 15px;">
         <h3 style="color: #f87171; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px;">
-          <i class="fas fa-shield-alt"></i> Automaticky opravená neplatná ověření (Bod 3)
+          <i class="fas fa-shield-alt"></i> Automaticky opravená neplatná ověření
         </h3>
         <p style="color: var(--text-muted); font-size: 12px; margin: 5px 0 0 0;">
-          Jakmile je detekováno admin ověření pro SPZ "NEZNÁMÁ", systém automaticky vyhodí chybu, tento neplatný status zruší a zapíše jej do tohoto přehledu.
+          Jakmile je detekováno admin ověření pro SPZ "NEZNÁMÁ" či "AKTIVNÍ HLEDÁNÍ", systém automaticky vyhodí chybu, tento neplatný status zruší a zapíše jej do tohoto přehledu.
         </p>
       </div>
 
@@ -4312,21 +4421,15 @@ function showToast(text, isError = false) {
 }
 
 function switchTab(tabName) {
-  ['spz', 'proposals', 'drivers', 'invalid'].forEach(t => {
+  ['spz', 'proposals', 'automation', 'drivers', 'invalid'].forEach(t => {
     const el = document.getElementById('tab-content-' + t);
     const btn = document.getElementById('tab-btn-' + t);
     if (t === tabName) {
       if (el) el.style.display = 'block';
-      if (btn) {
-        btn.style.color = '#38bdf8';
-        btn.style.borderBottomColor = '#38bdf8';
-      }
+      if (btn) btn.classList.add('active');
     } else {
       if (el) el.style.display = 'none';
-      if (btn) {
-        btn.style.color = '#94a3b8';
-        btn.style.borderBottomColor = 'transparent';
-      }
+      if (btn) btn.classList.remove('active');
     }
   });
 }
@@ -4370,10 +4473,11 @@ function renderDashboardUI() {
   document.getElementById('stat-duplicate').innerText = s.duplicate_count || 0;
   document.getElementById('stat-unverified').innerText = s.unverified_count || 0;
   document.getElementById('stat-proposals').innerText = s.pending_proposals_count || 0;
-  document.getElementById('stat-drivers').innerText = s.drivers_notes_count || 0;
+  document.getElementById('stat-automation').innerText = (s.automation_log_count || (_dashData.automation_log || []).length) || 0;
 
   document.getElementById('badge-tab-spz').innerText = (s.unknown_count || 0) + (s.duplicate_count || 0) + (s.unverified_count || 0);
   document.getElementById('badge-tab-proposals').innerText = s.pending_proposals_count || 0;
+  document.getElementById('badge-tab-automation').innerText = (_dashData.automation_log || []).length;
   document.getElementById('badge-tab-drivers').innerText = s.drivers_notes_count || 0;
   document.getElementById('badge-tab-invalid').innerText = s.invalid_verifications_count || 0;
 
@@ -4392,8 +4496,17 @@ function renderDashboardUI() {
 
   renderSpzTable();
   renderProposals();
+  renderAutomationLog();
   renderDriversTable();
   renderInvalidLog();
+}
+
+function setQuickInp(busId, spzVal) {
+  const inp = document.getElementById('spz-inp-' + busId);
+  if (inp) {
+    inp.value = spzVal;
+    inp.focus();
+  }
 }
 
 function renderSpzTable() {
@@ -4403,11 +4516,11 @@ function renderSpzTable() {
 
   let list = [];
   if (_currentSpzFilter === 'all') {
-    list = [...(_dashData.unknown_buses || []), ...(_dashData.duplicate_buses || []), ...(_dashData.unverified_buses || [])];
-  } else if (_currentSpzFilter === 'unknown') {
-    list = _dashData.unknown_buses || [];
+    list = [...(_dashData.duplicate_buses || []), ...(_dashData.unknown_buses || []), ...(_dashData.unverified_buses || [])];
   } else if (_currentSpzFilter === 'duplicate') {
     list = _dashData.duplicate_buses || [];
+  } else if (_currentSpzFilter === 'unknown') {
+    list = _dashData.unknown_buses || [];
   } else if (_currentSpzFilter === 'unverified') {
     list = _dashData.unverified_buses || [];
   }
@@ -4424,48 +4537,55 @@ function renderSpzTable() {
   }
 
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 30px; color: #64748b;"><i class="fas fa-check-circle" style="color: #10b981;"></i> Žádná problematická vozidla v této kategorii!</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 30px; color: #10b981;"><i class="fas fa-check-circle"></i> Vše v pořádku! Žádné chyby v této kategorii.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = list.map(b => {
-    const isUnknown = !b.spz || b.spz.toUpperCase().includes('NEZNÁMÁ');
-    const badgeColor = b.admin_verified ? '#10b981' : (b.spz_verified ? '#3b82f6' : (isUnknown ? '#ef4444' : '#f59e0b'));
-    const statusLabel = b.admin_verified ? 'Admin ověřeno' : (b.spz_verified ? '3F Ověřeno' : (isUnknown ? 'Neznámá' : 'Neověřeno'));
+    const isSearching = !b.spz || b.spz === 'Aktivní hledání' || b.spz.toUpperCase().includes('NEZNÁMÁ');
+    const badgeColor = b.admin_verified ? '#10b981' : (b.spz_verified ? '#3b82f6' : (isSearching ? '#38bdf8' : '#f97316'));
+    const statusLabel = b.admin_verified ? 'Admin ověřeno' : (b.spz_verified ? '3F Ověřeno' : (isSearching ? 'Aktivní hledání' : 'Neověřeno'));
+    const trackUrl = b.map_url || `https://datacorebot.koyeb.app/mapa?track=${b.bus_id}`;
+
+    let candChip = '';
+    if (b.candidate_spz) {
+      candChip = `<div style="margin-top: 5px;"><button onclick="setQuickInp('${b.bus_id}', '${b.candidate_spz}')" style="background: rgba(2, 132, 199, 0.2); border: 1px solid #0284c7; color: #38bdf8; font-size: 11px; padding: 3px 7px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Klikněte pro vložení navržené SPZ"><i class="fas fa-magic"></i> Navrženo z Arrivy: <b>${b.candidate_spz}</b> (${b.candidate_dist}m)</button></div>`;
+    }
 
     return `
       <tr style="border-bottom: 1px solid #334155; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
-        <td style="padding: 12px;">
-          <div style="font-weight: bold; color: white;">#${b.bus_id}</div>
-          <div style="color: #38bdf8; font-size: 11px;"><i class="fas fa-route"></i> Linka <b>${b.line}</b> (${b.destination || 'Neznámý cíl'})</div>
+        <td data-label="Vůz ID / Linka" style="padding: 12px;">
+          <div style="font-weight: bold;"><a href="${trackUrl}" target="_blank" class="bus-link"><i class="fas fa-bus"></i> Vůz #${b.bus_id}</a></div>
+          <div style="color: #38bdf8; font-size: 12px; margin-top: 2px;"><i class="fas fa-route"></i> Linka <b>${b.line}</b> (${b.destination || 'Neznámý cíl'})</div>
         </td>
-        <td style="padding: 12px;">
+        <td data-label="Model / Spoj" style="padding: 12px;">
           <div style="color: #e2e8f0; font-weight: 500;">${b.vehicle_type || 'Neznámý model'}</div>
           <div style="color: #94a3b8; font-size: 11px;">${b.real_linka_spoj || 'Bez spojení'} • Zpoždění: <span style="color:#f87171;">${b.delay_text}</span></div>
         </td>
-        <td style="padding: 12px;">
+        <td data-label="Aktuální SPZ" style="padding: 12px;">
           <span style="display: inline-block; padding: 4px 8px; border-radius: 6px; font-weight: bold; font-family: monospace; font-size: 13px; background: rgba(0,0,0,0.4); border: 1px solid ${badgeColor}; color: ${badgeColor};">
-            ${b.spz}
+            ${isSearching ? '<i class="fas fa-satellite-dish fa-spin" style="font-size:10px;margin-right:4px;"></i>Aktivní hledání' : b.spz}
           </span>
           <div style="font-size: 10px; color: ${badgeColor}; margin-top: 3px;"><i class="fas fa-shield-alt"></i> ${statusLabel}</div>
+          ${candChip}
         </td>
-        <td style="padding: 12px; max-width: 300px;">
+        <td data-label="Důvod chyby" style="padding: 12px; max-width: 320px;">
           <div style="color: #f1f5f9; font-size: 12px; line-height: 1.4;">${b.reason || 'Důvod nezaznamenán'}</div>
         </td>
-        <td style="padding: 12px;">
-          <div style="display: flex; gap: 6px; align-items: center;">
-            <input type="text" id="spz-inp-${b.bus_id}" value="${isUnknown ? '' : b.spz}" placeholder="Nová SPZ..." style="width: 110px; background: #0f172a; border: 1px solid #475569; color: white; padding: 6px 8px; border-radius: 4px; font-size: 12px; font-family: monospace;">
+        <td data-label="Rychlá úprava SPZ" style="padding: 12px;">
+          <div class="mobile-edit-box" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+            <input type="text" id="spz-inp-${b.bus_id}" value="${isSearching ? '' : b.spz}" placeholder="Nová SPZ..." style="width: 110px; background: #0f172a; border: 1px solid #475569; color: white; padding: 6px 8px; border-radius: 4px; font-size: 12px; font-family: monospace;">
             <label style="font-size: 11px; color: #94a3b8; display: flex; align-items: center; gap: 4px; cursor: pointer;">
               <input type="checkbox" id="spz-ver-${b.bus_id}" ${b.admin_verified ? 'checked' : ''} style="cursor: pointer;"> Ověřit
             </label>
-            <button onclick="saveQuickSpz('${b.bus_id}')" style="background: #10b981; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px;">
-              <i class="fas fa-save"></i>
+            <button onclick="saveQuickSpz('${b.bus_id}')" style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+              <i class="fas fa-save"></i> Uložit
             </button>
           </div>
         </td>
-        <td style="padding: 12px; text-align: center;">
-          <a href="/interaktivnimapa?bus_id=${b.bus_id}" target="_blank" style="display: inline-block; background: #334155; color: #38bdf8; padding: 6px 10px; border-radius: 6px; text-decoration: none; font-size: 12px;" title="Zobrazit vůz na živé mapě">
-            <i class="fas fa-eye"></i> Mapa
+        <td data-label="Akce" style="padding: 12px; text-align: center;">
+          <a href="${trackUrl}" target="_blank" style="display: inline-block; background: #334155; color: #38bdf8; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold;" title="Zobrazit vůz na živé mapě">
+            <i class="fas fa-map-marker-alt"></i> Mapa
           </a>
         </td>
       </tr>
@@ -4522,38 +4642,54 @@ function renderProposals() {
       : (p.status === 'accepted' ? '<span style="background: rgba(16, 185, 129, 0.2); color: #86efac; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Schváleno adminem</span>'
       : '<span style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">Odmítnuto (Ponecháno)</span>'));
 
+    const busUrl = p.map_url_bus || `https://datacorebot.koyeb.app/mapa?track=${p.bus_id}`;
+    const conflictUrl = p.map_url_conflict || (p.conflict_with_id ? `https://datacorebot.koyeb.app/mapa?track=${p.conflict_with_id}` : null);
+
     return `
-      <div style="background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
-        <div style="flex: 1; min-width: 320px;">
-          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-            <span style="font-weight: bold; color: white; font-size: 15px;">Vůz #${p.bus_id} (Linka ${p.line || '?'})</span>
+      <div style="background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 18px; display: flex; justify-content: space-between; align-items: stretch; flex-wrap: wrap; gap: 20px;">
+        <div style="flex: 1; min-width: 300px;">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap;">
+            <a href="${busUrl}" target="_blank" class="bus-link" style="font-size: 16px;"><i class="fas fa-bus"></i> Vůz #${p.bus_id} (Linka ${p.line || '?'})</a>
             ${statusBadge}
             <span style="color: #64748b; font-size: 11px;">${p.created_at || ''}</span>
           </div>
-          <div style="color: #f1f5f9; font-size: 13px; line-height: 1.5; margin-bottom: 10px;">
+
+          <div style="color: #f1f5f9; font-size: 13px; line-height: 1.5; margin-bottom: 12px;">
             <i class="fas fa-info-circle" style="color: #38bdf8;"></i> ${p.reason}
           </div>
-          <div style="display: flex; gap: 15px; font-size: 12px;">
-            <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); padding: 4px 10px; border-radius: 6px; color: #fca5a5;">
-              Stávající SPZ: <b>${p.current_spz || 'Neznámá'}</b>
+
+          <!-- Přehled vozů a map links -->
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
+            <a href="${busUrl}" target="_blank" style="background: #1e293b; border: 1px solid #0284c7; color: #38bdf8; padding: 5px 10px; border-radius: 6px; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;">
+              <i class="fas fa-map-marker-alt"></i> Zobrazit vůz #${p.bus_id} na mapě
+            </a>
+            ${conflictUrl ? `
+            <a href="${conflictUrl}" target="_blank" style="background: #1e293b; border: 1px solid #f97316; color: #fb923c; padding: 5px 10px; border-radius: 6px; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;">
+              <i class="fas fa-user-shield"></i> Reálný vlastník: vůz #${p.conflict_with_id} (L${p.conflict_with_line}) na mapě
+            </a>` : ''}
+          </div>
+
+          <div style="display: flex; gap: 15px; font-size: 12px; flex-wrap: wrap;">
+            <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); padding: 5px 10px; border-radius: 6px; color: #fca5a5;">
+              Chybná SPZ: <b>${p.current_spz || 'Neznámá'}</b>
             </div>
-            <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); padding: 4px 10px; border-radius: 6px; color: #86efac;">
-              Navrhované řešení: <b>${p.proposed_spz}</b>
+            <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); padding: 5px 10px; border-radius: 6px; color: #86efac;">
+              Doporučené řešení: <b>${p.proposed_spz}</b>
             </div>
           </div>
         </div>
 
         ${isPending ? `
-        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-          <button onclick="resolveProposal('${p.id}', 'accept')" style="background: linear-gradient(135deg, #059669, #10b981); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);">
-            <i class="fas fa-check"></i> Ano máš pravdu systéme
+        <div style="display: flex; flex-direction: column; justify-content: center; gap: 10px; min-width: 220px;">
+          <button onclick="resolveProposal('${p.id}', 'accept')" style="background: linear-gradient(135deg, #059669, #10b981); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);">
+            <i class="fas fa-check"></i> ${p.has_candidate ? `Přiřadit SPZ ${p.proposed_spz}` : 'Potvrdit (Aktivní hledání)'}
           </button>
-          <button onclick="resolveProposal('${p.id}', 'reject')" style="background: #334155; color: #cbd5e1; border: 1px solid #475569; padding: 10px 16px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+          <button onclick="resolveProposal('${p.id}', 'reject')" style="background: #334155; color: #cbd5e1; border: 1px solid #475569; padding: 10px 16px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
             <i class="fas fa-times"></i> Zachovat tak jak je
           </button>
         </div>
         ` : `
-        <div style="color: #94a3b8; font-size: 12px; font-style: italic;">
+        <div style="display: flex; align-items: center; color: #94a3b8; font-size: 12px; font-style: italic;">
           ${p.resolution_note || ('Rozhodnuto uživatelem ' + (p.resolved_by || 'Admin'))}
         </div>
         `}
@@ -4579,6 +4715,70 @@ async function resolveProposal(proposalId, action) {
   } catch (e) {
     showToast('Chyba: ' + e.message, true);
   }
+}
+
+function renderAutomationLog() {
+  if (!_dashData) return;
+  const tbody = document.getElementById('automation-table-body');
+  const q = (document.getElementById('automation-search')?.value || '').toLowerCase().trim();
+  let list = _dashData.automation_log || [];
+
+  if (q) {
+    list = list.filter(item => 
+      String(item.bus_id || '').toLowerCase().includes(q) ||
+      String(item.spz || '').toLowerCase().includes(q) ||
+      String(item.line || '').toLowerCase().includes(q) ||
+      String(item.title || '').toLowerCase().includes(q) ||
+      String(item.detail || '').toLowerCase().includes(q)
+    );
+  }
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 30px; color: #64748b;">Žádný záznam v logu automatiky.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(item => {
+    let actionBadge = '<span style="background:#334155;color:#f1f5f9;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;">Událost</span>';
+    if (item.action_type === 'duplicate_resolved') {
+      actionBadge = '<span style="background:rgba(249,115,22,0.2);color:#fb923c;border:1px solid #f97316;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-clone"></i> Duplicita</span>';
+    } else if (item.action_type === 'proposal_resolved') {
+      actionBadge = '<span style="background:rgba(16,185,129,0.2);color:#86efac;border:1px solid #10b981;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-check"></i> Vyřešeno</span>';
+    } else if (item.action_type === 'admin_edit') {
+      actionBadge = '<span style="background:rgba(168,85,247,0.2);color:#c084fc;border:1px solid #a855f7;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-user-shield"></i> Admin úprava</span>';
+    } else if (item.action_type === 'spz_verified' || item.action_type === 'spz_match') {
+      actionBadge = '<span style="background:rgba(2,132,199,0.2);color:#38bdf8;border:1px solid #0284c7;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:bold;"><i class="fas fa-satellite-dish"></i> SPZ ověřena</span>';
+    }
+
+    const trackUrl = item.map_url || (item.bus_id ? `https://datacorebot.koyeb.app/mapa?track=${item.bus_id}` : 'https://datacorebot.koyeb.app/mapa');
+
+    return `
+      <tr style="border-bottom: 1px solid #334155; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+        <td data-label="Čas" style="padding: 12px; color: #94a3b8; font-family: monospace; font-size: 12px; white-space: nowrap;">
+          ${item.time} <span style="font-size:10px;color:#64748b;">${item.date || ''}</span>
+        </td>
+        <td data-label="Typ akce" style="padding: 12px;">
+          ${actionBadge}
+        </td>
+        <td data-label="Vůz / Linka / SPZ" style="padding: 12px;">
+          ${item.bus_id ? `<a href="${trackUrl}" target="_blank" class="bus-link"><i class="fas fa-bus"></i> Vůz #${item.bus_id}</a>` : '—'}
+          <div style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">
+            ${item.line ? `Linka <b>${item.line}</b> • ` : ''}${item.spz ? `SPZ: <span style="font-family:monospace;color:#38bdf8;">${item.spz}</span>` : ''}
+          </div>
+        </td>
+        <td data-label="Popis události" style="padding: 12px;">
+          <div style="color: white; font-weight: 500;">${item.title}</div>
+          ${item.detail ? `<div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">${item.detail}</div>` : ''}
+        </td>
+        <td data-label="Mapa" style="padding: 12px; text-align: center;">
+          ${item.bus_id ? `
+          <a href="${trackUrl}" target="_blank" style="display: inline-block; background: #334155; color: #38bdf8; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold;" title="Zobrazit na mapě">
+            <i class="fas fa-eye"></i> Mapa
+          </a>` : '—'}
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
 async function toggleAutoResolve() {
@@ -4633,7 +4833,7 @@ function renderDriversTable() {
   }
 
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 30px; color: #64748b;">Nenalezen žádný zadaný řidič ani poznámka.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 30px; color: #64748b;">Nenalezen žádný zadaný řidič ani poznámka.</td></tr>`;
     return;
   }
 
@@ -4642,25 +4842,31 @@ function renderDriversTable() {
     const statusBadge = isOnline
       ? '<span style="color: #10b981; font-weight: bold;"><i class="fas fa-circle" style="font-size: 8px;"></i> Online</span>'
       : '<span style="color: #64748b;"><i class="fas fa-hdd" style="font-size: 10px;"></i> V paměti</span>';
+    const trackUrl = d.map_url || `https://datacorebot.koyeb.app/mapa?track=${d.bus_id}`;
 
     return `
       <tr style="border-bottom: 1px solid #334155; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
-        <td style="padding: 12px;">
-          <div style="font-weight: bold; color: white;">#${d.bus_id}</div>
+        <td data-label="Vůz ID / SPZ" style="padding: 12px;">
+          <div style="font-weight: bold;"><a href="${trackUrl}" target="_blank" class="bus-link">#${d.bus_id}</a></div>
           <div style="font-family: monospace; font-size: 11px; color: #38bdf8;">${d.spz}</div>
         </td>
-        <td style="padding: 12px; font-weight: bold; color: #f1f5f9; font-size: 14px;">
+        <td data-label="Jméno řidiče" style="padding: 12px; font-weight: bold; color: #f1f5f9; font-size: 14px;">
           <i class="fas fa-user-circle" style="color: #10b981;"></i> ${d.driver_name}
         </td>
-        <td style="padding: 12px; color: #cbd5e1; max-width: 280px;">
+        <td data-label="Poznámka vozu" style="padding: 12px; color: #cbd5e1; max-width: 280px;">
           ${d.note !== '—' ? `<span style="background: rgba(245, 158, 11, 0.1); border-left: 3px solid #f59e0b; padding: 4px 8px; border-radius: 4px; display: inline-block;">${d.note}</span>` : '<span style="color: #64748b;">Bez poznámky</span>'}
         </td>
-        <td style="padding: 12px;">
+        <td data-label="Linka & Model" style="padding: 12px;">
           <div style="color: white; font-weight: 500;">Linka ${d.line}</div>
           <div style="color: #94a3b8; font-size: 11px;">${d.vehicle_type}</div>
         </td>
-        <td style="padding: 12px;">${statusBadge}</td>
-        <td style="padding: 12px; color: #64748b; font-size: 12px; white-space: nowrap;">${d.updated_at}</td>
+        <td data-label="Stav" style="padding: 12px;">${statusBadge}</td>
+        <td data-label="Datum / Čas" style="padding: 12px; color: #64748b; font-size: 12px; white-space: nowrap;">${d.updated_at}</td>
+        <td data-label="Mapa" style="padding: 12px; text-align: center;">
+          <a href="${trackUrl}" target="_blank" style="display: inline-block; background: #334155; color: #38bdf8; padding: 6px 10px; border-radius: 6px; text-decoration: none; font-size: 12px;" title="Zobrazit vůz na živé mapě">
+            <i class="fas fa-eye"></i>
+          </a>
+        </td>
       </tr>
     `;
   }).join('');
@@ -4678,21 +4884,29 @@ function renderInvalidLog() {
 
   container.innerHTML = `
     <div style="display: flex; flex-direction: column; gap: 10px;">
-      ${list.map(item => `
+      ${list.map(item => {
+        const trackUrl = `https://datacorebot.koyeb.app/mapa?track=${item.bus_id}`;
+        return `
         <div style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; border-radius: 6px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
           <div>
             <div style="font-weight: bold; color: #fca5a5; font-size: 13px;">
-              <i class="fas fa-exclamation-circle"></i> Vůz #${item.bus_id} (Linka ${item.line})
+              <a href="${trackUrl}" target="_blank" class="bus-link" style="color: #fca5a5;"><i class="fas fa-exclamation-circle"></i> Vůz #${item.bus_id} (Linka ${item.line})</a>
             </div>
             <div style="color: #e2e8f0; font-size: 12px; margin-top: 3px;">
               ${item.reason}
             </div>
           </div>
-          <div style="color: #94a3b8; font-size: 11px;">
-            ${item.time}
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="color: #94a3b8; font-size: 11px;">
+              ${item.time}
+            </div>
+            <a href="${trackUrl}" target="_blank" style="background: #334155; color: #38bdf8; padding: 4px 8px; border-radius: 4px; font-size: 11px; text-decoration: none;">
+              <i class="fas fa-map-marker-alt"></i> Mapa
+            </a>
           </div>
         </div>
-      `).join('')}
+      `;
+      }).join('')}
     </div>
   `;
 }
@@ -4702,8 +4916,10 @@ loadSpzControlData();
 setInterval(() => {
   const searchSpz = document.getElementById('spz-search');
   const searchDrv = document.getElementById('driver-search');
+  const searchAut = document.getElementById('automation-search');
   if (searchSpz && searchSpz === document.activeElement) return;
   if (searchDrv && searchDrv === document.activeElement) return;
+  if (searchAut && searchAut === document.activeElement) return;
   loadSpzControlData();
 }, 20000);
 </script>
