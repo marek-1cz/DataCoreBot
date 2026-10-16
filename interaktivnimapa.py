@@ -4671,11 +4671,12 @@ SPZ_CONFLICT_PROPOSALS = {}      # prop_id -> dict návrhu řešení konfliktu
 INVALID_VERIFICATIONS_LOG = []   # list chyb při admin-ověření Neznámé SPZ (Bod 3)
 AUTO_RESOLVE_SPZ = True          # True = automatické rozluštění (Automode), False = manuální schvalování adminem
 WATCHED_SPZ_BUSES = set()        # set ID vozů, které systém aktivně hlídá a přiřadí jim SPZ ihned po vyjetí na Arriva mapu
+IGNORED_SPZ_ERRORS = set()       # set ID vozů, kde uživatel zvolil 'Nechat být' (skryto z aktivních chyb)
 
 _SPZ_SETTINGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "spz_settings.json")
 
 def _load_spz_settings():
-    global AUTO_RESOLVE_SPZ, WATCHED_SPZ_BUSES
+    global AUTO_RESOLVE_SPZ, WATCHED_SPZ_BUSES, IGNORED_SPZ_ERRORS
     try:
         if os.path.exists(_SPZ_SETTINGS_PATH):
             with open(_SPZ_SETTINGS_PATH, "r", encoding="utf-8") as f:
@@ -4684,18 +4685,22 @@ def _load_spz_settings():
                     AUTO_RESOLVE_SPZ = bool(data["auto_resolve"])
                 if "watched_buses" in data:
                     WATCHED_SPZ_BUSES = set(str(x) for x in data["watched_buses"])
+                if "ignored_errors" in data:
+                    IGNORED_SPZ_ERRORS = set(str(x) for x in data["ignored_errors"])
                 return
     except Exception:
         pass
     AUTO_RESOLVE_SPZ = True
     WATCHED_SPZ_BUSES = set()
+    IGNORED_SPZ_ERRORS = set()
 
 def _save_spz_settings():
     try:
         with open(_SPZ_SETTINGS_PATH, "w", encoding="utf-8") as f:
             json.dump({
                 "auto_resolve": AUTO_RESOLVE_SPZ,
-                "watched_buses": list(WATCHED_SPZ_BUSES)
+                "watched_buses": list(WATCHED_SPZ_BUSES),
+                "ignored_errors": list(IGNORED_SPZ_ERRORS)
             }, f, indent=2)
     except Exception:
         pass
@@ -5124,6 +5129,105 @@ def _bearing_diff(b1, b2):
         return 0
     diff = abs(int(b1) - int(b2)) % 360
     return min(diff, 360 - diff)
+
+
+def are_destinations_compatible(dest_local, dest_arriva):
+    """
+    Zkontroluje zda cíl z PVVD/naší mapy a cíl z Arrivy (destinationName) jsou slučitelné:
+    - Pokud jeden z nich chybí nebo je neznámý -> (True, False)
+    - Pokud se shodují nebo obsahují jeden v druhém -> (True, True)
+    - Pokud mají společný významný token (město/obec) -> (True, True)
+    - Pokud mají OBA známé, ale zcela ODLIŠNÉ cílové lokality -> (False, False) [KONFLIKT!]
+    """
+    if not dest_local or not dest_arriva:
+        return True, False
+    d1 = str(dest_local).strip()
+    d2 = str(dest_arriva).strip()
+    if d1.upper() in ("?", "NEZNÁMÝ CÍL", "NEZNAMY CIL", "NONE", "", "AKTIVNÍ HLEDÁNÍ") or \
+       d2.upper() in ("?", "NEZNÁMÝ CÍL", "NEZNAMY CIL", "NONE", "", "AKTIVNÍ HLEDÁNÍ"):
+        return True, False
+
+    n1 = _norm_txt(d1)
+    n2 = _norm_txt(d2)
+    if n1 and n2 and (n1 in n2 or n2 in n1):
+        return True, True
+
+    t1 = set(_tokenize(d1))
+    t2 = set(_tokenize(d2))
+    stop_words = {'autobusove', 'stanoviste', 'nadrazi', 'namesti', 'rozcesti', 'zastavka', 'ulice', 'zeleznicni', 'stanice', 'krizovatka', 'obec', 'obecni', 'urad'}
+    sig1 = t1 - stop_words
+    sig2 = t2 - stop_words
+
+    if sig1 and sig2:
+        overlap = sig1.intersection(sig2)
+        if overlap:
+            return True, True
+        # Zcela odlišné destinace na stejné lince -> jedou v protisměru nebo na jiné trase!
+        return False, False
+
+    if t1 and t2 and t1.intersection(t2):
+        return True, True
+
+    return True, False
+
+
+def is_bearing_compatible(b1, b2, max_diff=85):
+    """Vrací zda úhly jízdy nejsou v protisměru (např. jeden na sever a druhý na jih)."""
+    if b1 is None or b2 is None:
+        return True
+    try:
+        diff = _bearing_diff(b1, b2)
+        return diff <= max_diff
+    except Exception:
+        return True
+
+
+def check_arriva_candidate_match(local_bus, a_bus, max_dist=850):
+    """
+    Kompletní 360° ověření shody kandidáta z Arriva mapy vůči PVVD / naší mapě:
+    1. Shoda linky (přesné číslo linky)
+    2. Shoda nebo kompatibilita cíle/destinace (nesmí jet do opačného města!)
+    3. Shoda směru jízdy (bearing úhel nesmí být v protisměru)
+    4. Vzdálenost v metrech
+    Vrací: (is_match: bool, score: float, details: str, dist_m: float)
+    """
+    loc_line = str(local_bus.get("line") or "").strip()
+    if not _arriva_line_matches(loc_line, a_bus):
+        return False, 999999, "Odlišná linka", 999999
+
+    a_lat = a_bus.get("latitude") or 0
+    a_lon = a_bus.get("longitude") or 0
+    l_lat = local_bus.get("lat") or 0
+    l_lon = local_bus.get("lng") or 0
+    if not a_lat or not a_lon or not l_lat or not l_lon:
+        return False, 999999, "Chybí GPS souřadnice", 999999
+
+    dist_m = haversine_m(l_lat, l_lon, a_lat, a_lon)
+    if dist_m > max_dist:
+        return False, 999999, f"Příliš velká vzdálenost ({round(dist_m)}m > {max_dist}m)", dist_m
+
+    # Kontrola destinace / směru
+    loc_dest = local_bus.get("destination") or ""
+    arr_dest = a_bus.get("destinationName") or ""
+    is_dest_compat, is_dest_exact = are_destinations_compatible(loc_dest, arr_dest)
+    if not is_dest_compat:
+        return False, 999999, f"Konflikt destinace: Naše mapa má '{loc_dest}', ale Arriva hlásí '{arr_dest}'", dist_m
+
+    # Kontrola směru (bearing)
+    loc_bearing = local_bus.get("bearing")
+    arr_angle = a_bus.get("angle")
+    if not is_bearing_compatible(loc_bearing, arr_angle, max_diff=85):
+        return False, 999999, f"Vozidla jedou v protisměru (úhel {loc_bearing}° vs Arriva {arr_angle}°)", dist_m
+
+    score = dist_m
+    if is_dest_exact:
+        score -= 250  # Výrazný bonus za potvrzenou shodnou destinaci
+    if loc_bearing is not None and arr_angle is not None:
+        bd = _bearing_diff(loc_bearing, arr_angle)
+        if bd <= 35:
+            score -= 100  # Bonus za shodný směr jízdy
+
+    return True, max(0.0, score), "Plná shoda linky, destinace i směru", dist_m
 
 
 def _load_route_stop_overrides(db):
@@ -5848,52 +5952,30 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                     candidates = []
                     for b_a in LATEST_ARRIVA_DATA:
                         a_spz = (b_a.get("spz") or "").strip()
-                        if not a_spz or a_spz == spz_val or a_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ"):
+                        if not a_spz or a_spz == spz_val or a_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
                             continue
                         if a_spz.upper() in taken_spzs:
                             continue
-                        a_lat = b_a.get("latitude") or 0
-                        a_lon = b_a.get("longitude") or 0
-                        if not a_lat or not a_lon:
-                            continue
 
-                        # STRIKTNÍ SHODA LINKY (nesmí tipovat jinou linku!)
-                        if not _arriva_line_matches(t_line, b_a):
+                        ok_m, score, detail, d_cand = check_arriva_candidate_match(t_c, b_a, max_dist=850)
+                        if not ok_m:
                             continue
-
-                        d_cand = haversine_m(t_lat, t_lng, a_lat, a_lon)
-                        if d_cand > 850:
-                            continue
-
-                        a_dest = str(b_a.get("destinationName") or "")
-                        a_dest_norm = _norm_txt(a_dest)
-                        dest_match = bool(t_dest_norm and a_dest_norm and (t_dest_norm in a_dest_norm or a_dest_norm in t_dest_norm))
-                        
-                        a_angle = b_a.get("angle")
-                        bearing_match = False
-                        if t_bearing is not None and a_angle is not None:
-                            bearing_match = (_bearing_diff(t_bearing, a_angle) <= SPZ_BEARING_MAX_DIFF)
 
                         candidates.append({
                             "spz": a_spz,
                             "dist": d_cand,
+                            "score": score,
                             "line": str(b_a.get("linkNumber") or b_a.get("linkNumberAlias") or t_line).strip(),
-                            "dest_match": dest_match,
-                            "bearing_match": bearing_match
+                            "detail": detail
                         })
 
                     if candidates:
-                        candidates.sort(key=lambda x: (
-                            0 if (x["dest_match"] or x["bearing_match"] or x["dist"] <= 350) else 1,
-                            x["dist"]
-                        ))
+                        candidates.sort(key=lambda x: x["score"])
                         top = candidates[0]
-                        # Spolehlivost: vzdálenost <= 400m, nebo vzdálenost <= 800m se shodou cíle/směru
-                        if top["dist"] <= 400 or (top["dist"] <= 800 and (top["dest_match"] or top["bearing_match"])):
-                            best_cand_spz = top["spz"]
-                            best_cand_dist = top["dist"]
-                            best_cand_line = top["line"]
-                            is_reliable = True
+                        best_cand_spz = top["spz"]
+                        best_cand_dist = top["dist"]
+                        best_cand_line = top["line"]
+                        is_reliable = True
 
                 if is_reliable and best_cand_spz:
                     proposed_spz = best_cand_spz
@@ -6033,19 +6115,15 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
         if w_lat and w_lng and w_line and LATEST_ARRIVA_DATA:
             best_arr_spz = None
             best_arr_dist = 999999
+            best_arr_score = 999999
             for b_a in LATEST_ARRIVA_DATA:
                 a_spz = (b_a.get("spz") or "").strip()
                 if not a_spz or a_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
                     continue
-                a_lat = b_a.get("latitude") or 0
-                a_lon = b_a.get("longitude") or 0
-                if not a_lat or not a_lon:
-                    continue
-                if not _arriva_line_matches(w_line, b_a):
-                    continue
-                d_cand = haversine_m(w_lat, w_lng, a_lat, a_lon)
-                if d_cand <= 850 and d_cand < best_arr_dist:
-                    best_arr_dist = d_cand
+                ok_m, score, detail, dist_m = check_arriva_candidate_match(w_c, b_a, max_dist=850)
+                if ok_m and score < best_arr_score:
+                    best_arr_score = score
+                    best_arr_dist = dist_m
                     best_arr_spz = a_spz
 
             if best_arr_spz:
@@ -7269,37 +7347,36 @@ def background_map_worker():
 
                     for b_a in data_arriva:
                         b_spz = (b_a.get("spz") or "").strip()
-                        if not b_spz or b_spz == "Nezn\u00e1m\u00e1":
+                        if not b_spz or b_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
                             continue
-                        if not _arriva_line_matches(line, b_a):
+                        ok_m, score, match_detail, dist_m = check_arriva_candidate_match(c, b_a, max_dist=ARRIVA_MATCH_DIST_M)
+                        if not ok_m:
                             continue
-                        b_lat = b_a.get("latitude") or 0
-                        b_lon = b_a.get("longitude") or 0
-                        dist_m = haversine_m(lat1, lng1, b_lat, b_lon)
+
                         if dist_m <= 500:
                             if b_spz not in gate_partial or dist_m < gate_partial[b_spz]:
                                 gate_partial[b_spz] = dist_m
-                        if dist_m > ARRIVA_MATCH_DIST_M:
-                            continue
                         if b_spz not in gate_pass or dist_m < gate_pass[b_spz]:
                             gate_pass[b_spz] = dist_m
-                        # Faktor 3: cil + posledni zastavka + bonus: smer (bearing)
-                        ok_dir = True
-                        a_dest_norm = _norm_txt(b_a.get("destinationName", ""))
-                        if d1_norm and a_dest_norm:
-                            ok_dir = (d1_norm in a_dest_norm or a_dest_norm in d1_norm)
+
+                        # Faktor 3: plná shoda destinace + zastávka + shodný směr
+                        loc_dest = c.get("destination") or ""
+                        arr_dest = b_a.get("destinationName") or ""
+                        is_dest_compat, is_dest_exact = are_destinations_compatible(loc_dest, arr_dest)
+
                         ok_stop = True
                         if near_stop_norm:
                             a_stop_norm = _norm_txt(b_a.get("lastStopName", ""))
                             if a_stop_norm:
                                 ok_stop = (near_stop_norm in a_stop_norm or a_stop_norm in near_stop_norm)
-                        # Bonus faktor: bearing (smer jizdy)
+
                         ok_bearing = True
                         a_angle = b_a.get("angle")
                         if c.get("bearing") is not None and a_angle is not None:
                             bdiff = _bearing_diff(c["bearing"], a_angle)
                             ok_bearing = (bdiff <= SPZ_BEARING_MAX_DIFF)
-                        if ok_dir and ok_stop and ok_bearing:
+
+                        if is_dest_exact and ok_stop and ok_bearing:
                             gate_3f.add(b_spz)
 
                     if gate_3f:
@@ -9305,6 +9382,7 @@ def get_spz_control_dashboard_data():
         status_s = str(c.get("status") or "").lower()
         is_stationary = in_depot or any(w in status_s for w in ("stojí", "stoji", "čeká", "ceka", "odstaven", "konečná", "konecna", "depo", "vozovna")) or (speed is not None and speed <= 2) or (c.get("bearing") is None and not speed)
         is_watched = str(bid) in WATCHED_SPZ_BUSES
+        is_ignored = str(bid) in IGNORED_SPZ_ERRORS
 
         bus_entry = {
             "bus_id": bid,
@@ -9323,35 +9401,34 @@ def get_spz_control_dashboard_data():
             "status": c.get("status") or "Aktivní",
             "is_stationary": bool(is_stationary),
             "is_watched": bool(is_watched),
+            "is_ignored": bool(is_ignored),
             "reason": "",
             "map_url": f"https://datacorebot.koyeb.app/mapa?track={bid}"
         }
 
-        # Zkontroluj, zda v LATEST_ARRIVA_DATA existuje blízký kandidát pro tento bus
+        # Zkontroluj, zda v LATEST_ARRIVA_DATA existuje spolehlivý kandidát (shoda linky, destinace i směru)
         cand_spz = None
         cand_dist = 999999
+        cand_score = 999999
         cand_line = ""
+        cand_detail = ""
         if lat and lng and line and LATEST_ARRIVA_DATA:
             for b_a in LATEST_ARRIVA_DATA:
                 a_spz = (b_a.get("spz") or "").strip()
                 if not a_spz or a_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
                     continue
-                a_lat = b_a.get("latitude") or 0
-                a_lon = b_a.get("longitude") or 0
-                if not a_lat or not a_lon:
-                    continue
-                # STRIKTNÍ SHODA LINKY (žádné tipování z jiných linek!)
-                if not _arriva_line_matches(line, b_a):
-                    continue
-                d_c = haversine_m(lat, lng, a_lat, a_lon)
-                if d_c <= 850 and d_c < cand_dist:
+                ok_m, score, detail, d_c = check_arriva_candidate_match(c, b_a, max_dist=850)
+                if ok_m and score < cand_score:
+                    cand_score = score
                     cand_dist = d_c
                     cand_spz = a_spz
                     cand_line = str(b_a.get("linkNumber") or b_a.get("linkNumberAlias") or line).strip()
+                    cand_detail = detail
         if cand_spz:
             bus_entry["candidate_spz"] = cand_spz
             bus_entry["candidate_dist"] = round(cand_dist)
             bus_entry["candidate_line"] = cand_line
+            bus_entry["candidate_detail"] = cand_detail
 
         # Neznámá SPZ / Aktivní hledání
         if not spz or spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
@@ -9494,9 +9571,11 @@ def get_spz_control_dashboard_data():
             "pending_proposals_count": sum(1 for p in proposals_list if p.get("status") == "pending"),
             "invalid_verifications_count": len(INVALID_VERIFICATIONS_LOG),
             "automation_log_count": len(AUTOMATION_ACTIVITY_LOG),
-            "watched_buses_count": len(WATCHED_SPZ_BUSES)
+            "watched_buses_count": len(WATCHED_SPZ_BUSES),
+            "ignored_buses_count": len(IGNORED_SPZ_ERRORS)
         },
         "watched_buses": list(WATCHED_SPZ_BUSES),
+        "ignored_buses": list(IGNORED_SPZ_ERRORS),
         "unknown_buses": unknown_buses,
         "duplicate_buses": duplicate_buses,
         "unverified_buses": unverified_buses,
@@ -9816,6 +9895,80 @@ def api_admin_spz_watch_bus():
         msg = f"Vůz #{bus_id} byl přidán do sledování. Jakmile vyjede a objeví se na mapě Arriva na lince, systém mu automaticky spolehlivě přiřadí SPZ."
         log_automation_action("spz_watch", bus_id, f"Admin {admin_name} nastavil hlídání vozu #{bus_id}", msg)
         return jsonify({"status": "success", "is_watched": True, "message": msg})
+
+
+@mapa_bp.route('/api/admin/spz_reset_and_watch', methods=['POST'])
+def api_admin_spz_reset_and_watch():
+    global WATCHED_SPZ_BUSES, IGNORED_SPZ_ERRORS
+    is_admin, admin_name = _check_admin_request()
+    if not is_admin and not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
+    admin_name = admin_name or session.get("nick") or "Admin"
+
+    data = request.json or {}
+    bus_id = str(data.get("bus_id", "")).strip()
+    if not bus_id or bus_id not in GLOBAL_BUS_CACHE:
+        return jsonify({"status": "error", "message": "Vůz nebyl nalezen v aktivní mapě"}), 404
+
+    c = GLOBAL_BUS_CACHE[bus_id]
+    old_spz = c.get("spz") or "Aktivní hledání"
+
+    c["spz"] = "Aktivní hledání"
+    c["spz_verified"] = False
+    c["admin_spz_verified"] = False
+    c["is_locked_by_admin"] = False
+    c["manual_spz"] = False
+    c["spz_locked"] = False
+    c["spz_frozen"] = False
+    c["investigating"] = True
+
+    ADMIN_SPZ_LOCKS.pop(bus_id, None)
+    ADMIN_SPZ_LOCKS.pop(str(bus_id), None)
+    try:
+        from local_db import local_spz_purge_invalid_admin
+        local_spz_purge_invalid_admin(bus_id)
+    except Exception:
+        pass
+
+    WATCHED_SPZ_BUSES.add(bus_id)
+    IGNORED_SPZ_ERRORS.discard(bus_id)
+    _save_spz_settings()
+
+    log_spz_change(bus_id, old_spz, "Aktivní hledání", reason="admin_reset_and_watch", admin_note=f"Resetováno adminem {admin_name}")
+    msg = f"Vůz #{bus_id} byl resetován na 'Aktivní hledání' a zařazen do hlídání. Jakmile bude na Arriva mapě dostupný, systém mu automaticky přiřadí správnou SPZ."
+    log_automation_action("spz_reset_watch", bus_id, f"Admin {admin_name} resetoval SPZ u #{bus_id} a zapnul hlídání", msg, spz="Aktivní hledání", line=c.get("line"))
+
+    analyze_spz_anomalies_and_conflicts(auto_resolve=True)
+    return jsonify({"status": "success", "message": msg})
+
+
+@mapa_bp.route('/api/admin/spz_ignore_bus', methods=['POST'])
+def api_admin_spz_ignore_bus():
+    global IGNORED_SPZ_ERRORS
+    is_admin, admin_name = _check_admin_request()
+    if not is_admin and not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
+    admin_name = admin_name or session.get("nick") or "Admin"
+
+    data = request.json or {}
+    bus_id = str(data.get("bus_id", "")).strip()
+    action = str(data.get("action", "ignore")).lower()  # "ignore" | "unignore"
+
+    if not bus_id:
+        return jsonify({"status": "error", "message": "Chybí bus_id"}), 400
+
+    if action == "unignore":
+        IGNORED_SPZ_ERRORS.discard(bus_id)
+        _save_spz_settings()
+        msg = f"Vůz #{bus_id} byl vrácen do aktivního přehledu chyb."
+        log_automation_action("spz_unignore", bus_id, f"Admin {admin_name} vrátil vůz #{bus_id} do řešení chyb", msg)
+        return jsonify({"status": "success", "is_ignored": False, "message": msg})
+    else:
+        IGNORED_SPZ_ERRORS.add(bus_id)
+        _save_spz_settings()
+        msg = f"Vůz #{bus_id} byl označen jako 'Nechat být' a skryt z aktivního přehledu chyb."
+        log_automation_action("spz_ignored", bus_id, f"Admin {admin_name} zvolil 'Nechat být' pro vůz #{bus_id}", msg)
+        return jsonify({"status": "success", "is_ignored": True, "message": msg})
 
 
 
