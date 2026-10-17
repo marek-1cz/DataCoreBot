@@ -4618,6 +4618,67 @@ CUSTOM_ROUTES = {}
 ROUTE_STOP_OVERRIDES = {}
 DEPOT_ZONES = []  # list dict: {id, name, polygon [[lat,lng],...], color}
 
+# === BEZPEČNÝ PŘÍSTUP KE GLOBAL_BUS_CACHE (OCHRANA PŘED RuntimeError: dictionary changed size) ===
+def safe_bus_cache_items():
+    """Vrací bezpečný snapshot (list položek) z GLOBAL_BUS_CACHE odolný proti RuntimeError."""
+    for _ in range(5):
+        try:
+            return list(GLOBAL_BUS_CACHE.items())
+        except RuntimeError:
+            time.sleep(0.005)
+    try:
+        return list(GLOBAL_BUS_CACHE.copy().items())
+    except Exception:
+        return []
+
+def safe_bus_cache_values():
+    """Vrací bezpečný snapshot hodnot z GLOBAL_BUS_CACHE."""
+    for _ in range(5):
+        try:
+            return list(GLOBAL_BUS_CACHE.values())
+        except RuntimeError:
+            time.sleep(0.005)
+    try:
+        return list(GLOBAL_BUS_CACHE.copy().values())
+    except Exception:
+        return []
+
+def safe_bus_cache_keys():
+    """Vrací bezpečný snapshot klíčů z GLOBAL_BUS_CACHE."""
+    for _ in range(5):
+        try:
+            return list(GLOBAL_BUS_CACHE.keys())
+        except RuntimeError:
+            time.sleep(0.005)
+    try:
+        return list(GLOBAL_BUS_CACHE.copy().keys())
+    except Exception:
+        return []
+
+def safe_bus_cache_dict():
+    """Vrací bezpečný snapshot celého slovníku GLOBAL_BUS_CACHE."""
+    for _ in range(5):
+        try:
+            return dict(list(GLOBAL_BUS_CACHE.items()))
+        except RuntimeError:
+            time.sleep(0.005)
+    try:
+        return dict(GLOBAL_BUS_CACHE)
+    except Exception:
+        return {}
+
+def safe_admin_locks_items():
+    """Vrací bezpečný snapshot (list položek) z ADMIN_SPZ_LOCKS odolný proti RuntimeError."""
+    for _ in range(5):
+        try:
+            return list(ADMIN_SPZ_LOCKS.items())
+        except RuntimeError:
+            time.sleep(0.005)
+    try:
+        return list(ADMIN_SPZ_LOCKS.copy().items())
+    except Exception:
+        return []
+
 # === SPZ DEBUG LOG: podrobný rotující buffer pro diagnostiku SPZ matching ===
 # Každý záznam: {ts, bus_id, spz, event, detail, gate_3f_cnt, gate_pass_cnt}
 _SPZ_DEBUG_LOG = []
@@ -4803,7 +4864,7 @@ def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick:
     _save_spz_settings()
 
     # Synchronizace do aktivních vozů na mapě s touto SPZ
-    for bid, c in list(GLOBAL_BUS_CACHE.items()):
+    for bid, c in safe_bus_cache_items():
         if normalize_spz_key(c.get("spz")) == k:
             if driver is not None:
                 c["admin_driver"] = entry.get("driver", "")
@@ -4811,7 +4872,7 @@ def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick:
                 c["admin_note"] = entry.get("note", "")
 
     # Sync do zámků
-    for bid, lk in list(ADMIN_SPZ_LOCKS.items()):
+    for bid, lk in safe_admin_locks_items():
         if normalize_spz_key(lk.get("spz")) == k:
             if driver is not None:
                 lk["admin_driver"] = entry.get("driver", "")
@@ -4843,7 +4904,7 @@ def delete_spz_metadata(spz: str, field: str = "all", admin_nick: str = "Admin")
     _save_spz_settings()
 
     # Okamžitě vymazat na aktivních vozech na mapě
-    for bid, c in list(GLOBAL_BUS_CACHE.items()):
+    for bid, c in safe_bus_cache_items():
         if normalize_spz_key(c.get("spz")) == k:
             if field in ("driver", "all"):
                 c["admin_driver"] = ""
@@ -4851,7 +4912,7 @@ def delete_spz_metadata(spz: str, field: str = "all", admin_nick: str = "Admin")
                 c["admin_note"] = ""
 
     # Vymazat v zámcích
-    for bid, lk in list(ADMIN_SPZ_LOCKS.items()):
+    for bid, lk in safe_admin_locks_items():
         if normalize_spz_key(lk.get("spz")) == k:
             if field in ("driver", "all"):
                 lk["admin_driver"] = ""
@@ -5047,7 +5108,7 @@ def is_train_vehicle(bus_id, line="", traction=""):
 def _purge_trains_everywhere(db_client=None):
     """Kompletně smaže všechny vlaky z cache a databáze, které by se tvářily jako busy."""
     to_delete = []
-    for bid, c in list(GLOBAL_BUS_CACHE.items()):
+    for bid, c in safe_bus_cache_items():
         line = str(c.get("line") or c.get("real_linka_spoj") or "")
         if is_train_vehicle(str(bid), line):
             if c.get("is_offline") or c.get("color_class") == "bg-lastpos" or c.get("status") == "Poslední známá poloha":
@@ -5926,12 +5987,12 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
     now_str = now.strftime("%H:%M:%S")
 
     # ── 1. Bod 3: Automatické zrušení neplatného admin-ověření pro "NEZNÁMÁ" a "AKTIVNÍ HLEDÁNÍ" ──
-    for lk_bid, lk_data in list(ADMIN_SPZ_LOCKS.items()):
+    for lk_bid, lk_data in safe_admin_locks_items():
         lk_spz = str(lk_data.get("spz") or "").strip()
         if lk_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
             ADMIN_SPZ_LOCKS.pop(lk_bid, None)
 
-    for bid, c in list(GLOBAL_BUS_CACHE.items()):
+    for bid, c in safe_bus_cache_items():
         spz_val = str(c.get("spz") or "").strip()
         is_admin_v = bool(c.get("admin_spz_verified") or c.get("admin_flag") or c.get("is_locked_by_admin") or (bid in ADMIN_SPZ_LOCKS))
         if is_admin_v and (spz_val.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI")):
@@ -5977,7 +6038,7 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
 
     # ── 2. Bod 2: Detekce a řešení duplicit v SPZ (stolen SPZ) ──
     spz_groups = {}
-    for bid, c in GLOBAL_BUS_CACHE.items():
+    for bid, c in safe_bus_cache_items():
         if c.get("is_withdrawn") or c.get("is_train"):
             continue
         spz_val = str(c.get("spz") or "").strip()
@@ -6097,7 +6158,7 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                 # SPZ obsazené jinými ověřenými vozy
                 taken_spzs = {
                     str(c_other.get("spz")).strip().upper()
-                    for bid_other, c_other in GLOBAL_BUS_CACHE.items()
+                    for bid_other, c_other in safe_bus_cache_items()
                     if bid_other != thief_bid and c_other.get("spz") and c_other.get("spz_verified")
                 }
 
@@ -6187,7 +6248,7 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                 SPZ_CONFLICT_PROPOSALS[prop_id] = proposal
 
     # ── 3. Bod 5: Systém má podezření, že ověřená SPZ je špatná ──
-    for bid, c in GLOBAL_BUS_CACHE.items():
+    for bid, c in safe_bus_cache_items():
         if c.get("is_withdrawn") or c.get("is_train"):
             continue
         current_spz = str(c.get("spz") or "").strip()
@@ -6759,7 +6820,7 @@ def background_map_worker():
                                 ghost_verified = False
                                 ghost_trip_id = f"TRIP-{TRIP_COUNTER}"
                                 gc_list = []
-                                for gid, gc in list(GLOBAL_BUS_CACHE.items()):
+                                for gid, gc in safe_bus_cache_items():
                                     if gc.get("is_train") or is_train_vehicle(gid, gc.get("line")):
                                         continue
                                     if not (gc.get("is_offline") and gc.get("spz") and gc["spz"] not in ("Neznámá", "Neznama")):
@@ -7023,7 +7084,7 @@ def background_map_worker():
 
             # ── Duplikaty (bug-locked vozy vynechej – jejich SPZ je navzdy zamknuta) ─────
             spz_tracker = {}
-            for bid, bc in GLOBAL_BUS_CACHE.items():
+            for bid, bc in safe_bus_cache_items():
                 sv = bc.get("spz")
                 if sv and sv != "Nezn\u00e1m\u00e1" and not bc.get("is_offline") and not bc.get("bug_locked"):
                     spz_tracker.setdefault(sv, []).append(bid)
@@ -7092,10 +7153,10 @@ def background_map_worker():
 
             # ── Odstraneni starych offline zaznamu, pokud se vuz objevil zive na mape ──
             active_spzs = {
-                bc["spz"]: bid for bid, bc in GLOBAL_BUS_CACHE.items()
+                bc["spz"]: bid for bid, bc in safe_bus_cache_items()
                 if not bc.get("is_offline") and bc.get("spz") and bc["spz"] not in ("Neznámá", "Nezn\u00e1m\u00e1")
             }
-            for bid, bc in list(GLOBAL_BUS_CACHE.items()):
+            for bid, bc in safe_bus_cache_items():
                 if bc.get("is_offline") and bc.get("spz") in active_spzs:
                     new_active_bid = active_spzs[bc["spz"]]
                     if new_active_bid != bid:
@@ -7108,7 +7169,7 @@ def background_map_worker():
                         del GLOBAL_BUS_CACHE[bid]
 
             # ── Offline + timeouty ────────────────────────────────────────────────────────
-            for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
+            for bus_id, c in safe_bus_cache_items():
                 om = (now - c["last_inflow_seen"]).total_seconds() / 60.0
                 tm = (now - c["first_seen"]).total_seconds() / 60.0
                 
@@ -7222,7 +7283,7 @@ def background_map_worker():
             # ── Statusy, barvy, SPZ parovani ─────────────────────────────────────────────
             new_live_data = []
             tt_ftick = 0
-            for bus_id, c in list(GLOBAL_BUS_CACHE.items()):
+            for bus_id, c in safe_bus_cache_items():
                 inact = (now - c["last_moved"]).total_seconds() / 60.0
                 
                 # Fetch lastStopName z pameti
@@ -7268,7 +7329,7 @@ def background_map_worker():
                                 # Pokud stejná SPZ jede zároveň na aktivní mapě (jiný bus_id),
                                 # vozovnový záznam označíme jako BUG a zapíšeme do logu.
                                 if spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá"):
-                                    for oth_id, oth_c in list(GLOBAL_BUS_CACHE.items()):
+                                    for oth_id, oth_c in safe_bus_cache_items():
                                         if oth_id == bus_id:
                                             continue
                                         if (oth_c.get("spz") == spz_val
@@ -7595,7 +7656,7 @@ def background_map_worker():
 
                     # REPORT SITUACE: duplicitni SPZ
                     if best_spz:
-                        for oth_id, oth_c in list(GLOBAL_BUS_CACHE.items()):
+                        for oth_id, oth_c in safe_bus_cache_items():
                             if oth_id == bus_id:
                                 continue
                             if (oth_c.get("spz") == best_spz
@@ -8177,7 +8238,7 @@ def background_map_worker():
                     (now - _last_spz_auto_refresh).total_seconds() >= SPZ_AUTO_REFRESH_MIN * 60):
                 _last_spz_auto_refresh = now
                 refreshed = 0
-                for bid, bc in GLOBAL_BUS_CACHE.items():
+                for bid, bc in safe_bus_cache_items():
                     if (bc.get("is_offline") or bc.get("manual_spz") or
                             bc.get("spz_frozen") or bc.get("bug_locked") or bc.get("is_train")
                             or bc.get("admin_spz_verified")):
@@ -8204,7 +8265,7 @@ def background_map_worker():
             if (now - last_spz_cache_flush).total_seconds() >= _flush_interval:
                 last_spz_cache_flush = now
                 cache_rows = []
-                for bid, bc in list(GLOBAL_BUS_CACHE.items()):
+                for bid, bc in safe_bus_cache_items():
                     if bc.get("is_train") or is_train_vehicle(bid, bc.get("line")):
                         continue
                     spz_v = bc.get("spz")
@@ -8251,7 +8312,7 @@ def background_map_worker():
                             print(f"[SPZ CACHE] Chyba pri zapisu do Supabase (lokální kopie OK): {e_flush}", flush=True)
                 # Smaz zaznamy ktere uz nejsou aktivni (přeskočit v šetřícím režimu)
                 if not _egress_save:
-                    active_ids = list(GLOBAL_BUS_CACHE.keys())
+                    active_ids = safe_bus_cache_keys()
                     if active_ids:
                         try:
                             if db_client:
@@ -8263,8 +8324,8 @@ def background_map_worker():
             # ── Metriky pro denní report ────────────────────────────────
             try:
                 from daily_reporter import TRACKER
-                bug_c = sum(1 for b in GLOBAL_BUS_CACHE.values() if "BUG" in str(b.get("status", "")).upper())
-                TRACKER.record_map_tick(len(GLOBAL_BUS_CACHE), bug_count=bug_c)
+                bug_c = sum(1 for b in safe_bus_cache_values() if "BUG" in str(b.get("status", "")).upper())
+                TRACKER.record_map_tick(len(safe_bus_cache_items()), bug_count=bug_c)
             except Exception:
                 pass
 
@@ -8274,7 +8335,7 @@ def background_map_worker():
                     (now - _last_notification_check).total_seconds() >= 10):
                 _last_notification_check = now
                 try:
-                    _check_and_fire_notifications(db_client, GLOBAL_BUS_CACHE)
+                    _check_and_fire_notifications(db_client, safe_bus_cache_dict())
                 except Exception as _notif_err:
                     print(f"[NOTIF] Chyba pri kontrole notifikaci: {_notif_err}", flush=True)
 
@@ -8476,9 +8537,10 @@ def _check_and_fire_notifications(db_client, bus_cache):
 
         norm_identifier = _norm_id(identifier)
         bus_data = None
+        bus_cache_items = safe_bus_cache_items() if (bus_cache is GLOBAL_BUS_CACHE or not isinstance(bus_cache, dict)) else list(bus_cache.items())
         if id_type == "spz":
             matched = []
-            for bus_id, bc in bus_cache.items():
+            for bus_id, bc in bus_cache_items:
                 if _norm_id(bc.get("spz")) == norm_identifier or str(bus_id).strip() == str(identifier).strip():
                     b_item = dict(bc)
                     b_item["id"] = bus_id
@@ -8487,7 +8549,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 active = [b for b in matched if "BUG" not in b.get("status", "").upper() and "ODSTAVEN" not in b.get("status", "").upper()]
                 bus_data = active[0] if active else matched[0]
         elif id_type == "bus_id":
-            for bus_id, bc in bus_cache.items():
+            for bus_id, bc in bus_cache_items:
                 if str(bus_id).strip() == str(identifier).strip() or _norm_id(bc.get("spz")) == norm_identifier:
                     bus_data = dict(bc)
                     bus_data["id"] = bus_id
@@ -8858,7 +8920,7 @@ def api_notif_create():
     if identifier_type == "spz":
         matched_buses = [
             {"id": bus_id, "status": bc.get("status", ""), "spz": bc.get("spz", "")}
-            for bus_id, bc in GLOBAL_BUS_CACHE.items()
+            for bus_id, bc in safe_bus_cache_items()
             if bc.get("spz") == identifier
         ]
         
@@ -9577,16 +9639,18 @@ def get_spz_control_dashboard_data():
     duplicate_buses = []
     verified_buses = []
 
+    cache_items = safe_bus_cache_items()
+
     # Mapování četností SPZ pro detekci duplicit
     spz_counts = {}
-    for bid, c in GLOBAL_BUS_CACHE.items():
+    for bid, c in cache_items:
         if c.get("is_withdrawn") or c.get("is_train"):
             continue
         spz = str(c.get("spz") or "").strip()
         if spz and spz.upper() not in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
             spz_counts[spz] = spz_counts.get(spz, 0) + 1
 
-    for bid, c in GLOBAL_BUS_CACHE.items():
+    for bid, c in cache_items:
         if c.get("is_withdrawn") or c.get("is_train"):
             continue
 
@@ -9682,7 +9746,7 @@ def get_spz_control_dashboard_data():
 
         # Duplicitní SPZ
         elif spz_counts.get(spz, 0) > 1:
-            other_bids = [str(o_bid) for o_bid, o_c in GLOBAL_BUS_CACHE.items() if o_bid != bid and str(o_c.get("spz") or "").strip() == spz]
+            other_bids = [str(o_bid) for o_bid, o_c in cache_items if o_bid != bid and str(o_c.get("spz") or "").strip() == spz]
             other_str = f"vozem #{', #'.join(other_bids)}" if other_bids else "jiným vozem"
             dup_reason = f"Duplicitní SPZ: Vůz #{bid} sdílí SPZ '{spz}' s {other_str} (celkem {spz_counts[spz]} vozy)."
             if cand_spz and cand_spz != spz:
@@ -9724,7 +9788,7 @@ def get_spz_control_dashboard_data():
 
         # Zjistíme, zda je tato SPZ aktuálně na mapě
         on_map_bus = None
-        for b_id, b_c in GLOBAL_BUS_CACHE.items():
+        for b_id, b_c in cache_items:
             if b_c.get("is_withdrawn"):
                 continue
             if normalize_spz_key(b_c.get("spz")) == norm_k:
@@ -9762,7 +9826,7 @@ def get_spz_control_dashboard_data():
             })
 
     # Doplníme případné vozy na mapě, které mají řidiče/poznámku, ale dosud nebyly v SPZ_METADATA
-    for b_id, b_c in GLOBAL_BUS_CACHE.items():
+    for b_id, b_c in cache_items:
         if b_c.get("is_withdrawn"):
             continue
         drv = str(b_c.get("admin_driver") or "").strip()
@@ -9801,7 +9865,7 @@ def get_spz_control_dashboard_data():
             "duplicate_count": len(duplicate_buses),
             "unverified_count": len(unverified_buses),
             "verified_count": len(verified_buses),
-            "total_active": len(GLOBAL_BUS_CACHE),
+            "total_active": len(cache_items),
             "drivers_notes_count": len(admin_drivers_notes),
             "pending_proposals_count": sum(1 for p in proposals_list if p.get("status") == "pending"),
             "invalid_verifications_count": len(INVALID_VERIFICATIONS_LOG),
@@ -11372,7 +11436,7 @@ def api_depot_zones():
     for zone in DEPOT_ZONES:
         # Spocitej busy v teto vozovne
         buses_in_dict = {}
-        for bid, bc in GLOBAL_BUS_CACHE.items():
+        for bid, bc in safe_bus_cache_items():
             if bc.get("_in_depot") and bc.get("_depot_name") == zone["name"]:
                 spz = bc.get("spz") or "Neznámá"
                 if bc.get("color_class") == "bg-bug":
