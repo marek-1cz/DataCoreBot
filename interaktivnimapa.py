@@ -4782,16 +4782,28 @@ SPZ_METADATA = {}                # norm_spz -> {"spz":, "driver":, "note":, "upd
 _SPZ_SETTINGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "spz_settings.json")
 
 def normalize_spz_key(spz: str) -> str:
-    """Vrátí kanonický klíč pro SPZ (velká písmena, bez vícenásobných mezer, ignoruje neplatné)."""
+    """Vrátí kanonický klíč pro SPZ (velká písmena, bez mezer a pomlček, ignoruje neplatné)."""
     if not spz:
         return ""
     s = str(spz).strip().upper()
     if s in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI", ""):
         return ""
-    return re.sub(r'\s+', ' ', s)
+    return re.sub(r'[\s\-]+', '', s)
 
-def _load_spz_settings():
+def format_spz_display(raw_spz: str) -> str:
+    """Zformátuje SPZ do standardního českého formátu s mezerou (např. '8P2 9742')."""
+    if not raw_spz:
+        return ""
+    s = re.sub(r'[^A-Za-z0-9]', '', str(raw_spz).strip().upper())
+    if s in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍHLEDÁNÍ", "AKTIVNIHLEDANI", ""):
+        return str(raw_spz).strip()
+    if len(s) > 4:
+        return s[:-4] + " " + s[-4:]
+    return s
+
+def _load_spz_settings(db_client=None):
     global AUTO_RESOLVE_SPZ, WATCHED_SPZ_BUSES, IGNORED_SPZ_ERRORS, SPZ_METADATA
+    # 1. Lokální soubor spz_settings.json
     try:
         if os.path.exists(_SPZ_SETTINGS_PATH):
             with open(_SPZ_SETTINGS_PATH, "r", encoding="utf-8") as f:
@@ -4803,11 +4815,48 @@ def _load_spz_settings():
                 if "ignored_errors" in data:
                     IGNORED_SPZ_ERRORS = set(str(x) for x in data["ignored_errors"])
                 if "spz_metadata" in data and isinstance(data["spz_metadata"], dict):
-                    SPZ_METADATA = {normalize_spz_key(k): v for k, v in data["spz_metadata"].items() if normalize_spz_key(k)}
+                    for k, v in data["spz_metadata"].items():
+                        nk = normalize_spz_key(k)
+                        if nk and isinstance(v, dict):
+                            v["spz"] = format_spz_display(v.get("spz") or nk)
+                            SPZ_METADATA[nk] = v
     except Exception as e:
-        print(f"[SPZ-SETTINGS] Load err: {e}", flush=True)
+        print(f"[SPZ-SETTINGS] Load json err: {e}", flush=True)
 
-    # Migrace existujících řidičů a poznámek z lokální SQLite DB do SPZ_METADATA
+    # 2. Lokální SQLite tabulka spz_metadata_local
+    try:
+        from local_db import init_local_db, local_spz_metadata_load_all
+        init_local_db()
+        loc_meta = local_spz_metadata_load_all()
+        for k, v in loc_meta.items():
+            nk = normalize_spz_key(k)
+            if nk and nk not in SPZ_METADATA:
+                v["spz"] = format_spz_display(v.get("spz") or nk)
+                SPZ_METADATA[nk] = v
+    except Exception:
+        pass
+
+    # 3. Supabase cloudové nastavení (klíč spz_metadata v tabulce settings - přežije restart/deploy na Koyeb)
+    try:
+        db_c = db_client
+        if not db_c and "get_db_client" in globals():
+            db_c = get_db_client()
+        if db_c:
+            sb_res = db_c.table("settings").select("setting_value").eq("setting_key", "spz_metadata").execute()
+            if sb_res and sb_res.data and len(sb_res.data) > 0:
+                raw_val = sb_res.data[0].get("setting_value")
+                if raw_val:
+                    sb_dict = json.loads(raw_val)
+                    if isinstance(sb_dict, dict):
+                        for k, v in sb_dict.items():
+                            nk = normalize_spz_key(k)
+                            if nk and isinstance(v, dict):
+                                v["spz"] = format_spz_display(v.get("spz") or nk)
+                                SPZ_METADATA[nk] = v
+    except Exception as e_sb:
+        pass
+
+    # 4. Migrace existujících řidičů a poznámek z lokální SQLite DB spz_cache_local
     try:
         from local_db import get_local_db
         with get_local_db() as conn:
@@ -4822,7 +4871,7 @@ def _load_spz_settings():
                 norm_k = normalize_spz_key(spz_val)
                 if norm_k and norm_k not in SPZ_METADATA:
                     SPZ_METADATA[norm_k] = {
-                        "spz": spz_val,
+                        "spz": format_spz_display(spz_val),
                         "driver": str(row[1] or "").strip(),
                         "note": str(row[2] or "").strip(),
                         "updated_at": str(row[3] or "")[:19].replace("T", " "),
@@ -4831,7 +4880,7 @@ def _load_spz_settings():
     except Exception:
         pass
 
-def _save_spz_settings():
+def _save_spz_settings(db_client=None):
     try:
         with open(_SPZ_SETTINGS_PATH, "w", encoding="utf-8") as f:
             json.dump({
@@ -4843,11 +4892,45 @@ def _save_spz_settings():
     except Exception as e:
         print(f"[SPZ-SETTINGS] Save err: {e}", flush=True)
 
+    # Uložení do Supabase tabulky settings pro trvalou persistenci
+    try:
+        db_c = db_client
+        if not db_c and "get_db_client" in globals():
+            db_c = get_db_client()
+        if db_c:
+            meta_json = json.dumps(SPZ_METADATA, ensure_ascii=False)
+            db_c.table("settings").upsert({
+                "setting_key": "spz_metadata",
+                "setting_value": meta_json
+            }).execute()
+    except Exception:
+        pass
+
 def get_spz_metadata(spz: str) -> dict:
     k = normalize_spz_key(spz)
     if not k:
         return {}
     return SPZ_METADATA.get(k, {})
+
+def bind_bus_to_spz_metadata(c: dict, spz: str):
+    """Automaticky přiřadí jméno řidiče a poznámku z SPZ_METADATA k vozu. Cestují výhradně s danou SPZ."""
+    if not c:
+        return
+    norm = normalize_spz_key(spz)
+    if not norm:
+        c["admin_driver"] = ""
+        c["admin_note"] = ""
+        return
+    meta = SPZ_METADATA.get(norm)
+    if meta:
+        c["admin_driver"] = meta.get("driver", "")
+        c["admin_note"] = meta.get("note", "")
+        bid = str(c.get("id") or "")
+        if bid and bid in ADMIN_SPZ_LOCKS:
+            ADMIN_SPZ_LOCKS[bid]["admin_driver"] = c["admin_driver"]
+            ADMIN_SPZ_LOCKS[bid]["admin_note"] = c["admin_note"]
+    elif c.get("admin_driver") or c.get("admin_note"):
+        set_spz_metadata(spz, driver=c.get("admin_driver"), note=c.get("admin_note"))
 
 def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick: str = "Admin"):
     """Uloží jméno řidiče a poznámku pevně k SPZ (cestují s touto SPZ)."""
@@ -4855,15 +4938,23 @@ def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick:
     if not k:
         return
     entry = SPZ_METADATA.get(k, {})
-    entry["spz"] = str(spz).strip()
+    disp = format_spz_display(spz) or str(spz).strip()
+    entry["spz"] = disp
     if driver is not None:
         entry["driver"] = str(driver).strip()
     if note is not None:
         entry["note"] = str(note).strip()
-    entry["updated_at"] = datetime.now(ZoneInfo("Europe/Prague")).strftime("%d.%m.%Y %H:%M")
+    entry["updated_at"] = get_prague_time().strftime("%d.%m.%Y %H:%M")
     entry["updated_by"] = admin_nick
     SPZ_METADATA[k] = entry
     _save_spz_settings()
+
+    # Synchronizace do lokální SQLite DB
+    try:
+        from local_db import local_spz_metadata_save
+        local_spz_metadata_save(k, disp, entry.get("driver", ""), entry.get("note", ""), entry["updated_at"], admin_nick)
+    except Exception:
+        pass
 
     # Synchronizace do aktivních vozů na mapě s touto SPZ
     for bid, c in safe_bus_cache_items():
@@ -4886,17 +4977,18 @@ def delete_spz_metadata(spz: str, field: str = "all", admin_nick: str = "Admin")
     k = normalize_spz_key(spz)
     if not k:
         return
+    now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
     if field == "driver":
         if k in SPZ_METADATA:
             SPZ_METADATA[k]["driver"] = ""
-            SPZ_METADATA[k]["updated_at"] = datetime.now(ZoneInfo("Europe/Prague")).strftime("%d.%m.%Y %H:%M")
+            SPZ_METADATA[k]["updated_at"] = now_str
             SPZ_METADATA[k]["updated_by"] = admin_nick
             if not SPZ_METADATA[k].get("note"):
                 SPZ_METADATA.pop(k, None)
     elif field == "note":
         if k in SPZ_METADATA:
             SPZ_METADATA[k]["note"] = ""
-            SPZ_METADATA[k]["updated_at"] = datetime.now(ZoneInfo("Europe/Prague")).strftime("%d.%m.%Y %H:%M")
+            SPZ_METADATA[k]["updated_at"] = now_str
             SPZ_METADATA[k]["updated_by"] = admin_nick
             if not SPZ_METADATA[k].get("driver"):
                 SPZ_METADATA.pop(k, None)
@@ -4904,6 +4996,13 @@ def delete_spz_metadata(spz: str, field: str = "all", admin_nick: str = "Admin")
         SPZ_METADATA.pop(k, None)
 
     _save_spz_settings()
+
+    # Synchronizace do lokální SQLite DB
+    try:
+        from local_db import local_spz_metadata_delete
+        local_spz_metadata_delete(k, field=field, updated_at=now_str, updated_by=admin_nick)
+    except Exception:
+        pass
 
     # Okamžitě vymazat na aktivních vozech na mapě
     for bid, c in safe_bus_cache_items():
@@ -6348,6 +6447,7 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                 w_c["spz_verified"] = True
                 w_c["spz_locked"] = True
                 w_c["manual_spz"] = False
+                bind_bus_to_spz_metadata(w_c, best_arr_spz)
                 log_spz_change(w_bid, "Aktivní hledání", best_arr_spz, reason="watched_bus_auto_paired", admin_note=f"Hlídaný vůz vyjel na linku {w_line} -> Arriva match {round(best_arr_dist)}m")
                 log_automation_action("watched_bus_resolved", w_bid, f"Hlídaný vůz #{w_bid} vyjel na linku {w_line}", f"Systém úspěšně zachytil vysílač z Arriva mapy a přiřadil SPZ '{best_arr_spz}' ({round(best_arr_dist)}m na lince {w_line}).", spz=best_arr_spz, line=w_line)
                 resolved_watched.append(str(w_bid))
@@ -6415,17 +6515,8 @@ def log_spz_change(bus_id, old_spz, new_spz, reason="auto", admin_note=""):
                 ADMIN_SPZ_LOCKS[bid_str]["admin_driver"] = ""
                 ADMIN_SPZ_LOCKS[bid_str]["admin_note"] = ""
         else:
-            # SPZ byla nastavena -> načíst zadaného řidiče a poznámku z SPZ_METADATA
-            meta = SPZ_METADATA.get(norm_new)
-            if meta:
-                c["admin_driver"] = meta.get("driver", "")
-                c["admin_note"] = meta.get("note", "")
-                if bid_str in ADMIN_SPZ_LOCKS:
-                    ADMIN_SPZ_LOCKS[bid_str]["admin_driver"] = c["admin_driver"]
-                    ADMIN_SPZ_LOCKS[bid_str]["admin_note"] = c["admin_note"]
-                sys_log(f"[SPZ-BIND] K vozu #{bid_str} s SPZ '{new_spz}' naskočil řidič '{c.get('admin_driver')}' a poznámka '{c.get('admin_note')}'")
-            elif c.get("admin_driver") or c.get("admin_note"):
-                set_spz_metadata(new_spz, driver=c.get("admin_driver"), note=c.get("admin_note"))
+            bind_bus_to_spz_metadata(c, new_spz)
+            sys_log(f"[SPZ-BIND] K vozu #{bid_str} s SPZ '{new_spz}' naskočil řidič '{c.get('admin_driver')}' a poznámka '{c.get('admin_note')}'")
 
     # 4. Propis do notifikaci (aktualizace navazanych pravidel)
     try:
@@ -6563,6 +6654,7 @@ def background_map_worker():
         _load_custom_routes(db_client)
         _load_depot_zones(db_client)
         _load_depot_active_sessions(db_client)
+        _load_spz_settings(db_client)
 
         # === SPZ CACHE RESTORE: Obnov SPZ z predchoziho behu (zachrani data po restartu/deployi) ===
         try:
@@ -6622,6 +6714,7 @@ def background_map_worker():
                     ghost_entry["spoj_num"] = row.get("spoj_num")
                 if ghost_entry["admin_spz_verified"]:
                     ghost_entry["manual_spz"] = True
+                bind_bus_to_spz_metadata(ghost_entry, spz)
                 GLOBAL_BUS_CACHE[bid] = ghost_entry
                 SPZ_MEMORY[spz] = {
                     "last_arriva_lat": row.get("lat") or 0,
@@ -6912,15 +7005,7 @@ def background_map_worker():
                                             nb["admin_driver"] = lock["admin_driver"]
 
                                 # Vázání řidiče a poznámky k SPZ (cestují výhradně s danou SPZ)
-                                norm_nb_spz = normalize_spz_key(nb.get("spz"))
-                                if norm_nb_spz:
-                                    meta_nb = SPZ_METADATA.get(norm_nb_spz)
-                                    if meta_nb:
-                                        if meta_nb.get("driver"): nb["admin_driver"] = meta_nb["driver"]
-                                        if meta_nb.get("note"): nb["admin_note"] = meta_nb["note"]
-                                else:
-                                    nb["admin_driver"] = ""
-                                    nb["admin_note"] = ""
+                                bind_bus_to_spz_metadata(nb, nb.get("spz"))
                                 
                                 GLOBAL_BUS_CACHE[bus_id] = nb
 
@@ -6979,17 +7064,7 @@ def background_map_worker():
                                         c["admin_driver"] = lock["admin_driver"]
 
                             # Vázání řidiče a poznámky k SPZ
-                            norm_c_spz = normalize_spz_key(c.get("spz"))
-                            if norm_c_spz:
-                                meta_c = SPZ_METADATA.get(norm_c_spz)
-                                if meta_c:
-                                    if meta_c.get("driver") and not c.get("admin_driver"):
-                                        c["admin_driver"] = meta_c["driver"]
-                                    if meta_c.get("note") and not c.get("admin_note"):
-                                        c["admin_note"] = meta_c["note"]
-                            else:
-                                c["admin_driver"] = ""
-                                c["admin_note"] = ""
+                            bind_bus_to_spz_metadata(c, c.get("spz"))
 
                             if not is_same_line(c["line"], line) and line and c["line"] != "Nezn\u00e1m\u00e1":
                                 if not c["actual_end_time"]:
@@ -7882,6 +7957,7 @@ def background_map_worker():
                                 TRIP_COUNTER += 1
                                 c["trip_id"] = f"TRIP-{TRIP_COUNTER}"
                                 c["spz"] = best_spz
+                                bind_bus_to_spz_metadata(c, best_spz)
                                 c["spz_stable_ticks"] = 1
                                 c["spz_verified"] = False
                                 c["spz_locked"] = False
@@ -7903,6 +7979,7 @@ def background_map_worker():
                                 c["spz_verified"] = True
                                 c["spz_locked"] = True
                                 c["spz_3factor"] = is_3f
+                                bind_bus_to_spz_metadata(c, best_spz)
                                 if not was_v:
                                     log_automation_action(
                                         "spz_verified",
@@ -9286,6 +9363,7 @@ def api_admin_map_action():
         if new_spz:
             old_spz = c.get("spz")
             c["spz"] = new_spz
+            bind_bus_to_spz_metadata(c, new_spz)
             c["spz_locked"] = True
             c["spz_verified"] = True
             c["manual_spz"] = True
@@ -9785,7 +9863,7 @@ def get_spz_control_dashboard_data():
     seen_spz = set()
 
     for norm_k, meta in SPZ_METADATA.items():
-        spz_str = meta.get("spz") or norm_k
+        spz_str = format_spz_display(meta.get("spz") or norm_k)
         drv = meta.get("driver", "").strip()
         nte = meta.get("note", "").strip()
         if not drv and not nte:
@@ -9843,7 +9921,7 @@ def get_spz_control_dashboard_data():
             seen_spz.add(norm_k)
             set_spz_metadata(spz_val, driver=drv, note=nte)
             admin_drivers_notes.append({
-                "spz": spz_val,
+                "spz": format_spz_display(spz_val) or spz_val,
                 "driver_name": drv or "—",
                 "note": nte or "—",
                 "bus_id": str(b_id),
@@ -9944,6 +10022,7 @@ def api_admin_spz_resolve_proposal():
             if b_id in GLOBAL_BUS_CACHE:
                 bc = GLOBAL_BUS_CACHE[b_id]
                 bc["spz"] = spz_val
+                bind_bus_to_spz_metadata(bc, spz_val)
                 bc["spz_verified"] = True
                 bc["admin_spz_verified"] = True
                 bc["is_locked_by_admin"] = True
@@ -10075,6 +10154,7 @@ def api_admin_spz_quick_edit():
         log_automation_action("admin_edit", bus_id, f"Admin {admin_name} uvolnil vůz #{bus_id}", "Nastaveno na Aktivní hledání", spz="Aktivní hledání", line=c.get("line"))
     else:
         c["spz"] = new_spz
+        bind_bus_to_spz_metadata(c, new_spz)
         if is_verified:
             c["admin_spz_verified"] = True
             c["is_locked_by_admin"] = True

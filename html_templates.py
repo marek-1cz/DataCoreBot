@@ -4434,6 +4434,43 @@ let _dashData = null;
 let _currentSpzFilter = 'all';
 let _currentProposalFilter = 'all';
 
+window.openSeznamAutobusu = function(rawSpz) {
+  if (!rawSpz || rawSpz === '—' || rawSpz === 'Neznámá' || rawSpz === 'None') return;
+  let s = String(rawSpz).replace(/[^a-zA-Z0-9]/g, '');
+  let formattedSpz = String(rawSpz).trim();
+  if (s.length > 4) {
+    formattedSpz = s.substring(0, s.length - 4) + ' ' + s.substring(s.length - 4);
+  }
+  
+  let newTab = window.open('about:blank', '_blank');
+  if (!newTab) {
+    window.open('https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz), '_blank');
+    return;
+  }
+  
+  newTab.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Načítám seznam autobusů...</title>
+      <meta charset="utf-8">
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    </head>
+    <body style="background:#0f172a; color:white; font-family:sans-serif; display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh; margin:0;">
+      <i class="fas fa-circle-notch fa-spin" style="font-size:3rem; color:#38bdf8; margin-bottom:20px;"></i>
+      <h2 style="margin:0;">Otevírám databázi vozidel...</h2>
+      <p style="color:#94a3b8; margin-top:15px; text-align:center; max-width: 400px; line-height:1.5;">
+        Vyhledávám vůz <b>${formattedSpz}</b> na stránce https://seznam-autobusu.cz/<br>
+        Prosím o strpení, navazuji spojení s cílovým serverem (cca 5 sekund)...
+      </p>
+    </body>
+    </html>
+  `);
+  newTab.document.close();
+  
+  newTab.location.href = 'https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz);
+};
+
 function showToast(text, isError = false) {
   const t = document.getElementById('spz-toast');
   t.innerText = text;
@@ -5262,7 +5299,9 @@ function renderDriversTable() {
 
     const spzBadge = `<div style="display:flex;align-items:center;gap:6px;">
       <span style="background:#0f172a;border:1px solid #0284c7;color:#38bdf8;padding:4px 8px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:13px;">${d.spz}</span>
-      <a href="https://seznam-autobusu.cz/seznam?evcspz=${encodeURIComponent(String(d.spz).replace(/\s+/g,''))}" target="_blank" title="Otevřít na Seznam-Autobusu" style="color:#64748b;font-size:11px;"><i class="fas fa-external-link-alt"></i></a>
+      <button onclick="openSeznamAutobusu('${d.spz}')" title="🚌 Fotografie a informace o vozu (Seznam-Autobusu)" style="background:#1e293b;border:1px solid #0284c7;color:#38bdf8;padding:3px 7px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:0.2s;" onmouseover="this.style.background='#0284c7';this.style.color='#fff'" onmouseout="this.style.background='#1e293b';this.style.color='#38bdf8'">
+        <i class="fas fa-bus"></i> Info
+      </button>
     </div>`;
 
     const driverCell = d.driver_name && d.driver_name !== '—'
@@ -5293,6 +5332,7 @@ function renderDriversTable() {
         <td data-label="Akce" style="padding: 12px; text-align: center;">
           <div style="display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap;">
             ${trackUrl ? `<a href="${trackUrl}" target="_blank" style="background: #1e293b; border: 1px solid #0284c7; color: #38bdf8; padding: 6px 10px; border-radius: 6px; text-decoration: none; font-size: 11px; font-weight: bold;" title="Zobrazit na mapě"><i class="fas fa-map-marker-alt"></i> Mapa</a>` : ''}
+            <button onclick="openSeznamAutobusu('${d.spz}')" style="background: #1e293b; border: 1px solid #2563eb; color: #93c5fd; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="🚌 Fotografie a informace o vozu na Seznam-Autobusu"><i class="fas fa-camera"></i> Vůz</button>
             <button onclick="deleteSpzMeta('${d.spz}','all')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;" title="Smazat řidiče i poznámku pro tuto SPZ"><i class="fas fa-trash-alt"></i> Smazat</button>
           </div>
         </td>

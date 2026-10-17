@@ -1,0 +1,196 @@
+{
+  "auto_resolve": true,
+  "watched_buses": [],
+  "ignored_errors": [],
+  "spz_metadata": {
+    "8P29755": {
+      "spz": "8P2 9755",
+      "driver": "",
+      "note": "Držák na kola",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29506": {
+      "spz": "8P2 9506",
+      "driver": "Miroslav Lukáš",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29732": {
+      "spz": "8P2 9732",
+      "driver": "",
+      "note": "Náhradní autobus Stříbro",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29513": {
+      "spz": "8P2 9513",
+      "driver": "Milan Šenovký",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29572": {
+      "spz": "8P2 9572",
+      "driver": "Martin Doubek",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29720": {
+      "spz": "8P2 9720",
+      "driver": "Tomáš",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "3AX7863": {
+      "spz": "3AX 7863",
+      "driver": "Miroslav Lukáš",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29559": {
+      "spz": "8P2 9559",
+      "driver": "Svoboda",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29575": {
+      "spz": "8P2 9575",
+      "driver": "Václav Kruml",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29581": {
+      "spz": "8P2 9581",
+      "driver": "Jiři Mouček",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29796": {
+      "spz": "8P2 9796",
+      "driver": "Václav Pangrác",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "7SH1894": {
+      "spz": "7SH 1894",
+      "driver": "",
+      "note": "Poptávková doprava",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29731": {
+      "spz": "8P2 9731",
+      "driver": "Svoboda",
+      "note": "",
+      "updated_at": "2026-10-14 21:40:20",
+      "updated_by": "Migrace DB"
+    },
+    "8P29509": {
+      "spz": "8P2 9509",
+      "driver": "Václav",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29528": {
+      "spz": "8P2 9528",
+      "driver": "Václav Kruml",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29623": {
+      "spz": "8P2 9623",
+      "driver": "Miroslav Lukáš",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29797": {
+      "spz": "8P2 9797",
+      "driver": "Miříkovský",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P25534": {
+      "spz": "8P2 5534",
+      "driver": "Václav Kruml",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29600": {
+      "spz": "8P2 9600",
+      "driver": "Josef Rozhoň",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29514": {
+      "spz": "8P2 9514",
+      "driver": "Hadraba",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29499": {
+      "spz": "8P2 9499",
+      "driver": "Ladislav Gesl",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8T57295": {
+      "spz": "8T5 7295",
+      "driver": "",
+      "note": "Náhradní autobus Stříbro",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29590": {
+      "spz": "8P2 9590",
+      "driver": "",
+      "note": "Doreza",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29505": {
+      "spz": "8P2 9505",
+      "driver": "Sláva Jedlička st.",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29579": {
+      "spz": "8P2 9579",
+      "driver": "Václav Kruml",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29652": {
+      "spz": "8P2 9652",
+      "driver": "Čenda",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    },
+    "8P29696": {
+      "spz": "8P2 9696",
+      "driver": "Václav Kruml",
+      "note": "",
+      "updated_at": "2026-10-14 21:45:22",
+      "updated_by": "Migrace DB"
+    }
+  }
+}

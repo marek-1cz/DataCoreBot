@@ -100,6 +100,16 @@ def init_local_db():
                     ts TEXT
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS spz_metadata_local (
+                    spz_key TEXT PRIMARY KEY,
+                    spz_display TEXT DEFAULT '',
+                    driver TEXT DEFAULT '',
+                    note TEXT DEFAULT '',
+                    updated_at TEXT DEFAULT '',
+                    updated_by TEXT DEFAULT ''
+                )
+            """)
             conn.commit()
             # Automatické pročištění neplatných admin zámků (Neznámá / Aktivní hledání nesmí mít admin zámek)
             try:
@@ -446,3 +456,73 @@ def check_offline_login(username: str, password: str):
             print(f"[OFFLINE AUTH] Chyba overeni hesla: {e}", flush=True)
             return None
     return None
+
+def local_spz_metadata_save(spz_key: str, spz_display: str, driver: str, note: str, updated_at: str, updated_by: str = "Admin"):
+    """Uloží metadata SPZ (řidič a poznámka) do lokální SQLite databáze."""
+    if not spz_key:
+        return
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                conn.execute("""
+                    INSERT INTO spz_metadata_local (spz_key, spz_display, driver, note, updated_at, updated_by)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(spz_key) DO UPDATE SET
+                        spz_display = excluded.spz_display,
+                        driver = excluded.driver,
+                        note = excluded.note,
+                        updated_at = excluded.updated_at,
+                        updated_by = excluded.updated_by
+                """, (spz_key, spz_display, driver, note, updated_at, updated_by))
+                conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] local_spz_metadata_save err: {e}", flush=True)
+
+def local_spz_metadata_delete(spz_key: str, field: str = "all", updated_at: str = "", updated_by: str = "Admin"):
+    """Smaže nebo vyčistí metadata pro danou SPZ z lokální SQLite databáze."""
+    if not spz_key:
+        return
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                if field == "all":
+                    conn.execute("DELETE FROM spz_metadata_local WHERE spz_key = ?", (spz_key,))
+                elif field == "driver":
+                    conn.execute("""
+                        UPDATE spz_metadata_local
+                        SET driver = '', updated_at = ?, updated_by = ?
+                        WHERE spz_key = ?
+                    """, (updated_at, updated_by, spz_key))
+                    conn.execute("DELETE FROM spz_metadata_local WHERE spz_key = ? AND (driver = '' OR driver IS NULL) AND (note = '' OR note IS NULL)", (spz_key,))
+                elif field == "note":
+                    conn.execute("""
+                        UPDATE spz_metadata_local
+                        SET note = '', updated_at = ?, updated_by = ?
+                        WHERE spz_key = ?
+                    """, (updated_at, updated_by, spz_key))
+                    conn.execute("DELETE FROM spz_metadata_local WHERE spz_key = ? AND (driver = '' OR driver IS NULL) AND (note = '' OR note IS NULL)", (spz_key,))
+                conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] local_spz_metadata_delete err: {e}", flush=True)
+
+def local_spz_metadata_load_all() -> dict:
+    """Načte všechna uložená metadata SPZ z lokální SQLite databáze."""
+    res = {}
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                cur = conn.execute("SELECT spz_key, spz_display, driver, note, updated_at, updated_by FROM spz_metadata_local")
+                for row in cur.fetchall():
+                    k = str(row[0] or "").strip()
+                    if k:
+                        res[k] = {
+                            "spz": str(row[1] or k),
+                            "driver": str(row[2] or ""),
+                            "note": str(row[3] or ""),
+                            "updated_at": str(row[4] or ""),
+                            "updated_by": str(row[5] or "Admin")
+                        }
+    except Exception as e:
+        print(f"[LOCAL DB] local_spz_metadata_load_all err: {e}", flush=True)
+    return res
+
