@@ -1409,7 +1409,7 @@ async function adminAction(action,busId,extraData={}){
         openPopupBusId=null;
       }
       setTimeout(()=>{
-        if(action==='hard_refresh'||action==='active_search_spz'||action==='status_refresh'||action==='reset_admin'||action==='recheck_spz'){
+        if(action==='hard_refresh'||action==='active_search_spz'||action==='status_refresh'||action==='reset_admin'||action==='recheck_spz'||action==='mark_bug'){
           Object.keys(adminInputCache).forEach(k=>{if(k.endsWith('_'+busId))delete adminInputCache[k];});
         }
         fetchBuses();
@@ -4122,19 +4122,21 @@ async function fetchBuses(){
                   <input type="checkbox" id="adm_flag_${bus.id}" ${bus.admin_flag?'checked':''} onchange="adminAction('set_admin_flag','${bus.id}',{flag:this.checked})" style="width:16px;height:16px;cursor:pointer;">
                   Admin úprava
                 </label>
-                <button onclick="adminAction('mark_bug','${bus.id}')" style="background:#3f0000;color:#fca5a5;border:1px solid #ef4444;border-radius:5px;font-size:11px;cursor:pointer;padding:6px 10px;touch-action:manipulation;font-weight:bold;" title="Označit polohu jako BUG">⛔ BUG</button>
               </div>
             </div>
 
-            <!-- NOVÝ SYSTÉM: Spodní akční tlačítka vedle Delete (Status Refresh, Hard Refresh a Smazat) -->
-            <div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
-              <button onclick="adminStatusRefresh('${bus.id}')" style="flex:1;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid #d97706;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Obnoví zaseknutou barvu a status z reálných dat jízdního řádu a zpoždění">
+            <!-- Akční tlačítka administrátora (Status Refresh, Označit jako BUG, Hard Refresh a Smazat) -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
+              <button onclick="adminStatusRefresh('${bus.id}')" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid #d97706;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Obnoví zaseknutou barvu a status z reálných dat jízdního řádu a zpoždění">
                 <i class="fas fa-palette"></i> Status Refresh
               </button>
-              <button onclick="adminHardRefresh('${bus.id}')" style="flex:1;background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid #dc2626;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Smaže kolečko, SPZ, řidiče i poznámku jako by vůz přestal existovat a ihned vytvoří zbrusu nový čistý záznam">
+              <button onclick="adminAction('mark_bug','${bus.id}')" style="background:${bus.color_class==='bg-bug'?'#7f1d1d':'#3f0000'};color:${bus.color_class==='bg-bug'?'#fecaca':'#fca5a5'};border:1px solid ${bus.color_class==='bg-bug'?'#ef4444':'#b91c1c'};border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="${bus.color_class==='bg-bug'?'Vůz je označen jako BUG (pro zrušení použijte Status Refresh)':'Označit polohu jako nereálnou (BUG / nestojí tu)'}">
+                <i class="fas fa-bug"></i> ${bus.color_class==='bg-bug'?'Označeno BUG':'⛔ Označit BUG'}
+              </button>
+              <button onclick="adminHardRefresh('${bus.id}')" style="background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid #dc2626;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Smaže kolečko, SPZ, řidiče i poznámku jako by vůz přestal existovat a ihned vytvoří zbrusu nový čistý záznam">
                 <i class="fas fa-redo-alt"></i> Hard Refresh
               </button>
-              <button onclick="adminDelete('${bus.id}')" style="flex:1;background:#ef4444;color:white;border:none;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Skryje tečku vozu z mapy do nového spoje">
+              <button onclick="adminDelete('${bus.id}')" style="background:#ef4444;color:white;border:none;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Skryje tečku vozu z mapy do nového spoje">
                 <i class="fas fa-trash-alt"></i> Smazat
               </button>
             </div>
@@ -9454,6 +9456,10 @@ def api_admin_map_action():
             c["is_locked_by_admin"] = False
             c["admin_spz_bug"] = True
             ADMIN_SPZ_LOCKS.pop(bus_id, None)
+
+        msg = f"Vůz #{bus_id} byl označen jako BUG (nereálná poloha)."
+        log_automation_action("mark_bug", bus_id, f"Admin {admin_name} označil vůz #{bus_id} jako BUG", msg, line=c.get("line"))
+        return jsonify({"status": "success", "message": msg, "status_text": c.get("status"), "color_class": c.get("color_class")})
 
     elif action == "admin_verify_spz":
         # Absolutni admin lock - SPZ je overena adminem, automatikata prestane hledat
