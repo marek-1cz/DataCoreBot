@@ -4851,8 +4851,8 @@ def _load_spz_settings(db_client=None):
                         for k, v in sb_dict.items():
                             nk = normalize_spz_key(k)
                             if nk and isinstance(v, dict):
-                                v["spz"] = format_spz_display(v.get("spz") or nk)
-                                SPZ_METADATA[nk] = v
+                                if nk not in SPZ_METADATA:
+                                    SPZ_METADATA[nk] = v
     except Exception as e_sb:
         pass
 
@@ -4955,6 +4955,21 @@ def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick:
             if note is not None:
                 lk["admin_note"] = entry.get("note", "")
 
+    # Synchronizace do Supabase spz_cache
+    try:
+        db_c = get_db_client() if "get_db_client" in globals() else None
+        if db_c:
+            update_payload = {}
+            if driver is not None:
+                update_payload["admin_driver"] = entry.get("driver", "")
+            if note is not None:
+                update_payload["admin_note"] = entry.get("note", "")
+            if update_payload:
+                db_c.table("spz_cache").update(update_payload).eq("spz", disp).execute()
+                db_c.table("spz_cache").update(update_payload).eq("spz", k).execute()
+    except Exception:
+        pass
+
 def delete_spz_metadata(spz: str, field: str = "all", admin_nick: str = "Admin"):
     """Smaže řidiče, poznámku nebo obojí pro danou SPZ a vymaže je i na živé mapě."""
     k = normalize_spz_key(spz)
@@ -4987,9 +5002,25 @@ def delete_spz_metadata(spz: str, field: str = "all", admin_nick: str = "Admin")
     except Exception:
         pass
 
+    # Synchronizace do Supabase spz_cache (aby se po restartu/ghost reconnectu nevrátil starý řidič)
+    try:
+        db_c = get_db_client() if "get_db_client" in globals() else None
+        if db_c:
+            disp = format_spz_display(spz) or spz
+            update_payload = {}
+            if field in ("driver", "all"):
+                update_payload["admin_driver"] = ""
+            if field in ("note", "all"):
+                update_payload["admin_note"] = ""
+            if update_payload:
+                db_c.table("spz_cache").update(update_payload).eq("spz", disp).execute()
+                db_c.table("spz_cache").update(update_payload).eq("spz", k).execute()
+    except Exception as e_sb_del:
+        print(f"[SPZ-META] Supabase cache delete err: {e_sb_del}", flush=True)
+
     # Okamžitě vymazat na aktivních vozech na mapě
     for bid, c in safe_bus_cache_items():
-        if normalize_spz_key(c.get("spz")) == k:
+        if normalize_spz_key(c.get("spz")) == k or str(c.get("id")) == k:
             if field in ("driver", "all"):
                 c["admin_driver"] = ""
             if field in ("note", "all"):
@@ -6664,10 +6695,11 @@ def background_map_worker():
                 if row.get("admin_verified") and bid and spz:
                     spz_str = str(spz).strip()
                     if spz_str.upper() not in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI") and not is_train_vehicle(bid, row.get("linka") or ""):
+                        meta_restore = get_spz_metadata(spz_str)
                         ADMIN_SPZ_LOCKS[bid] = {
                             "spz": spz_str,
-                            "admin_note": row.get("admin_note", ""),
-                            "admin_driver": row.get("admin_driver", ""),
+                            "admin_note": meta_restore.get("note", "") if meta_restore else "",
+                            "admin_driver": meta_restore.get("driver", "") if meta_restore else "",
                         }
                     
                 if not bid or not spz or spz in ("Nezn\u00e1m\u00e1", "Neznama", "Aktivní hledání"):
@@ -6697,8 +6729,9 @@ def background_map_worker():
                     ghost_entry["bug_locked"] = True
                     ghost_entry["bug_lat"] = ghost_entry.get("lat")
                     ghost_entry["bug_lng"] = ghost_entry.get("lng")
-                ghost_entry["admin_note"] = row.get("admin_note") or ""
-                ghost_entry["admin_driver"] = row.get("admin_driver") or ""
+                meta_ghost = get_spz_metadata(spz)
+                ghost_entry["admin_note"] = meta_ghost.get("note", "") if meta_ghost else ""
+                ghost_entry["admin_driver"] = meta_ghost.get("driver", "") if meta_ghost else ""
                 ghost_entry["admin_flag"] = row.get("admin_flag", False)
                 if row.get("manual_spz"):
                     ghost_entry["manual_spz"] = True
@@ -10011,7 +10044,7 @@ def get_spz_control_dashboard_data():
                 "map_url": None
             })
 
-    # Doplníme případné vozy na mapě, které mají řidiče/poznámku, ale dosud nebyly v SPZ_METADATA
+    # Vyčištění případných starých/přetrvávajících řidičů na vozech na mapě, kteří již nejsou v SPZ_METADATA
     for b_id, b_c in cache_items:
         if b_c.get("is_withdrawn"):
             continue
@@ -10019,22 +10052,12 @@ def get_spz_control_dashboard_data():
         nte = str(b_c.get("admin_note") or "").strip()
         spz_val = str(b_c.get("spz") or "").strip()
         norm_k = normalize_spz_key(spz_val)
-        if (drv or nte) and norm_k and norm_k not in seen_spz:
-            seen_spz.add(norm_k)
-            set_spz_metadata(spz_val, driver=drv, note=nte)
-            admin_drivers_notes.append({
-                "spz": format_spz_display(spz_val) or spz_val,
-                "driver_name": drv or "—",
-                "note": nte or "—",
-                "bus_id": str(b_id),
-                "line": b_c.get("line") or "?",
-                "vehicle_type": b_c.get("vehicle_type") or "Neznámý",
-                "is_online": True,
-                "status_text": "Na mapě",
-                "updated_at": "Nyní na mapě",
-                "updated_by": "Admin",
-                "map_url": f"https://datacorebot.koyeb.app/mapa?track={b_id}"
-            })
+        if norm_k:
+            meta = SPZ_METADATA.get(norm_k, {})
+            if drv and not meta.get("driver"):
+                b_c["admin_driver"] = ""
+            if nte and not meta.get("note"):
+                b_c["admin_note"] = ""
 
     admin_drivers_notes.sort(key=lambda x: (0 if x["is_online"] else 1, x["spz"]))
 

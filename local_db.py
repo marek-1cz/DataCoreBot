@@ -501,6 +501,12 @@ def local_spz_metadata_delete(spz_key: str, field: str = "all", updated_at: str 
                         WHERE spz_key = ?
                     """, (updated_at, updated_by, spz_key))
                     conn.execute("DELETE FROM spz_metadata_local WHERE spz_key = ? AND (driver = '' OR driver IS NULL) AND (note = '' OR note IS NULL)", (spz_key,))
+
+                # Vymazat také v spz_cache_local, aby se řidič/poznámka nevracely při obnově z mezipaměti
+                if field in ("driver", "all"):
+                    conn.execute("UPDATE spz_cache_local SET admin_driver = '' WHERE REPLACE(spz, ' ', '') = ? OR spz = ?", (spz_key, spz_key))
+                if field in ("note", "all"):
+                    conn.execute("UPDATE spz_cache_local SET admin_note = '' WHERE REPLACE(spz, ' ', '') = ? OR spz = ?", (spz_key, spz_key))
                 conn.commit()
     except Exception as e:
         print(f"[LOCAL DB] local_spz_metadata_delete err: {e}", flush=True)
