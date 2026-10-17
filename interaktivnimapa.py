@@ -4130,8 +4130,8 @@ async function fetchBuses(){
               <button onclick="adminStatusRefresh('${bus.id}')" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid #d97706;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Obnoví zaseknutou barvu a status z reálných dat jízdního řádu a zpoždění">
                 <i class="fas fa-palette"></i> Status Refresh
               </button>
-              <button onclick="adminAction('mark_bug','${bus.id}')" style="background:${bus.color_class==='bg-bug'?'#7f1d1d':'#3f0000'};color:${bus.color_class==='bg-bug'?'#fecaca':'#fca5a5'};border:1px solid ${bus.color_class==='bg-bug'?'#ef4444':'#b91c1c'};border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="${bus.color_class==='bg-bug'?'Vůz je označen jako BUG (pro zrušení použijte Status Refresh)':'Označit polohu jako nereálnou (BUG / nestojí tu)'}">
-                <i class="fas fa-bug"></i> ${bus.color_class==='bg-bug'?'Označeno BUG':'⛔ Označit BUG'}
+              <button onclick="adminAction('mark_bug','${bus.id}')" style="background:${bus.color_class==='bg-bug'?'#7f1d1d':'#3f0000'};color:${bus.color_class==='bg-bug'?'#fecaca':'#fca5a5'};border:1px solid ${bus.color_class==='bg-bug'?'#ef4444':'#b91c1c'};border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="${bus.color_class==='bg-bug'?'Vůz je označen jako BUG (kliknutím zrušíte BUG, nebo se zruší sám jakmile se rozjede)':'Označit polohu jako nereálnou (BUG / nestojí tu) – zruší se automaticky jakmile se vůz rozjede'}">
+                <i class="fas fa-bug"></i> ${bus.color_class==='bg-bug'?'Označeno BUG (Zrušit)':'⛔ Označit BUG'}
               </button>
               <button onclick="adminHardRefresh('${bus.id}')" style="background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid #dc2626;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Smaže kolečko, SPZ, řidiče i poznámku jako by vůz přestal existovat a ihned vytvoří zbrusu nový čistý záznam">
                 <i class="fas fa-redo-alt"></i> Hard Refresh
@@ -5880,7 +5880,7 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "db_first_upsert": False, "_last_db_status": None, "_last_db_linka": None,
         "_end_written": False, "_was_long_stationary": False, "final_delay_display": 0,
         "admin_color_override": None, "admin_status_override": None, "admin_flag": False,
-        "bug_locked": False, "admin_lock_display": False, "admin_lock_permanent": False,
+        "bug_locked": False, "bug_lat": None, "bug_lng": None, "admin_lock_display": False, "admin_lock_permanent": False,
         "admin_note": "",
         "admin_driver": "",
         "admin_spz_verified": False if is_train else admin_verified,
@@ -6698,6 +6698,10 @@ def background_map_worker():
                 ghost_entry["is_offline"] = True
                 ghost_entry["color_class"] = row.get("color_class") or "bg-lastpos"
                 ghost_entry["status"] = row.get("status_text") or "Poslední známá poloha"
+                if ghost_entry["color_class"] == "bg-bug":
+                    ghost_entry["bug_locked"] = True
+                    ghost_entry["bug_lat"] = ghost_entry.get("lat")
+                    ghost_entry["bug_lng"] = ghost_entry.get("lng")
                 ghost_entry["admin_note"] = row.get("admin_note") or ""
                 ghost_entry["admin_driver"] = row.get("admin_driver") or ""
                 ghost_entry["admin_flag"] = row.get("admin_flag", False)
@@ -7031,9 +7035,9 @@ def background_map_worker():
                                 c["skip_spz"] = True
                                 ADMIN_SPZ_LOCKS.pop(bus_id, None)
                             c.pop("offline_since_time", None)
-                            if c.get("color_class") in ("bg-lastpos", "bg-gray") and not c.get("admin_lock_display"):
+                            if c.get("color_class") in ("bg-lastpos", "bg-gray") and not c.get("admin_lock_display") and not c.get("bug_locked") and c.get("color_class") != "bg-bug":
                                 c["color_class"] = "bg-green"
-                            if c.get("status") in ("Poslední známá poloha", "Odstáven", "Odstaven", "Timeout"):
+                            if c.get("status") in ("Poslední známá poloha", "Odstáven", "Odstaven", "Timeout") and not c.get("bug_locked") and c.get("color_class") != "bg-bug":
                                 c["status"] = "Jízda"
                             if "last_moved_lat" not in c:
                                 c["last_moved_lat"] = c["lat"]
@@ -7140,7 +7144,43 @@ def background_map_worker():
                                 if line and len(line) > len(c.get("line", "")):
                                     c["line"] = line
 
-                            if dm > 0.0001:
+                            # Kontrola fyzického pohybu pro vozy označené jako BUG
+                            if c.get("bug_locked") or c.get("color_class") == "bg-bug":
+                                b_lat = c.get("bug_lat")
+                                b_lng = c.get("bug_lng")
+                                if b_lat is None or b_lng is None:
+                                    c["bug_lat"] = c.get("lat") or lat1
+                                    c["bug_lng"] = c.get("lng") or lng1
+                                    b_lat = c["bug_lat"]
+                                    b_lng = c["bug_lng"]
+                                
+                                d_lat = (lat1 - b_lat) * 111139.0
+                                d_lng = (lng1 - b_lng) * 111139.0 * math.cos(math.radians(lat1))
+                                dist_bug_m = math.hypot(d_lat, d_lng)
+                                
+                                if dist_bug_m >= 100.0:
+                                    # Vůz se skutečně rozjel a ujel >= 100m od BUG polohy!
+                                    c["bug_locked"] = False
+                                    c.pop("bug_lat", None)
+                                    c.pop("bug_lng", None)
+                                    c["spz_frozen"] = False
+                                    c["color_class"] = "bg-green"
+                                    c["status"] = "Jízda"
+                                    c["last_moved"] = now
+                                    c["last_moved_lat"] = lat1
+                                    c["last_moved_lng"] = lng1
+                                    sys_log(f"[BUG-CLEAR] Vůz #{bus_id} se rozjel ({dist_bug_m:.0f}m od BUG polohy) -> BUG automaticky zrušen")
+                                    log_automation_action("bug_cleared_movement", bus_id,
+                                                          f"Vůz #{bus_id} se rozjel ({dist_bug_m:.0f}m od označené BUG polohy) – BUG status automaticky zrušen",
+                                                          f"Vůz se reálně rozjel, nová poloha [{lat1:.5f}, {lng1:.5f}], vzdálenost {dist_bug_m:.0f} m",
+                                                          line=line or c.get("line"))
+                                else:
+                                    # Vůz stále stojí / vysílá ghost data u BUG polohy -> zachovej BUG
+                                    c["bug_locked"] = True
+                                    c["color_class"] = "bg-bug"
+                                    c["status"] = "BUG / Nereálná poloha (označeno adminem)"
+                                    c["spz_frozen"] = True
+                            elif dm > 0.0001:
                                 l1r = math.radians(c["lat"])
                                 l2r = math.radians(lat1)
                                 ld = math.radians(lng1 - c["lng"])
@@ -7170,7 +7210,7 @@ def background_map_worker():
                     bc0 = GLOBAL_BUS_CACHE[bus_ids[0]]
                     bc0["investigating"] = False
                     bc0["investigation_start"] = None
-                    if bc0.get("color_class") == "bg-bug":
+                    if bc0.get("color_class") == "bg-bug" and not bc0.get("bug_locked"):
                         bc0["color_class"] = "bg-gray"
                         bc0["status"] = "Stoj\u00ed"
                     continue
@@ -7197,6 +7237,8 @@ def background_map_worker():
                             bc["color_class"] = "bg-bug"
                             bc["spz_locked"] = True
                             bc["bug_locked"] = True
+                            bc["bug_lat"] = bc.get("lat")
+                            bc["bug_lng"] = bc.get("lng")
                         bc["investigating"] = False
                         bc["investigation_start"] = None
                     for bid in mb:
@@ -7335,7 +7377,7 @@ def background_map_worker():
                             c["status"] = f"Vozovna: {c.get('_depot_name', 'Vozovna')}"
                             c["color_class"] = "bg-yellow"
                             c["is_withdrawn"] = False
-                        elif not c.get("admin_lock_display"):
+                        elif not c.get("admin_lock_display") and not c.get("bug_locked") and c.get("color_class") != "bg-bug":
                             if om >= 10.0:
                                 # Bus je odstaveny mimo vozovnu - zobraz sede jako "Odstaven"
                                 if c.get("status") != "Odstáven":
@@ -7424,6 +7466,8 @@ def background_map_worker():
                                             c["color_class"] = "bg-bug"
                                             c["status"] = "BUG \u2013 Syst\u00e9m rozpoznal duplicitu SPZ"
                                             c["bug_locked"] = True
+                                            c["bug_lat"] = c.get("lat")
+                                            c["bug_lng"] = c.get("lng")
                                             c["spz_frozen"] = True
                                             dup_msg = (f"Syst\u00e9m rozpoznal duplicitu v {now.strftime('%H:%M %d.%m.%Y')}: "
                                                        f"SPZ {spz_val} v\u00edz\u00ed tak\u00e9 aktivn\u011b bus_id={oth_id} "
@@ -7548,8 +7592,8 @@ def background_map_worker():
                         "is_before_departure": False,
                         "destination": c.get("destination"), "spz": c.get("spz") or "Neznámá",
                         "spz_verified": c.get("spz_verified", False), "is_train": False,
-                        "status": f"Vozovna: {c.get('_depot_name', 'Vozovna')}" if c.get("_in_depot") else c.get("status"),
-                        "color_class": "bg-yellow" if c.get("_in_depot") else c.get("color_class"),
+                        "status": "BUG / Nereálná poloha (označeno adminem)" if (c.get("bug_locked") or c.get("color_class") == "bg-bug") else (f"Vozovna: {c.get('_depot_name', 'Vozovna')}" if c.get("_in_depot") else c.get("status")),
+                        "color_class": "bg-bug" if (c.get("bug_locked") or c.get("color_class") == "bg-bug") else ("bg-yellow" if c.get("_in_depot") else c.get("color_class")),
                         "inactive_minutes": inact,
                         "last_updated": c["last_moved"].strftime("%H:%M:%S") if c.get("last_moved") else "N/A",
                         "investigating": False, "investigation_spz": "",
@@ -7559,7 +7603,7 @@ def background_map_worker():
                         "depot_color": c.get("_depot_color") or "#facc15",
                         "offline_since_time": c.get("offline_since_time", ""),
                         "is_offline": True,
-                        "is_withdrawn": False if c.get("_in_depot") else bool(c.get("is_withdrawn", False) or c.get("status") in ("Odstáven", "Odstaven") or c.get("color_class") == "bg-gray"),
+                        "is_withdrawn": False if (c.get("bug_locked") or c.get("color_class") == "bg-bug") else (False if c.get("_in_depot") else bool(c.get("is_withdrawn", False) or c.get("status") in ("Odstáven", "Odstaven") or c.get("color_class") == "bg-gray")),
                         "real_linka_spoj": c.get("real_linka_spoj"),
                         "spoj_num": c.get("spoj_num"),
                         "last_known_spoj": c.get("last_known_spoj") or c.get("spoj_num"),
@@ -8043,18 +8087,49 @@ def background_map_worker():
                 # ── Barvy + status ────────────────────────────────────────────────────────
                 old_status = c.get("status", "")
 
+                # Kontrola fyzického pohybu pro vozy označené jako BUG
+                if c.get("bug_locked") or c.get("color_class") == "bg-bug":
+                    bug_lat = c.get("bug_lat")
+                    bug_lng = c.get("bug_lng")
+                    cur_lat = c.get("lat")
+                    cur_lng = c.get("lng")
+                    if bug_lat is not None and bug_lng is not None and cur_lat is not None and cur_lng is not None:
+                        d_lat = (cur_lat - bug_lat) * 111139.0
+                        d_lng = (cur_lng - bug_lng) * 111139.0 * math.cos(math.radians(cur_lat))
+                        dist_m = math.hypot(d_lat, d_lng)
+                        if dist_m >= 100.0:
+                            # Vůz se skutečně rozjel – ujel >= 100m od BUG pozice!
+                            c["bug_locked"] = False
+                            c.pop("bug_lat", None)
+                            c.pop("bug_lng", None)
+                            c["spz_frozen"] = False
+                            c["color_class"] = "bg-green"
+                            c["status"] = "Jízda"
+                            sys_log(f"[BUG-CLEAR] Vůz #{bus_id} se rozjel ({dist_m:.0f}m od BUG polohy) -> BUG automaticky zrušen")
+                            log_automation_action("bug_cleared_movement", bus_id,
+                                                  f"Vůz #{bus_id} se rozjel ({dist_m:.0f}m od označené BUG polohy) – BUG status automaticky zrušen",
+                                                  f"Vůz se reálně rozjel, nová poloha [{cur_lat:.5f}, {cur_lng:.5f}], vzdálenost {dist_m:.0f}m",
+                                                  line=c.get("line"))
+                    else:
+                        if cur_lat is not None and cur_lng is not None:
+                            c["bug_lat"] = cur_lat
+                            c["bug_lng"] = cur_lng
+
                 if c.get("admin_lock_display"):
                     if c.get("admin_color_override"):
                         c["color_class"] = c["admin_color_override"]
                     if c.get("admin_status_override"):
                         c["status"] = c["admin_status_override"]
 
-                elif c.get("color_class") == "bg-bug":
-                    if is_moving:
-                        c["color_class"] = "bg-orange"
-                        c["status"] = "V\u00fdzkum \u2013 Reaktivace (byl zaseknut\u00fd)"
+                elif c.get("bug_locked") or c.get("color_class") == "bg-bug":
+                    # Vůz stále stojí u ghost BUG polohy -> ZŮSTÁVÁ TVRDĚ ZAMKNUTÝ JAKO BUG!
+                    c["bug_locked"] = True
+                    c["color_class"] = "bg-bug"
+                    c["status"] = "BUG / Nereálná poloha (označeno adminem)"
+                    c["final_delay_display"] = 0
+
                 elif c.get("is_offline"):
-                    if not c.get("admin_lock_display"):
+                    if not c.get("admin_lock_display") and not c.get("bug_locked") and c.get("color_class") != "bg-bug":
                         depot_n, depot_col = _check_depot_zones(c.get("lat"), c.get("lng")) if (DEPOT_ZONES and c.get("lat") and c.get("lng") and not c.get("is_train")) else (None, None)
                         if c.get("_in_depot") or depot_n:
                             c["_in_depot"] = True
@@ -9393,6 +9468,8 @@ def api_admin_map_action():
         c["admin_spz_verified"] = False
         c["is_locked_by_admin"] = False
         c["bug_locked"] = False
+        c.pop("bug_lat", None)
+        c.pop("bug_lng", None)
         c["spz_frozen"] = False
         c["spz_3factor"] = False
         c["admin_flag"] = False
@@ -9431,6 +9508,8 @@ def api_admin_map_action():
         c["admin_color_override"] = None
         c["admin_lock_display"] = False
         c["bug_locked"] = False
+        c.pop("bug_lat", None)
+        c.pop("bug_lng", None)
         c["color_class"] = ""
         c["status"] = "Aktivní"
 
@@ -9522,22 +9601,35 @@ def api_admin_map_action():
                 ADMIN_SPZ_LOCKS[bus_id]["color_class"] = new_col
 
     elif action == "mark_bug":
-        # Admin rucne oznaci bus jako "BUG / nestoji tu" - bude mit cerveny alert
-        # ale SPZ se mu nesmazava (zustavaji videt kde byl naposledy)
-        c["bug_locked"] = True
-        c["color_class"] = "bg-bug"
-        c["status"] = "BUG / Nerealna poloha (oznaceno adminem)"
-        c["spz_frozen"] = True  # zamraz SPZ aby se nesmazala
-        c["spz_conflict_warn"] = False  # admin to vedome oznacil, uz neni potreba duplikat alert
-        if c.get("admin_spz_verified") or bus_id in ADMIN_SPZ_LOCKS:
-            c["admin_spz_verified"] = False
-            c["is_locked_by_admin"] = False
-            c["admin_spz_bug"] = True
-            ADMIN_SPZ_LOCKS.pop(bus_id, None)
+        # Pokud již je vůz označen jako BUG, kliknutí funguje jako toggle pro zrušení BUG stavu
+        if c.get("bug_locked") or c.get("color_class") == "bg-bug":
+            c["bug_locked"] = False
+            c.pop("bug_lat", None)
+            c.pop("bug_lng", None)
+            c["spz_frozen"] = False
+            c["color_class"] = "bg-green"
+            c["status"] = "Jízda"
+            msg = f"Vůz #{bus_id}: Označení BUG bylo zrušeno adminem {admin_name}."
+            log_automation_action("unmark_bug", bus_id, f"Admin {admin_name} zrušil BUG u #{bus_id}", msg, line=c.get("line"))
+            return jsonify({"status": "success", "message": msg, "status_text": c.get("status"), "color_class": c.get("color_class")})
+        else:
+            # Admin ručně označí bus jako BUG (nereálná poloha / ghost na mapě)
+            c["bug_locked"] = True
+            c["bug_lat"] = c.get("lat")
+            c["bug_lng"] = c.get("lng")
+            c["color_class"] = "bg-bug"
+            c["status"] = "BUG / Nereálná poloha (označeno adminem)"
+            c["spz_frozen"] = True  # zamraz SPZ aby se nesmazala
+            c["spz_conflict_warn"] = False  # admin to vědomě označil, už není potřeba duplikát alert
+            if c.get("admin_spz_verified") or bus_id in ADMIN_SPZ_LOCKS:
+                c["admin_spz_verified"] = False
+                c["is_locked_by_admin"] = False
+                c["admin_spz_bug"] = True
+                ADMIN_SPZ_LOCKS.pop(bus_id, None)
 
-        msg = f"Vůz #{bus_id} byl označen jako BUG (nereálná poloha)."
-        log_automation_action("mark_bug", bus_id, f"Admin {admin_name} označil vůz #{bus_id} jako BUG", msg, line=c.get("line"))
-        return jsonify({"status": "success", "message": msg, "status_text": c.get("status"), "color_class": c.get("color_class")})
+            msg = f"Vůz #{bus_id} byl označen jako BUG (nereálná poloha). Zůstane jako BUG, dokud se reálně nerozjede."
+            log_automation_action("mark_bug", bus_id, f"Admin {admin_name} označil vůz #{bus_id} jako BUG", msg, line=c.get("line"))
+            return jsonify({"status": "success", "message": msg, "status_text": c.get("status"), "color_class": c.get("color_class")})
 
     elif action == "admin_verify_spz":
         # Absolutni admin lock - SPZ je overena adminem, automatikata prestane hledat
