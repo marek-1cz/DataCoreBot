@@ -47,7 +47,7 @@
     },
     "3AX7863": {
       "spz": "3AX 7863",
-      "driver": "Miroslav Lukáš",
+      "driver": "",
       "note": "",
       "updated_at": "2026-10-14 21:45:22",
       "updated_by": "Migrace DB"
@@ -89,7 +89,7 @@
     },
     "8P29731": {
       "spz": "8P2 9731",
-      "driver": "Svoboda",
+      "driver": "",
       "note": "",
       "updated_at": "2026-10-14 21:40:20",
       "updated_by": "Migrace DB"
@@ -103,14 +103,14 @@
     },
     "8P29528": {
       "spz": "8P2 9528",
-      "driver": "Václav Kruml",
+      "driver": "",
       "note": "",
       "updated_at": "2026-10-14 21:45:22",
       "updated_by": "Migrace DB"
     },
     "8P29623": {
       "spz": "8P2 9623",
-      "driver": "Miroslav Lukáš",
+      "driver": "",
       "note": "",
       "updated_at": "2026-10-14 21:45:22",
       "updated_by": "Migrace DB"
@@ -124,7 +124,7 @@
     },
     "8P25534": {
       "spz": "8P2 5534",
-      "driver": "Václav Kruml",
+      "driver": "",
       "note": "",
       "updated_at": "2026-10-14 21:45:22",
       "updated_by": "Migrace DB"
@@ -173,7 +173,7 @@
     },
     "8P29579": {
       "spz": "8P2 9579",
-      "driver": "Václav Kruml",
+      "driver": "",
       "note": "",
       "updated_at": "2026-10-14 21:45:22",
       "updated_by": "Migrace DB"
@@ -187,7 +187,7 @@
     },
     "8P29696": {
       "spz": "8P2 9696",
-      "driver": "Václav Kruml",
+      "driver": "",
       "note": "",
       "updated_at": "2026-10-14 21:45:22",
       "updated_by": "Migrace DB"

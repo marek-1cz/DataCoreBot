@@ -4856,29 +4856,6 @@ def _load_spz_settings(db_client=None):
     except Exception as e_sb:
         pass
 
-    # 4. Migrace existujících řidičů a poznámek z lokální SQLite DB spz_cache_local
-    try:
-        from local_db import get_local_db
-        with get_local_db() as conn:
-            cur = conn.execute("""
-                SELECT spz, admin_driver, admin_note, updated_at
-                FROM spz_cache_local
-                WHERE (admin_driver IS NOT NULL AND admin_driver != '')
-                   OR (admin_note IS NOT NULL AND admin_note != '')
-            """)
-            for row in cur.fetchall():
-                spz_val = str(row[0] or "").strip()
-                norm_k = normalize_spz_key(spz_val)
-                if norm_k and norm_k not in SPZ_METADATA:
-                    SPZ_METADATA[norm_k] = {
-                        "spz": format_spz_display(spz_val),
-                        "driver": str(row[1] or "").strip(),
-                        "note": str(row[2] or "").strip(),
-                        "updated_at": str(row[3] or "")[:19].replace("T", " "),
-                        "updated_by": "Migrace DB"
-                    }
-    except Exception:
-        pass
 
 def _save_spz_settings(db_client=None):
     try:
@@ -4929,8 +4906,14 @@ def bind_bus_to_spz_metadata(c: dict, spz: str):
         if bid and bid in ADMIN_SPZ_LOCKS:
             ADMIN_SPZ_LOCKS[bid]["admin_driver"] = c["admin_driver"]
             ADMIN_SPZ_LOCKS[bid]["admin_note"] = c["admin_note"]
-    elif c.get("admin_driver") or c.get("admin_note"):
-        set_spz_metadata(spz, driver=c.get("admin_driver"), note=c.get("admin_note"))
+    else:
+        # SPZ nemá v metadatech žádného řidiče ani poznámku -> vyčisti, nesmí zůstat cizí řidič
+        c["admin_driver"] = ""
+        c["admin_note"] = ""
+        bid = str(c.get("id") or "")
+        if bid and bid in ADMIN_SPZ_LOCKS:
+            ADMIN_SPZ_LOCKS[bid]["admin_driver"] = ""
+            ADMIN_SPZ_LOCKS[bid]["admin_note"] = ""
 
 def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick: str = "Admin"):
     """Uloží jméno řidiče a poznámku pevně k SPZ (cestují s touto SPZ)."""
@@ -5072,15 +5055,27 @@ def get_internet_prague_time():
 
 
 def is_same_line(l1, l2):
-    if not l1 or not l2 or l1 == "Nezn\u00e1m\u00e1" or l2 == "Nezn\u00e1m\u00e1":
+    if not l1 or not l2 or l1 in ("Neznámá", "Neznama") or l2 in ("Neznámá", "Neznama"):
         return False
-    b1 = str(l1).split('/')[0]
-    b2 = str(l2).split('/')[0]
+    b1 = str(l1).split('/')[0].strip()
+    b2 = str(l2).split('/')[0].strip()
     cl1 = re.sub(r'\D', '', b1)
     cl2 = re.sub(r'\D', '', b2)
     if not cl1 or not cl2:
-        return b1 == b2
-    return cl1.endswith(cl2) or cl2.endswith(cl1)
+        return b1.upper() == b2.upper()
+    s1 = cl1.lstrip('0') or '0'
+    s2 = cl2.lstrip('0') or '0'
+    if s1 == s2:
+        return True
+    # Podpora pro 6-místné licenční číslo linky CIS JŘ (např. 440212 vs 212 nebo 431521 vs 521)
+    # Poslední 3 číslice v 6-místném kódu CIS odpovídají veřejnému číslu linky:
+    if len(cl1) == 6 and len(cl2) <= 3:
+        cis_num = cl1[-3:].lstrip('0') or '0'
+        return cis_num == s2
+    if len(cl2) == 6 and len(cl1) <= 3:
+        cis_num = cl2[-3:].lstrip('0') or '0'
+        return cis_num == s1
+    return False
 
 
 def _arriva_line_matches(local_line, b):
@@ -6922,17 +6917,18 @@ def background_map_worker():
                                 for gid, gc in safe_bus_cache_items():
                                     if gc.get("is_train") or is_train_vehicle(gid, gc.get("line")):
                                         continue
-                                    if not (gc.get("is_offline") and gc.get("spz") and gc["spz"] not in ("Neznámá", "Neznama")):
+                                    if not (gc.get("is_offline") and gc.get("spz") and gc["spz"] not in ("Neznámá", "Neznama", "Aktivní hledání")):
+                                        continue
+                                    # Ghost vůz MUSÍ být striktně na stejné lince!
+                                    if not is_same_line(line, gc.get("line")):
                                         continue
                                     oa_min = (now - gc["last_inflow_seen"]).total_seconds() / 60.0
-                                    if oa_min > 4320:
+                                    if oa_min > 720:  # max 12 hodin offline
                                         continue
                                     gd = math.hypot(lat1 - gc["lat"], lng1 - gc["lng"])
-                                    lm = is_same_line(line, gc["line"])
-                                    if lm and gd < 0.08:
-                                        gc_list.append((gid, gc, gd, gd + oa_min * 0.0001 - 0.05))
-                                    elif gd < GHOST_DIST_STRICT and oa_min <= GHOST_MAX_OFFLINE_MIN:
-                                        gc_list.append((gid, gc, gd, gd + oa_min * 0.0005))
+                                    # Musí být blízko poslední polohy (max cca 850 metrů, nikoliv kilometry daleko):
+                                    if gd < 0.008:
+                                        gc_list.append((gid, gc, gd, gd + oa_min * 0.0001))
                                 if gc_list:
                                     gc_list.sort(key=lambda x: x[3])
                                     best_gid, best_gc, _, _ = gc_list[0]
@@ -7726,9 +7722,20 @@ def background_map_worker():
                     gate_3f      = set()  # spz ktere prosly vsemi 3 faktory => prima fajfka
                     gate_partial = {}   # spz -> dist_m (jen linka+pozice <= 500m, fallback)
 
+                    # SPZ zamknuté administrátorem u jiných aktivních vozů – NIKDY NESMÍ BÝT PŘEVZATY jiným vozem!
+                    admin_protected_spzs = {
+                        normalize_spz_key(oth_c.get("spz"))
+                        for oth_id, oth_c in safe_bus_cache_items()
+                        if oth_id != bus_id and not oth_c.get("is_offline") and oth_c.get("spz")
+                        and oth_c.get("spz") not in ("Neznámá", "Neznama", "Aktivní hledání")
+                        and (oth_c.get("admin_spz_verified") or oth_c.get("is_locked_by_admin") or oth_c.get("manual_spz"))
+                    }
+
                     for b_a in data_arriva:
                         b_spz = (b_a.get("spz") or "").strip()
                         if not b_spz or b_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
+                            continue
+                        if normalize_spz_key(b_spz) in admin_protected_spzs:
                             continue
                         ok_m, score, match_detail, dist_m = check_arriva_candidate_match(c, b_a, max_dist=ARRIVA_MATCH_DIST_M)
                         if not ok_m:
@@ -7780,9 +7787,12 @@ def background_map_worker():
                         for oth_id, oth_c in safe_bus_cache_items():
                             if oth_id == bus_id:
                                 continue
-                            if (oth_c.get("spz") == best_spz
-                                    and oth_c.get("spz_verified")
-                                    and not oth_c.get("is_offline")):
+                            if (oth_c.get("spz") == best_spz and not oth_c.get("is_offline")):
+                                # Nikdy nekraď SPZ vozu, který je zamčený adminem!
+                                if oth_c.get("admin_spz_verified") or oth_c.get("is_locked_by_admin") or oth_c.get("manual_spz"):
+                                    best_spz = None
+                                    break
+
                                 oth_line = oth_c.get("line", "")
                                 oth_lat = oth_c.get("lat") or 0
                                 oth_lng = oth_c.get("lng") or 0
@@ -7809,7 +7819,7 @@ def background_map_worker():
                                 )
                                 # STREDNI AGRESIVITA: pokud maji ruzne linky -> jasna chyba
                                 # Okamzite odebrat SPZ starsimu (mene verifikovanimu) busu
-                                if lines_differ and not oth_c.get("manual_spz") and not oth_c.get("bug_locked"):
+                                if lines_differ and not oth_c.get("manual_spz") and not oth_c.get("bug_locked") and not oth_c.get("admin_spz_verified") and not oth_c.get("is_locked_by_admin"):
                                     print(f"[SPZ-CONFLICT] SPZ {best_spz}: bus {bus_id} (L{line}) vs "
                                           f"bus {oth_id} (L{oth_line}) - RUZNE LINKY, dist={dist_between}m "
                                           f"-> uvolnuji SPZ u busu {oth_id}", flush=True)
@@ -7842,7 +7852,7 @@ def background_map_worker():
                                         spz="Aktivní hledání",
                                         line=oth_line
                                     )
-                                elif is_3f_winner and not oth_c.get("spz_3factor") and not oth_c.get("manual_spz") and not oth_c.get("bug_locked"):
+                                elif is_3f_winner and not oth_c.get("spz_3factor") and not oth_c.get("manual_spz") and not oth_c.get("bug_locked") and not oth_c.get("admin_spz_verified") and not oth_c.get("is_locked_by_admin"):
                                     # Nas kandidat je 3-faktor, ostatni neni -> prebirame SPZ
                                     prev_oth_spz = oth_c.get("spz")
                                     oth_c["spz"] = "Aktivní hledání"
