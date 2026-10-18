@@ -28,6 +28,32 @@ def get_prague_time():
     except Exception:
         return datetime.now()
 
+def to_naive_prague(dt):
+    """Zaručí převod libovolného datetime (naive, aware nebo ISO string) na naive Prague čas."""
+    if not dt:
+        return None
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt)
+        except Exception:
+            return None
+    if isinstance(dt, datetime):
+        if dt.tzinfo is not None:
+            try:
+                return dt.astimezone(ZoneInfo('Europe/Prague')).replace(tzinfo=None)
+            except Exception:
+                return dt.replace(tzinfo=None)
+        return dt
+    return None
+
+def safe_diff_seconds(t1, t2, default=9999.0):
+    """Bezpečně spočítá (t1 - t2).total_seconds() bez výjimky can't subtract offset-naive and offset-aware."""
+    d1 = to_naive_prague(t1)
+    d2 = to_naive_prague(t2)
+    if not d1 or not d2:
+        return default
+    return (d1 - d2).total_seconds()
+
 try:
     # pyrefly: ignore [missing-import]
     from supabase import create_client
@@ -6110,7 +6136,7 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
     Generuje návrhy do SPZ_CONFLICT_PROPOSALS a čistí neplatné stavy.
     """
     global SPZ_CONFLICT_PROPOSALS, INVALID_VERIFICATIONS_LOG, AUTO_RESOLVE_SPZ
-    now = datetime.now(ZoneInfo("Europe/Prague"))
+    now = get_prague_time()
     now_str = now.strftime("%H:%M:%S")
 
     # ── 1. Bod 3: Automatické zrušení neplatného admin-ověření pro "NEZNÁMÁ" a "AKTIVNÍ HLEDÁNÍ" ──
@@ -6280,7 +6306,7 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                 t_dest = str(thief_c.get("destination") or "").strip()
                 t_dest_norm = _norm_txt(t_dest)
                 t_bearing = thief_c.get("bearing")
-                t_inact = (now - thief_c.get("last_inflow_seen")).total_seconds() / 60.0 if thief_c.get("last_inflow_seen") else 99
+                t_inact = safe_diff_seconds(now, thief_c.get("last_inflow_seen"), default=99.0 * 60.0) / 60.0
 
                 # SPZ obsazené jinými ověřenými vozy
                 taken_spzs = {
@@ -6298,7 +6324,7 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                         if a_spz.upper() in taken_spzs:
                             continue
 
-                        ok_m, score, detail, d_cand = check_arriva_candidate_match(t_c, b_a, max_dist=850)
+                        ok_m, score, detail, d_cand = check_arriva_candidate_match(thief_c, b_a, max_dist=850)
                         if not ok_m:
                             continue
 
@@ -6955,7 +6981,7 @@ def background_map_worker():
                                     # Ghost vůz MUSÍ být striktně na stejné lince!
                                     if not is_same_line(line, gc.get("line")):
                                         continue
-                                    oa_min = (now - gc["last_inflow_seen"]).total_seconds() / 60.0
+                                    oa_min = safe_diff_seconds(now, gc.get("last_inflow_seen"), default=9999.0 * 60.0) / 60.0
                                     if oa_min > 720:  # max 12 hodin offline
                                         continue
                                     gd = math.hypot(lat1 - gc["lat"], lng1 - gc["lng"])
@@ -7243,12 +7269,12 @@ def background_map_worker():
                         bc0["color_class"] = "bg-gray"
                         bc0["status"] = "Stoj\u00ed"
                     continue
-                mb = [bid for bid in bus_ids if (now - GLOBAL_BUS_CACHE[bid]["last_moved"]).total_seconds() < 60]
-                sb = [bid for bid in bus_ids if (now - GLOBAL_BUS_CACHE[bid]["last_moved"]).total_seconds() > 180]
+                mb = [bid for bid in bus_ids if safe_diff_seconds(now, GLOBAL_BUS_CACHE[bid].get("last_moved")) < 60]
+                sb = [bid for bid in bus_ids if safe_diff_seconds(now, GLOBAL_BUS_CACHE[bid].get("last_moved")) > 180]
                 if mb and sb:
                     for bid in sb:
                         bc = GLOBAL_BUS_CACHE[bid]
-                        if (now - bc["last_moved"]).total_seconds() / 60.0 < 2:
+                        if safe_diff_seconds(now, bc.get("last_moved")) / 60.0 < 2:
                             bc["color_class"] = "bg-orange"
                             bc["status"] = "V\u00fdzkum – Duplitn\u00ed SPZ"
                         else:
@@ -7292,7 +7318,7 @@ def background_map_worker():
                         bc["investigation_spz"] = sv
                         if bc.get("investigation_start") is None:
                             bc["investigation_start"] = now
-                        elif (now - bc["investigation_start"]).total_seconds() > DUPLICATE_GRACE_SEC and not bc.get("manual_spz") and not bc.get("bug_locked"):
+                        elif safe_diff_seconds(now, bc.get("investigation_start")) > DUPLICATE_GRACE_SEC and not bc.get("manual_spz") and not bc.get("bug_locked"):
                             bc["spz_verified"] = False
                             bc["spz_locked"] = False
                             bc["investigating"] = False
@@ -7318,8 +7344,8 @@ def background_map_worker():
 
             # ── Offline + timeouty ────────────────────────────────────────────────────────
             for bus_id, c in safe_bus_cache_items():
-                om = (now - c["last_inflow_seen"]).total_seconds() / 60.0
-                tm = (now - c["first_seen"]).total_seconds() / 60.0
+                om = safe_diff_seconds(now, c.get("last_inflow_seen")) / 60.0
+                tm = safe_diff_seconds(now, c.get("first_seen")) / 60.0
                 
                 # VLAKY: Absolutně striktní pravidlo - vlaky NIKDY nesmí být offline / poslední známá poloha!
                 # Jakmile vlak zmizí z aktuálního inflow feedu, je okamžitě a bezpodmínečně smazán z cache!
@@ -7432,7 +7458,7 @@ def background_map_worker():
             new_live_data = []
             tt_ftick = 0
             for bus_id, c in safe_bus_cache_items():
-                inact = (now - c["last_moved"]).total_seconds() / 60.0
+                inact = safe_diff_seconds(now, c.get("last_moved")) / 60.0
                 
                 # Fetch lastStopName z pameti
                 if c.get("spz") and c["spz"] in SPZ_MEMORY:
@@ -9847,7 +9873,7 @@ def get_spz_control_dashboard_data():
     """
     Sestaví kompletní diagnostická data pro dashboard 'Interaktivní mapa' (Body 2, 3, 4, 5).
     """
-    now = datetime.now(ZoneInfo("Europe/Prague"))
+    now = get_prague_time()
     now_str = now.strftime("%H:%M:%S")
 
     # Spustíme rychlou analýzu a očistu
