@@ -6012,6 +6012,26 @@ def is_stop_match(dest, stop_name):
     return False
 
 
+def is_exact_stop_match(s1, s2):
+    """Přísné porovnání názvu zastávek (pro detekci konečné).
+    Vyžaduje shodu jak obce, tak konkrétního názvu/nádraží, aby se konečná nespustila v půlce trasy."""
+    if not s1 or not s2:
+        return False
+    n1 = _norm_stop_text(s1)
+    n2 = _norm_stop_text(s2)
+    if not n1 or not n2:
+        return False
+    if n1 == n2:
+        return True
+    t1 = set(n1.replace(',', ' ').split())
+    t2 = set(n2.replace(',', ' ').split())
+    if not t1 or not t2:
+        return False
+    inter = len(t1 & t2)
+    union = len(t1 | t2)
+    return (inter / union) >= 0.65
+
+
 def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000, bus_mode=None):
     """GPS souradnice zastavky podle nazvu z GTFS. Vraci (coords, confidence)
     kde confidence je "exact" / "fuzzy" / None (kdyz se nic nenajde).
@@ -7436,47 +7456,58 @@ def background_map_worker():
                             last_total = lh * 60 + lm
                             cur_total = now.hour * 60 + now.minute
                             diff_l = cur_total - last_total
-                            if diff_l < -180:
+                            if diff_l < -720:
                                 diff_l += 1440
+                            elif diff_l > 720:
+                                diff_l -= 1440
                             diff_last = diff_l
                         except Exception:
                             pass
 
-                    # 3. Kontrola zda je bus na cílové zastávce
+                    # 3. Kontrola zda je bus SKUTEČNĚ na cílové zastávce (ne v půlce trasy!)
                     is_at_dest = False
                     bus_dest = c.get("destination") or dest
-                    if bus_dest and bus_dest not in ("Neznámá", "-1", "", "None"):
-                        if is_stop_match(bus_dest, c.get("nearest_stop")) or is_stop_match(bus_dest, c.get("real_zastavka")):
-                            is_at_dest = True
-                        else:
-                            coords, _ = _lookup_stop_coords(bus_dest, anchor=(lat, lng), max_anchor_dist_m=3000)
-                            if coords and haversine_m(lat, lng, coords[0], coords[1]) <= 650:
+                    dist_to_dest = 999999.0
+
+                    if bus_dest and bus_dest not in ("Neznámá", "Neznama", "-1", "", "None"):
+                        # A) Přesná GPS kontrola podle souřadnic konečné zastávky (max 350 metrů)
+                        coords, _ = _lookup_stop_coords(bus_dest, anchor=(lat, lng), max_anchor_dist_m=5000)
+                        if coords:
+                            dist_to_dest = haversine_m(lat, lng, coords[0], coords[1])
+                            if dist_to_dest <= 350.0:
+                                is_at_dest = True
+
+                        # B) Pokud se souřadnice nenašly, striktní shoda celého názvu zastávky (obec + specifikace)
+                        if not is_at_dest:
+                            if is_exact_stop_match(bus_dest, c.get("nearest_stop")) or is_exact_stop_match(bus_dest, c.get("real_zastavka")):
                                 is_at_dest = True
 
                     # 4. Detekce dojezdu na konečnou / ukončení spoje:
+                    # Podmínky pro konečnou:
+                    # - Vůz NESMÍ být v pohybu (musí stát)
+                    # - Vůz NESMÍ čekat na výchozí odjezd
+                    # - Vůz MUSÍ být skutečně na konečné (is_at_dest)
+                    # - Pokud má JŘ, nesmí být více než 8 minut před plánovaným příjezdem do cíle
                     is_terminal_now = False
-                    if not is_moving:
-                        if c.get("_terminal_reached") or c.get("locked_arrival_delay"):
-                            if not is_before_departure:
-                                is_terminal_now = True
-                        elif is_at_dest and (diff_last is None or diff_last >= -5):
+
+                    if not is_moving and not is_before_departure:
+                        time_ok = (diff_last is None or diff_last >= -8)
+                        if is_at_dest and time_ok:
                             is_terminal_now = True
-                        elif inact >= 2 and diff_last is not None and diff_last > 3:
-                            is_terminal_now = True
-                        elif inact >= 2 and delay >= 25 and (diff_last is not None or is_at_dest or in_depot_zone):
-                            is_terminal_now = True
-                        elif in_depot_zone:
+                        elif c.get("_terminal_reached") and (is_at_dest or dist_to_dest <= 450.0):
+                            # Držení stavu konečné, pokud vůz stále stojí v areálu konečné
                             is_terminal_now = True
 
-                    # Pokud se bus znovu rozjede dál mimo konečnou a není to jen posun:
-                    if is_moving and c.get("_terminal_reached") and not is_at_dest and not in_depot_zone:
-                        c["_terminal_reached"] = False
-                        c["locked_arrival_delay"] = False
-                        c["actual_end_time"] = None
-                        is_terminal_now = False
+                    # Reset konečné: Pokud vůz není na konečné nebo se rozjede dál
+                    if not is_at_dest or (is_moving or dm >= 25.0) or dist_to_dest > 400.0:
+                        if not is_at_dest:
+                            c["_terminal_reached"] = False
+                            c["locked_arrival_delay"] = False
+                            c["actual_end_time"] = None
+                            is_terminal_now = False
 
-                    # Uzamčení zpoždění při příjezdu (ochrana před PVVD runaway):
-                    if not is_before_departure and (is_terminal_now or in_depot_zone):
+                    # Uzamčení zpoždění při příjezdu (pouze pokud je SKUTEČNĚ na konečné):
+                    if is_terminal_now:
                         if not c.get("locked_arrival_delay"):
                             prev_d = c.get("arrival_delay")
                             if prev_d is not None and -15 <= prev_d <= 25 and delay > prev_d + 8:
