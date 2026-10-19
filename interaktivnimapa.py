@@ -1,4 +1,5 @@
 import os
+import ssl
 import time
 import json
 import urllib.request
@@ -5111,9 +5112,310 @@ def get_internet_prague_time():
     return datetime.now(ZoneInfo('Europe/Prague')).isoformat()
 
 
+STATE_FILE = "idpk_vehicles_state.json"
+
+def remove_accents(text: str) -> str:
+    if not text:
+        return ""
+    return "".join(
+        c for c in unicodedata.normalize("NFD", str(text).lower())
+        if unicodedata.category(c) != "Mn"
+    )
+
+def normalize_line(line_raw: str) -> str:
+    """Sjednotí formát linky (např. '490722' a '722' -> '722')."""
+    if not line_raw:
+        return ""
+    digits = "".join(ch for ch in str(line_raw) if ch.isdigit())
+    if len(digits) == 6 and (digits.startswith("4") or digits.startswith("3")):
+        return str(int(digits[-3:]))  # '490722' -> '722'
+    if digits:
+        v = int(digits)
+        if v == 0:
+            return ""
+        return str(v)
+    return str(line_raw).strip()
+
+class BusFusionEngine:
+    def __init__(self, state_file=STATE_FILE):
+        self.state_file = state_file
+        self.alt_state_file = "vehicle_state.json"
+        self.registry_by_pvvd = {}  # pvvd_id -> vehicle_dict
+        self.parked_by_spz = {}     # spz -> vehicle_dict (pro zaparkované vozy s SPZ)
+        self.parked_by_pvvd = {}    # pvvd_id -> vehicle_dict (pro zaparkované vozy)
+        self.load_state()
+
+    def load_state(self):
+        target = self.state_file if os.path.exists(self.state_file) else (self.alt_state_file if os.path.exists(self.alt_state_file) else None)
+        if target:
+            try:
+                with open(target, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.registry_by_pvvd = data.get("registry_by_pvvd", {})
+                    self.parked_by_spz = data.get("parked_by_spz", {})
+                    self.parked_by_pvvd = data.get("parked_by_pvvd", {})
+                    print(f"[FUSION] Načten stav: {len(self.registry_by_pvvd)} vozů v registru, {len(self.parked_by_spz)} zaparkovaných.", flush=True)
+            except Exception as e:
+                print(f"[WARN] Nepodařilo se načíst stav: {e}", flush=True)
+
+    def save_state(self):
+        payload = {
+            "registry_by_pvvd": self.registry_by_pvvd,
+            "parked_by_spz": self.parked_by_spz,
+            "parked_by_pvvd": self.parked_by_pvvd
+        }
+        for path in [self.state_file, self.alt_state_file]:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(payload, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f"[WARN] Nepodařilo se uložit stav do {path}: {e}", flush=True)
+
+    def filter_pvvd_buses(self, raw_pvvd: list) -> list:
+        filtered = []
+        for p in raw_pvvd:
+            p_id = str(p.get("id", "0"))
+            raw_line = str(p.get("text") or p.get("line") or "").strip()
+            traction = str(p.get("traction") or "BUS").upper()
+
+            # Vyloučit vlaky
+            if is_train_vehicle(p_id, line=raw_line, traction=traction):
+                continue
+
+            # Filtrovat PMDP (MHD Plzeň - linky 1-99), ale ponechat manipulační jízdy
+            digits = "".join(ch for ch in raw_line if ch.isdigit())
+            if digits:
+                val = int(digits)
+                if 1 <= val <= 99 and len(digits) <= 2:
+                    continue
+
+            filtered.append(p)
+        return filtered
+
+    def filter_arriva_buses(self, raw_arriva: list) -> list:
+        filtered = []
+        for a in raw_arriva:
+            if str(a.get("mainType", "")).upper() == "TRAIN":
+                continue
+            spz = (a.get("spz") or "").strip()
+            if not spz or spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NONE", "?", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
+                continue
+            try:
+                lat = float(a.get("lat") or a.get("latitude") or 0)
+                lng = float(a.get("lng") or a.get("longitude") or 0)
+                if lat == 0 or lng == 0:
+                    continue
+                delay = int(a.get("delay") or 0)
+            except (ValueError, TypeError):
+                continue
+            filtered.append({
+                "spz": spz,
+                "lat": lat,
+                "lng": lng,
+                "line": a.get("linkNumber") or a.get("linkNumberAlias") or "",
+                "finalStopName": a.get("destinationName") or a.get("finalStopName") or "",
+                "delay": delay,
+                "type": a.get("type") or ""
+            })
+        return filtered
+
+    def merge_sources(self, raw_pvvd: list, raw_arriva: list, admin_locks: dict = None) -> list:
+        now = int(time.time())
+        admin_locks = admin_locks or {}
+
+        pvvd_buses = self.filter_pvvd_buses(raw_pvvd)
+        arriva_buses = self.filter_arriva_buses(raw_arriva)
+
+        candidates = []
+
+        # 1. Vytvoření skórovací matice pro všechny dvojice (PVVD x Arriva)
+        for p in pvvd_buses:
+            p_id = str(p["id"])
+            p_line = normalize_line(p.get("text") or p.get("line") or "")
+            p_dest = remove_accents(p.get("finalStopName") or "")
+            p_lat = float(p.get("lat") or 0)
+            p_lng = float(p.get("lng") or 0)
+            p_delay = p.get("delay")
+
+            # Pokud má admin zámek, přeskočíme auto-párování tohoto vozu
+            if p_id in admin_locks:
+                continue
+
+            prev_record = self.registry_by_pvvd.get(p_id, {})
+            prev_spz = prev_record.get("locked_spz") or prev_record.get("spz")
+
+            for a in arriva_buses:
+                a_spz = a["spz"]
+                # Pokud je tato SPZ zamčena administrátorem u jiného vozu, přeskočit
+                if any(normalize_spz_key(lk.get("spz")) == normalize_spz_key(a_spz) for lk_id, lk in admin_locks.items() if str(lk_id) != p_id):
+                    continue
+
+                a_line = normalize_line(a.get("line", ""))
+
+                # Hard filtr 1: Pokud mají oba linku a neshoduje se, přeskočit
+                if p_line and a_line and p_line != a_line:
+                    continue
+
+                # Hard filtr 2: GPS vzdálenost max 1800 m
+                dist = haversine_m(p_lat, p_lng, a["lat"], a["lng"])
+                if dist > 1800.0:
+                    continue
+
+                # Výpočet score
+                score = max(0.0, 100.0 - (dist / 18.0))
+                if p_line and a_line and p_line == a_line:
+                    score += 50.0
+
+                # Shoda cílové zastávky / směru
+                a_dest = remove_accents(a.get("finalStopName", ""))
+                if p_dest and a_dest:
+                    p_city = p_dest.split(",")[0].strip()
+                    a_city = a_dest.split(",")[0].strip()
+                    if p_city and a_city and (p_city in a_city or a_city in p_city):
+                        score += 40.0
+
+                # Podobné zpoždění (abs <= 2 min)
+                if p_delay is not None and a.get("delay") is not None:
+                    try:
+                        if abs(int(p_delay) - int(a["delay"])) <= 2:
+                            score += 15.0
+                    except:
+                        pass
+
+                # Sticky bonus (držení SPZ z minulého cyklu pro stejné pvvd_id)
+                if prev_spz and prev_spz == a_spz:
+                    score += 60.0
+
+                if score >= 70.0:
+                    candidates.append((score, dist, p_id, a_spz, a))
+
+        # 2. Seřazení podle nejvyššího skóre a unikátní zámek 1:1
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        assigned_pvvd = {}
+        used_spz = set()
+
+        # Admin zámky mají absolutní přednost
+        for lk_bid, lk in admin_locks.items():
+            lk_spz = (lk.get("spz") or "").strip()
+            if lk_spz:
+                assigned_pvvd[str(lk_bid)] = {
+                    "spz": lk_spz,
+                    "score": 999.0,
+                    "dist_m": 0.0,
+                    "admin": True,
+                    "a_bus": None
+                }
+                used_spz.add(lk_spz)
+
+        for score, dist, p_id, a_spz, a_bus in candidates:
+            if p_id not in assigned_pvvd and a_spz not in used_spz:
+                assigned_pvvd[p_id] = {
+                    "spz": a_spz,
+                    "score": round(score, 1),
+                    "dist_m": round(dist, 1),
+                    "admin": False,
+                    "a_bus": a_bus
+                }
+                used_spz.add(a_spz)
+
+        # 3. Aktualizace aktivních vozidel z PVVD
+        current_pvvd_ids = set()
+        for p in pvvd_buses:
+            p_id = str(p["id"])
+            current_pvvd_ids.add(p_id)
+            prev = self.registry_by_pvvd.get(p_id, {})
+
+            matched = assigned_pvvd.get(p_id)
+            spz = None
+            spz_verified = False
+            spz_inherited = False
+
+            if matched:
+                spz = matched["spz"]
+                if matched.get("admin") or matched.get("score", 0) >= 110.0:
+                    spz_verified = True
+                    prev["locked_spz"] = spz
+            else:
+                # Trvalá paměť vazeb (Sticky SPZ)
+                spz = prev.get("locked_spz") or prev.get("spz")
+                if spz:
+                    spz_verified = prev.get("spz_verified", False)
+
+            p_lat = float(p.get("lat") or 0)
+            p_lng = float(p.get("lng") or 0)
+
+            # Ranní dědění SPZ z místa parkování, pokud ještě nemá SPZ a není na Arrivě
+            if not spz:
+                nearby_parked = [
+                    pk for pk_spz, pk in self.parked_by_spz.items()
+                    if pk_spz not in used_spz and haversine_m(p_lat, p_lng, pk["lat"], pk["lng"]) <= 150.0
+                ]
+                if len(nearby_parked) == 1:
+                    spz = nearby_parked[0]["spz"]
+                    spz_inherited = True
+                    used_spz.add(spz)
+
+            raw_line = str(p.get("text") or p.get("line") or "").strip()
+            has_active_line = bool(raw_line and raw_line not in ("0", "-1", "None"))
+            last_valid_line = raw_line if has_active_line else prev.get("last_valid_line", "Neznámá")
+
+            status = "ACTIVE_LINE" if has_active_line else "MANIPULATION"
+
+            locked_spz = spz if (matched and matched.get("score", 0) >= 110.0) else prev.get("locked_spz")
+
+            record = {
+                "pvvd_id": p_id,
+                "spz": spz,
+                "lat": p_lat,
+                "lng": p_lng,
+                "current_line": raw_line if has_active_line else None,
+                "last_valid_line": last_valid_line,
+                "final_stop": p.get("finalStopName", ""),
+                "delay": p.get("delay", 0),
+                "vehicle_type": p.get("type") or (matched["a_bus"].get("type") if matched and matched.get("a_bus") else None) or prev.get("vehicle_type", ""),
+                "status": status,
+                "last_seen": now,
+                "parked_since": None,
+                "locked_spz": locked_spz,
+                "spz_verified": spz_verified,
+                "spz_inherited": spz_inherited,
+                "bearing": p.get("azm")
+            }
+            self.registry_by_pvvd[p_id] = record
+
+            # Pokud tento vůz se známou SPZ vyjel, vymažeme ho ze seznamu zaparkovaných
+            if spz and spz in self.parked_by_spz:
+                del self.parked_by_spz[spz]
+            if p_id in self.parked_by_pvvd:
+                del self.parked_by_pvvd[p_id]
+
+        # 4. Přepnutí vozidel, která zmizela z PVVD (dojela do vozovny), do stavu PARKED
+        for p_id, rec in list(self.registry_by_pvvd.items()):
+            if p_id not in current_pvvd_ids:
+                if rec.get("status") != "PARKED":
+                    rec["status"] = "PARKED"
+                    rec["current_line"] = None
+                    rec["parked_since"] = rec.get("last_seen", now)
+                if rec.get("spz"):
+                    self.parked_by_spz[rec["spz"]] = rec
+                self.parked_by_pvvd[p_id] = rec
+
+        self.save_state()
+
+        active_list = [r for p_id, r in self.registry_by_pvvd.items() if p_id in current_pvvd_ids]
+        parked_list = list(self.parked_by_spz.values())
+        return active_list + parked_list
+
+FUSION_ENGINE = BusFusionEngine()
+
+
 def is_same_line(l1, l2):
     if not l1 or not l2 or l1 in ("Neznámá", "Neznama") or l2 in ("Neznámá", "Neznama"):
         return False
+    n1 = normalize_line(l1)
+    n2 = normalize_line(l2)
+    if n1 and n2 and n1 == n2:
+        return True
     b1 = str(l1).split('/')[0].strip()
     b2 = str(l2).split('/')[0].strip()
     cl1 = re.sub(r'\D', '', b1)
@@ -6788,6 +7090,10 @@ def background_map_worker():
                 restored += 1
             print(f"[SPZ CACHE] Obnoveno {restored} zaznamu z predchoziho behu.", flush=True)
             _purge_trains_everywhere(db_client)
+            try:
+                FUSION_ENGINE.load_state()
+            except Exception as e_fe:
+                print(f"[FUSION] Chyba obnovy: {e_fe}", flush=True)
         except Exception as e_cache:
             print(f"[SPZ CACHE] Chyba pri obnove: {e_cache}", flush=True)
 
@@ -6835,19 +7141,27 @@ def background_map_worker():
                 if to_delete:
                     print(f"[SPZ MEMORY] Vymazano {len(to_delete)} starych zaznamu", flush=True)
 
+            # === 1. ZDROJE DAT (MASTER-SLAVE) & RATE LIMIT OCHRANA ===
             data_inflow, data_arriva = [], []
             url_inflow = f"{url_inflow_base}?_={int(time.time() * 1000)}"
+            ssl_ctx = ssl.create_default_context()
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+
+            # PVVD: Master primární zdroj pravdy (timeout 8s, ošetření SSL)
             try:
-                with urllib.request.urlopen(urllib.request.Request(url_inflow, headers=inflow_headers), timeout=5) as r:
-                    data_inflow = json.loads(r.read().decode())
+                req_inflow = urllib.request.Request(url_inflow, headers=inflow_headers)
+                with urllib.request.urlopen(req_inflow, context=ssl_ctx, timeout=8) as r:
+                    data_inflow = json.loads(r.read().decode('utf-8'))
             except Exception:
                 try:
                     req1p = urllib.request.Request(url_inflow, data=b"{}", headers=inflow_headers, method='POST')
-                    with urllib.request.urlopen(req1p, timeout=5) as r:
-                        data_inflow = json.loads(r.read().decode())
-                except Exception:
-                    pass
+                    with urllib.request.urlopen(req1p, context=ssl_ctx, timeout=8) as r:
+                        data_inflow = json.loads(r.read().decode('utf-8'))
+                except Exception as e_pvvd:
+                    print(f"[PVVD-ERR] Chyba při stahování dat z PVVD: {e_pvvd}", flush=True)
 
+            # Arriva: Sekundární obohacující zdroj pro SPZ (timeout 8s, výpadek nikdy nezastaví PVVD)
             try:
                 ap = {
                     "operationName": "busesCurrentLocation", "variables": {},
@@ -6858,13 +7172,12 @@ def background_map_worker():
                     headers={'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json',
                              'Origin': 'https://www.arriva.cz', 'Referer': 'https://www.arriva.cz/'},
                     method='POST')
-                with urllib.request.urlopen(req2, timeout=5) as r2:
-                    resp2 = json.loads(r2.read().decode())
+                with urllib.request.urlopen(req2, context=ssl_ctx, timeout=8) as r2:
+                    resp2 = json.loads(r2.read().decode('utf-8'))
                 if isinstance(resp2, list) and resp2:
                     data_arriva = resp2[0].get("data", {}).get("busesCurrentLocations", [])
                 elif isinstance(resp2, dict):
                     data_arriva = resp2.get("data", {}).get("busesCurrentLocations", [])
-                # Arriva fetch stats
                 if data_arriva:
                     data_arriva = [b for b in data_arriva if str(b.get("mainType", "")).upper() != "TRAIN"]
                     global LATEST_ARRIVA_DATA
@@ -6873,1580 +7186,333 @@ def background_map_worker():
                     _arriva_fetch_stats["last_ok_cnt"] = len(data_arriva)
                 else:
                     _arriva_fetch_stats["empty"] += 1
-                    print(f"[ARRIVA-WARN] Prazdna odpoved z Arriva API (resp keys: {list(resp2.keys()) if isinstance(resp2, dict) else type(resp2).__name__})", flush=True)
-            except urllib.error.HTTPError as e_http:
-                _arriva_fetch_stats["fail"] += 1
-                _arriva_fetch_stats["last_fail_reason"] = f"HTTP {e_http.code}: {e_http.reason}"
-                print(f"[ARRIVA-ERR] HTTP chyba: {e_http.code} {e_http.reason} - Arriva API blokuje?", flush=True)
-            except urllib.error.URLError as e_url:
-                _arriva_fetch_stats["fail"] += 1
-                _arriva_fetch_stats["last_fail_reason"] = str(e_url.reason)
-                print(f"[ARRIVA-ERR] URL chyba: {e_url.reason}", flush=True)
             except Exception as e_gen:
                 _arriva_fetch_stats["fail"] += 1
                 _arriva_fetch_stats["last_fail_reason"] = str(e_gen)
-                print(f"[ARRIVA-ERR] Neocekavana chyba: {e_gen}", flush=True)
+                data_arriva = []
 
-            # === SPZ MEMORY UPDATE: uloz pozice z Arriva pro kazdou SPZ ===
-            # To nam umozni matchovat SPZ i kdyz Arriva bus momentalne nevidí
+            # Aktualizace SPZ_MEMORY pro obohacení metadat
             for b_a in data_arriva:
                 b_spz = (b_a.get("spz") or "").strip()
-                if not b_spz or b_spz == "Neznámá":
+                if not b_spz or b_spz in ("Neznámá", "Neznama"):
                     continue
-                b_lat = b_a.get("latitude") or 0
-                b_lon = b_a.get("longitude") or 0
-                b_line = str(b_a.get("linkNumber") or b_a.get("linkNumberAlias") or "").strip()
-                b_dest = str(b_a.get("destinationName") or "").strip()
-                b_last_stop = str(b_a.get("lastStopName") or "").strip()
-                # aktualizuj/pridej do pameti (zachovej model a spoj)
                 _old_mem = SPZ_MEMORY.get(b_spz) or {}
                 SPZ_MEMORY[b_spz] = {
-                    "last_arriva_lat": b_lat,
-                    "last_arriva_lng": b_lon,
+                    "last_arriva_lat": b_a.get("latitude") or 0,
+                    "last_arriva_lng": b_a.get("longitude") or 0,
                     "last_arriva_time": now,
-                    "line": b_line,
-                    "destination": b_dest,
-                    "last_stop_name": b_last_stop,
+                    "line": str(b_a.get("linkNumber") or b_a.get("linkNumberAlias") or "").strip(),
+                    "destination": str(b_a.get("destinationName") or "").strip(),
+                    "last_stop_name": str(b_a.get("lastStopName") or "").strip(),
                     "verified": _old_mem.get("verified", False),
-                    "vehicle_type": _old_mem.get("vehicle_type"),
+                    "vehicle_type": b_a.get("type") or _old_mem.get("vehicle_type"),
                     "real_linka_spoj": _old_mem.get("real_linka_spoj"),
                     "spoj_num": _old_mem.get("spoj_num"),
+                    "last_pvvd_bus_id": _old_mem.get("last_pvvd_bus_id"),
+                    "last_pvvd_time": _old_mem.get("last_pvvd_time"),
+                    "trip_id": _old_mem.get("trip_id"),
                 }
 
-            current_inflow_ids = set()
-            new_live_data = []
+            # === 2. PÁROVÁNÍ SPZ A ŽIVOTNÍ CYKLUS (BusFusionEngine) ===
+            merged_vehicles = FUSION_ENGINE.merge_sources(
+                data_inflow if isinstance(data_inflow, list) else [],
+                data_arriva,
+                admin_locks=ADMIN_SPZ_LOCKS
+            )
 
-
+            # Oddělené záznamy pro vlaky z PVVD (vlaky se zobrazují živě bez SPZ, neukládají se jako busy)
+            train_inflow = []
             if isinstance(data_inflow, list):
-                for bus1 in data_inflow:
-                    try:
-                        bus_id = str(bus1.get("id", "0"))
-                        line = str(bus1.get("text", "")).strip()
-                        lat1 = bus1.get("lat", 0)
-                        lng1 = bus1.get("lng", 0)
-                        raw_d = bus1.get("delay")
-                        if raw_d is not None and int(raw_d) > -10000:
-                            delay = int(raw_d)
-                            delay_unknown = False
-                        else:
-                            delay = 0
-                            delay_unknown = True
-                        dest1 = str(bus1.get("finalStopName", "")).strip()
-                        if dest1 == "-1" or not dest1:
-                            if bus_id in GLOBAL_BUS_CACHE and GLOBAL_BUS_CACHE[bus_id].get("destination") and GLOBAL_BUS_CACHE[bus_id]["destination"] != "Neznámý":
-                                dest1 = GLOBAL_BUS_CACHE[bus_id]["destination"]
-                            else:
-                                dest1 = "Neznámý"
-                        traction = str(bus1.get("traction", "BUS")).upper()
-                        is_train = is_train_vehicle(bus_id, line=line, traction=traction)
+                for p in data_inflow:
+                    p_id = str(p.get("id", "0"))
+                    p_line = str(p.get("text") or p.get("line") or "").strip()
+                    p_trac = str(p.get("traction") or "BUS").upper()
+                    if is_train_vehicle(p_id, line=p_line, traction=p_trac):
+                        train_inflow.append(p)
 
-                        if bus_id in ADMIN_DELETED_BUSES:
-                            if not is_same_line(line, ADMIN_DELETED_BUSES[bus_id]):
-                                del ADMIN_DELETED_BUSES[bus_id]
-                            else:
-                                current_inflow_ids.add(bus_id)
-                                continue
-
-                        current_inflow_ids.add(bus_id)
-
-                        if bus_id not in GLOBAL_BUS_CACHE:
-                            if is_train:
-                                nb = new_cache_entry(
-                                    bus_id, f"TRAIN-{bus_id}", lat1, lng1, line, dest1, True, delay, now,
-                                    ghost_spz="Neznámá", ghost_verified=False, admin_verified=False)
-                                nb["is_train"] = True
-                                nb["spz"] = "Neznámá"
-                                nb["admin_note"] = ""
-                                nb["admin_driver"] = ""
-                                nb["admin_flag"] = False
-                                nb["manual_spz"] = False
-                                nb["admin_spz_verified"] = False
-                                nb["spz_verified"] = False
-                                nb["spz_frozen"] = True
-                                nb["spz_locked"] = True
-                                nb["skip_spz"] = True
-                                GLOBAL_BUS_CACHE[bus_id] = nb
-                                ADMIN_SPZ_LOCKS.pop(bus_id, None)
-                            else:
-                                TRIP_COUNTER += 1
-                                ghost_spz = None
-                                ghost_verified = False
-                                ghost_trip_id = f"TRIP-{TRIP_COUNTER}"
-                                gc_list = []
-                                for gid, gc in safe_bus_cache_items():
-                                    if gc.get("is_train") or is_train_vehicle(gid, gc.get("line")):
-                                        continue
-                                    if not (gc.get("is_offline") and gc.get("spz") and gc["spz"] not in ("Neznámá", "Neznama", "Aktivní hledání")):
-                                        continue
-                                    # Ghost vůz MUSÍ být striktně na stejné lince!
-                                    if not is_same_line(line, gc.get("line")):
-                                        continue
-                                    oa_min = safe_diff_seconds(now, gc.get("last_inflow_seen"), default=9999.0 * 60.0) / 60.0
-                                    if oa_min > 720:  # max 12 hodin offline
-                                        continue
-                                    gd = math.hypot(lat1 - gc["lat"], lng1 - gc["lng"])
-                                    # Musí být blízko poslední polohy (max cca 850 metrů, nikoliv kilometry daleko):
-                                    if gd < 0.008:
-                                        gc_list.append((gid, gc, gd, gd + oa_min * 0.0001))
-                                if gc_list:
-                                    gc_list.sort(key=lambda x: x[3])
-                                    best_gid, best_gc, _, _ = gc_list[0]
-                                    ghost_spz = best_gc["spz"]
-                                    if is_same_line(line, best_gc["line"]):
-                                        ghost_trip_id = best_gc["trip_id"]
-                                        ghost_verified = best_gc.get("spz_verified", False)
-                                        ghost_admin_verified = best_gc.get("admin_spz_verified", False)
-                                        ghost_admin_note = best_gc.get("admin_note", "")
-                                        ghost_admin_driver = best_gc.get("admin_driver", "")
-                                        ghost_admin_flag = best_gc.get("admin_flag", False)
-                                        ghost_color_class = best_gc.get("color_class")
-                                        ghost_status = best_gc.get("status")
-                                        ghost_manual_spz = best_gc.get("manual_spz", False)
-                                        ghost_vehicle_type = best_gc.get("vehicle_type")
-                                        ghost_real_linka_spoj = best_gc.get("real_linka_spoj")
-                                        ghost_spoj_num = best_gc.get("spoj_num")
-                                    del GLOBAL_BUS_CACHE[best_gid]
-                                    if db_client and ghost_spz and ghost_spz != "Neznámá":
-                                        close_previous_trips(db_client, ghost_spz, ghost_trip_id, now.strftime('%H:%M'))
-                                
-                                nb = new_cache_entry(
-                                    bus_id, ghost_trip_id, lat1, lng1, line, dest1, False, delay, now,
-                                    ghost_spz, ghost_verified, ghost_admin_verified if 'ghost_admin_verified' in locals() else False,
-                                    ghost_vehicle_type=ghost_vehicle_type if 'ghost_vehicle_type' in locals() else None,
-                                    ghost_real_linka_spoj=ghost_real_linka_spoj if 'ghost_real_linka_spoj' in locals() else None,
-                                    ghost_spoj_num=ghost_spoj_num if 'ghost_spoj_num' in locals() else None)
-                                nb["is_withdrawn"] = False
-                                nb["delay_unknown"] = delay_unknown
-                                
-                                if 'ghost_vehicle_type' in locals() and ghost_vehicle_type:
-                                    nb["vehicle_type"] = ghost_vehicle_type
-                                if 'ghost_real_linka_spoj' in locals() and ghost_real_linka_spoj:
-                                    nb["real_linka_spoj"] = ghost_real_linka_spoj
-                                if 'ghost_spoj_num' in locals() and ghost_spoj_num:
-                                    nb["spoj_num"] = ghost_spoj_num
-
-                                if ghost_spz and ghost_spz in SPZ_MEMORY:
-                                    _mem = SPZ_MEMORY[ghost_spz]
-                                    if not nb.get("vehicle_type") and _mem.get("vehicle_type"):
-                                        nb["vehicle_type"] = _mem.get("vehicle_type")
-                                    if not nb.get("real_linka_spoj") and _mem.get("real_linka_spoj"):
-                                        nb["real_linka_spoj"] = _mem.get("real_linka_spoj")
-                                    if not nb.get("spoj_num") and _mem.get("spoj_num"):
-                                        nb["spoj_num"] = _mem.get("spoj_num")
-                                
-                                if 'ghost_admin_note' in locals():
-                                    nb["admin_note"] = ghost_admin_note
-                                if 'ghost_admin_driver' in locals():
-                                    nb["admin_driver"] = ghost_admin_driver
-                                    nb["admin_flag"] = ghost_admin_flag
-                                    nb["manual_spz"] = ghost_manual_spz
-                                    if ghost_color_class and ghost_color_class not in ("bg-gray", "bg-lastpos"):
-                                        nb["color_class"] = ghost_color_class
-                                    if ghost_status and ghost_status not in ("Načítání...", "Poslední známá poloha", "Odstáven", "Odstaven", "Timeout"):
-                                        nb["status"] = ghost_status
-                                
-                                if bus_id in ADMIN_SPZ_LOCKS:
-                                    lock = ADMIN_SPZ_LOCKS[bus_id]
-                                    lk_spz = str(lock.get("spz") or "").strip()
-                                    if lk_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
-                                        ADMIN_SPZ_LOCKS.pop(bus_id, None)
-                                    else:
-                                        nb["spz"] = lk_spz
-                                        nb["admin_spz_verified"] = True
-                                        nb["admin_flag"] = True
-                                        nb["spz_verified"] = True
-                                        nb["manual_spz"] = True
-                                        nb["spz_locked"] = True
-                                        nb["spz_frozen"] = True
-                                        if "admin_note" in lock:
-                                            nb["admin_note"] = lock["admin_note"]
-                                        if "admin_driver" in lock:
-                                            nb["admin_driver"] = lock["admin_driver"]
-
-                                # Vázání řidiče a poznámky k SPZ (cestují výhradně s danou SPZ)
-                                bind_bus_to_spz_metadata(nb, nb.get("spz"))
-                                
-                                GLOBAL_BUS_CACHE[bus_id] = nb
-
-                        else:
-                            c = GLOBAL_BUS_CACHE[bus_id]
-                            c["last_inflow_seen"] = now
-                            c["is_offline"] = False
-                            c["is_withdrawn"] = False
-                            c["raw_delay"] = delay
-                            c["delay_unknown"] = delay_unknown
-                            c["is_train"] = is_train
-                            if is_train:
-                                c["spz"] = "Neznámá"
-                                c["admin_note"] = ""
-                                c["admin_driver"] = ""
-                                c["admin_flag"] = False
-                                c["manual_spz"] = False
-                                c["admin_spz_verified"] = False
-                                c["is_locked_by_admin"] = False
-                                c["spz_verified"] = False
-                                c["spz_frozen"] = True
-                                c["spz_locked"] = True
-                                c["skip_spz"] = True
-                                ADMIN_SPZ_LOCKS.pop(bus_id, None)
-                            c.pop("offline_since_time", None)
-                            if c.get("color_class") in ("bg-lastpos", "bg-gray") and not c.get("admin_lock_display") and not c.get("bug_locked") and c.get("color_class") != "bg-bug":
-                                c["color_class"] = "bg-green"
-                            if c.get("status") in ("Poslední známá poloha", "Odstáven", "Odstaven", "Timeout") and not c.get("bug_locked") and c.get("color_class") != "bg-bug":
-                                c["status"] = "Jízda"
-                            if "last_moved_lat" not in c:
-                                c["last_moved_lat"] = c["lat"]
-                                c["last_moved_lng"] = c["lng"]
-                            dm = math.hypot(lat1 - c["last_moved_lat"], lng1 - c["last_moved_lng"])
-                            
-                            is_restored = c.pop("_is_restored", False)
-                            if is_restored:
-                                c["line"] = line
-                                # Ignoruj prni nesoulad linky pri nacteni z db
-
-                            if not is_train and bus_id in ADMIN_SPZ_LOCKS:
-                                lock = ADMIN_SPZ_LOCKS[bus_id]
-                                lk_spz = str(lock.get("spz") or "").strip()
-                                if lk_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
-                                    ADMIN_SPZ_LOCKS.pop(bus_id, None)
-                                else:
-                                    c["spz"] = lk_spz
-                                    c["admin_spz_verified"] = True
-                                    c["admin_flag"] = True
-                                    c["spz_verified"] = True
-                                    c["manual_spz"] = True
-                                    c["spz_locked"] = True
-                                    c["spz_frozen"] = True
-                                    if "admin_note" in lock:
-                                        c["admin_note"] = lock["admin_note"]
-                                    if "admin_driver" in lock:
-                                        c["admin_driver"] = lock["admin_driver"]
-
-                            # Vázání řidiče a poznámky k SPZ
-                            bind_bus_to_spz_metadata(c, c.get("spz"))
-
-                            if not is_same_line(c["line"], line) and line and c["line"] != "Nezn\u00e1m\u00e1":
-                                if not c["actual_end_time"]:
-                                    c["actual_end_time"] = now.strftime('%H:%M')
-                                    c["status"] = "Ukon\u010deno (Za\u010d\u00e1tek nov\u00e9ho spoje)"
-                                    upsert_to_history(db_client, c)
-                                TRIP_COUNTER += 1
-                                nti = f"TRIP-{TRIP_COUNTER}"
-                                if c.get("spz") and c["spz"] != "Nezn\u00e1m\u00e1" and db_client:
-                                    close_previous_trips(db_client, c["spz"], nti, now.strftime('%H:%M'))
-                                c["trip_id"] = nti
-                                c["line"] = line
-                                c["real_linka_spoj"] = None
-                                c["destination"] = dest1
-                                c["first_dep_time"] = None
-                                c["last_dep_time"] = None
-                                c["actual_start_time"] = None
-                                c["actual_end_time"] = None
-                                c["arrival_delay"] = None
-                                c["locked_arrival_delay"] = False
-                                c["_terminal_reached"] = False
-                                c["created_at"] = now
-                                c["status"] = "Načítání..."
-                                c["bearing"] = None
-                                # BUG-zamknute SPZ se NIKDY automaticky neresetuje (ani pri zmene linky)
-                                if not c.get("manual_spz") and not c.get("bug_locked"):
-                                    c["spz_locked"] = False
-                                    c["spz_verified"] = False
-                                    # spz_frozen se UVOLNI presne tady - novy spoj na nove
-                                    # lince je legitimni duvod zacit hledat SPZ od znovu,
-                                    # i kdyz byl bus driv "Konečná zastávka"/v depu.
-                                    c["spz_frozen"] = False
-                                    c["spz_last_audit_check"] = None
-                                    c["spz_last_verified"] = None
-                                if not c.get("admin_lock_permanent"):
-                                    c["admin_lock_display"] = False
-                                    c["admin_color_override"] = None
-                                    c["admin_status_override"] = None
-                                c["investigating"] = False
-                                c["db_first_upsert"] = False
-                                c["_last_db_status"] = None
-                                c["_last_db_linka"] = None
-                                c["_end_written"] = False
-                            else:
-                                if dest1:
-                                    # Pokud se zmenil cil na stejne lince po dojezdu na konecnou/depo (novy spoj v protismeru)
-                                    if (c.get("destination") and c["destination"] not in ("Neznámý", "-1", "") 
-                                            and dest1 not in ("Neznámý", "-1", "")
-                                            and not is_stop_match(c["destination"], dest1)
-                                            and (c.get("_terminal_reached") or c.get("locked_arrival_delay"))):
-                                        if not c.get("actual_end_time"):
-                                            c["actual_end_time"] = now.strftime('%H:%M')
-                                        if c.get("spz") and c["spz"] != "Neznámá" and db_client:
-                                            upsert_to_history(db_client, c)
-                                        TRIP_COUNTER += 1
-                                        nti = f"TRIP-{TRIP_COUNTER}"
-                                        if c.get("spz") and c["spz"] != "Neznámá" and db_client:
-                                            close_previous_trips(db_client, c["spz"], nti, now.strftime('%H:%M'))
-                                        c["trip_id"] = nti
-                                        c["destination"] = dest1
-                                        c["first_dep_time"] = None
-                                        c["last_dep_time"] = None
-                                        c["actual_start_time"] = None
-                                        c["actual_end_time"] = None
-                                        c["arrival_delay"] = None
-                                        c["locked_arrival_delay"] = False
-                                        c["_terminal_reached"] = False
-                                        c["status"] = "Načítání..."
-                                        c["db_first_upsert"] = False
-                                        c["_end_written"] = False
-                                    else:
-                                        c["destination"] = dest1
-                                if line and len(line) > len(c.get("line", "")):
-                                    c["line"] = line
-
-                            # Kontrola fyzického pohybu pro vozy označené jako BUG
-                            if c.get("bug_locked") or c.get("color_class") == "bg-bug":
-                                b_lat = c.get("bug_lat")
-                                b_lng = c.get("bug_lng")
-                                if b_lat is None or b_lng is None:
-                                    c["bug_lat"] = c.get("lat") or lat1
-                                    c["bug_lng"] = c.get("lng") or lng1
-                                    b_lat = c["bug_lat"]
-                                    b_lng = c["bug_lng"]
-                                
-                                d_lat = (lat1 - b_lat) * 111139.0
-                                d_lng = (lng1 - b_lng) * 111139.0 * math.cos(math.radians(lat1))
-                                dist_bug_m = math.hypot(d_lat, d_lng)
-                                
-                                if dist_bug_m >= 100.0:
-                                    # Vůz se skutečně rozjel a ujel >= 100m od BUG polohy!
-                                    c["bug_locked"] = False
-                                    c.pop("bug_lat", None)
-                                    c.pop("bug_lng", None)
-                                    c["spz_frozen"] = False
-                                    c["color_class"] = "bg-green"
-                                    c["status"] = "Jízda"
-                                    c["last_moved"] = now
-                                    c["last_moved_lat"] = lat1
-                                    c["last_moved_lng"] = lng1
-                                    sys_log(f"[BUG-CLEAR] Vůz #{bus_id} se rozjel ({dist_bug_m:.0f}m od BUG polohy) -> BUG automaticky zrušen")
-                                    log_automation_action("bug_cleared_movement", bus_id,
-                                                          f"Vůz #{bus_id} se rozjel ({dist_bug_m:.0f}m od označené BUG polohy) – BUG status automaticky zrušen",
-                                                          f"Vůz se reálně rozjel, nová poloha [{lat1:.5f}, {lng1:.5f}], vzdálenost {dist_bug_m:.0f} m",
-                                                          line=line or c.get("line"))
-                                else:
-                                    # Vůz stále stojí / vysílá ghost data u BUG polohy -> zachovej BUG
-                                    c["bug_locked"] = True
-                                    c["color_class"] = "bg-bug"
-                                    c["status"] = "BUG / Nereálná poloha (označeno adminem)"
-                                    c["spz_frozen"] = True
-                            elif dm > 0.0001:
-                                l1r = math.radians(c["lat"])
-                                l2r = math.radians(lat1)
-                                ld = math.radians(lng1 - c["lng"])
-                                y = math.sin(ld) * math.cos(l2r)
-                                x = math.cos(l1r) * math.sin(l2r) - math.sin(l1r) * math.cos(l2r) * math.cos(ld)
-                                c["bearing"] = int((math.degrees(math.atan2(y, x)) + 360) % 360)
-                                c["last_moved"] = now
-                                c["last_moved_lat"] = lat1
-                                c["last_moved_lng"] = lng1
-                                if GTFS_LOADED:
-                                    c["nearest_stop"] = _nearest_stop_name(lat1, lng1, 500)
-                            c["lat"] = lat1
-                            c["lng"] = lng1
-                            if c.get("nearest_stop") is None and GTFS_LOADED:
-                                c["nearest_stop"] = _nearest_stop_name(lat1, lng1, 500)
-                    except Exception:
-                        continue
-
-            # ── Duplikaty (bug-locked vozy vynechej – jejich SPZ je navzdy zamknuta) ─────
-            spz_tracker = {}
-            for bid, bc in safe_bus_cache_items():
-                sv = bc.get("spz")
-                if sv and sv != "Nezn\u00e1m\u00e1" and not bc.get("is_offline") and not bc.get("bug_locked"):
-                    spz_tracker.setdefault(sv, []).append(bid)
-            for sv, bus_ids in spz_tracker.items():
-                if len(bus_ids) <= 1:
-                    bc0 = GLOBAL_BUS_CACHE[bus_ids[0]]
-                    bc0["investigating"] = False
-                    bc0["investigation_start"] = None
-                    if bc0.get("color_class") == "bg-bug" and not bc0.get("bug_locked"):
-                        bc0["color_class"] = "bg-gray"
-                        bc0["status"] = "Stoj\u00ed"
-                    continue
-                mb = [bid for bid in bus_ids if safe_diff_seconds(now, GLOBAL_BUS_CACHE[bid].get("last_moved")) < 60]
-                sb = [bid for bid in bus_ids if safe_diff_seconds(now, GLOBAL_BUS_CACHE[bid].get("last_moved")) > 180]
-                if mb and sb:
-                    for bid in sb:
-                        bc = GLOBAL_BUS_CACHE[bid]
-                        if safe_diff_seconds(now, bc.get("last_moved")) / 60.0 < 2:
-                            bc["color_class"] = "bg-orange"
-                            bc["status"] = "V\u00fdzkum – Duplitn\u00ed SPZ"
-                        else:
-                            # Tecka se zasekla, SPZ jede jinde -> BUG lock NAVZDY
-                            if bc.get("admin_spz_verified"):
-                                print(f"[ADMIN-VERIFY] status odebrán admin potvrzením a přesunut", flush=True)
-                                bc["admin_spz_verified"] = False
-                                c["is_locked_by_admin"] = False
-                                bc["admin_spz_bug"] = True
-                                for mb_id in mb:
-                                    GLOBAL_BUS_CACHE[mb_id]["admin_spz_conflict"] = True
-                                    GLOBAL_BUS_CACHE[mb_id]["spz_verified"] = True
-
-                            bc["status"] = "BUG - NEAKTU\u00c1LN\u00cd M\u00cdSTO"
-                            bc["color_class"] = "bg-bug"
-                            bc["spz_locked"] = True
-                            bc["bug_locked"] = True
-                            bc["bug_lat"] = bc.get("lat")
-                            bc["bug_lng"] = bc.get("lng")
-                        bc["investigating"] = False
-                        bc["investigation_start"] = None
-                    for bid in mb:
-                        GLOBAL_BUS_CACHE[bid]["investigating"] = False
-                        GLOBAL_BUS_CACHE[bid]["investigation_start"] = None
-                    continue
-
-                def sc_fn(bid):
-                    bc = GLOBAL_BUS_CACHE[bid]
-                    return (bc.get("spz_stable_ticks", 0), bc.get("spz_last_verified") or datetime.min)
-                best_bid = max(bus_ids, key=sc_fn)
-                for bid in bus_ids:
-                    bc = GLOBAL_BUS_CACHE[bid]
-                    if bid == best_bid:
-                        bc["investigating"] = False
-                        bc["investigation_start"] = None
-                    else:
-                        if not bc.get("manual_spz") and not bc.get("bug_locked"):
-                            bc["spz_verified"] = False
-                            bc["spz_locked"] = False
-                        bc["investigating"] = True
-                        bc["investigation_spz"] = sv
-                        if bc.get("investigation_start") is None:
-                            bc["investigation_start"] = now
-                        elif safe_diff_seconds(now, bc.get("investigation_start")) > DUPLICATE_GRACE_SEC and not bc.get("manual_spz") and not bc.get("bug_locked"):
-                            bc["spz_verified"] = False
-                            bc["spz_locked"] = False
-                            bc["investigating"] = False
-                            bc["investigation_start"] = None
-                            bc["spz_stable_ticks"] = 0
-
-            # ── Odstraneni starych offline zaznamu, pokud se vuz objevil zive na mape ──
-            active_spzs = {
-                bc["spz"]: bid for bid, bc in safe_bus_cache_items()
-                if not bc.get("is_offline") and bc.get("spz") and bc["spz"] not in ("Neznámá", "Nezn\u00e1m\u00e1")
-            }
-            for bid, bc in safe_bus_cache_items():
-                if bc.get("is_offline") and bc.get("spz") in active_spzs:
-                    new_active_bid = active_spzs[bc["spz"]]
-                    if new_active_bid != bid:
-                        nbc = GLOBAL_BUS_CACHE.get(new_active_bid)
-                        if nbc and bc.get("admin_flag") and not nbc.get("admin_flag"):
-                            nbc["admin_flag"] = True
-                            nbc["admin_note"] = bc.get("admin_note", "")
-                            nbc["admin_driver"] = bc.get("admin_driver", "")
-                            nbc["admin_spz_verified"] = bc.get("admin_spz_verified", False)
-                        del GLOBAL_BUS_CACHE[bid]
-
-            # ── Offline + timeouty ────────────────────────────────────────────────────────
-            for bus_id, c in safe_bus_cache_items():
-                om = safe_diff_seconds(now, c.get("last_inflow_seen")) / 60.0
-                tm = safe_diff_seconds(now, c.get("first_seen")) / 60.0
-                
-                # VLAKY: Absolutně striktní pravidlo - vlaky NIKDY nesmí být offline / poslední známá poloha!
-                # Jakmile vlak zmizí z aktuálního inflow feedu, je okamžitě a bezpodmínečně smazán z cache!
-                if c.get("is_train") or is_train_vehicle(bus_id, c.get("line")):
-                    if bus_id not in current_inflow_ids or c.get("color_class") == "bg-bug":
-                        GLOBAL_BUS_CACHE.pop(bus_id, None)
-                        continue
-                    # Živý vlak na mapě: striktně bez SPZ, poznámek, řidiče či admin zámků
-                    c["is_train"] = True
-                    c["spz"] = "Neznámá"
-                    c["spz_verified"] = False
-                    c["admin_spz_verified"] = False
-                    c["is_locked_by_admin"] = False
-                    c["admin_note"] = ""
-                    c["admin_driver"] = ""
-                    c["admin_flag"] = False
-                    c["manual_spz"] = False
-                    c["skip_spz"] = True
-                    c["spz_frozen"] = True
-                    c["spz_locked"] = True
-                    continue
-
-                if tm > 1200 and not c["actual_end_time"] and not c.get("is_offline"):
-                    c["actual_end_time"] = now.strftime('%H:%M')
-                    c["status"] = "Timeout"
-                    c["color_class"] = "bg-gray"
-                    upsert_to_history(db_client, c)
-                    if bus_id in DEPOT_ACTIVE_SESSIONS:
-                        try:
-                            db_client.table("depot_history").update({"left_at": datetime.now(ZoneInfo('Europe/Prague')).isoformat()}).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
-                        except: pass
-                        del DEPOT_ACTIVE_SESSIONS[bus_id]
-                        DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
-                    del GLOBAL_BUS_CACHE[bus_id]
-                    continue
-                if bus_id not in current_inflow_ids:
-                    # Po 7 dnech (10080 min) neaktivity bez signalu teprve cisti z cache
-                    if om > 10080:
-                        upsert_to_history(db_client, c)
-                        if bus_id in DEPOT_ACTIVE_SESSIONS:
-                            try:
-                                db_client.table("depot_history").update({"left_at": datetime.now(ZoneInfo('Europe/Prague')).isoformat()}).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
-                            except: pass
-                            del DEPOT_ACTIVE_SESSIONS[bus_id]
-                            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
-                        del GLOBAL_BUS_CACHE[bus_id]
-                        continue
-
-                    c["is_offline"] = True
-                    spz_ok = bool(c.get("spz") and c.get("spz") not in ("Neznámá", "Nezn\u00e1m\u00e1"))
-                    # === SPZ MEMORY: uloz posledni PVVD pozici pro offline bus ===
-                    if spz_ok and c.get("spz") in SPZ_MEMORY:
-                        SPZ_MEMORY[c["spz"]]["last_pvvd_lat"] = c["lat"]
-                        SPZ_MEMORY[c["spz"]]["last_pvvd_lng"] = c["lng"]
-                        SPZ_MEMORY[c["spz"]]["last_pvvd_time"] = now
-                        SPZ_MEMORY[c["spz"]]["last_pvvd_bus_id"] = bus_id
-
-                    # ── VOZOVNA KONTROLA PRO OFFLINE BUS ──
-                    is_in_depot = False
-                    if DEPOT_ZONES and c.get("lat") and c.get("lng") and not c.get("is_train"):
-                        depot_n, depot_col = _check_depot_zones(c.get("lat"), c.get("lng"))
-                        if depot_n and c.get("color_class") != "bg-bug":
-                            is_in_depot = True
-                            c["_in_depot"] = True
-                            c["_depot_name"] = depot_n
-                            c["_depot_color"] = depot_col or "#facc15"
-                            c["status"] = f"Vozovna: {depot_n}"
-                            c["color_class"] = "bg-yellow"
-                            c["is_withdrawn"] = False
-                    elif c.get("_in_depot"):
-                        is_in_depot = True
-                        c["status"] = f"Vozovna: {c.get('_depot_name', 'Vozovna')}"
-                        c["color_class"] = "bg-yellow"
-                        c["is_withdrawn"] = False
-
-                    if om >= 2.0:
-                        if not c.get("offline_since_time"):
-                            c["offline_since_time"] = now.strftime('%H:%M')
-                        if not c.get("actual_end_time"):
-                            c["actual_end_time"] = now.strftime('%H:%M')
-                        
-                        if is_in_depot:
-                            # Vůz je ve vozovně -> vždy status Vozovna, žlutá barva, NENÍ odstaven ani poslední poloha!
-                            c["status"] = f"Vozovna: {c.get('_depot_name', 'Vozovna')}"
-                            c["color_class"] = "bg-yellow"
-                            c["is_withdrawn"] = False
-                        elif not c.get("admin_lock_display") and not c.get("bug_locked") and c.get("color_class") != "bg-bug":
-                            if om >= 10.0:
-                                # Bus je odstaveny mimo vozovnu - zobraz sede jako "Odstaven"
-                                if c.get("status") != "Odstáven":
-                                    sys_log(f"[OFFLINE] Bus {bus_id} odstaveny po {om:.0f} min (SPZ={c.get('spz')})")
-                                c["status"] = "Odstáven"
-                                c["color_class"] = "bg-gray"
-                                c["is_withdrawn"] = True
-                            else:
-                                # Kratke vymizeni (2-10 min) mimo vozovnu - Posledni znama poloha (ruzova)
-                                c["status"] = "Poslední známá poloha"
-                                c["color_class"] = "bg-lastpos"
-                                c["is_withdrawn"] = False
-                        
-                        c["raw_delay"] = 0
-                        c["final_delay_display"] = 0
-                        c["spz_locked"] = True
-                        if spz_ok:
-                            c["spz_frozen"] = True
-                        if om < 4.0:
-                            upsert_to_history(db_client, c)
-
-            # ── Statusy, barvy, SPZ parovani ─────────────────────────────────────────────
+            # === 3. SESTAVENÍ AKTIVNÍCH A ZAPARKOVANÝCH VOZŮ PRO MAPU ===
             new_live_data = []
-            tt_ftick = 0
-            for bus_id, c in safe_bus_cache_items():
-                inact = safe_diff_seconds(now, c.get("last_moved")) / 60.0
-                
-                # Fetch lastStopName z pameti
-                if c.get("spz") and c["spz"] in SPZ_MEMORY:
-                    c["last_stop_name"] = SPZ_MEMORY[c["spz"]].get("last_stop_name", "")
-                
-                # ── Retroaktivni uprava SPZ vozovny ──────────────────────────────────────
-                if c.get("spz") and c["spz"] not in ("Nezn\u00e1m\u00e1", "Neznámá") and not c.get("_depot_retro_updated"):
-                    if db_client:
-                        try:
-                            # Prepis ID na SPZ zpetne
-                            db_client.table("depot_history").update({"spz": c["spz"]}).eq("bus_id", bus_id).like("spz", "[ID:%").execute()
-                            c["_depot_retro_updated"] = True
-                            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
-                        except Exception: pass
-                        
-                # ── Vozovna check ────────────────────────────────────────────────────────
-                # Zkontroluj zda je bus uvnitr nejake vozovny (depot zone).
-                # Kontrola probiha jen kazdych DEPOT_CHECK_INTERVAL_SEC sekund
-                # aby se neskenoval polygon pri kazdem tiku (10s).
-                if DEPOT_ZONES and not c.get("is_train") and not c.get("admin_lock_display"):
-                    last_depot_check = c.get("_last_depot_check")
-                    depot_due = (not last_depot_check or
-                                 (now - last_depot_check).total_seconds() >= DEPOT_CHECK_INTERVAL_SEC)
-                    if depot_due:
-                        c["_last_depot_check"] = now
-                        depot_name, depot_color = _check_depot_zones(c.get("lat"), c.get("lng"))
-                        if c.get("color_class") == "bg-bug":
-                            depot_name = None
-                        
-                        if depot_name:
-                            if not c.get("_in_depot"):
-                                c["_in_depot"] = True
-                                c["_depot_name"] = depot_name
-                                c["_depot_color"] = depot_color or "#facc15"
-                                # Bylo zde mrazeni SPZ, ale admin pozadoval aby i ve vozovne system kontroloval SPZ
-                                spz_val = c.get("spz")
-                                # if spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá"):
-                                #     c["spz_frozen"] = True
-                                #     c["spz_locked"] = True
 
-                                # === DETEKCE DUPLICITY VOZOVNA vs. AKTIVNI MAPA ===
-                                # Pokud stejná SPZ jede zároveň na aktivní mapě (jiný bus_id),
-                                # vozovnový záznam označíme jako BUG a zapíšeme do logu.
-                                if spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá"):
-                                    for oth_id, oth_c in safe_bus_cache_items():
-                                        if oth_id == bus_id:
-                                            continue
-                                        if (oth_c.get("spz") == spz_val
-                                                and not oth_c.get("is_offline")
-                                                and not oth_c.get("bug_locked")):
-                                            # Duplicita! Vozovnový bus dostane BUG.
-                                            if c.get("admin_spz_verified"):
-                                                print(f"[ADMIN-VERIFY] status odebrán admin potvrzením a přesunut", flush=True)
-                                                c["admin_spz_verified"] = False
-                                                c["is_locked_by_admin"] = False
-                                                c["admin_spz_bug"] = True
-                                                oth_c["admin_spz_conflict"] = True
-                                                oth_c["spz_verified"] = True
-                                                
-                                            c["color_class"] = "bg-bug"
-                                            c["status"] = "BUG \u2013 Syst\u00e9m rozpoznal duplicitu SPZ"
-                                            c["bug_locked"] = True
-                                            c["bug_lat"] = c.get("lat")
-                                            c["bug_lng"] = c.get("lng")
-                                            c["spz_frozen"] = True
-                                            dup_msg = (f"Syst\u00e9m rozpoznal duplicitu v {now.strftime('%H:%M %d.%m.%Y')}: "
-                                                       f"SPZ {spz_val} v\u00edz\u00ed tak\u00e9 aktivn\u011b bus_id={oth_id} "
-                                                       f"(L{oth_c.get('line','?')})")
-                                            _report_situace("DUP_DEPOT", dup_msg,
-                                                            spz=spz_val, depot_bus=bus_id, active_bus=oth_id)
-                                            # Zapis do depot_history jako poznamka
-                                            if db_client and bus_id in DEPOT_ACTIVE_SESSIONS:
-                                                try:
-                                                    db_client.table("depot_history").update({
-                                                        "spz": f"[BUG-DUP] {spz_val}",
-                                                    }).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
-                                                except Exception:
-                                                    pass
-                                            print(f"[DEPOT-DUP] SPZ {spz_val}: bus {bus_id} ve vozovne "
-                                                  f"+ bus {oth_id} aktivni na mape -> BUG", flush=True)
-                                            break
+            for v in merged_vehicles:
+                bid = str(v["pvvd_id"])
+                status = v["status"]  # ACTIVE_LINE, MANIPULATION, PARKED
+                spz = v.get("spz")
+                lat = float(v.get("lat") or 0)
+                lng = float(v.get("lng") or 0)
+                raw_line = str(v.get("current_line") or "").strip()
+                last_valid_line = str(v.get("last_valid_line") or "Neznámá").strip()
+                dest = str(v.get("final_stop") or "Neznámý").strip()
+                delay = int(v.get("delay") or 0)
+                bearing = v.get("bearing")
+                vehicle_type = v.get("vehicle_type")
+                spz_verified = bool(v.get("spz_verified"))
+                spz_inherited = bool(v.get("spz_inherited"))
 
-                                if bus_id not in DEPOT_ACTIVE_SESSIONS:
-                                    is_imprecise = (now - SCRIPT_START_TIME).total_seconds() < 120
-                                    try:
-                                        eff_spz = spz_val if spz_val and spz_val not in ("Nezn\u00e1m\u00e1", "Neznámá") else f"[ID: {bus_id}]"
-                                        resp = db_client.table("depot_history").insert({
-                                            "spz": eff_spz,
-                                            "bus_id": bus_id,
-                                            "depot_name": depot_name,
-                                            "arrived_at": get_internet_prague_time(),
-                                            "is_imprecise": is_imprecise
-                                        }).execute()
-                                        if resp.data:
-                                            DEPOT_ACTIVE_SESSIONS[bus_id] = {
-                                                "id": resp.data[0]["id"],
-                                                "depot_name": depot_name,
-                                                "arrived_at": get_internet_prague_time(),
-                                                "is_imprecise": is_imprecise,
-                                                "spz": eff_spz
-                                            }
-                                            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
-                                    except Exception as e:
-                                        print(f"[DEPOT] Chyba zapisu DB prijezdu pro bus_id={bus_id}: {e}")
-                                print(f"[DEPOT] Bus {bus_id} ({c.get('spz','?')}) vjel do vozovny '{depot_name}'", flush=True)
-                                try:
-                                    log_automation_action(
-                                        "depot_in",
-                                        bus_id,
-                                        f"Vůz #{bus_id} vjel do vozovny '{depot_name}'",
-                                        f"Linka {c.get('line') or '?'}, SPZ: {spz_val or 'Aktivní hledání'}. Vozidlo detekováno v polygonu depa.",
-                                        spz=spz_val,
-                                        line=c.get("line")
-                                    )
-                                except Exception:
-                                    pass
-                            else:
-                                # Aktualizuj barvu i kdyz uz je v depu (mohla se zmenit)
-                                c["_depot_color"] = depot_color or "#facc15"
-                                # Update zpetne SPZ pokud ji najdeme
-                                if bus_id in DEPOT_ACTIVE_SESSIONS:
-                                    sess_spz = DEPOT_ACTIVE_SESSIONS[bus_id].get("spz")
-                                    curr_spz = c.get("spz")
-                                    if curr_spz and curr_spz not in ("Nezn\u00e1m\u00e1", "Neznámá") and curr_spz != sess_spz:
-                                        DEPOT_ACTIVE_SESSIONS[bus_id]["spz"] = curr_spz
-                                        try:
-                                            db_client.table("depot_history").update({"spz": curr_spz}).eq("id", DEPOT_ACTIVE_SESSIONS[bus_id]["id"]).execute()
-                                            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
-                                        except Exception:
-                                            pass
-                        else:
-                            if c.get("_in_depot"):
-                                old_depot_name = c.get("_depot_name")
-                                if bus_id in DEPOT_ACTIVE_SESSIONS:
-                                    session_id = DEPOT_ACTIVE_SESSIONS[bus_id]["id"]
-                                    try:
-                                        db_client.table("depot_history").update({
-                                            "left_at": get_internet_prague_time()
-                                        }).eq("id", session_id).execute()
-                                    except Exception as e:
-                                        print(f"[DEPOT] Chyba zapisu DB odjezdu: {e}")
-                                    del DEPOT_ACTIVE_SESSIONS[bus_id]
-                                    DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
-                                c["_in_depot"] = False
-                                c["_depot_name"] = None
-                                c["_depot_color"] = None
-                                # Odemkni SPZ - bus opustil vozovnu, muzeme hledat znovu
-                                if not c.get("manual_spz") and not c.get("bug_locked"):
-                                    c["spz_frozen"] = False
-                                    c["spz_locked"] = False
-                                    c["spz_verified"] = False
-                                    c["spz_stable_ticks"] = 0
-                                print(f"[DEPOT] Bus {bus_id} opustil vozovnu", flush=True)
-                                try:
-                                    log_automation_action(
-                                        "depot_out",
-                                        bus_id,
-                                        f"Vůz #{bus_id} opustil vozovnu '{old_depot_name or 'Depo'}'",
-                                        f"Linka {c.get('line') or '?'}, SPZ: {c.get('spz') or 'Aktivní hledání'}. Vozidlo vyjelo z areálu depa do provozu.",
-                                        spz=c.get("spz"),
-                                        line=c.get("line")
-                                    )
-                                except Exception:
-                                    pass
-
-                # ── JR fetch pro offline busy ──────────────────────────────────────────────────
-                if c.get("is_offline") and not c.get("is_train"):
-                    tt_age = (now - c["tt_last_fetch"]).total_seconds() if c.get("tt_last_fetch") else 9999
-                    retry_lim = 300 if c.get("real_linka_spoj") else 60
-                    if tt_age > retry_lim and not c.get("tt_is_fetching"):
-                        c["tt_last_fetch"] = now
-                        c["tt_is_fetching"] = True
-                        queue_tt_fetch(4, bus_id, c)
-
-                if c.get("is_offline"):
-                    if c.get("is_train") or is_train_vehicle(bus_id, c.get("line")):
-                        GLOBAL_BUS_CACHE.pop(bus_id, None)
+                if bid in ADMIN_DELETED_BUSES:
+                    if not is_same_line(raw_line or last_valid_line, ADMIN_DELETED_BUSES[bid]):
+                        del ADMIN_DELETED_BUSES[bid]
+                    else:
                         continue
-                    fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if c.get("is_train") else "Neznámá")
-                    new_live_data.append({
-                        "id": bus_id, "trip_id": c.get("trip_id"), "lat": c.get("lat"), "lng": c.get("lng"),
-                        "bearing": c.get("bearing"), "line": fld, "delay": 0,
-                        "arrival_delay": c.get("arrival_delay"),
-                        "locked_arrival_delay": bool(c.get("locked_arrival_delay")),
-                        "time_to_dep": 0,
-                        "is_before_departure": False,
-                        "destination": c.get("destination"), "spz": c.get("spz") or "Neznámá",
-                        "spz_verified": c.get("spz_verified", False), "is_train": False,
-                        "status": "BUG / Nereálná poloha (označeno adminem)" if (c.get("bug_locked") or c.get("color_class") == "bg-bug") else (f"Vozovna: {c.get('_depot_name', 'Vozovna')}" if c.get("_in_depot") else c.get("status")),
-                        "color_class": "bg-bug" if (c.get("bug_locked") or c.get("color_class") == "bg-bug") else ("bg-yellow" if c.get("_in_depot") else c.get("color_class")),
-                        "inactive_minutes": inact,
-                        "last_updated": c["last_moved"].strftime("%H:%M:%S") if c.get("last_moved") else "N/A",
-                        "investigating": False, "investigation_spz": "",
-                        "admin_flag": c.get("admin_flag", False), "admin_note": c.get("admin_note", ""), "admin_driver": c.get("admin_driver", ""),
-                        "in_depot": bool(c.get("_in_depot")),
-                        "depot_name": c.get("_depot_name"),
-                        "depot_color": c.get("_depot_color") or "#facc15",
-                        "offline_since_time": c.get("offline_since_time", ""),
-                        "is_offline": True,
-                        "is_withdrawn": False if (c.get("bug_locked") or c.get("color_class") == "bg-bug") else (False if c.get("_in_depot") else bool(c.get("is_withdrawn", False) or c.get("status") in ("Odstáven", "Odstaven") or c.get("color_class") == "bg-gray")),
-                        "real_linka_spoj": c.get("real_linka_spoj"),
-                        "spoj_num": c.get("spoj_num"),
-                        "last_known_spoj": c.get("last_known_spoj") or c.get("spoj_num"),
-                        "vehicle_type": c.get("vehicle_type"),
-                    })
-                    continue
 
-                lat1 = c["lat"]; lng1 = c["lng"]; line = c["line"]
-                dest1 = c["destination"]; is_train = bool(c.get("is_train") or is_train_vehicle(bus_id, line))
-                if is_train:
-                    c["is_train"] = True
-                    c["spz"] = "Neznámá"
-                    c["spz_verified"] = False
-                    c["admin_spz_verified"] = False
-                    c["is_locked_by_admin"] = False
-                    c["admin_note"] = ""
-                    c["admin_driver"] = ""
-                    c["admin_flag"] = False
-                    c["skip_spz"] = True
-                    c["spz_frozen"] = True
+                # Získej nebo vytvoř záznam v GLOBAL_BUS_CACHE
+                if bid not in GLOBAL_BUS_CACHE:
+                    TRIP_COUNTER += 1
+                    nti = f"TRIP-{TRIP_COUNTER}"
+                    c = new_cache_entry(
+                        bid, nti, lat, lng, raw_line or last_valid_line, dest, False, delay, now,
+                        ghost_spz=spz, ghost_verified=spz_verified,
+                        ghost_vehicle_type=vehicle_type
+                    )
+                    GLOBAL_BUS_CACHE[bid] = c
+                else:
+                    c = GLOBAL_BUS_CACHE[bid]
+
+                # Telemetrie pohybu a azimutu
+                last_lat = c.get("last_moved_lat", lat)
+                last_lng = c.get("last_moved_lng", lng)
+                dm = haversine_m(lat, lng, last_lat, last_lng)
+                if dm >= 15.0 or "last_moved" not in c:
+                    c["last_moved"] = now
+                    c["last_moved_lat"] = lat
+                    c["last_moved_lng"] = lng
+                    if bearing is not None:
+                        c["bearing"] = int(bearing)
+                    else:
+                        l1r, l2r = math.radians(last_lat), math.radians(lat)
+                        ld = math.radians(lng - last_lng)
+                        y = math.sin(ld) * math.cos(l2r)
+                        x = math.cos(l1r) * math.sin(l2r) - math.sin(l1r) * math.cos(l2r) * math.cos(ld)
+                        c["bearing"] = int((math.degrees(math.atan2(y, x)) + 360) % 360)
+                elif bearing is not None:
+                    c["bearing"] = int(bearing)
+
+                inact = safe_diff_seconds(now, c.get("last_moved")) / 60.0
+                is_moving = inact < 1.0
+
+                # Detekce zón vozoven
+                in_depot_zone, depot_zone_name = _check_depot_zones(lat, lng)
+                c["_in_depot"] = in_depot_zone
+                c["_depot_name"] = depot_zone_name if in_depot_zone else ""
+                c["in_depot"] = in_depot_zone
+                c["depot_name"] = depot_zone_name if in_depot_zone else ""
+
+                c["lat"] = lat
+                c["lng"] = lng
+                c["destination"] = dest
+                c["raw_delay"] = delay
+                c["final_delay_display"] = delay
+                if vehicle_type:
+                    c["vehicle_type"] = vehicle_type
+
+                # Admin zámky a metadata
+                if bid in ADMIN_SPZ_LOCKS:
+                    lock = ADMIN_SPZ_LOCKS[bid]
+                    spz = lock.get("spz") or spz
+                    c["spz"] = spz
+                    c["admin_spz_verified"] = True
+                    c["admin_flag"] = True
+                    c["spz_verified"] = True
+                    c["manual_spz"] = True
                     c["spz_locked"] = True
-                is_moving = inact < 1
-                delay_val = c["raw_delay"]
-                delay_unknown = bool(c.get("delay_unknown", False))
-
-                # ══════════════════════════════════════════════════════════════════
-                # SPZ PAROVANI – kontinualni, samoopravne
-                # ──────────────────────────────────────────────────────────────────
-                # Klicove opravy oproti puvodni verzi:
-                # 1) Blok bezi VZDY (ne jen kdyz spz_locked==False) -> i zamknuta SPZ
-                #    se kazdy tik overi, ze stale sedi. Pokud nesedi, uvolni se a hleda znovu.
-                # 2) best_match_dest se ted pouziva jako TVRDA PODMINKA (kandidat s nesedici
-                #    destinaci se rovnou zahodí, misto toho aby jen nezaktualizoval timestamp).
-                # 3) lastStopName z Arrivy se pouziva jako dalsi krizova kontrola (pokud GTFS data dostupna).
-                # 4) Kdyz bus dlouho nestoji v pohybu (inact > 10 min - stejny prah jako
-                #    "Stoji prilis dlouho" status nize), SPZ se NEPARUJE ANI NEKONTROLUJE.
-                #    Stojici bus (depo, zaseknuty, cekajici dlouho) ma nespolehlivou polohu
-                #    vuci zive Arriva mape - hledani/re-audit SPZ za techto podminek casteji
-                #    vede ke spatnemu prirazeni nez k uzitku. SPZ zustava zamrazena na
-                #    poslednim znamem stavu, dokud se bus znovu nerozjede.
-                # 5) spz_frozen: jakmile bus opravdu DOJEL (konecna zastavka / depo /
-                #    odstaven), SPZ se TVRDE zamkne a uz se vubec nezkousi menit - ani
-                #    pri pripadnem znovu-pripojeni k Arrive. To je schvalne JINE nez
-                #    behem jizdy (kde SPZ zustava soft-zamcena a porad prubezne
-                #    samoopravna) - po dojeti uz nehrozi false-positive prebehnuti na
-                #    jinou SPZ, ale hrozi ze by re-audit kvuli ridke Arriva poloze na
-                #    parkovisti/v depu omylem SPZ odemkl a system by ji ztratil z dohledu.
-                # ══════════════════════════════════════════════════════════════════
-                # SPZ PAROVÁNÍ: spustí se pokud:
-                # - Bus nemá SPZ vůbec (vždy hledej bez ohledu na inact)
-                # - Bus má SPZ ale není frozen (hledej/reaudituj při jízdě)
-                # Přeskočí jen: manual_spz, bug_locked, investigating, vlak,
-                #               admin_spz_verified (absolutni admin lock),
-                #               blokované barvy (bg-bug/blue/purple/gray) bez admin_verified,
-                #               nebo spz_frozen s platnou SPZ (po dojeti na konečnou)
-
-                # Sleduj první pohyb (pro SPZ_MIN_MOVE_MINUTES)
-                if is_moving and not c.get("_first_move_time"):
-                    c["_first_move_time"] = now
-
-                has_valid_spz = bool(c.get("spz") and c.get("spz") not in ("Neznámá", "Aktivní hledání"))
-                if c.get("spz_frozen") and not has_valid_spz:
-                    c["spz_frozen"] = False
-
-                # Pokud ma admin_spz_verified, SPZ je absolutne zamcena - skip vse
-                if (c.get("is_locked_by_admin") or c.get("admin_spz_verified") or bus_id in ADMIN_SPZ_LOCKS) and has_valid_spz:
-                    skip_spz = True
+                    c["spz_frozen"] = True
+                    if "admin_note" in lock:
+                        c["admin_note"] = lock["admin_note"]
+                    if "admin_driver" in lock:
+                        c["admin_driver"] = lock["admin_driver"]
                 else:
-                    # =========================================================================
-                    # PRAVIDLO #1 PRO VYHODNOCOVÁNÍ SPZ:
-                    # Jakmile autobus není na mapě Arriva, nebo se bus nehýbe (stojí) a nemá SPZ,
-                    # NIKDY PRO NĚJ NEHLEDEJ ANI NETIPUJ SPZ! NENAJDEŠ JI V ŽIVOTĚ!
-                    # Musí se čekat, až pojede a aktivně vysílá na Arriva mapě.
-                    # Místo 'Neznámá' je v tomto stavu nastaveno 'Aktivní hledání'.
-                    # =========================================================================
-                    if not is_moving and not has_valid_spz:
-                        skip_spz = True
-                        c["spz"] = "Aktivní hledání"
-                        c["spz_searching"] = True
-                    elif not data_arriva:
-                        skip_spz = True
-                        if not has_valid_spz:
-                            c["spz"] = "Aktivní hledání"
-                            c["spz_searching"] = True
-                    else:
-                        force_search = (not has_valid_spz and not c.get("spz_frozen")
-                                        and not c.get("manual_spz") and not c.get("bug_locked")
-                                        and not is_train and inact <= 120 and is_moving)
-                        skip_spz = (is_train or c.get("investigating") or c.get("manual_spz")
-                                    or c.get("bug_locked")
-                                    or (c.get("spz_frozen") and has_valid_spz and inact > 2))
+                    c["spz"] = spz
+                    c["spz_verified"] = spz_verified
+                    c["spz_inherited"] = spz_inherited
 
-                        # Blokuj SPZ parovani pri blokovanych stavech
-                        if not c.get("admin_spz_verified"):
-                            if c.get("color_class") in SPZ_BLOCKED_COLORS and has_valid_spz:
-                                skip_spz = True
-                            elif c.get("color_class") in SPZ_BLOCKED_COLORS and not has_valid_spz:
-                                skip_spz = True
-                                c["spz"] = "Aktivní hledání"
-                                c["spz_searching"] = True
+                bind_bus_to_spz_metadata(c, spz)
 
-                        # Minimalni pohyb pred prvnim SPZ parovanim
-                        if not has_valid_spz and not skip_spz:
-                            first_move = c.get("_first_move_time")
-                            if not first_move or (now - first_move).total_seconds() < SPZ_MIN_MOVE_MINUTES * 60:
-                                skip_spz = True
-                                c["spz"] = "Aktivní hledání"
-                                c["spz_searching"] = True
+                # Nastavení životního cyklu (ACTIVE_LINE, MANIPULATION, PARKED)
+                if status == "PARKED":
+                    c["is_offline"] = True
+                    c["is_withdrawn"] = True
+                    p_since = v.get("parked_since") or int(time.time())
+                    try:
+                        c["offline_since_time"] = datetime.fromtimestamp(p_since).strftime('%H:%M')
+                    except Exception:
+                        c["offline_since_time"] = now.strftime('%H:%M')
 
-                        if force_search and not c.get("color_class") in SPZ_BLOCKED_COLORS:
-                            skip_spz = False
-
-                if not skip_spz:
-                    d1_norm = _norm_txt(dest1)
-                    near_stop = _nearest_stop_name(lat1, lng1, ARRIVA_STOP_MATCH_M) if GTFS_LOADED else None
-                    near_stop_norm = _norm_txt(near_stop) if near_stop else ""
-
-                    # 3-FAKTOROVY SPZ ALGORITMUS
-                    gate_pass    = {}   # spz -> dist_m (linka+pozice+cil = full match)
-                    gate_3f      = set()  # spz ktere prosly vsemi 3 faktory => prima fajfka
-                    gate_partial = {}   # spz -> dist_m (jen linka+pozice <= 500m, fallback)
-
-                    # SPZ zamknuté administrátorem u jiných aktivních vozů – NIKDY NESMÍ BÝT PŘEVZATY jiným vozem!
-                    admin_protected_spzs = {
-                        normalize_spz_key(oth_c.get("spz"))
-                        for oth_id, oth_c in safe_bus_cache_items()
-                        if oth_id != bus_id and not oth_c.get("is_offline") and oth_c.get("spz")
-                        and oth_c.get("spz") not in ("Neznámá", "Neznama", "Aktivní hledání")
-                        and (oth_c.get("admin_spz_verified") or oth_c.get("is_locked_by_admin") or oth_c.get("manual_spz"))
-                    }
-
-                    for b_a in data_arriva:
-                        b_spz = (b_a.get("spz") or "").strip()
-                        if not b_spz or b_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
-                            continue
-                        if normalize_spz_key(b_spz) in admin_protected_spzs:
-                            continue
-                        ok_m, score, match_detail, dist_m = check_arriva_candidate_match(c, b_a, max_dist=ARRIVA_MATCH_DIST_M)
-                        if not ok_m:
-                            continue
-
-                        if dist_m <= 500:
-                            if b_spz not in gate_partial or dist_m < gate_partial[b_spz]:
-                                gate_partial[b_spz] = dist_m
-                        if b_spz not in gate_pass or dist_m < gate_pass[b_spz]:
-                            gate_pass[b_spz] = dist_m
-
-                        # Faktor 3: plná shoda destinace + zastávka + shodný směr
-                        loc_dest = c.get("destination") or ""
-                        arr_dest = b_a.get("destinationName") or ""
-                        is_dest_compat, is_dest_exact = are_destinations_compatible(loc_dest, arr_dest)
-
-                        ok_stop = True
-                        if near_stop_norm:
-                            a_stop_norm = _norm_txt(b_a.get("lastStopName", ""))
-                            if a_stop_norm:
-                                ok_stop = (near_stop_norm in a_stop_norm or a_stop_norm in near_stop_norm)
-
-                        ok_bearing = True
-                        a_angle = b_a.get("angle")
-                        if c.get("bearing") is not None and a_angle is not None:
-                            bdiff = _bearing_diff(c["bearing"], a_angle)
-                            ok_bearing = (bdiff <= SPZ_BEARING_MAX_DIFF)
-
-                        if is_dest_exact and ok_stop and ok_bearing:
-                            gate_3f.add(b_spz)
-
-                    if gate_3f:
-                        best_spz = min(gate_3f, key=lambda s: gate_pass.get(s, 9999))
-                    elif gate_pass:
-                        best_spz = min(gate_pass, key=gate_pass.get)
-                    elif not has_valid_spz and gate_partial:
-                        best_spz = min(gate_partial, key=gate_partial.get)
-                    else:
-                        best_spz = None
-
-                    # PRAVIDLO #1: ŽÁDNÝ SLEPÝ MEMORY FALLBACK!
-                    # Pokud nemáme jistotu z živých Arriva dat, nastavíme 'Aktivní hledání'
-                    if not best_spz and not has_valid_spz and not c.get("spz_frozen"):
-                        c["spz"] = "Aktivní hledání"
-                        c["spz_searching"] = True
-
-                    # REPORT SITUACE: duplicitni SPZ
-                    if best_spz:
-                        for oth_id, oth_c in safe_bus_cache_items():
-                            if oth_id == bus_id:
-                                continue
-                            if (oth_c.get("spz") == best_spz and not oth_c.get("is_offline")):
-                                # Nikdy nekraď SPZ vozu, který je zamčený adminem!
-                                if oth_c.get("admin_spz_verified") or oth_c.get("is_locked_by_admin") or oth_c.get("manual_spz"):
-                                    best_spz = None
-                                    break
-
-                                oth_line = oth_c.get("line", "")
-                                oth_lat = oth_c.get("lat") or 0
-                                oth_lng = oth_c.get("lng") or 0
-                                dist_between = round(haversine_m(lat1, lng1, oth_lat, oth_lng))
-                                lines_differ = not is_same_line(line, oth_line)
-                                is_3f_winner = (best_spz in gate_3f)
-                                _report_situace(
-                                    "DUP_SPZ",
-                                    f"SPZ {best_spz} pouziva aktivni bus {oth_id} (L{oth_line})"
-                                    f" a take bus {bus_id} (L{line})",
-                                    spz=best_spz,
-                                    bus_a=bus_id, line_a=line, lat_a=lat1, lon_a=lng1,
-                                    bus_b=oth_id, line_b=oth_line,
-                                    lat_b=oth_lat, lon_b=oth_lng,
-                                    dist_between=dist_between,
-                                    is_3factor=is_3f_winner,
-                                    lines_differ=lines_differ,
-                                )
-                                _spz_debug_log(
-                                    bus_id, "DUP_SPZ_DETECTED",
-                                    spz=best_spz,
-                                    detail=f"Konflikt s busem {oth_id} (L{oth_line}), dist={dist_between}m, ruzne_linky={lines_differ}",
-                                    is_3f=is_3f_winner,
-                                )
-                                # STREDNI AGRESIVITA: pokud maji ruzne linky -> jasna chyba
-                                # Okamzite odebrat SPZ starsimu (mene verifikovanimu) busu
-                                if lines_differ and not oth_c.get("manual_spz") and not oth_c.get("bug_locked") and not oth_c.get("admin_spz_verified") and not oth_c.get("is_locked_by_admin"):
-                                    print(f"[SPZ-CONFLICT] SPZ {best_spz}: bus {bus_id} (L{line}) vs "
-                                          f"bus {oth_id} (L{oth_line}) - RUZNE LINKY, dist={dist_between}m "
-                                          f"-> uvolnuji SPZ u busu {oth_id}", flush=True)
-                                    _spz_debug_log(
-                                        oth_id, "SPZ_REMOVED_DIFF_LINE",
-                                        spz=best_spz,
-                                        detail=f"Odebrana SPZ kvuli konfliktu s busem {bus_id} (L{line}), ruzne linky",
-                                    )
-                                    if oth_c.get("spz_verified") and db_client:
-                                        try:
-                                            db_client.table("bus_history").update({
-                                                "status": "Falešný záznam (SPZ odebrána - konflikt různé linky)",
-                                                "spz_verified": False,
-                                            }).eq("trip_id", oth_c["trip_id"]).execute()
-                                        except Exception:
-                                            pass
-                                    prev_oth_spz = oth_c.get("spz")
-                                    oth_c["spz"] = "Aktivní hledání"
-                                    oth_c["spz_verified"] = False
-                                    oth_c["spz_locked"] = False
-                                    oth_c["spz_3factor"] = False
-                                    oth_c["spz_stable_ticks"] = 0
-                                    oth_c["spz_conflict_warn"] = True
-                                    log_spz_change(oth_id, prev_oth_spz, "Aktivní hledání", reason="conflict_diff_line", admin_note=f"Konflikt s #{bus_id} (L{line})")
-                                    log_automation_action(
-                                        "spz_conflict",
-                                        oth_id,
-                                        f"Odebrána duplicitní SPZ {best_spz} u vozu #{oth_id}",
-                                        f"Vůz #{oth_id} (L{oth_line}) byl v konfliktu s vozem #{bus_id} (L{line}) na vzdálenost {dist_between}m. SPZ uvolněna na Aktivní hledání.",
-                                        spz="Aktivní hledání",
-                                        line=oth_line
-                                    )
-                                elif is_3f_winner and not oth_c.get("spz_3factor") and not oth_c.get("manual_spz") and not oth_c.get("bug_locked") and not oth_c.get("admin_spz_verified") and not oth_c.get("is_locked_by_admin"):
-                                    # Nas kandidat je 3-faktor, ostatni neni -> prebirame SPZ
-                                    prev_oth_spz = oth_c.get("spz")
-                                    oth_c["spz"] = "Aktivní hledání"
-                                    oth_c["spz_verified"] = False
-                                    oth_c["spz_locked"] = False
-                                    oth_c["spz_3factor"] = False
-                                    oth_c["spz_stable_ticks"] = 0
-                                    oth_c["spz_conflict_warn"] = True
-                                    log_spz_change(oth_id, prev_oth_spz, "Aktivní hledání", reason="conflict_3f_takeover", admin_note=f"Převzato 3F vozem #{bus_id}")
-                                    log_automation_action(
-                                        "spz_3f_takeover",
-                                        oth_id,
-                                        f"Převzetí SPZ {best_spz} vozem #{bus_id}",
-                                        f"Vůz #{bus_id} dosáhl 3-faktorové shody, vůz #{oth_id} (L{oth_line}) uvolněn na Aktivní hledání.",
-                                        spz="Aktivní hledání",
-                                        line=oth_line
-                                    )
-                                else:
-                                    # Ostatni bus uz SPZ ma a je stejne dobry (nebo lepsi). Nesmime mu ji krast!
-                                    best_spz = None
-                                    break
-
-                    # SPZ DEBUG LOG: zaznamenej matching decision pro kazdy bus
-                    if best_spz:
-                        _dist_raw = gate_pass.get(best_spz) or gate_partial.get(best_spz)
-                        _dist_str = f"{_dist_raw:.0f}m" if isinstance(_dist_raw, (int, float)) else "?m"
-                        _spz_debug_log(
-                            bus_id, "SPZ_MATCH",
-                            spz=best_spz,
-                            detail=f"gate_3f={len(gate_3f)}, gate_pass={len(gate_pass)}, "
-                                   f"gate_partial={len(gate_partial)}, "
-                                   f"is_3f={best_spz in gate_3f}, "
-                                   f"dist={_dist_str} inact={inact:.1f}min",
-                            line=line, dest=dest1,
-                            gate_3f_cnt=len(gate_3f),
-                            gate_pass_cnt=len(gate_pass),
-                        )
-                    elif not has_valid_spz and not c.get("spz_frozen"):
-                        _spz_debug_log(
-                            bus_id, "SPZ_NO_MATCH",
-                            detail=f"Zadny kandidat: gate_3f={len(gate_3f)}, gate_pass={len(gate_pass)}, "
-                                   f"gate_partial={len(gate_partial)}, arriva_total={len(data_arriva)}, "
-                                   f"inact={inact:.1f}min",
-                            line=line,
-                        )
-
-                    # Re-audit: spust cely match algoritmus, ne jen listingovou kontrolu.
-                    # Pokud best_spz z re-auditu je JINA nez aktualni SPZ (nebo zadna),
-                    # okamzite uvolni lock - bus byl spatne pripojen.
-                    current_spz = c.get("spz")
-                    was_locked = bool(c.get("spz_locked"))
-                    if was_locked and current_spz and current_spz != "Nezn\u00e1m\u00e1":
-                        last_audit = c.get("spz_last_audit_check")
-                        due = (not last_audit) or (now - last_audit).total_seconds() >= SPZ_REAUDIT_INTERVAL_SEC
-                        if due:
-                            c["spz_last_audit_check"] = now
-                            # Audit: je aktualni SPZ stale nejlepsi kandidat?
-                            if current_spz in gate_3f:
-                                # Stale nejlepsi (3-faktor) - potvrd a pokracuj
-                                c["spz_last_verified"] = now
-                                c["spz_verified"] = True
-                                c["spz_3factor"] = True
-                            elif current_spz in gate_pass:
-                                # Stale v dosahu (1-2 faktor) - potvrd bez 3f
-                                c["spz_last_verified"] = now
-                            else:
-                                # Aktualni SPZ neni v arriva datech VUBEC
-                                still_listed = any((ba.get("spz") or "").strip() == current_spz for ba in data_arriva)
-                                last_v = c.get("spz_last_verified")
-                                stale = (not last_v) or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60
-                                if not still_listed or stale:
-                                    # SPZ zmizela z Arrivy a ceka prilis dlouho -
-                                    # zkontroluj zda existuje lepsi kandidat na trase
-                                    new_candidate = None
-                                    if gate_3f:
-                                        new_candidate = min(gate_3f, key=lambda s: gate_pass.get(s, 9999))
-                                    elif gate_pass:
-                                        new_candidate = min(gate_pass, key=gate_pass.get)
-                                    if new_candidate and new_candidate != current_spz:
-                                        # Existuje jiny kandidat na trase - uvolni lock
-                                        _report_situace("SPZ_RESET",
-                                            f"SPZ {current_spz} nahrazena {new_candidate} u busu {bus_id}",
-                                            bus=bus_id, old_spz=current_spz, new_spz=new_candidate,
-                                            reason="better_candidate_found")
-                                        print(f"[SPZ] REAUDIT: {current_spz} -> {new_candidate} u busu {bus_id}", flush=True)
-                                        if c.get("spz_verified") and db_client:
-                                            try:
-                                                db_client.table("bus_history").update({
-                                                    "status": "Fale\u0161n\u00fd z\u00e1znam (SPZ opravena re-auditem)",
-                                                    "spz_verified": False
-                                                }).eq("trip_id", c["trip_id"]).execute()
-                                            except Exception:
-                                                pass
-                                        c["spz"] = new_candidate
-                                        c["spz_verified"] = False
-                                        c["spz_locked"] = False
-                                        c["spz_3factor"] = False
-                                        c["spz_stable_ticks"] = 0
-                                        was_locked = False
-                                        log_spz_change(bus_id, current_spz, new_candidate, reason="reaudit_better_candidate")
-                                        log_automation_action(
-                                            "spz_reaudit",
-                                            bus_id,
-                                            f"Re-audit změnil SPZ u vozu #{bus_id}: {current_spz} -> {new_candidate}",
-                                            f"Při re-auditu nalezen přesnější kandidát '{new_candidate}' na lince {line}.",
-                                            spz=new_candidate,
-                                            line=line
-                                        )
-                                    elif stale:
-                                        # Zadny lepsi kandidat, ale SPZ je davno neoverena
-                                        _report_situace("SPZ_RESET",
-                                            f"SPZ {current_spz} uvolnena (stale) u busu {bus_id}",
-                                            bus=bus_id, spz=current_spz, reason="stale")
-                                        print(f"[SPZ] Uvolnuji {current_spz} u busu {bus_id} (stale)", flush=True)
-                                        if c.get("spz_verified") and db_client:
-                                            try:
-                                                db_client.table("bus_history").update({
-                                                    "status": "Fale\u0161n\u00fd z\u00e1znam (SPZ opravena)",
-                                                    "spz_verified": False
-                                                }).eq("trip_id", c["trip_id"]).execute()
-                                            except Exception:
-                                                pass
-                                        c["spz"] = "Aktivní hledání"
-                                        c["spz_verified"] = False
-                                        c["spz_locked"] = False
-                                        c["spz_3factor"] = False
-                                        c["spz_stable_ticks"] = 0
-                                        was_locked = False
-                                        log_spz_change(bus_id, current_spz, "Aktivní hledání", reason="reaudit_stale")
-                                        log_automation_action(
-                                            "spz_stale_release",
-                                            bus_id,
-                                            f"Uvolněna neověřená SPZ {current_spz} u vozu #{bus_id}",
-                                            f"SPZ zmizela z Arriva mapy a vypršel timeout ověření ({SPZ_HOLD_MINUTES} min). Nastaveno Aktivní hledání.",
-                                            spz="Aktivní hledání",
-                                            line=line
-                                        )
-
-                    if was_locked and (not current_spz or current_spz == "Nezn\u00e1m\u00e1"):
-                        was_locked = False
-                        c["spz_locked"] = False
-
-                    # Prirazeni noveho kandidata
-                    if not was_locked:
-                        if best_spz:
-                            is_3f = best_spz in gate_3f
-                            if best_spz != current_spz:
-                                if c.get("spz_verified") and current_spz and db_client:
-                                    try:
-                                        db_client.table("bus_history").update({
-                                            "status": "Fale\u0161n\u00fd z\u00e1znam (SPZ opravena)",
-                                            "spz_verified": False
-                                        }).eq("trip_id", c["trip_id"]).execute()
-                                    except Exception:
-                                        pass
-                                TRIP_COUNTER += 1
-                                c["trip_id"] = f"TRIP-{TRIP_COUNTER}"
-                                c["spz"] = best_spz
-                                bind_bus_to_spz_metadata(c, best_spz)
-                                c["spz_stable_ticks"] = 1
-                                c["spz_verified"] = False
-                                c["spz_locked"] = False
-                                c["spz_3factor"] = False
-                                log_spz_change(bus_id, current_spz, best_spz, reason="auto_assigned_match")
-                                log_automation_action(
-                                    "spz_assigned",
-                                    bus_id,
-                                    f"Přiřazena nová SPZ {best_spz} vozu #{bus_id}",
-                                    f"Přiřazeno párováním na lince {line} ({'3-faktorová shoda' if is_3f else 'poloha+linka'}). Původní: {current_spz or 'Aktivní hledání'}.",
-                                    spz=best_spz,
-                                    line=line
-                                )
-                            else:
-                                c["spz_stable_ticks"] = c.get("spz_stable_ticks", 0) + 1
-                            c["spz_last_verified"] = now
-                            if is_3f or c.get("spz_stable_ticks", 0) >= SPZ_STABLE_TICKS:
-                                was_v = c.get("spz_verified")
-                                c["spz_verified"] = True
-                                c["spz_locked"] = True
-                                c["spz_3factor"] = is_3f
-                                bind_bus_to_spz_metadata(c, best_spz)
-                                if not was_v:
-                                    log_automation_action(
-                                        "spz_verified",
-                                        bus_id,
-                                        f"SPZ {best_spz} ověřena a uzamčena pro #{bus_id}",
-                                        f"Úspěšná verifikace ({'3-faktorový match' if is_3f else f'stabilní {SPZ_STABLE_TICKS} tiků'}) na lince {line}.",
-                                        spz=best_spz,
-                                        line=line
-                                    )
-                                # === SPZ MEMORY UPDATE: oznac jako verified v pameti ===
-                                if best_spz in SPZ_MEMORY:
-                                    SPZ_MEMORY[best_spz]["verified"] = True
-                                    SPZ_MEMORY[best_spz]["last_pvvd_bus_id"] = bus_id
-                                    SPZ_MEMORY[best_spz]["last_pvvd_time"] = now
-                                    SPZ_MEMORY[best_spz]["trip_id"] = c.get("trip_id")
-                                    if c.get("vehicle_type"):
-                                        SPZ_MEMORY[best_spz]["vehicle_type"] = c.get("vehicle_type")
-                                    if c.get("real_linka_spoj"):
-                                        SPZ_MEMORY[best_spz]["real_linka_spoj"] = c.get("real_linka_spoj")
-                                    if c.get("spoj_num"):
-                                        SPZ_MEMORY[best_spz]["spoj_num"] = c.get("spoj_num")
-                                    if is_3f:
-                                        SPZ_MEMORY[best_spz]["verified"] = True
-                        else:
-                            last_v = c.get("spz_last_verified")
-                            if not last_v or (now - last_v).total_seconds() >= SPZ_HOLD_MINUTES * 60:
-                                if c.get("spz") and c.get("spz") not in ("Aktivní hledání", "Neznámá"):
-                                    old_v_spz = c.get("spz")
-                                    c["spz"] = "Aktivní hledání"
-                                    log_spz_change(bus_id, old_v_spz, "Aktivní hledání", reason="hold_timeout")
-                                    log_automation_action(
-                                        "spz_timeout",
-                                        bus_id,
-                                        f"Uvolněna SPZ {old_v_spz} u vozu #{bus_id}",
-                                        f"Vypršel timeout držení SPZ ({SPZ_HOLD_MINUTES} min bez signálu). Nastaveno Aktivní hledání.",
-                                        spz="Aktivní hledání",
-                                        line=line
-                                    )
-                                c["spz_verified"] = False
-                                c["spz_locked"] = False
-                                c["spz_3factor"] = False
-
-
-                # ── JR fetch ──────────────────────────────────────────────────────────────
-                if not is_train:
-                        tt_age = (now - c["tt_last_fetch"]).total_seconds() if c.get("tt_last_fetch") else 9999
-                        retry_lim = 300 if c.get("real_linka_spoj") else 60
-                        if tt_age > retry_lim and not c.get("tt_is_fetching"):
-                            c["tt_last_fetch"] = now
-                            c["tt_is_fetching"] = True
-                            pri = 1
-                            if c.get("is_offline") or c.get("_in_depot") or inact > 10:
-                                pri = 4
-                            elif not is_moving:
-                                if delay_val <= -10000:
-                                    pri = 2
-                                elif inact > 2:
-                                    pri = 3
-                            queue_tt_fetch(pri, bus_id, c)
-
-                # ── Barvy + status ────────────────────────────────────────────────────────
-                old_status = c.get("status", "")
-
-                # Kontrola fyzického pohybu pro vozy označené jako BUG
-                if c.get("bug_locked") or c.get("color_class") == "bg-bug":
-                    bug_lat = c.get("bug_lat")
-                    bug_lng = c.get("bug_lng")
-                    cur_lat = c.get("lat")
-                    cur_lng = c.get("lng")
-                    if bug_lat is not None and bug_lng is not None and cur_lat is not None and cur_lng is not None:
-                        d_lat = (cur_lat - bug_lat) * 111139.0
-                        d_lng = (cur_lng - bug_lng) * 111139.0 * math.cos(math.radians(cur_lat))
-                        dist_m = math.hypot(d_lat, d_lng)
-                        if dist_m >= 100.0:
-                            # Vůz se skutečně rozjel – ujel >= 100m od BUG pozice!
-                            c["bug_locked"] = False
-                            c.pop("bug_lat", None)
-                            c.pop("bug_lng", None)
-                            c["spz_frozen"] = False
-                            c["color_class"] = "bg-green"
-                            c["status"] = "Jízda"
-                            sys_log(f"[BUG-CLEAR] Vůz #{bus_id} se rozjel ({dist_m:.0f}m od BUG polohy) -> BUG automaticky zrušen")
-                            log_automation_action("bug_cleared_movement", bus_id,
-                                                  f"Vůz #{bus_id} se rozjel ({dist_m:.0f}m od označené BUG polohy) – BUG status automaticky zrušen",
-                                                  f"Vůz se reálně rozjel, nová poloha [{cur_lat:.5f}, {cur_lng:.5f}], vzdálenost {dist_m:.0f}m",
-                                                  line=c.get("line"))
-                    else:
-                        if cur_lat is not None and cur_lng is not None:
-                            c["bug_lat"] = cur_lat
-                            c["bug_lng"] = cur_lng
-
-                if c.get("admin_lock_display"):
-                    if c.get("admin_color_override"):
-                        c["color_class"] = c["admin_color_override"]
-                    if c.get("admin_status_override"):
-                        c["status"] = c["admin_status_override"]
-
-                elif c.get("bug_locked") or c.get("color_class") == "bg-bug":
-                    # Vůz stále stojí u ghost BUG polohy -> ZŮSTÁVÁ TVRDĚ ZAMKNUTÝ JAKO BUG!
-                    c["bug_locked"] = True
-                    c["color_class"] = "bg-bug"
-                    c["status"] = "BUG / Nereálná poloha (označeno adminem)"
-                    c["final_delay_display"] = 0
-
-                elif c.get("is_offline"):
-                    if not c.get("admin_lock_display") and not c.get("bug_locked") and c.get("color_class") != "bg-bug":
-                        depot_n, depot_col = _check_depot_zones(c.get("lat"), c.get("lng")) if (DEPOT_ZONES and c.get("lat") and c.get("lng") and not c.get("is_train")) else (None, None)
-                        if c.get("_in_depot") or depot_n:
-                            c["_in_depot"] = True
-                            c["in_depot"] = True
-                            c["_depot_name"] = depot_n or c.get("_depot_name", "Vozovna")
-                            c["_depot_color"] = depot_col or c.get("_depot_color") or "#facc15"
-                            c["status"] = f"Vozovna: {c['_depot_name']}"
-                            c["color_class"] = "bg-yellow"
-                            c["is_withdrawn"] = False
-                        elif c.get("is_withdrawn") or c.get("status") in ("Odstáven", "Odstaven") or c.get("color_class") == "bg-gray":
-                            c["status"] = "Odstáven"
-                            c["color_class"] = "bg-gray"
-                            c["is_withdrawn"] = True
-                        else:
-                            c["status"] = "Poslední známá poloha"
-                            c["color_class"] = "bg-lastpos"
-                    c["final_delay_display"] = 0
-
-                else:
-                    c["is_withdrawn"] = False
-                    is_before_departure = False
-                    time_to_dep = 0
-
-                    # 1. Čeká na odjezd (první zastávka spoje v budoucnu)
-                    if not is_moving and c.get("first_dep_time"):
-                        try:
-                            dh, dm_ = map(int, c["first_dep_time"].split(':'))
-                            dep_total = dh * 60 + dm_
-                            cur_total = now.hour * 60 + now.minute
-                            diff = dep_total - cur_total
-                            if diff < -720: diff += 1440
-                            elif diff > 720: diff -= 1440
-                            if 0 < diff <= 360:
-                                is_before_departure = True
-                                time_to_dep = int(diff)
-                        except Exception:
-                            pass
-
-                    # 2. Kontrola času poslední zastávky spoje dle JŘ (last_dep_time)
-                    diff_last = None
-                    if c.get("last_dep_time"):
-                        try:
-                            lh, lm = map(int, c["last_dep_time"].split(':'))
-                            last_total = lh * 60 + lm
-                            cur_total = now.hour * 60 + now.minute
-                            diff_l = cur_total - last_total
-                            if diff_l < -180:
-                                diff_l += 1440
-                            diff_last = diff_l
-                        except Exception:
-                            pass
-
-                    # 3. Kontrola zda je bus na cílové zastávce
-                    is_at_dest = False
-                    dest = c.get("destination")
-                    if dest and dest not in ("Neznámý", "-1", ""):
-                        if is_stop_match(dest, c.get("nearest_stop")) or is_stop_match(dest, c.get("real_zastavka")):
-                            is_at_dest = True
-                        else:
-                            coords, _ = _lookup_stop_coords(dest, anchor=(c["lat"], c["lng"]), max_anchor_dist_m=3000)
-                            if coords and haversine_m(c["lat"], c["lng"], coords[0], coords[1]) <= 650:
-                                is_at_dest = True
-
-                    # 4. Detekce dojezdu na konečnou / ukončení spoje:
-                    is_terminal_now = False
-                    if not is_moving:
-                        if c.get("_terminal_reached") or c.get("locked_arrival_delay"):
-                            if not is_before_departure:
-                                is_terminal_now = True
-                        elif is_at_dest and (diff_last is None or diff_last >= -5):
-                            is_terminal_now = True
-                        elif inact >= 2 and diff_last is not None and diff_last > 3:
-                            is_terminal_now = True
-                        elif inact >= 2 and delay_val >= 25 and (diff_last is not None or is_at_dest or c.get("_in_depot")):
-                            is_terminal_now = True
-                        elif c.get("_in_depot"):
-                            is_terminal_now = True
-
-                    # Pokud se bus znovu rozjede dál mimo konečnou a není to jen posun:
-                    if is_moving and c.get("_terminal_reached") and not is_at_dest and not c.get("_in_depot"):
-                        c["_terminal_reached"] = False
-                        c["locked_arrival_delay"] = False
-                        c["actual_end_time"] = None
-                        is_terminal_now = False
-
-                    # 5. Uzamčení zpoždění při příjezdu (ochrana před PVVD runaway):
-                    if not is_before_departure and (is_terminal_now or c.get("_in_depot")):
-                        if not c.get("locked_arrival_delay"):
-                            prev_d = c.get("arrival_delay")
-                            if prev_d is not None and -15 <= prev_d <= 25 and delay_val > prev_d + 8:
-                                locked_d = prev_d
-                            elif diff_last is not None and diff_last > 0 and delay_val > 15:
-                                est_d = delay_val - diff_last
-                                locked_d = est_d if -15 <= est_d <= 35 else 0
-                            elif delay_val >= 25:
-                                locked_d = 0
-                            else:
-                                locked_d = delay_val
-
-                            c["arrival_delay"] = locked_d
-                            c["locked_arrival_delay"] = True
-                            c["_terminal_reached"] = True
-                            c["spz_frozen"] = True
-                            if not c.get("actual_end_time"):
-                                c["actual_end_time"] = now.strftime('%H:%M')
-                            c["_end_written"] = False
-
-                        # VŽDY použij zamknuté zpoždění, NIKDY nepřičítej PVVD runaway!
-                        delay_val = c.get("arrival_delay", 0)
-
-                    # 6. Přiřazení statusu a barvy (bg-purple pro konečnou, bg-yellow pro vozovnu, atd.)
-                    if c.get("_in_depot"):
-                        depot_name = c.get("_depot_name", "Vozovna")
+                    if in_depot_zone:
                         c["color_class"] = "bg-yellow"
-                        c["status"] = f"Vozovna: {depot_name}"
-
-                    elif is_before_departure:
-                        c["actual_end_time"] = None
-                        c["_terminal_reached"] = False
-                        c["locked_arrival_delay"] = False
-                        c["arrival_delay"] = None
-                        if time_to_dep <= 240:
-                            c["status"] = f"Čeká na odjezd ({time_to_dep} min)"
-                            c["color_class"] = "bg-blue"
-                        else:
-                            c["status"] = "Čeká na spoj (>4h)"
-                            c["color_class"] = "bg-gray"
-                        delay_val = 0
-
-                    elif is_terminal_now:
-                        dest_clean = c.get("destination", "")
-                        if not dest_clean or dest_clean in ("Neznámý", "-1"):
-                            dest_clean = c.get("nearest_stop") or "Konečná zastávka"
-                        dest_clean = re.sub(r',+', ', ', dest_clean).strip()
-                        c["status"] = f"Konečná: {dest_clean}"
-                        c["color_class"] = "bg-purple"
-
-                    elif delay_unknown:
-                        delay_val = 0
-                        c["status"] = "Jízda" if is_moving else "Stojí"
-                        c["color_class"] = "bg-green"
-
-                    elif delay_val >= 5:
-                        c["status"] = f"Jízda (Zpoždění {delay_val} min)" if is_moving else f"Stojí (Zpoždění {delay_val} min)"
-                        c["color_class"] = "bg-red"
-
-                    elif delay_val <= -1:
-                        c["status"] = f"Jízda (Náskok {abs(delay_val)} min)" if is_moving else f"Stojí (Náskok {abs(delay_val)} min)"
-                        c["color_class"] = "bg-darkblue"
-
+                        c["status"] = f"Vozovna: {depot_zone_name}"
                     else:
-                        if delay_val > 0:
-                            c["status"] = f"Jízda (+{delay_val} min)" if is_moving else f"Stojí (+{delay_val} min)"
-                        else:
-                            c["status"] = "Jízda (Načas)" if is_moving else "Stojí (Načas)"
-                        c["color_class"] = "bg-green"
+                        c["color_class"] = "bg-lastpos"
+                        c["status"] = f"Odstaveno (poslední linka: {last_valid_line})"
+                    display_line = f"Odstaveno ({last_valid_line})"
 
-                    if (not is_moving and inact > 10 and c.get("actual_start_time")
-                            and c["color_class"] not in ("bg-purple", "bg-gray", "bg-bug", "bg-blue", "bg-orange", "bg-yellow")):
+                elif status == "MANIPULATION":
+                    c["is_offline"] = False
+                    c["is_withdrawn"] = False
+                    c.pop("offline_since_time", None)
+                    if in_depot_zone:
+                        c["color_class"] = "bg-yellow"
+                        c["status"] = f"Vozovna: {depot_zone_name} (Manipulace)"
+                    else:
+                        c["color_class"] = "bg-blue"
+                        c["status"] = f"Manipulační jízda (poslední linka: {last_valid_line})"
+                    display_line = f"Manipulace ({last_valid_line})"
+
+                else:  # ACTIVE_LINE
+                    c["is_offline"] = False
+                    c["is_withdrawn"] = False
+                    c.pop("offline_since_time", None)
+                    c["line"] = raw_line or last_valid_line
+
+                    if in_depot_zone:
+                        c["color_class"] = "bg-yellow"
+                        c["status"] = f"Vozovna: {depot_zone_name}"
+                    elif delay >= 10:
+                        c["color_class"] = "bg-red"
+                        c["status"] = f"Jízda (+{delay} min)" if is_moving else f"Stojí (+{delay} min)"
+                    elif delay > 0:
+                        c["color_class"] = "bg-green"
+                        c["status"] = f"Jízda (+{delay} min)" if is_moving else f"Stojí (+{delay} min)"
+                    elif delay <= -1:
+                        c["color_class"] = "bg-darkblue"
+                        c["status"] = f"Jízda (Náskok {abs(delay)} min)" if is_moving else f"Stojí (Náskok {abs(delay)} min)"
+                    else:
+                        c["color_class"] = "bg-green"
+                        c["status"] = "Jízda (Načas)" if is_moving else "Stojí (Načas)"
+
+                    # Dlouhé stání mimo vozovnu
+                    if not is_moving and inact > 10 and not in_depot_zone and c["color_class"] not in ("bg-bug", "bg-purple", "bg-yellow"):
                         c["status"] = f"Stojí příliš dlouho ({int(inact)} min)"
                         c["color_class"] = "bg-gray"
-                        c["_was_long_stationary"] = True
-                        if c.get("spz") and c["spz"] != "Neznámá":
-                            c["spz_locked"] = True
-                    elif is_moving and c.get("_was_long_stationary") and c["color_class"] not in ("bg-bug", "bg-blue"):
-                        c["color_class"] = "bg-orange"
-                        c["status"] = "Výzkum – Reaktivace po dlouhém stání"
-                        c["_was_long_stationary"] = False
 
-                if is_moving and not c.get("actual_start_time") and not is_train:
-                    c["actual_start_time"] = now.strftime('%H:%M')
-                    c["_end_written"] = False
-                    c["locked_arrival_delay"] = False
+                    display_line = c.get("real_linka_spoj") or raw_line or last_valid_line
 
-                c["final_delay_display"] = delay_val
+                    # Timetable fetch
+                    if not c.get("real_linka_spoj") and not c.get("tt_is_fetching"):
+                        tt_age = (now - c["tt_last_fetch"]).total_seconds() if c.get("tt_last_fetch") else 9999
+                        if tt_age > 60:
+                            queue_tt_fetch(1, bid, c)
 
-                # Zpoždění při příjezdu: aktualizuj průběžně pokud není zamknuto
-                if not c.get("locked_arrival_delay"):
-                    c["arrival_delay"] = delay_val
+                    # DB historie upsert
+                    if spz and _is_tracked_line(raw_line):
+                        upsert_to_history(db_client, c)
 
-                # Pokud dojel na konečnou nebo byl ukončen spoj nebo je ve vozovně, zamkni zpoždění
-                if c.get("actual_end_time") or (c.get("status") and ("Konečná" in c["status"] or "Konecna" in c["status"])) or c.get("_in_depot"):
-                    c["locked_arrival_delay"] = True
+                # Kontrola pohybu pro BUG
+                if c.get("bug_locked") or c.get("color_class") == "bg-bug":
+                    b_lat = c.get("bug_lat") or lat
+                    b_lng = c.get("bug_lng") or lng
+                    if haversine_m(lat, lng, b_lat, b_lng) >= 100.0:
+                        c["bug_locked"] = False
+                        c["color_class"] = "bg-green"
+                        c["status"] = "Jízda"
+                    else:
+                        c["bug_locked"] = True
+                        c["color_class"] = "bg-bug"
+                        c["status"] = "BUG / Nereálná poloha (označeno adminem)"
 
+                # Admin overrides
                 if c.get("admin_color_override"):
                     c["color_class"] = c["admin_color_override"]
                 if c.get("admin_status_override"):
                     c["status"] = c["admin_status_override"]
 
-                # ── DB upsert ─────────────────────────────────────────────────────────────
-                has_spz = c.get("spz") and c["spz"] != "Nezn\u00e1m\u00e1"
-                tracked_line = _is_tracked_line(c.get("real_linka_spoj") or c.get("line", ""))
-                just_ended = c.get("actual_end_time") and not c.get("_end_written")
+                if GTFS_LOADED and "nearest_stop" not in c:
+                    c["nearest_stop"] = _nearest_stop_name(lat, lng, 500)
 
-                if has_spz and tracked_line:
-                    if (not c.get("db_first_upsert") or (old_status != c["status"]) or just_ended
-                    or c.get("_last_db_linka") != (c.get("real_linka_spoj") or c.get("line"))
-                    or (is_moving and c.get("actual_start_time") and int(time.time()) % 30 < 10)):
-                        upsert_to_history(db_client, c)
-                        c["db_first_upsert"] = True
-                        c["_last_db_status"] = c["status"]
-                        c["_last_db_linka"] = c.get("real_linka_spoj") or c.get("line")
-                        if just_ended:
-                            c["_end_written"] = True
-                            close_previous_trips(db_client, c.get("spz"), c["trip_id"], c["actual_end_time"])
-
-                is_train_final = bool(c.get("is_train") or is_train_vehicle(bus_id, c.get("line")))
-                if is_train_final:
-                    c["is_train"] = True
-                    c["spz"] = "Neznámá"
-                    c["spz_verified"] = False
-                    c["admin_spz_verified"] = False
-                    c["is_locked_by_admin"] = False
-                    c["admin_note"] = ""
-                    c["admin_driver"] = ""
-                    c["admin_flag"] = False
-
-                fld = c.get("real_linka_spoj") or c["line"] if c["line"] else ("Vlak" if is_train_final else "Neznámá")
                 new_live_data.append({
-                    "id": bus_id, "trip_id": c["trip_id"], "lat": c["lat"], "lng": c["lng"],
-                    "bearing": c.get("bearing"), "line": fld, "real_linka_spoj": c.get("real_linka_spoj"), "delay": c.get("final_delay_display", 0),
+                    "id": bid,
+                    "trip_id": c.get("trip_id", f"TRIP-{bid}"),
+                    "lat": lat,
+                    "lng": lng,
+                    "bearing": c.get("bearing"),
+                    "line": display_line,
+                    "real_linka_spoj": c.get("real_linka_spoj"),
+                    "delay": delay if status == "ACTIVE_LINE" else 0,
                     "arrival_delay": c.get("arrival_delay"),
                     "locked_arrival_delay": bool(c.get("locked_arrival_delay")),
-                    "time_to_dep": time_to_dep,
-                    "is_before_departure": bool(is_before_departure),
-                    "in_depot": bool(c.get("_in_depot")),
-                    "depot_name": c.get("_depot_name", ""),
-                    "destination": c["destination"], "spz": "Neznámá" if is_train_final else (c["spz"] or "Neznámá"),
-                    "spz_verified": False if is_train_final else c.get("spz_verified", False), "is_train": is_train_final,
-                    "status": c["status"], "color_class": c["color_class"], "inactive_minutes": inact,
-                    "last_updated": c["last_moved"].strftime("%H:%M:%S") if c["last_moved"] else "N/A",
-                    "investigating": False if is_train_final else c.get("investigating", False),
-                    "investigation_spz": "" if is_train_final else c.get("investigation_spz", ""),
-                    "admin_flag": False if is_train_final else c.get("admin_flag", False),
-                    "admin_note": "" if is_train_final else c.get("admin_note", ""),
-                    "admin_driver": "" if is_train_final else c.get("admin_driver", ""),
-                    "admin_spz_verified": False if is_train_final else c.get("admin_spz_verified", False),
-                    "is_locked_by_admin": False if is_train_final else bool(c.get("is_locked_by_admin") or c.get("admin_spz_verified", False)),
-                    "admin_spz_bug": False if is_train_final else c.get("admin_spz_bug", False),
-                    "admin_spz_conflict": False if is_train_final else c.get("admin_spz_conflict", False),
+                    "time_to_dep": c.get("time_to_dep", 0),
+                    "is_before_departure": bool(c.get("is_before_departure")),
+                    "in_depot": bool(c.get("in_depot")),
+                    "depot_name": c.get("depot_name", ""),
+                    "destination": dest,
+                    "spz": spz or "Aktivní hledání",
+                    "spz_verified": bool(c.get("spz_verified")),
+                    "is_train": False,
+                    "status": c["status"],
+                    "color_class": c["color_class"],
+                    "inactive_minutes": inact,
+                    "last_updated": c.get("last_moved", now).strftime("%H:%M:%S") if isinstance(c.get("last_moved"), datetime) else now.strftime("%H:%M:%S"),
+                    "investigating": bool(c.get("investigating")),
+                    "investigation_spz": c.get("investigation_spz", ""),
+                    "admin_flag": bool(c.get("admin_flag")),
+                    "admin_note": c.get("admin_note", ""),
+                    "admin_driver": c.get("admin_driver", ""),
+                    "admin_spz_verified": bool(c.get("admin_spz_verified")),
+                    "is_locked_by_admin": bool(c.get("is_locked_by_admin") or c.get("admin_spz_verified")),
+                    "admin_spz_bug": bool(c.get("admin_spz_bug")),
+                    "admin_spz_conflict": bool(c.get("admin_spz_conflict")),
                     "real_zastavka": c.get("real_zastavka"),
                     "nearest_stop": c.get("nearest_stop"),
-                    "last_stop_name": "" if is_train_final else c.get("last_stop_name"),
-                    "vehicle_type": None if is_train_final else c.get("vehicle_type"),
-                    "is_withdrawn": False,  # Online vuz neni nikdy odstaven
-                    "is_offline": False,
+                    "last_stop_name": c.get("last_stop_name", ""),
+                    "vehicle_type": c.get("vehicle_type"),
+                    "is_withdrawn": bool(c.get("is_withdrawn")),
+                    "is_offline": bool(c.get("is_offline")),
+                    "offline_since_time": c.get("offline_since_time"),
                     "spoj_num": c.get("spoj_num"),
                     "last_known_spoj": c.get("last_known_spoj") or c.get("spoj_num"),
+                    "parked_since": v.get("parked_since"),
+                    "spz_inherited": bool(v.get("spz_inherited"))
+                })
+
+            # Živé vlaky z PVVD (vlaky NIKDY nemají SPZ ani offline stav)
+            for t in train_inflow:
+                t_id = str(t.get("id", "0"))
+                t_line = str(t.get("text") or t.get("line") or "").strip() or "Vlak"
+                t_dest = str(t.get("finalStopName") or "").strip() or "Vlak"
+                t_lat = float(t.get("lat") or 0)
+                t_lng = float(t.get("lng") or 0)
+                t_delay = int(t.get("delay") or 0) if t.get("delay") is not None else 0
+                new_live_data.append({
+                    "id": t_id,
+                    "trip_id": f"TRAIN-{t_id}",
+                    "lat": t_lat,
+                    "lng": t_lng,
+                    "bearing": t.get("azm"),
+                    "line": t_line,
+                    "real_linka_spoj": None,
+                    "delay": t_delay,
+                    "arrival_delay": None,
+                    "locked_arrival_delay": False,
+                    "time_to_dep": 0,
+                    "is_before_departure": False,
+                    "in_depot": False,
+                    "depot_name": "",
+                    "destination": t_dest,
+                    "spz": "Neznámá",
+                    "spz_verified": False,
+                    "is_train": True,
+                    "status": f"Jízda (+{t_delay} min)" if t_delay > 0 else "Jízda (Načas)",
+                    "color_class": "bg-green" if t_delay <= 0 else ("bg-red" if t_delay >= 10 else "bg-green"),
+                    "inactive_minutes": 0,
+                    "last_updated": now.strftime("%H:%M:%S"),
+                    "investigating": False,
+                    "investigation_spz": "",
+                    "admin_flag": False,
+                    "admin_note": "",
+                    "admin_driver": "",
+                    "admin_spz_verified": False,
+                    "is_locked_by_admin": False,
+                    "admin_spz_bug": False,
+                    "admin_spz_conflict": False,
+                    "real_zastavka": None,
+                    "nearest_stop": None,
+                    "last_stop_name": "",
+                    "vehicle_type": None,
+                    "is_withdrawn": False,
+                    "is_offline": False,
+                    "offline_since_time": None,
+                    "spoj_num": None,
+                    "last_known_spoj": None,
+                    "parked_since": None,
+                    "spz_inherited": False
                 })
 
             global LIVE_BUSES_DATA, _last_spz_auto_refresh
@@ -8568,7 +7634,7 @@ def background_map_worker():
             except Exception as _anom_err:
                 print(f"[SPZ ANOMALY] Chyba pri analyze anomalii: {_anom_err}", flush=True)
 
-            time.sleep(10)
+            time.sleep(15)
 
 
         except Exception as crash_error:
@@ -8578,7 +7644,7 @@ def background_map_worker():
                 sys_log(err_str)
             except Exception:
                 print(f"[MAPA CRITICAL] {err_str}", flush=True)
-            time.sleep(10)
+            time.sleep(15)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -9516,6 +8582,12 @@ def api_admin_map_action():
             c["admin_flag"] = True
             c["investigating"] = False
             
+            try:
+                FUSION_ENGINE.registry_by_pvvd.setdefault(str(bus_id), {})["locked_spz"] = new_spz
+                FUSION_ENGINE.registry_by_pvvd[str(bus_id)]["spz"] = new_spz
+                FUSION_ENGINE.save_state()
+            except Exception:
+                pass
             ADMIN_SPZ_LOCKS[bus_id] = {
                 "spz": new_spz,
                 "admin_note": c.get("admin_note", ""),

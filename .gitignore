@@ -13,3 +13,10 @@ datacore_local.db
 __pycache__/
 *.pyc
 daily_metrics.json
+*.bak
+*_backup*
+*.db
+idpk_vehicles_state.json
+vehicle_state.json
+automation_activity_log.json
+daily_reports_history.json
