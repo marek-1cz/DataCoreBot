@@ -5389,7 +5389,7 @@ class BusFusionEngine:
             if p_id in self.parked_by_pvvd:
                 del self.parked_by_pvvd[p_id]
 
-        # 4. Přepnutí vozidel, která zmizela z PVVD (dojela do vozovny), do stavu PARKED
+        # 4. Přepnutí vozidel, která zmizela z PVVD, do stavu PARKED (zůstávají na mapě)
         for p_id, rec in list(self.registry_by_pvvd.items()):
             if p_id not in current_pvvd_ids:
                 if rec.get("status") != "PARKED":
@@ -5403,7 +5403,12 @@ class BusFusionEngine:
         self.save_state()
 
         active_list = [r for p_id, r in self.registry_by_pvvd.items() if p_id in current_pvvd_ids]
-        parked_list = list(self.parked_by_spz.values())
+        # Ponecháme VŠECHNY zaparkované vozy (i bez SPZ i s SPZ), které zmizely z PVVD, po dobu až 7 dní (10080 min)
+        cutoff_parked = now - (7 * 86400)
+        parked_list = [
+            r for p_id, r in self.parked_by_pvvd.items()
+            if p_id not in current_pvvd_ids and (r.get("last_seen") or now) >= cutoff_parked
+        ]
         return active_list + parked_list
 
 FUSION_ENGINE = BusFusionEngine()
@@ -7329,20 +7334,26 @@ def background_map_worker():
                 # Nastavení životního cyklu (ACTIVE_LINE, MANIPULATION, PARKED)
                 if status == "PARKED":
                     c["is_offline"] = True
-                    c["is_withdrawn"] = True
                     p_since = v.get("parked_since") or int(time.time())
                     try:
                         c["offline_since_time"] = datetime.fromtimestamp(p_since).strftime('%H:%M')
                     except Exception:
                         c["offline_since_time"] = now.strftime('%H:%M')
 
+                    off_min = (int(time.time()) - p_since) / 60.0 if p_since else 0.0
                     if in_depot_zone:
                         c["color_class"] = "bg-yellow"
                         c["status"] = f"Vozovna: {depot_zone_name}"
-                    else:
+                        c["is_withdrawn"] = False
+                    elif off_min < 10.0:
                         c["color_class"] = "bg-lastpos"
-                        c["status"] = f"Odstaveno (poslední linka: {last_valid_line})"
-                    display_line = f"Odstaveno ({last_valid_line})"
+                        c["status"] = "Poslední známá poloha"
+                        c["is_withdrawn"] = False
+                    else:
+                        c["color_class"] = "bg-gray"
+                        c["status"] = "Odstáven"
+                        c["is_withdrawn"] = True
+                    display_line = last_valid_line or "Odstaveno"
 
                 elif status == "MANIPULATION":
                     c["is_offline"] = False
@@ -7362,9 +7373,118 @@ def background_map_worker():
                     c.pop("offline_since_time", None)
                     c["line"] = raw_line or last_valid_line
 
+                    # 1. Kontrola zda čeká na odjezd (první zastávka spoje v budoucnu)
+                    is_before_departure = False
+                    time_to_dep = 0
+                    first_dep = c.get("first_dep_time")
+                    if not is_moving and first_dep and not c.get("actual_start_time"):
+                        try:
+                            fh, fm = map(int, first_dep.split(':'))
+                            first_total = fh * 60 + fm
+                            cur_total = now.hour * 60 + now.minute
+                            diff = first_total - cur_total
+                            if diff < -720: diff += 1440
+                            elif diff > 720: diff -= 1440
+                            if 0 < diff <= 360:
+                                is_before_departure = True
+                                time_to_dep = int(diff)
+                        except Exception:
+                            pass
+                    c["is_before_departure"] = is_before_departure
+                    c["time_to_dep"] = time_to_dep
+
+                    # 2. Kontrola času poslední zastávky spoje dle JŘ (last_dep_time)
+                    diff_last = None
+                    if c.get("last_dep_time"):
+                        try:
+                            lh, lm = map(int, c["last_dep_time"].split(':'))
+                            last_total = lh * 60 + lm
+                            cur_total = now.hour * 60 + now.minute
+                            diff_l = cur_total - last_total
+                            if diff_l < -180:
+                                diff_l += 1440
+                            diff_last = diff_l
+                        except Exception:
+                            pass
+
+                    # 3. Kontrola zda je bus na cílové zastávce
+                    is_at_dest = False
+                    bus_dest = c.get("destination") or dest
+                    if bus_dest and bus_dest not in ("Neznámá", "-1", "", "None"):
+                        if is_stop_match(bus_dest, c.get("nearest_stop")) or is_stop_match(bus_dest, c.get("real_zastavka")):
+                            is_at_dest = True
+                        else:
+                            coords, _ = _lookup_stop_coords(bus_dest, anchor=(lat, lng), max_anchor_dist_m=3000)
+                            if coords and haversine_m(lat, lng, coords[0], coords[1]) <= 650:
+                                is_at_dest = True
+
+                    # 4. Detekce dojezdu na konečnou / ukončení spoje:
+                    is_terminal_now = False
+                    if not is_moving:
+                        if c.get("_terminal_reached") or c.get("locked_arrival_delay"):
+                            if not is_before_departure:
+                                is_terminal_now = True
+                        elif is_at_dest and (diff_last is None or diff_last >= -5):
+                            is_terminal_now = True
+                        elif inact >= 2 and diff_last is not None and diff_last > 3:
+                            is_terminal_now = True
+                        elif inact >= 2 and delay >= 25 and (diff_last is not None or is_at_dest or in_depot_zone):
+                            is_terminal_now = True
+                        elif in_depot_zone:
+                            is_terminal_now = True
+
+                    # Pokud se bus znovu rozjede dál mimo konečnou a není to jen posun:
+                    if is_moving and c.get("_terminal_reached") and not is_at_dest and not in_depot_zone:
+                        c["_terminal_reached"] = False
+                        c["locked_arrival_delay"] = False
+                        c["actual_end_time"] = None
+                        is_terminal_now = False
+
+                    # Uzamčení zpoždění při příjezdu (ochrana před PVVD runaway):
+                    if not is_before_departure and (is_terminal_now or in_depot_zone):
+                        if not c.get("locked_arrival_delay"):
+                            prev_d = c.get("arrival_delay")
+                            if prev_d is not None and -15 <= prev_d <= 25 and delay > prev_d + 8:
+                                locked_d = prev_d
+                            elif diff_last is not None and diff_last > 0 and delay > 15:
+                                est_d = delay - diff_last
+                                locked_d = est_d if -15 <= est_d <= 35 else 0
+                            elif delay >= 25:
+                                locked_d = 0
+                            else:
+                                locked_d = delay
+
+                            c["arrival_delay"] = locked_d
+                            c["locked_arrival_delay"] = True
+                            c["_terminal_reached"] = True
+                            c["spz_frozen"] = True
+                            if not c.get("actual_end_time"):
+                                c["actual_end_time"] = now.strftime('%H:%M')
+                            c["_end_written"] = False
+
+                        delay = c.get("arrival_delay", 0)
+
+                    # 5. Přiřazení statusu a barvy (bg-blue pro odjezd, bg-purple pro konečnou)
                     if in_depot_zone:
                         c["color_class"] = "bg-yellow"
                         c["status"] = f"Vozovna: {depot_zone_name}"
+                    elif is_before_departure:
+                        c["actual_end_time"] = None
+                        c["_terminal_reached"] = False
+                        c["locked_arrival_delay"] = False
+                        c["arrival_delay"] = None
+                        if time_to_dep <= 240:
+                            c["status"] = f"Čeká na odjezd ({time_to_dep} min)"
+                            c["color_class"] = "bg-blue"
+                        else:
+                            c["status"] = "Čeká na spoj (>4h)"
+                            c["color_class"] = "bg-gray"
+                        delay = 0
+                    elif is_terminal_now:
+                        dest_clean = bus_dest or c.get("nearest_stop") or "Konečná zastávka"
+                        dest_clean = re.sub(r',+', ', ', dest_clean).strip()
+                        c["status"] = f"Konečná: {dest_clean}"
+                        c["color_class"] = "bg-purple"
                     elif delay >= 10:
                         c["color_class"] = "bg-red"
                         c["status"] = f"Jízda (+{delay} min)" if is_moving else f"Stojí (+{delay} min)"
@@ -7379,7 +7499,7 @@ def background_map_worker():
                         c["status"] = "Jízda (Načas)" if is_moving else "Stojí (Načas)"
 
                     # Dlouhé stání mimo vozovnu
-                    if not is_moving and inact > 10 and not in_depot_zone and c["color_class"] not in ("bg-bug", "bg-purple", "bg-yellow"):
+                    if not is_moving and inact > 10 and not in_depot_zone and c["color_class"] not in ("bg-bug", "bg-purple", "bg-blue", "bg-yellow"):
                         c["status"] = f"Stojí příliš dlouho ({int(inact)} min)"
                         c["color_class"] = "bg-gray"
 
