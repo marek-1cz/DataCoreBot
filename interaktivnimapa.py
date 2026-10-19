@@ -6277,7 +6277,7 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "spz_locked": True if is_train else False, "manual_spz": False, "spz_stable_ticks": 0,
         "spz_last_verified": None if is_train else (now if ghost_verified else None), "investigating": False, "investigation_spz": None,
         "investigation_start": None, "first_seen": now, "last_inflow_seen": now,
-        "last_moved": now, "created_at": now, "actual_start_time": None,
+        "last_moved": now, "last_moved_lat": lat, "last_moved_lng": lng, "created_at": now, "actual_start_time": None,
         "actual_end_time": None, "first_dep_time": None, "last_dep_time": None,
         "arrival_delay": None, "locked_arrival_delay": False, "_terminal_reached": False,
         "tt_last_fetch": None, "tt_is_fetching": False,
@@ -7319,10 +7319,15 @@ def background_map_worker():
                     c = GLOBAL_BUS_CACHE[bid]
 
                 # Telemetrie pohybu a azimutu
-                last_lat = c.get("last_moved_lat", lat)
-                last_lng = c.get("last_moved_lng", lng)
+                if "last_moved_lat" not in c or "last_moved_lng" not in c:
+                    c["last_moved_lat"] = lat
+                    c["last_moved_lng"] = lng
+                    c["last_moved"] = now
+
+                last_lat = c["last_moved_lat"]
+                last_lng = c["last_moved_lng"]
                 dm = haversine_m(lat, lng, last_lat, last_lng)
-                if dm >= 15.0 or "last_moved" not in c:
+                if dm >= 15.0:
                     c["last_moved"] = now
                     c["last_moved_lat"] = lat
                     c["last_moved_lng"] = lng
@@ -7337,8 +7342,8 @@ def background_map_worker():
                 elif bearing is not None:
                     c["bearing"] = int(bearing)
 
-                inact = safe_diff_seconds(now, c.get("last_moved")) / 60.0
-                is_moving = inact < 1.0 or dm >= 15.0
+                inact = safe_diff_seconds(now, c.get("last_moved", now)) / 60.0
+                is_moving = inact < 2.0 or dm >= 15.0
 
                 # Detekce zón vozoven
                 in_depot_zone, depot_zone_name = _check_depot_zones(lat, lng)
@@ -7564,8 +7569,8 @@ def background_map_worker():
                         c["color_class"] = "bg-green"
                         c["status"] = "Jízda (Načas)" if is_moving else "Stojí (Načas)"
 
-                    # Dlouhé stání mimo vozovnu
-                    if not is_moving and inact > 10 and not in_depot_zone and c["color_class"] not in ("bg-bug", "bg-purple", "bg-blue", "bg-yellow"):
+                    # Dlouhé stání mimo vozovnu (pouze pokud vůz skutečně stojí na místě bez pohybu >= 15 min)
+                    if not is_moving and inact >= 15 and not in_depot_zone and c["color_class"] not in ("bg-bug", "bg-purple", "bg-blue", "bg-yellow"):
                         c["status"] = f"Stojí příliš dlouho ({int(inact)} min)"
                         c["color_class"] = "bg-gray"
 
