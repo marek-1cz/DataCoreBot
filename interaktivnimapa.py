@@ -5383,31 +5383,57 @@ class BusFusionEngine:
             }
             self.registry_by_pvvd[p_id] = record
 
-            # Pokud tento vůz se známou SPZ vyjel, vymažeme ho ze seznamu zaparkovaných
-            if spz and spz in self.parked_by_spz:
-                del self.parked_by_spz[spz]
+            # Pokud tento vůz vyjel, vymažeme ho ze seznamu zaparkovaných
+            if spz:
+                if spz in self.parked_by_spz:
+                    del self.parked_by_spz[spz]
+                # Smazat jakýkoliv starý zaparkovaný záznam pro tuto SPZ
+                to_del_p = [pid for pid, pr in self.parked_by_pvvd.items() if pr.get("spz") == spz]
+                for pid in to_del_p:
+                    del self.parked_by_pvvd[pid]
             if p_id in self.parked_by_pvvd:
                 del self.parked_by_pvvd[p_id]
 
         # 4. Přepnutí vozidel, která zmizela z PVVD, do stavu PARKED (zůstávají na mapě)
+        # Ochrana před chvilkovým výpadkem: Vůz musí chybět alespoň 120 s (2 minuty), než je označen jako zaparkovaný
+        active_spzs = {r.get("spz") for r in self.registry_by_pvvd.values() if r.get("pvvd_id") in current_pvvd_ids and r.get("spz")}
+
         for p_id, rec in list(self.registry_by_pvvd.items()):
             if p_id not in current_pvvd_ids:
+                spz_val = rec.get("spz")
+                # Pokud tato SPZ už aktivně jezdí pod jiným PVVD ID, starý záznam odstranit
+                if spz_val and spz_val in active_spzs:
+                    del self.registry_by_pvvd[p_id]
+                    self.parked_by_pvvd.pop(p_id, None)
+                    continue
+
+                missing_sec = now - (rec.get("last_seen") or now)
+                # Pokud v datech chybí méně než 120 s, ponechat v aktivním stavu (výpadek signálu na trase)
+                if missing_sec < 120:
+                    continue
+
                 if rec.get("status") != "PARKED":
                     rec["status"] = "PARKED"
                     rec["current_line"] = None
-                    rec["parked_since"] = rec.get("last_seen", now)
-                if rec.get("spz"):
-                    self.parked_by_spz[rec["spz"]] = rec
+                    rec["parked_since"] = rec.get("last_seen") or now
+                if spz_val:
+                    self.parked_by_spz[spz_val] = rec
                 self.parked_by_pvvd[p_id] = rec
 
         self.save_state()
 
-        active_list = [r for p_id, r in self.registry_by_pvvd.items() if p_id in current_pvvd_ids]
-        # Ponecháme VŠECHNY zaparkované vozy (i bez SPZ i s SPZ), které zmizely z PVVD, po dobu až 7 dní (10080 min)
+        # Aktivní vozy: živé z PVVD + vozy v krátkém výpadku signálu (< 120s)
+        active_list = [r for p_id, r in self.registry_by_pvvd.items() if p_id in current_pvvd_ids or (now - (r.get("last_seen") or now)) < 120]
+        act_spzs_final = {r.get("spz") for r in active_list if r.get("spz")}
+
+        # Zaparkované vozy: chybí déle než 120s, max 7 dní, a jejich SPZ NIKDY nesmí být v active_list
         cutoff_parked = now - (7 * 86400)
         parked_list = [
             r for p_id, r in self.parked_by_pvvd.items()
-            if p_id not in current_pvvd_ids and (r.get("last_seen") or now) >= cutoff_parked
+            if p_id not in current_pvvd_ids
+            and (not r.get("spz") or r.get("spz") not in act_spzs_final)
+            and (r.get("last_seen") or now) >= cutoff_parked
+            and (now - (r.get("last_seen") or now)) >= 120
         ]
         return active_list + parked_list
 
@@ -5559,8 +5585,8 @@ def is_train_vehicle(bus_id, line="", traction=""):
         return True
     if re.search(r'\b(vlak|train|rychlik|osobak|spech)\b', l_str, re.IGNORECASE):
         return True
-    s = f"{l_str} {bid_str}"
-    if any(k in s for k in ("1093", "1081", "7265", "1094", "7512", "7430", "554", "27849", "27828", "750", "7280")):
+    # Pouze pokud linka obsahuje explicitní označení vlaku s číslem (např. Os 7512, R 750)
+    if re.search(r'\b(Os|Sp|R|Ex|IC|EC|SC|RJ|LE|TL|GWTR)\s*\d+', l_str, re.IGNORECASE):
         return True
     return False
 
@@ -7292,7 +7318,7 @@ def background_map_worker():
                     c["bearing"] = int(bearing)
 
                 inact = safe_diff_seconds(now, c.get("last_moved")) / 60.0
-                is_moving = inact < 1.0
+                is_moving = inact < 1.0 or dm >= 15.0
 
                 # Detekce zón vozoven
                 in_depot_zone, depot_zone_name = _check_depot_zones(lat, lng)
@@ -7330,6 +7356,15 @@ def background_map_worker():
                     c["spz_inherited"] = spz_inherited
 
                 bind_bus_to_spz_metadata(c, spz)
+
+                # ── POJISTKA: Pokud se vůz prokazatelně pohybuje nebo má linku, NESMÍ být PARKED ani Odstaven! ──
+                has_route = bool(raw_line and raw_line not in ("0", "-1", "None", "Neznámá", "Neznama"))
+                if status == "PARKED" and (is_moving or dm >= 15.0 or has_route):
+                    status = "ACTIVE_LINE" if has_route else "MANIPULATION"
+                    v["status"] = status
+                    c["is_offline"] = False
+                    c["is_withdrawn"] = False
+                    c.pop("offline_since_time", None)
 
                 # Nastavení životního cyklu (ACTIVE_LINE, MANIPULATION, PARKED)
                 if status == "PARKED":
