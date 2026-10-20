@@ -1556,8 +1556,9 @@ window.adminActiveSearchSpz=(id)=>adminAction('active_search_spz',id);
 window.adminRecheck=(id)=>adminAction('active_search_spz',id);
 window.adminSetSPZ=(id)=>{let spz=document.getElementById('adm_spz_'+id)?.value;if(spz)adminAction('edit_spz',id,{spz});};
 window.adminSaveAll=(id,permanent)=>{
+  let spz=document.getElementById('adm_spz_'+id)?.value?.trim()||'';
   let st=document.getElementById('adm_st_'+id)?.value?.trim()||'',col=document.getElementById('adm_col_'+id)?.value?.trim()||'',note=document.getElementById('adm_note_'+id)?.value?.trim()||'',driver=document.getElementById('adm_driver_'+id)?.value?.trim()||'';
-  adminAction('edit_all',id,{status:st,color_class:col,note,driver,permanent});
+  adminAction('edit_all',id,{spz,status:st,color_class:col,note,driver,permanent});
 };
 
 window.openSeznamAutobusu = function(rawSpz) {
@@ -5098,28 +5099,30 @@ def bind_bus_to_spz_metadata(c: dict, spz: str):
         return
     norm = normalize_spz_key(spz)
     if not norm:
-        c["admin_driver"] = ""
-        c["admin_note"] = ""
+        # Pokud SPZ momentálně chybí (např. dočasný výpadek), nemaž řidiče/poznámku (mohl nastat dočasný lag telemetrie)
         return
     meta = SPZ_METADATA.get(norm)
     if meta:
-        c["admin_driver"] = meta.get("driver", "")
-        c["admin_note"] = meta.get("note", "")
+        if meta.get("driver") is not None:
+            c["admin_driver"] = meta.get("driver", "")
+        if meta.get("note") is not None:
+            c["admin_note"] = meta.get("note", "")
         bid = str(c.get("id") or "")
-        if bid and bid in ADMIN_SPZ_LOCKS:
-            ADMIN_SPZ_LOCKS[bid]["admin_driver"] = c["admin_driver"]
-            ADMIN_SPZ_LOCKS[bid]["admin_note"] = c["admin_note"]
+        for k_bid in (bid, int(bid) if bid.isdigit() else None):
+            if k_bid in ADMIN_SPZ_LOCKS:
+                if meta.get("driver") is not None:
+                    ADMIN_SPZ_LOCKS[k_bid]["admin_driver"] = c["admin_driver"]
+                if meta.get("note") is not None:
+                    ADMIN_SPZ_LOCKS[k_bid]["admin_note"] = c["admin_note"]
     else:
-        # SPZ nemá v metadatech žádného řidiče ani poznámku -> vyčisti, nesmí zůstat cizí řidič
-        c["admin_driver"] = ""
-        c["admin_note"] = ""
-        bid = str(c.get("id") or "")
-        if bid and bid in ADMIN_SPZ_LOCKS:
-            ADMIN_SPZ_LOCKS[bid]["admin_driver"] = ""
-            ADMIN_SPZ_LOCKS[bid]["admin_note"] = ""
+        # Pokud vůz již má nastaveného řidiče nebo poznámku, ulož je do metadat této SPZ
+        curr_drv = str(c.get("admin_driver") or "").strip()
+        curr_note = str(c.get("admin_note") or "").strip()
+        if curr_drv or curr_note:
+            set_spz_metadata(spz, driver=curr_drv or None, note=curr_note or None)
 
 def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick: str = "Admin"):
-    """Uloží jméno řidiče a poznámku pevně k SPZ (cestují s touto SPZ)."""
+    """Uloží jméno řidiče a poznámku pevně k SPZ (cestují s touto SPZ). Jméno řidiče může být na více vozech současně."""
     k = normalize_spz_key(spz)
     if not k:
         return
@@ -5129,17 +5132,6 @@ def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick:
     if driver is not None:
         drv_str = str(driver).strip()
         entry["driver"] = drv_str
-        # Uvolnit tohoto řidiče z jakékoliv jiné SPZ, aby se neduplikoval na jiných vozech (Bod 7)
-        if drv_str:
-            for other_k, other_entry in list(SPZ_METADATA.items()):
-                if other_k != k and str(other_entry.get("driver", "")).strip().lower() == drv_str.lower():
-                    other_entry["driver"] = ""
-                    for obid, oc in safe_bus_cache_items():
-                        if normalize_spz_key(oc.get("spz")) == other_k:
-                            oc["admin_driver"] = ""
-                    for obid, olk in safe_admin_locks_items():
-                        if normalize_spz_key(olk.get("spz")) == other_k:
-                            olk["admin_driver"] = ""
     if note is not None:
         entry["note"] = str(note).strip()
     entry["updated_at"] = get_prague_time().strftime("%d.%m.%Y %H:%M")
@@ -5565,9 +5557,18 @@ class BusFusionEngine:
                 if matched.get("admin") or matched.get("score", 0) >= 110.0:
                     spz_verified = True
                     prev["locked_spz"] = spz
+                else:
+                    prev["spz"] = spz
             else:
                 # Trvalá paměť vazeb (Sticky SPZ)
                 spz = prev.get("locked_spz") or prev.get("spz")
+                if not spz:
+                    if p_id in admin_locks and normalize_spz_key(admin_locks[p_id].get("spz")):
+                        spz = admin_locks[p_id].get("spz")
+                    elif p_id in GLOBAL_BUS_CACHE and normalize_spz_key(GLOBAL_BUS_CACHE[p_id].get("spz")):
+                        spz = GLOBAL_BUS_CACHE[p_id].get("spz")
+                    if spz:
+                        prev["locked_spz"] = spz
                 if spz:
                     spz_verified = prev.get("spz_verified", False)
 
@@ -5591,7 +5592,7 @@ class BusFusionEngine:
 
             status = "ACTIVE_LINE" if has_active_line else "MANIPULATION"
 
-            locked_spz = spz if (matched and matched.get("score", 0) >= 110.0) else prev.get("locked_spz")
+            locked_spz = spz if (matched and matched.get("score", 0) >= 110.0) else (prev.get("locked_spz") or (spz if (p_id in admin_locks or (p_id in GLOBAL_BUS_CACHE and GLOBAL_BUS_CACHE[p_id].get("spz_locked"))) else None))
 
             record = {
                 "pvvd_id": p_id,
@@ -6728,7 +6729,14 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
 
     for bid, c in safe_bus_cache_items():
         spz_val = str(c.get("spz") or "").strip()
-        is_admin_v = bool(c.get("admin_spz_verified") or c.get("admin_flag") or c.get("is_locked_by_admin") or (bid in ADMIN_SPZ_LOCKS))
+        # Pokud má platný záznam v ADMIN_SPZ_LOCKS, synchronizuj ho zpět do c["spz"] (ochrana proti dočasnému vymazání)
+        lk = ADMIN_SPZ_LOCKS.get(bid) or ADMIN_SPZ_LOCKS.get(str(bid))
+        if lk and lk.get("spz") and normalize_spz_key(lk.get("spz")):
+            if not spz_val or not normalize_spz_key(spz_val):
+                c["spz"] = lk["spz"]
+                spz_val = lk["spz"]
+
+        is_admin_v = bool(c.get("admin_spz_verified") or c.get("admin_flag") or c.get("is_locked_by_admin") or (bid in ADMIN_SPZ_LOCKS) or (str(bid) in ADMIN_SPZ_LOCKS))
         if is_admin_v and (spz_val.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI")):
             c["admin_spz_verified"] = False
             c["admin_flag"] = False
@@ -7665,8 +7673,8 @@ def background_map_worker():
                 c["destination"] = dest
 
                 # Admin zámky a metadata
-                if bid in ADMIN_SPZ_LOCKS:
-                    lock = ADMIN_SPZ_LOCKS[bid]
+                if bid in ADMIN_SPZ_LOCKS or str(bid) in ADMIN_SPZ_LOCKS:
+                    lock = ADMIN_SPZ_LOCKS.get(bid) or ADMIN_SPZ_LOCKS.get(str(bid))
                     spz = lock.get("spz") or spz
                     c["spz"] = spz
                     c["admin_spz_verified"] = True
@@ -7680,8 +7688,13 @@ def background_map_worker():
                     if "admin_driver" in lock:
                         c["admin_driver"] = lock["admin_driver"]
                 else:
+                    # POJISTKA: Pokud v c již existuje platná SPZ a nová hodnota z telemetrie je None / neznámá,
+                    # NIKDY nepřemazávej platnou SPZ na None! Vůz si zachová svoji SPZ.
+                    existing_spz = c.get("spz")
+                    if not spz and existing_spz and normalize_spz_key(existing_spz):
+                        spz = existing_spz
                     c["spz"] = spz
-                    c["spz_verified"] = spz_verified
+                    c["spz_verified"] = spz_verified or bool(c.get("spz_verified"))
                     c["spz_inherited"] = spz_inherited
 
                 bind_bus_to_spz_metadata(c, spz)
@@ -7960,7 +7973,7 @@ def background_map_worker():
                     "in_depot": bool(c.get("in_depot")),
                     "depot_name": c.get("depot_name", ""),
                     "destination": dest,
-                    "spz": spz or "Aktivní hledání",
+                    "spz": spz or c.get("spz") or "Aktivní hledání",
                     "spz_verified": bool(c.get("spz_verified")),
                     "is_train": False,
                     "status": c["status"],
@@ -9321,6 +9334,14 @@ def api_admin_map_action():
         new_note = str(data.get("note", "")).strip()
         new_driver = str(data.get("driver", "")).strip()
         permanent = bool(data.get("permanent", False))
+        new_spz = str(data.get("spz", "")).strip()
+
+        if new_spz and normalize_spz_key(new_spz):
+            bus_spz = format_spz_display(new_spz) or new_spz
+            c["spz"] = bus_spz
+        else:
+            bus_spz = c.get("spz")
+
         if new_st:
             c["status"] = new_st
             c["admin_status_override"] = new_st
@@ -9335,16 +9356,42 @@ def api_admin_map_action():
             c["admin_driver"] = new_driver
         c["admin_lock_permanent"] = permanent
         
-        # Vázání řidiče a poznámky k SPZ (cestují s touto SPZ, SPZ vozu se NIKDY nemění! - Bod 7)
-        bus_spz = c.get("spz")
+        # Vázání řidiče a poznámky k SPZ (cestují s touto SPZ, SPZ vozu se NIKDY nemění!)
         if bus_spz and normalize_spz_key(bus_spz):
+            c["spz"] = bus_spz
+            c["spz_frozen"] = True
+            c["spz_locked"] = True
             set_spz_metadata(bus_spz, driver=new_driver, note=new_note, admin_nick=admin_name)
+            bind_bus_to_spz_metadata(c, bus_spz)
+            try:
+                FUSION_ENGINE.registry_by_pvvd.setdefault(str(bus_id), {})["locked_spz"] = bus_spz
+                FUSION_ENGINE.registry_by_pvvd[str(bus_id)]["spz"] = bus_spz
+                FUSION_ENGINE.save_state()
+            except Exception:
+                pass
 
-        if bus_id in ADMIN_SPZ_LOCKS:
-            ADMIN_SPZ_LOCKS[bus_id]["admin_note"] = new_note
-            ADMIN_SPZ_LOCKS[bus_id]["admin_driver"] = new_driver
-            if new_col and new_col not in ("", "\u2500\u2500"):
-                ADMIN_SPZ_LOCKS[bus_id]["color_class"] = new_col
+            if permanent:
+                c["admin_spz_verified"] = True
+                c["is_locked_by_admin"] = True
+                c["manual_spz"] = True
+                c["admin_flag"] = True
+                ADMIN_SPZ_LOCKS[str(bus_id)] = {
+                    "spz": bus_spz,
+                    "admin_note": new_note,
+                    "admin_driver": new_driver,
+                    "is_locked_by_admin": True,
+                }
+                ADMIN_SPZ_LOCKS[bus_id] = ADMIN_SPZ_LOCKS[str(bus_id)]
+                if new_col and new_col not in ("", "\u2500\u2500"):
+                    ADMIN_SPZ_LOCKS[str(bus_id)]["color_class"] = new_col
+                _save_spz_settings()
+
+        for k_bid in (bus_id, str(bus_id)):
+            if k_bid in ADMIN_SPZ_LOCKS:
+                ADMIN_SPZ_LOCKS[k_bid]["admin_note"] = new_note
+                ADMIN_SPZ_LOCKS[k_bid]["admin_driver"] = new_driver
+                if new_col and new_col not in ("", "\u2500\u2500"):
+                    ADMIN_SPZ_LOCKS[k_bid]["color_class"] = new_col
 
         # Záznam do logu dashboardu (Bod 7)
         if new_driver:
@@ -9399,7 +9446,7 @@ def api_admin_map_action():
 
     elif action == "admin_verify_spz":
         # Absolutni admin lock - SPZ je overena adminem, automatikata prestane hledat
-        if c.get("spz") and c["spz"] not in ("Nezn\u00e1m\u00e1", "Neznámá"):
+        if c.get("spz") and normalize_spz_key(c["spz"]):
             c["admin_spz_verified"] = True
             c["is_locked_by_admin"] = True
             old_spz = c.get("spz")
@@ -9410,12 +9457,20 @@ def api_admin_map_action():
             c["spz_verified"] = True
             c["investigating"] = False
             c["bug_locked"] = False
-            ADMIN_SPZ_LOCKS[bus_id] = {
+            ADMIN_SPZ_LOCKS[str(bus_id)] = {
                 "spz": c["spz"],
                 "admin_note": c.get("admin_note", ""),
                 "admin_driver": c.get("admin_driver", ""),
+                "is_locked_by_admin": True,
             }
-            ADMIN_SPZ_LOCKS[bus_id]["is_locked_by_admin"] = True
+            ADMIN_SPZ_LOCKS[bus_id] = ADMIN_SPZ_LOCKS[str(bus_id)]
+            try:
+                FUSION_ENGINE.registry_by_pvvd.setdefault(str(bus_id), {})["locked_spz"] = c["spz"]
+                FUSION_ENGINE.registry_by_pvvd[str(bus_id)]["spz"] = c["spz"]
+                FUSION_ENGINE.save_state()
+            except Exception:
+                pass
+            _save_spz_settings()
             log_spz_change(bus_id, old_spz, c["spz"], reason="admin_verify", admin_note=c.get("admin_note", ""))
             # Okamzite zapsat do spz_cache s admin_verified=True
             try:
