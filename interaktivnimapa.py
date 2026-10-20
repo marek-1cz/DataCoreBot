@@ -701,6 +701,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     __AD_BTN__
     <button id="pub-stops-btn" onclick="togglePubStops()"><i class="fas fa-bus"></i> Zastávky</button>
     <button id="lines-overlay-btn-pub" onclick="toggleLinesPanel()" class="n-btn"><i class="fas fa-route"></i> Linky</button>
+    <button id="moving-only-btn" onclick="toggleOnlyMovingBuses()" class="n-btn" title="Zobrazit pouze vozy v jízdě (skrýt odstavené, vozovny a neaktivní)"><i class="fas fa-play"></i> Pouze v jízdě</button>
     <div class="n-sp"></div>
     <div class="n-clock"><span id="systemTimeClock">--:--:--</span></div>
     <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
@@ -1129,6 +1130,24 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
       <input type="range" class="gfx-slider" id="settings-gfx-slider" min="1" max="4" step="0.01" value="3" onchange="gfxSliderChange(this)" oninput="gfxSliderInput(this, 'settings-gfx-desc')" style="margin-bottom:8px;">
       <div id="settings-gfx-desc" style="color:#94a3b8;font-size:11px;text-align:center;">Vysoké: Výchozí, plné animace (Pro běžné PC)</div>
     </div>
+
+    <div style="color:white;font-size:12px;font-weight:bold;margin-top:16px;margin-bottom:8px;padding-left:4px;">Plynulost a filtry</div>
+    <div style="background:rgba(255,255,255,0.03);padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);display:flex;flex-direction:column;gap:10px;">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;color:#e2e8f0;font-size:12px;">
+        <input type="checkbox" id="settings-smooth-anim" onchange="toggleSmoothAnim(this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:#38bdf8;">
+        <div>
+          <div style="font-weight:bold;">Plynulý pohyb vozidel</div>
+          <div style="font-size:10px;color:#94a3b8;">Plynulá animace přejezdu vozů po mapě</div>
+        </div>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;color:#e2e8f0;font-size:12px;">
+        <input type="checkbox" id="settings-only-moving" onchange="toggleOnlyMovingBuses(this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:#10b981;">
+        <div>
+          <div style="font-weight:bold;">Pouze vozy v jízdě</div>
+          <div style="font-size:10px;color:#94a3b8;">Skrýt odstavené vozy, vozovny a čekající</div>
+        </div>
+      </label>
+    </div>
   </div>
 </div>
 
@@ -1332,6 +1351,91 @@ function setGraphicsLevel(level, isInit=false) {
       if(!isInit && typeof fetchBuses === 'function') fetchBuses();
     }
   }
+}
+
+// === HLADKÝ POHYB VOZIDEL (ANIMACE) & FILTR POUZE V JÍZDĚ (Body 1, 4, 5) ===
+window.isSmoothAnimActive = function() {
+  let custom = localStorage.getItem('smooth_anim_enabled');
+  if (custom !== null) return custom === 'true';
+  let lvl = parseInt(localStorage.getItem('graphics_level') || '3');
+  return lvl >= 3; // Od vysoké kvality automaticky zapnuto
+};
+
+window.toggleSmoothAnim = function(enabled) {
+  localStorage.setItem('smooth_anim_enabled', enabled ? 'true' : 'false');
+  let cb = document.getElementById('settings-smooth-anim');
+  if (cb) cb.checked = enabled;
+};
+
+window.onlyMovingBuses = (localStorage.getItem('only_moving_buses') === 'true');
+
+window.toggleOnlyMovingBuses = function(forceVal) {
+  if (typeof forceVal === 'boolean') {
+    window.onlyMovingBuses = forceVal;
+  } else {
+    window.onlyMovingBuses = !window.onlyMovingBuses;
+  }
+  localStorage.setItem('only_moving_buses', window.onlyMovingBuses ? 'true' : 'false');
+  let cb = document.getElementById('settings-only-moving');
+  if (cb) cb.checked = window.onlyMovingBuses;
+  let btn = document.getElementById('moving-only-btn');
+  if (btn) {
+    if (window.onlyMovingBuses) {
+      btn.style.background = 'rgba(16, 185, 129, 0.25)';
+      btn.style.borderColor = '#10b981';
+      btn.style.color = '#34d399';
+      btn.innerHTML = '<i class="fas fa-play"></i> Pouze v jízdě (AKTIVNÍ)';
+    } else {
+      btn.style.background = '';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+      btn.innerHTML = '<i class="fas fa-play"></i> Pouze v jízdě';
+    }
+  }
+  if (typeof fetchBuses === 'function') fetchBuses();
+};
+
+function animateMarkerTo(marker, targetLat, targetLng, durationMs = 1200) {
+  if (!marker) return;
+  let curPos = marker.getLatLng();
+  let startLat = curPos.lat;
+  let startLng = curPos.lng;
+  if (Math.abs(startLat - targetLat) < 0.000005 && Math.abs(startLng - targetLng) < 0.000005) {
+    return;
+  }
+  let dLat = Math.abs(startLat - targetLat);
+  let dLng = Math.abs(startLng - targetLng);
+  // Pokud je to velký skok (např. teleportace přes 8 km nebo inicializace), skoč bez animace
+  if (dLat > 0.08 || dLng > 0.08) {
+    marker.setLatLng([targetLat, targetLng]);
+    return;
+  }
+
+  if (marker._animFrame) {
+    cancelAnimationFrame(marker._animFrame);
+    marker._animFrame = null;
+  }
+
+  let startTime = performance.now();
+  function easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+  }
+
+  function animStep(nowTime) {
+    let elapsed = nowTime - startTime;
+    let progress = Math.min(elapsed / durationMs, 1.0);
+    let ease = easeInOutQuad(progress);
+    let curLat = startLat + (targetLat - startLat) * ease;
+    let curLng = startLng + (targetLng - startLng) * ease;
+    marker.setLatLng([curLat, curLng]);
+    if (progress < 1.0) {
+      marker._animFrame = requestAnimationFrame(animStep);
+    } else {
+      marker._animFrame = null;
+      marker.setLatLng([targetLat, targetLng]);
+    }
+  }
+  marker._animFrame = requestAnimationFrame(animStep);
 }
 
 function swNext(step) {
@@ -3880,6 +3984,31 @@ async function fetchBuses(){
 
     data.buses.forEach(bus=>{
       if(!bus.lat||!bus.lng)return;
+
+      // FILTR POUZE PRO JEDOUCÍ VOZY (Bod 5)
+      if (window.onlyMovingBuses) {
+        let isNonDriving = Boolean(
+          bus.is_offline ||
+          bus.in_depot ||
+          bus.color_class === 'bg-lastpos' ||
+          bus.color_class === 'bg-yellow' ||
+          bus.color_class === 'bg-purple' ||
+          bus.color_class === 'bg-gray' ||
+          bus.is_before_departure ||
+          bus.status === 'Poslední známá poloha' ||
+          (bus.status && (bus.status.startsWith('Vozovna') || bus.status.includes('Odstaven') || bus.status.includes('Odstáven') || bus.status.includes('Konečná') || bus.status.includes('Čeká'))) ||
+          !bus.line || bus.line === '0' || bus.line === 'Neznámá' || bus.line === 'Neznama'
+        );
+        if (isNonDriving) {
+          let existingMarker = window.busMarkersMap.get(bus.id);
+          if (existingMarker) {
+            ml.removeLayer(existingMarker);
+            window.busMarkersMap.delete(bus.id);
+          }
+          return;
+        }
+      }
+
       currentBusIds.add(bus.id);
       let mc=bus.color_class;
 
@@ -4182,13 +4311,31 @@ async function fetchBuses(){
       
       let existingMarker = window.busMarkersMap.get(bus.id);
       if (existingMarker) {
-          existingMarker.setLatLng([bus.lat, bus.lng]);
-          existingMarker.setIcon(icon);
+          // PLYNULÁ ANIMACE POHYBU (Bod 4) nebo okamžitý posun:
+          if (window.isSmoothAnimActive && window.isSmoothAnimActive()) {
+              animateMarkerTo(existingMarker, bus.lat, bus.lng, 1200);
+          } else {
+              existingMarker.setLatLng([bus.lat, bus.lng]);
+          }
+
+          // OPTIMALIZACE VÝKONU (Bod 1):
+          // setIcon ničí a znovu sestavuje SVG v DOMu. Měnit pouze pokud se obsah skutečně změnil!
+          let newIconHtml = icon.options.html;
+          if (existingMarker._lastIconHtml !== newIconHtml) {
+              existingMarker.setIcon(icon);
+              existingMarker._lastIconHtml = newIconHtml;
+          }
+
           if (!(isTyping && openPopupBusId === bus.id)) {
-              existingMarker.setPopupContent(popH);
+              if (existingMarker._lastPopH !== popH) {
+                  existingMarker.setPopupContent(popH);
+                  existingMarker._lastPopH = popH;
+              }
           }
       } else {
           let m = L.marker([bus.lat, bus.lng], {icon, zIndexOffset: 1000});
+          m._lastIconHtml = icon.options.html;
+          m._lastPopH = popH;
           m.bindPopup(popH, {className:'dark-popup', maxWidth:300});
           m._busId = bus.id;
           m.on('popupopen', ()=>{openPopupBusId=bus.id;});
@@ -4643,6 +4790,25 @@ if(IS_ADMIN){
 // Automaticky načti vozovny při startu
 loadDepotZones();
 setInterval(loadDepotZones,20000); // refresh kazdych 20 sekund
+
+// Inicializace přepínačů animací a filtrů při startu (Body 4 a 5)
+(function initAnimationAndFilterControls() {
+  try {
+    let cbSmooth = document.getElementById('settings-smooth-anim');
+    if (cbSmooth) cbSmooth.checked = window.isSmoothAnimActive();
+
+    let cbMoving = document.getElementById('settings-only-moving');
+    if (cbMoving) cbMoving.checked = window.onlyMovingBuses;
+
+    let btnMoving = document.getElementById('moving-only-btn');
+    if (btnMoving && window.onlyMovingBuses) {
+      btnMoving.style.background = 'rgba(16, 185, 129, 0.25)';
+      btnMoving.style.borderColor = '#10b981';
+      btnMoving.style.color = '#34d399';
+      btnMoving.innerHTML = '<i class="fas fa-play"></i> Pouze v jízdě (AKTIVNÍ)';
+    }
+  } catch(e) {}
+})();
 </script>
 """
 
@@ -4961,7 +5127,19 @@ def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick:
     disp = format_spz_display(spz) or str(spz).strip()
     entry["spz"] = disp
     if driver is not None:
-        entry["driver"] = str(driver).strip()
+        drv_str = str(driver).strip()
+        entry["driver"] = drv_str
+        # Uvolnit tohoto řidiče z jakékoliv jiné SPZ, aby se neduplikoval na jiných vozech (Bod 7)
+        if drv_str:
+            for other_k, other_entry in list(SPZ_METADATA.items()):
+                if other_k != k and str(other_entry.get("driver", "")).strip().lower() == drv_str.lower():
+                    other_entry["driver"] = ""
+                    for obid, oc in safe_bus_cache_items():
+                        if normalize_spz_key(oc.get("spz")) == other_k:
+                            oc["admin_driver"] = ""
+                    for obid, olk in safe_admin_locks_items():
+                        if normalize_spz_key(olk.get("spz")) == other_k:
+                            olk["admin_driver"] = ""
     if note is not None:
         entry["note"] = str(note).strip()
     entry["updated_at"] = get_prague_time().strftime("%d.%m.%Y %H:%M")
@@ -5305,15 +5483,18 @@ class BusFusionEngine:
                 if p_line and a_line and p_line != a_line:
                     continue
 
-                # Hard filtr 2: GPS vzdálenost max 1800 m
+                # Hard filtr 2: GPS vzdálenost
+                # Arriva má pomalejší / skokovou aktualizaci GPS oproti PVVD (zpoždění 30-90s).
+                # Pokud se shoduje linka nebo jde o sticky shodu, tolerujeme větší rozestup v pohybu podél trasy.
                 dist = haversine_m(p_lat, p_lng, a["lat"], a["lng"])
-                if dist > 1800.0:
+                max_allowed_dist = 4500.0 if (prev_spz and prev_spz == a_spz) else (3500.0 if (p_line and a_line and p_line == a_line) else 1800.0)
+                if dist > max_allowed_dist:
                     continue
 
-                # Výpočet score
-                score = max(0.0, 100.0 - (dist / 18.0))
+                # Výpočet score (rozšířená škála pro pomalejší Arriva GPS)
+                score = max(0.0, 100.0 - (dist / 35.0))
                 if p_line and a_line and p_line == a_line:
-                    score += 50.0
+                    score += 60.0
 
                 # Shoda cílové zastávky / směru
                 a_dest = remove_accents(a.get("finalStopName", ""))
@@ -5323,19 +5504,19 @@ class BusFusionEngine:
                     if p_city and a_city and (p_city in a_city or a_city in p_city):
                         score += 40.0
 
-                # Podobné zpoždění (abs <= 2 min)
+                # Podobné zpoždění (abs <= 3 min vzhledem k Arriva zpoždění telemetrie)
                 if p_delay is not None and a.get("delay") is not None:
                     try:
-                        if abs(int(p_delay) - int(a["delay"])) <= 2:
+                        if abs(int(p_delay) - int(a["delay"])) <= 3:
                             score += 15.0
                     except:
                         pass
 
                 # Sticky bonus (držení SPZ z minulého cyklu pro stejné pvvd_id)
                 if prev_spz and prev_spz == a_spz:
-                    score += 60.0
+                    score += 70.0
 
-                if score >= 70.0:
+                if score >= 65.0:
                     candidates.append((score, dist, p_id, a_spz, a))
 
         # 2. Seřazení podle nejvyššího skóre a unikátní zámek 1:1
@@ -5432,12 +5613,12 @@ class BusFusionEngine:
             }
             self.registry_by_pvvd[p_id] = record
 
-            # Pokud tento vůz vyjel, vymažeme ho ze seznamu zaparkovaných
+            # Pokud tento vůz vyjel, vymažeme ho ze seznamu zaparkovaných (pouze pokud nemá admin lock)
             if spz:
                 if spz in self.parked_by_spz:
                     del self.parked_by_spz[spz]
-                # Smazat jakýkoliv starý zaparkovaný záznam pro tuto SPZ
-                to_del_p = [pid for pid, pr in self.parked_by_pvvd.items() if pr.get("spz") == spz]
+                # Smazat jakýkoliv starý zaparkovaný záznam pro tuto SPZ (nikdy nemaž admin lock!)
+                to_del_p = [pid for pid, pr in self.parked_by_pvvd.items() if pr.get("spz") == spz and str(pid) not in admin_locks]
                 for pid in to_del_p:
                     del self.parked_by_pvvd[pid]
             if p_id in self.parked_by_pvvd:
@@ -5450,7 +5631,10 @@ class BusFusionEngine:
             if p_id not in current_pvvd_ids:
                 spz_val = rec.get("spz")
                 # Pokud tato SPZ už aktivně jezdí pod jiným PVVD ID, starý duplicitní záznam odstranit
-                if spz_val and spz_val in active_spzs:
+                # VÝJIMKA: Pokud má vůz ADMIN LOCK, NIKDY HO NEMAŽEME!
+                if str(p_id) in admin_locks:
+                    pass
+                elif spz_val and spz_val in active_spzs:
                     del self.registry_by_pvvd[p_id]
                     self.parked_by_pvvd.pop(p_id, None)
                     continue
@@ -6473,9 +6657,10 @@ def fetch_tt_bg(bus_id, cached_dict):
                 cached_dict["first_dep_time"] = times[0]
                 cached_dict["last_dep_time"] = times[-1]
                 
-            # Extrahuj destinaci z posledni zastavky v tabulce
+            # Extrahuj destinaci a vychozi zastavku z tabulky
             stops = re.findall(r'<tr>\s*<td>(.*?)</td>', tt_unescaped, re.IGNORECASE | re.DOTALL)
             if stops:
+                cached_dict["first_stop_name"] = stops[0].strip()
                 real_dest = stops[-1].strip()
                 curr_dest = cached_dict.get("destination", "")
                 if "Neznámý" in curr_dest or "-1" in curr_dest or not curr_dest:
@@ -6597,12 +6782,17 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
 
     for spz_val, buses in spz_groups.items():
         if len(buses) > 1:
-            admin_verified_buses = [b for b in buses if (b[1].get("admin_spz_verified") or b[1].get("is_locked_by_admin"))]
+            admin_verified_buses = [b for b in buses if (b[1].get("admin_spz_verified") or b[1].get("is_locked_by_admin") or (str(b[0]) in ADMIN_SPZ_LOCKS))]
             if len(admin_verified_buses) >= 2:
                 # KRITICKÝ KONFLIKT: 2x stejná SPZ ověřená adminem!
-                # Podle striktního pravidla: NIKDY neprovádět automatické rozluštění, VŽDY vyžadovat manuální schválení!
+                # Podle striktního pravidla uživatele (Bod 3): NIKDY NEMAŽEME SPZ ani u jednoho IDčka!
+                # Zapíšeme konflikt do dashboardu i do SPZ_CONFLICT_PROPOSALS a ponecháme oběma.
                 bus_a_id, bus_a_c = admin_verified_buses[0]
                 bus_b_id, bus_b_c = admin_verified_buses[1]
+                bus_a_c["admin_spz_conflict"] = True
+                bus_b_c["admin_spz_conflict"] = True
+                bus_a_c["spz_conflict_warn"] = True
+                bus_b_c["spz_conflict_warn"] = True
                 prop_id = f"admin_dup_{spz_val}_{bus_a_id}_{bus_b_id}"
 
                 a_lat = bus_a_c.get("lat") or 0
@@ -6612,13 +6802,13 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                 dist_between = round(haversine_m(a_lat, a_lng, b_lat, b_lng)) if (a_lat and b_lat) else 0
 
                 existing_prop = SPZ_CONFLICT_PROPOSALS.get(prop_id)
+                reason = (
+                    f"🚨 KRITICKÝ KONFLIKT: Dva vozy (#{bus_a_id} L{bus_a_c.get('line') or '?'} a #{bus_b_id} L{bus_b_c.get('line') or '?'}) "
+                    f"mají obě adminem ověřenou stejnou SPZ '{spz_val}'! "
+                    f"Vzdálenost mezi nimi je {dist_between}m. "
+                    f"Systém SPZ nemaže – vyžaduje se MANUÁLNÍ ROZHODNUTÍ v dashboardu."
+                )
                 if not existing_prop or existing_prop.get("status") == "pending":
-                    reason = (
-                        f"🚨 KRITICKÝ KONFLIKT: Dva vozy (#{bus_a_id} L{bus_a_c.get('line') or '?'} a #{bus_b_id} L{bus_b_c.get('line') or '?'}) "
-                        f"mají obě adminem ověřenou stejnou SPZ '{spz_val}'! "
-                        f"Vzdálenost mezi nimi je {dist_between}m. "
-                        f"Automatika do této situace nezasahuje – vyžaduje se MANUÁLNÍ SCHVÁLENÍ dispečera."
-                    )
                     SPZ_CONFLICT_PROPOSALS[prop_id] = {
                         "id": prop_id,
                         "type": "admin_duplicate_conflict",
@@ -6635,18 +6825,32 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                         "dist_between": dist_between,
                         "map_url_bus": f"https://datacorebot.koyeb.app/mapa?track={bus_a_id}",
                         "map_url_conflict": f"https://datacorebot.koyeb.app/mapa?track={bus_b_id}",
+                        "options": [
+                            {"action": "keep_first", "label": f"Ponechat vozu #{bus_a_id}"},
+                            {"action": "keep_second", "label": f"Ponechat vozu #{bus_b_id}"},
+                            {"action": "keep_both", "label": "Ponechat oběma (výjimka)"}
+                        ],
                         "reason": reason,
                         "status": "pending",
                         "created_at": now_str
                     }
-                # PŘESKOČIT automatické rozluštění pro tuto SPZ – nutný manuální zásah!
+                    if not existing_prop:
+                        log_automation_action(
+                            "admin_spz_conflict",
+                            bus_a_id,
+                            f"Kritický konflikt: 2x Admin SPZ {spz_val}",
+                            reason,
+                            spz=spz_val,
+                            line=bus_a_c.get("line")
+                        )
+                # PŘESKOČIT automatické rozluštění pro tuto SPZ – ani jeden vůz nesmí mít smazanou SPZ!
                 continue
 
             def _score_bus(item):
                 b_id, b_c = item
                 score = 0
-                if b_c.get("admin_spz_verified") or b_c.get("is_locked_by_admin"):
-                    score += 1000
+                if b_c.get("admin_spz_verified") or b_c.get("is_locked_by_admin") or (str(b_id) in ADMIN_SPZ_LOCKS):
+                    score += 10000
                 if b_c.get("spz_verified"):
                     score += 200
                 if b_c.get("spz_3factor"):
@@ -6679,6 +6883,10 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
             sorted_buses = sorted(buses, key=_score_bus, reverse=True)
             legit_bid, legit_c = sorted_buses[0]
             for thief_bid, thief_c in sorted_buses[1:]:
+                # Vůz s admin zámkem NIKDY nesmí přijít o SPZ (Bod 3)
+                if thief_c.get("admin_spz_verified") or thief_c.get("is_locked_by_admin") or (str(thief_bid) in ADMIN_SPZ_LOCKS):
+                    continue
+
                 prop_id = f"dup_{spz_val}_{thief_bid}"
                 existing_prop = SPZ_CONFLICT_PROPOSALS.get(prop_id)
                 # Pokud již bylo vyřešeno a SPZ už duplicitní není, přeskočit
@@ -6745,10 +6953,12 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                     reason = (f"Vůz #{thief_bid} (L{t_line}) měl duplicitní SPZ '{spz_val}' patřící vozu #{legit_bid} ({dist_between}m). "
                               f"Na Arriva mapě byl pro vůz #{thief_bid} spolehlivě nalezen vysílač s SPZ '{best_cand_spz}' "
                               f"({best_cand_dist:.0f}m na stejné lince {best_cand_line}).")
+                    resolution_found = True
                 else:
                     proposed_spz = "Aktivní hledání"
-                    reason = (f"Vůz #{thief_bid} (L{t_line}) neoprávněně převzal duplicitní SPZ '{spz_val}' od vozu #{legit_bid} ({dist_between}m). "
-                              f"Na Arriva mapě pro něj zatím nebyl nalezen žádný jistý vysílač na lince {t_line} – bezpečně uvolněno na Aktivní hledání.")
+                    reason = (f"Konflikt SPZ: Vozy #{legit_bid} a #{thief_bid} (L{t_line}) mají shodnou SPZ '{spz_val}' ({dist_between}m). "
+                              f"Automatika nenalezla jednoznačné přiřazení pro vůz #{thief_bid} na lince {t_line}. Návrh předán dispečerovi.")
+                    resolution_found = False
 
                 proposal = {
                     "id": prop_id,
@@ -6767,13 +6977,18 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                     "dist_between": dist_between,
                     "map_url_bus": f"https://datacorebot.koyeb.app/mapa?track={thief_bid}",
                     "map_url_conflict": f"https://datacorebot.koyeb.app/mapa?track={legit_bid}",
+                    "options": [
+                        {"action": "keep_legit", "label": f"Ponechat vozu #{legit_bid} (uvolnit #{thief_bid})"},
+                        {"action": "assign_thief", "label": f"Přiřadit vozu #{thief_bid} (uvolnit #{legit_bid})"},
+                        {"action": "release_both", "label": "Uvolnit oba na Aktivní hledání"}
+                    ],
                     "reason": reason,
                     "status": "pending",
                     "created_at": now_str
                 }
 
-                if auto_resolve or AUTO_RESOLVE_SPZ:
-                    # Automatické rozluštění v reálném čase
+                if resolution_found and (auto_resolve or AUTO_RESOLVE_SPZ):
+                    # Automatické rozluštění v reálném čase pouze pokud byla nalezena jistá alternativa
                     thief_c["spz"] = proposed_spz
                     thief_c["spz_verified"] = bool(is_reliable and best_cand_spz)
                     thief_c["spz_locked"] = bool(is_reliable and best_cand_spz)
@@ -6781,18 +6996,17 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
                     thief_c["admin_spz_verified"] = False
                     thief_c["admin_flag"] = False
                     proposal["status"] = "auto_resolved"
-                    if is_reliable and best_cand_spz:
-                        proposal["resolution_note"] = (f"Automode vyřešil duplicitu: SPZ '{spz_val}' ponechána vozu #{legit_bid}. "
-                                                       f"Vůz #{thief_bid} spolehlivě přepnut na SPZ '{best_cand_spz}' nalezenou na Arriva mapě ({best_cand_dist:.0f}m na lince {best_cand_line}).")
-                        log_spz_change(thief_bid, spz_val, best_cand_spz, reason="automode_duplicate_resolved", admin_note=f"Nalezena spolehlivá SPZ z Arrivy ({best_cand_dist:.0f}m na L{best_cand_line})")
-                        log_automation_action("duplicate_resolved", thief_bid, f"Automode vyřešil duplicitu SPZ {spz_val}", proposal["resolution_note"], spz=best_cand_spz, line=t_line)
-                    else:
-                        proposal["resolution_note"] = (f"Automode uvolnil duplicitu: SPZ '{spz_val}' ponechána legitimnímu vozu #{legit_bid}. "
-                                                       f"Vůz #{thief_bid} uvolněn na 'Aktivní hledání' (na Arriva mapě pro něj zatím není spolehlivý vysílač na lince {t_line}).")
-                        log_spz_change(thief_bid, spz_val, "Aktivní hledání", reason="automode_duplicate_released", admin_note=f"Uvolněno z duplicity, čeká se na Arrivu při lince {t_line}")
-                        log_automation_action("duplicate_resolved", thief_bid, f"Automode uvolnil duplicitu SPZ {spz_val}", proposal["resolution_note"], spz="Aktivní hledání", line=t_line)
-
+                    proposal["resolution_note"] = (f"Automode vyřešil duplicitu: SPZ '{spz_val}' ponechána vozu #{legit_bid}. "
+                                                   f"Vůz #{thief_bid} spolehlivě přepnut na SPZ '{best_cand_spz}' nalezenou na Arriva mapě ({best_cand_dist:.0f}m na lince {best_cand_line}).")
+                    log_spz_change(thief_bid, spz_val, best_cand_spz, reason="automode_duplicate_resolved", admin_note=f"Nalezena spolehlivá SPZ z Arrivy ({best_cand_dist:.0f}m na L{best_cand_line})")
+                    log_automation_action("duplicate_resolved", thief_bid, f"Automode vyřešil duplicitu SPZ {spz_val}", proposal["resolution_note"], spz=best_cand_spz, line=t_line)
                     print(f"[AUTO-RESOLVE SPZ] {proposal['resolution_note']}", flush=True)
+                else:
+                    # Nejednoznačný konflikt bez admin locku -> označit a poslat s možnostmi do dashboardu (Bod 3)
+                    thief_c["spz_conflict_warn"] = True
+                    legit_c["spz_conflict_warn"] = True
+                    if not existing_prop:
+                        log_automation_action("spz_conflict_unresolved", thief_bid, f"Nerozhodnutý konflikt SPZ {spz_val}", reason, spz=spz_val, line=t_line)
 
                 SPZ_CONFLICT_PROPOSALS[prop_id] = proposal
 
@@ -6804,7 +7018,7 @@ def analyze_spz_anomalies_and_conflicts(auto_resolve=False):
         if not current_spz or current_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "NONE", "AKTIVNÍ HLEDÁNÍ"):
             continue
 
-        if c.get("spz_verified") or c.get("admin_spz_verified"):
+        if c.get("spz_verified") and not (c.get("admin_spz_verified") or c.get("is_locked_by_admin") or (str(bid) in ADMIN_SPZ_LOCKS)):
             mem = SPZ_MEMORY.get(current_spz)
             if mem:
                 mem_lat = mem.get("last_arriva_lat") or 0
@@ -7438,6 +7652,7 @@ def background_map_worker():
                     c["timetable"] = None
                     c["all_stops"] = None
                     c["first_dep_time"] = None
+                    c["first_stop_name"] = None
                     c["last_dep_time"] = None
                     c["actual_start_time"] = None
                     c["actual_end_time"] = None
@@ -7526,19 +7741,39 @@ def background_map_worker():
                     is_before_departure = False
                     time_to_dep = 0
                     first_dep = c.get("first_dep_time")
+
+                    # Pokud se vůz pohybuje nebo ujel znatelnou vzdálenost, spoj už začal! (Bod 6)
+                    if is_moving or dm >= 25.0:
+                        if not c.get("actual_start_time"):
+                            c["actual_start_time"] = now.strftime('%H:%M')
+
+                    # Čeká na odjezd POUZE pokud ještě neodjel a nachází se u výchozí zastávky
                     if not is_moving and first_dep and not c.get("actual_start_time"):
-                        try:
-                            fh, fm = map(int, first_dep.split(':'))
-                            first_total = fh * 60 + fm
-                            cur_total = now.hour * 60 + now.minute
-                            diff = first_total - cur_total
-                            if diff < -720: diff += 1440
-                            elif diff > 720: diff -= 1440
-                            if 0 < diff <= 360:
-                                is_before_departure = True
-                                time_to_dep = int(diff)
-                        except Exception:
-                            pass
+                        first_stop = c.get("first_stop_name")
+                        is_near_start = True
+                        if first_stop:
+                            coords_f, _ = _lookup_stop_coords(first_stop, anchor=(lat, lng), max_anchor_dist_m=5000)
+                            if coords_f:
+                                dist_to_start = haversine_m(lat, lng, coords_f[0], coords_f[1])
+                                if dist_to_start > 450.0:
+                                    is_near_start = False
+                            elif not is_exact_stop_match(first_stop, c.get("nearest_stop")) and not is_exact_stop_match(first_stop, c.get("real_zastavka")):
+                                is_near_start = False
+
+                        if is_near_start:
+                            try:
+                                fh, fm = map(int, first_dep.split(':'))
+                                first_total = fh * 60 + fm
+                                cur_total = now.hour * 60 + now.minute
+                                diff = first_total - cur_total
+                                if diff < -720: diff += 1440
+                                elif diff > 720: diff -= 1440
+                                if 0 < diff <= 360:
+                                    is_before_departure = True
+                                    time_to_dep = int(diff)
+                            except Exception:
+                                pass
+
                     c["is_before_departure"] = is_before_departure
                     c["time_to_dep"] = time_to_dep
 
@@ -9017,6 +9252,10 @@ def api_admin_map_action():
         c["bug_locked"] = False
         c.pop("bug_lat", None)
         c.pop("bug_lng", None)
+        c["is_before_departure"] = False
+        c["time_to_dep"] = 0
+        c["_terminal_reached"] = False
+        c["actual_start_time"] = None
         c["color_class"] = ""
         c["status"] = "Aktivní"
 
@@ -9096,7 +9335,7 @@ def api_admin_map_action():
             c["admin_driver"] = new_driver
         c["admin_lock_permanent"] = permanent
         
-        # Vázání řidiče a poznámky k SPZ (cestují s touto SPZ)
+        # Vázání řidiče a poznámky k SPZ (cestují s touto SPZ, SPZ vozu se NIKDY nemění! - Bod 7)
         bus_spz = c.get("spz")
         if bus_spz and normalize_spz_key(bus_spz):
             set_spz_metadata(bus_spz, driver=new_driver, note=new_note, admin_nick=admin_name)
@@ -9106,6 +9345,26 @@ def api_admin_map_action():
             ADMIN_SPZ_LOCKS[bus_id]["admin_driver"] = new_driver
             if new_col and new_col not in ("", "\u2500\u2500"):
                 ADMIN_SPZ_LOCKS[bus_id]["color_class"] = new_col
+
+        # Záznam do logu dashboardu (Bod 7)
+        if new_driver:
+            log_automation_action(
+                "driver_assigned",
+                bus_id,
+                f"Admin {admin_name} přiřadil řidiče '{new_driver}' k vozu #{bus_id}",
+                f"Řidič '{new_driver}' spojen s SPZ '{bus_spz or 'neznámá'}' vozu #{bus_id}.",
+                spz=bus_spz,
+                line=c.get("line")
+            )
+        if new_note:
+            log_automation_action(
+                "note_saved",
+                bus_id,
+                f"Admin {admin_name} uložil poznámku k vozu #{bus_id}",
+                f"Poznámka: {new_note} (SPZ: {bus_spz or 'neznámá'})",
+                spz=bus_spz,
+                line=c.get("line")
+            )
 
     elif action == "mark_bug":
         # Pokud již je vůz označen jako BUG, kliknutí funguje jako toggle pro zrušení BUG stavu

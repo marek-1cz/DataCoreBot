@@ -248,6 +248,91 @@ function setGraphicsLevel(level, isInit = false) {
   }
 }
 
+// === HLADKÝ POHYB VOZIDEL (ANIMACE) & FILTR POUZE V JÍZDĚ (Body 1, 4, 5) ===
+window.isSmoothAnimActive = function() {
+  let custom = localStorage.getItem('smooth_anim_enabled');
+  if (custom !== null) return custom === 'true';
+  let lvl = parseInt(localStorage.getItem('graphics_level') || '3');
+  return lvl >= 3; // Od vysoké kvality automaticky zapnuto
+};
+
+window.toggleSmoothAnim = function(enabled) {
+  localStorage.setItem('smooth_anim_enabled', enabled ? 'true' : 'false');
+  let cb = document.getElementById('settings-smooth-anim');
+  if (cb) cb.checked = enabled;
+};
+
+window.onlyMovingBuses = (localStorage.getItem('only_moving_buses') === 'true');
+
+window.toggleOnlyMovingBuses = function(forceVal) {
+  if (typeof forceVal === 'boolean') {
+    window.onlyMovingBuses = forceVal;
+  } else {
+    window.onlyMovingBuses = !window.onlyMovingBuses;
+  }
+  localStorage.setItem('only_moving_buses', window.onlyMovingBuses ? 'true' : 'false');
+  let cb = document.getElementById('settings-only-moving');
+  if (cb) cb.checked = window.onlyMovingBuses;
+  let btn = document.getElementById('moving-only-btn');
+  if (btn) {
+    if (window.onlyMovingBuses) {
+      btn.style.background = 'rgba(16, 185, 129, 0.25)';
+      btn.style.borderColor = '#10b981';
+      btn.style.color = '#34d399';
+      btn.innerHTML = '<i class="fas fa-play"></i> Pouze v jízdě (AKTIVNÍ)';
+    } else {
+      btn.style.background = '';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+      btn.innerHTML = '<i class="fas fa-play"></i> Pouze v jízdě';
+    }
+  }
+  if (typeof fetchBuses === 'function') fetchBuses();
+};
+
+function animateMarkerTo(marker, targetLat, targetLng, durationMs = 1200) {
+  if (!marker) return;
+  let curPos = marker.getLatLng();
+  let startLat = curPos.lat;
+  let startLng = curPos.lng;
+  if (Math.abs(startLat - targetLat) < 0.000005 && Math.abs(startLng - targetLng) < 0.000005) {
+    return;
+  }
+  let dLat = Math.abs(startLat - targetLat);
+  let dLng = Math.abs(startLng - targetLng);
+  // Pokud je to velký skok (např. teleportace přes 8 km nebo inicializace), skoč bez animace
+  if (dLat > 0.08 || dLng > 0.08) {
+    marker.setLatLng([targetLat, targetLng]);
+    return;
+  }
+
+  if (marker._animFrame) {
+    cancelAnimationFrame(marker._animFrame);
+    marker._animFrame = null;
+  }
+
+  let startTime = performance.now();
+  function easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+  }
+
+  function animStep(nowTime) {
+    let elapsed = nowTime - startTime;
+    let progress = Math.min(elapsed / durationMs, 1.0);
+    let ease = easeInOutQuad(progress);
+    let curLat = startLat + (targetLat - startLat) * ease;
+    let curLng = startLng + (targetLng - startLng) * ease;
+    marker.setLatLng([curLat, curLng]);
+    if (progress < 1.0) {
+      marker._animFrame = requestAnimationFrame(animStep);
+    } else {
+      marker._animFrame = null;
+      marker.setLatLng([targetLat, targetLng]);
+    }
+  }
+  marker._animFrame = requestAnimationFrame(animStep);
+}
+
 function swNext(step) {
   document.querySelectorAll('.sw-step').forEach(e => e.style.display = 'none');
   let s = document.getElementById('sw-step-' + step);
@@ -2554,6 +2639,31 @@ async function fetchBuses() {
 
     data.buses.forEach(bus => {
       if (!bus.lat || !bus.lng) return;
+
+      // FILTR POUZE PRO JEDOUCÍ VOZY (Bod 5)
+      if (window.onlyMovingBuses) {
+        let isNonDriving = Boolean(
+          bus.is_offline ||
+          bus.in_depot ||
+          bus.color_class === 'bg-lastpos' ||
+          bus.color_class === 'bg-yellow' ||
+          bus.color_class === 'bg-purple' ||
+          bus.color_class === 'bg-gray' ||
+          bus.is_before_departure ||
+          bus.status === 'Poslední známá poloha' ||
+          (bus.status && (bus.status.startsWith('Vozovna') || bus.status.includes('Odstaven') || bus.status.includes('Odstáven') || bus.status.includes('Konečná') || bus.status.includes('Čeká'))) ||
+          !bus.line || bus.line === '0' || bus.line === 'Neznámá' || bus.line === 'Neznama'
+        );
+        if (isNonDriving) {
+          let existingMarker = window.busMarkersMap.get(bus.id);
+          if (existingMarker) {
+            ml.removeLayer(existingMarker);
+            window.busMarkersMap.delete(bus.id);
+          }
+          return;
+        }
+      }
+
       currentBusIds.add(bus.id);
       let mc = bus.color_class, dv = parseInt(bus.delay), dTxt = '';
       if (isNaN(dv)) dv = 0;
@@ -2821,13 +2931,31 @@ async function fetchBuses() {
 
       let existingMarker = window.busMarkersMap.get(bus.id);
       if (existingMarker) {
-        existingMarker.setLatLng([bus.lat, bus.lng]);
-        existingMarker.setIcon(icon);
+        // PLYNULÁ ANIMACE POHYBU (Bod 4) nebo okamžitý posun:
+        if (window.isSmoothAnimActive && window.isSmoothAnimActive()) {
+          animateMarkerTo(existingMarker, bus.lat, bus.lng, 1200);
+        } else {
+          existingMarker.setLatLng([bus.lat, bus.lng]);
+        }
+
+        // OPTIMALIZACE VÝKONU (Bod 1):
+        // setIcon ničí a znovu sestavuje SVG v DOMu. Měnit pouze pokud se obsah skutečně změnil!
+        let newIconHtml = icon.options.html;
+        if (existingMarker._lastIconHtml !== newIconHtml) {
+          existingMarker.setIcon(icon);
+          existingMarker._lastIconHtml = newIconHtml;
+        }
+
         if (!(isTyping && openPopupBusId === bus.id)) {
-          existingMarker.setPopupContent(popH);
+          if (existingMarker._lastPopH !== popH) {
+            existingMarker.setPopupContent(popH);
+            existingMarker._lastPopH = popH;
+          }
         }
       } else {
         let m = L.marker([bus.lat, bus.lng], { icon, zIndexOffset: 1000 });
+        m._lastIconHtml = icon.options.html;
+        m._lastPopH = popH;
         m.bindPopup(popH, { className: 'dark-popup', maxWidth: 300 });
         m._busId = bus.id;
         m.on('popupopen', () => { openPopupBusId = bus.id; });
@@ -3280,3 +3408,22 @@ if (IS_ADMIN) {
 // Automaticky načti vozovny při startu
 loadDepotZones();
 setInterval(loadDepotZones, 20000); // refresh kazdych 20 sekund
+
+// Inicializace přepínačů animací a filtrů při startu (Body 4 a 5)
+(function initAnimationAndFilterControls() {
+  try {
+    let cbSmooth = document.getElementById('settings-smooth-anim');
+    if (cbSmooth) cbSmooth.checked = window.isSmoothAnimActive();
+
+    let cbMoving = document.getElementById('settings-only-moving');
+    if (cbMoving) cbMoving.checked = window.onlyMovingBuses;
+
+    let btnMoving = document.getElementById('moving-only-btn');
+    if (btnMoving && window.onlyMovingBuses) {
+      btnMoving.style.background = 'rgba(16, 185, 129, 0.25)';
+      btnMoving.style.borderColor = '#10b981';
+      btnMoving.style.color = '#34d399';
+      btnMoving.innerHTML = '<i class="fas fa-play"></i> Pouze v jízdě (AKTIVNÍ)';
+    }
+  } catch(e) {}
+})();
