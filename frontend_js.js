@@ -1421,10 +1421,12 @@ async function showTT(busId) {
 let swShown = false, pageLoad = Date.now();
 function checkSW(uptimeSec) {
   let sw = document.getElementById('sw');
-  if (uptimeSec < 600 && (Date.now() - pageLoad) < 660000) {
+  if (!sw) return;
+  if (uptimeSec < 25 && (Date.now() - pageLoad) < 30000) {
     if (!swShown) { swShown = true; sw.style.display = 'block'; }
-    let rem = Math.max(0, Math.round(600 - uptimeSec));
-    document.getElementById('sw-cd').textContent = rem > 0 ? 'Pribl. ' + rem + 's do plneho nacteni' : 'Dokoncuji...';
+    let rem = Math.max(0, Math.round(25 - uptimeSec));
+    let cdEl = document.getElementById('sw-cd');
+    if (cdEl) cdEl.textContent = rem > 0 ? 'Pribl. ' + rem + 's do plneho nacteni' : 'Dokoncuji...';
   } else { sw.style.display = 'none'; swShown = false; }
 }
 
@@ -2651,7 +2653,8 @@ async function fetchBuses() {
           bus.color_class === 'bg-gray' ||
           bus.is_before_departure ||
           bus.status === 'Poslední známá poloha' ||
-          (bus.status && (bus.status.startsWith('Vozovna') || bus.status.includes('Odstaven') || bus.status.includes('Odstáven') || bus.status.includes('Konečná') || bus.status.includes('Čeká'))) ||
+          bus.status === 'Zmizel z mapy PVVD' ||
+          (bus.status && (bus.status.startsWith('Vozovna') || bus.status.includes('Odstaven') || bus.status.includes('Odstáven') || bus.status.includes('Konečná') || bus.status.includes('Čeká') || bus.status.includes('Zmizel z mapy'))) ||
           !bus.line || bus.line === '0' || bus.line === 'Neznámá' || bus.line === 'Neznama'
         );
         if (isNonDriving) {
@@ -2683,7 +2686,7 @@ async function fetchBuses() {
         markerColor = 'bg-yellow';
       }
       let isTrain = (typeof isTrainVehicle === 'function') ? isTrainVehicle(bus) : Boolean(bus.is_train);
-      let isWithdrawn = Boolean(bus.is_offline && (bus.is_withdrawn || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-gray' || bus.color_class === 'bg-lastpos' || bus.status === 'Poslední známá poloha'));
+      let isWithdrawn = Boolean(bus.is_offline && (bus.is_withdrawn || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-gray' || bus.color_class === 'bg-lastpos' || bus.status === 'Poslední známá poloha' || bus.status === 'Zmizel z mapy PVVD' || (bus.status && bus.status.includes('Zmizel z mapy'))));
       let icon = L.divIcon({ className: '', html: buildMarkerSvg(markerColor, bus.bearing, bus.line, isTrain, bus.id, isWithdrawn), iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20] });
       let spzH = '', invTxt = '', histBtn = '';
       if (!bus.is_train) {
@@ -2708,7 +2711,7 @@ async function fetchBuses() {
         withdrawnW = `<div style="background:linear-gradient(135deg,rgba(20,20,25,0.97),rgba(30,25,30,0.97));border:1.5px solid #6b7280;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 8px rgba(107,114,128,0.3);"><b style="color:#9ca3af;font-size:12px;letter-spacing:0.5px;">⏸️ ODSTÁVEN</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.45;display:inline-block;margin-top:3px;">Vůz neodesílá data.<br>poslední známá poloha ${tOff}.<br>pravděpodobně autobus parkuje a nebo je odstaven</span></div>`;
       }
       let lastposW = '';
-      if (bus.is_offline && (mc === 'bg-lastpos' || bus.status === 'Poslední známá poloha')) {
+      if (bus.is_offline && (mc === 'bg-lastpos' || bus.status === 'Poslední známá poloha' || bus.status === 'Zmizel z mapy PVVD' || (bus.status && bus.status.includes('Zmizel z mapy')))) {
         let tOffline = bus.offline_since_time ? ` v ${bus.offline_since_time}` : '';
         lastposW = `<div style="background:linear-gradient(135deg,rgba(24,24,32,0.95),rgba(45,30,45,0.95));border:1.5px solid #f472b6;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 10px rgba(244,114,182,0.25);"><b style="color:#f472b6;font-size:12px;letter-spacing:0.5px;">📍 POSLEDNÍ ZNÁMÁ POLOHA</b><br><span style="color:#cbd5e1;font-size:10px;">Vůz zmizel z mapy pvvd.idpk.cz${tOffline}. Ponechán na stejné pozici, než se znovu objeví.</span></div>`;
       }
@@ -2721,7 +2724,7 @@ async function fetchBuses() {
       if (bus.in_depot && bus.depot_name) { let dCol = bus.depot_color || '#facc15'; depotW = `<div style="background:rgba(${hexToRgb(dCol)},0.12);border:1px solid ${dCol};border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:${dCol};"><b>🅿️ ${bus.depot_name}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny</span></div>`; }
       else if (mc === 'bg-yellow' || bus.status?.startsWith('Vozovna')) depotW = `<div style="background:rgba(250,204,21,.12);border:1px solid #facc15;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#facc15;"><b>🅿️ ${bus.status || 'Vozovna'}</b><br><span style="color:#94a3b8;font-size:10px;">Bus v areálu vozovny</span></div>`;
       let sc = '#10b981';
-      if (mc === 'bg-lastpos' || bus.status === 'Poslední známá poloha') sc = '#f472b6';
+      if (mc === 'bg-lastpos' || bus.status === 'Poslední známá poloha' || bus.status === 'Zmizel z mapy PVVD' || (bus.status && bus.status.includes('Zmizel z mapy'))) sc = '#f472b6';
       else if (mc === 'bg-bug') sc = '#6b7280';
       else if (mc === 'bg-orange') sc = '#f59e0b';
       else if (mc === 'bg-yellow' || bus.status?.includes('Vozovna')) sc = '#facc15';
@@ -2798,9 +2801,9 @@ async function fetchBuses() {
       }
 
       let popH = `
-        <div class="ph" style="${mc === 'bg-bug' ? 'background:#1f2937;' : ''}${mc === 'bg-orange' ? 'background:#1c1400;' : ''}${(mc === 'bg-lastpos' || bus.status === 'Poslední známá poloha') ? 'background:linear-gradient(90deg,#181820,#2e1e2c);border-bottom:1px solid #f472b6;' : ''}">
+        <div class="ph" style="${mc === 'bg-bug' ? 'background:#1f2937;' : ''}${mc === 'bg-orange' ? 'background:#1c1400;' : ''}${(mc === 'bg-lastpos' || bus.status === 'Poslední známá poloha' || bus.status === 'Zmizel z mapy PVVD' || (bus.status && bus.status.includes('Zmizel z mapy'))) ? 'background:linear-gradient(90deg,#181820,#2e1e2c);border-bottom:1px solid #f472b6;' : ''}">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-            <h3 class="ph-t" style="${mc === 'bg-bug' ? 'color:#9ca3af;' : ''}${mc === 'bg-orange' ? 'color:#f59e0b;' : ''}${(mc === 'bg-lastpos' || bus.status === 'Poslední známá poloha') ? 'color:#fbcfe8;' : ''}; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0;">
+            <h3 class="ph-t" style="${mc === 'bg-bug' ? 'color:#9ca3af;' : ''}${mc === 'bg-orange' ? 'color:#f59e0b;' : ''}${(mc === 'bg-lastpos' || bus.status === 'Poslední známá poloha' || bus.status === 'Zmizel z mapy PVVD' || (bus.status && bus.status.includes('Zmizel z mapy'))) ? 'color:#fbcfe8;' : ''}; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0;">
               ${_hlavickaSpoj}
             </h3>
             <span style="font-size:10px; color:#64748b; font-weight:normal; letter-spacing:0.5px; white-space:nowrap; flex-shrink:0;">#${bus.id}</span>
@@ -3024,7 +3027,30 @@ async function fetchBuses() {
   }
 }
 fetchBuses();
-setInterval(fetchBuses, 10000);
+// Spolehlivý časovač: Web Worker netrpí uspáváním tabu v pozadí v prohlížečích (Chrome throttling)
+try {
+  let blob = new Blob([`
+    setInterval(function(){ postMessage('tick'); }, 10000);
+  `], { type: 'application/javascript' });
+  let bgTimer = new Worker(URL.createObjectURL(blob));
+  bgTimer.onmessage = function() {
+    if (typeof fetchBuses === 'function') fetchBuses();
+  };
+} catch(e) {
+  setInterval(fetchBuses, 10000);
+}
+
+// Okamžité obnovení poloh při přepnutí zpět na záložku nebo do okna
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden && typeof fetchBuses === 'function') {
+    fetchBuses();
+  }
+});
+window.addEventListener('focus', function() {
+  if (typeof fetchBuses === 'function') {
+    fetchBuses();
+  }
+});
 
 // ═══════════════════════════════════════════════════════════
 // VOZOVNY (DEPOT ZONES) — admin draw + public garage icons
