@@ -3888,7 +3888,7 @@ async function fetchBuses(){
       let inDepot = Boolean(bus.in_depot || (bus.status && bus.status.includes('Vozovna')) || mc === 'bg-yellow');
       let markerColor = inDepot ? 'bg-yellow' : mc;
       let isTrain = isTrainVehicle(bus);
-      let isWithdrawn = Boolean(!inDepot && bus.is_offline && (bus.is_withdrawn || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-gray'));
+      let isWithdrawn = Boolean(!inDepot && bus.is_offline && (bus.is_withdrawn || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-gray' || bus.color_class === 'bg-lastpos' || bus.status === 'Poslední známá poloha'));
       let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,isTrain,bus.id,isWithdrawn),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
       let spzH='',invTxt='',histBtn='';
       if(!isTrain){
@@ -4025,7 +4025,7 @@ async function fetchBuses(){
       } else if (mc === 'bg-orange') {
         headerBg = 'background:#1c1400;';
         headerColor = 'color:#f59e0b;';
-      } else if (mc === 'bg-lastpos') {
+      } else if (mc === 'bg-lastpos' || bus.status === 'Poslední známá poloha') {
         headerBg = 'background:linear-gradient(90deg,#181820,#2e1e2c);border-bottom:1px solid #f472b6;';
         headerColor = 'color:#fbcfe8;';
       }
@@ -5443,27 +5443,21 @@ class BusFusionEngine:
             if p_id in self.parked_by_pvvd:
                 del self.parked_by_pvvd[p_id]
 
-        # 4. Přepnutí vozidel, která zmizela z PVVD, do stavu PARKED (zůstávají na mapě)
-        # Ochrana před chvilkovým výpadkem: Vůz musí chybět alespoň 120 s (2 minuty), než je označen jako zaparkovaný
+        # 4. Přepnutí vozidel, která zmizela z PVVD, do stavu PARKED (zůstávají na mapě na stejné pozici)
         active_spzs = {r.get("spz") for r in self.registry_by_pvvd.values() if r.get("pvvd_id") in current_pvvd_ids and r.get("spz")}
 
         for p_id, rec in list(self.registry_by_pvvd.items()):
             if p_id not in current_pvvd_ids:
                 spz_val = rec.get("spz")
-                # Pokud tato SPZ už aktivně jezdí pod jiným PVVD ID, starý záznam odstranit
+                # Pokud tato SPZ už aktivně jezdí pod jiným PVVD ID, starý duplicitní záznam odstranit
                 if spz_val and spz_val in active_spzs:
                     del self.registry_by_pvvd[p_id]
                     self.parked_by_pvvd.pop(p_id, None)
                     continue
 
-                missing_sec = now - (rec.get("last_seen") or now)
-                # Pokud v datech chybí méně než 120 s, ponechat v aktivním stavu (výpadek signálu na trase)
-                if missing_sec < 120:
-                    continue
-
-                if rec.get("status") != "PARKED":
-                    rec["status"] = "PARKED"
-                    rec["current_line"] = None
+                rec["status"] = "PARKED"
+                rec["current_line"] = None
+                if not rec.get("parked_since"):
                     rec["parked_since"] = rec.get("last_seen") or now
                 if spz_val:
                     self.parked_by_spz[spz_val] = rec
@@ -5471,18 +5465,17 @@ class BusFusionEngine:
 
         self.save_state()
 
-        # Aktivní vozy: živé z PVVD + vozy v krátkém výpadku signálu (< 120s)
-        active_list = [r for p_id, r in self.registry_by_pvvd.items() if p_id in current_pvvd_ids or (now - (r.get("last_seen") or now)) < 120]
+        # Aktivní vozy: striktně živé z PVVD
+        active_list = [r for p_id, r in self.registry_by_pvvd.items() if p_id in current_pvvd_ids]
         act_spzs_final = {r.get("spz") for r in active_list if r.get("spz")}
 
-        # Zaparkované vozy: chybí déle než 120s, max 7 dní, a jejich SPZ NIKDY nesmí být v active_list
+        # Zaparkované / offline vozy: všechny vozy, které zmizely z PVVD (ponechané na poslední známé pozici, max 7 dní)
         cutoff_parked = now - (7 * 86400)
         parked_list = [
             r for p_id, r in self.parked_by_pvvd.items()
             if p_id not in current_pvvd_ids
             and (not r.get("spz") or r.get("spz") not in act_spzs_final)
             and (r.get("last_seen") or now) >= cutoff_parked
-            and (now - (r.get("last_seen") or now)) >= 120
         ]
         return active_list + parked_list
 
@@ -7323,8 +7316,11 @@ def background_map_worker():
 
             # Oddělené záznamy pro vlaky z PVVD (vlaky se zobrazují živě bez SPZ, neukládají se jako busy)
             train_inflow = []
+            current_inflow_ids = set()
             if isinstance(data_inflow, list):
                 for p in data_inflow:
+                    if isinstance(p, dict) and "id" in p:
+                        current_inflow_ids.add(str(p["id"]))
                     p_id = str(p.get("id", "0"))
                     p_line = str(p.get("text") or p.get("line") or "").strip()
                     p_trac = str(p.get("traction") or "BUS").upper()
@@ -7475,9 +7471,9 @@ def background_map_worker():
 
                 bind_bus_to_spz_metadata(c, spz)
 
-                # ── POJISTKA: Pokud se vůz prokazatelně pohybuje nebo má linku, NESMÍ být PARKED ani Odstaven! ──
+                # ── POJISTKA: Pokud se vůz prokazatelně pohybuje nebo má linku a JE ŽIVÝ V PVVD ──
                 has_route = bool(raw_line and raw_line not in ("0", "-1", "None", "Neznámá", "Neznama"))
-                if status == "PARKED" and (is_moving or dm >= 15.0 or has_route):
+                if status == "PARKED" and bid in current_inflow_ids and (dm >= 15.0 or has_route):
                     status = "ACTIVE_LINE" if has_route else "MANIPULATION"
                     v["status"] = status
                     c["is_offline"] = False
@@ -7485,7 +7481,8 @@ def background_map_worker():
                     c.pop("offline_since_time", None)
 
                 # Nastavení životního cyklu (ACTIVE_LINE, MANIPULATION, PARKED)
-                if status == "PARKED":
+                if status == "PARKED" or bid not in current_inflow_ids:
+                    status = "PARKED"
                     c["is_offline"] = True
                     p_since = v.get("parked_since") or int(time.time())
                     try:
@@ -7493,21 +7490,18 @@ def background_map_worker():
                     except Exception:
                         c["offline_since_time"] = now.strftime('%H:%M')
 
-                    off_min = (int(time.time()) - p_since) / 60.0 if p_since else 0.0
                     if in_depot_zone:
                         c["color_class"] = "bg-yellow"
                         c["status"] = f"Vozovna: {depot_zone_name}"
                         c["is_withdrawn"] = False
-                    elif off_min < 10.0:
+                    else:
+                        # Vůz zmizel z mapy pvvd.idpk.cz -> VŽDY černo-šedo-růžová (Poslední známá poloha)!
                         c["color_class"] = "bg-lastpos"
                         c["status"] = "Poslední známá poloha"
-                        c["is_withdrawn"] = False
-                    else:
-                        c["color_class"] = "bg-gray"
-                        c["status"] = "Odstáven"
                         c["is_withdrawn"] = True
+
                     clean_last = normalize_line(last_valid_line) or last_valid_line
-                    display_line = clean_last or "Odstaveno"
+                    display_line = clean_last or ""
 
                 elif status == "MANIPULATION":
                     c["is_offline"] = False
@@ -7758,6 +7752,80 @@ def background_map_worker():
                     "last_known_spoj": c.get("last_known_spoj") or c.get("spoj_num"),
                     "parked_since": v.get("parked_since"),
                     "spz_inherited": bool(v.get("spz_inherited"))
+                })
+
+            # Pojistka: Žádný autobus z GLOBAL_BUS_CACHE nesmí z mapy zmizet!
+            # Pokud chybí v merged_vehicles, zachováme ho na poslední známé pozici jako offline bg-lastpos
+            merged_ids = {str(v.get("pvvd_id")) for v in merged_vehicles}
+            for bid_cached, c_cached in list(GLOBAL_BUS_CACHE.items()):
+                if bid_cached in merged_ids:
+                    continue
+                if is_train_vehicle(bid_cached, c_cached.get("line")) or c_cached.get("is_train"):
+                    continue
+                if bid_cached in ADMIN_DELETED_BUSES:
+                    continue
+                lat_c = float(c_cached.get("lat") or 0)
+                lng_c = float(c_cached.get("lng") or 0)
+                if not (lat_c and lng_c):
+                    continue
+
+                in_depot_zone, depot_zone_name = _check_depot_zones(lat_c, lng_c)
+                c_cached["is_offline"] = True
+                c_cached["is_withdrawn"] = True
+                if in_depot_zone:
+                    c_cached["color_class"] = "bg-yellow"
+                    c_cached["status"] = f"Vozovna: {depot_zone_name}"
+                else:
+                    c_cached["color_class"] = "bg-lastpos"
+                    c_cached["status"] = "Poslední známá poloha"
+                if not c_cached.get("offline_since_time"):
+                    c_cached["offline_since_time"] = now.strftime('%H:%M')
+
+                clean_last = normalize_line(c_cached.get("line")) or c_cached.get("line") or ""
+
+                new_live_data.append({
+                    "id": bid_cached,
+                    "trip_id": c_cached.get("trip_id", f"TRIP-{bid_cached}"),
+                    "lat": lat_c,
+                    "lng": lng_c,
+                    "bearing": c_cached.get("bearing"),
+                    "line": clean_last,
+                    "real_linka_spoj": c_cached.get("real_linka_spoj"),
+                    "delay": 0,
+                    "arrival_delay": c_cached.get("arrival_delay"),
+                    "locked_arrival_delay": bool(c_cached.get("locked_arrival_delay")),
+                    "time_to_dep": 0,
+                    "is_before_departure": False,
+                    "in_depot": bool(in_depot_zone),
+                    "depot_name": depot_zone_name if in_depot_zone else "",
+                    "destination": c_cached.get("destination") or "Neznámý",
+                    "spz": c_cached.get("spz") or "Aktivní hledání",
+                    "spz_verified": bool(c_cached.get("spz_verified")),
+                    "is_train": False,
+                    "status": c_cached["status"],
+                    "color_class": c_cached["color_class"],
+                    "inactive_minutes": 999.0,
+                    "last_updated": c_cached.get("offline_since_time") or now.strftime("%H:%M:%S"),
+                    "investigating": False,
+                    "investigation_spz": "",
+                    "admin_flag": bool(c_cached.get("admin_flag")),
+                    "admin_note": c_cached.get("admin_note", ""),
+                    "admin_driver": c_cached.get("admin_driver", ""),
+                    "admin_spz_verified": bool(c_cached.get("admin_spz_verified")),
+                    "is_locked_by_admin": bool(c_cached.get("is_locked_by_admin") or c_cached.get("admin_spz_verified")),
+                    "admin_spz_bug": bool(c_cached.get("admin_spz_bug")),
+                    "admin_spz_conflict": bool(c_cached.get("admin_spz_conflict")),
+                    "real_zastavka": c_cached.get("real_zastavka"),
+                    "nearest_stop": c_cached.get("nearest_stop"),
+                    "last_stop_name": c_cached.get("last_stop_name", ""),
+                    "vehicle_type": sanitize_vehicle_type(c_cached.get("vehicle_type")),
+                    "is_withdrawn": True,
+                    "is_offline": True,
+                    "offline_since_time": c_cached.get("offline_since_time"),
+                    "spoj_num": c_cached.get("spoj_num"),
+                    "last_known_spoj": c_cached.get("last_known_spoj") or c_cached.get("spoj_num"),
+                    "parked_since": None,
+                    "spz_inherited": bool(c_cached.get("spz_inherited"))
                 })
 
             # Živé vlaky z PVVD (vlaky NIKDY nemají SPZ ani offline stav)
