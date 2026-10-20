@@ -2,12 +2,5 @@
   "auto_resolve": true,
   "watched_buses": [],
   "ignored_errors": [],
-  "spz_metadata": {
-    "4P23333": {
-      "spz": "4P2 3333",
-      "driver": "Josef Maly",
-      "updated_at": "20.10.2026 18:08",
-      "updated_by": "Admin"
-    }
-  }
+  "spz_metadata": {}
 }

@@ -5007,58 +5007,79 @@ def format_spz_display(raw_spz: str) -> str:
 
 def _load_spz_settings(db_client=None):
     global AUTO_RESOLVE_SPZ, WATCHED_SPZ_BUSES, IGNORED_SPZ_ERRORS, SPZ_METADATA
-    # 1. Lokální soubor spz_settings.json
-    try:
-        if os.path.exists(_SPZ_SETTINGS_PATH):
-            with open(_SPZ_SETTINGS_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if "auto_resolve" in data:
-                    AUTO_RESOLVE_SPZ = bool(data["auto_resolve"])
-                if "watched_buses" in data:
-                    WATCHED_SPZ_BUSES = set(str(x) for x in data["watched_buses"])
-                if "ignored_errors" in data:
-                    IGNORED_SPZ_ERRORS = set(str(x) for x in data["ignored_errors"])
-                if "spz_metadata" in data and isinstance(data["spz_metadata"], dict):
-                    for k, v in data["spz_metadata"].items():
-                        nk = normalize_spz_key(k)
-                        if nk and isinstance(v, dict):
-                            v["spz"] = format_spz_display(v.get("spz") or nk)
-                            SPZ_METADATA[nk] = v
-    except Exception as e:
-        print(f"[SPZ-SETTINGS] Load json err: {e}", flush=True)
 
-    # 2. Lokální SQLite tabulka spz_metadata_local
-    try:
-        from local_db import init_local_db, local_spz_metadata_load_all
-        init_local_db()
-        loc_meta = local_spz_metadata_load_all()
-        for k, v in loc_meta.items():
-            nk = normalize_spz_key(k)
-            if nk and nk not in SPZ_METADATA:
-                v["spz"] = format_spz_display(v.get("spz") or nk)
-                SPZ_METADATA[nk] = v
-    except Exception:
-        pass
+    db_c = db_client
+    if not db_c and "get_db_client" in globals():
+        db_c = get_db_client()
 
-    # 3. Supabase cloudové nastavení (klíč spz_metadata v tabulce settings - přežije restart/deploy na Koyeb)
-    try:
-        db_c = db_client
-        if not db_c and "get_db_client" in globals():
-            db_c = get_db_client()
-        if db_c:
+    loaded_from_supabase = False
+    if db_c:
+        try:
             sb_res = db_c.table("settings").select("setting_value").eq("setting_key", "spz_metadata").execute()
             if sb_res and sb_res.data and len(sb_res.data) > 0:
                 raw_val = sb_res.data[0].get("setting_value")
-                if raw_val:
+                if raw_val is not None:
                     sb_dict = json.loads(raw_val)
                     if isinstance(sb_dict, dict):
+                        SPZ_METADATA.clear()
                         for k, v in sb_dict.items():
                             nk = normalize_spz_key(k)
                             if nk and isinstance(v, dict):
-                                if nk not in SPZ_METADATA:
-                                    SPZ_METADATA[nk] = v
-    except Exception as e_sb:
-        pass
+                                v["spz"] = format_spz_display(v.get("spz") or nk)
+                                SPZ_METADATA[nk] = v
+                        loaded_from_supabase = True
+                        print(f"[SPZ-SETTINGS] Načteno {len(SPZ_METADATA)} záznamů SPZ metadat přímo z persistentní Supabase (autoritativní).", flush=True)
+        except Exception as e_sb:
+            print(f"[SPZ-SETTINGS] Supabase load err: {e_sb}", flush=True)
+
+    # Pokud Supabase není dostupná nebo selhala, použijeme lokální zálohy
+    if not loaded_from_supabase:
+        # 1. Lokální SQLite tabulka spz_metadata_local
+        try:
+            from local_db import init_local_db, local_spz_metadata_load_all
+            init_local_db()
+            loc_meta = local_spz_metadata_load_all()
+            for k, v in loc_meta.items():
+                nk = normalize_spz_key(k)
+                if nk and nk not in SPZ_METADATA:
+                    v["spz"] = format_spz_display(v.get("spz") or nk)
+                    SPZ_METADATA[nk] = v
+        except Exception:
+            pass
+
+        # 2. Lokální soubor spz_settings.json
+        try:
+            if os.path.exists(_SPZ_SETTINGS_PATH):
+                with open(_SPZ_SETTINGS_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if "auto_resolve" in data:
+                        AUTO_RESOLVE_SPZ = bool(data["auto_resolve"])
+                    if "watched_buses" in data:
+                        WATCHED_SPZ_BUSES = set(str(x) for x in data["watched_buses"])
+                    if "ignored_errors" in data:
+                        IGNORED_SPZ_ERRORS = set(str(x) for x in data["ignored_errors"])
+                    if "spz_metadata" in data and isinstance(data["spz_metadata"], dict):
+                        for k, v in data["spz_metadata"].items():
+                            nk = normalize_spz_key(k)
+                            if nk and isinstance(v, dict) and nk not in SPZ_METADATA:
+                                v["spz"] = format_spz_display(v.get("spz") or nk)
+                                SPZ_METADATA[nk] = v
+        except Exception as e:
+            print(f"[SPZ-SETTINGS] Load json err: {e}", flush=True)
+    else:
+        # Pokud máme data ze Supabase, dotáhneme ostatní nastavení ze souboru
+        try:
+            if os.path.exists(_SPZ_SETTINGS_PATH):
+                with open(_SPZ_SETTINGS_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if "auto_resolve" in data:
+                        AUTO_RESOLVE_SPZ = bool(data["auto_resolve"])
+                    if "watched_buses" in data:
+                        WATCHED_SPZ_BUSES = set(str(x) for x in data["watched_buses"])
+                    if "ignored_errors" in data:
+                        IGNORED_SPZ_ERRORS = set(str(x) for x in data["ignored_errors"])
+        except Exception:
+            pass
 
 
 def _save_spz_settings(db_client=None):
@@ -5115,11 +5136,14 @@ def bind_bus_to_spz_metadata(c: dict, spz: str):
                 if meta.get("note") is not None:
                     ADMIN_SPZ_LOCKS[k_bid]["admin_note"] = c["admin_note"]
     else:
-        # Pokud vůz již má nastaveného řidiče nebo poznámku, ulož je do metadat této SPZ
-        curr_drv = str(c.get("admin_driver") or "").strip()
-        curr_note = str(c.get("admin_note") or "").strip()
-        if curr_drv or curr_note:
-            set_spz_metadata(spz, driver=curr_drv or None, note=curr_note or None)
+        # SPZ nemá v metadatech žádného řidiče ani poznámku (byla smazána v administraci nebo ještě nebyla zadána)
+        c["admin_driver"] = ""
+        c["admin_note"] = ""
+        bid = str(c.get("id") or "")
+        for k_bid in (bid, int(bid) if bid.isdigit() else None):
+            if k_bid in ADMIN_SPZ_LOCKS:
+                ADMIN_SPZ_LOCKS[k_bid]["admin_driver"] = ""
+                ADMIN_SPZ_LOCKS[k_bid]["admin_note"] = ""
 
 def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick: str = "Admin"):
     """Uloží jméno řidiče a poznámku pevně k SPZ (cestují s touto SPZ). Jméno řidiče může být na více vozech současně."""
@@ -5178,7 +5202,7 @@ def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick:
         pass
 
 def delete_spz_metadata(spz: str, field: str = "all", admin_nick: str = "Admin"):
-    """Smaže řidiče, poznámku nebo obojí pro danou SPZ a vymaže je i na živé mapě."""
+    """Smaže řidiče, poznámku nebo obojí pro danou SPZ a vymaže je i na živé mapě a v zámcích."""
     k = normalize_spz_key(spz)
     if not k:
         return
@@ -5209,6 +5233,14 @@ def delete_spz_metadata(spz: str, field: str = "all", admin_nick: str = "Admin")
     except Exception:
         pass
 
+    # Synchronizace do zámků ADMIN_SPZ_LOCKS (aby se řidič/poznámka nevracely ze zámků)
+    for lk_bid, lk in list(ADMIN_SPZ_LOCKS.items()):
+        if normalize_spz_key(lk.get("spz")) == k or str(lk_bid) == k:
+            if field in ("driver", "all"):
+                lk["admin_driver"] = ""
+            if field in ("note", "all"):
+                lk["admin_note"] = ""
+
     # Synchronizace do Supabase spz_cache (aby se po restartu/ghost reconnectu nevrátil starý řidič)
     try:
         db_c = get_db_client() if "get_db_client" in globals() else None
@@ -5220,8 +5252,20 @@ def delete_spz_metadata(spz: str, field: str = "all", admin_nick: str = "Admin")
             if field in ("note", "all"):
                 update_payload["admin_note"] = ""
             if update_payload:
-                db_c.table("spz_cache").update(update_payload).eq("spz", disp).execute()
-                db_c.table("spz_cache").update(update_payload).eq("spz", k).execute()
+                try:
+                    db_c.table("spz_cache").update(update_payload).eq("spz", disp).execute()
+                except Exception:
+                    pass
+                try:
+                    db_c.table("spz_cache").update(update_payload).eq("spz", k).execute()
+                except Exception:
+                    pass
+                for obid, oc in safe_bus_cache_items():
+                    if normalize_spz_key(oc.get("spz")) == k or str(obid) == k:
+                        try:
+                            db_c.table("spz_cache").update(update_payload).eq("bus_id", str(obid)).execute()
+                        except Exception:
+                            pass
     except Exception as e_sb_del:
         print(f"[SPZ-META] Supabase cache delete err: {e_sb_del}", flush=True)
 
