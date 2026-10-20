@@ -63,7 +63,9 @@ def init_local_db():
                     synced_to_supabase INTEGER DEFAULT 0,
                     vehicle_type TEXT DEFAULT '',
                     real_linka_spoj TEXT DEFAULT '',
-                    spoj_num TEXT DEFAULT ''
+                    spoj_num TEXT DEFAULT '',
+                    offline_since_time TEXT DEFAULT '',
+                    parked_since INTEGER DEFAULT 0
                 )
             """)
             # Migration check pro existujici tabulky
@@ -74,7 +76,9 @@ def init_local_db():
             for _c_def in [
                 "vehicle_type TEXT DEFAULT ''",
                 "real_linka_spoj TEXT DEFAULT ''",
-                "spoj_num TEXT DEFAULT ''"
+                "spoj_num TEXT DEFAULT ''",
+                "offline_since_time TEXT DEFAULT ''",
+                "parked_since INTEGER DEFAULT 0"
             ]:
                 try:
                     conn.execute(f"ALTER TABLE spz_cache_local ADD COLUMN {_c_def}")
@@ -153,12 +157,12 @@ def local_spz_upsert(rows: list):
                             (bus_id, spz, linka, lat, lng, spz_verified, admin_verified,
                              admin_flag, manual_spz, is_locked_by_admin, trip_id, color_class, status_text,
                              admin_note, admin_driver, updated_at, synced_to_supabase,
-                             vehicle_type, real_linka_spoj, spoj_num)
+                             vehicle_type, real_linka_spoj, spoj_num, offline_since_time, parked_since)
                         VALUES
                             (:bus_id, :spz, :linka, :lat, :lng, :spz_verified, :admin_verified,
                              :admin_flag, :manual_spz, :is_locked_by_admin, :trip_id, :color_class, :status_text,
                              :admin_note, :admin_driver, :updated_at, 0,
-                             :vehicle_type, :real_linka_spoj, :spoj_num)
+                             :vehicle_type, :real_linka_spoj, :spoj_num, :offline_since_time, :parked_since)
                         ON CONFLICT(bus_id) DO UPDATE SET
                             spz = CASE
                                 WHEN (spz_cache_local.is_locked_by_admin = 1 OR spz_cache_local.admin_verified = 1)
@@ -206,7 +210,9 @@ def local_spz_upsert(rows: list):
                             synced_to_supabase = 0,
                             vehicle_type = CASE WHEN excluded.vehicle_type != '' THEN excluded.vehicle_type ELSE spz_cache_local.vehicle_type END,
                             real_linka_spoj = CASE WHEN excluded.real_linka_spoj != '' THEN excluded.real_linka_spoj ELSE spz_cache_local.real_linka_spoj END,
-                            spoj_num = CASE WHEN excluded.spoj_num != '' THEN excluded.spoj_num ELSE spz_cache_local.spoj_num END
+                            spoj_num = CASE WHEN excluded.spoj_num != '' THEN excluded.spoj_num ELSE spz_cache_local.spoj_num END,
+                            offline_since_time = CASE WHEN excluded.offline_since_time != '' THEN excluded.offline_since_time ELSE spz_cache_local.offline_since_time END,
+                            parked_since = CASE WHEN excluded.parked_since != 0 THEN excluded.parked_since ELSE spz_cache_local.parked_since END
                     """, {
                         "bus_id": row.get("bus_id", ""),
                         "spz": row.get("spz", ""),
@@ -227,6 +233,8 @@ def local_spz_upsert(rows: list):
                         "vehicle_type": (row.get("vehicle_type", "") or "") if not any(x in str(row.get("vehicle_type", "")).lower() for x in ["plzen", "klatov", "domazl", "tachov", "rokycan", "susic", "stribr", "cechy", "praha", "oblast", "kraj"]) else "",
                         "real_linka_spoj": row.get("real_linka_spoj", "") or "",
                         "spoj_num": str(row.get("spoj_num", "") or ""),
+                        "offline_since_time": str(row.get("offline_since_time") or ""),
+                        "parked_since": int(row.get("parked_since") or 0),
                     })
                 conn.commit()
     except Exception as e:

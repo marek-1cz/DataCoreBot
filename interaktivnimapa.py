@@ -4048,9 +4048,10 @@ async function fetchBuses(){
         }
       }
       let withdrawnW='';
-      if(!inDepot && bus.is_offline && (bus.is_withdrawn || bus.status === 'Odstáven' || bus.status === 'Odstaven')){
+      let isParkedWithdrawn = !inDepot && (bus.is_offline || (bus.status && (bus.status.includes('Odstaven') || bus.status.includes('Odstáven')))) && (bus.is_withdrawn || mc === 'bg-gray' || (bus.status && (bus.status.includes('Odstaven') || bus.status.includes('Odstáven'))));
+      if(isParkedWithdrawn){
         let tOff = bus.offline_since_time || (bus.last_updated && bus.last_updated !== 'N/A' ? bus.last_updated.substring(0,5) : '') || '--:--';
-        withdrawnW = `<div style="background:linear-gradient(135deg,rgba(20,20,25,0.97),rgba(30,25,30,0.97));border:1.5px solid #6b7280;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 8px rgba(107,114,128,0.3);"><b style="color:#9ca3af;font-size:12px;letter-spacing:0.5px;">⏸️ ODSTÁVEN</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.45;display:inline-block;margin-top:3px;">Vůz neodesílá data.<br>poslední známá poloha ${tOff}.<br>pravděpodobně autobus parkuje a nebo je odstaven</span></div>`;
+        withdrawnW = `<div style="background:linear-gradient(135deg,rgba(20,20,25,0.97),rgba(30,25,30,0.97));border:1.5px solid #6b7280;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 8px rgba(107,114,128,0.3);"><b style="color:#9ca3af;font-size:12px;letter-spacing:0.5px;">⏸️ ODSTÁVEN (od ${tOff})</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.45;display:inline-block;margin-top:3px;">Vůz neodesílá data / stojí na místě.<br>Odstaven od ${tOff}.<br>pravděpodobně autobus parkuje a nebo je odstaven</span></div>`;
       }
       let lastposW='';
       if(!inDepot && bus.is_offline && (mc==='bg-lastpos'||bus.status==='Poslední známá poloha'||bus.status==='Zmizel z mapy PVVD'||(bus.status&&bus.status.includes('Zmizel z mapy')))){
@@ -4915,7 +4916,122 @@ def safe_admin_locks_items():
 # Každý záznam: {ts, bus_id, spz, event, detail, gate_3f_cnt, gate_pass_cnt}
 _SPZ_DEBUG_LOG = []
 _SPZ_DEBUG_LOG_MAX = 500
-_arriva_fetch_stats = {"ok": 0, "fail": 0, "empty": 0, "last_fail_reason": None, "last_ok_cnt": 0}
+_pvvd_fetch_stats = {
+    "ok": 0,
+    "fail": 0,
+    "empty": 0,
+    "last_fail_reason": None,
+    "last_ok_cnt": 0,
+    "last_ok_time": None,
+    "consecutive_fails": 0,
+    "history": []
+}
+_arriva_fetch_stats = {
+    "ok": 0,
+    "fail": 0,
+    "empty": 0,
+    "last_fail_reason": None,
+    "last_ok_cnt": 0,
+    "last_ok_time": None,
+    "consecutive_fails": 0,
+    "history": []
+}
+
+def get_system_health_status():
+    """
+    Vypočítá aktuální procentuální zdraví systému (0-100%) a stav konektivity PVVD a Arriva.
+    PVVD (master telemetrie): 60 % váha
+    Arriva (SPZ párování):    40 % váha
+    """
+    now = get_prague_time()
+    now_str = now.strftime("%H:%M:%S")
+
+    # PVVD úspěšnost
+    pvvd_fails = _pvvd_fetch_stats.get("consecutive_fails", 0)
+    pvvd_hist = _pvvd_fetch_stats.get("history", [])
+    if pvvd_fails >= 2:
+        pvvd_rate = 0.0
+    elif pvvd_hist:
+        pvvd_rate = sum(1 for x in pvvd_hist[-20:] if x) / min(len(pvvd_hist), 20) * 100.0
+    else:
+        pvvd_rate = 100.0 if _pvvd_fetch_stats.get("ok", 0) > 0 else (0.0 if pvvd_fails > 0 else 100.0)
+
+    # Arriva úspěšnost
+    arriva_fails = _arriva_fetch_stats.get("consecutive_fails", 0)
+    arriva_hist = _arriva_fetch_stats.get("history", [])
+    if arriva_fails >= 2:
+        arriva_rate = 0.0
+    elif arriva_hist:
+        arriva_rate = sum(1 for x in arriva_hist[-20:] if x) / min(len(arriva_hist), 20) * 100.0
+    else:
+        arriva_rate = 100.0 if _arriva_fetch_stats.get("ok", 0) > 0 else (0.0 if arriva_fails > 0 else 100.0)
+
+    # Celkové procento
+    if pvvd_rate == 0.0:
+        system_percent = 0
+    else:
+        system_percent = int(round((pvvd_rate * 0.6) + (arriva_rate * 0.4)))
+    system_percent = max(0, min(100, system_percent))
+
+    if system_percent >= 90:
+        system_label = "Všechny služby v provozu"
+        system_color = "#10b981"
+    elif system_percent >= 50:
+        system_label = "Částečný výpadek služeb"
+        system_color = "#f59e0b"
+    else:
+        system_label = "Kritický výpadek systému"
+        system_color = "#ef4444"
+
+    # PVVD detail
+    if pvvd_fails >= 2:
+        pvvd_status = "error"
+        pvvd_text = f"Výpadek spojení: {_pvvd_fetch_stats.get('last_fail_reason') or 'Spojení selhalo'}"
+    else:
+        pvvd_status = "ok"
+        cnt_p = _pvvd_fetch_stats.get("last_ok_cnt", 0)
+        pvvd_text = f"Poskytuje data v reálném čase ({cnt_p} vozů)"
+
+    # Arriva detail
+    if arriva_fails >= 2:
+        arriva_status = "error"
+        reason = _arriva_fetch_stats.get('last_fail_reason') or 'Odmítnutí spojení'
+        if "429" in reason:
+            reason = "Rate limit (HTTP 429 - příliš mnoho požadavků)"
+        elif "timed out" in reason.lower():
+            reason = "Vypršel časový limit spojení"
+        arriva_text = f"Odmítá data / Výpadek: {reason}"
+    elif _arriva_fetch_stats.get("empty", 0) > 0 and _arriva_fetch_stats.get("last_ok_cnt", 0) == 0:
+        arriva_status = "warning"
+        arriva_text = "API dostupné, ale vrací prázdný seznam vozů"
+    else:
+        arriva_status = "ok"
+        cnt_a = _arriva_fetch_stats.get("last_ok_cnt", 0)
+        arriva_text = f"Poskytuje data v reálném čase ({cnt_a} vozů s SPZ)"
+
+    return {
+        "system_percent": system_percent,
+        "system_label": system_label,
+        "system_color": system_color,
+        "timestamp": now_str,
+        "pvvd": {
+            "status": pvvd_status,
+            "text": pvvd_text,
+            "bus_count": _pvvd_fetch_stats.get("last_ok_cnt", 0),
+            "last_ok": _pvvd_fetch_stats.get("last_ok_time") or "Neznámý",
+            "consecutive_fails": pvvd_fails,
+            "error": _pvvd_fetch_stats.get("last_fail_reason")
+        },
+        "arriva": {
+            "status": arriva_status,
+            "text": arriva_text,
+            "bus_count": _arriva_fetch_stats.get("last_ok_cnt", 0),
+            "last_ok": _arriva_fetch_stats.get("last_ok_time") or "Neznámý",
+            "consecutive_fails": arriva_fails,
+            "error": _arriva_fetch_stats.get("last_fail_reason")
+        }
+    }
+
 
 # === LOG AUTOMATIKY INTERAKTIVNÍ MAPY (BOD 5) ===
 _AUTOMATION_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "automation_activity_log.json")
@@ -5420,6 +5536,18 @@ def sanitize_vehicle_type(vt: str) -> str:
     vt_str = str(vt).strip()
     return vt_str if is_valid_vehicle_type(vt_str) else ""
 
+def get_db_client():
+    if not HAS_SUPABASE:
+        return None
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
+    if url and key:
+        try:
+            return create_client(url, key)
+        except Exception:
+            return None
+    return None
+
 class BusFusionEngine:
     def __init__(self, state_file=STATE_FILE):
         self.state_file = state_file
@@ -5427,31 +5555,63 @@ class BusFusionEngine:
         self.registry_by_pvvd = {}  # pvvd_id -> vehicle_dict
         self.parked_by_spz = {}     # spz -> vehicle_dict (pro zaparkované vozy s SPZ)
         self.parked_by_pvvd = {}    # pvvd_id -> vehicle_dict (pro zaparkované vozy)
+        self.last_db_save = 0
         self.load_state()
 
-    def load_state(self):
-        target = self.state_file if os.path.exists(self.state_file) else (self.alt_state_file if os.path.exists(self.alt_state_file) else None)
-        if target:
+    def load_state(self, db_client=None):
+        loaded_from_db = False
+        db_c = db_client or get_db_client()
+        if db_c:
             try:
-                with open(target, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    self.registry_by_pvvd = data.get("registry_by_pvvd", {})
-                    self.parked_by_spz = data.get("parked_by_spz", {})
-                    self.parked_by_pvvd = data.get("parked_by_pvvd", {})
-                    # Sanitizuj načtené typy vozidel (odstraň jakékoliv zbytky oblastí jako Plzeňsko)
-                    for reg in [self.registry_by_pvvd, self.parked_by_spz, self.parked_by_pvvd]:
-                        for r in reg.values():
-                            if isinstance(r, dict) and "vehicle_type" in r:
-                                r["vehicle_type"] = sanitize_vehicle_type(r.get("vehicle_type"))
-                    print(f"[FUSION] Načten stav: {len(self.registry_by_pvvd)} vozů v registru, {len(self.parked_by_spz)} zaparkovaných.", flush=True)
-            except Exception as e:
-                print(f"[WARN] Nepodařilo se načíst stav: {e}", flush=True)
+                res = db_c.table("settings").select("setting_value").eq("setting_key", "parked_buses_state").execute()
+                if res.data and res.data[0].get("setting_value"):
+                    raw = res.data[0]["setting_value"]
+                    data = json.loads(raw) if isinstance(raw, str) else raw
+                    if isinstance(data, dict):
+                        self.registry_by_pvvd = data.get("registry_by_pvvd", {}) or {}
+                        self.parked_by_spz = data.get("parked_by_spz", {}) or {}
+                        self.parked_by_pvvd = data.get("parked_by_pvvd", {}) or {}
+                        loaded_from_db = True
+                        print(f"[FUSION-DB] Úspěšně obnoven stav z DB (Supabase): {len(self.parked_by_pvvd)} zaparkovaných, {len(self.registry_by_pvvd)} v registru.", flush=True)
+            except Exception as e_db:
+                print(f"[FUSION-DB-WARN] Nepodařilo se načíst stav ze Supabase: {e_db}", flush=True)
 
-    def save_state(self):
+        if not loaded_from_db:
+            target = self.state_file if os.path.exists(self.state_file) else (self.alt_state_file if os.path.exists(self.alt_state_file) else None)
+            if target:
+                try:
+                    with open(target, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        self.registry_by_pvvd = data.get("registry_by_pvvd", {}) or {}
+                        self.parked_by_spz = data.get("parked_by_spz", {}) or {}
+                        self.parked_by_pvvd = data.get("parked_by_pvvd", {}) or {}
+                        print(f"[FUSION] Načten stav ze souboru {target}: {len(self.registry_by_pvvd)} vozů v registru, {len(self.parked_by_spz)} zaparkovaných.", flush=True)
+                except Exception as e:
+                    print(f"[WARN] Nepodařilo se načíst stav: {e}", flush=True)
+
+        # Sanitizuj načtené typy vozidel a ujisti se, že mají offline_since_time a parked_since
+        now_ts = int(time.time())
+        for reg in [self.registry_by_pvvd, self.parked_by_spz, self.parked_by_pvvd]:
+            for r in reg.values():
+                if isinstance(r, dict):
+                    if "vehicle_type" in r:
+                        r["vehicle_type"] = sanitize_vehicle_type(r.get("vehicle_type"))
+                    p_since = r.get("parked_since") or r.get("last_seen")
+                    if p_since:
+                        r["parked_since"] = p_since
+                        if not r.get("offline_since_time"):
+                            try:
+                                r["offline_since_time"] = datetime.fromtimestamp(p_since).strftime('%H:%M')
+                            except Exception:
+                                pass
+
+    def save_state(self, db_client=None, force_db=False):
+        now_ts = time.time()
         payload = {
             "registry_by_pvvd": self.registry_by_pvvd,
             "parked_by_spz": self.parked_by_spz,
-            "parked_by_pvvd": self.parked_by_pvvd
+            "parked_by_pvvd": self.parked_by_pvvd,
+            "saved_at": int(now_ts)
         }
         for path in [self.state_file, self.alt_state_file]:
             try:
@@ -5459,6 +5619,19 @@ class BusFusionEngine:
                     json.dump(payload, f, ensure_ascii=False, indent=2)
             except Exception as e:
                 print(f"[WARN] Nepodařilo se uložit stav do {path}: {e}", flush=True)
+
+        # Supabase zápis s throttlingem (každých 30s nebo při force_db)
+        if force_db or (now_ts - self.last_db_save) >= 30.0:
+            db_c = db_client or get_db_client()
+            if db_c:
+                try:
+                    self.last_db_save = now_ts
+                    db_c.table("settings").upsert({
+                        "setting_key": "parked_buses_state",
+                        "setting_value": json.dumps(payload, ensure_ascii=False)
+                    }).execute()
+                except Exception:
+                    pass
 
     def filter_pvvd_buses(self, raw_pvvd: list) -> list:
         filtered = []
@@ -5714,6 +5887,37 @@ class BusFusionEngine:
                 rec["current_line"] = None
                 if not rec.get("parked_since"):
                     rec["parked_since"] = rec.get("last_seen") or now
+                if not rec.get("offline_since_time") and rec.get("parked_since"):
+                    try:
+                        rec["offline_since_time"] = datetime.fromtimestamp(rec["parked_since"]).strftime('%H:%M')
+                    except Exception:
+                        rec["offline_since_time"] = None
+
+                # Zabezpečení vehicle_type pro zaparkovaný vůz (uchovat přes restarty)
+                if not rec.get("vehicle_type"):
+                    if p_id in GLOBAL_BUS_CACHE and GLOBAL_BUS_CACHE[p_id].get("vehicle_type"):
+                        rec["vehicle_type"] = sanitize_vehicle_type(GLOBAL_BUS_CACHE[p_id].get("vehicle_type"))
+                    elif spz_val and spz_val in SPZ_MEMORY and SPZ_MEMORY[spz_val].get("vehicle_type"):
+                        rec["vehicle_type"] = sanitize_vehicle_type(SPZ_MEMORY[spz_val].get("vehicle_type"))
+
+                # Zabezpečení statusu, barvy a poznámek z GLOBAL_BUS_CACHE
+                if p_id in GLOBAL_BUS_CACHE:
+                    c_gc = GLOBAL_BUS_CACHE[p_id]
+                    if c_gc.get("offline_since_time"):
+                        rec["offline_since_time"] = c_gc["offline_since_time"]
+                    if c_gc.get("status"):
+                        rec["status_text"] = c_gc["status"]
+                    if c_gc.get("color_class"):
+                        rec["color_class"] = c_gc["color_class"]
+                    if c_gc.get("admin_driver"):
+                        rec["admin_driver"] = c_gc["admin_driver"]
+                    if c_gc.get("admin_note"):
+                        rec["admin_note"] = c_gc["admin_note"]
+                    if c_gc.get("admin_spz_verified"):
+                        rec["admin_spz_verified"] = c_gc["admin_spz_verified"]
+                    if c_gc.get("is_locked_by_admin"):
+                        rec["is_locked_by_admin"] = c_gc["is_locked_by_admin"]
+
                 if spz_val:
                     self.parked_by_spz[spz_val] = rec
                 self.parked_by_pvvd[p_id] = rec
@@ -5730,7 +5934,7 @@ class BusFusionEngine:
             r for p_id, r in self.parked_by_pvvd.items()
             if p_id not in current_pvvd_ids
             and (not r.get("spz") or r.get("spz") not in act_spzs_final)
-            and (r.get("last_seen") or now) >= cutoff_parked
+            and (r.get("last_seen") or r.get("parked_since") or now) >= cutoff_parked
         ]
         return active_list + parked_list
 
@@ -6540,20 +6744,6 @@ def _lookup_stop_coords(name, anchor=None, max_anchor_dist_m=60000, bus_mode=Non
     return None, None
 
 
-def get_db_client():
-    if not HAS_SUPABASE:
-        return None
-    url = os.environ.get("SUPABASE_URL")
-    # Preferujeme service key - obejde RLS a generuje méně chybových logů
-    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
-    if url and key:
-        try:
-            return create_client(url, key)
-        except Exception:
-            return None
-    return None
-
-
 def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
                      ghost_spz=None, ghost_verified=False, admin_verified=False,
                      ghost_vehicle_type=None, ghost_real_linka_spoj=None, ghost_spoj_num=None):
@@ -6650,6 +6840,14 @@ def fetch_tt_bg(bus_id, cached_dict):
                 vt_clean = sanitize_vehicle_type(vt_clean)
                 if vt_clean and len(vt_clean) > 2:
                     cached_dict["vehicle_type"] = vt_clean
+                    try:
+                        b_str = str(bus_id)
+                        if b_str in FUSION_ENGINE.registry_by_pvvd:
+                            FUSION_ENGINE.registry_by_pvvd[b_str]["vehicle_type"] = vt_clean
+                        if b_str in FUSION_ENGINE.parked_by_pvvd:
+                            FUSION_ENGINE.parked_by_pvvd[b_str]["vehicle_type"] = vt_clean
+                    except Exception:
+                        pass
                     success = True
 
             # Linka a spoj: <dt>Linka / spoj</dt><dd>490745 / 23</dd>
@@ -7453,7 +7651,11 @@ def background_map_worker():
                 ghost_entry["_is_restored"] = True
                 ghost_entry["spz_locked"] = True
                 if row.get("vehicle_type"):
-                    ghost_entry["vehicle_type"] = row.get("vehicle_type")
+                    ghost_entry["vehicle_type"] = sanitize_vehicle_type(row.get("vehicle_type"))
+                if row.get("offline_since_time"):
+                    ghost_entry["offline_since_time"] = row.get("offline_since_time")
+                if row.get("parked_since"):
+                    ghost_entry["parked_since"] = row.get("parked_since")
                 if row.get("real_linka_spoj"):
                     ghost_entry["real_linka_spoj"] = row.get("real_linka_spoj")
                 if row.get("spoj_num"):
@@ -7469,7 +7671,7 @@ def background_map_worker():
                     "line": row.get("linka") or "",
                     "destination": "",
                     "verified": row.get("spz_verified", False),
-                    "vehicle_type": row.get("vehicle_type") or None,
+                    "vehicle_type": sanitize_vehicle_type(row.get("vehicle_type")) or None,
                     "real_linka_spoj": row.get("real_linka_spoj") or None,
                     "spoj_num": row.get("spoj_num") or None,
                 }
@@ -7477,7 +7679,69 @@ def background_map_worker():
             print(f"[SPZ CACHE] Obnoveno {restored} zaznamu z predchoziho behu.", flush=True)
             _purge_trains_everywhere(db_client)
             try:
-                FUSION_ENGINE.load_state()
+                FUSION_ENGINE.load_state(db_client=db_client)
+                restored_parked = 0
+                for p_id, rec in list(FUSION_ENGINE.parked_by_pvvd.items()):
+                    p_id_str = str(p_id)
+                    if p_id_str in GLOBAL_BUS_CACHE:
+                        ex = GLOBAL_BUS_CACHE[p_id_str]
+                        if not ex.get("vehicle_type") and rec.get("vehicle_type"):
+                            ex["vehicle_type"] = sanitize_vehicle_type(rec.get("vehicle_type"))
+                        if not ex.get("offline_since_time") and rec.get("offline_since_time"):
+                            ex["offline_since_time"] = rec.get("offline_since_time")
+                        if not ex.get("parked_since") and rec.get("parked_since"):
+                            ex["parked_since"] = rec.get("parked_since")
+                        continue
+                    lat_p = float(rec.get("lat") or 0)
+                    lng_p = float(rec.get("lng") or 0)
+                    if not (lat_p and lng_p):
+                        continue
+                    spz_p = rec.get("spz") or "Aktivní hledání"
+                    line_p = rec.get("last_valid_line") or rec.get("current_line") or ""
+                    v_type_p = sanitize_vehicle_type(rec.get("vehicle_type"))
+                    p_since_p = rec.get("parked_since") or rec.get("last_seen") or int(time.time())
+                    off_time_p = rec.get("offline_since_time")
+                    if not off_time_p and p_since_p:
+                        try:
+                            off_time_p = datetime.fromtimestamp(p_since_p).strftime('%H:%M')
+                        except Exception:
+                            off_time_p = _now_restore.strftime('%H:%M')
+
+                    ghost_p = new_cache_entry(
+                        p_id_str, f"PARKED-{p_id_str}", lat_p, lng_p, line_p, rec.get("final_stop", ""), False, 0, _now_restore,
+                        ghost_spz=spz_p, ghost_verified=bool(rec.get("spz_verified")),
+                        admin_verified=bool(rec.get("admin_spz_verified")),
+                        ghost_vehicle_type=v_type_p
+                    )
+                    ghost_p["is_offline"] = True
+                    ghost_p["is_withdrawn"] = True
+                    ghost_p["parked_since"] = p_since_p
+                    ghost_p["offline_since_time"] = off_time_p
+                    ghost_p["vehicle_type"] = v_type_p
+
+                    elapsed_min = max(0.0, (_now_restore.timestamp() - p_since_p) / 60.0)
+                    ghost_p["inactive_minutes"] = round(elapsed_min, 1)
+                    in_dep, d_name = _check_depot_zones(lat_p, lng_p)
+                    if in_dep:
+                        ghost_p["color_class"] = "bg-yellow"
+                        ghost_p["status"] = f"Vozovna: {d_name}"
+                    elif elapsed_min >= 10.0 and rec.get("status_text") != "Zmizel z mapy PVVD":
+                        ghost_p["color_class"] = "bg-gray"
+                        ghost_p["status"] = f"Odstaveno ({int(elapsed_min)} min)"
+                    else:
+                        ghost_p["color_class"] = rec.get("color_class") or "bg-lastpos"
+                        ghost_p["status"] = rec.get("status_text") or "Zmizel z mapy PVVD"
+
+                    ghost_p["admin_note"] = rec.get("admin_note", "")
+                    ghost_p["admin_driver"] = rec.get("admin_driver", "")
+                    ghost_p["admin_spz_verified"] = bool(rec.get("admin_spz_verified"))
+                    ghost_p["is_locked_by_admin"] = bool(rec.get("is_locked_by_admin"))
+                    bind_bus_to_spz_metadata(ghost_p, spz_p)
+                    GLOBAL_BUS_CACHE[p_id_str] = ghost_p
+                    restored_parked += 1
+
+                if restored_parked:
+                    print(f"[PARKED RESTORE] Obnoveno {restored_parked} zaparkovaných vozů s typem a časem odstavení.", flush=True)
             except Exception as e_fe:
                 print(f"[FUSION] Chyba obnovy: {e_fe}", flush=True)
         except Exception as e_cache:
@@ -7536,23 +7800,42 @@ def background_map_worker():
             ssl_ctx.verify_mode = ssl.CERT_NONE
 
             # PVVD: Master primární zdroj pravdy (timeout 8s, ošetření SSL)
+            pvvd_err = None
             try:
                 req_inflow = urllib.request.Request(url_inflow, headers=inflow_headers)
                 with urllib.request.urlopen(req_inflow, context=ssl_ctx, timeout=8) as r:
                     data_inflow = json.loads(r.read().decode('utf-8'))
-            except Exception:
+            except Exception as e_pvvd1:
+                pvvd_err = e_pvvd1
                 try:
                     req1p = urllib.request.Request(url_inflow, data=b"{}", headers=inflow_headers, method='POST')
                     with urllib.request.urlopen(req1p, context=ssl_ctx, timeout=8) as r:
                         data_inflow = json.loads(r.read().decode('utf-8'))
-                except Exception as e_pvvd:
-                    print(f"[PVVD-ERR] Chyba při stahování dat z PVVD: {e_pvvd}", flush=True)
+                    pvvd_err = None
+                except Exception as e_pvvd2:
+                    pvvd_err = e_pvvd2
+                    print(f"[PVVD-ERR] Chyba při stahování dat z PVVD: {e_pvvd2}", flush=True)
 
             if data_inflow and isinstance(data_inflow, list):
                 last_successful_pvvd = list(data_inflow)
-            elif not data_inflow and last_successful_pvvd:
-                print("[PVVD-WARN] Data PVVD jsou prázdná/výpadek, zachovávám data z předchozího tiku", flush=True)
-                data_inflow = list(last_successful_pvvd)
+                _pvvd_fetch_stats["ok"] += 1
+                _pvvd_fetch_stats["last_ok_cnt"] = len(data_inflow)
+                _pvvd_fetch_stats["last_ok_time"] = now.strftime('%H:%M:%S')
+                _pvvd_fetch_stats["consecutive_fails"] = 0
+                _pvvd_fetch_stats["history"].append(True)
+                if len(_pvvd_fetch_stats["history"]) > 30:
+                    _pvvd_fetch_stats["history"].pop(0)
+            else:
+                _pvvd_fetch_stats["fail"] += 1
+                _pvvd_fetch_stats["consecutive_fails"] += 1
+                if pvvd_err:
+                    _pvvd_fetch_stats["last_fail_reason"] = str(pvvd_err)
+                _pvvd_fetch_stats["history"].append(False)
+                if len(_pvvd_fetch_stats["history"]) > 30:
+                    _pvvd_fetch_stats["history"].pop(0)
+                if last_successful_pvvd:
+                    print("[PVVD-WARN] Data PVVD jsou prázdná/výpadek, zachovávám data z předchozího tiku", flush=True)
+                    data_inflow = list(last_successful_pvvd)
 
             # Arriva: Sekundární obohacující zdroj pro SPZ (timeout 8s, výpadek nikdy nezastaví PVVD)
             try:
@@ -7577,11 +7860,23 @@ def background_map_worker():
                     LATEST_ARRIVA_DATA = list(data_arriva)
                     _arriva_fetch_stats["ok"] += 1
                     _arriva_fetch_stats["last_ok_cnt"] = len(data_arriva)
+                    _arriva_fetch_stats["last_ok_time"] = now.strftime('%H:%M:%S')
+                    _arriva_fetch_stats["consecutive_fails"] = 0
+                    _arriva_fetch_stats["history"].append(True)
+                    if len(_arriva_fetch_stats["history"]) > 30:
+                        _arriva_fetch_stats["history"].pop(0)
                 else:
                     _arriva_fetch_stats["empty"] += 1
+                    _arriva_fetch_stats["history"].append(False)
+                    if len(_arriva_fetch_stats["history"]) > 30:
+                        _arriva_fetch_stats["history"].pop(0)
             except Exception as e_gen:
                 _arriva_fetch_stats["fail"] += 1
+                _arriva_fetch_stats["consecutive_fails"] += 1
                 _arriva_fetch_stats["last_fail_reason"] = str(e_gen)
+                _arriva_fetch_stats["history"].append(False)
+                if len(_arriva_fetch_stats["history"]) > 30:
+                    _arriva_fetch_stats["history"].pop(0)
                 data_arriva = []
 
             # Aktualizace SPZ_MEMORY pro obohacení metadat
@@ -8068,14 +8363,27 @@ def background_map_worker():
                 in_depot_zone, depot_zone_name = _check_depot_zones(lat_c, lng_c)
                 c_cached["is_offline"] = True
                 c_cached["is_withdrawn"] = True
+                p_since = c_cached.get("parked_since") or int(time.time())
+                c_cached["parked_since"] = p_since
+
+                if not c_cached.get("offline_since_time"):
+                    try:
+                        c_cached["offline_since_time"] = datetime.fromtimestamp(p_since).strftime('%H:%M')
+                    except Exception:
+                        c_cached["offline_since_time"] = now.strftime('%H:%M')
+
+                elapsed_min = max(0.0, (now.timestamp() - p_since) / 60.0)
+                c_cached["inactive_minutes"] = round(elapsed_min, 1)
+
                 if in_depot_zone:
                     c_cached["color_class"] = "bg-yellow"
                     c_cached["status"] = f"Vozovna: {depot_zone_name}"
+                elif "Odstaveno" in str(c_cached.get("status", "")) or (elapsed_min >= 10.0 and c_cached.get("status") != "Zmizel z mapy PVVD"):
+                    c_cached["color_class"] = "bg-gray"
+                    c_cached["status"] = f"Odstaveno ({int(elapsed_min)} min)"
                 else:
                     c_cached["color_class"] = "bg-lastpos"
-                    c_cached["status"] = "Zmizel z mapy PVVD"
-                if not c_cached.get("offline_since_time"):
-                    c_cached["offline_since_time"] = now.strftime('%H:%M')
+                    c_cached["status"] = c_cached.get("status") or "Zmizel z mapy PVVD"
 
                 clean_last = normalize_line(c_cached.get("line")) or c_cached.get("line") or ""
 
@@ -8100,7 +8408,7 @@ def background_map_worker():
                     "is_train": False,
                     "status": c_cached["status"],
                     "color_class": c_cached["color_class"],
-                    "inactive_minutes": 999.0,
+                    "inactive_minutes": c_cached["inactive_minutes"],
                     "last_updated": c_cached.get("offline_since_time") or now.strftime("%H:%M:%S"),
                     "investigating": False,
                     "investigation_spz": "",
@@ -8120,7 +8428,7 @@ def background_map_worker():
                     "offline_since_time": c_cached.get("offline_since_time"),
                     "spoj_num": c_cached.get("spoj_num"),
                     "last_known_spoj": c_cached.get("last_known_spoj") or c_cached.get("spoj_num"),
-                    "parked_since": None,
+                    "parked_since": c_cached.get("parked_since"),
                     "spz_inherited": bool(c_cached.get("spz_inherited"))
                 })
 
@@ -8241,6 +8549,8 @@ def background_map_worker():
                         "vehicle_type": bc.get("vehicle_type") or "",
                         "real_linka_spoj": bc.get("real_linka_spoj") or "",
                         "spoj_num": str(bc.get("spoj_num") or ""),
+                        "offline_since_time": bc.get("offline_since_time") or "",
+                        "parked_since": int(bc.get("parked_since") or 0),
                         "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
                     })
                 if cache_rows:
@@ -8253,7 +8563,14 @@ def background_map_worker():
                     # Supabase zápis (pokud je dostupná)
                     if db_client:
                         try:
-                            db_client.table("spz_cache").upsert(cache_rows).execute()
+                            # Očistit payload pro supabase spz_cache tabulku (kdyby neměla sloupce offline_since_time a parked_since)
+                            sb_cache_rows = []
+                            for r_c in cache_rows:
+                                r_copy = dict(r_c)
+                                r_copy.pop("offline_since_time", None)
+                                r_copy.pop("parked_since", None)
+                                sb_cache_rows.append(r_copy)
+                            db_client.table("spz_cache").upsert(sb_cache_rows).execute()
                             # Po úspěšném zápisu: synchronizuj dříve neukončené záznamy (s cooldownem 5 min)
                             try:
                                 _try_sync(db_client)
@@ -8261,6 +8578,12 @@ def background_map_worker():
                                 pass
                         except Exception as e_flush:
                             print(f"[SPZ CACHE] Chyba pri zapisu do Supabase (lokální kopie OK): {e_flush}", flush=True)
+
+                # ★ Plán B: Uložení stavu zaparkovaných vozů a registru do Supabase settings (garantuje přežití deploye)
+                try:
+                    FUSION_ENGINE.save_state(db_client=db_client, force_db=True)
+                except Exception:
+                    pass
                 # Smaz zaznamy ktere uz nejsou aktivni (přeskočit v šetřícím režimu)
                 if not _egress_save:
                     active_ids = safe_bus_cache_keys()
@@ -9895,6 +10218,7 @@ def get_spz_control_dashboard_data():
         "status": "success",
         "timestamp": now_str,
         "auto_resolve": AUTO_RESOLVE_SPZ,
+        "system_health": get_system_health_status(),
         "stats": {
             "unknown_count": len(unknown_buses),
             "duplicate_count": len(duplicate_buses),
@@ -9919,6 +10243,16 @@ def get_spz_control_dashboard_data():
         "invalid_verifications": INVALID_VERIFICATIONS_LOG,
         "automation_log": AUTOMATION_ACTIVITY_LOG
     }
+
+
+@mapa_bp.route('/api/system_status', methods=['GET'])
+def api_system_status():
+    return jsonify(get_system_health_status())
+
+
+@mapa_bp.route('/api/admin/system_status', methods=['GET'])
+def api_admin_system_status():
+    return jsonify(get_system_health_status())
 
 
 @mapa_bp.route('/api/admin/spz_control_data', methods=['GET'])

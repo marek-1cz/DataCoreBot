@@ -4177,6 +4177,57 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
   <!-- Automode Banner -->
   <div id="automode-banner-container" style="margin-bottom: 22px;"></div>
 
+  <!-- SYSTEM HEALTH & API STATUS WIDGET -->
+  <div id="system-health-widget" style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)); border: 1px solid #334155; border-radius: 12px; padding: 18px 20px; margin-bottom: 22px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+      
+      <!-- Percentage Gauge & Status -->
+      <div style="display: flex; align-items: center; gap: 16px; min-width: 250px;">
+        <div id="health-ring" style="position: relative; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; background: rgba(16, 185, 129, 0.1); border-radius: 50%; border: 3px solid #10b981; flex-shrink: 0; box-shadow: 0 0 15px rgba(16, 185, 129, 0.25); transition: all 0.3s ease;">
+          <span id="health-pct-val" style="font-size: 19px; font-weight: 800; color: #10b981;">100%</span>
+        </div>
+        <div>
+          <div style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700; letter-spacing: 0.5px;">Aktuální stav systému</div>
+          <div id="health-status-badge" style="font-size: 16px; font-weight: 800; color: #10b981; display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+            <span id="health-dot" style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #10b981; box-shadow: 0 0 10px #10b981;"></span>
+            <span id="health-label">Načítání stavu...</span>
+          </div>
+          <div id="health-subtext" style="font-size: 12px; color: #64748b; margin-top: 3px;">Ověřování dostupnosti poskytovatelů dat...</div>
+        </div>
+      </div>
+
+      <!-- Feed Status Cards (PVVD & Arriva) -->
+      <div style="display: flex; gap: 14px; flex-wrap: wrap; flex: 1; justify-content: flex-end;">
+        
+        <!-- PVVD Telemetry Feed -->
+        <div id="pvvd-health-card" style="background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 12px 18px; min-width: 240px; display: flex; align-items: center; gap: 14px; transition: all 0.2s ease;">
+          <div id="pvvd-icon-wrap" style="width: 40px; height: 40px; border-radius: 8px; background: rgba(16, 185, 129, 0.15); display: flex; align-items: center; justify-content: center; color: #10b981; font-size: 18px; flex-shrink: 0; border: 1px solid rgba(16, 185, 129, 0.3);">
+            <i class="fas fa-satellite"></i>
+          </div>
+          <div>
+            <div style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">PVVD Telemetrie (IDPK)</div>
+            <div id="pvvd-status-text" style="font-size: 13px; font-weight: 700; color: #10b981; margin-top: 1px;">Poskytuje data</div>
+            <div id="pvvd-detail-text" style="font-size: 11px; color: #64748b; margin-top: 1px;">Poslední kontakt: --:--:--</div>
+          </div>
+        </div>
+
+        <!-- Arriva Feed -->
+        <div id="arriva-health-card" style="background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 12px 18px; min-width: 240px; display: flex; align-items: center; gap: 14px; transition: all 0.2s ease;">
+          <div id="arriva-icon-wrap" style="width: 40px; height: 40px; border-radius: 8px; background: rgba(16, 185, 129, 0.15); display: flex; align-items: center; justify-content: center; color: #10b981; font-size: 18px; flex-shrink: 0; border: 1px solid rgba(16, 185, 129, 0.3);">
+            <i class="fas fa-bus"></i>
+          </div>
+          <div>
+            <div style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Arriva API (SPZ feed)</div>
+            <div id="arriva-status-text" style="font-size: 13px; font-weight: 700; color: #10b981; margin-top: 1px;">Poskytuje data</div>
+            <div id="arriva-detail-text" style="font-size: 11px; color: #64748b; margin-top: 1px;">Poslední kontakt: --:--:--</div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
   <!-- Top Stats Cards -->
   <div class="dash-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px;">
     <!-- Neznámá SPZ -->
@@ -4554,6 +4605,78 @@ function renderDashboardUI() {
   document.getElementById('badge-tab-automation').innerText = (_dashData.automation_log || []).length;
   document.getElementById('badge-tab-drivers').innerText = s.drivers_notes_count || 0;
   document.getElementById('badge-tab-invalid').innerText = s.invalid_verifications_count || 0;
+
+  // Aktualizace System Health widgetu
+  const health = _dashData.system_health || {};
+  const pct = health.system_percent !== undefined ? health.system_percent : 100;
+  const col = health.system_color || '#10b981';
+
+  const pctEl = document.getElementById('health-pct-val');
+  if (pctEl) {
+    pctEl.innerText = pct + '%';
+    pctEl.style.color = col;
+  }
+  const ringEl = document.getElementById('health-ring');
+  if (ringEl) {
+    ringEl.style.borderColor = col;
+    ringEl.style.boxShadow = '0 0 15px ' + (col === '#ef4444' ? 'rgba(239, 68, 68, 0.3)' : (col === '#f59e0b' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'));
+    ringEl.style.background = col === '#ef4444' ? 'rgba(239, 68, 68, 0.1)' : (col === '#f59e0b' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)');
+  }
+  const dotEl = document.getElementById('health-dot');
+  if (dotEl) {
+    dotEl.style.background = col;
+    dotEl.style.boxShadow = '0 0 10px ' + col;
+  }
+  const lblEl = document.getElementById('health-label');
+  if (lblEl) {
+    lblEl.innerText = health.system_label || 'Všechny služby v provozu';
+    lblEl.style.color = col;
+  }
+  const subEl = document.getElementById('health-subtext');
+  if (subEl) {
+    subEl.innerText = `Sledováno ${s.total_active || 0} vozů celkem | Poslední aktualizace: ${_dashData.timestamp || '--:--:--'}`;
+  }
+
+  // PVVD status card
+  const pvvd = health.pvvd || {};
+  const pvvdIcon = document.getElementById('pvvd-icon-wrap');
+  const pvvdStatus = document.getElementById('pvvd-status-text');
+  const pvvdDetail = document.getElementById('pvvd-detail-text');
+  if (pvvdStatus) {
+    const isOk = pvvd.status === 'ok';
+    const pCol = isOk ? '#10b981' : '#ef4444';
+    pvvdStatus.innerText = isOk ? `Poskytuje data (${pvvd.bus_count || 0} vozů)` : (pvvd.text || 'Výpadek spojení');
+    pvvdStatus.style.color = pCol;
+    if (pvvdIcon) {
+      pvvdIcon.style.color = pCol;
+      pvvdIcon.style.borderColor = isOk ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+      pvvdIcon.style.background = isOk ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
+    }
+    if (pvvdDetail) {
+      pvvdDetail.innerText = isOk ? `Poslední úspěch: ${pvvd.last_ok || '--:--'} | 100% dostupné` : `Chyba: ${pvvd.error || 'Bez odezvy'}`;
+    }
+  }
+
+  // Arriva status card
+  const arriva = health.arriva || {};
+  const arrivaStatus = document.getElementById('arriva-status-text');
+  const arrivaIcon = document.getElementById('arriva-icon-wrap');
+  const arrivaDetail = document.getElementById('arriva-detail-text');
+  if (arrivaStatus) {
+    const isOk = arriva.status === 'ok';
+    const isWarn = arriva.status === 'warning';
+    const aCol = isOk ? '#10b981' : (isWarn ? '#f59e0b' : '#ef4444');
+    arrivaStatus.innerText = isOk ? `Poskytuje data (${arriva.bus_count || 0} vozů)` : (isWarn ? (arriva.text || 'Prázdný feed') : (arriva.text || 'Odmítá data'));
+    arrivaStatus.style.color = aCol;
+    if (arrivaIcon) {
+      arrivaIcon.style.color = aCol;
+      arrivaIcon.style.borderColor = isOk ? 'rgba(16, 185, 129, 0.3)' : (isWarn ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.3)');
+      arrivaIcon.style.background = isOk ? 'rgba(16, 185, 129, 0.15)' : (isWarn ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)');
+    }
+    if (arrivaDetail) {
+      arrivaDetail.innerText = isOk ? `Poslední úspěch: ${arriva.last_ok || '--:--'}` : `Chyba/Důvod: ${arriva.error || 'Odmítnutí spojení nebo limit'}`;
+    }
+  }
 
   // Automode tlačítko v hlavičce
   const autoBtn = document.getElementById('btn-auto-resolve');
