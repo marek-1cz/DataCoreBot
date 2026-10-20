@@ -3992,6 +3992,11 @@ async function fetchBuses(){
         }
       }
 
+      // Normalizace 6-místného CIS kódu linky (např. 460523 -> 523)
+      if (/^[34][0-9]{5}$/.test(_linkaNum)) {
+        _linkaNum = String(parseInt(_linkaNum.slice(-3), 10));
+      }
+
       if (_spojNum && (_spojNum === '?' || _spojNum === '-' || _spojNum.toLowerCase() === 'neznámý' || _spojNum.toLowerCase() === 'neznamy')) {
         _spojNum = null;
       }
@@ -4004,6 +4009,11 @@ async function fetchBuses(){
         ? `LINKOSPOJ: ${_linkaNum || '?'}/${_spojNum}`
         : `LINKA: ${_linkaNum || 'Neznámá'} <span style="color:#94a3b8;font-size:11px;font-weight:600;margin-left:3px;">(SPOJ NEZNÁMÝ)</span>`;
       
+      let _vType = (bus.vehicle_type && typeof bus.vehicle_type === 'string') ? bus.vehicle_type.trim() : '';
+      if (_vType && !/setra|crossway|iveco|sor|man|mercedes|scania|solaris|rosero|isuzu|volvo|karosa|citaro|urbanway/i.test(_vType) && /plzeň|plzen|klatov|domažl|domazl|tachov|rokycan|sušic|susic|stříbr|stribr|kralovic|nepomuk|přeštic|prestic|čechy|cechy|praha|středočesk|stredocesk|oblast|kraj|region|arriva/i.test(_vType)) {
+        _vType = '';
+      }
+
       let headerBg = '';
       let headerColor = '';
       if (inDepot) {
@@ -4050,7 +4060,7 @@ async function fetchBuses(){
                 `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;"><span id="spoj-status-${bus.id}">Spoj není známý</span> <button id="req-spoj-${bus.id}" onclick="requestSpoj('${bus.id}',this)" style="background:linear-gradient(135deg,#0284c7,#0369a1);border:1px solid #38bdf8;color:#ffffff;padding:2px 9px;border-radius:5px;font-size:10px;cursor:pointer;margin-left:5px;transition:.2s;font-weight:700;box-shadow:0 2px 6px rgba(2,132,199,0.4);">⚡ Vyžádat spoj</button></span></div>`
             ) : ''
           }
-          ${(!isTrain) ? `<div class="pr"><span class="pl">Vozidlo:</span><span class="pv" style="color:${bus.vehicle_type ? '#e2e8f0' : '#64748b'};font-size:11px;font-weight:${bus.vehicle_type ? '600' : 'normal'};">${bus.vehicle_type || 'Nezjištěno'}</span></div>` : ''}
+          ${(!isTrain) ? `<div class="pr"><span class="pl">Vozidlo:</span><span class="pv" style="color:${_vType ? '#e2e8f0' : '#64748b'};font-size:11px;font-weight:${_vType ? '600' : 'normal'};">${_vType || 'Nezjištěno'}</span></div>` : ''}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};font-weight:bold;">${cleanStatusText(displayStatus)}</span></div>
           ${renderDelayRowHtml(bus)}
           <button class="pa" onclick="showTT('${bus.id}')">📋 Zobrazit jízdní řád</button>
@@ -5136,6 +5146,40 @@ def normalize_line(line_raw: str) -> str:
         return str(v)
     return str(line_raw).strip()
 
+def is_valid_vehicle_type(vt: str) -> bool:
+    """Ověří, zda text představuje skutečný model vozidla (např. Setra, Crossway, SOR),
+    a nikoliv provozní oblast (např. Plzeňsko, Klatovsko, Praha a Střední Čechy)."""
+    if not vt or not isinstance(vt, str):
+        return False
+    v = vt.strip()
+    if len(v) < 3:
+        return False
+    v_norm = "".join(
+        c for c in unicodedata.normalize("NFD", v.lower())
+        if unicodedata.category(c) != "Mn"
+    )
+    invalid_keywords = [
+        "plzen", "klatov", "domazl", "tachov", "rokycan",
+        "susic", "stribr", "kralovic", "nepomuk", "prestic",
+        "cechy", "praha", "stredocesk", "morav", "sever", "jih", "vychod", "zapad",
+        "oblast", "kraj", "region", "provozovna", "depo", "arriva", "linka", "spoj",
+        "nezjisteno", "nezname", "unknown", "bus", "autobus", "mhd"
+    ]
+    for kw in invalid_keywords:
+        if kw in v_norm:
+            known_makers = ["setra", "iveco", "crossway", "sor", "man", "mercedes", "scania", "solaris", "rosero", "isuzu", "volvo", "karosa", "citaro", "urbanway"]
+            if any(maker in v_norm for maker in known_makers):
+                break
+            return False
+    return True
+
+def sanitize_vehicle_type(vt: str) -> str:
+    """Vrátí validní model vozidla nebo prázdný řetězec."""
+    if not vt:
+        return ""
+    vt_str = str(vt).strip()
+    return vt_str if is_valid_vehicle_type(vt_str) else ""
+
 class BusFusionEngine:
     def __init__(self, state_file=STATE_FILE):
         self.state_file = state_file
@@ -5154,6 +5198,11 @@ class BusFusionEngine:
                     self.registry_by_pvvd = data.get("registry_by_pvvd", {})
                     self.parked_by_spz = data.get("parked_by_spz", {})
                     self.parked_by_pvvd = data.get("parked_by_pvvd", {})
+                    # Sanitizuj načtené typy vozidel (odstraň jakékoliv zbytky oblastí jako Plzeňsko)
+                    for reg in [self.registry_by_pvvd, self.parked_by_spz, self.parked_by_pvvd]:
+                        for r in reg.values():
+                            if isinstance(r, dict) and "vehicle_type" in r:
+                                r["vehicle_type"] = sanitize_vehicle_type(r.get("vehicle_type"))
                     print(f"[FUSION] Načten stav: {len(self.registry_by_pvvd)} vozů v registru, {len(self.parked_by_spz)} zaparkovaných.", flush=True)
             except Exception as e:
                 print(f"[WARN] Nepodařilo se načíst stav: {e}", flush=True)
@@ -5372,7 +5421,7 @@ class BusFusionEngine:
                 "last_valid_line": last_valid_line,
                 "final_stop": p.get("finalStopName", ""),
                 "delay": p.get("delay", 0),
-                "vehicle_type": p.get("type") or (matched["a_bus"].get("type") if matched and matched.get("a_bus") else None) or prev.get("vehicle_type", ""),
+                "vehicle_type": sanitize_vehicle_type(prev.get("vehicle_type", "")),
                 "status": status,
                 "last_seen": now,
                 "parked_since": None,
@@ -6350,6 +6399,7 @@ def fetch_tt_bg(bus_id, cached_dict):
             mv = re.search(r'<dt>\s*Vozidlo\s*</dt>\s*<dd>\s*(.*?)\s*</dd>', info_unescaped, re.IGNORECASE | re.DOTALL)
             if mv:
                 vt_clean = re.sub(r'<[^>]+>', '', mv.group(1)).strip()
+                vt_clean = sanitize_vehicle_type(vt_clean)
                 if vt_clean and len(vt_clean) > 2:
                     cached_dict["vehicle_type"] = vt_clean
                     success = True
@@ -6449,7 +6499,7 @@ def fetch_tt_bg(bus_id, cached_dict):
         if _c_spz and _c_spz not in ("Neznámá", "Neznama", "?", "", "None"):
             if _c_spz not in SPZ_MEMORY:
                 SPZ_MEMORY[_c_spz] = {}
-            if cached_dict.get("vehicle_type"):
+            if cached_dict.get("vehicle_type") and is_valid_vehicle_type(cached_dict["vehicle_type"]):
                 SPZ_MEMORY[_c_spz]["vehicle_type"] = cached_dict["vehicle_type"]
             if cached_dict.get("real_linka_spoj"):
                 SPZ_MEMORY[_c_spz]["real_linka_spoj"] = cached_dict["real_linka_spoj"]
@@ -7256,7 +7306,7 @@ def background_map_worker():
                     "destination": str(b_a.get("destinationName") or "").strip(),
                     "last_stop_name": str(b_a.get("lastStopName") or "").strip(),
                     "verified": _old_mem.get("verified", False),
-                    "vehicle_type": b_a.get("type") or _old_mem.get("vehicle_type"),
+                    "vehicle_type": sanitize_vehicle_type(_old_mem.get("vehicle_type")),
                     "real_linka_spoj": _old_mem.get("real_linka_spoj"),
                     "spoj_num": _old_mem.get("spoj_num"),
                     "last_pvvd_bus_id": _old_mem.get("last_pvvd_bus_id"),
@@ -7354,11 +7404,54 @@ def background_map_worker():
 
                 c["lat"] = lat
                 c["lng"] = lng
-                c["destination"] = dest
                 c["raw_delay"] = delay
                 c["final_delay_display"] = delay
-                if vehicle_type:
+                if vehicle_type and is_valid_vehicle_type(vehicle_type):
                     c["vehicle_type"] = vehicle_type
+
+                # ── DETEKCE ZMĚNY LINKY, DESTINACE A SPOJE ──
+                curr_norm_line = normalize_line(raw_line) if raw_line else ""
+                prev_line = str(c.get("line") or "")
+                prev_norm_line = normalize_line(prev_line) if prev_line else ""
+
+                # A) Změna linky (např. vůz přejel z 521 na 523)
+                line_switched = bool(curr_norm_line and prev_norm_line and curr_norm_line != prev_norm_line)
+
+                # B) Nesoulad s linkou ve starém linkospoji (v c zůstal spoj z předchozí linky)
+                if c.get("real_linka_spoj"):
+                    rls_part = str(c["real_linka_spoj"]).split('/')[0].strip()
+                    rls_norm = normalize_line(rls_part)
+                    if curr_norm_line and rls_norm and curr_norm_line != rls_norm:
+                        line_switched = True
+
+                # C) Změna cílové stanice (nový spoj v opačném směru)
+                dest_switched = False
+                if dest and dest not in ("Neznámý", "Neznama", "-1", "", "None"):
+                    old_dest = c.get("destination") or c.get("tt_destination")
+                    if old_dest and old_dest not in ("Neznámý", "Neznama", "-1", "", "None") and dest != old_dest:
+                        dest_switched = True
+
+                # D) Odjezd ze stavu konečné po ukončení spoje
+                terminal_departed = bool(c.get("_terminal_reached") and (is_moving or dm >= 25.0))
+
+                # Pokud nastala jakákoliv změna trasy/spoje, okamžitě vymaž staré neplatné spojové údaje:
+                if line_switched or dest_switched or terminal_departed:
+                    c["real_linka_spoj"] = None
+                    c["spoj_num"] = None
+                    c["last_known_spoj"] = None
+                    c["timetable"] = None
+                    c["all_stops"] = None
+                    c["first_dep_time"] = None
+                    c["last_dep_time"] = None
+                    c["actual_start_time"] = None
+                    c["actual_end_time"] = None
+                    c["_terminal_reached"] = False
+                    c["locked_arrival_delay"] = False
+                    c["arrival_delay"] = None
+                    c["tt_is_fetching"] = False
+                    c["tt_last_fetch"] = None  # Okamžitě vynutí nové stažení JŘ pro aktuální spoj!
+
+                c["destination"] = dest
 
                 # Admin zámky a metadata
                 if bid in ADMIN_SPZ_LOCKS:
@@ -7413,19 +7506,21 @@ def background_map_worker():
                         c["color_class"] = "bg-gray"
                         c["status"] = "Odstáven"
                         c["is_withdrawn"] = True
-                    display_line = last_valid_line or "Odstaveno"
+                    clean_last = normalize_line(last_valid_line) or last_valid_line
+                    display_line = clean_last or "Odstaveno"
 
                 elif status == "MANIPULATION":
                     c["is_offline"] = False
                     c["is_withdrawn"] = False
                     c.pop("offline_since_time", None)
+                    clean_last = normalize_line(last_valid_line) or last_valid_line
                     if in_depot_zone:
                         c["color_class"] = "bg-yellow"
                         c["status"] = f"Vozovna: {depot_zone_name} (Manipulace)"
                     else:
                         c["color_class"] = "bg-blue"
-                        c["status"] = f"Manipulační jízda (poslední linka: {last_valid_line})"
-                    display_line = f"Manipulace ({last_valid_line})"
+                        c["status"] = f"Manipulační jízda (poslední linka: {clean_last})"
+                    display_line = f"Manipulace ({clean_last})"
 
                 else:  # ACTIVE_LINE
                     c["is_offline"] = False
@@ -7574,13 +7669,25 @@ def background_map_worker():
                         c["status"] = f"Stojí příliš dlouho ({int(inact)} min)"
                         c["color_class"] = "bg-gray"
 
-                    display_line = c.get("real_linka_spoj") or raw_line or last_valid_line
+                    clean_line = curr_norm_line or raw_line or normalize_line(last_valid_line) or last_valid_line
+                    display_line = clean_line
 
-                    # Timetable fetch
-                    if not c.get("real_linka_spoj") and not c.get("tt_is_fetching"):
+                    # Timetable fetch: načti spoj při chybějícím spoji nebo po dojezdu předchozího
+                    need_tt = False
+                    if not c.get("tt_is_fetching"):
                         tt_age = (now - c["tt_last_fetch"]).total_seconds() if c.get("tt_last_fetch") else 9999
-                        if tt_age > 60:
-                            queue_tt_fetch(1, bid, c)
+                        if not c.get("real_linka_spoj"):
+                            if tt_age > 30:
+                                need_tt = True
+                        elif diff_last is not None and diff_last > 10 and tt_age > 90:
+                            need_tt = True
+                        elif tt_age > 600:
+                            need_tt = True
+
+                    if need_tt and status == "ACTIVE_LINE":
+                        c["tt_is_fetching"] = True
+                        c["tt_last_fetch"] = now
+                        queue_tt_fetch(1, bid, c)
 
                     # DB historie upsert
                     if spz and _is_tracked_line(raw_line):
@@ -7643,7 +7750,7 @@ def background_map_worker():
                     "real_zastavka": c.get("real_zastavka"),
                     "nearest_stop": c.get("nearest_stop"),
                     "last_stop_name": c.get("last_stop_name", ""),
-                    "vehicle_type": c.get("vehicle_type"),
+                    "vehicle_type": sanitize_vehicle_type(c.get("vehicle_type")),
                     "is_withdrawn": bool(c.get("is_withdrawn")),
                     "is_offline": bool(c.get("is_offline")),
                     "offline_since_time": c.get("offline_since_time"),
@@ -9859,14 +9966,13 @@ def api_priority_spoj(bus_id):
         return jsonify({"status": "error", "message": "Vůz je momentálně offline, spoj nelze vyžádat."}), 400
 
     # Zaradi bus do prioritni fronty (priorita 0 = nejvyssi)
-    if not c.get("tt_is_fetching"):
-        c["tt_is_fetching"] = True
-        c["tt_last_fetch"] = None  # Vynuti refetch
-        queue_tt_fetch(0, bus_id, c)
-        sys_log(f"[PRIORITY] Bus {bus_id} pridan do prioritni fronty spoje (IP={client_ip})")
-        return jsonify({"status": "queued", "message": "Požadavek na zjištění spoje byl zařazen do prioritní fronty"})
-    else:
-        return jsonify({"status": "already_fetching", "message": "Spoj se již stahuje"})
+    c["real_linka_spoj"] = None
+    c["spoj_num"] = None
+    c["tt_is_fetching"] = True
+    c["tt_last_fetch"] = None  # Vynuti refetch
+    queue_tt_fetch(0, bus_id, c)
+    sys_log(f"[PRIORITY] Bus {bus_id} pridan do prioritni fronty spoje (IP={client_ip})")
+    return jsonify({"status": "queued", "message": "Požadavek na zjištění spoje byl zařazen do prioritní fronty"})
 
 
 @mapa_bp.route('/api/live_buses')

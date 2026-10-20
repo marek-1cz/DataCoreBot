@@ -224,7 +224,7 @@ def local_spz_upsert(rows: list):
                         "admin_note": row.get("admin_note", ""),
                         "admin_driver": row.get("admin_driver", ""),
                         "updated_at": row.get("updated_at") or datetime.now().isoformat(),
-                        "vehicle_type": row.get("vehicle_type", "") or "",
+                        "vehicle_type": (row.get("vehicle_type", "") or "") if not any(x in str(row.get("vehicle_type", "")).lower() for x in ["plzen", "klatov", "domazl", "tachov", "rokycan", "susic", "stribr", "cechy", "praha", "oblast", "kraj"]) else "",
                         "real_linka_spoj": row.get("real_linka_spoj", "") or "",
                         "spoj_num": str(row.get("spoj_num", "") or ""),
                     })

@@ -2665,6 +2665,9 @@ async function fetchBuses() {
         } else if (!_linkaNum) {
           _linkaNum = _ls;
         }
+      // Normalizace 6-místného CIS kódu linky (např. 460523 -> 523)
+      if (/^[34][0-9]{5}$/.test(_linkaNum)) {
+        _linkaNum = String(parseInt(_linkaNum.slice(-3), 10));
       }
 
       if (_spojNum && (_spojNum === '?' || _spojNum === '-' || _spojNum.toLowerCase() === 'neznámý' || _spojNum.toLowerCase() === 'neznamy')) {
@@ -2678,6 +2681,11 @@ async function fetchBuses() {
       let _hlavickaSpoj = _spojNum
         ? `LINKOSPOJ: ${_linkaNum || '?'}/${_spojNum}`
         : `LINKA: ${_linkaNum || 'Neznámá'} <span style="color:#94a3b8;font-size:11px;font-weight:600;margin-left:3px;">(SPOJ NEZNÁMÝ)</span>`;
+
+      let _vType = (bus.vehicle_type && typeof bus.vehicle_type === 'string') ? bus.vehicle_type.trim() : '';
+      if (_vType && !/setra|crossway|iveco|sor|man|mercedes|scania|solaris|rosero|isuzu|volvo|karosa|citaro|urbanway/i.test(_vType) && /plzeň|plzen|klatov|domažl|domazl|tachov|rokycan|sušic|susic|stříbr|stribr|kralovic|nepomuk|přeštic|prestic|čechy|cechy|praha|středočesk|stredocesk|oblast|kraj|region|arriva/i.test(_vType)) {
+        _vType = '';
+      }
 
       let popH = `
         <div class="ph" style="${mc === 'bg-bug' ? 'background:#1f2937;' : ''}${mc === 'bg-orange' ? 'background:#1c1400;' : ''}${mc === 'bg-lastpos' ? 'background:linear-gradient(90deg,#181820,#2e1e2c);border-bottom:1px solid #f472b6;' : ''}">
@@ -2707,7 +2715,7 @@ async function fetchBuses() {
                 `<div class="pr"><span class="pl">Spoj:</span><span class="pv" style="color:#64748b;"><span id="spoj-status-${bus.id}">Spoj není známý</span> <button id="req-spoj-${bus.id}" onclick="requestSpoj('${bus.id}',this)" style="background:linear-gradient(135deg,#0284c7,#0369a1);border:1px solid #38bdf8;color:#ffffff;padding:2px 9px;border-radius:5px;font-size:10px;cursor:pointer;margin-left:5px;transition:.2s;font-weight:700;box-shadow:0 2px 6px rgba(2,132,199,0.4);">⚡ Vyžádat spoj</button></span></div>`
             ) : ''
           }
-          ${(!isTrain) ? `<div class="pr"><span class="pl">Vozidlo:</span><span class="pv" style="color:${bus.vehicle_type ? '#e2e8f0' : '#64748b'};font-size:11px;font-weight:${bus.vehicle_type ? '600' : 'normal'};">${bus.vehicle_type || 'Nezjištěno'}</span></div>` : ''}
+          ${(!isTrain) ? `<div class="pr"><span class="pl">Vozidlo:</span><span class="pv" style="color:${_vType ? '#e2e8f0' : '#64748b'};font-size:11px;font-weight:${_vType ? '600' : 'normal'};">${_vType || 'Nezjištěno'}</span></div>` : ''}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};">${bus.status}</span></div>
           <div class="pr" style="border:none;"><span class="pl">JR:</span><span class="pv">${dTxt}</span></div>
           <button class="pa" onclick="showTT('${bus.id}')">📋 Zobrazit jízdní řád</button>
