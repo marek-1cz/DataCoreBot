@@ -5767,8 +5767,20 @@ class BusFusionEngine:
         now = int(time.time())
         admin_locks = admin_locks or {}
 
+        # O(1) rychlý lookup admin zámků podle normované SPZ (zabraňuje milionům opakovaných regex skenů v cyklu)
+        admin_locked_spz_map = {}
+        for lk_id, lk in admin_locks.items():
+            s = lk.get("spz")
+            if s:
+                k = normalize_spz_key(s)
+                if k:
+                    admin_locked_spz_map[k] = str(lk_id)
+
         pvvd_buses = self.filter_pvvd_buses(raw_pvvd)
         arriva_buses = self.filter_arriva_buses(raw_arriva)
+        for a in arriva_buses:
+            a["_norm_spz"] = normalize_spz_key(a.get("spz"))
+            a["_norm_line"] = normalize_line(a.get("line", ""))
 
         candidates = []
 
@@ -5790,11 +5802,13 @@ class BusFusionEngine:
 
             for a in arriva_buses:
                 a_spz = a["spz"]
-                # Pokud je tato SPZ zamčena administrátorem u jiného vozu, přeskočit
-                if any(normalize_spz_key(lk.get("spz")) == normalize_spz_key(a_spz) for lk_id, lk in admin_locks.items() if str(lk_id) != p_id):
+                a_spz_norm = a.get("_norm_spz")
+                # Pokud je tato SPZ zamčena administrátorem u jiného vozu, přeskočit (bleskový O(1) hash lookup)
+                locked_owner = admin_locked_spz_map.get(a_spz_norm)
+                if locked_owner and locked_owner != p_id:
                     continue
 
-                a_line = normalize_line(a.get("line", ""))
+                a_line = a.get("_norm_line", "")
 
                 # Hard filtr 1: Pokud mají oba linku a neshoduje se, přeskočit
                 if p_line and a_line and p_line != a_line:
@@ -6052,9 +6066,10 @@ class BusFusionEngine:
 
         # 5. Nezařazené živé vozy z Arrivy (striktně IDPK vozy v Plzeňském kraji)
         unmapped_arriva = []
+        tracked_norm_set = {normalize_spz_key(s) for s in TRACKED_SPZS if s}
         for a in arriva_buses:
             a_spz = (a.get("spz") or "").strip()
-            norm_a_spz = normalize_spz_key(a_spz)
+            norm_a_spz = a.get("_norm_spz") or normalize_spz_key(a_spz)
             if not norm_a_spz or norm_a_spz in used_spz:
                 continue
             a_lat = float(a.get("lat") or 0.0)
@@ -6071,7 +6086,7 @@ class BusFusionEngine:
                     is_idpk_line = True
                 elif clean_l and 200 <= int(clean_l) <= 999 and not clean_l.startswith(("100", "157", "220", "225")):
                     is_idpk_line = True
-            is_known = bool(a_spz in TRACKED_SPZS or any(normalize_spz_key(s) == norm_a_spz for s in TRACKED_SPZS) or norm_a_spz in SPZ_MEMORY)
+            is_known = bool(a_spz in TRACKED_SPZS or norm_a_spz in tracked_norm_set or norm_a_spz in SPZ_MEMORY)
 
             # Přidat pouze pokud je prokazatelně v Plzeňském kraji a má IDPK linku nebo známou Plzeň SPZ
             if in_plzen_region and (is_idpk_line or (is_plzen_spz and is_known)):
@@ -11150,8 +11165,15 @@ def api_live_buses():
     
     is_admin = bool(session.get('logged_in'))
     buses_to_send = []
+    now_ts = now.timestamp()
     for b in LIVE_BUSES_DATA:
         b_copy = dict(b)
+        # Dynamický a přesný výpočet stáří polohy a pingu v čase požadavku klienta
+        if b_copy.get("last_moved_epoch"):
+            b_copy["pos_age_sec"] = round(max(0.0, now_ts - float(b_copy["last_moved_epoch"])))
+        if b_copy.get("last_seen_epoch"):
+            b_copy["ping_age_sec"] = round(max(0.0, now_ts - float(b_copy["last_seen_epoch"])))
+
         bid_str = str(b_copy.get("id") or "")
         b_copy["is_watched"] = bool(bid_str in WATCHED_SPZ_BUSES)
         b_copy["is_ignored"] = bool(bid_str in IGNORED_SPZ_ERRORS)
