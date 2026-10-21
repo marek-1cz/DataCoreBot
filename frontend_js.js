@@ -2815,31 +2815,36 @@ async function fetchBuses(){
       let isTrain = isTrainVehicle(bus);
       let isWithdrawn = Boolean(!inDepot && bus.is_offline && (bus.is_withdrawn || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-gray' || bus.color_class === 'bg-lastpos' || bus.status === 'Poslední známá poloha' || bus.status === 'Zmizel z mapy PVVD' || (bus.status && bus.status.includes('Zmizel z mapy'))));
 
-      // Stáří záznamu polohy na tomto místě a signálu telemetrie
+      // Stáří živého signálu z PVVD/Arrivy a polohy
       let nowEpoch = (data && data.server_epoch && !isNaN(data.server_epoch)) ? data.server_epoch : (Date.now() / 1000);
-      let posEpoch = (bus.last_moved_epoch && !isNaN(bus.last_moved_epoch)) ? bus.last_moved_epoch : (bus.last_seen_epoch || nowEpoch);
-      let ageSec = Math.max(0, Math.round(nowEpoch - posEpoch));
       let pingEpoch = (bus.last_seen_epoch && !isNaN(bus.last_seen_epoch)) ? bus.last_seen_epoch : nowEpoch;
       let pingSec = Math.max(0, Math.round(nowEpoch - pingEpoch));
+      let posEpoch = (bus.last_moved_epoch && !isNaN(bus.last_moved_epoch)) ? bus.last_moved_epoch : pingEpoch;
+      let posAgeSec = Math.max(0, Math.round(nowEpoch - posEpoch));
 
+      // ŠTÍTEK NA MARKERU: ŽIVÝ ČAS JAKO Z PVVD
+      // Pokud vůz posílá data, je 100% LIVE a píšeme např. "před 2s", "před 4s"!
       let ageText = '';
       let badgeCol = '#34d399';
-      if (ageSec < 60) {
-        ageText = `před ${ageSec}s`;
-        if (ageSec <= 20) badgeCol = '#34d399';
-        else badgeCol = '#38bdf8';
-      } else if (ageSec < 3600) {
-        let m = Math.floor(ageSec / 60);
-        ageText = `před ${m}m`;
-        if (m < 5) badgeCol = '#facc15';
-        else badgeCol = '#f59e0b';
+      if (bus.is_offline || pingSec >= 60) {
+        let m = Math.floor(Math.max(pingSec, posAgeSec) / 60);
+        if (m < 60) {
+          ageText = `před ${Math.max(1, m)}m`;
+          badgeCol = m < 5 ? '#facc15' : '#f59e0b';
+        } else {
+          let h = Math.floor(m / 60);
+          ageText = `před ${h}h`;
+          badgeCol = '#f472b6';
+        }
       } else {
-        let h = Math.floor(ageSec / 3600);
-        ageText = `před ${h}h`;
-        badgeCol = '#f472b6';
+        // Vůz je aktivní a živý v PVVD -> píšeme přesný počet sekund!
+        ageText = `před ${pingSec}s`;
+        if (pingSec <= 10) badgeCol = '#34d399';
+        else if (pingSec <= 30) badgeCol = '#38bdf8';
+        else badgeCol = '#facc15';
       }
 
-      let posTextFull = ageSec < 60 ? `před ${ageSec} s` : (ageSec < 3600 ? `před ${Math.floor(ageSec/60)} min ${ageSec%60} s` : `před ${Math.floor(ageSec/3600)} h ${Math.floor((ageSec%3600)/60)} min`);
+      let posTextFull = posAgeSec < 60 ? `před ${posAgeSec} s` : (posAgeSec < 3600 ? `před ${Math.floor(posAgeSec/60)} min ${posAgeSec%60} s` : `před ${Math.floor(posAgeSec/3600)} h ${Math.floor((posAgeSec%3600)/60)} min`);
       let pingTextFull = pingSec < 5 ? `před ${pingSec} s (100% LIVE)` : `před ${pingSec} s`;
       let timePos = bus.last_moved || bus.last_updated || '';
       let timePing = bus.last_seen || bus.server_time || '';

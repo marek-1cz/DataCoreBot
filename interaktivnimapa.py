@@ -4032,31 +4032,36 @@ async function fetchBuses(){
       let isTrain = isTrainVehicle(bus);
       let isWithdrawn = Boolean(!inDepot && bus.is_offline && (bus.is_withdrawn || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-gray' || bus.color_class === 'bg-lastpos' || bus.status === 'Poslední známá poloha' || bus.status === 'Zmizel z mapy PVVD' || (bus.status && bus.status.includes('Zmizel z mapy'))));
 
-      // Stáří záznamu polohy na tomto místě a signálu telemetrie
+      // Stáří živého signálu z PVVD/Arrivy a polohy
       let nowEpoch = (data && data.server_epoch && !isNaN(data.server_epoch)) ? data.server_epoch : (Date.now() / 1000);
-      let posEpoch = (bus.last_moved_epoch && !isNaN(bus.last_moved_epoch)) ? bus.last_moved_epoch : (bus.last_seen_epoch || nowEpoch);
-      let ageSec = Math.max(0, Math.round(nowEpoch - posEpoch));
       let pingEpoch = (bus.last_seen_epoch && !isNaN(bus.last_seen_epoch)) ? bus.last_seen_epoch : nowEpoch;
       let pingSec = Math.max(0, Math.round(nowEpoch - pingEpoch));
+      let posEpoch = (bus.last_moved_epoch && !isNaN(bus.last_moved_epoch)) ? bus.last_moved_epoch : pingEpoch;
+      let posAgeSec = Math.max(0, Math.round(nowEpoch - posEpoch));
 
+      // ŠTÍTEK NA MARKERU: ŽIVÝ ČAS JAKO Z PVVD
+      // Pokud vůz posílá data, je 100% LIVE a píšeme např. "před 2s", "před 4s"!
       let ageText = '';
       let badgeCol = '#34d399';
-      if (ageSec < 60) {
-        ageText = `před ${ageSec}s`;
-        if (ageSec <= 20) badgeCol = '#34d399';
-        else badgeCol = '#38bdf8';
-      } else if (ageSec < 3600) {
-        let m = Math.floor(ageSec / 60);
-        ageText = `před ${m}m`;
-        if (m < 5) badgeCol = '#facc15';
-        else badgeCol = '#f59e0b';
+      if (bus.is_offline || pingSec >= 60) {
+        let m = Math.floor(Math.max(pingSec, posAgeSec) / 60);
+        if (m < 60) {
+          ageText = `před ${Math.max(1, m)}m`;
+          badgeCol = m < 5 ? '#facc15' : '#f59e0b';
+        } else {
+          let h = Math.floor(m / 60);
+          ageText = `před ${h}h`;
+          badgeCol = '#f472b6';
+        }
       } else {
-        let h = Math.floor(ageSec / 3600);
-        ageText = `před ${h}h`;
-        badgeCol = '#f472b6';
+        // Vůz je aktivní a živý v PVVD -> píšeme přesný počet sekund!
+        ageText = `před ${pingSec}s`;
+        if (pingSec <= 10) badgeCol = '#34d399';
+        else if (pingSec <= 30) badgeCol = '#38bdf8';
+        else badgeCol = '#facc15';
       }
 
-      let posTextFull = ageSec < 60 ? `před ${ageSec} s` : (ageSec < 3600 ? `před ${Math.floor(ageSec/60)} min ${ageSec%60} s` : `před ${Math.floor(ageSec/3600)} h ${Math.floor((ageSec%3600)/60)} min`);
+      let posTextFull = posAgeSec < 60 ? `před ${posAgeSec} s` : (posAgeSec < 3600 ? `před ${Math.floor(posAgeSec/60)} min ${posAgeSec%60} s` : `před ${Math.floor(posAgeSec/3600)} h ${Math.floor((posAgeSec%3600)/60)} min`);
       let pingTextFull = pingSec < 5 ? `před ${pingSec} s (100% LIVE)` : `před ${pingSec} s`;
       let timePos = bus.last_moved || bus.last_updated || '';
       let timePing = bus.last_seen || bus.server_time || '';
@@ -7760,6 +7765,52 @@ def upsert_to_history(db, c):
 
 _bg_flush_in_progress = False
 _notif_check_in_progress = False
+_arriva_worker_started = False
+
+def start_arriva_bg_worker():
+    global _arriva_worker_started
+    if _arriva_worker_started:
+        return
+    _arriva_worker_started = True
+
+    def _arriva_fetch_loop():
+        global LATEST_ARRIVA_DATA
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        url_arriva = "https://www.arriva.cz/api/graphql"
+        ap = {
+            "operationName": "busesCurrentLocation", "variables": {},
+            "query": "query busesCurrentLocation {\n  busesCurrentLocations {\n    angle delay destinationName lastStopName\n    latitude longitude linkNumber state type\n    mainType spz updated linkNumberAlias __typename\n  }\n}"
+        }
+        while True:
+            try:
+                req2 = urllib.request.Request(
+                    url_arriva, data=json.dumps(ap).encode('utf-8'),
+                    headers={'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json',
+                             'Origin': 'https://www.arriva.cz', 'Referer': 'https://www.arriva.cz/'},
+                    method='POST')
+                with urllib.request.urlopen(req2, context=ssl_ctx, timeout=4) as r2:
+                    resp2 = json.loads(r2.read().decode('utf-8'))
+                arr = []
+                if isinstance(resp2, list) and resp2:
+                    arr = resp2[0].get("data", {}).get("busesCurrentLocations", [])
+                elif isinstance(resp2, dict):
+                    arr = resp2.get("data", {}).get("busesCurrentLocations", [])
+                if arr:
+                    arr_buses = [b for b in arr if str(b.get("mainType", "")).upper() != "TRAIN"]
+                    LATEST_ARRIVA_DATA = list(arr_buses)
+                    _arriva_fetch_stats["ok"] += 1
+                    _arriva_fetch_stats["last_ok_cnt"] = len(arr_buses)
+                    _arriva_fetch_stats["last_ok_time"] = get_prague_time().strftime('%H:%M:%S')
+                    _arriva_fetch_stats["consecutive_fails"] = 0
+            except Exception as e_arr:
+                _arriva_fetch_stats["fail"] += 1
+                _arriva_fetch_stats["consecutive_fails"] += 1
+                _arriva_fetch_stats["last_fail_reason"] = str(e_arr)
+            time.sleep(2.5)
+
+    threading.Thread(target=_arriva_fetch_loop, daemon=True).start()
 
 
 def background_map_worker():
@@ -8040,53 +8091,9 @@ def background_map_worker():
                     print("[PVVD-WARN] Data PVVD jsou prázdná/výpadek, zachovávám data z předchozího tiku", flush=True)
                     data_inflow = list(last_successful_pvvd)
 
-            # Arriva: Sekundární obohacující zdroj pro SPZ i alternativní polohu (výpadek nikdy nezastaví PVVD)
-            # Dotazujeme každých 2.5s pro okamžitou odezvu a plynulost; mezitím používáme LATEST_ARRIVA_DATA
-            now_ts = time.time()
-            if (now_ts - last_arriva_fetch_ts) >= 2.5 or not LATEST_ARRIVA_DATA:
-                last_arriva_fetch_ts = now_ts
-                try:
-                    ap = {
-                        "operationName": "busesCurrentLocation", "variables": {},
-                        "query": "query busesCurrentLocation {\n  busesCurrentLocations {\n    angle delay destinationName lastStopName\n    latitude longitude linkNumber state type\n    mainType spz updated linkNumberAlias __typename\n  }\n}"
-                    }
-                    req2 = urllib.request.Request(
-                        url_arriva, data=json.dumps(ap).encode('utf-8'),
-                        headers={'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json',
-                                 'Origin': 'https://www.arriva.cz', 'Referer': 'https://www.arriva.cz/'},
-                        method='POST')
-                    with urllib.request.urlopen(req2, context=ssl_ctx, timeout=5) as r2:
-                        resp2 = json.loads(r2.read().decode('utf-8'))
-                    if isinstance(resp2, list) and resp2:
-                        data_arriva = resp2[0].get("data", {}).get("busesCurrentLocations", [])
-                    elif isinstance(resp2, dict):
-                        data_arriva = resp2.get("data", {}).get("busesCurrentLocations", [])
-                    if data_arriva:
-                        data_arriva = [b for b in data_arriva if str(b.get("mainType", "")).upper() != "TRAIN"]
-                        LATEST_ARRIVA_DATA = list(data_arriva)
-                        _arriva_fetch_stats["ok"] += 1
-                        _arriva_fetch_stats["last_ok_cnt"] = len(data_arriva)
-                        _arriva_fetch_stats["last_ok_time"] = now.strftime('%H:%M:%S')
-                        _arriva_fetch_stats["consecutive_fails"] = 0
-                        _arriva_fetch_stats["history"].append(True)
-                        if len(_arriva_fetch_stats["history"]) > 30:
-                            _arriva_fetch_stats["history"].pop(0)
-                    else:
-                        _arriva_fetch_stats["empty"] += 1
-                        _arriva_fetch_stats["history"].append(False)
-                        if len(_arriva_fetch_stats["history"]) > 30:
-                            _arriva_fetch_stats["history"].pop(0)
-                        data_arriva = list(LATEST_ARRIVA_DATA) if LATEST_ARRIVA_DATA else []
-                except Exception as e_gen:
-                    _arriva_fetch_stats["fail"] += 1
-                    _arriva_fetch_stats["consecutive_fails"] += 1
-                    _arriva_fetch_stats["last_fail_reason"] = str(e_gen)
-                    _arriva_fetch_stats["history"].append(False)
-                    if len(_arriva_fetch_stats["history"]) > 30:
-                        _arriva_fetch_stats["history"].pop(0)
-                    data_arriva = list(LATEST_ARRIVA_DATA) if LATEST_ARRIVA_DATA else []
-            else:
-                data_arriva = list(LATEST_ARRIVA_DATA) if LATEST_ARRIVA_DATA else []
+            # Arriva: Načteno asynchronně v daemon vlákně - NIKDY neblokuje PVVD GPS smyčku
+            start_arriva_bg_worker()
+            data_arriva = list(LATEST_ARRIVA_DATA) if LATEST_ARRIVA_DATA else []
 
             # Rychlý lookup Arriva vozů pro záchrannou kontrolu v GLOBAL_BUS_CACHE
             arriva_by_spz = {}
