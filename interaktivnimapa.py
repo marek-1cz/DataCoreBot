@@ -2634,10 +2634,18 @@ function isTrainVehicle(bus) {
 }
 
 // === SVG MARKER ===
-function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false){
+function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false,ageText='',badgeCol='#34d399'){
   const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151','bg-lastpos':'#1a1820'};
   let bgC=cM[mc]||'#64748b';
   const cx=18,cy=18;
+
+  let ageBadge = '';
+  if (ageText) {
+    ageBadge = `<g class="bus-age-badge" style="filter:drop-shadow(0 2px 3px rgba(0,0,0,0.85));">
+      <rect class="bus-age-rect" x="1" y="28" width="34" height="12" rx="3.5" fill="rgba(15,23,42,0.92)" stroke="${badgeCol}" stroke-width="0.8"/>
+      <text class="bus-age-text" x="18" y="35.5" dominant-baseline="middle" text-anchor="middle" fill="${badgeCol}" font-size="7" font-weight="700" font-family="'Segoe UI',system-ui,sans-serif">${ageText}</text>
+    </g>`;
+  }
   
   let reallyTrain = Boolean(isTrain);
   if (!reallyTrain) {
@@ -2658,7 +2666,7 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false){
     if (lShort) {
       si += `<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="#fff" font-weight="bold" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lShort}</text>`;
     }
-    return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
+    return `<svg width="36" height="44" viewBox="0 0 36 44" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}${ageBadge}</svg>`;
   }
 
   // === ODSTAVENÝ VŮZ / POSLEDNÍ ZNÁMÁ POLOHA (Design: Tělo černé/tmavě šedé, UVNITŘ RŮŽOVÁ PŘERUŠOVANÁ ČÁRA) ===
@@ -2681,7 +2689,7 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false){
     }else{
       si+=`<circle cx="${cx}" cy="${cy}" r="2.5" fill="#f472b6"/>`;
     }
-    return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
+    return `<svg width="36" height="44" viewBox="0 0 36 44" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}${ageBadge}</svg>`;
   }
 
   const tF=(mc==='bg-orange'||mc==='bg-yellow')?'#0f172a':'#fff';
@@ -2709,7 +2717,7 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false){
     }
     else si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="8" font-family="'Segoe UI',system-ui,sans-serif">${lD}</text>`;
   }
-  return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
+  return `<svg width="36" height="44" viewBox="0 0 36 44" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}${ageBadge}</svg>`;
 }
 
 
@@ -3931,7 +3939,7 @@ async function fetchBuses(){
 
 
       let d = parseInt(bus.delay);
-      if (isNaN(d)) d = 0;
+      if (isNaN(d) || Math.abs(d) >= 10000) d = 0;
 
       if (d <= -1) {
         let absD = Math.abs(d);
@@ -4023,7 +4031,50 @@ async function fetchBuses(){
       let markerColor = inDepot ? 'bg-yellow' : mc;
       let isTrain = isTrainVehicle(bus);
       let isWithdrawn = Boolean(!inDepot && bus.is_offline && (bus.is_withdrawn || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-gray' || bus.color_class === 'bg-lastpos' || bus.status === 'Poslední známá poloha' || bus.status === 'Zmizel z mapy PVVD' || (bus.status && bus.status.includes('Zmizel z mapy'))));
-      let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,isTrain,bus.id,isWithdrawn),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
+
+      // Stáří záznamu polohy na tomto místě a signálu telemetrie
+      let nowEpoch = (data && data.server_epoch && !isNaN(data.server_epoch)) ? data.server_epoch : (Date.now() / 1000);
+      let posEpoch = (bus.last_moved_epoch && !isNaN(bus.last_moved_epoch)) ? bus.last_moved_epoch : (bus.last_seen_epoch || nowEpoch);
+      let ageSec = Math.max(0, Math.round(nowEpoch - posEpoch));
+      let pingEpoch = (bus.last_seen_epoch && !isNaN(bus.last_seen_epoch)) ? bus.last_seen_epoch : nowEpoch;
+      let pingSec = Math.max(0, Math.round(nowEpoch - pingEpoch));
+
+      let ageText = '';
+      let badgeCol = '#34d399';
+      if (ageSec < 60) {
+        ageText = `před ${ageSec}s`;
+        if (ageSec <= 20) badgeCol = '#34d399';
+        else badgeCol = '#38bdf8';
+      } else if (ageSec < 3600) {
+        let m = Math.floor(ageSec / 60);
+        ageText = `před ${m}m`;
+        if (m < 5) badgeCol = '#facc15';
+        else badgeCol = '#f59e0b';
+      } else {
+        let h = Math.floor(ageSec / 3600);
+        ageText = `před ${h}h`;
+        badgeCol = '#f472b6';
+      }
+
+      let posTextFull = ageSec < 60 ? `před ${ageSec} s` : (ageSec < 3600 ? `před ${Math.floor(ageSec/60)} min ${ageSec%60} s` : `před ${Math.floor(ageSec/3600)} h ${Math.floor((ageSec%3600)/60)} min`);
+      let pingTextFull = pingSec < 5 ? `před ${pingSec} s (100% LIVE)` : `před ${pingSec} s`;
+      let timePos = bus.last_moved || bus.last_updated || '';
+      let timePing = bus.last_seen || bus.server_time || '';
+
+      let telemetryBadge = `
+        <div style="background:linear-gradient(135deg,rgba(15,23,42,0.88),rgba(30,41,59,0.88));border:1px solid #334155;border-radius:6px;padding:6px 9px;margin:5px 0;font-size:11px;box-shadow:0 2px 6px rgba(0,0,0,0.3);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+            <span style="color:#94a3b8;"><i class="fas fa-map-marker-alt" style="color:#38bdf8;width:14px;"></i> Poloha na místě:</span>
+            <span style="color:#f8fafc;font-weight:700;">${posTextFull} ${timePos ? '<span style="color:#94a3b8;font-weight:normal;font-size:10px;">(v '+timePos+')</span>' : ''}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:#94a3b8;"><i class="fas fa-satellite-dish" style="color:#10b981;width:14px;"></i> Ověření signálu:</span>
+            <span style="color:#34d399;font-weight:700;">${pingTextFull} ${timePing ? '<span style="color:#94a3b8;font-weight:normal;font-size:10px;">(v '+timePing+')</span>' : ''}</span>
+          </div>
+        </div>
+      `;
+
+      let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,isTrain,bus.id,isWithdrawn,ageText,badgeCol),iconSize:[36,44],iconAnchor:[18,18],popupAnchor:[0,-20]});
       let spzH='',invTxt='',histBtn='';
       if(!isTrain){
         const isSearchingSpz = bus.investigating || !bus.spz || bus.spz==='Neznama' || bus.spz==='Neznámá' || bus.spz==='Aktivní hledání' || bus.spz==='Aktivni hledani';
@@ -4202,6 +4253,7 @@ async function fetchBuses(){
           ${(!isTrain) ? `<div class="pr"><span class="pl">Vozidlo:</span><span class="pv" style="color:${_vType ? '#e2e8f0' : '#64748b'};font-size:11px;font-weight:${_vType ? '600' : 'normal'};">${_vType || 'Nezjištěno'}</span></div>` : ''}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};font-weight:bold;">${cleanStatusText(displayStatus)}</span></div>
           ${renderDelayRowHtml(bus)}
+          ${telemetryBadge}
           <button class="pa" onclick="showTT('${bus.id}')">📋 Zobrazit jízdní řád</button>
           <button class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
           ${histBtn}
@@ -4329,11 +4381,25 @@ async function fetchBuses(){
           }
 
           // OPTIMALIZACE VÝKONU (Bod 1):
-          // setIcon ničí a znovu sestavuje SVG v DOMu. Měnit pouze pokud se obsah skutečně změnil!
-          let newIconHtml = icon.options.html;
-          if (existingMarker._lastIconHtml !== newIconHtml) {
+          // Pokud se nezměnila linka, barva ani azimut, updatuj pouze text stáří polohy bez ničení SVG v DOMu!
+          let coreKey = `${markerColor}_${bus.bearing}_${bus.line}_${isTrain}_${isWithdrawn}`;
+          let mEl = existingMarker.getElement ? existingMarker.getElement() : null;
+          if (mEl && existingMarker._coreKey === coreKey) {
+              let textEl = mEl.querySelector('.bus-age-text');
+              let rectEl = mEl.querySelector('.bus-age-rect');
+              if (textEl && textEl.textContent !== ageText) {
+                  textEl.textContent = ageText;
+                  if (textEl.getAttribute('fill') !== badgeCol) {
+                      textEl.setAttribute('fill', badgeCol);
+                  }
+              }
+              if (rectEl && rectEl.getAttribute('stroke') !== badgeCol) {
+                  rectEl.setAttribute('stroke', badgeCol);
+              }
+          } else {
               existingMarker.setIcon(icon);
-              existingMarker._lastIconHtml = newIconHtml;
+              existingMarker._coreKey = coreKey;
+              existingMarker._lastIconHtml = icon.options.html;
           }
 
           if (!(isTyping && openPopupBusId === bus.id)) {
@@ -4343,7 +4409,9 @@ async function fetchBuses(){
               }
           }
       } else {
+          let coreKey = `${markerColor}_${bus.bearing}_${bus.line}_${isTrain}_${isWithdrawn}`;
           let m = L.marker([bus.lat, bus.lng], {icon, zIndexOffset: 1000});
+          m._coreKey = coreKey;
           m._lastIconHtml = icon.options.html;
           m._lastPopH = popH;
           m.bindPopup(popH, {className:'dark-popup', maxWidth:300});
@@ -6874,7 +6942,8 @@ def new_cache_entry(bus_id, trip_id, lat, lng, line, dest, is_train, delay, now,
         "spz_locked": True if is_train else False, "manual_spz": False, "spz_stable_ticks": 0,
         "spz_last_verified": None if is_train else (now if ghost_verified else None), "investigating": False, "investigation_spz": None,
         "investigation_start": None, "first_seen": now, "last_inflow_seen": now,
-        "last_moved": now, "last_moved_lat": lat, "last_moved_lng": lng, "created_at": now, "actual_start_time": None,
+        "last_seen": now, "last_seen_epoch": now.timestamp(),
+        "last_moved": now, "last_moved_lat": lat, "last_moved_lng": lng, "last_moved_epoch": now.timestamp(), "created_at": now, "actual_start_time": None,
         "actual_end_time": None, "first_dep_time": None, "last_dep_time": None,
         "arrival_delay": None, "locked_arrival_delay": False, "_terminal_reached": False,
         "tt_last_fetch": None, "tt_is_fetching": False,
@@ -7674,8 +7743,12 @@ def upsert_to_history(db, c):
     threading.Thread(target=_do_async_upsert, args=(payload_full,), daemon=True).start()
 
 
+_bg_flush_in_progress = False
+_notif_check_in_progress = False
+
+
 def background_map_worker():
-    global TRACKED_SPZS, WORKER_START_TIME, LATEST_ARRIVA_DATA
+    global TRACKED_SPZS, WORKER_START_TIME, LATEST_ARRIVA_DATA, _bg_flush_in_progress, _notif_check_in_progress
     print("[MAPA] Worker startuje...", flush=True)
     WORKER_START_TIME = get_prague_time()
 
@@ -7871,6 +7944,8 @@ def background_map_worker():
     last_arriva_fetch_ts = 0.0
     TRIP_COUNTER = int(time.time())
     last_successful_pvvd = []
+    _bg_flush_in_progress = False
+    _notif_check_in_progress = False
 
     while True:
         try:
@@ -7880,9 +7955,16 @@ def background_map_worker():
 
             if db_client and (now - last_overrides_poll).total_seconds() > 300:
                 last_overrides_poll = now
-                _load_stop_overrides(db_client)
-                _load_route_stop_overrides(db_client)
-                _load_custom_routes(db_client)
+                def _async_load_overrides():
+                    try:
+                        dbc = get_db_client()
+                        if dbc:
+                            _load_stop_overrides(dbc)
+                            _load_route_stop_overrides(dbc)
+                            _load_custom_routes(dbc)
+                    except Exception:
+                        pass
+                threading.Thread(target=_async_load_overrides, daemon=True).start()
 
             # === SPZ MEMORY CLEANUP: smaz stare zaznamy (max 24h) ===
             if (now - last_spz_memory_cleanup).total_seconds() > 3600:
@@ -7905,17 +7987,17 @@ def background_map_worker():
             ssl_ctx.check_hostname = False
             ssl_ctx.verify_mode = ssl.CERT_NONE
 
-            # PVVD: Master primární zdroj pravdy (timeout 8s, ošetření SSL)
+            # PVVD: Master primární zdroj pravdy (timeout 4s pro bleskovou live odezvu, ošetření SSL)
             pvvd_err = None
             try:
                 req_inflow = urllib.request.Request(url_inflow, headers=inflow_headers)
-                with urllib.request.urlopen(req_inflow, context=ssl_ctx, timeout=8) as r:
+                with urllib.request.urlopen(req_inflow, context=ssl_ctx, timeout=4) as r:
                     data_inflow = json.loads(r.read().decode('utf-8'))
             except Exception as e_pvvd1:
                 pvvd_err = e_pvvd1
                 try:
                     req1p = urllib.request.Request(url_inflow, data=b"{}", headers=inflow_headers, method='POST')
-                    with urllib.request.urlopen(req1p, context=ssl_ctx, timeout=8) as r:
+                    with urllib.request.urlopen(req1p, context=ssl_ctx, timeout=4) as r:
                         data_inflow = json.loads(r.read().decode('utf-8'))
                     pvvd_err = None
                 except Exception as e_pvvd2:
@@ -8064,7 +8146,12 @@ def background_map_worker():
                 raw_line = str(v.get("current_line") or "").strip()
                 last_valid_line = str(v.get("last_valid_line") or "Neznámá").strip()
                 dest = str(v.get("final_stop") or "Neznámý").strip()
-                delay = int(v.get("delay") or 0)
+                raw_delay = v.get("delay")
+                try:
+                    d_int = int(raw_delay or 0)
+                    delay = 0 if (abs(d_int) >= 10000 or d_int <= -100000) else d_int
+                except Exception:
+                    delay = 0
                 bearing = v.get("bearing")
                 vehicle_type = v.get("vehicle_type")
                 spz_verified = bool(v.get("spz_verified"))
@@ -8089,17 +8176,23 @@ def background_map_worker():
                 else:
                     c = GLOBAL_BUS_CACHE[bid]
 
+                # Potvrzený živý signál z telemetrie pro tento vůz
+                c["last_seen"] = now
+                c["last_seen_epoch"] = now.timestamp()
+
                 # Telemetrie pohybu a azimutu
-                if "last_moved_lat" not in c or "last_moved_lng" not in c:
+                if "last_moved_lat" not in c or "last_moved_lng" not in c or "last_moved_epoch" not in c:
                     c["last_moved_lat"] = lat
                     c["last_moved_lng"] = lng
                     c["last_moved"] = now
+                    c["last_moved_epoch"] = now.timestamp()
 
                 last_lat = c["last_moved_lat"]
                 last_lng = c["last_moved_lng"]
                 dm = haversine_m(lat, lng, last_lat, last_lng)
                 if dm >= 15.0:
                     c["last_moved"] = now
+                    c["last_moved_epoch"] = now.timestamp()
                     c["last_moved_lat"] = lat
                     c["last_moved_lng"] = lng
                     if bearing is not None:
@@ -8486,7 +8579,13 @@ def background_map_worker():
                     "status": c["status"],
                     "color_class": c["color_class"],
                     "inactive_minutes": inact,
-                    "last_updated": c.get("last_moved", now).strftime("%H:%M:%S") if isinstance(c.get("last_moved"), datetime) else now.strftime("%H:%M:%S"),
+                    "last_updated": c.get("last_seen", now).strftime("%H:%M:%S") if isinstance(c.get("last_seen"), datetime) else now.strftime("%H:%M:%S"),
+                    "last_seen": c.get("last_seen", now).strftime("%H:%M:%S") if isinstance(c.get("last_seen"), datetime) else now.strftime("%H:%M:%S"),
+                    "last_seen_epoch": c.get("last_seen_epoch", now.timestamp()),
+                    "last_moved": c.get("last_moved", now).strftime("%H:%M:%S") if isinstance(c.get("last_moved"), datetime) else now.strftime("%H:%M:%S"),
+                    "last_moved_epoch": c.get("last_moved_epoch", now.timestamp()),
+                    "pos_age_sec": round(max(0.0, (now.timestamp() - c.get("last_moved_epoch", now.timestamp())))),
+                    "ping_age_sec": round(max(0.0, (now.timestamp() - c.get("last_seen_epoch", now.timestamp())))),
                     "investigating": bool(c.get("investigating")),
                     "investigation_spz": c.get("investigation_spz", ""),
                     "admin_flag": bool(c.get("admin_flag")),
@@ -8540,7 +8639,13 @@ def background_map_worker():
                     c_cached["position_source"] = "arriva"
                     c_cached.pop("offline_since_time", None)
                     c_cached["parked_since"] = None
-                    a_delay = int(a_bus.get("delay") or 0)
+                    c_cached["last_seen"] = now
+                    c_cached["last_seen_epoch"] = now.timestamp()
+                    if "last_moved" not in c_cached or "last_moved_epoch" not in c_cached:
+                        c_cached["last_moved"] = now
+                        c_cached["last_moved_epoch"] = now.timestamp()
+                    a_delay_raw = int(a_bus.get("delay") or 0)
+                    a_delay = 0 if abs(a_delay_raw) >= 10000 else a_delay_raw
                     c_cached["delay"] = a_delay
                     if a_bus.get("bearing") is not None:
                         c_cached["bearing"] = a_bus["bearing"]
@@ -8590,6 +8695,12 @@ def background_map_worker():
                         "color_class": c_cached["color_class"],
                         "inactive_minutes": 0,
                         "last_updated": now.strftime("%H:%M:%S"),
+                        "last_seen": now.strftime("%H:%M:%S"),
+                        "last_seen_epoch": now.timestamp(),
+                        "last_moved": c_cached.get("last_moved", now).strftime("%H:%M:%S") if isinstance(c_cached.get("last_moved"), datetime) else now.strftime("%H:%M:%S"),
+                        "last_moved_epoch": c_cached.get("last_moved_epoch", now.timestamp()),
+                        "pos_age_sec": round(max(0.0, now.timestamp() - c_cached.get("last_moved_epoch", now.timestamp()))),
+                        "ping_age_sec": round(max(0.0, now.timestamp() - c_cached.get("last_seen_epoch", now.timestamp()))),
                         "investigating": False,
                         "investigation_spz": "",
                         "admin_flag": bool(c_cached.get("admin_flag")),
@@ -8668,6 +8779,12 @@ def background_map_worker():
                     "color_class": c_cached["color_class"],
                     "inactive_minutes": c_cached["inactive_minutes"],
                     "last_updated": c_cached.get("offline_since_time") or now.strftime("%H:%M:%S"),
+                    "last_seen": c_cached.get("offline_since_time") or now.strftime("%H:%M:%S"),
+                    "last_seen_epoch": c_cached.get("last_seen_epoch", p_since),
+                    "last_moved": c_cached.get("offline_since_time") or now.strftime("%H:%M:%S"),
+                    "last_moved_epoch": c_cached.get("last_moved_epoch", p_since),
+                    "pos_age_sec": round(max(0.0, now.timestamp() - p_since)),
+                    "ping_age_sec": round(max(0.0, now.timestamp() - p_since)),
                     "investigating": False,
                     "investigation_spz": "",
                     "admin_flag": bool(c_cached.get("admin_flag")),
@@ -8699,7 +8816,8 @@ def background_map_worker():
                 t_dest = str(t.get("finalStopName") or "").strip() or "Vlak"
                 t_lat = float(t.get("lat") or 0)
                 t_lng = float(t.get("lng") or 0)
-                t_delay = int(t.get("delay") or 0) if t.get("delay") is not None else 0
+                t_delay_raw = int(t.get("delay") or 0) if t.get("delay") is not None else 0
+                t_delay = 0 if abs(t_delay_raw) >= 10000 else t_delay_raw
                 new_live_data.append({
                     "id": t_id,
                     "trip_id": f"TRAIN-{t_id}",
@@ -8723,6 +8841,12 @@ def background_map_worker():
                     "color_class": "bg-green" if t_delay <= 0 else ("bg-red" if t_delay >= 10 else "bg-green"),
                     "inactive_minutes": 0,
                     "last_updated": now.strftime("%H:%M:%S"),
+                    "last_seen": now.strftime("%H:%M:%S"),
+                    "last_seen_epoch": now.timestamp(),
+                    "last_moved": now.strftime("%H:%M:%S"),
+                    "last_moved_epoch": now.timestamp(),
+                    "pos_age_sec": 0,
+                    "ping_age_sec": 0,
                     "investigating": False,
                     "investigation_spz": "",
                     "admin_flag": False,
@@ -8816,44 +8940,51 @@ def background_map_worker():
                 if cache_rows:
                     # ★ Plán A: Lokální SQLite zálohování (vždy, bez ohledu na Supabase)
                     try:
-                        from local_db import local_spz_upsert as _local_upsert, try_sync_to_supabase as _try_sync
+                        from local_db import local_spz_upsert as _local_upsert
                         _local_upsert(cache_rows)
                     except Exception:
                         pass
-                    # Supabase zápis (pokud je dostupná)
-                    if db_client:
-                        try:
-                            # Očistit payload pro supabase spz_cache tabulku (kdyby neměla sloupce offline_since_time a parked_since)
-                            sb_cache_rows = []
-                            for r_c in cache_rows:
-                                r_copy = dict(r_c)
-                                r_copy.pop("offline_since_time", None)
-                                r_copy.pop("parked_since", None)
-                                sb_cache_rows.append(r_copy)
-                            db_client.table("spz_cache").upsert(sb_cache_rows).execute()
-                            # Po úspěšném zápisu: synchronizuj dříve neukončené záznamy (s cooldownem 5 min)
-                            try:
-                                _try_sync(db_client)
-                            except Exception:
-                                pass
-                        except Exception as e_flush:
-                            print(f"[SPZ CACHE] Chyba pri zapisu do Supabase (lokální kopie OK): {e_flush}", flush=True)
 
-                # ★ Plán B: Uložení stavu zaparkovaných vozů a registru do Supabase settings (garantuje přežití deploye)
-                try:
-                    FUSION_ENGINE.save_state(db_client=db_client, force_db=True)
-                except Exception:
-                    pass
-                # Smaz zaznamy ktere uz nejsou aktivni (přeskočit v šetřícím režimu)
-                if not _egress_save:
-                    active_ids = safe_bus_cache_keys()
-                    if active_ids:
+                # ★ Plán B: Asynchronní Supabase operace v daemon vlákně - NIKDY neblokuje hlavní GPS smyčku!
+                active_ids_snapshot = list(safe_bus_cache_keys())
+                def _bg_supabase_sync(rows_to_save, active_ids, eg_save):
+                    global _bg_flush_in_progress
+                    if _bg_flush_in_progress:
+                        return
+                    _bg_flush_in_progress = True
+                    try:
+                        dbc = get_db_client()
+                        if dbc and rows_to_save:
+                            try:
+                                sb_cache_rows = []
+                                for r_c in rows_to_save:
+                                    r_copy = dict(r_c)
+                                    r_copy.pop("offline_since_time", None)
+                                    r_copy.pop("parked_since", None)
+                                    sb_cache_rows.append(r_copy)
+                                dbc.table("spz_cache").upsert(sb_cache_rows).execute()
+                                try:
+                                    from local_db import try_sync_to_supabase as _try_sync
+                                    _try_sync(dbc)
+                                except Exception:
+                                    pass
+                            except Exception as e_flush:
+                                print(f"[SPZ CACHE] Chyba pri zapisu do Supabase (lokální kopie OK): {e_flush}", flush=True)
+
                         try:
-                            if db_client:
-                                db_client.table("spz_cache").delete().not_.in_("bus_id", active_ids).eq("admin_verified", False).execute()
+                            FUSION_ENGINE.save_state(db_client=dbc, force_db=True)
                         except Exception:
                             pass
 
+                        if not eg_save and dbc and active_ids:
+                            try:
+                                dbc.table("spz_cache").delete().not_.in_("bus_id", active_ids).eq("admin_verified", False).execute()
+                            except Exception:
+                                pass
+                    finally:
+                        _bg_flush_in_progress = False
+
+                threading.Thread(target=_bg_supabase_sync, args=(cache_rows, active_ids_snapshot, _egress_save), daemon=True).start()
 
             # ── Metriky pro denní report ────────────────────────────────
             try:
@@ -8863,15 +8994,24 @@ def background_map_worker():
             except Exception:
                 pass
 
-            # ── Notifikace: zkontroluj triggery (každých 10s při každém tiku) ─────────────
+            # ── Notifikace: zkontroluj triggery (každých 10s v daemon vlákně) ─────────────
             global _last_notification_check
             if db_client and (not _last_notification_check or
                     (now - _last_notification_check).total_seconds() >= 10):
                 _last_notification_check = now
-                try:
-                    _check_and_fire_notifications(db_client, safe_bus_cache_dict())
-                except Exception as _notif_err:
-                    print(f"[NOTIF] Chyba pri kontrole notifikaci: {_notif_err}", flush=True)
+                if not _notif_check_in_progress:
+                    def _async_notif_worker(cache_dict):
+                        global _notif_check_in_progress
+                        _notif_check_in_progress = True
+                        try:
+                            dbc = get_db_client()
+                            if dbc:
+                                _check_and_fire_notifications(dbc, cache_dict)
+                        except Exception as _notif_err:
+                            print(f"[NOTIF] Chyba pri kontrole notifikaci: {_notif_err}", flush=True)
+                        finally:
+                            _notif_check_in_progress = False
+                    threading.Thread(target=_async_notif_worker, args=(safe_bus_cache_dict(),), daemon=True).start()
 
             # ── SPZ Anomálie a Konflikty (Body 2, 3, 5) ───────────────────
             try:
@@ -11032,8 +11172,11 @@ def api_live_buses():
         buses_to_send.append(b_copy)
             
     resp = jsonify({
-        "status": "success", "server_time": now.strftime('%H:%M:%S'),
-        "worker_uptime_seconds": round(uptime), "buses": buses_to_send,
+        "status": "success",
+        "server_time": now.strftime('%H:%M:%S'),
+        "server_epoch": now.timestamp(),
+        "worker_uptime_seconds": round(uptime),
+        "buses": buses_to_send,
     })
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"

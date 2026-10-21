@@ -1417,10 +1417,18 @@ function isTrainVehicle(bus) {
 }
 
 // === SVG MARKER ===
-function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false){
+function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false,ageText='',badgeCol='#34d399'){
   const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151','bg-lastpos':'#1a1820'};
   let bgC=cM[mc]||'#64748b';
   const cx=18,cy=18;
+
+  let ageBadge = '';
+  if (ageText) {
+    ageBadge = `<g class="bus-age-badge" style="filter:drop-shadow(0 2px 3px rgba(0,0,0,0.85));">
+      <rect class="bus-age-rect" x="1" y="28" width="34" height="12" rx="3.5" fill="rgba(15,23,42,0.92)" stroke="${badgeCol}" stroke-width="0.8"/>
+      <text class="bus-age-text" x="18" y="35.5" dominant-baseline="middle" text-anchor="middle" fill="${badgeCol}" font-size="7" font-weight="700" font-family="'Segoe UI',system-ui,sans-serif">${ageText}</text>
+    </g>`;
+  }
   
   let reallyTrain = Boolean(isTrain);
   if (!reallyTrain) {
@@ -1441,7 +1449,7 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false){
     if (lShort) {
       si += `<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="#fff" font-weight="bold" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lShort}</text>`;
     }
-    return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
+    return `<svg width="36" height="44" viewBox="0 0 36 44" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}${ageBadge}</svg>`;
   }
 
   // === ODSTAVENÝ VŮZ / POSLEDNÍ ZNÁMÁ POLOHA (Design: Tělo černé/tmavě šedé, UVNITŘ RŮŽOVÁ PŘERUŠOVANÁ ČÁRA) ===
@@ -1464,7 +1472,7 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false){
     }else{
       si+=`<circle cx="${cx}" cy="${cy}" r="2.5" fill="#f472b6"/>`;
     }
-    return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
+    return `<svg width="36" height="44" viewBox="0 0 36 44" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}${ageBadge}</svg>`;
   }
 
   const tF=(mc==='bg-orange'||mc==='bg-yellow')?'#0f172a':'#fff';
@@ -1492,7 +1500,7 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false){
     }
     else si+=`<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="${tF}" font-weight="bold" font-size="8" font-family="'Segoe UI',system-ui,sans-serif">${lD}</text>`;
   }
-  return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}</svg>`;
+  return `<svg width="36" height="44" viewBox="0 0 36 44" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}${ageBadge}</svg>`;
 }
 
 
@@ -2714,7 +2722,7 @@ async function fetchBuses(){
 
 
       let d = parseInt(bus.delay);
-      if (isNaN(d)) d = 0;
+      if (isNaN(d) || Math.abs(d) >= 10000) d = 0;
 
       if (d <= -1) {
         let absD = Math.abs(d);
@@ -2806,7 +2814,50 @@ async function fetchBuses(){
       let markerColor = inDepot ? 'bg-yellow' : mc;
       let isTrain = isTrainVehicle(bus);
       let isWithdrawn = Boolean(!inDepot && bus.is_offline && (bus.is_withdrawn || bus.status === "Odstáven" || bus.status === "Odstaven" || bus.color_class === 'bg-gray' || bus.color_class === 'bg-lastpos' || bus.status === 'Poslední známá poloha' || bus.status === 'Zmizel z mapy PVVD' || (bus.status && bus.status.includes('Zmizel z mapy'))));
-      let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,isTrain,bus.id,isWithdrawn),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
+
+      // Stáří záznamu polohy na tomto místě a signálu telemetrie
+      let nowEpoch = (data && data.server_epoch && !isNaN(data.server_epoch)) ? data.server_epoch : (Date.now() / 1000);
+      let posEpoch = (bus.last_moved_epoch && !isNaN(bus.last_moved_epoch)) ? bus.last_moved_epoch : (bus.last_seen_epoch || nowEpoch);
+      let ageSec = Math.max(0, Math.round(nowEpoch - posEpoch));
+      let pingEpoch = (bus.last_seen_epoch && !isNaN(bus.last_seen_epoch)) ? bus.last_seen_epoch : nowEpoch;
+      let pingSec = Math.max(0, Math.round(nowEpoch - pingEpoch));
+
+      let ageText = '';
+      let badgeCol = '#34d399';
+      if (ageSec < 60) {
+        ageText = `před ${ageSec}s`;
+        if (ageSec <= 20) badgeCol = '#34d399';
+        else badgeCol = '#38bdf8';
+      } else if (ageSec < 3600) {
+        let m = Math.floor(ageSec / 60);
+        ageText = `před ${m}m`;
+        if (m < 5) badgeCol = '#facc15';
+        else badgeCol = '#f59e0b';
+      } else {
+        let h = Math.floor(ageSec / 3600);
+        ageText = `před ${h}h`;
+        badgeCol = '#f472b6';
+      }
+
+      let posTextFull = ageSec < 60 ? `před ${ageSec} s` : (ageSec < 3600 ? `před ${Math.floor(ageSec/60)} min ${ageSec%60} s` : `před ${Math.floor(ageSec/3600)} h ${Math.floor((ageSec%3600)/60)} min`);
+      let pingTextFull = pingSec < 5 ? `před ${pingSec} s (100% LIVE)` : `před ${pingSec} s`;
+      let timePos = bus.last_moved || bus.last_updated || '';
+      let timePing = bus.last_seen || bus.server_time || '';
+
+      let telemetryBadge = `
+        <div style="background:linear-gradient(135deg,rgba(15,23,42,0.88),rgba(30,41,59,0.88));border:1px solid #334155;border-radius:6px;padding:6px 9px;margin:5px 0;font-size:11px;box-shadow:0 2px 6px rgba(0,0,0,0.3);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+            <span style="color:#94a3b8;"><i class="fas fa-map-marker-alt" style="color:#38bdf8;width:14px;"></i> Poloha na místě:</span>
+            <span style="color:#f8fafc;font-weight:700;">${posTextFull} ${timePos ? '<span style="color:#94a3b8;font-weight:normal;font-size:10px;">(v '+timePos+')</span>' : ''}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:#94a3b8;"><i class="fas fa-satellite-dish" style="color:#10b981;width:14px;"></i> Ověření signálu:</span>
+            <span style="color:#34d399;font-weight:700;">${pingTextFull} ${timePing ? '<span style="color:#94a3b8;font-weight:normal;font-size:10px;">(v '+timePing+')</span>' : ''}</span>
+          </div>
+        </div>
+      `;
+
+      let icon=L.divIcon({className:'',html:buildMarkerSvg(markerColor,bus.bearing,bus.line,isTrain,bus.id,isWithdrawn,ageText,badgeCol),iconSize:[36,44],iconAnchor:[18,18],popupAnchor:[0,-20]});
       let spzH='',invTxt='',histBtn='';
       if(!isTrain){
         const isSearchingSpz = bus.investigating || !bus.spz || bus.spz==='Neznama' || bus.spz==='Neznámá' || bus.spz==='Aktivní hledání' || bus.spz==='Aktivni hledani';
@@ -2985,6 +3036,7 @@ async function fetchBuses(){
           ${(!isTrain) ? `<div class="pr"><span class="pl">Vozidlo:</span><span class="pv" style="color:${_vType ? '#e2e8f0' : '#64748b'};font-size:11px;font-weight:${_vType ? '600' : 'normal'};">${_vType || 'Nezjištěno'}</span></div>` : ''}
           <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};font-weight:bold;">${cleanStatusText(displayStatus)}</span></div>
           ${renderDelayRowHtml(bus)}
+          ${telemetryBadge}
           <button class="pa" onclick="showTT('${bus.id}')">📋 Zobrazit jízdní řád</button>
           <button class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
           ${histBtn}
@@ -3112,11 +3164,25 @@ async function fetchBuses(){
           }
 
           // OPTIMALIZACE VÝKONU (Bod 1):
-          // setIcon ničí a znovu sestavuje SVG v DOMu. Měnit pouze pokud se obsah skutečně změnil!
-          let newIconHtml = icon.options.html;
-          if (existingMarker._lastIconHtml !== newIconHtml) {
+          // Pokud se nezměnila linka, barva ani azimut, updatuj pouze text stáří polohy bez ničení SVG v DOMu!
+          let coreKey = `${markerColor}_${bus.bearing}_${bus.line}_${isTrain}_${isWithdrawn}`;
+          let mEl = existingMarker.getElement ? existingMarker.getElement() : null;
+          if (mEl && existingMarker._coreKey === coreKey) {
+              let textEl = mEl.querySelector('.bus-age-text');
+              let rectEl = mEl.querySelector('.bus-age-rect');
+              if (textEl && textEl.textContent !== ageText) {
+                  textEl.textContent = ageText;
+                  if (textEl.getAttribute('fill') !== badgeCol) {
+                      textEl.setAttribute('fill', badgeCol);
+                  }
+              }
+              if (rectEl && rectEl.getAttribute('stroke') !== badgeCol) {
+                  rectEl.setAttribute('stroke', badgeCol);
+              }
+          } else {
               existingMarker.setIcon(icon);
-              existingMarker._lastIconHtml = newIconHtml;
+              existingMarker._coreKey = coreKey;
+              existingMarker._lastIconHtml = icon.options.html;
           }
 
           if (!(isTyping && openPopupBusId === bus.id)) {
@@ -3126,7 +3192,9 @@ async function fetchBuses(){
               }
           }
       } else {
+          let coreKey = `${markerColor}_${bus.bearing}_${bus.line}_${isTrain}_${isWithdrawn}`;
           let m = L.marker([bus.lat, bus.lng], {icon, zIndexOffset: 1000});
+          m._coreKey = coreKey;
           m._lastIconHtml = icon.options.html;
           m._lastPopH = popH;
           m.bindPopup(popH, {className:'dark-popup', maxWidth:300});
