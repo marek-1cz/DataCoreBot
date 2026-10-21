@@ -4144,8 +4144,10 @@ async function fetchBuses(){
         lastposW=`<div style="background:linear-gradient(135deg,rgba(24,24,32,0.95),rgba(45,30,45,0.95));border:1.5px solid #f472b6;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 10px rgba(244,114,182,0.25);"><b style="color:#f472b6;font-size:12px;letter-spacing:0.5px;">📍 POSLEDNÍ ZNÁMÁ POLOHA</b><br><span style="color:#cbd5e1;font-size:10px;">Vůz zmizel z mapy pvvd.idpk.cz${tOffline}. Ponechán na stejné pozici, než se znovu objeví.</span></div>`;
       }
       let arrivaW='';
-      if(bus.is_arriva_fallback || bus.position_source === 'arriva'){
+      if(bus.is_arriva_fallback){
         arrivaW=`<div style="background:linear-gradient(135deg,rgba(2,132,199,0.22),rgba(3,105,161,0.22));border:1.5px solid #38bdf8;border-radius:6px;padding:7px 10px;margin:5px 0;font-size:11px;box-shadow:0 0 10px rgba(56,189,248,0.2);display:flex;align-items:center;gap:8px;"><i class="fas fa-satellite-dish" style="color:#38bdf8;font-size:14px;"></i><div><b style="color:#38bdf8;font-size:11px;letter-spacing:0.3px;">Alternativní live poloha (Arriva mapa)</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.35;display:inline-block;">Vůz chybí na PVVD – poloha a telemetrie jsou přebírány živě z mapy Arriva.</span></div></div>`;
+      } else if(bus.position_source === 'arriva'){
+        arrivaW=`<div style="background:linear-gradient(135deg,rgba(2,132,199,0.18),rgba(3,105,161,0.18));border:1.5px solid #38bdf8;border-radius:6px;padding:7px 10px;margin:5px 0;font-size:11px;box-shadow:0 0 10px rgba(56,189,248,0.2);display:flex;align-items:center;gap:8px;"><i class="fas fa-satellite-dish" style="color:#38bdf8;font-size:14px;"></i><div><b style="color:#38bdf8;font-size:11px;letter-spacing:0.3px;">Režim polohy: Arriva Live</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.35;display:inline-block;">Poloha vozu je přebírána z mapy Arriva (aktivní globální režim).</span></div></div>`;
       }
       let bugW='';
       if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#3f0000;border:2px solid #ef4444;border-radius:5px;padding:8px;margin:5px 0;font-size:11px;text-align:center;"><b style="color:#ef4444;font-size:13px;letter-spacing:.5px;">⛔ NENÍ REÁLNÁ POLOHA</b><br><span style="color:#fca5a5;font-weight:bold;">PRAVDĚPODOBNĚ BUG NEBO POSLEDNÍ ZNÁMÁ POZICE</span><br><span style="color:#94a3b8;font-size:10px;">Pravděpodobně SPZ <b style="color:#fbbf24;">${bS}</b> – pozice nemusí odpovídat realitě</span></div>`;}
@@ -5234,6 +5236,7 @@ SPZ_MEMORY_MAX_AGE_HOURS = 24  # jak dlouho pamatovat SPZ bez aktualizace
 SPZ_CONFLICT_PROPOSALS = {}      # prop_id -> dict návrhu řešení konfliktu
 INVALID_VERIFICATIONS_LOG = []   # list chyb při admin-ověření Neznámé SPZ (Bod 3)
 AUTO_RESOLVE_SPZ = True          # True = automatické rozluštění (Automode), False = manuální schvalování adminem
+POSITION_SOURCE_MODE = "pvvd"    # "pvvd" (výchozí) | "arriva" - Jednotný zdroj GPS souřadnic pro mapu
 WATCHED_SPZ_BUSES = set()        # set ID vozů, které systém aktivně hlídá a přiřadí jim SPZ ihned po vyjetí na Arriva mapu
 IGNORED_SPZ_ERRORS = set()       # set ID vozů, kde uživatel zvolil 'Nechat být' (skryto z aktivních chyb)
 SPZ_METADATA = {}                # norm_spz -> {"spz":, "driver":, "note":, "updated_at":, "updated_by":}
@@ -5261,7 +5264,7 @@ def format_spz_display(raw_spz: str) -> str:
     return s
 
 def _load_spz_settings(db_client=None):
-    global AUTO_RESOLVE_SPZ, WATCHED_SPZ_BUSES, IGNORED_SPZ_ERRORS, SPZ_METADATA
+    global AUTO_RESOLVE_SPZ, WATCHED_SPZ_BUSES, IGNORED_SPZ_ERRORS, SPZ_METADATA, POSITION_SOURCE_MODE
 
     db_c = db_client
     if not db_c and "get_db_client" in globals():
@@ -5284,6 +5287,13 @@ def _load_spz_settings(db_client=None):
                                 SPZ_METADATA[nk] = v
                         loaded_from_supabase = True
                         print(f"[SPZ-SETTINGS] Načteno {len(SPZ_METADATA)} záznamů SPZ metadat přímo z persistentní Supabase (autoritativní).", flush=True)
+            
+            sb_mode = db_c.table("settings").select("setting_value").eq("setting_key", "map_position_source_mode").execute()
+            if sb_mode and sb_mode.data and len(sb_mode.data) > 0:
+                raw_m = str(sb_mode.data[0].get("setting_value") or "").strip().lower()
+                if raw_m in ("pvvd", "arriva"):
+                    POSITION_SOURCE_MODE = raw_m
+                    print(f"[POSITION-MODE] Načten režim zdroje polohy ze Supabase: {POSITION_SOURCE_MODE.upper()}", flush=True)
         except Exception as e_sb:
             print(f"[SPZ-SETTINGS] Supabase load err: {e_sb}", flush=True)
 
@@ -5309,6 +5319,8 @@ def _load_spz_settings(db_client=None):
                     data = json.load(f)
                     if "auto_resolve" in data:
                         AUTO_RESOLVE_SPZ = bool(data["auto_resolve"])
+                    if "position_source_mode" in data and str(data["position_source_mode"]).lower() in ("pvvd", "arriva"):
+                        POSITION_SOURCE_MODE = str(data["position_source_mode"]).lower()
                     if "watched_buses" in data:
                         WATCHED_SPZ_BUSES = set(str(x) for x in data["watched_buses"])
                     if "ignored_errors" in data:
@@ -5329,6 +5341,8 @@ def _load_spz_settings(db_client=None):
                     data = json.load(f)
                     if "auto_resolve" in data:
                         AUTO_RESOLVE_SPZ = bool(data["auto_resolve"])
+                    if "position_source_mode" in data and str(data["position_source_mode"]).lower() in ("pvvd", "arriva"):
+                        POSITION_SOURCE_MODE = str(data["position_source_mode"]).lower()
                     if "watched_buses" in data:
                         WATCHED_SPZ_BUSES = set(str(x) for x in data["watched_buses"])
                     if "ignored_errors" in data:
@@ -5341,6 +5355,7 @@ def _save_spz_settings(db_client=None):
     try:
         with open(_SPZ_SETTINGS_PATH, "w", encoding="utf-8") as f:
             json.dump({
+                "position_source_mode": POSITION_SOURCE_MODE,
                 "auto_resolve": AUTO_RESOLVE_SPZ,
                 "watched_buses": list(WATCHED_SPZ_BUSES),
                 "ignored_errors": list(IGNORED_SPZ_ERRORS),
@@ -5359,6 +5374,10 @@ def _save_spz_settings(db_client=None):
             db_c.table("settings").upsert({
                 "setting_key": "spz_metadata",
                 "setting_value": meta_json
+            }).execute()
+            db_c.table("settings").upsert({
+                "setting_key": "map_position_source_mode",
+                "setting_value": POSITION_SOURCE_MODE
             }).execute()
     except Exception:
         pass
@@ -5801,9 +5820,11 @@ class BusFusionEngine:
             })
         return filtered
 
-    def merge_sources(self, raw_pvvd: list, raw_arriva: list, admin_locks: dict = None) -> list:
+    def merge_sources(self, raw_pvvd: list, raw_arriva: list, admin_locks: dict = None, source_mode: str = None) -> list:
         now = int(time.time())
         admin_locks = admin_locks or {}
+        if not source_mode:
+            source_mode = POSITION_SOURCE_MODE
 
         # O(1) rychlý lookup admin zámků podle normované SPZ (zabraňuje milionům opakovaných regex skenů v cyklu)
         admin_locked_spz_map = {}
@@ -6002,144 +6023,144 @@ class BusFusionEngine:
             if p_id in self.parked_by_pvvd:
                 del self.parked_by_pvvd[p_id]
 
-        # Vytvoření rychlé mapy Arriva vozidel podle normované SPZ pro fallback
-        arriva_by_spz = {}
-        for a in arriva_buses:
-            k = normalize_spz_key(a.get("spz"))
-            if k:
-                arriva_by_spz[k] = a
+        if source_mode == "pvvd":
+            # === REŽIM PVVD (VÝCHOZÍ JEDNOTNÝ REŽIM) ===
+            # Všechny živé polohy vozidel se berou VÝHRADNĚ z PVVD IDPK.
+            # ŽÁDNÝ fallback na Arriva GPS, ŽÁDNÁ unmapped_arriva (zabraňuje duplicitním vozům jedoucím za sebou)!
+            # PVVD a Arriva spolu nepřetržitě komunikují a vyměňují si SPZ, typ vozidla, JŘ, zpoždění a destinace.
+            active_spzs = {r.get("spz") for r in self.registry_by_pvvd.values() if r.get("pvvd_id") in current_pvvd_ids and r.get("spz")}
 
-        # 4. Kontrola vozidel, která zmizela nebo chybí na PVVD:
-        # POKUD JE VŮZ NA ARRIVA MAPĚ, POUŽIJEME JEHO POLOHU JAKO ALTERNATIVNÍ ŽIVÝ ZDROJ!
-        active_spzs = {r.get("spz") for r in self.registry_by_pvvd.values() if r.get("pvvd_id") in current_pvvd_ids and r.get("spz")}
-        arriva_fallback_ids = set()
+            for p_id, rec in list(self.registry_by_pvvd.items()):
+                if p_id not in current_pvvd_ids:
+                    spz_val = rec.get("locked_spz") or rec.get("spz")
+                    if not spz_val:
+                        if p_id in admin_locks:
+                            spz_val = admin_locks[p_id].get("spz")
+                        elif p_id in GLOBAL_BUS_CACHE:
+                            spz_val = GLOBAL_BUS_CACHE[p_id].get("spz")
 
-        for p_id, rec in list(self.registry_by_pvvd.items()):
-            if p_id not in current_pvvd_ids:
-                spz_val = rec.get("locked_spz") or rec.get("spz")
-                if not spz_val:
-                    if p_id in admin_locks:
-                        spz_val = admin_locks[p_id].get("spz")
-                    elif p_id in GLOBAL_BUS_CACHE:
-                        spz_val = GLOBAL_BUS_CACHE[p_id].get("spz")
+                    if str(p_id) in admin_locks:
+                        pass
+                    elif spz_val and spz_val in active_spzs:
+                        del self.registry_by_pvvd[p_id]
+                        self.parked_by_pvvd.pop(p_id, None)
+                        continue
 
-                norm_spz = normalize_spz_key(spz_val)
-                # KONTROLA ALTERNATIVNÍ POLOHY NA ARRIVA MAPĚ:
-                if norm_spz and norm_spz in arriva_by_spz:
-                    a_bus = arriva_by_spz[norm_spz]
-                    rec["lat"] = a_bus["lat"]
-                    rec["lng"] = a_bus["lng"]
-                    rec["delay"] = a_bus.get("delay", 0)
-                    if a_bus.get("bearing") is not None:
-                        rec["bearing"] = a_bus["bearing"]
-                    a_line = normalize_line(a_bus.get("line") or "") or a_bus.get("line") or ""
-                    if a_line and a_line not in ("0", "-1", "None", "Neznámá", "Neznama"):
-                        rec["current_line"] = a_line
-                        rec["last_valid_line"] = a_line
-                    if a_bus.get("finalStopName"):
-                        rec["final_stop"] = a_bus["finalStopName"]
-                    rec["status"] = "ACTIVE_LINE" if rec.get("current_line") else "MANIPULATION"
-                    rec["is_arriva_fallback"] = True
-                    rec["position_source"] = "arriva"
-                    rec["is_offline"] = False
-                    rec["last_seen"] = now
-                    rec["parked_since"] = None
-                    rec["offline_since_time"] = None
-                    if spz_val in self.parked_by_spz:
-                        self.parked_by_spz.pop(spz_val, None)
-                    self.parked_by_pvvd.pop(p_id, None)
-                    used_spz.add(spz_val)
-                    arriva_fallback_ids.add(p_id)
+                    rec["status"] = "PARKED"
+                    rec["current_line"] = None
+                    rec["is_arriva_fallback"] = False
+                    rec["position_source"] = "pvvd"
+                    if not rec.get("parked_since"):
+                        rec["parked_since"] = rec.get("last_seen") or now
+                    if not rec.get("offline_since_time") and rec.get("parked_since"):
+                        try:
+                            rec["offline_since_time"] = datetime.fromtimestamp(rec["parked_since"]).strftime('%H:%M')
+                        except Exception:
+                            rec["offline_since_time"] = None
+
+                    # Zabezpečení vehicle_type pro zaparkovaný vůz (uchovat přes restarty)
+                    if not rec.get("vehicle_type"):
+                        if p_id in GLOBAL_BUS_CACHE and GLOBAL_BUS_CACHE[p_id].get("vehicle_type"):
+                            rec["vehicle_type"] = sanitize_vehicle_type(GLOBAL_BUS_CACHE[p_id].get("vehicle_type"))
+                        elif spz_val and spz_val in SPZ_MEMORY and SPZ_MEMORY[spz_val].get("vehicle_type"):
+                            rec["vehicle_type"] = sanitize_vehicle_type(SPZ_MEMORY[spz_val].get("vehicle_type"))
+
+                    # Zabezpečení statusu, barvy a poznámek z GLOBAL_BUS_CACHE
+                    if p_id in GLOBAL_BUS_CACHE:
+                        c_gc = GLOBAL_BUS_CACHE[p_id]
+                        if c_gc.get("offline_since_time"):
+                            rec["offline_since_time"] = c_gc["offline_since_time"]
+                        if c_gc.get("status"):
+                            rec["status_text"] = c_gc["status"]
+                        if c_gc.get("color_class"):
+                            rec["color_class"] = c_gc["color_class"]
+                        if c_gc.get("admin_driver"):
+                            rec["admin_driver"] = c_gc["admin_driver"]
+                        if c_gc.get("admin_note"):
+                            rec["admin_note"] = c_gc["admin_note"]
+                        if c_gc.get("admin_spz_verified"):
+                            rec["admin_spz_verified"] = c_gc["admin_spz_verified"]
+                        if c_gc.get("is_locked_by_admin"):
+                            rec["is_locked_by_admin"] = c_gc["is_locked_by_admin"]
+
+                    if spz_val:
+                        self.parked_by_spz[spz_val] = rec
+                    self.parked_by_pvvd[p_id] = rec
+
+            self.save_state()
+
+            # Aktivní vozy: pouze živé z PVVD
+            active_list = [r for p_id, r in self.registry_by_pvvd.items() if p_id in current_pvvd_ids]
+            act_spzs_final = {r.get("spz") for r in active_list if r.get("spz")}
+
+            # Zaparkované / offline vozy (max 7 dní)
+            cutoff_parked = now - (7 * 86400)
+            parked_list = [
+                r for p_id, r in self.parked_by_pvvd.items()
+                if p_id not in current_pvvd_ids
+                and (not r.get("spz") or r.get("spz") not in act_spzs_final)
+                and (r.get("last_seen") or r.get("parked_since") or now) >= cutoff_parked
+            ]
+            return active_list + parked_list
+
+        else:
+            # === REŽIM ARRIVA LIVE ===
+            # Všechny živé polohy vozidel se berou VÝHRADNĚ z Arriva mapy.
+            # PVVD a JŘ nepřetržitě komunikují a obohacují vozy o linky, zastávky a JŘ.
+            arriva_active_list = []
+            tracked_norm_set = {normalize_spz_key(s) for s in TRACKED_SPZS if s}
+            assigned_arriva = {normalize_spz_key(item["spz"]): (p_id, item) for p_id, item in assigned_pvvd.items() if item.get("spz")}
+            pvvd_by_id = {str(p["id"]): p for p in pvvd_buses}
+
+            for a in arriva_buses:
+                a_spz = (a.get("spz") or "").strip()
+                norm_a_spz = a.get("_norm_spz") or normalize_spz_key(a_spz)
+                if not norm_a_spz:
                     continue
 
-                # Pokud tato SPZ už aktivně jezdí pod jiným PVVD ID, starý duplicitní záznam odstranit
-                # VÝJIMKA: Pokud má vůz ADMIN LOCK, NIKDY HO NEMAŽEME!
-                if str(p_id) in admin_locks:
-                    pass
-                elif spz_val and spz_val in active_spzs:
-                    del self.registry_by_pvvd[p_id]
-                    self.parked_by_pvvd.pop(p_id, None)
+                a_lat = float(a.get("lat") or 0.0)
+                a_lng = float(a.get("lng") or 0.0)
+                a_line = normalize_line(a.get("line") or "") or a.get("line") or ""
+
+                # Striktní geografické ohraničení Plzeňského kraje
+                in_plzen_region = (48.95 <= a_lat <= 50.18 and 12.50 <= a_lng <= 13.82)
+                is_plzen_spz = (len(a_spz) >= 2 and a_spz[1].upper() == 'P')
+                is_idpk_line = False
+                if a_line:
+                    clean_l = "".join(ch for ch in a_line if ch.isdigit())
+                    if clean_l.startswith("4") and len(clean_l) == 6:
+                        is_idpk_line = True
+                    elif clean_l and 200 <= int(clean_l) <= 999 and not clean_l.startswith(("100", "157", "220", "225")):
+                        is_idpk_line = True
+                is_known = bool(a_spz in TRACKED_SPZS or norm_a_spz in tracked_norm_set or norm_a_spz in SPZ_MEMORY)
+
+                if not (in_plzen_region and (is_idpk_line or (is_plzen_spz and is_known))):
                     continue
 
-                rec["status"] = "PARKED"
-                rec["current_line"] = None
-                rec["is_arriva_fallback"] = False
-                rec["position_source"] = "pvvd"
-                if not rec.get("parked_since"):
-                    rec["parked_since"] = rec.get("last_seen") or now
-                if not rec.get("offline_since_time") and rec.get("parked_since"):
-                    try:
-                        rec["offline_since_time"] = datetime.fromtimestamp(rec["parked_since"]).strftime('%H:%M')
-                    except Exception:
-                        rec["offline_since_time"] = None
+                # Spárování s PVVD záznamem
+                matched_p_id, _ = assigned_arriva.get(norm_a_spz, (None, None))
+                if not matched_p_id and norm_a_spz in admin_locked_spz_map:
+                    matched_p_id = admin_locked_spz_map[norm_a_spz]
 
-                # Zabezpečení vehicle_type pro zaparkovaný vůz (uchovat přes restarty)
-                if not rec.get("vehicle_type"):
-                    if p_id in GLOBAL_BUS_CACHE and GLOBAL_BUS_CACHE[p_id].get("vehicle_type"):
-                        rec["vehicle_type"] = sanitize_vehicle_type(GLOBAL_BUS_CACHE[p_id].get("vehicle_type"))
-                    elif spz_val and spz_val in SPZ_MEMORY and SPZ_MEMORY[spz_val].get("vehicle_type"):
-                        rec["vehicle_type"] = sanitize_vehicle_type(SPZ_MEMORY[spz_val].get("vehicle_type"))
+                final_bus_id = str(matched_p_id) if matched_p_id else f"ARR-{norm_a_spz}"
+                pvvd_match = pvvd_by_id.get(str(matched_p_id)) if matched_p_id else None
 
-                # Zabezpečení statusu, barvy a poznámek z GLOBAL_BUS_CACHE
-                if p_id in GLOBAL_BUS_CACHE:
-                    c_gc = GLOBAL_BUS_CACHE[p_id]
-                    if c_gc.get("offline_since_time"):
-                        rec["offline_since_time"] = c_gc["offline_since_time"]
-                    if c_gc.get("status"):
-                        rec["status_text"] = c_gc["status"]
-                    if c_gc.get("color_class"):
-                        rec["color_class"] = c_gc["color_class"]
-                    if c_gc.get("admin_driver"):
-                        rec["admin_driver"] = c_gc["admin_driver"]
-                    if c_gc.get("admin_note"):
-                        rec["admin_note"] = c_gc["admin_note"]
-                    if c_gc.get("admin_spz_verified"):
-                        rec["admin_spz_verified"] = c_gc["admin_spz_verified"]
-                    if c_gc.get("is_locked_by_admin"):
-                        rec["is_locked_by_admin"] = c_gc["is_locked_by_admin"]
+                final_line = (normalize_line(pvvd_match.get("text") or pvvd_match.get("line")) if pvvd_match else None) or a_line
+                has_act_l = bool(final_line and final_line not in ("0", "-1", "None", "Neznámá", "Neznama"))
+                final_dest = (pvvd_match.get("finalStopName") if pvvd_match else None) or a.get("finalStopName") or ""
 
-                if spz_val:
-                    self.parked_by_spz[spz_val] = rec
-                self.parked_by_pvvd[p_id] = rec
+                v_type = sanitize_vehicle_type(SPZ_MEMORY.get(a_spz, {}).get("vehicle_type") or SPZ_METADATA.get(norm_a_spz, {}).get("vehicle_type") or "")
 
-        # 5. Nezařazené živé vozy z Arrivy (striktně IDPK vozy v Plzeňském kraji)
-        unmapped_arriva = []
-        tracked_norm_set = {normalize_spz_key(s) for s in TRACKED_SPZS if s}
-        for a in arriva_buses:
-            a_spz = (a.get("spz") or "").strip()
-            norm_a_spz = a.get("_norm_spz") or normalize_spz_key(a_spz)
-            if not norm_a_spz or norm_a_spz in used_spz:
-                continue
-            a_lat = float(a.get("lat") or 0.0)
-            a_lng = float(a.get("lng") or 0.0)
-            a_line = normalize_line(a.get("line") or "") or a.get("line") or ""
-
-            # Striktní geografické ohraničení Plzeňského kraje (vylučuje Středočeský kraj, Kladno i Prahu)
-            in_plzen_region = (48.95 <= a_lat <= 50.18 and 12.50 <= a_lng <= 13.82)
-            is_plzen_spz = (len(a_spz) >= 2 and a_spz[1].upper() == 'P')
-            is_idpk_line = False
-            if a_line:
-                clean_l = "".join(ch for ch in a_line if ch.isdigit())
-                if clean_l.startswith("4") and len(clean_l) == 6:
-                    is_idpk_line = True
-                elif clean_l and 200 <= int(clean_l) <= 999 and not clean_l.startswith(("100", "157", "220", "225")):
-                    is_idpk_line = True
-            is_known = bool(a_spz in TRACKED_SPZS or norm_a_spz in tracked_norm_set or norm_a_spz in SPZ_MEMORY)
-
-            # Přidat pouze pokud je prokazatelně v Plzeňském kraji a má IDPK linku nebo známou Plzeň SPZ
-            if in_plzen_region and (is_idpk_line or (is_plzen_spz and is_known)):
-                arr_id = f"ARR-{norm_a_spz}"
-                has_act_l = bool(a_line and a_line not in ("0", "-1", "None", "Neznámá", "Neznama"))
                 record = {
-                    "pvvd_id": arr_id,
+                    "pvvd_id": final_bus_id,
                     "spz": a_spz,
                     "lat": a_lat,
                     "lng": a_lng,
-                    "current_line": a_line if has_act_l else None,
-                    "last_valid_line": a_line or "Neznámá",
-                    "final_stop": a.get("finalStopName", ""),
+                    "current_line": final_line if has_act_l else None,
+                    "last_valid_line": final_line or "Neznámá",
+                    "final_stop": final_dest,
                     "delay": a.get("delay", 0),
-                    "vehicle_type": sanitize_vehicle_type(SPZ_MEMORY.get(a_spz, {}).get("vehicle_type", "")),
+                    "vehicle_type": v_type,
                     "status": "ACTIVE_LINE" if has_act_l else "MANIPULATION",
                     "last_seen": now,
                     "parked_since": None,
@@ -6147,27 +6168,23 @@ class BusFusionEngine:
                     "spz_verified": True,
                     "spz_inherited": False,
                     "bearing": a.get("bearing"),
-                    "is_arriva_fallback": True,
+                    "is_arriva_fallback": False,
                     "position_source": "arriva"
                 }
-                unmapped_arriva.append(record)
-                used_spz.add(norm_a_spz)
+                arriva_active_list.append(record)
+                self.registry_by_pvvd[final_bus_id] = record
 
-        self.save_state()
-
-        # Aktivní vozy: živé z PVVD + alternativní živé z Arrivy
-        active_list = [r for p_id, r in self.registry_by_pvvd.items() if p_id in current_pvvd_ids or p_id in arriva_fallback_ids] + unmapped_arriva
-        act_spzs_final = {r.get("spz") for r in active_list if r.get("spz")}
-
-        # Zaparkované / offline vozy: vozy, které nejsou na PVVD ani na Arrivě (max 7 dní)
-        cutoff_parked = now - (7 * 86400)
-        parked_list = [
-            r for p_id, r in self.parked_by_pvvd.items()
-            if p_id not in current_pvvd_ids and p_id not in arriva_fallback_ids
-            and (not r.get("spz") or r.get("spz") not in act_spzs_final)
-            and (r.get("last_seen") or r.get("parked_since") or now) >= cutoff_parked
-        ]
-        return active_list + parked_list
+            self.save_state()
+            act_spzs_final = {r.get("spz") for r in arriva_active_list if r.get("spz")}
+            active_ids = {r.get("pvvd_id") for r in arriva_active_list}
+            cutoff_parked = now - (7 * 86400)
+            parked_list = [
+                r for p_id, r in self.parked_by_pvvd.items()
+                if p_id not in active_ids
+                and (not r.get("spz") or r.get("spz") not in act_spzs_final)
+                and (r.get("last_seen") or r.get("parked_since") or now) >= cutoff_parked
+            ]
+            return arriva_active_list + parked_list
 
 FUSION_ENGINE = BusFusionEngine()
 
@@ -8173,7 +8190,8 @@ def background_map_worker():
             merged_vehicles = FUSION_ENGINE.merge_sources(
                 data_inflow if isinstance(data_inflow, list) else [],
                 data_arriva,
-                admin_locks=ADMIN_SPZ_LOCKS
+                admin_locks=ADMIN_SPZ_LOCKS,
+                source_mode=POSITION_SOURCE_MODE
             )
 
             # Oddělené záznamy pro vlaky z PVVD (vlaky se zobrazují živě bez SPZ, neukládají se jako busy)
@@ -8350,18 +8368,19 @@ def background_map_worker():
 
                 bind_bus_to_spz_metadata(c, spz)
 
-                # ── ŽIVOTNÍ CYKLUS A STATUSY (PVVD TELEMETRIE, ARRIVA FALLBACK, ODSTAVENÍ A ČEKÁNÍ NA SPOJ) ──
+                # ── ŽIVOTNÍ CYKLUS A STATUSY (PVVD TELEMETRIE, ARRIVA LIVE, ODSTAVENÍ A ČEKÁNÍ NA SPOJ) ──
                 has_route = bool(raw_line and raw_line not in ("0", "-1", "None", "Neznámá", "Neznama"))
                 is_alive_in_pvvd = bool(bid in current_inflow_ids)
                 is_arriva_fallback = bool(v.get("is_arriva_fallback"))
-                has_live_pos = is_alive_in_pvvd or is_arriva_fallback
+                is_alive_in_arriva = bool(POSITION_SOURCE_MODE == "arriva" and v.get("status") in ("ACTIVE_LINE", "MANIPULATION"))
+                has_live_pos = is_alive_in_pvvd or is_arriva_fallback or is_alive_in_arriva
 
                 if has_live_pos:
                     c["pvvd_missing_ticks"] = 0
                     c["is_offline"] = False
                     c["is_withdrawn"] = False
                     c["is_arriva_fallback"] = is_arriva_fallback
-                    c["position_source"] = "arriva" if is_arriva_fallback else "pvvd"
+                    c["position_source"] = "arriva" if (is_arriva_fallback or POSITION_SOURCE_MODE == "arriva") else "pvvd"
                     c.pop("offline_since_time", None)
 
                     clean_line = curr_norm_line or raw_line or normalize_line(last_valid_line) or last_valid_line
@@ -8369,8 +8388,8 @@ def background_map_worker():
                     if has_route:
                         c["line"] = clean_line
 
-                    if is_arriva_fallback:
-                        # Vůz jede podle alternativní live telemetrie Arriva (chybí na PVVD)
+                    if is_arriva_fallback or (POSITION_SOURCE_MODE == "arriva" and not is_alive_in_pvvd):
+                        # Vůz jede podle telemetrie Arriva (chybí na PVVD nebo je zvolen celkový režim Arriva)
                         c["actual_end_time"] = None
                         c["_terminal_reached"] = False
                         c["locked_arrival_delay"] = False
@@ -8620,7 +8639,7 @@ def background_map_worker():
                     "bearing": c.get("bearing"),
                     "line": display_line,
                     "real_linka_spoj": c.get("real_linka_spoj"),
-                    "delay": delay if (status == "ACTIVE_LINE" or is_arriva_fallback) else 0,
+                    "delay": delay if (status == "ACTIVE_LINE" or is_arriva_fallback or POSITION_SOURCE_MODE == "arriva") else 0,
                     "arrival_delay": c.get("arrival_delay"),
                     "locked_arrival_delay": bool(c.get("locked_arrival_delay")),
                     "time_to_dep": c.get("time_to_dep", 0),
@@ -8662,7 +8681,7 @@ def background_map_worker():
                     "parked_since": v.get("parked_since"),
                     "spz_inherited": bool(v.get("spz_inherited")),
                     "is_arriva_fallback": is_arriva_fallback,
-                    "position_source": "arriva" if is_arriva_fallback else "pvvd"
+                    "position_source": "arriva" if (is_arriva_fallback or POSITION_SOURCE_MODE == "arriva") else "pvvd"
                 })
 
             # Pojistka: Žádný autobus z GLOBAL_BUS_CACHE nesmí z mapy zmizet!
@@ -8678,11 +8697,11 @@ def background_map_worker():
                 lat_c = float(c_cached.get("lat") or 0)
                 lng_c = float(c_cached.get("lng") or 0)
 
-                # ZÁCHRANA Z ARRIVA MAPY: Pokud vůz chybí v PVVD datech, ale je živě na Arrivě,
-                # použijeme jeho aktuální live Arriva pozici a telemetrii!
+                # ZÁCHRANA Z ARRIVA MAPY: Pouze pokud NENÍ aktivní striktní režim PVVD!
+                # V režimu PVVD nesmí Arriva polohy vytvářet falešné duplicitní vozy jedoucí za sebou.
                 cached_spz = c_cached.get("spz")
                 norm_c_spz = normalize_spz_key(cached_spz)
-                if norm_c_spz and norm_c_spz in arriva_by_spz:
+                if POSITION_SOURCE_MODE != "pvvd" and norm_c_spz and norm_c_spz in arriva_by_spz:
                     a_bus = arriva_by_spz[norm_c_spz]
                     lat_c = float(a_bus.get("lat") or 0)
                     lng_c = float(a_bus.get("lng") or 0)
@@ -10677,6 +10696,7 @@ def get_spz_control_dashboard_data():
         "status": "success",
         "timestamp": now_str,
         "auto_resolve": AUTO_RESOLVE_SPZ,
+        "position_source_mode": POSITION_SOURCE_MODE,
         "system_health": get_system_health_status(),
         "stats": {
             "unknown_count": len(unknown_buses),
@@ -10720,6 +10740,43 @@ def api_admin_spz_control_data():
     if not is_admin and not session.get('logged_in'):
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
     return jsonify(get_spz_control_dashboard_data())
+
+
+@mapa_bp.route('/api/admin/set_position_source_mode', methods=['POST'])
+def api_admin_set_position_source_mode():
+    global POSITION_SOURCE_MODE
+    is_admin, admin_name = _check_admin_request()
+    if not is_admin and not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
+    admin_name = admin_name or session.get("nick") or "Admin"
+    data = request.json or {}
+    mode = str(data.get("mode") or "").strip().lower()
+    if mode not in ("pvvd", "arriva"):
+        return jsonify({"status": "error", "message": "Neplatný režim (povolené: 'pvvd', 'arriva')"}), 400
+
+    POSITION_SOURCE_MODE = mode
+    _save_spz_settings()
+    log_automation_action(
+        "position_source_changed",
+        "-",
+        f"Změna režimu polohy na {mode.upper()}",
+        f"Admin {admin_name} změnil jednotný režim GPS poloh vozidel na '{mode.upper()}'.",
+        spz="-"
+    )
+    print(f"[POSITION-MODE] Admin {admin_name} změnil režim GPS poloh na: {mode.upper()}", flush=True)
+    return jsonify({
+        "status": "success",
+        "position_source_mode": POSITION_SOURCE_MODE,
+        "message": f"Režim polohy úspěšně změněn na {mode.upper()}."
+    })
+
+
+@mapa_bp.route('/api/admin/position_source_mode', methods=['GET'])
+def api_admin_get_position_source_mode():
+    return jsonify({
+        "status": "success",
+        "position_source_mode": POSITION_SOURCE_MODE
+    })
 
 
 @mapa_bp.route('/api/admin/spz_resolve_proposal', methods=['POST'])
@@ -11238,6 +11295,7 @@ def api_live_buses():
         "server_time": now.strftime('%H:%M:%S'),
         "server_epoch": now.timestamp(),
         "worker_uptime_seconds": round(uptime),
+        "position_source_mode": POSITION_SOURCE_MODE,
         "buses": buses_to_send,
     })
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"

@@ -4177,6 +4177,29 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
   <!-- Automode Banner -->
   <div id="automode-banner-container" style="margin-bottom: 22px;"></div>
 
+  <!-- REŽIM ZDROJE POLOHY VOZIDEL (GPS) -->
+  <div id="position-source-card" style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)); border: 1px solid #334155; border-radius: 12px; padding: 18px 20px; margin-bottom: 22px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+      <div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 16px; font-weight: 800; color: #f8fafc;"><i class="fas fa-crosshairs" style="color: #38bdf8;"></i> Režim zdroje polohy vozidel</span>
+          <span id="pos-mode-badge" style="padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 800; background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #0284c7;">Aktivní: PVVD IDPK</span>
+        </div>
+        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px; max-width: 720px; line-height: 1.45;">
+          Určuje primární zdroj živých GPS souřadnic pro mapu. Druhý zdroj s mapou nepřetržitě komunikuje a předává SPZ, typy vozidel a jízdní řády, ale nevytváří falešné duplicitní vozy jedoucí za sebou.
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <button id="btn-mode-pvvd" onclick="setPositionSourceMode('pvvd')" style="padding: 10px 18px; border-radius: 8px; font-weight: bold; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s; border: 2px solid #38bdf8; background: rgba(56, 189, 248, 0.18); color: #38bdf8; box-shadow: 0 0 12px rgba(56,189,248,0.25);">
+          <i class="fas fa-satellite-dish"></i> <span>1. PVVD IDPK (Výchozí)</span>
+        </button>
+        <button id="btn-mode-arriva" onclick="setPositionSourceMode('arriva')" style="padding: 10px 18px; border-radius: 8px; font-weight: bold; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid #475569; background: #1e293b; color: #94a3b8;">
+          <i class="fas fa-bus"></i> <span>2. Arriva Live</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- SYSTEM HEALTH & API STATUS WIDGET -->
   <div id="system-health-widget" style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)); border: 1px solid #334155; border-radius: 12px; padding: 18px 20px; margin-bottom: 22px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);">
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
@@ -4605,6 +4628,9 @@ function renderDashboardUI() {
   document.getElementById('badge-tab-automation').innerText = (_dashData.automation_log || []).length;
   document.getElementById('badge-tab-drivers').innerText = s.drivers_notes_count || 0;
   document.getElementById('badge-tab-invalid').innerText = s.invalid_verifications_count || 0;
+
+  // Aktualizace voliče režimu zdroje polohy
+  updatePositionModeUI(_dashData.position_source_mode || 'pvvd');
 
   // Aktualizace System Health widgetu
   const health = _dashData.system_health || {};
@@ -5556,6 +5582,74 @@ function renderInvalidLog() {
       }).join('')}
     </div>
   `;
+}
+
+async function setPositionSourceMode(mode) {
+  try {
+    const res = await fetch('/api/admin/set_position_source_mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: mode })
+    });
+    const d = await res.json();
+    if (d.status === 'success') {
+      showToast(d.message || ('Režim polohy nastaven na: ' + mode.toUpperCase()), false);
+      if (_dashData) {
+        _dashData.position_source_mode = mode;
+      }
+      updatePositionModeUI(mode);
+      loadSpzControlData();
+    } else {
+      showToast('Chyba: ' + (d.message || 'Nepodařilo se změnit režim'), true);
+    }
+  } catch (e) {
+    showToast('Chyba komunikace: ' + e.message, true);
+  }
+}
+
+function updatePositionModeUI(mode) {
+  const btnPvvd = document.getElementById('btn-mode-pvvd');
+  const btnArriva = document.getElementById('btn-mode-arriva');
+  const badge = document.getElementById('pos-mode-badge');
+  const isPvvd = (mode === 'pvvd');
+
+  if (btnPvvd && btnArriva) {
+    if (isPvvd) {
+      btnPvvd.style.border = '2px solid #38bdf8';
+      btnPvvd.style.background = 'rgba(56, 189, 248, 0.18)';
+      btnPvvd.style.color = '#38bdf8';
+      btnPvvd.style.boxShadow = '0 0 12px rgba(56,189,248,0.25)';
+
+      btnArriva.style.border = '1px solid #475569';
+      btnArriva.style.background = '#1e293b';
+      btnArriva.style.color = '#94a3b8';
+      btnArriva.style.boxShadow = 'none';
+    } else {
+      btnArriva.style.border = '2px solid #10b981';
+      btnArriva.style.background = 'rgba(16, 185, 129, 0.18)';
+      btnArriva.style.color = '#34d399';
+      btnArriva.style.boxShadow = '0 0 12px rgba(16,185,129,0.25)';
+
+      btnPvvd.style.border = '1px solid #475569';
+      btnPvvd.style.background = '#1e293b';
+      btnPvvd.style.color = '#94a3b8';
+      btnPvvd.style.boxShadow = 'none';
+    }
+  }
+
+  if (badge) {
+    if (isPvvd) {
+      badge.innerText = 'Aktivní: PVVD IDPK';
+      badge.style.background = 'rgba(56, 189, 248, 0.2)';
+      badge.style.color = '#38bdf8';
+      badge.style.borderColor = '#0284c7';
+    } else {
+      badge.innerText = 'Aktivní: Arriva Live';
+      badge.style.background = 'rgba(16, 185, 129, 0.2)';
+      badge.style.color = '#34d399';
+      badge.style.borderColor = '#059669';
+    }
+  }
 }
 
 // Spustit načítání při startu a obnovovat každých 20 sekund
