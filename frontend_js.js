@@ -140,8 +140,7 @@ function setGraphicsLevel(level, isInit=false) {
 window.isSmoothAnimActive = function() {
   let custom = localStorage.getItem('smooth_anim_enabled');
   if (custom !== null) return custom === 'true';
-  let lvl = parseInt(localStorage.getItem('graphics_level') || '3');
-  return lvl >= 3; // Od vysoké kvality automaticky zapnuto
+  return false; // Výchozí: vypnuto pro okamžitou odezvu a přesnou shodu s PVVD
 };
 
 window.toggleSmoothAnim = function(enabled) {
@@ -3105,9 +3104,9 @@ async function fetchBuses(){
       
       let existingMarker = window.busMarkersMap.get(bus.id);
       if (existingMarker) {
-          // PLYNULÁ ANIMACE POHYBU (Bod 4) nebo okamžitý posun:
-          if (window.isSmoothAnimActive && window.isSmoothAnimActive()) {
-              animateMarkerTo(existingMarker, bus.lat, bus.lng, 800);
+          // Okamžitá live poloha shodná s PVVD bez zpoždění a bez chokingu CPU (animace pouze u aktivně sledovaného vozu)
+          if (window.isSmoothAnimActive && window.isSmoothAnimActive() && followId === bus.id) {
+              animateMarkerTo(existingMarker, bus.lat, bus.lng, 600);
           } else {
               existingMarker.setLatLng([bus.lat, bus.lng]);
           }
@@ -3205,14 +3204,14 @@ fetchBuses();
 // Spolehlivý časovač: Web Worker netrpí uspáváním tabu v pozadí v prohlížečích (Chrome throttling)
 try {
   let blob = new Blob([`
-    setInterval(function(){ postMessage('tick'); }, 2000);
+    setInterval(function(){ postMessage('tick'); }, 1500);
   `], { type: 'application/javascript' });
   let bgTimer = new Worker(URL.createObjectURL(blob));
   bgTimer.onmessage = function() {
     if (typeof fetchBuses === 'function') fetchBuses();
   };
 } catch(e) {
-  setInterval(fetchBuses, 2000);
+  setInterval(fetchBuses, 1500);
 }
 
 // Okamžité obnovení poloh při přepnutí zpět na záložku nebo do okna

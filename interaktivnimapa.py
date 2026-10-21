@@ -1357,8 +1357,7 @@ function setGraphicsLevel(level, isInit=false) {
 window.isSmoothAnimActive = function() {
   let custom = localStorage.getItem('smooth_anim_enabled');
   if (custom !== null) return custom === 'true';
-  let lvl = parseInt(localStorage.getItem('graphics_level') || '3');
-  return lvl >= 3; // Od vysoké kvality automaticky zapnuto
+  return false; // Výchozí: vypnuto pro okamžitou odezvu a přesnou shodu s PVVD
 };
 
 window.toggleSmoothAnim = function(enabled) {
@@ -4322,9 +4321,9 @@ async function fetchBuses(){
       
       let existingMarker = window.busMarkersMap.get(bus.id);
       if (existingMarker) {
-          // PLYNULÁ ANIMACE POHYBU (Bod 4) nebo okamžitý posun:
-          if (window.isSmoothAnimActive && window.isSmoothAnimActive()) {
-              animateMarkerTo(existingMarker, bus.lat, bus.lng, 800);
+          // Okamžitá live poloha shodná s PVVD bez zpoždění a bez chokingu CPU (animace pouze u aktivně sledovaného vozu)
+          if (window.isSmoothAnimActive && window.isSmoothAnimActive() && followId === bus.id) {
+              animateMarkerTo(existingMarker, bus.lat, bus.lng, 600);
           } else {
               existingMarker.setLatLng([bus.lat, bus.lng]);
           }
@@ -4422,14 +4421,14 @@ fetchBuses();
 // Spolehlivý časovač: Web Worker netrpí uspáváním tabu v pozadí v prohlížečích (Chrome throttling)
 try {
   let blob = new Blob([`
-    setInterval(function(){ postMessage('tick'); }, 2000);
+    setInterval(function(){ postMessage('tick'); }, 1500);
   `], { type: 'application/javascript' });
   let bgTimer = new Worker(URL.createObjectURL(blob));
   bgTimer.onmessage = function() {
     if (typeof fetchBuses === 'function') fetchBuses();
   };
 } catch(e) {
-  setInterval(fetchBuses, 2000);
+  setInterval(fetchBuses, 1500);
 }
 
 // Okamžité obnovení poloh při přepnutí zpět na záložku nebo do okna
@@ -5615,6 +5614,10 @@ class BusFusionEngine:
 
     def save_state(self, db_client=None, force_db=False):
         now_ts = time.time()
+        # Throttlovat diskový zápis na každých 60s (pokud není force_db), aby nebrzdil hlavní smyčku telemetrie
+        if not force_db and (now_ts - getattr(self, "last_disk_save", 0)) < 60.0:
+            return
+        self.last_disk_save = now_ts
         payload = {
             "registry_by_pvvd": self.registry_by_pvvd,
             "parked_by_spz": self.parked_by_spz,
@@ -5624,22 +5627,24 @@ class BusFusionEngine:
         for path in [self.state_file, self.alt_state_file]:
             try:
                 with open(path, "w", encoding="utf-8") as f:
-                    json.dump(payload, f, ensure_ascii=False, indent=2)
+                    json.dump(payload, f, ensure_ascii=False)
             except Exception as e:
                 print(f"[WARN] Nepodařilo se uložit stav do {path}: {e}", flush=True)
 
-        # Supabase zápis s throttlingem (každých 30s nebo při force_db)
-        if force_db or (now_ts - self.last_db_save) >= 30.0:
+        # Supabase zápis s throttlingem (každých 300s nebo při force_db) v daemon vlákně
+        if force_db or (now_ts - getattr(self, "last_db_save", 0)) >= 300.0:
             db_c = db_client or get_db_client()
             if db_c:
-                try:
-                    self.last_db_save = now_ts
-                    db_c.table("settings").upsert({
-                        "setting_key": "parked_buses_state",
-                        "setting_value": json.dumps(payload, ensure_ascii=False)
-                    }).execute()
-                except Exception:
-                    pass
+                def _do_db_save(p_load, cur_ts):
+                    try:
+                        self.last_db_save = cur_ts
+                        db_c.table("settings").upsert({
+                            "setting_key": "parked_buses_state",
+                            "setting_value": json.dumps(p_load, ensure_ascii=False)
+                        }).execute()
+                    except Exception:
+                        pass
+                threading.Thread(target=_do_db_save, args=(payload, now_ts), daemon=True).start()
 
     def filter_pvvd_buses(self, raw_pvvd: list) -> list:
         filtered = []
@@ -5977,25 +5982,31 @@ class BusFusionEngine:
                     self.parked_by_spz[spz_val] = rec
                 self.parked_by_pvvd[p_id] = rec
 
-        # 5. Nezařazené živé vozy z Arrivy (vůz jezdí v Plzeňském kraji / na IDPK linkách, ale PVVD o něm neví)
+        # 5. Nezařazené živé vozy z Arrivy (striktně IDPK vozy v Plzeňském kraji)
         unmapped_arriva = []
         for a in arriva_buses:
-            a_spz = a.get("spz")
+            a_spz = (a.get("spz") or "").strip()
             norm_a_spz = normalize_spz_key(a_spz)
             if not norm_a_spz or norm_a_spz in used_spz:
                 continue
             a_lat = float(a.get("lat") or 0.0)
             a_lng = float(a.get("lng") or 0.0)
             a_line = normalize_line(a.get("line") or "") or a.get("line") or ""
-            in_region = (48.80 <= a_lat <= 50.40 and 12.20 <= a_lng <= 14.20)
+
+            # Striktní geografické ohraničení Plzeňského kraje (vylučuje Středočeský kraj, Kladno i Prahu)
+            in_plzen_region = (48.95 <= a_lat <= 50.18 and 12.50 <= a_lng <= 13.82)
+            is_plzen_spz = (len(a_spz) >= 2 and a_spz[1].upper() == 'P')
             is_idpk_line = False
             if a_line:
-                digits = "".join(ch for ch in a_line if ch.isdigit())
-                if digits and 100 <= int(digits) <= 999:
+                clean_l = "".join(ch for ch in a_line if ch.isdigit())
+                if clean_l.startswith("4") and len(clean_l) == 6:
                     is_idpk_line = True
-            is_tracked = bool(a_spz in TRACKED_SPZS or any(normalize_spz_key(s) == norm_a_spz for s in TRACKED_SPZS))
+                elif clean_l and 200 <= int(clean_l) <= 999 and not clean_l.startswith(("100", "157", "220", "225")):
+                    is_idpk_line = True
+            is_known = bool(a_spz in TRACKED_SPZS or any(normalize_spz_key(s) == norm_a_spz for s in TRACKED_SPZS) or norm_a_spz in SPZ_MEMORY)
 
-            if in_region or is_idpk_line or is_tracked:
+            # Přidat pouze pokud je prokazatelně v Plzeňském kraji a má IDPK linku nebo známou Plzeň SPZ
+            if in_plzen_region and (is_idpk_line or (is_plzen_spz and is_known)):
                 arr_id = f"ARR-{norm_a_spz}"
                 has_act_l = bool(a_line and a_line not in ("0", "-1", "None", "Neznámá", "Neznama"))
                 record = {
@@ -7647,25 +7658,20 @@ def upsert_to_history(db, c):
         "last_lat": c.get("lat"), "last_lng": c.get("lng"), "status": status_to_save,
         "created_at": c["created_at"].isoformat(), "updated_at": get_prague_time().isoformat(),
     }
-    try:
-        db.table("bus_history").upsert(payload_full).execute()
-    except Exception as e:
-        err_str = str(e)
-        # Graceful fallback: pokud DB nema sloupec spz_3factor nebo spz_conflict_warn
-        # (PGRST204 = neznamy sloupec v schema cache), zkus bez tech sloupcu
-        if "PGRST204" in err_str or "spz_3factor" in err_str or "spz_conflict_warn" in err_str:
-            payload_fallback = {k: v for k, v in payload_full.items()
-                                if k not in ("spz_3factor", "spz_conflict_warn")}
-            try:
-                db.table("bus_history").upsert(payload_fallback).execute()
-                # Jen jednou za cas upozornit ze fallback je aktivni
-                print(f"[MAPA-DB WARN] {spz}: spz_3factor/spz_conflict_warn sloupec chybi v DB "
-                      f"- pridat SQL: ALTER TABLE bus_history ADD COLUMN spz_3factor BOOLEAN DEFAULT FALSE; "
-                      f"ADD COLUMN spz_conflict_warn BOOLEAN DEFAULT FALSE;", flush=True)
-            except Exception as e2:
-                print(f"[MAPA-DB CHYBA] {spz}: {e2}", flush=True)
-        else:
-            print(f"[MAPA-DB CHYBA] {spz}: {e}", flush=True)
+    def _do_async_upsert(pl):
+        try:
+            db.table("bus_history").upsert(pl).execute()
+        except Exception as e:
+            err_str = str(e)
+            if "PGRST204" in err_str or "spz_3factor" in err_str or "spz_conflict_warn" in err_str:
+                payload_fallback = {k: v for k, v in pl.items()
+                                    if k not in ("spz_3factor", "spz_conflict_warn")}
+                try:
+                    db.table("bus_history").upsert(payload_fallback).execute()
+                except Exception:
+                    pass
+
+    threading.Thread(target=_do_async_upsert, args=(payload_full,), daemon=True).start()
 
 
 def background_map_worker():
@@ -8873,7 +8879,7 @@ def background_map_worker():
             except Exception as _anom_err:
                 print(f"[SPZ ANOMALY] Chyba pri analyze anomalii: {_anom_err}", flush=True)
 
-            time.sleep(2.0)
+            time.sleep(1.0)
 
 
         except Exception as crash_error:
@@ -9685,7 +9691,7 @@ def _full_page(title, body_html, is_map=False):
     .user-avatar-wrap > div { width: 30px !important; height: 30px !important; }
 }
 </style>"""
-    return Response(
+    resp = Response(
         f"""<!DOCTYPE html>
 <html style="background:#0f172a;">
 <head>
@@ -9696,6 +9702,10 @@ def _full_page(title, body_html, is_map=False):
 </head>
 <body style="background:#0f172a;color:white;{extra}margin:0;padding:0;">{body_html}</body>
 </html>""", mimetype='text/html')
+    if is_map:
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 _AD_BTN_NORMAL = '<a href="/mapa_admin" class="n-btn n-ad">🔧 AD</a>'
