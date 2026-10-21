@@ -290,7 +290,7 @@ window.toggleOnlyMovingBuses = function(forceVal) {
   if (typeof fetchBuses === 'function') fetchBuses();
 };
 
-function animateMarkerTo(marker, targetLat, targetLng, durationMs = 1200) {
+function animateMarkerTo(marker, targetLat, targetLng, durationMs = 800) {
   if (!marker) return;
   let curPos = marker.getLatLng();
   let startLat = curPos.lat;
@@ -2612,6 +2612,8 @@ function zoomToSpz(lat, lng, busId) {
 
 // === MAIN FETCH ===
 async function fetchBuses() {
+  if (fetchBuses._inflight) return;
+  fetchBuses._inflight = true;
   try {
     let r = await fetch('/api/live_buses'), data = await r.json();
     if (data.server_time) document.getElementById('systemTimeClock').innerText = data.server_time;
@@ -2937,7 +2939,7 @@ async function fetchBuses() {
       if (existingMarker) {
         // PLYNULÁ ANIMACE POHYBU (Bod 4) nebo okamžitý posun:
         if (window.isSmoothAnimActive && window.isSmoothAnimActive()) {
-          animateMarkerTo(existingMarker, bus.lat, bus.lng, 1200);
+          animateMarkerTo(existingMarker, bus.lat, bus.lng, 800);
         } else {
           existingMarker.setLatLng([bus.lat, bus.lng]);
         }
@@ -3025,20 +3027,22 @@ async function fetchBuses() {
     console.error(e);
     isRefreshing = false;
     appLog('fetchBuses chyba: ' + e.message, 'error');
+  } finally {
+    fetchBuses._inflight = false;
   }
 }
 fetchBuses();
 // Spolehlivý časovač: Web Worker netrpí uspáváním tabu v pozadí v prohlížečích (Chrome throttling)
 try {
   let blob = new Blob([`
-    setInterval(function(){ postMessage('tick'); }, 10000);
+    setInterval(function(){ postMessage('tick'); }, 2500);
   `], { type: 'application/javascript' });
   let bgTimer = new Worker(URL.createObjectURL(blob));
   bgTimer.onmessage = function() {
     if (typeof fetchBuses === 'function') fetchBuses();
   };
 } catch(e) {
-  setInterval(fetchBuses, 10000);
+  setInterval(fetchBuses, 2500);
 }
 
 // Okamžité obnovení poloh při přepnutí zpět na záložku nebo do okna

@@ -1395,7 +1395,7 @@ window.toggleOnlyMovingBuses = function(forceVal) {
   if (typeof fetchBuses === 'function') fetchBuses();
 };
 
-function animateMarkerTo(marker, targetLat, targetLng, durationMs = 1200) {
+function animateMarkerTo(marker, targetLat, targetLng, durationMs = 800) {
   if (!marker) return;
   let curPos = marker.getLatLng();
   let startLat = curPos.lat;
@@ -3792,6 +3792,8 @@ function zoomToSpz(lat,lng,busId){
 
 // === MAIN FETCH ===
 async function fetchBuses(){
+  if (fetchBuses._inflight) return;
+  fetchBuses._inflight = true;
   try{
     let r=await fetch('/api/live_buses'),data=await r.json();
     if(data.server_time)document.getElementById('systemTimeClock').innerText=data.server_time;
@@ -4318,7 +4320,7 @@ async function fetchBuses(){
       if (existingMarker) {
           // PLYNULÁ ANIMACE POHYBU (Bod 4) nebo okamžitý posun:
           if (window.isSmoothAnimActive && window.isSmoothAnimActive()) {
-              animateMarkerTo(existingMarker, bus.lat, bus.lng, 1200);
+              animateMarkerTo(existingMarker, bus.lat, bus.lng, 800);
           } else {
               existingMarker.setLatLng([bus.lat, bus.lng]);
           }
@@ -4408,20 +4410,22 @@ async function fetchBuses(){
     console.error(e);
     isRefreshing=false;
     appLog('fetchBuses chyba: '+e.message,'error');
+  } finally {
+    fetchBuses._inflight = false;
   }
 }
 fetchBuses();
 // Spolehlivý časovač: Web Worker netrpí uspáváním tabu v pozadí v prohlížečích (Chrome throttling)
 try {
   let blob = new Blob([`
-    setInterval(function(){ postMessage('tick'); }, 10000);
+    setInterval(function(){ postMessage('tick'); }, 2500);
   `], { type: 'application/javascript' });
   let bgTimer = new Worker(URL.createObjectURL(blob));
   bgTimer.onmessage = function() {
     if (typeof fetchBuses === 'function') fetchBuses();
   };
 } catch(e) {
-  setInterval(fetchBuses, 10000);
+  setInterval(fetchBuses, 2500);
 }
 
 // Okamžité obnovení poloh při přepnutí zpět na záložku nebo do okna
@@ -7570,7 +7574,7 @@ def upsert_to_history(db, c):
 
 
 def background_map_worker():
-    global TRACKED_SPZS, WORKER_START_TIME
+    global TRACKED_SPZS, WORKER_START_TIME, LATEST_ARRIVA_DATA
     print("[MAPA] Worker startuje...", flush=True)
     WORKER_START_TIME = get_prague_time()
 
@@ -7763,6 +7767,7 @@ def background_map_worker():
     last_spz_memory_cleanup = get_prague_time()
     last_spz_cache_flush = get_prague_time()
     last_overrides_poll = get_prague_time()
+    last_arriva_fetch_ts = 0.0
     TRIP_COUNTER = int(time.time())
     last_successful_pvvd = []
 
@@ -7838,46 +7843,52 @@ def background_map_worker():
                     data_inflow = list(last_successful_pvvd)
 
             # Arriva: Sekundární obohacující zdroj pro SPZ (timeout 8s, výpadek nikdy nezastaví PVVD)
-            try:
-                ap = {
-                    "operationName": "busesCurrentLocation", "variables": {},
-                    "query": "query busesCurrentLocation {\n  busesCurrentLocations {\n    angle delay destinationName lastStopName\n    latitude longitude linkNumber state type\n    mainType spz updated linkNumberAlias __typename\n  }\n}"
-                }
-                req2 = urllib.request.Request(
-                    url_arriva, data=json.dumps(ap).encode('utf-8'),
-                    headers={'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json',
-                             'Origin': 'https://www.arriva.cz', 'Referer': 'https://www.arriva.cz/'},
-                    method='POST')
-                with urllib.request.urlopen(req2, context=ssl_ctx, timeout=8) as r2:
-                    resp2 = json.loads(r2.read().decode('utf-8'))
-                if isinstance(resp2, list) and resp2:
-                    data_arriva = resp2[0].get("data", {}).get("busesCurrentLocations", [])
-                elif isinstance(resp2, dict):
-                    data_arriva = resp2.get("data", {}).get("busesCurrentLocations", [])
-                if data_arriva:
-                    data_arriva = [b for b in data_arriva if str(b.get("mainType", "")).upper() != "TRAIN"]
-                    global LATEST_ARRIVA_DATA
-                    LATEST_ARRIVA_DATA = list(data_arriva)
-                    _arriva_fetch_stats["ok"] += 1
-                    _arriva_fetch_stats["last_ok_cnt"] = len(data_arriva)
-                    _arriva_fetch_stats["last_ok_time"] = now.strftime('%H:%M:%S')
-                    _arriva_fetch_stats["consecutive_fails"] = 0
-                    _arriva_fetch_stats["history"].append(True)
-                    if len(_arriva_fetch_stats["history"]) > 30:
-                        _arriva_fetch_stats["history"].pop(0)
-                else:
-                    _arriva_fetch_stats["empty"] += 1
+            # Dotazujeme každých 10s pro úsporu sítě a ochranu před 429 rate limitem; mezitím používáme LATEST_ARRIVA_DATA
+            now_ts = time.time()
+            if (now_ts - last_arriva_fetch_ts) >= 10.0 or not LATEST_ARRIVA_DATA:
+                last_arriva_fetch_ts = now_ts
+                try:
+                    ap = {
+                        "operationName": "busesCurrentLocation", "variables": {},
+                        "query": "query busesCurrentLocation {\n  busesCurrentLocations {\n    angle delay destinationName lastStopName\n    latitude longitude linkNumber state type\n    mainType spz updated linkNumberAlias __typename\n  }\n}"
+                    }
+                    req2 = urllib.request.Request(
+                        url_arriva, data=json.dumps(ap).encode('utf-8'),
+                        headers={'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json',
+                                 'Origin': 'https://www.arriva.cz', 'Referer': 'https://www.arriva.cz/'},
+                        method='POST')
+                    with urllib.request.urlopen(req2, context=ssl_ctx, timeout=8) as r2:
+                        resp2 = json.loads(r2.read().decode('utf-8'))
+                    if isinstance(resp2, list) and resp2:
+                        data_arriva = resp2[0].get("data", {}).get("busesCurrentLocations", [])
+                    elif isinstance(resp2, dict):
+                        data_arriva = resp2.get("data", {}).get("busesCurrentLocations", [])
+                    if data_arriva:
+                        data_arriva = [b for b in data_arriva if str(b.get("mainType", "")).upper() != "TRAIN"]
+                        LATEST_ARRIVA_DATA = list(data_arriva)
+                        _arriva_fetch_stats["ok"] += 1
+                        _arriva_fetch_stats["last_ok_cnt"] = len(data_arriva)
+                        _arriva_fetch_stats["last_ok_time"] = now.strftime('%H:%M:%S')
+                        _arriva_fetch_stats["consecutive_fails"] = 0
+                        _arriva_fetch_stats["history"].append(True)
+                        if len(_arriva_fetch_stats["history"]) > 30:
+                            _arriva_fetch_stats["history"].pop(0)
+                    else:
+                        _arriva_fetch_stats["empty"] += 1
+                        _arriva_fetch_stats["history"].append(False)
+                        if len(_arriva_fetch_stats["history"]) > 30:
+                            _arriva_fetch_stats["history"].pop(0)
+                        data_arriva = list(LATEST_ARRIVA_DATA) if LATEST_ARRIVA_DATA else []
+                except Exception as e_gen:
+                    _arriva_fetch_stats["fail"] += 1
+                    _arriva_fetch_stats["consecutive_fails"] += 1
+                    _arriva_fetch_stats["last_fail_reason"] = str(e_gen)
                     _arriva_fetch_stats["history"].append(False)
                     if len(_arriva_fetch_stats["history"]) > 30:
                         _arriva_fetch_stats["history"].pop(0)
-            except Exception as e_gen:
-                _arriva_fetch_stats["fail"] += 1
-                _arriva_fetch_stats["consecutive_fails"] += 1
-                _arriva_fetch_stats["last_fail_reason"] = str(e_gen)
-                _arriva_fetch_stats["history"].append(False)
-                if len(_arriva_fetch_stats["history"]) > 30:
-                    _arriva_fetch_stats["history"].pop(0)
-                data_arriva = []
+                    data_arriva = list(LATEST_ARRIVA_DATA) if LATEST_ARRIVA_DATA else []
+            else:
+                data_arriva = list(LATEST_ARRIVA_DATA) if LATEST_ARRIVA_DATA else []
 
             # Aktualizace SPZ_MEMORY pro obohacení metadat
             for b_a in data_arriva:
@@ -8619,7 +8630,7 @@ def background_map_worker():
             except Exception as _anom_err:
                 print(f"[SPZ ANOMALY] Chyba pri analyze anomalii: {_anom_err}", flush=True)
 
-            time.sleep(9)
+            time.sleep(2.5)
 
 
         except Exception as crash_error:
@@ -8629,7 +8640,7 @@ def background_map_worker():
                 sys_log(err_str)
             except Exception:
                 print(f"[MAPA CRITICAL] {err_str}", flush=True)
-            time.sleep(15)
+            time.sleep(5)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
