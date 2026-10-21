@@ -2594,7 +2594,7 @@ function updateHud(b){
   else if(dv>=5)de.innerHTML=`<span style="color:#ef4444;">+${dv} min</span>`;
   else if(dv<-1)de.innerHTML=`<span style="color:#60a5fa;">-${Math.abs(dv)} min</span>`;
   else de.innerHTML='<span style="color:#10b981;">V case</span>';
-  document.getElementById('h-status').textContent=b.status||'-';
+  document.getElementById('h-status').innerHTML=(b.status||'-')+((b.is_arriva_fallback||b.position_source==='arriva')?' <span style="color:#38bdf8;font-size:10px;font-weight:bold;">(Arriva GPS)</span>':'');
   document.getElementById('hm-line').textContent='L'+(b.line||'?');
   document.getElementById('h-jr').onclick=()=>showTT(followInflowId||b.id);
 }
@@ -3795,7 +3795,7 @@ async function fetchBuses(){
   if (fetchBuses._inflight) return;
   fetchBuses._inflight = true;
   try{
-    let r=await fetch('/api/live_buses'),data=await r.json();
+    let r=await fetch('/api/live_buses?t=' + Date.now(), { cache: 'no-store' }),data=await r.json();
     if(data.server_time)document.getElementById('systemTimeClock').innerText=data.server_time;
     if(typeof data.worker_uptime_seconds==='number')checkSW(data.worker_uptime_seconds);
     if(data.status!=='success')return;
@@ -4060,6 +4060,10 @@ async function fetchBuses(){
         let tOffline = bus.offline_since_time ? ` v ${bus.offline_since_time}` : '';
         lastposW=`<div style="background:linear-gradient(135deg,rgba(24,24,32,0.95),rgba(45,30,45,0.95));border:1.5px solid #f472b6;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 10px rgba(244,114,182,0.25);"><b style="color:#f472b6;font-size:12px;letter-spacing:0.5px;">📍 POSLEDNÍ ZNÁMÁ POLOHA</b><br><span style="color:#cbd5e1;font-size:10px;">Vůz zmizel z mapy pvvd.idpk.cz${tOffline}. Ponechán na stejné pozici, než se znovu objeví.</span></div>`;
       }
+      let arrivaW='';
+      if(bus.is_arriva_fallback || bus.position_source === 'arriva'){
+        arrivaW=`<div style="background:linear-gradient(135deg,rgba(2,132,199,0.22),rgba(3,105,161,0.22));border:1.5px solid #38bdf8;border-radius:6px;padding:7px 10px;margin:5px 0;font-size:11px;box-shadow:0 0 10px rgba(56,189,248,0.2);display:flex;align-items:center;gap:8px;"><i class="fas fa-satellite-dish" style="color:#38bdf8;font-size:14px;"></i><div><b style="color:#38bdf8;font-size:11px;letter-spacing:0.3px;">Alternativní live poloha (Arriva mapa)</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.35;display:inline-block;">Vůz chybí na PVVD – poloha a telemetrie jsou přebírány živě z mapy Arriva.</span></div></div>`;
+      }
       let bugW='';
       if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#3f0000;border:2px solid #ef4444;border-radius:5px;padding:8px;margin:5px 0;font-size:11px;text-align:center;"><b style="color:#ef4444;font-size:13px;letter-spacing:.5px;">⛔ NENÍ REÁLNÁ POLOHA</b><br><span style="color:#fca5a5;font-weight:bold;">PRAVDĚPODOBNĚ BUG NEBO POSLEDNÍ ZNÁMÁ POZICE</span><br><span style="color:#94a3b8;font-size:10px;">Pravděpodobně SPZ <b style="color:#fbbf24;">${bS}</b> – pozice nemusí odpovídat realitě</span></div>`;}
       let orangeW='';
@@ -4179,7 +4183,7 @@ async function fetchBuses(){
           ${afH}
         </div>
         <div class="pb">
-          ${withdrawnW}${lastposW}${bugW}${orangeW}${depotW}
+          ${withdrawnW}${lastposW}${arrivaW}${bugW}${orangeW}${depotW}
           ${(bus.admin_note && typeof bus.admin_note === 'string' && bus.admin_note.trim() !== '' && !isTrain)?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
           ${(bus.admin_driver && typeof bus.admin_driver === 'string' && bus.admin_driver.trim() !== '' && !isTrain)?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
           <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination||'Neznamy'}</span></div>
@@ -4418,14 +4422,14 @@ fetchBuses();
 // Spolehlivý časovač: Web Worker netrpí uspáváním tabu v pozadí v prohlížečích (Chrome throttling)
 try {
   let blob = new Blob([`
-    setInterval(function(){ postMessage('tick'); }, 2500);
+    setInterval(function(){ postMessage('tick'); }, 2000);
   `], { type: 'application/javascript' });
   let bgTimer = new Worker(URL.createObjectURL(blob));
   bgTimer.onmessage = function() {
     if (typeof fetchBuses === 'function') fetchBuses();
   };
 } catch(e) {
-  setInterval(fetchBuses, 2500);
+  setInterval(fetchBuses, 2000);
 }
 
 // Okamžité obnovení poloh při přepnutí zpět na záložku nebo do okna
@@ -5678,6 +5682,7 @@ class BusFusionEngine:
                 "spz": spz,
                 "lat": lat,
                 "lng": lng,
+                "bearing": a.get("angle"),
                 "line": a.get("linkNumber") or a.get("linkNumberAlias") or "",
                 "finalStopName": a.get("destinationName") or a.get("finalStopName") or "",
                 "delay": delay,
@@ -5872,12 +5877,56 @@ class BusFusionEngine:
             if p_id in self.parked_by_pvvd:
                 del self.parked_by_pvvd[p_id]
 
-        # 4. Přepnutí vozidel, která zmizela z PVVD, do stavu PARKED (zůstávají na mapě na stejné pozici)
+        # Vytvoření rychlé mapy Arriva vozidel podle normované SPZ pro fallback
+        arriva_by_spz = {}
+        for a in arriva_buses:
+            k = normalize_spz_key(a.get("spz"))
+            if k:
+                arriva_by_spz[k] = a
+
+        # 4. Kontrola vozidel, která zmizela nebo chybí na PVVD:
+        # POKUD JE VŮZ NA ARRIVA MAPĚ, POUŽIJEME JEHO POLOHU JAKO ALTERNATIVNÍ ŽIVÝ ZDROJ!
         active_spzs = {r.get("spz") for r in self.registry_by_pvvd.values() if r.get("pvvd_id") in current_pvvd_ids and r.get("spz")}
+        arriva_fallback_ids = set()
 
         for p_id, rec in list(self.registry_by_pvvd.items()):
             if p_id not in current_pvvd_ids:
-                spz_val = rec.get("spz")
+                spz_val = rec.get("locked_spz") or rec.get("spz")
+                if not spz_val:
+                    if p_id in admin_locks:
+                        spz_val = admin_locks[p_id].get("spz")
+                    elif p_id in GLOBAL_BUS_CACHE:
+                        spz_val = GLOBAL_BUS_CACHE[p_id].get("spz")
+
+                norm_spz = normalize_spz_key(spz_val)
+                # KONTROLA ALTERNATIVNÍ POLOHY NA ARRIVA MAPĚ:
+                if norm_spz and norm_spz in arriva_by_spz:
+                    a_bus = arriva_by_spz[norm_spz]
+                    rec["lat"] = a_bus["lat"]
+                    rec["lng"] = a_bus["lng"]
+                    rec["delay"] = a_bus.get("delay", 0)
+                    if a_bus.get("bearing") is not None:
+                        rec["bearing"] = a_bus["bearing"]
+                    a_line = normalize_line(a_bus.get("line") or "") or a_bus.get("line") or ""
+                    if a_line and a_line not in ("0", "-1", "None", "Neznámá", "Neznama"):
+                        rec["current_line"] = a_line
+                        rec["last_valid_line"] = a_line
+                    if a_bus.get("finalStopName"):
+                        rec["final_stop"] = a_bus["finalStopName"]
+                    rec["status"] = "ACTIVE_LINE" if rec.get("current_line") else "MANIPULATION"
+                    rec["is_arriva_fallback"] = True
+                    rec["position_source"] = "arriva"
+                    rec["is_offline"] = False
+                    rec["last_seen"] = now
+                    rec["parked_since"] = None
+                    rec["offline_since_time"] = None
+                    if spz_val in self.parked_by_spz:
+                        self.parked_by_spz.pop(spz_val, None)
+                    self.parked_by_pvvd.pop(p_id, None)
+                    used_spz.add(spz_val)
+                    arriva_fallback_ids.add(p_id)
+                    continue
+
                 # Pokud tato SPZ už aktivně jezdí pod jiným PVVD ID, starý duplicitní záznam odstranit
                 # VÝJIMKA: Pokud má vůz ADMIN LOCK, NIKDY HO NEMAŽEME!
                 if str(p_id) in admin_locks:
@@ -5889,6 +5938,8 @@ class BusFusionEngine:
 
                 rec["status"] = "PARKED"
                 rec["current_line"] = None
+                rec["is_arriva_fallback"] = False
+                rec["position_source"] = "pvvd"
                 if not rec.get("parked_since"):
                     rec["parked_since"] = rec.get("last_seen") or now
                 if not rec.get("offline_since_time") and rec.get("parked_since"):
@@ -5926,17 +5977,61 @@ class BusFusionEngine:
                     self.parked_by_spz[spz_val] = rec
                 self.parked_by_pvvd[p_id] = rec
 
+        # 5. Nezařazené živé vozy z Arrivy (vůz jezdí v Plzeňském kraji / na IDPK linkách, ale PVVD o něm neví)
+        unmapped_arriva = []
+        for a in arriva_buses:
+            a_spz = a.get("spz")
+            norm_a_spz = normalize_spz_key(a_spz)
+            if not norm_a_spz or norm_a_spz in used_spz:
+                continue
+            a_lat = float(a.get("lat") or 0.0)
+            a_lng = float(a.get("lng") or 0.0)
+            a_line = normalize_line(a.get("line") or "") or a.get("line") or ""
+            in_region = (48.80 <= a_lat <= 50.40 and 12.20 <= a_lng <= 14.20)
+            is_idpk_line = False
+            if a_line:
+                digits = "".join(ch for ch in a_line if ch.isdigit())
+                if digits and 100 <= int(digits) <= 999:
+                    is_idpk_line = True
+            is_tracked = bool(a_spz in TRACKED_SPZS or any(normalize_spz_key(s) == norm_a_spz for s in TRACKED_SPZS))
+
+            if in_region or is_idpk_line or is_tracked:
+                arr_id = f"ARR-{norm_a_spz}"
+                has_act_l = bool(a_line and a_line not in ("0", "-1", "None", "Neznámá", "Neznama"))
+                record = {
+                    "pvvd_id": arr_id,
+                    "spz": a_spz,
+                    "lat": a_lat,
+                    "lng": a_lng,
+                    "current_line": a_line if has_act_l else None,
+                    "last_valid_line": a_line or "Neznámá",
+                    "final_stop": a.get("finalStopName", ""),
+                    "delay": a.get("delay", 0),
+                    "vehicle_type": sanitize_vehicle_type(SPZ_MEMORY.get(a_spz, {}).get("vehicle_type", "")),
+                    "status": "ACTIVE_LINE" if has_act_l else "MANIPULATION",
+                    "last_seen": now,
+                    "parked_since": None,
+                    "locked_spz": a_spz,
+                    "spz_verified": True,
+                    "spz_inherited": False,
+                    "bearing": a.get("bearing"),
+                    "is_arriva_fallback": True,
+                    "position_source": "arriva"
+                }
+                unmapped_arriva.append(record)
+                used_spz.add(norm_a_spz)
+
         self.save_state()
 
-        # Aktivní vozy: striktně živé z PVVD
-        active_list = [r for p_id, r in self.registry_by_pvvd.items() if p_id in current_pvvd_ids]
+        # Aktivní vozy: živé z PVVD + alternativní živé z Arrivy
+        active_list = [r for p_id, r in self.registry_by_pvvd.items() if p_id in current_pvvd_ids or p_id in arriva_fallback_ids] + unmapped_arriva
         act_spzs_final = {r.get("spz") for r in active_list if r.get("spz")}
 
-        # Zaparkované / offline vozy: všechny vozy, které zmizely z PVVD (ponechané na poslední známé pozici, max 7 dní)
+        # Zaparkované / offline vozy: vozy, které nejsou na PVVD ani na Arrivě (max 7 dní)
         cutoff_parked = now - (7 * 86400)
         parked_list = [
             r for p_id, r in self.parked_by_pvvd.items()
-            if p_id not in current_pvvd_ids
+            if p_id not in current_pvvd_ids and p_id not in arriva_fallback_ids
             and (not r.get("spz") or r.get("spz") not in act_spzs_final)
             and (r.get("last_seen") or r.get("parked_since") or now) >= cutoff_parked
         ]
@@ -7842,10 +7937,10 @@ def background_map_worker():
                     print("[PVVD-WARN] Data PVVD jsou prázdná/výpadek, zachovávám data z předchozího tiku", flush=True)
                     data_inflow = list(last_successful_pvvd)
 
-            # Arriva: Sekundární obohacující zdroj pro SPZ (timeout 8s, výpadek nikdy nezastaví PVVD)
-            # Dotazujeme každých 10s pro úsporu sítě a ochranu před 429 rate limitem; mezitím používáme LATEST_ARRIVA_DATA
+            # Arriva: Sekundární obohacující zdroj pro SPZ i alternativní polohu (výpadek nikdy nezastaví PVVD)
+            # Dotazujeme každých 2.5s pro okamžitou odezvu a plynulost; mezitím používáme LATEST_ARRIVA_DATA
             now_ts = time.time()
-            if (now_ts - last_arriva_fetch_ts) >= 10.0 or not LATEST_ARRIVA_DATA:
+            if (now_ts - last_arriva_fetch_ts) >= 2.5 or not LATEST_ARRIVA_DATA:
                 last_arriva_fetch_ts = now_ts
                 try:
                     ap = {
@@ -7857,7 +7952,7 @@ def background_map_worker():
                         headers={'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json',
                                  'Origin': 'https://www.arriva.cz', 'Referer': 'https://www.arriva.cz/'},
                         method='POST')
-                    with urllib.request.urlopen(req2, context=ssl_ctx, timeout=8) as r2:
+                    with urllib.request.urlopen(req2, context=ssl_ctx, timeout=5) as r2:
                         resp2 = json.loads(r2.read().decode('utf-8'))
                     if isinstance(resp2, list) and resp2:
                         data_arriva = resp2[0].get("data", {}).get("busesCurrentLocations", [])
@@ -7889,6 +7984,25 @@ def background_map_worker():
                     data_arriva = list(LATEST_ARRIVA_DATA) if LATEST_ARRIVA_DATA else []
             else:
                 data_arriva = list(LATEST_ARRIVA_DATA) if LATEST_ARRIVA_DATA else []
+
+            # Rychlý lookup Arriva vozů pro záchrannou kontrolu v GLOBAL_BUS_CACHE
+            arriva_by_spz = {}
+            for b_a in data_arriva:
+                b_spz_raw = (b_a.get("spz") or "").strip()
+                b_k = normalize_spz_key(b_spz_raw)
+                if b_k:
+                    try:
+                        arriva_by_spz[b_k] = {
+                            "spz": b_spz_raw,
+                            "lat": float(b_a.get("latitude") or b_a.get("lat") or 0),
+                            "lng": float(b_a.get("longitude") or b_a.get("lng") or 0),
+                            "bearing": b_a.get("angle"),
+                            "line": str(b_a.get("linkNumber") or b_a.get("linkNumberAlias") or "").strip(),
+                            "finalStopName": str(b_a.get("destinationName") or "").strip(),
+                            "delay": int(b_a.get("delay") or 0)
+                        }
+                    except Exception:
+                        pass
 
             # Aktualizace SPZ_MEMORY pro obohacení metadat
             for b_a in data_arriva:
@@ -8082,14 +8196,18 @@ def background_map_worker():
 
                 bind_bus_to_spz_metadata(c, spz)
 
-                # ── ŽIVOTNÍ CYKLUS A STATUSY (PVVD TELEMETRIE, ODSTAVENÍ A ČEKÁNÍ NA SPOJ) ──
+                # ── ŽIVOTNÍ CYKLUS A STATUSY (PVVD TELEMETRIE, ARRIVA FALLBACK, ODSTAVENÍ A ČEKÁNÍ NA SPOJ) ──
                 has_route = bool(raw_line and raw_line not in ("0", "-1", "None", "Neznámá", "Neznama"))
                 is_alive_in_pvvd = bool(bid in current_inflow_ids)
+                is_arriva_fallback = bool(v.get("is_arriva_fallback"))
+                has_live_pos = is_alive_in_pvvd or is_arriva_fallback
 
-                if is_alive_in_pvvd:
+                if has_live_pos:
                     c["pvvd_missing_ticks"] = 0
                     c["is_offline"] = False
                     c["is_withdrawn"] = False
+                    c["is_arriva_fallback"] = is_arriva_fallback
+                    c["position_source"] = "arriva" if is_arriva_fallback else "pvvd"
                     c.pop("offline_since_time", None)
 
                     clean_line = curr_norm_line or raw_line or normalize_line(last_valid_line) or last_valid_line
@@ -8097,169 +8215,198 @@ def background_map_worker():
                     if has_route:
                         c["line"] = clean_line
 
-                    # 1. Kontrola zda čeká na spoj (nový spoj / odjezd v budoucnu)
-                    is_before_departure = False
-                    time_to_dep = 0
-                    first_dep = c.get("first_dep_time")
-
-                    if is_moving or dm >= 25.0:
-                        if not c.get("actual_start_time"):
-                            c["actual_start_time"] = now.strftime('%H:%M')
-
-                    if not is_moving and first_dep and not c.get("actual_start_time"):
-                        try:
-                            fh, fm = map(int, first_dep.split(':'))
-                            first_total = fh * 60 + fm
-                            cur_total = now.hour * 60 + now.minute
-                            diff = first_total - cur_total
-                            if diff < -720: diff += 1440
-                            elif diff > 720: diff -= 1440
-                            if 0 <= diff <= 360:
-                                is_before_departure = True
-                                time_to_dep = int(diff)
-                        except Exception:
-                            pass
-
-                    c["is_before_departure"] = is_before_departure
-                    c["time_to_dep"] = time_to_dep
-
-                    # 2. Kontrola času poslední zastávky spoje dle JŘ (last_dep_time)
-                    diff_last = None
-                    if c.get("last_dep_time"):
-                        try:
-                            lh, lm = map(int, c["last_dep_time"].split(':'))
-                            last_total = lh * 60 + lm
-                            cur_total = now.hour * 60 + now.minute
-                            diff_l = cur_total - last_total
-                            if diff_l < -720: diff_l += 1440
-                            elif diff_l > 720: diff_l -= 1440
-                            diff_last = diff_l
-                        except Exception:
-                            pass
-
-                    # 3. Kontrola zda je bus na cílové zastávce
-                    is_at_dest = False
-                    bus_dest = c.get("destination") or dest
-                    dist_to_dest = 999999.0
-                    if bus_dest and bus_dest not in ("Neznámá", "Neznama", "-1", "", "None"):
-                        coords, _ = _lookup_stop_coords(bus_dest, anchor=(lat, lng), max_anchor_dist_m=5000)
-                        if coords:
-                            dist_to_dest = haversine_m(lat, lng, coords[0], coords[1])
-                            if dist_to_dest <= 350.0:
-                                is_at_dest = True
-                        if not is_at_dest:
-                            if is_exact_stop_match(bus_dest, c.get("nearest_stop")) or is_exact_stop_match(bus_dest, c.get("real_zastavka")):
-                                is_at_dest = True
-
-                    # 4. Detekce dojezdu na konečnou / ukončení spoje:
-                    is_terminal_now = False
-                    if not is_moving and not is_before_departure:
-                        time_ok = (diff_last is None or diff_last >= -8)
-                        if is_at_dest and time_ok:
-                            is_terminal_now = True
-                        elif c.get("_terminal_reached") and (is_at_dest or dist_to_dest <= 450.0):
-                            is_terminal_now = True
-
-                    if not is_at_dest or (is_moving or dm >= 25.0) or dist_to_dest > 400.0:
-                        if not is_at_dest:
-                            c["_terminal_reached"] = False
-                            c["locked_arrival_delay"] = False
-                            c["actual_end_time"] = None
-                            is_terminal_now = False
-
-                    if is_terminal_now:
-                        if not c.get("locked_arrival_delay"):
-                            prev_d = c.get("arrival_delay")
-                            if prev_d is not None and -15 <= prev_d <= 25 and delay > prev_d + 8:
-                                locked_d = prev_d
-                            elif diff_last is not None and diff_last > 0 and delay > 15:
-                                est_d = delay - diff_last
-                                locked_d = est_d if -15 <= est_d <= 35 else 0
-                            elif delay >= 25:
-                                locked_d = 0
-                            else:
-                                locked_d = delay
-                            c["arrival_delay"] = locked_d
-                            c["locked_arrival_delay"] = True
-                            c["_terminal_reached"] = True
-                            c["spz_frozen"] = True
-                            if not c.get("actual_end_time"):
-                                c["actual_end_time"] = now.strftime('%H:%M')
-                            c["_end_written"] = False
-                        delay = c.get("arrival_delay", 0)
-
-                    # 5. PŘIŘAZENÍ STATUSU A BARVY:
-                    # A) Vozovna (depo)
-                    if in_depot_zone:
-                        c["color_class"] = "bg-yellow"
-                        c["status"] = f"Vozovna: {depot_zone_name}"
-                    # B) Čeká na nový spoj
-                    elif is_before_departure:
+                    if is_arriva_fallback:
+                        # Vůz jede podle alternativní live telemetrie Arriva (chybí na PVVD)
                         c["actual_end_time"] = None
                         c["_terminal_reached"] = False
                         c["locked_arrival_delay"] = False
-                        c["arrival_delay"] = None
-                        if time_to_dep <= 240:
+                        c["is_before_departure"] = False
+                        c["time_to_dep"] = 0
+                        if in_depot_zone:
+                            c["color_class"] = "bg-yellow"
+                            c["status"] = f"Vozovna: {depot_zone_name}"
+                        elif has_route:
+                            if delay >= 10:
+                                c["color_class"] = "bg-red"
+                                c["status"] = f"Jízda (+{delay} min)" if is_moving else f"Stojí (+{delay} min)"
+                            elif delay > 0:
+                                c["color_class"] = "bg-green"
+                                c["status"] = f"Jízda (+{delay} min)" if is_moving else f"Stojí (+{delay} min)"
+                            elif delay <= -1:
+                                c["color_class"] = "bg-darkblue"
+                                c["status"] = f"Jízda (Náskok {abs(delay)} min)" if is_moving else f"Stojí (Náskok {abs(delay)} min)"
+                            else:
+                                c["color_class"] = "bg-green"
+                                c["status"] = "Jízda (Načas)" if is_moving else "Stojí (Načas)"
+                        else:
                             c["color_class"] = "bg-blue"
-                            c["status"] = f"Čeká na spoj ({time_to_dep} min)" if time_to_dep > 0 else "Čeká na spoj (<1 min)"
-                        else:
-                            c["color_class"] = "bg-gray"
-                            c["status"] = "Odstaveno (>4h)"
-                        delay = 0
-                    # C) Odstaveno (stojí na místě >= 10 minut bez jízdy)
-                    elif not is_moving and inact >= 10.0:
-                        c["color_class"] = "bg-gray"
-                        c["status"] = f"Odstaveno ({int(inact)} min)"
-                        delay = 0
-                    # D) Konečná zastávka
-                    elif is_terminal_now:
-                        dest_clean = bus_dest or c.get("nearest_stop") or "Konečná zastávka"
-                        dest_clean = re.sub(r',+', ', ', dest_clean).strip()
-                        c["status"] = f"Konečná: {dest_clean}"
-                        c["color_class"] = "bg-purple"
-                    # E) Jízda / stání s aktivní linkou (< 10 min)
-                    elif has_route:
-                        if delay >= 10:
-                            c["color_class"] = "bg-red"
-                            c["status"] = f"Jízda (+{delay} min)" if is_moving else f"Stojí (+{delay} min)"
-                        elif delay > 0:
-                            c["color_class"] = "bg-green"
-                            c["status"] = f"Jízda (+{delay} min)" if is_moving else f"Stojí (+{delay} min)"
-                        elif delay <= -1:
-                            c["color_class"] = "bg-darkblue"
-                            c["status"] = f"Jízda (Náskok {abs(delay)} min)" if is_moving else f"Stojí (Náskok {abs(delay)} min)"
-                        else:
-                            c["color_class"] = "bg-green"
-                            c["status"] = "Jízda (Načas)" if is_moving else "Stojí (Načas)"
-                    # F) Manipulační jízda (bez linky)
+                            c["status"] = "Manipulační jízda (Arriva)"
                     else:
-                        c["color_class"] = "bg-blue"
-                        clean_last = normalize_line(last_valid_line) or last_valid_line
-                        c["status"] = f"Manipulační jízda (poslední linka: {clean_last})" if clean_last and clean_last not in ("Neznámá", "Neznama", "0", "-1") else "Manipulační jízda"
-                        display_line = f"Manipulace ({clean_last})" if clean_last and clean_last not in ("Neznámá", "Neznama", "0", "-1") else "Manipulace"
+                        # 1. Kontrola zda čeká na spoj (nový spoj / odjezd v budoucnu)
+                        is_before_departure = False
+                        time_to_dep = 0
+                        first_dep = c.get("first_dep_time")
 
-                    # Timetable fetch: načti spoj při chybějícím spoji nebo po dojezdu předchozího
-                    need_tt = False
-                    if not c.get("tt_is_fetching"):
-                        tt_age = (now - c["tt_last_fetch"]).total_seconds() if c.get("tt_last_fetch") else 9999
-                        if not c.get("real_linka_spoj"):
-                            if tt_age > 30: need_tt = True
-                        elif diff_last is not None and diff_last > 10 and tt_age > 90:
-                            need_tt = True
-                        elif tt_age > 600:
-                            need_tt = True
+                        if is_moving or dm >= 25.0:
+                            if not c.get("actual_start_time"):
+                                c["actual_start_time"] = now.strftime('%H:%M')
 
-                    if need_tt and has_route:
-                        c["tt_is_fetching"] = True
-                        c["tt_last_fetch"] = now
-                        queue_tt_fetch(1, bid, c)
+                        if not is_moving and first_dep and not c.get("actual_start_time"):
+                            try:
+                                fh, fm = map(int, first_dep.split(':'))
+                                first_total = fh * 60 + fm
+                                cur_total = now.hour * 60 + now.minute
+                                diff = first_total - cur_total
+                                if diff < -720: diff += 1440
+                                elif diff > 720: diff -= 1440
+                                if 0 <= diff <= 360:
+                                    is_before_departure = True
+                                    time_to_dep = int(diff)
+                            except Exception:
+                                pass
 
-                    # DB historie upsert
-                    if spz and _is_tracked_line(raw_line):
-                        upsert_to_history(db_client, c)
+                        c["is_before_departure"] = is_before_departure
+                        c["time_to_dep"] = time_to_dep
+
+                        # 2. Kontrola času poslední zastávky spoje dle JŘ (last_dep_time)
+                        diff_last = None
+                        if c.get("last_dep_time"):
+                            try:
+                                lh, lm = map(int, c["last_dep_time"].split(':'))
+                                last_total = lh * 60 + lm
+                                cur_total = now.hour * 60 + now.minute
+                                diff_l = cur_total - last_total
+                                if diff_l < -720: diff_l += 1440
+                                elif diff_l > 720: diff_l -= 1440
+                                diff_last = diff_l
+                            except Exception:
+                                pass
+
+                        # 3. Kontrola zda je bus na cílové zastávce
+                        is_at_dest = False
+                        bus_dest = c.get("destination") or dest
+                        dist_to_dest = 999999.0
+                        if bus_dest and bus_dest not in ("Neznámá", "Neznama", "-1", "", "None"):
+                            coords, _ = _lookup_stop_coords(bus_dest, anchor=(lat, lng), max_anchor_dist_m=5000)
+                            if coords:
+                                dist_to_dest = haversine_m(lat, lng, coords[0], coords[1])
+                                if dist_to_dest <= 350.0:
+                                    is_at_dest = True
+                            if not is_at_dest:
+                                if is_exact_stop_match(bus_dest, c.get("nearest_stop")) or is_exact_stop_match(bus_dest, c.get("real_zastavka")):
+                                    is_at_dest = True
+
+                        # 4. Detekce dojezdu na konečnou / ukončení spoje:
+                        is_terminal_now = False
+                        if not is_moving and not is_before_departure:
+                            time_ok = (diff_last is None or diff_last >= -8)
+                            if is_at_dest and time_ok:
+                                is_terminal_now = True
+                            elif c.get("_terminal_reached") and (is_at_dest or dist_to_dest <= 450.0):
+                                is_terminal_now = True
+
+                        if not is_at_dest or (is_moving or dm >= 25.0) or dist_to_dest > 400.0:
+                            if not is_at_dest:
+                                c["_terminal_reached"] = False
+                                c["locked_arrival_delay"] = False
+                                c["actual_end_time"] = None
+                                is_terminal_now = False
+
+                        if is_terminal_now:
+                            if not c.get("locked_arrival_delay"):
+                                prev_d = c.get("arrival_delay")
+                                if prev_d is not None and -15 <= prev_d <= 25 and delay > prev_d + 8:
+                                    locked_d = prev_d
+                                elif diff_last is not None and diff_last > 0 and delay > 15:
+                                    est_d = delay - diff_last
+                                    locked_d = est_d if -15 <= est_d <= 35 else 0
+                                elif delay >= 25:
+                                    locked_d = 0
+                                else:
+                                    locked_d = delay
+                                c["arrival_delay"] = locked_d
+                                c["locked_arrival_delay"] = True
+                                c["_terminal_reached"] = True
+                                c["spz_frozen"] = True
+                                if not c.get("actual_end_time"):
+                                    c["actual_end_time"] = now.strftime('%H:%M')
+                                c["_end_written"] = False
+                            delay = c.get("arrival_delay", 0)
+
+                        # 5. PŘIŘAZENÍ STATUSU A BARVY:
+                        # A) Vozovna (depo)
+                        if in_depot_zone:
+                            c["color_class"] = "bg-yellow"
+                            c["status"] = f"Vozovna: {depot_zone_name}"
+                        # B) Čeká na nový spoj
+                        elif is_before_departure:
+                            c["actual_end_time"] = None
+                            c["_terminal_reached"] = False
+                            c["locked_arrival_delay"] = False
+                            c["arrival_delay"] = None
+                            if time_to_dep <= 240:
+                                c["color_class"] = "bg-blue"
+                                c["status"] = f"Čeká na spoj ({time_to_dep} min)" if time_to_dep > 0 else "Čeká na spoj (<1 min)"
+                            else:
+                                c["color_class"] = "bg-gray"
+                                c["status"] = "Odstaveno (>4h)"
+                            delay = 0
+                        # C) Odstaveno (stojí na místě >= 10 minut bez jízdy)
+                        elif not is_moving and inact >= 10.0:
+                            c["color_class"] = "bg-gray"
+                            c["status"] = f"Odstaveno ({int(inact)} min)"
+                            delay = 0
+                        # D) Konečná zastávka
+                        elif is_terminal_now:
+                            dest_clean = bus_dest or c.get("nearest_stop") or "Konečná zastávka"
+                            dest_clean = re.sub(r',+', ', ', dest_clean).strip()
+                            c["status"] = f"Konečná: {dest_clean}"
+                            c["color_class"] = "bg-purple"
+                        # E) Jízda / stání s aktivní linkou (< 10 min)
+                        elif has_route:
+                            if delay >= 10:
+                                c["color_class"] = "bg-red"
+                                c["status"] = f"Jízda (+{delay} min)" if is_moving else f"Stojí (+{delay} min)"
+                            elif delay > 0:
+                                c["color_class"] = "bg-green"
+                                c["status"] = f"Jízda (+{delay} min)" if is_moving else f"Stojí (+{delay} min)"
+                            elif delay <= -1:
+                                c["color_class"] = "bg-darkblue"
+                                c["status"] = f"Jízda (Náskok {abs(delay)} min)" if is_moving else f"Stojí (Náskok {abs(delay)} min)"
+                            else:
+                                c["color_class"] = "bg-green"
+                                c["status"] = "Jízda (Načas)" if is_moving else "Stojí (Načas)"
+                        # F) Manipulační jízda (bez linky)
+                        else:
+                            c["color_class"] = "bg-blue"
+                            clean_last = normalize_line(last_valid_line) or last_valid_line
+                            c["status"] = f"Manipulační jízda (poslední linka: {clean_last})" if clean_last and clean_last not in ("Neznámá", "Neznama", "0", "-1") else "Manipulační jízda"
+                            display_line = f"Manipulace ({clean_last})" if clean_last and clean_last not in ("Neznámá", "Neznama", "0", "-1") else "Manipulace"
+
+                        # Timetable fetch: načti spoj při chybějícím spoji nebo po dojezdu předchozího
+                        need_tt = False
+                        if not c.get("tt_is_fetching"):
+                            tt_age = (now - c["tt_last_fetch"]).total_seconds() if c.get("tt_last_fetch") else 9999
+                            if not c.get("real_linka_spoj"):
+                                if tt_age > 30: need_tt = True
+                            elif diff_last is not None and diff_last > 10 and tt_age > 90:
+                                need_tt = True
+                            elif tt_age > 600:
+                                need_tt = True
+
+                        if need_tt and has_route:
+                            c["tt_is_fetching"] = True
+                            c["tt_last_fetch"] = now
+                            queue_tt_fetch(1, bid, c)
+
+                        # DB historie upsert
+                        if spz and _is_tracked_line(raw_line):
+                            upsert_to_history(db_client, c)
 
                 else:
-                    # NENÍ V TELEMETRII PVVD (bid not in current_inflow_ids)
+                    # NENÍ V TELEMETRII PVVD ANI NA ARRIVA MAPĚ (bid not in current_inflow_ids and not fallback)
+                    c["is_arriva_fallback"] = False
+                    c["position_source"] = "pvvd"
                     missing = c.get("pvvd_missing_ticks", 0) + 1
                     c["pvvd_missing_ticks"] = missing
                     if missing < 3 and c.get("status"):
@@ -8319,7 +8466,7 @@ def background_map_worker():
                     "bearing": c.get("bearing"),
                     "line": display_line,
                     "real_linka_spoj": c.get("real_linka_spoj"),
-                    "delay": delay if status == "ACTIVE_LINE" else 0,
+                    "delay": delay if (status == "ACTIVE_LINE" or is_arriva_fallback) else 0,
                     "arrival_delay": c.get("arrival_delay"),
                     "locked_arrival_delay": bool(c.get("locked_arrival_delay")),
                     "time_to_dep": c.get("time_to_dep", 0),
@@ -8328,7 +8475,7 @@ def background_map_worker():
                     "depot_name": c.get("depot_name", ""),
                     "destination": dest,
                     "spz": spz or c.get("spz") or "Aktivní hledání",
-                    "spz_verified": bool(c.get("spz_verified")),
+                    "spz_verified": bool(c.get("spz_verified") or is_arriva_fallback),
                     "is_train": False,
                     "status": c["status"],
                     "color_class": c["color_class"],
@@ -8353,7 +8500,9 @@ def background_map_worker():
                     "spoj_num": c.get("spoj_num"),
                     "last_known_spoj": c.get("last_known_spoj") or c.get("spoj_num"),
                     "parked_since": v.get("parked_since"),
-                    "spz_inherited": bool(v.get("spz_inherited"))
+                    "spz_inherited": bool(v.get("spz_inherited")),
+                    "is_arriva_fallback": is_arriva_fallback,
+                    "position_source": "arriva" if is_arriva_fallback else "pvvd"
                 })
 
             # Pojistka: Žádný autobus z GLOBAL_BUS_CACHE nesmí z mapy zmizet!
@@ -8368,6 +8517,98 @@ def background_map_worker():
                     continue
                 lat_c = float(c_cached.get("lat") or 0)
                 lng_c = float(c_cached.get("lng") or 0)
+
+                # ZÁCHRANA Z ARRIVA MAPY: Pokud vůz chybí v PVVD datech, ale je živě na Arrivě,
+                # použijeme jeho aktuální live Arriva pozici a telemetrii!
+                cached_spz = c_cached.get("spz")
+                norm_c_spz = normalize_spz_key(cached_spz)
+                if norm_c_spz and norm_c_spz in arriva_by_spz:
+                    a_bus = arriva_by_spz[norm_c_spz]
+                    lat_c = float(a_bus.get("lat") or 0)
+                    lng_c = float(a_bus.get("lng") or 0)
+                    c_cached["lat"] = lat_c
+                    c_cached["lng"] = lng_c
+                    c_cached["is_offline"] = False
+                    c_cached["is_withdrawn"] = False
+                    c_cached["is_arriva_fallback"] = True
+                    c_cached["position_source"] = "arriva"
+                    c_cached.pop("offline_since_time", None)
+                    c_cached["parked_since"] = None
+                    a_delay = int(a_bus.get("delay") or 0)
+                    c_cached["delay"] = a_delay
+                    if a_bus.get("bearing") is not None:
+                        c_cached["bearing"] = a_bus["bearing"]
+                    a_line = normalize_line(a_bus.get("line") or "") or a_bus.get("line") or ""
+                    if a_line and a_line not in ("0", "-1", "None", "Neznámá", "Neznama"):
+                        c_cached["line"] = a_line
+                    if a_bus.get("finalStopName"):
+                        c_cached["destination"] = a_bus["finalStopName"]
+
+                    in_depot_zone, depot_zone_name = _check_depot_zones(lat_c, lng_c)
+                    if in_depot_zone:
+                        c_cached["color_class"] = "bg-yellow"
+                        c_cached["status"] = f"Vozovna: {depot_zone_name}"
+                    elif a_delay >= 10:
+                        c_cached["color_class"] = "bg-red"
+                        c_cached["status"] = f"Jízda (+{a_delay} min)"
+                    elif a_delay > 0:
+                        c_cached["color_class"] = "bg-green"
+                        c_cached["status"] = f"Jízda (+{a_delay} min)"
+                    elif a_delay <= -1:
+                        c_cached["color_class"] = "bg-darkblue"
+                        c_cached["status"] = f"Jízda (Náskok {abs(a_delay)} min)"
+                    else:
+                        c_cached["color_class"] = "bg-green"
+                        c_cached["status"] = "Jízda (Načas)"
+
+                    new_live_data.append({
+                        "id": bid_cached,
+                        "trip_id": c_cached.get("trip_id", f"TRIP-{bid_cached}"),
+                        "lat": lat_c,
+                        "lng": lng_c,
+                        "bearing": c_cached.get("bearing"),
+                        "line": c_cached.get("line", ""),
+                        "real_linka_spoj": c_cached.get("real_linka_spoj"),
+                        "delay": a_delay,
+                        "arrival_delay": c_cached.get("arrival_delay"),
+                        "locked_arrival_delay": bool(c_cached.get("locked_arrival_delay")),
+                        "time_to_dep": 0,
+                        "is_before_departure": False,
+                        "in_depot": bool(in_depot_zone),
+                        "depot_name": depot_zone_name if in_depot_zone else "",
+                        "destination": c_cached.get("destination") or "Neznámý",
+                        "spz": c_cached.get("spz") or a_bus.get("spz"),
+                        "spz_verified": True,
+                        "is_train": False,
+                        "status": c_cached["status"],
+                        "color_class": c_cached["color_class"],
+                        "inactive_minutes": 0,
+                        "last_updated": now.strftime("%H:%M:%S"),
+                        "investigating": False,
+                        "investigation_spz": "",
+                        "admin_flag": bool(c_cached.get("admin_flag")),
+                        "admin_note": c_cached.get("admin_note", ""),
+                        "admin_driver": c_cached.get("admin_driver", ""),
+                        "admin_spz_verified": bool(c_cached.get("admin_spz_verified")),
+                        "is_locked_by_admin": bool(c_cached.get("is_locked_by_admin") or c_cached.get("admin_spz_verified")),
+                        "admin_spz_bug": bool(c_cached.get("admin_spz_bug")),
+                        "admin_spz_conflict": bool(c_cached.get("admin_spz_conflict")),
+                        "real_zastavka": c_cached.get("real_zastavka"),
+                        "nearest_stop": c_cached.get("nearest_stop"),
+                        "last_stop_name": c_cached.get("last_stop_name", ""),
+                        "vehicle_type": sanitize_vehicle_type(c_cached.get("vehicle_type")),
+                        "is_withdrawn": False,
+                        "is_offline": False,
+                        "offline_since_time": None,
+                        "spoj_num": c_cached.get("spoj_num"),
+                        "last_known_spoj": c_cached.get("last_known_spoj") or c_cached.get("spoj_num"),
+                        "parked_since": None,
+                        "spz_inherited": bool(c_cached.get("spz_inherited")),
+                        "is_arriva_fallback": True,
+                        "position_source": "arriva"
+                    })
+                    continue
+
                 if not (lat_c and lng_c):
                     continue
 
@@ -8440,7 +8681,9 @@ def background_map_worker():
                     "spoj_num": c_cached.get("spoj_num"),
                     "last_known_spoj": c_cached.get("last_known_spoj") or c_cached.get("spoj_num"),
                     "parked_since": c_cached.get("parked_since"),
-                    "spz_inherited": bool(c_cached.get("spz_inherited"))
+                    "spz_inherited": bool(c_cached.get("spz_inherited")),
+                    "is_arriva_fallback": False,
+                    "position_source": "pvvd"
                 })
 
             # Živé vlaky z PVVD (vlaky NIKDY nemají SPZ ani offline stav)
@@ -8630,7 +8873,7 @@ def background_map_worker():
             except Exception as _anom_err:
                 print(f"[SPZ ANOMALY] Chyba pri analyze anomalii: {_anom_err}", flush=True)
 
-            time.sleep(2.5)
+            time.sleep(2.0)
 
 
         except Exception as crash_error:
@@ -10778,10 +11021,14 @@ def api_live_buses():
             b_copy.pop("admin_driver", None)
         buses_to_send.append(b_copy)
             
-    return jsonify({
+    resp = jsonify({
         "status": "success", "server_time": now.strftime('%H:%M:%S'),
         "worker_uptime_seconds": round(uptime), "buses": buses_to_send,
     })
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @mapa_bp.route('/api/debug/gtfs')
