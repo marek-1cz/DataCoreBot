@@ -308,10 +308,96 @@ function saveAdminInputs(){
   if(!IS_ADMIN)return;
   document.querySelectorAll('[id^="adm_spz_"]').forEach(el=>{if(el.value!==el.getAttribute('data-orig'))adminInputCache['spz_'+el.id.replace('adm_spz_','')]=el.value;});
   document.querySelectorAll('[id^="adm_st_"]').forEach(el=>{if(el.value!==el.getAttribute('data-orig'))adminInputCache['st_'+el.id.replace('adm_st_','')]=el.value;});
-  document.querySelectorAll('[id^="adm_note_"]').forEach(el=>{adminInputCache['note_'+el.id.replace('adm_note_','')]=el.value;});
-  document.querySelectorAll('[id^="adm_driver_"]').forEach(el=>{adminInputCache['driver_'+el.id.replace('adm_driver_','')]=el.value;});
+  document.querySelectorAll('[id^="adm_note_"]').forEach(el=>{if(el.value!==el.getAttribute('data-orig'))adminInputCache['note_'+el.id.replace('adm_note_','')]=el.value;});
+  document.querySelectorAll('[id^="adm_driver_"]').forEach(el=>{if(el.value!==el.getAttribute('data-orig'))adminInputCache['driver_'+el.id.replace('adm_driver_','')]=el.value;});
 }
 function restoreAdminInput(busId,ft){let v=adminInputCache[ft+'_'+busId];return(v!==undefined&&v!==null)?v:null;}
+
+// === ZMRAZENÍ SCREENU A POHYBU (POUZE ADMIN) ===
+window.adminFreezeMode = false;
+
+window.updateFreezeUi = function() {
+  const btn = document.getElementById('admin-screen-freeze-btn');
+  const banner = document.getElementById('admin-freeze-banner');
+  const isFr = Boolean(window.adminFreezeMode);
+
+  if (btn) {
+    if (isFr) {
+      btn.style.background = 'linear-gradient(135deg, #0284c7, #0ea5e9)';
+      btn.style.borderColor = '#38bdf8';
+      btn.style.color = '#ffffff';
+      btn.style.boxShadow = '0 0 20px rgba(56,189,248,0.95), 0 4px 14px rgba(0,0,0,0.6)';
+      btn.style.transform = 'scale(1.12)';
+      btn.title = '🧊 Odmrazit mapu a obnovit živé sledování (pouze Admin)';
+    } else {
+      btn.style.background = '#0f172a';
+      btn.style.borderColor = '#334155';
+      btn.style.color = '#94a3b8';
+      btn.style.boxShadow = '0 6px 18px rgba(0,0,0,0.6)';
+      btn.style.transform = 'scale(1)';
+      btn.title = '🧊 Zmrazit mapu a statusy pro úpravy (pouze Admin)';
+    }
+  }
+
+  if (banner) {
+    banner.style.display = isFr ? 'flex' : 'none';
+  }
+
+  document.querySelectorAll('[id^="pop-freeze-btn-"]').forEach(b => {
+    if (isFr) {
+      b.style.background = '#0284c7';
+      b.style.color = '#ffffff';
+      b.style.borderColor = '#38bdf8';
+      b.innerHTML = '🧊 Odmrazit';
+      b.title = 'Klikněte pro odmrazení a obnovení živého pohybu i statusů';
+    } else {
+      b.style.background = '#1e293b';
+      b.style.color = '#93c5fd';
+      b.style.borderColor = '#334155';
+      b.innerHTML = '🧊 Zmrazit';
+      b.title = 'Zmrazí pohyb vozu i statusy, abyste mohli v klidu rolovat a přepisovat';
+    }
+  });
+};
+
+window.toggleAdminFreeze = function() {
+  if (!IS_ADMIN) return;
+  window.adminFreezeMode = !window.adminFreezeMode;
+  window.updateFreezeUi();
+  if (window.adminFreezeMode) {
+    showAdminToast('🧊 Mapa zmrazena – vozy i statusy zůstávají stát pro úpravy');
+  } else {
+    showAdminToast('☀️ Mapa odmrazena – živá data obnovena');
+    fetchBuses();
+  }
+};
+
+function initAdminFreezeControls() {
+  if (!IS_ADMIN) return;
+  if (!document.getElementById('admin-screen-freeze-btn')) {
+    let btn = document.createElement('button');
+    btn.id = 'admin-screen-freeze-btn';
+    btn.setAttribute('onclick', 'toggleAdminFreeze()');
+    btn.title = '🧊 Zmrazit mapu a statusy pro úpravy (pouze Admin)';
+    btn.style.cssText = 'position:fixed;bottom:24px;left:16px;z-index:9999;width:44px;height:44px;border-radius:50%;background:#0f172a;border:2px solid #334155;color:#94a3b8;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,0.6);transition:all .2s;touch-action:manipulation;';
+    btn.innerHTML = '🧊';
+    document.body.appendChild(btn);
+  }
+
+  if (!document.getElementById('admin-freeze-banner')) {
+    let banner = document.createElement('div');
+    banner.id = 'admin-freeze-banner';
+    banner.style.cssText = 'display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);background:rgba(2,132,199,0.92);backdrop-filter:blur(6px);color:white;border:1px solid #38bdf8;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:bold;z-index:9999;box-shadow:0 4px 15px rgba(0,0,0,0.4);align-items:center;gap:8px;';
+    banner.innerHTML = '<span>🧊 Režim zmrazení aktivní – vozy a statusy zůstávají stát</span><button onclick="toggleAdminFreeze()" style="background:#0f172a;color:#38bdf8;border:1px solid #38bdf8;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:bold;cursor:pointer;margin-left:4px;">Odmrazit</button>';
+    document.body.appendChild(banner);
+  }
+}
+
+if (document.body) {
+  initAdminFreezeControls();
+} else {
+  document.addEventListener('DOMContentLoaded', initAdminFreezeControls);
+}
 
 let _toastT=null;
 function showAdminToast(msg,ok=true){
@@ -333,12 +419,11 @@ async function adminAction(action,busId,extraData={}){
         window.busMarkersMap.delete(busId);
         openPopupBusId=null;
       }
+      // VŽDY po úspěšné akci vyčisti adminInputCache pro tento vůz, aby nezůstávaly viset staré/smazané hodnoty
+      Object.keys(adminInputCache).forEach(k=>{if(k.endsWith('_'+busId))delete adminInputCache[k];});
       setTimeout(()=>{
-        if(action==='hard_refresh'||action==='active_search_spz'||action==='status_refresh'||action==='reset_admin'||action==='recheck_spz'||action==='mark_bug'){
-          Object.keys(adminInputCache).forEach(k=>{if(k.endsWith('_'+busId))delete adminInputCache[k];});
-        }
         fetchBuses();
-      }, 500);
+      }, 300);
     }
     else showAdminToast('Chyba: '+(data.message||'neznámá'),false);
   }catch(e){showAdminToast('Chyba spojení: '+e.message,false);}
@@ -2595,6 +2680,7 @@ function zoomToSpz(lat,lng,busId){
 
 // === MAIN FETCH ===
 async function fetchBuses(){
+  if (window.adminFreezeMode) return;
   if (fetchBuses._inflight) return;
   fetchBuses._inflight = true;
   try{
@@ -3109,6 +3195,7 @@ async function fetchBuses(){
             +'background:'+adminVerifyBg+';color:'+adminVerifyColor+';transition:all .2s;">'
             +adminVerifyText+'</button>';
         }
+        let isGrafikaOpen = Boolean(document.getElementById('adm_grafika_' + bus.id) && document.getElementById('adm_grafika_' + bus.id).style.display === 'block');
         popH+=`<style>.adm-inp{width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:5px;padding:9px;font-size:13px;margin-top:4px;}.adm-inp:focus{outline:none;border-color:#38bdf8;}.adm-btn{width:100%;padding:11px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;touch-action:manipulation;}.adm-toggle-btn{width:100%;padding:9px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;font-size:12px;cursor:pointer;margin-top:8px;touch-action:manipulation;}
 @keyframes routeDrawLoop {
   0% { stroke-dashoffset: var(--r-len); }
@@ -3119,7 +3206,12 @@ async function fetchBuses(){
           <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;border-radius: 0 0 5px 5px;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <strong style="color:#38bdf8;font-size:12px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
-              <a href="/dashboard/interaktivni-mapa" target="_blank" style="color:#a855f7;font-size:11px;font-weight:bold;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" title="Otevřít přehled chyb a správu v Dashboardu"><i class="fas fa-sliders-h"></i> Dashboard správa</a>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <button onclick="toggleAdminFreeze()" id="pop-freeze-btn-${bus.id}" style="background:${window.adminFreezeMode?'#0284c7':'#1e293b'};color:${window.adminFreezeMode?'#ffffff':'#93c5fd'};border:1px solid ${window.adminFreezeMode?'#38bdf8':'#334155'};border-radius:5px;padding:3px 7px;font-size:11px;font-weight:bold;cursor:pointer;display:inline-flex;align-items:center;gap:3px;touch-action:manipulation;transition:all .2s;" title="Zmrazit pohyb vozu a obnovování statusů (pouze pro Admina)">
+                  🧊 ${window.adminFreezeMode ? 'Odmrazit' : 'Zmrazit'}
+                </button>
+                <a href="/dashboard/interaktivni-mapa" target="_blank" style="color:#a855f7;font-size:11px;font-weight:bold;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" title="Otevřít přehled chyb a správu v Dashboardu"><i class="fas fa-sliders-h"></i> Dashboard správa</a>
+              </div>
             </div>
             <div style="color:#94a3b8;font-size:10px;margin-top:2px;font-family:monospace;word-break:break-all;">ID vozu: ${bus.id}</div>
             
@@ -3134,9 +3226,9 @@ async function fetchBuses(){
               <i class="fas fa-satellite-dish fa-spin"></i> Aktivní hledání SPZ
             </button>`}
             
-            <button class="adm-toggle-btn" onclick="let el=document.getElementById('adm_grafika_${bus.id}'); if(el.style.display==='none'){el.style.display='block';this.innerText='🔼 Skrýt vzhled a úpravy';}else{el.style.display='none';this.innerText='🎨 Vzhled a další úpravy';}">🎨 Vzhled a další úpravy</button>
+            <button class="adm-toggle-btn" onclick="let el=document.getElementById('adm_grafika_${bus.id}'); if(el.style.display==='none'){el.style.display='block';this.innerText='🔼 Skrýt vzhled a úpravy';}else{el.style.display='none';this.innerText='🎨 Vzhled a další úpravy';}">${isGrafikaOpen ? '🔼 Skrýt vzhled a úpravy' : '🎨 Vzhled a další úpravy'}</button>
             
-            <div id="adm_grafika_${bus.id}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
+            <div id="adm_grafika_${bus.id}" style="${isGrafikaOpen ? 'display:block;' : 'display:none;'}margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
               <input type="text" id="adm_st_${bus.id}" value="${cSt}" data-orig="${bus.status}" placeholder="Status text..." class="adm-inp">
               <select id="adm_col_${bus.id}" class="adm-inp" style="margin-top:6px;">
                 <option value="">-- Výchozí barva --</option>

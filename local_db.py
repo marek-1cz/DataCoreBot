@@ -466,9 +466,18 @@ def check_offline_login(username: str, password: str):
     return None
 
 def local_spz_metadata_save(spz_key: str, spz_display: str, driver: str, note: str, updated_at: str, updated_by: str = "Admin"):
-    """Uloží metadata SPZ (řidič a poznámka) do lokální SQLite databáze."""
+    """Uloží metadata SPZ (řidič a poznámka) do lokální SQLite databáze a synchronizuje je se spz_cache_local."""
     if not spz_key:
         return
+    k_clean = str(spz_key).strip().upper().replace(" ", "").replace("-", "")
+    d_clean = str(driver or "").strip()
+    n_clean = str(note or "").strip()
+
+    # Pokud jsou obě pole prázdná, kompletně odstranit
+    if not d_clean and not n_clean:
+        local_spz_metadata_delete(spz_key, field="all", updated_at=updated_at, updated_by=updated_by)
+        return
+
     try:
         with _local_db_lock:
             with _get_local_conn() as conn:
@@ -481,15 +490,23 @@ def local_spz_metadata_save(spz_key: str, spz_display: str, driver: str, note: s
                         note = excluded.note,
                         updated_at = excluded.updated_at,
                         updated_by = excluded.updated_by
-                """, (spz_key, spz_display, driver, note, updated_at, updated_by))
+                """, (spz_key, spz_display, d_clean, n_clean, updated_at, updated_by))
+
+                # Synchronizace aktuálního řidiče a poznámky do spz_cache_local
+                conn.execute("""
+                    UPDATE spz_cache_local
+                    SET admin_driver = ?, admin_note = ?
+                    WHERE REPLACE(REPLACE(UPPER(spz), ' ', ''), '-', '') = ? OR UPPER(spz) = ?
+                """, (d_clean, n_clean, k_clean, str(spz_display).upper()))
                 conn.commit()
     except Exception as e:
         print(f"[LOCAL DB] local_spz_metadata_save err: {e}", flush=True)
 
 def local_spz_metadata_delete(spz_key: str, field: str = "all", updated_at: str = "", updated_by: str = "Admin"):
-    """Smaže nebo vyčistí metadata pro danou SPZ z lokální SQLite databáze."""
+    """Smaže nebo vyčistí metadata pro danou SPZ z lokální SQLite databáze a vymaže je i ze spz_cache_local."""
     if not spz_key:
         return
+    k_clean = str(spz_key).strip().upper().replace(" ", "").replace("-", "")
     try:
         with _local_db_lock:
             with _get_local_conn() as conn:
@@ -512,9 +529,9 @@ def local_spz_metadata_delete(spz_key: str, field: str = "all", updated_at: str 
 
                 # Vymazat také v spz_cache_local, aby se řidič/poznámka nevracely při obnově z mezipaměti
                 if field in ("driver", "all"):
-                    conn.execute("UPDATE spz_cache_local SET admin_driver = '' WHERE REPLACE(spz, ' ', '') = ? OR spz = ?", (spz_key, spz_key))
+                    conn.execute("UPDATE spz_cache_local SET admin_driver = '' WHERE REPLACE(REPLACE(UPPER(spz), ' ', ''), '-', '') = ? OR UPPER(spz) = ?", (k_clean, str(spz_key).upper()))
                 if field in ("note", "all"):
-                    conn.execute("UPDATE spz_cache_local SET admin_note = '' WHERE REPLACE(spz, ' ', '') = ? OR spz = ?", (spz_key, spz_key))
+                    conn.execute("UPDATE spz_cache_local SET admin_note = '' WHERE REPLACE(REPLACE(UPPER(spz), ' ', ''), '-', '') = ? OR UPPER(spz) = ?", (k_clean, str(spz_key).upper()))
                 conn.commit()
     except Exception as e:
         print(f"[LOCAL DB] local_spz_metadata_delete err: {e}", flush=True)

@@ -481,9 +481,9 @@ body.nav-static #nav-handle, body.nav-glass:not(.nav-glass-hide) #nav-handle { d
 /* Kurzor kříže v NT add mode */
 body.nt-add-active{cursor:crosshair !important;}
 body.nt-add-active #map{cursor:crosshair !important;}
-.dark-popup .leaflet-popup-content-wrapper{background:#1e293b;color:#fff;border:1px solid #334155;padding:0;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.65);}
+.dark-popup .leaflet-popup-content-wrapper{background:#1e293b;color:#fff;border:1px solid #334155;padding:0;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.65);border-radius:8px;}
 .dark-popup .leaflet-popup-tip{background:#1e293b;}
-.dark-popup .leaflet-popup-content{margin:0;width:292px!important;}
+.dark-popup .leaflet-popup-content{margin:0;width:292px!important;max-height:75vh!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
 .ph{background:#0f172a;padding:10px 13px;border-bottom:1px solid #334155;}
 .ph-t{font-weight:bold;color:#38bdf8;font-size:15px;margin:0;}
 .pb{padding:11px 13px;font-size:13px;line-height:1.6;}
@@ -586,7 +586,7 @@ body.nt-add-active #map{cursor:crosshair !important;}
   .leaflet-top.leaflet-left { top: 85px !important; }
 
   #hf{width:220px; padding: 10px;}
-  .dark-popup .leaflet-popup-content{width:240px!important;}
+  .dark-popup .leaflet-popup-content{width:260px!important;max-height:72vh!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
   
   /* Log and main popups - bottom sheet style */
   #log-panel, #nt-edit-pop, #bus-detail-pop, #stop-info-pop {
@@ -1532,10 +1532,96 @@ function saveAdminInputs(){
   if(!IS_ADMIN)return;
   document.querySelectorAll('[id^="adm_spz_"]').forEach(el=>{if(el.value!==el.getAttribute('data-orig'))adminInputCache['spz_'+el.id.replace('adm_spz_','')]=el.value;});
   document.querySelectorAll('[id^="adm_st_"]').forEach(el=>{if(el.value!==el.getAttribute('data-orig'))adminInputCache['st_'+el.id.replace('adm_st_','')]=el.value;});
-  document.querySelectorAll('[id^="adm_note_"]').forEach(el=>{adminInputCache['note_'+el.id.replace('adm_note_','')]=el.value;});
-  document.querySelectorAll('[id^="adm_driver_"]').forEach(el=>{adminInputCache['driver_'+el.id.replace('adm_driver_','')]=el.value;});
+  document.querySelectorAll('[id^="adm_note_"]').forEach(el=>{if(el.value!==el.getAttribute('data-orig'))adminInputCache['note_'+el.id.replace('adm_note_','')]=el.value;});
+  document.querySelectorAll('[id^="adm_driver_"]').forEach(el=>{if(el.value!==el.getAttribute('data-orig'))adminInputCache['driver_'+el.id.replace('adm_driver_','')]=el.value;});
 }
 function restoreAdminInput(busId,ft){let v=adminInputCache[ft+'_'+busId];return(v!==undefined&&v!==null)?v:null;}
+
+// === ZMRAZENÍ SCREENU A POHYBU (POUZE ADMIN) ===
+window.adminFreezeMode = false;
+
+window.updateFreezeUi = function() {
+  const btn = document.getElementById('admin-screen-freeze-btn');
+  const banner = document.getElementById('admin-freeze-banner');
+  const isFr = Boolean(window.adminFreezeMode);
+
+  if (btn) {
+    if (isFr) {
+      btn.style.background = 'linear-gradient(135deg, #0284c7, #0ea5e9)';
+      btn.style.borderColor = '#38bdf8';
+      btn.style.color = '#ffffff';
+      btn.style.boxShadow = '0 0 20px rgba(56,189,248,0.95), 0 4px 14px rgba(0,0,0,0.6)';
+      btn.style.transform = 'scale(1.12)';
+      btn.title = '🧊 Odmrazit mapu a obnovit živé sledování (pouze Admin)';
+    } else {
+      btn.style.background = '#0f172a';
+      btn.style.borderColor = '#334155';
+      btn.style.color = '#94a3b8';
+      btn.style.boxShadow = '0 6px 18px rgba(0,0,0,0.6)';
+      btn.style.transform = 'scale(1)';
+      btn.title = '🧊 Zmrazit mapu a statusy pro úpravy (pouze Admin)';
+    }
+  }
+
+  if (banner) {
+    banner.style.display = isFr ? 'flex' : 'none';
+  }
+
+  document.querySelectorAll('[id^="pop-freeze-btn-"]').forEach(b => {
+    if (isFr) {
+      b.style.background = '#0284c7';
+      b.style.color = '#ffffff';
+      b.style.borderColor = '#38bdf8';
+      b.innerHTML = '🧊 Odmrazit';
+      b.title = 'Klikněte pro odmrazení a obnovení živého pohybu i statusů';
+    } else {
+      b.style.background = '#1e293b';
+      b.style.color = '#93c5fd';
+      b.style.borderColor = '#334155';
+      b.innerHTML = '🧊 Zmrazit';
+      b.title = 'Zmrazí pohyb vozu i statusy, abyste mohli v klidu rolovat a přepisovat';
+    }
+  });
+};
+
+window.toggleAdminFreeze = function() {
+  if (!IS_ADMIN) return;
+  window.adminFreezeMode = !window.adminFreezeMode;
+  window.updateFreezeUi();
+  if (window.adminFreezeMode) {
+    showAdminToast('🧊 Mapa zmrazena – vozy i statusy zůstávají stát pro úpravy');
+  } else {
+    showAdminToast('☀️ Mapa odmrazena – živá data obnovena');
+    fetchBuses();
+  }
+};
+
+function initAdminFreezeControls() {
+  if (!IS_ADMIN) return;
+  if (!document.getElementById('admin-screen-freeze-btn')) {
+    let btn = document.createElement('button');
+    btn.id = 'admin-screen-freeze-btn';
+    btn.setAttribute('onclick', 'toggleAdminFreeze()');
+    btn.title = '🧊 Zmrazit mapu a statusy pro úpravy (pouze Admin)';
+    btn.style.cssText = 'position:fixed;bottom:24px;left:16px;z-index:9999;width:44px;height:44px;border-radius:50%;background:#0f172a;border:2px solid #334155;color:#94a3b8;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,0.6);transition:all .25s;touch-action:manipulation;';
+    btn.innerHTML = '🧊';
+    document.body.appendChild(btn);
+  }
+
+  if (!document.getElementById('admin-freeze-banner')) {
+    let banner = document.createElement('div');
+    banner.id = 'admin-freeze-banner';
+    banner.style.cssText = 'display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);background:rgba(2,132,199,0.92);backdrop-filter:blur(6px);color:white;border:1px solid #38bdf8;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:bold;z-index:9999;box-shadow:0 4px 15px rgba(0,0,0,0.4);align-items:center;gap:8px;';
+    banner.innerHTML = '<span>🧊 Režim zmrazení aktivní – vozy a statusy zůstávají stát</span><button onclick="toggleAdminFreeze()" style="background:#0f172a;color:#38bdf8;border:1px solid #38bdf8;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:bold;cursor:pointer;margin-left:4px;">Odmrazit</button>';
+    document.body.appendChild(banner);
+  }
+}
+
+if (document.body) {
+  initAdminFreezeControls();
+} else {
+  document.addEventListener('DOMContentLoaded', initAdminFreezeControls);
+}
 
 let _toastT=null;
 function showAdminToast(msg,ok=true){
@@ -1557,12 +1643,11 @@ async function adminAction(action,busId,extraData={}){
         window.busMarkersMap.delete(busId);
         openPopupBusId=null;
       }
+      // VŽDY po úspěšné akci vyčisti adminInputCache pro tento vůz, aby nezůstávaly viset staré/smazané hodnoty
+      Object.keys(adminInputCache).forEach(k=>{if(k.endsWith('_'+busId))delete adminInputCache[k];});
       setTimeout(()=>{
-        if(action==='hard_refresh'||action==='active_search_spz'||action==='status_refresh'||action==='reset_admin'||action==='recheck_spz'||action==='mark_bug'){
-          Object.keys(adminInputCache).forEach(k=>{if(k.endsWith('_'+busId))delete adminInputCache[k];});
-        }
         fetchBuses();
-      }, 500);
+      }, 300);
     }
     else showAdminToast('Chyba: '+(data.message||'neznámá'),false);
   }catch(e){showAdminToast('Chyba spojení: '+e.message,false);}
@@ -3820,6 +3905,7 @@ function zoomToSpz(lat,lng,busId){
 // === MAIN FETCH ===
 async function fetchBuses(){
   if (fetchBuses._inflight) return;
+  if (window.adminFreezeMode) return;
   fetchBuses._inflight = true;
   try{
     let r=await fetch('/api/live_buses?t=' + Date.now(), { cache: 'no-store' }),data=await r.json();
@@ -4333,6 +4419,7 @@ async function fetchBuses(){
             +'background:'+adminVerifyBg+';color:'+adminVerifyColor+';transition:all .2s;">'
             +adminVerifyText+'</button>';
         }
+        let isGrafikaOpen = Boolean(document.getElementById('adm_grafika_' + bus.id) && document.getElementById('adm_grafika_' + bus.id).style.display === 'block');
         popH+=`<style>.adm-inp{width:100%;box-sizing:border-box;background:#0f172a;color:white;border:1px solid #334155;border-radius:5px;padding:9px;font-size:13px;margin-top:4px;}.adm-inp:focus{outline:none;border-color:#38bdf8;}.adm-btn{width:100%;padding:11px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;touch-action:manipulation;}.adm-toggle-btn{width:100%;padding:9px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;font-size:12px;cursor:pointer;margin-top:8px;touch-action:manipulation;}
 @keyframes routeDrawLoop {
   0% { stroke-dashoffset: var(--r-len); }
@@ -4343,7 +4430,12 @@ async function fetchBuses(){
           <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;border-radius: 0 0 5px 5px;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <strong style="color:#38bdf8;font-size:12px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
-              <a href="/dashboard/interaktivni-mapa" target="_blank" style="color:#a855f7;font-size:11px;font-weight:bold;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" title="Otevřít přehled chyb a správu v Dashboardu"><i class="fas fa-sliders-h"></i> Dashboard správa</a>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <button onclick="toggleAdminFreeze()" id="pop-freeze-btn-${bus.id}" style="background:${window.adminFreezeMode?'#0284c7':'#1e293b'};color:${window.adminFreezeMode?'#ffffff':'#93c5fd'};border:1px solid ${window.adminFreezeMode?'#38bdf8':'#334155'};border-radius:5px;padding:3px 7px;font-size:11px;font-weight:bold;cursor:pointer;display:inline-flex;align-items:center;gap:3px;touch-action:manipulation;transition:all .2s;" title="Zmrazit pohyb vozu a obnovování statusů (pouze pro Admina)">
+                  🧊 ${window.adminFreezeMode ? 'Odmrazit' : 'Zmrazit'}
+                </button>
+                <a href="/dashboard/interaktivni-mapa" target="_blank" style="color:#a855f7;font-size:11px;font-weight:bold;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" title="Otevřít přehled chyb a správu v Dashboardu"><i class="fas fa-sliders-h"></i> Dashboard správa</a>
+              </div>
             </div>
             <div style="color:#94a3b8;font-size:10px;margin-top:2px;font-family:monospace;word-break:break-all;">ID vozu: ${bus.id}</div>
             
@@ -4358,9 +4450,9 @@ async function fetchBuses(){
               <i class="fas fa-satellite-dish fa-spin"></i> Aktivní hledání SPZ
             </button>`}
             
-            <button class="adm-toggle-btn" onclick="let el=document.getElementById('adm_grafika_${bus.id}'); if(el.style.display==='none'){el.style.display='block';this.innerText='🔼 Skrýt vzhled a úpravy';}else{el.style.display='none';this.innerText='🎨 Vzhled a další úpravy';}">🎨 Vzhled a další úpravy</button>
+            <button class="adm-toggle-btn" onclick="let el=document.getElementById('adm_grafika_${bus.id}'); if(el.style.display==='none'){el.style.display='block';this.innerText='🔼 Skrýt vzhled a úpravy';}else{el.style.display='none';this.innerText='🎨 Vzhled a další úpravy';}">${isGrafikaOpen ? '🔼 Skrýt vzhled a úpravy' : '🎨 Vzhled a další úpravy'}</button>
             
-            <div id="adm_grafika_${bus.id}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
+            <div id="adm_grafika_${bus.id}" style="${isGrafikaOpen ? 'display:block;' : 'display:none;'}margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">
               <input type="text" id="adm_st_${bus.id}" value="${cSt}" data-orig="${bus.status}" placeholder="Status text..." class="adm-inp">
               <select id="adm_col_${bus.id}" class="adm-inp" style="margin-top:6px;">
                 <option value="">-- Výchozí barva --</option>
@@ -5397,23 +5489,18 @@ def bind_bus_to_spz_metadata(c: dict, spz: str):
         # Pokud SPZ momentálně chybí (např. dočasný výpadek), nemaž řidiče/poznámku (mohl nastat dočasný lag telemetrie)
         return
     meta = SPZ_METADATA.get(norm)
+    bid = str(c.get("id") or "")
     if meta:
-        if meta.get("driver") is not None:
-            c["admin_driver"] = meta.get("driver", "")
-        if meta.get("note") is not None:
-            c["admin_note"] = meta.get("note", "")
-        bid = str(c.get("id") or "")
+        c["admin_driver"] = meta.get("driver", "") or ""
+        c["admin_note"] = meta.get("note", "") or ""
         for k_bid in (bid, int(bid) if bid.isdigit() else None):
             if k_bid in ADMIN_SPZ_LOCKS:
-                if meta.get("driver") is not None:
-                    ADMIN_SPZ_LOCKS[k_bid]["admin_driver"] = c["admin_driver"]
-                if meta.get("note") is not None:
-                    ADMIN_SPZ_LOCKS[k_bid]["admin_note"] = c["admin_note"]
+                ADMIN_SPZ_LOCKS[k_bid]["admin_driver"] = c["admin_driver"]
+                ADMIN_SPZ_LOCKS[k_bid]["admin_note"] = c["admin_note"]
     else:
         # SPZ nemá v metadatech žádného řidiče ani poznámku (byla smazána v administraci nebo ještě nebyla zadána)
         c["admin_driver"] = ""
         c["admin_note"] = ""
-        bid = str(c.get("id") or "")
         for k_bid in (bid, int(bid) if bid.isdigit() else None):
             if k_bid in ADMIN_SPZ_LOCKS:
                 ADMIN_SPZ_LOCKS[k_bid]["admin_driver"] = ""
@@ -5427,11 +5514,25 @@ def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick:
     entry = SPZ_METADATA.get(k, {})
     disp = format_spz_display(spz) or str(spz).strip()
     entry["spz"] = disp
-    if driver is not None:
-        drv_str = str(driver).strip()
-        entry["driver"] = drv_str
-    if note is not None:
-        entry["note"] = str(note).strip()
+
+    drv_str = str(driver).strip() if driver is not None else entry.get("driver", "")
+    note_str = str(note).strip() if note is not None else entry.get("note", "")
+
+    # Pokud jsou oba prázdné (nebo byly smazány), provést kompletní smazání metadat
+    if not drv_str and not note_str:
+        delete_spz_metadata(spz, field="all", admin_nick=admin_nick)
+        return
+
+    # Pokud byl driver zadán jako prázdný, zajistit smazání řidiče v cache/zámcích
+    if driver is not None and not drv_str:
+        delete_spz_metadata(spz, field="driver", admin_nick=admin_nick)
+
+    # Pokud byla note zadána jako prázdná, zajistit smazání poznámky v cache/zámcích
+    if note is not None and not note_str:
+        delete_spz_metadata(spz, field="note", admin_nick=admin_nick)
+
+    entry["driver"] = drv_str
+    entry["note"] = note_str
     entry["updated_at"] = get_prague_time().strftime("%d.%m.%Y %H:%M")
     entry["updated_by"] = admin_nick
     SPZ_METADATA[k] = entry
@@ -5446,7 +5547,7 @@ def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick:
 
     # Synchronizace do aktivních vozů na mapě s touto SPZ
     for bid, c in safe_bus_cache_items():
-        if normalize_spz_key(c.get("spz")) == k:
+        if normalize_spz_key(c.get("spz")) == k or str(c.get("id")) == k:
             if driver is not None:
                 c["admin_driver"] = entry.get("driver", "")
             if note is not None:
@@ -5454,7 +5555,7 @@ def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick:
 
     # Sync do zámků
     for bid, lk in safe_admin_locks_items():
-        if normalize_spz_key(lk.get("spz")) == k:
+        if normalize_spz_key(lk.get("spz")) == k or str(bid) == k:
             if driver is not None:
                 lk["admin_driver"] = entry.get("driver", "")
             if note is not None:
@@ -5470,8 +5571,20 @@ def set_spz_metadata(spz: str, driver: str = None, note: str = None, admin_nick:
             if note is not None:
                 update_payload["admin_note"] = entry.get("note", "")
             if update_payload:
-                db_c.table("spz_cache").update(update_payload).eq("spz", disp).execute()
-                db_c.table("spz_cache").update(update_payload).eq("spz", k).execute()
+                try:
+                    db_c.table("spz_cache").update(update_payload).eq("spz", disp).execute()
+                except Exception:
+                    pass
+                try:
+                    db_c.table("spz_cache").update(update_payload).eq("spz", k).execute()
+                except Exception:
+                    pass
+                for obid, oc in safe_bus_cache_items():
+                    if normalize_spz_key(oc.get("spz")) == k or str(obid) == k:
+                        try:
+                            db_c.table("spz_cache").update(update_payload).eq("bus_id", str(obid)).execute()
+                        except Exception:
+                            pass
     except Exception:
         pass
 
@@ -5553,7 +5666,7 @@ def delete_spz_metadata(spz: str, field: str = "all", admin_nick: str = "Admin")
 
     # Vymazat v zámcích
     for bid, lk in safe_admin_locks_items():
-        if normalize_spz_key(lk.get("spz")) == k:
+        if normalize_spz_key(lk.get("spz")) == k or str(bid) == k:
             if field in ("driver", "all"):
                 lk["admin_driver"] = ""
             if field in ("note", "all"):
@@ -10249,6 +10362,15 @@ def api_admin_map_action():
                 bus_id,
                 f"Admin {admin_name} přiřadil řidiče '{new_driver}' k vozu #{bus_id}",
                 f"Řidič '{new_driver}' spojen s SPZ '{bus_spz or 'neznámá'}' vozu #{bus_id}.",
+                spz=bus_spz,
+                line=c.get("line")
+            )
+        else:
+            log_automation_action(
+                "driver_cleared",
+                bus_id,
+                f"Admin {admin_name} odebral řidiče u vozu #{bus_id}",
+                f"Řidič byl odebrán u SPZ '{bus_spz or 'neznámá'}' vozu #{bus_id}.",
                 spz=bus_spz,
                 line=c.get("line")
             )

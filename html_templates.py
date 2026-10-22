@@ -5415,6 +5415,59 @@ async function triggerAnalysis() {
   }
 }
 
+window.editingSpz = null;
+
+function startSpzInlineEdit(spz) {
+  window.editingSpz = spz;
+  renderDriversTable();
+  setTimeout(() => {
+    const safeId = spz.replace(/\\s+/g, '_');
+    const el = document.getElementById('inline-edit-driver-' + safeId);
+    if (el) el.focus();
+  }, 40);
+}
+
+function cancelSpzInlineEdit() {
+  window.editingSpz = null;
+  renderDriversTable();
+}
+
+async function saveSpzInlineEdit(spz) {
+  const safeId = spz.replace(/\\s+/g, '_');
+  const drvInp = document.getElementById('inline-edit-driver-' + safeId);
+  const nteInp = document.getElementById('inline-edit-note-' + safeId);
+  const driver = drvInp ? drvInp.value.trim() : '';
+  const note = nteInp ? nteInp.value.trim() : '';
+
+  try {
+    if (!driver && !note) {
+      const res = await fetch('/api/admin/spz_meta/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spz, field: 'all' })
+      });
+      const d = await res.json();
+      showToast(d.message || 'Přiřazení SPZ bylo smazáno');
+    } else {
+      const res = await fetch('/api/admin/spz_meta/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spz, driver, note })
+      });
+      const d = await res.json();
+      if (!res.ok || d.status !== 'success') {
+        showToast(d.message || 'Chyba při ukládání', true);
+        return;
+      }
+      showToast(d.message || 'Přiřazení uloženo');
+    }
+    window.editingSpz = null;
+    loadSpzControlData();
+  } catch (e) {
+    showToast('Chyba: ' + e.message, true);
+  }
+}
+
 function renderDriversTable() {
   if (!_dashData) return;
   const tbody = document.getElementById('drivers-table-body');
@@ -5440,6 +5493,8 @@ function renderDriversTable() {
   tbody.innerHTML = list.map(d => {
     const isOnline = Boolean(d.is_online);
     const trackUrl = d.map_url || (d.bus_id ? `https://datacorebot.koyeb.app/mapa?track=${d.bus_id}` : null);
+    const isEditing = (window.editingSpz === d.spz);
+    const safeId = d.spz.replace(/\\s+/g, '_');
     
     const statusBadge = isOnline
       ? `<span style="background: rgba(16, 185, 129, 0.2); color: #86efac; border: 1px solid #10b981; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;"><i class="fas fa-circle" style="font-size: 8px;"></i> Na mapě</span>
@@ -5453,38 +5508,75 @@ function renderDriversTable() {
       </button>
     </div>`;
 
-    const driverCell = d.driver_name && d.driver_name !== '—'
-      ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-           <span style="font-weight:bold;color:#f1f5f9;font-size:13px;"><i class="fas fa-user-circle" style="color:#10b981;"></i> ${d.driver_name}</span>
-           <button onclick="deleteSpzMeta('${d.spz}','driver')" style="background:none;border:none;color:#f87171;cursor:pointer;padding:2px 6px;font-size:12px;" title="Smazat pouze řidiče"><i class="fas fa-times-circle"></i></button>
-         </div>`
-      : `<span style="color:#64748b;font-style:italic;">Bez řidiče</span>`;
+    let driverCell = '';
+    let noteCell = '';
+    let actionCell = '';
 
-    const noteCell = d.note && d.note !== '—'
-      ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-           <span style="background:rgba(245,158,11,0.1);border-left:3px solid #f59e0b;padding:4px 8px;border-radius:4px;color:#cbd5e1;font-size:12px;">${d.note}</span>
-           <button onclick="deleteSpzMeta('${d.spz}','note')" style="background:none;border:none;color:#f87171;cursor:pointer;padding:2px 6px;font-size:12px;" title="Smazat pouze poznámku"><i class="fas fa-times-circle"></i></button>
-         </div>`
-      : `<span style="color:#64748b;font-style:italic;">Bez poznámky</span>`;
+    if (isEditing) {
+      const curDriverVal = (d.driver_name && d.driver_name !== '—') ? d.driver_name.replace(/"/g, '&quot;') : '';
+      const curNoteVal = (d.note && d.note !== '—') ? d.note.replace(/"/g, '&quot;') : '';
+
+      driverCell = `<div style="display:flex;flex-direction:column;gap:4px;">
+        <input type="text" id="inline-edit-driver-${safeId}" value="${curDriverVal}" placeholder="Jméno řidiče..." style="background:#0f172a;color:#f1f5f9;border:1.5px solid #38bdf8;padding:6px 10px;border-radius:6px;font-size:13px;width:100%;box-sizing:border-box;box-shadow:0 0 8px rgba(56,189,248,0.3);">
+        <span style="font-size:10px;color:#94a3b8;">Vymažte pole pro smazání řidiče</span>
+      </div>`;
+
+      noteCell = `<div style="display:flex;flex-direction:column;gap:4px;">
+        <input type="text" id="inline-edit-note-${safeId}" value="${curNoteVal}" placeholder="Poznámka k vozu..." style="background:#0f172a;color:#f1f5f9;border:1.5px solid #38bdf8;padding:6px 10px;border-radius:6px;font-size:13px;width:100%;box-sizing:border-box;box-shadow:0 0 8px rgba(56,189,248,0.3);">
+        <span style="font-size:10px;color:#94a3b8;">Vymažte pole pro smazání poznámky</span>
+      </div>`;
+
+      actionCell = `<div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;">
+        <button onclick="saveSpzInlineEdit('${d.spz}')" style="background:linear-gradient(135deg, #059669, #10b981);color:white;border:none;padding:7px 12px;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(16,185,129,0.4);" title="Uložit změny do mapy i databáze"><i class="fas fa-save"></i> Uložit</button>
+        <button onclick="cancelSpzInlineEdit()" style="background:#334155;color:#cbd5e1;border:1px solid #475569;padding:7px 10px;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;" title="Zrušit úpravy"><i class="fas fa-times"></i> Zrušit</button>
+      </div>`;
+    } else {
+      driverCell = d.driver_name && d.driver_name !== '—'
+        ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+             <span style="font-weight:bold;color:#f1f5f9;font-size:13px;"><i class="fas fa-user-circle" style="color:#10b981;"></i> ${d.driver_name}</span>
+             <div style="display:inline-flex;gap:4px;align-items:center;">
+               <button onclick="startSpzInlineEdit('${d.spz}')" style="background:#1e293b;border:1px solid #38bdf8;color:#38bdf8;cursor:pointer;padding:3px 7px;border-radius:4px;font-size:11px;" title="Upravit řidiče"><i class="fas fa-pencil-alt"></i></button>
+               <button onclick="deleteSpzMeta('${d.spz}','driver')" style="background:none;border:none;color:#f87171;cursor:pointer;padding:2px 6px;font-size:12px;" title="Smazat pouze řidiče"><i class="fas fa-times-circle"></i></button>
+             </div>
+           </div>`
+        : `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+             <span style="color:#64748b;font-style:italic;">Bez řidiče</span>
+             <button onclick="startSpzInlineEdit('${d.spz}')" style="background:#1e293b;border:1px solid #38bdf8;color:#38bdf8;cursor:pointer;padding:3px 7px;border-radius:4px;font-size:11px;" title="Přidat řidiče"><i class="fas fa-plus"></i> Řidič</button>
+           </div>`;
+
+      noteCell = d.note && d.note !== '—'
+        ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+             <span style="background:rgba(245,158,11,0.1);border-left:3px solid #f59e0b;padding:4px 8px;border-radius:4px;color:#cbd5e1;font-size:12px;">${d.note}</span>
+             <div style="display:inline-flex;gap:4px;align-items:center;">
+               <button onclick="startSpzInlineEdit('${d.spz}')" style="background:#1e293b;border:1px solid #38bdf8;color:#38bdf8;cursor:pointer;padding:3px 7px;border-radius:4px;font-size:11px;" title="Upravit poznámku"><i class="fas fa-pencil-alt"></i></button>
+               <button onclick="deleteSpzMeta('${d.spz}','note')" style="background:none;border:none;color:#f87171;cursor:pointer;padding:2px 6px;font-size:12px;" title="Smazat pouze poznámku"><i class="fas fa-times-circle"></i></button>
+             </div>
+           </div>`
+        : `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+             <span style="color:#64748b;font-style:italic;">Bez poznámky</span>
+             <button onclick="startSpzInlineEdit('${d.spz}')" style="background:#1e293b;border:1px solid #38bdf8;color:#38bdf8;cursor:pointer;padding:3px 7px;border-radius:4px;font-size:11px;" title="Přidat poznámku"><i class="fas fa-plus"></i> Poznámka</button>
+           </div>`;
+
+      actionCell = `<div style="display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap;">
+        <button onclick="startSpzInlineEdit('${d.spz}')" style="background: #1e293b; border: 1px solid #38bdf8; color: #38bdf8; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: 0.2s;" onmouseover="this.style.background='#0284c7';this.style.color='#fff'" onmouseout="this.style.background='#1e293b';this.style.color='#38bdf8'" title="Upravit text řidiče a poznámky"><i class="fas fa-edit"></i> Upravit</button>
+        ${trackUrl ? `<a href="${trackUrl}" target="_blank" style="background: #1e293b; border: 1px solid #0284c7; color: #38bdf8; padding: 6px 10px; border-radius: 6px; text-decoration: none; font-size: 11px; font-weight: bold;" title="Zobrazit na mapě"><i class="fas fa-map-marker-alt"></i> Mapa</a>` : ''}
+        <button onclick="openSeznamAutobusu('${d.spz}')" style="background: #1e293b; border: 1px solid #2563eb; color: #93c5fd; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="🚌 Fotografie a informace o vozu na Seznam-Autobusu"><i class="fas fa-camera"></i> Vůz</button>
+        <button onclick="deleteSpzMeta('${d.spz}','all')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;" title="Smazat řidiče i poznámku pro tuto SPZ"><i class="fas fa-trash-alt"></i> Smazat</button>
+      </div>`;
+    }
 
     return `
-      <tr style="border-bottom: 1px solid #334155; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+      <tr style="border-bottom: 1px solid #334155; transition: 0.2s; ${isEditing ? 'background: rgba(56, 189, 248, 0.05); border-left: 3px solid #38bdf8;' : ''}" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='${isEditing ? 'rgba(56, 189, 248, 0.05)' : 'transparent'}'">
         <td data-label="SPZ" style="padding: 12px;">${spzBadge}</td>
-        <td data-label="Jméno řidiče" style="padding: 12px;">${driverCell}</td>
-        <td data-label="Poznámka vozu" style="padding: 12px; max-width: 260px;">${noteCell}</td>
+        <td data-label="Jméno řidiče" style="padding: 12px; min-width: 170px;">${driverCell}</td>
+        <td data-label="Poznámka vozu" style="padding: 12px; min-width: 200px; max-width: 280px;">${noteCell}</td>
         <td data-label="Stav na mapě" style="padding: 12px;">${statusBadge}</td>
         <td data-label="Linka & Model" style="padding: 12px;">
           <div style="color: white; font-weight: 500;">Linka ${d.line}</div>
           <div style="color: #94a3b8; font-size: 11px;">${d.vehicle_type}</div>
         </td>
         <td data-label="Datum úpravy" style="padding: 12px; color: #64748b; font-size: 12px; white-space: nowrap;">${d.updated_at}</td>
-        <td data-label="Akce" style="padding: 12px; text-align: center;">
-          <div style="display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap;">
-            ${trackUrl ? `<a href="${trackUrl}" target="_blank" style="background: #1e293b; border: 1px solid #0284c7; color: #38bdf8; padding: 6px 10px; border-radius: 6px; text-decoration: none; font-size: 11px; font-weight: bold;" title="Zobrazit na mapě"><i class="fas fa-map-marker-alt"></i> Mapa</a>` : ''}
-            <button onclick="openSeznamAutobusu('${d.spz}')" style="background: #1e293b; border: 1px solid #2563eb; color: #93c5fd; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="🚌 Fotografie a informace o vozu na Seznam-Autobusu"><i class="fas fa-camera"></i> Vůz</button>
-            <button onclick="deleteSpzMeta('${d.spz}','all')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;" title="Smazat řidiče i poznámku pro tuto SPZ"><i class="fas fa-trash-alt"></i> Smazat</button>
-          </div>
-        </td>
+        <td data-label="Akce" style="padding: 12px; text-align: center;">${actionCell}</td>
       </tr>
     `;
   }).join('');
@@ -5504,6 +5596,7 @@ async function deleteSpzMeta(spz, field) {
       showToast(d.message || 'Chyba při mazání', true);
     } else {
       showToast(d.message || 'Úspěšně smazáno');
+      if (window.editingSpz === spz) window.editingSpz = null;
       loadSpzControlData();
     }
   } catch (e) {
