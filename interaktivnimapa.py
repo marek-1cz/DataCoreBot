@@ -481,9 +481,17 @@ body.nav-static #nav-handle, body.nav-glass:not(.nav-glass-hide) #nav-handle { d
 /* Kurzor kříže v NT add mode */
 body.nt-add-active{cursor:crosshair !important;}
 body.nt-add-active #map{cursor:crosshair !important;}
-.dark-popup .leaflet-popup-content-wrapper{background:#1e293b;color:#fff;border:1px solid #334155;padding:0;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.65);border-radius:8px;}
+.dark-popup .leaflet-popup-content-wrapper{background:#1e293b;color:#fff;border:1px solid #334155;padding:0;box-shadow:0 12px 36px rgba(0,0,0,.75);border-radius:8px;}
 .dark-popup .leaflet-popup-tip{background:#1e293b;}
-.dark-popup .leaflet-popup-content{margin:0;width:292px!important;max-height:75vh!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
+/* Na PC bez zbytečného scrollbaru – popup se zobrazí v plné přirozené výšce */
+.dark-popup .leaflet-popup-content{margin:0;width:300px!important;max-height:none!important;overflow:visible!important;}
+
+/* Stylový moderní scroller s jemným neonově modrým gradientem */
+.dark-popup .leaflet-popup-content::-webkit-scrollbar{width:5px;}
+.dark-popup .leaflet-popup-content::-webkit-scrollbar-track{background:rgba(15,23,42,0.7);border-radius:4px;}
+.dark-popup .leaflet-popup-content::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#38bdf8,#0284c7);border-radius:4px;box-shadow:0 0 6px rgba(56,189,248,0.4);}
+.dark-popup .leaflet-popup-content::-webkit-scrollbar-thumb:hover{background:#38bdf8;}
+.dark-popup .leaflet-popup-content{scrollbar-width:thin;scrollbar-color:#38bdf8 rgba(15,23,42,0.7);}
 .ph{background:#0f172a;padding:10px 13px;border-bottom:1px solid #334155;}
 .ph-t{font-weight:bold;color:#38bdf8;font-size:15px;margin:0;}
 .pb{padding:11px 13px;font-size:13px;line-height:1.6;}
@@ -586,7 +594,8 @@ body.nt-add-active #map{cursor:crosshair !important;}
   .leaflet-top.leaflet-left { top: 85px !important; }
 
   #hf{width:220px; padding: 10px;}
-  .dark-popup .leaflet-popup-content{width:260px!important;max-height:72vh!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
+  .dark-popup .leaflet-popup-content-wrapper{overflow:hidden !important;}
+  .dark-popup .leaflet-popup-content{width:265px!important;max-height:70vh!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
   
   /* Log and main popups - bottom sheet style */
   #log-panel, #nt-edit-pop, #bus-detail-pop, #stop-info-pop {
@@ -1537,6 +1546,14 @@ function saveAdminInputs(){
 }
 function restoreAdminInput(busId,ft){let v=adminInputCache[ft+'_'+busId];return(v!==undefined&&v!==null)?v:null;}
 
+// === ZACHOVÁNÍ POZICE SCROLLU POPUPU PŘI TICKU ===
+window._popupScrollPositions = {};
+document.addEventListener('scroll', (e) => {
+  if (e.target && e.target.classList && e.target.classList.contains('leaflet-popup-content') && openPopupBusId) {
+    window._popupScrollPositions[openPopupBusId] = e.target.scrollTop;
+  }
+}, true);
+
 // === ZMRAZENÍ SCREENU A POHYBU (POUZE ADMIN) ===
 window.adminFreezeMode = false;
 
@@ -1566,22 +1583,6 @@ window.updateFreezeUi = function() {
   if (banner) {
     banner.style.display = isFr ? 'flex' : 'none';
   }
-
-  document.querySelectorAll('[id^="pop-freeze-btn-"]').forEach(b => {
-    if (isFr) {
-      b.style.background = '#0284c7';
-      b.style.color = '#ffffff';
-      b.style.borderColor = '#38bdf8';
-      b.innerHTML = '🧊 Odmrazit';
-      b.title = 'Klikněte pro odmrazení a obnovení živého pohybu i statusů';
-    } else {
-      b.style.background = '#1e293b';
-      b.style.color = '#93c5fd';
-      b.style.borderColor = '#334155';
-      b.innerHTML = '🧊 Zmrazit';
-      b.title = 'Zmrazí pohyb vozu i statusy, abyste mohli v klidu rolovat a přepisovat';
-    }
-  });
 };
 
 window.toggleAdminFreeze = function() {
@@ -4430,12 +4431,7 @@ async function fetchBuses(){
           <div style="border-top:1px solid #334155;margin-top:6px;padding:10px 13px;background:#0a0f1e;border-radius: 0 0 5px 5px;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <strong style="color:#38bdf8;font-size:12px;letter-spacing:.5px;">🔧 ADMIN PANEL</strong>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <button onclick="toggleAdminFreeze()" id="pop-freeze-btn-${bus.id}" style="background:${window.adminFreezeMode?'#0284c7':'#1e293b'};color:${window.adminFreezeMode?'#ffffff':'#93c5fd'};border:1px solid ${window.adminFreezeMode?'#38bdf8':'#334155'};border-radius:5px;padding:3px 7px;font-size:11px;font-weight:bold;cursor:pointer;display:inline-flex;align-items:center;gap:3px;touch-action:manipulation;transition:all .2s;" title="Zmrazit pohyb vozu a obnovování statusů (pouze pro Admina)">
-                  🧊 ${window.adminFreezeMode ? 'Odmrazit' : 'Zmrazit'}
-                </button>
-                <a href="/dashboard/interaktivni-mapa" target="_blank" style="color:#a855f7;font-size:11px;font-weight:bold;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" title="Otevřít přehled chyb a správu v Dashboardu"><i class="fas fa-sliders-h"></i> Dashboard správa</a>
-              </div>
+              <a href="/dashboard/interaktivni-mapa" target="_blank" style="color:#a855f7;font-size:11px;font-weight:bold;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" title="Otevřít přehled chyb a správu v Dashboardu"><i class="fas fa-sliders-h"></i> Dashboard správa</a>
             </div>
             <div style="color:#94a3b8;font-size:10px;margin-top:2px;font-family:monospace;word-break:break-all;">ID vozu: ${bus.id}</div>
             
@@ -4533,8 +4529,35 @@ async function fetchBuses(){
 
           if (!(isTyping && openPopupBusId === bus.id)) {
               if (existingMarker._lastPopH !== popH) {
+                  let savedScroll = 0;
+                  if (openPopupBusId === bus.id) {
+                      let p = existingMarker.getPopup();
+                      let cNode = p ? p.getElement() : null;
+                      let curP = cNode ? cNode.querySelector('.leaflet-popup-content') : null;
+                      if (curP && curP.scrollTop > 0) {
+                          savedScroll = curP.scrollTop;
+                          if (window._popupScrollPositions) window._popupScrollPositions[bus.id] = savedScroll;
+                      } else if (window._popupScrollPositions && window._popupScrollPositions[bus.id]) {
+                          savedScroll = window._popupScrollPositions[bus.id];
+                      }
+                  }
+
                   existingMarker.setPopupContent(popH);
                   existingMarker._lastPopH = popH;
+
+                  if (savedScroll > 0 && openPopupBusId === bus.id) {
+                      let restoreScroll = () => {
+                          let p = existingMarker.getPopup();
+                          let cNode = p ? p.getElement() : null;
+                          let newPEl = cNode ? cNode.querySelector('.leaflet-popup-content') : null;
+                          if (newPEl && newPEl.scrollTop !== savedScroll) {
+                              newPEl.scrollTop = savedScroll;
+                          }
+                      };
+                      restoreScroll();
+                      requestAnimationFrame(restoreScroll);
+                      setTimeout(restoreScroll, 25);
+                  }
               }
           }
       } else {
@@ -4545,7 +4568,20 @@ async function fetchBuses(){
           m._lastPopH = popH;
           m.bindPopup(popH, {className:'dark-popup', maxWidth:300});
           m._busId = bus.id;
-          m.on('popupopen', ()=>{openPopupBusId=bus.id;});
+          m.on('popupopen', ()=>{
+              openPopupBusId=bus.id;
+              let saved = window._popupScrollPositions ? window._popupScrollPositions[bus.id] : 0;
+              if (saved) {
+                  let restore = () => {
+                      let p = m.getPopup();
+                      let cNode = p ? p.getElement() : null;
+                      let el = cNode ? cNode.querySelector('.leaflet-popup-content') : null;
+                      if (el && el.scrollTop !== saved) el.scrollTop = saved;
+                  };
+                  restore();
+                  setTimeout(restore, 25);
+              }
+          });
           m.on('popupclose', ()=>{if(openPopupBusId===bus.id)openPopupBusId=null;});
           m.addTo(ml);
           window.busMarkersMap.set(bus.id, m);
