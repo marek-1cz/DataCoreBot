@@ -3128,7 +3128,7 @@ async function fetchBuses(){
           ${withdrawnW}${lastposW}${arrivaW}${bugW}${orangeW}${depotW}
           ${(bus.admin_note && typeof bus.admin_note === 'string' && bus.admin_note.trim() !== '' && !isTrain)?`<div style="background:rgba(147,197,253,0.1);border:1px solid #334155;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#93c5fd;">${bus.admin_note}</div>`:''}
           ${(bus.admin_driver && typeof bus.admin_driver === 'string' && bus.admin_driver.trim() !== '' && !isTrain)?`<div style="background:rgba(251,146,60,0.1);border:1px solid #ea580c;border-radius:5px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:#fb923c;"><b>ŘIDIČ:</b> ${bus.admin_driver}</div>`:''}
-          <div class="pr"><span class="pl">Cil:</span><span class="pv">${bus.destination||'Neznamy'}</span></div>
+          <div class="pr"><span class="pl">Cil:</span><span class="pv" id="pop-dest-${bus.id}">${bus.destination||'Neznamy'}</span></div>
           ${spzH}${invTxt}
           ${
             (!isTrain) ? (
@@ -3143,11 +3143,11 @@ async function fetchBuses(){
             ) : ''
           }
           ${(!isTrain) ? `<div class="pr"><span class="pl">Vozidlo:</span><span class="pv" style="color:${_vType ? '#e2e8f0' : '#64748b'};font-size:11px;font-weight:${_vType ? '600' : 'normal'};">${_vType || 'Nezjištěno'}</span></div>` : ''}
-          <div class="pr"><span class="pl">Status:</span><span class="pv" style="color:${sc};font-weight:bold;">${cleanStatusText(displayStatus)}</span></div>
-          ${renderDelayRowHtml(bus)}
-          ${telemetryBadge}
+          <div class="pr"><span class="pl">Status:</span><span class="pv" id="pop-status-${bus.id}" style="color:${sc};font-weight:bold;">${cleanStatusText(displayStatus)}</span></div>
+          <div id="pop-delay-${bus.id}">${renderDelayRowHtml(bus)}</div>
+          <div id="pop-telem-${bus.id}">${telemetryBadge}</div>
           <button class="pa" onclick="showTT('${bus.id}')">📋 Zobrazit jízdní řád</button>
-          <button class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
+          <button id="pop-follow-${bus.id}" class="pa" style="${fSt}margin-top:5px;" onclick="toggleFollow('${bus.id}','${bus.id}')">${fTxt}</button>
           ${histBtn}
           <button id="route-btn-${bus.id}" class="pa pa-d" style="margin-top:5px;${rA?'background:#1e40af;':''}" onclick="toggleRoute('${bus.id}')">${rA?'🗺️ Skryt trasu':'🗺️ Zobrazit trasu'}</button>
           <div style="display:flex;gap:5px;margin-top:5px;">
@@ -3270,11 +3270,15 @@ async function fetchBuses(){
           if (window.isSmoothAnimActive && window.isSmoothAnimActive() && followId === bus.id) {
               animateMarkerTo(existingMarker, bus.lat, bus.lng, 600);
           } else {
-              existingMarker.setLatLng([bus.lat, bus.lng]);
+              let curLl = existingMarker.getLatLng();
+              if (!curLl || Math.abs(curLl.lat - bus.lat) > 0.000001 || Math.abs(curLl.lng - bus.lng) > 0.000001) {
+                  existingMarker.setLatLng([bus.lat, bus.lng]);
+              }
           }
 
-          // OPTIMALIZACE VÝKONU (Bod 1):
-          // Pokud se nezměnila linka, barva, azimut ani režim štítku, updatuj pouze text bez ničení SVG v DOMu!
+          // OPTIMALIZACE VÝKONU & OCHRANA PŘED PROBLIKÁVÁNÍM:
+          // 1) Pokud se změní azimut nebo styl ikony, aktualizujeme přímo mEl.innerHTML bez ničení objektu ikony v Leafletu.
+          //    Volání existingMarker.setIcon(icon) totiž uvnitř Leafletu znovu váže popup (bindPopup), což při otevřeném popupu vyvolává probliknutí!
           let coreKey = `${markerColor}_${bus.bearing}_${bus.line}_${isTrain}_${isWithdrawn}_${Boolean(ageText)}`;
           let mEl = existingMarker.getElement ? existingMarker.getElement() : null;
           if (mEl && existingMarker._coreKey === coreKey) {
@@ -3291,43 +3295,65 @@ async function fetchBuses(){
                       rectEl.setAttribute('stroke', badgeCol);
                   }
               }
+          } else if (mEl) {
+              mEl.innerHTML = icon.options.html;
+              existingMarker._coreKey = coreKey;
+              existingMarker._lastIconHtml = icon.options.html;
           } else {
               existingMarker.setIcon(icon);
               existingMarker._coreKey = coreKey;
               existingMarker._lastIconHtml = icon.options.html;
           }
 
-          if (!(isTyping && openPopupBusId === bus.id)) {
-              if (existingMarker._lastPopH !== popH) {
-                  let savedScroll = 0;
-                  if (openPopupBusId === bus.id) {
-                      let p = existingMarker.getPopup();
-                      let cNode = p ? p.getElement() : null;
-                      let curP = cNode ? cNode.querySelector('.leaflet-popup-content') : null;
-                      if (curP && curP.scrollTop > 0) {
-                          savedScroll = curP.scrollTop;
-                          if (window._popupScrollPositions) window._popupScrollPositions[bus.id] = savedScroll;
-                      } else if (window._popupScrollPositions && window._popupScrollPositions[bus.id]) {
-                          savedScroll = window._popupScrollPositions[bus.id];
-                      }
-                  }
+          // 2) ŘEŠENÍ PROBLIKÁVÁNÍ OTEVŘENÉHO POPUPU:
+          // Když má uživatel otevřený popup tohoto vozu, NIKDY nevoláme setPopupContent(popH)!
+          // setPopupContent() v Leafletu zničí celý vnitřní DOM, vyresetuje scroll a znovu počítá rozměry okna,
+          // což způsobovalo viditelné přebliknutí a skákání scrollu každé 2 vteřiny.
+          // Místo toho při otevřeném okně hladce updatujeme pouze měnící se živé hodnoty v existujícím DOMu bez jakéhokoliv probliknutí.
+          if (openPopupBusId === bus.id) {
+              existingMarker._lastPopH = popH;
 
+              let stEl = document.getElementById('pop-status-' + bus.id);
+              let newSt = cleanStatusText(displayStatus);
+              if (stEl && (stEl.textContent !== newSt || stEl.style.color !== sc)) {
+                  stEl.textContent = newSt;
+                  stEl.style.color = sc;
+              }
+
+              let delEl = document.getElementById('pop-delay-' + bus.id);
+              let newDel = renderDelayRowHtml(bus);
+              if (delEl && delEl.innerHTML !== newDel) {
+                  delEl.innerHTML = newDel;
+              }
+
+              let telEl = document.getElementById('pop-telem-' + bus.id);
+              if (telEl && telEl.innerHTML !== telemetryBadge) {
+                  telEl.innerHTML = telemetryBadge;
+              }
+
+              let destEl = document.getElementById('pop-dest-' + bus.id);
+              let newDest = bus.destination || 'Neznamy';
+              if (destEl && destEl.textContent !== newDest) {
+                  destEl.textContent = newDest;
+              }
+
+              let folEl = document.getElementById('pop-follow-' + bus.id);
+              if (folEl && folEl.textContent !== fTxt) {
+                  folEl.textContent = fTxt;
+                  folEl.style.background = (followId === bus.id) ? '#ef4444' : '#3b82f6';
+              }
+
+              let routeBtn = document.getElementById('route-btn-' + bus.id);
+              let newRouteTxt = rA ? '🗺️ Skryt trasu' : '🗺️ Zobrazit trasu';
+              if (routeBtn && routeBtn.textContent !== newRouteTxt) {
+                  routeBtn.textContent = newRouteTxt;
+                  routeBtn.style.background = rA ? '#1e40af' : '';
+              }
+          } else {
+              // Když je popup zavřený, můžeme bezpečně a nepozorovaně aktualizovat celý HTML obsah v Leafletu pro budoucí otevření
+              if (existingMarker._lastPopH !== popH) {
                   existingMarker.setPopupContent(popH);
                   existingMarker._lastPopH = popH;
-
-                  if (savedScroll > 0 && openPopupBusId === bus.id) {
-                      let restoreScroll = () => {
-                          let p = existingMarker.getPopup();
-                          let cNode = p ? p.getElement() : null;
-                          let newPEl = cNode ? cNode.querySelector('.leaflet-popup-content') : null;
-                          if (newPEl && newPEl.scrollTop !== savedScroll) {
-                              newPEl.scrollTop = savedScroll;
-                          }
-                      };
-                      restoreScroll();
-                      requestAnimationFrame(restoreScroll);
-                      setTimeout(restoreScroll, 25);
-                  }
               }
           }
       } else {
