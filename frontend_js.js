@@ -1465,7 +1465,8 @@ function updateHud(b){
   else if(dv>=5)de.innerHTML=`<span style="color:#ef4444;">+${dv} min</span>`;
   else if(dv<-1)de.innerHTML=`<span style="color:#60a5fa;">-${Math.abs(dv)} min</span>`;
   else de.innerHTML='<span style="color:#10b981;">V case</span>';
-  document.getElementById('h-status').innerHTML=(b.status||'-')+((b.is_arriva_fallback||b.position_source==='arriva')?' <span style="color:#38bdf8;font-size:10px;font-weight:bold;">(Arriva GPS)</span>':'');
+  let srcTag = (IS_ADMIN && (b.is_arriva_fallback||b.position_source==='arriva')) ? ' <span style="color:#38bdf8;font-size:10px;font-weight:bold;">(Arriva GPS)</span>' : '';
+  document.getElementById('h-status').innerHTML=(b.status||'-')+srcTag;
   document.getElementById('hm-line').textContent='L'+(b.line||'?');
   document.getElementById('h-jr').onclick=()=>showTT(followInflowId||b.id);
 }
@@ -2998,10 +2999,12 @@ async function fetchBuses(){
         lastposW=`<div style="background:linear-gradient(135deg,rgba(24,24,32,0.95),rgba(45,30,45,0.95));border:1.5px solid #f472b6;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 10px rgba(244,114,182,0.25);"><b style="color:#f472b6;font-size:12px;letter-spacing:0.5px;">📍 POSLEDNÍ ZNÁMÁ POLOHA</b><br><span style="color:#cbd5e1;font-size:10px;">Vůz zmizel z mapy pvvd.idpk.cz${tOffline}. Ponechán na stejné pozici, než se znovu objeví.</span></div>`;
       }
       let arrivaW='';
-      if(bus.is_arriva_fallback){
-        arrivaW=`<div style="background:linear-gradient(135deg,rgba(2,132,199,0.22),rgba(3,105,161,0.22));border:1.5px solid #38bdf8;border-radius:6px;padding:7px 10px;margin:5px 0;font-size:11px;box-shadow:0 0 10px rgba(56,189,248,0.2);display:flex;align-items:center;gap:8px;"><i class="fas fa-satellite-dish" style="color:#38bdf8;font-size:14px;"></i><div><b style="color:#38bdf8;font-size:11px;letter-spacing:0.3px;">Alternativní live poloha (Arriva mapa)</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.35;display:inline-block;">Vůz chybí na PVVD – poloha a telemetrie jsou přebírány živě z mapy Arriva.</span></div></div>`;
-      } else if(bus.position_source === 'arriva'){
-        arrivaW=`<div style="background:linear-gradient(135deg,rgba(2,132,199,0.18),rgba(3,105,161,0.18));border:1.5px solid #38bdf8;border-radius:6px;padding:7px 10px;margin:5px 0;font-size:11px;box-shadow:0 0 10px rgba(56,189,248,0.2);display:flex;align-items:center;gap:8px;"><i class="fas fa-satellite-dish" style="color:#38bdf8;font-size:14px;"></i><div><b style="color:#38bdf8;font-size:11px;letter-spacing:0.3px;">Režim polohy: Arriva Live</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.35;display:inline-block;">Poloha vozu je přebírána z mapy Arriva (aktivní globální režim).</span></div></div>`;
+      if(IS_ADMIN){
+        if(bus.is_arriva_fallback){
+          arrivaW=`<div style="background:linear-gradient(135deg,rgba(2,132,199,0.22),rgba(3,105,161,0.22));border:1.5px solid #38bdf8;border-radius:6px;padding:7px 10px;margin:5px 0;font-size:11px;box-shadow:0 0 10px rgba(56,189,248,0.2);display:flex;align-items:center;gap:8px;"><i class="fas fa-satellite-dish" style="color:#38bdf8;font-size:14px;"></i><div><b style="color:#38bdf8;font-size:11px;letter-spacing:0.3px;">🔧 [Admin] Záložní GPS z mapy Arriva</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.35;display:inline-block;">Vůz dočasně chybí na PVVD IDPK – poloha je jištěna ze záložního feedu Arriva.</span></div></div>`;
+        } else if(bus.position_source === 'arriva'){
+          arrivaW=`<div style="background:linear-gradient(135deg,rgba(2,132,199,0.18),rgba(3,105,161,0.18));border:1.5px solid #38bdf8;border-radius:6px;padding:7px 10px;margin:5px 0;font-size:11px;box-shadow:0 0 10px rgba(56,189,248,0.2);display:flex;align-items:center;gap:8px;"><i class="fas fa-satellite-dish" style="color:#38bdf8;font-size:14px;"></i><div><b style="color:#38bdf8;font-size:11px;letter-spacing:0.3px;">🔧 [Admin] Globální režim poloh: Arriva Live</b><br><span style="color:#cbd5e1;font-size:10px;line-height:1.35;display:inline-block;">Poloha vozu je přebírána z mapy Arriva (režim Arriva Live).</span></div></div>`;
+        }
       }
       let bugW='';
       if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#3f0000;border:2px solid #ef4444;border-radius:5px;padding:8px;margin:5px 0;font-size:11px;text-align:center;"><b style="color:#ef4444;font-size:13px;letter-spacing:.5px;">⛔ NENÍ REÁLNÁ POLOHA</b><br><span style="color:#fca5a5;font-weight:bold;">PRAVDĚPODOBNĚ BUG NEBO POSLEDNÍ ZNÁMÁ POZICE</span><br><span style="color:#94a3b8;font-size:10px;">Pravděpodobně SPZ <b style="color:#fbbf24;">${bS}</b> – pozice nemusí odpovídat realitě</span></div>`;}
