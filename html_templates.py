@@ -84,8 +84,9 @@ tr:hover { background-color: #334155; }
     .user-avatar-wrap { padding: 6px 15px 6px 6px !important; margin-left: 0 !important; justify-content: center; width: auto !important; box-sizing: border-box; }
     .user-avatar-wrap span { font-size: 12px !important; max-width: 80px !important; }
     .user-avatar-wrap .fa-user-circle { font-size: 32px !important; }
-    .user-avatar-wrap > div { width: 34px !important; height: 34px !important; }
-    .user-dropdown-menu { right: 0; left: auto; transform: none; width: 250px; max-width: 90vw; }
+    .user-avatar-wrap > .user-avatar-circle,
+    .user-avatar-wrap > div:not(.user-dropdown-menu):not(.user-role-switcher) { width: 34px !important; height: 34px !important; }
+    .user-dropdown-menu { right: 0 !important; left: auto !important; transform: none !important; width: 250px !important; max-width: 90vw !important; height: auto !important; box-sizing: border-box !important; white-space: normal !important; }
     .container { margin: 20px auto; padding: 0 10px; }
     h1 { font-size: 1.8em !important; line-height: 1.3; }
     .screenshot-pair { flex-direction: column !important; }

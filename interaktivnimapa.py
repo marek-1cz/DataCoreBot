@@ -586,6 +586,24 @@ body.nt-add-active #map{cursor:crosshair !important;}
   #spz-search-inp{width:clamp(65px, 20vw, 90px) !important;font-size:10px !important;padding:4px 6px !important; flex: 1 1 auto;}
   #spz-search-wrap{flex: 1 1 auto; display: flex; justify-content: center;}
   #admin-mode-badge{font-size: 9px !important; padding: 2px 4px !important;}
+  .user-avatar-wrap { padding: 4px 10px 4px 4px !important; margin-left: 5px !important; }
+  .user-avatar-wrap span { font-size: 11px !important; max-width: 70px !important; }
+  .user-avatar-wrap .fa-user-circle { font-size: 30px !important; }
+  .user-avatar-wrap > .user-avatar-circle,
+  .user-avatar-wrap > div:not(.user-dropdown-menu) { width: 30px !important; height: 30px !important; }
+  .user-dropdown-menu {
+    width: 230px !important;
+    max-width: 85vw !important;
+    height: auto !important;
+    right: 0 !important;
+    left: auto !important;
+    top: calc(100% + 8px) !important;
+    padding: 14px !important;
+    box-sizing: border-box !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    z-index: 9999 !important;
+  }
   
   body.nav-glass #top-nav { width: 98vw !important; max-width: 98vw !important; border-radius: 14px !important; left: 50% !important; transform: translateX(-50%) !important; top: 10px !important; flex-wrap: wrap !important; height: auto !important; box-sizing: border-box; }
   body.nav-glass-hide #top-nav { top: -160px !important; }
@@ -10076,11 +10094,30 @@ def _full_page(title, body_html, is_map=False):
   65% { stroke-dashoffset: 0; }
   100% { stroke-dashoffset: 0; }
 }
+.user-dropdown-menu {
+    box-sizing: border-box !important;
+    white-space: normal !important;
+    height: auto !important;
+}
 @media (max-width: 768px) {
     .user-avatar-wrap { padding: 4px 10px 4px 4px !important; margin-left: 5px !important; }
     .user-avatar-wrap span { font-size: 11px !important; max-width: 70px !important; }
     .user-avatar-wrap .fa-user-circle { font-size: 30px !important; }
-    .user-avatar-wrap > div { width: 30px !important; height: 30px !important; }
+    .user-avatar-wrap > .user-avatar-circle,
+    .user-avatar-wrap > div:not(.user-dropdown-menu) { width: 30px !important; height: 30px !important; }
+    .user-dropdown-menu {
+        width: 230px !important;
+        max-width: 85vw !important;
+        height: auto !important;
+        right: 0 !important;
+        left: auto !important;
+        top: calc(100% + 8px) !important;
+        padding: 14px !important;
+        box-sizing: border-box !important;
+        white-space: normal !important;
+        word-break: normal !important;
+        z-index: 9999 !important;
+    }
 }
 </style>"""
     resp = Response(
@@ -10118,26 +10155,54 @@ def _get_avatar_html(req):
                 discord_id_text = f"<br>Discord ID: {u.get('discord_id')}" if u.get('discord_id') else ""
                 
                 return f"""
-                <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onclick="let d=this.querySelector('.user-dropdown-menu'); if(d) d.style.display=d.style.display==='none'?'block':'none';" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
-                  <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow: 0 0 10px rgba(56,189,248,0.5);">
+                <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onclick="toggleUserDropdown(this, event);" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
+                  <div class="user-avatar-circle" style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow: 0 0 10px rgba(56,189,248,0.5); flex-shrink:0;">
                     {img_tag}
                   </div>
                   <span style="color:white; font-weight:bold; font-size:14px; max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{display_name}</span>
                   
-                  <div class="user-dropdown-menu" style="display:none; position:absolute; top:calc(100% + 10px); right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left; box-sizing:border-box;">
+                  <div class="user-dropdown-menu" onclick="event.stopPropagation();" style="display:none; position:absolute; top:calc(100% + 10px); right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left; box-sizing:border-box;">
                     <div style="color:white; font-size:14px; font-weight:bold; margin-bottom:5px;">{display_name}</div>
                     <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{u.get('email') or 'Neznámý e-mail'}{discord_id_text}</div>
-                    <a href="/ucet" style="display:block; width:auto; box-sizing:border-box; background:#38bdf8; color:black; text-align:center; padding:8px; border-radius:6px; text-decoration:none; font-weight:bold; margin: 0 0 8px 0;"><i class="fas fa-cog"></i> Můj Účet</a>
-                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="display:block; width:100%; box-sizing:border-box; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold; transition:0.2s; margin:0;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.2)'; this.style.color='#ef4444';"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
+                    <a href="/ucet" style="display:block; width:100%; box-sizing:border-box; background:#38bdf8; color:black; text-align:center; padding:8px; border-radius:6px; text-decoration:none; font-weight:bold; margin: 0 0 8px 0; white-space:nowrap;"><i class="fas fa-cog"></i> Můj Účet</a>
+                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="display:block; width:100%; box-sizing:border-box; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold; transition:0.2s; margin:0; white-space:nowrap;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.2)'; this.style.color='#ef4444';"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
                   </div>
                 </div>
+                <script>
+                window.toggleUserDropdown = function(wrap, e) {{
+                  if (e) e.stopPropagation();
+                  let d = wrap.querySelector('.user-dropdown-menu');
+                  if (!d) return;
+                  let isVis = d.style.display === 'block';
+                  document.querySelectorAll('.user-dropdown-menu').forEach(function(m) {{ m.style.display = 'none'; }});
+                  if (!isVis) {{
+                    d.style.display = 'block';
+                    let rect = d.getBoundingClientRect();
+                    if (rect.left < 8) {{
+                      d.style.left = '0';
+                      d.style.right = 'auto';
+                    }} else if (rect.right > window.innerWidth - 8) {{
+                      d.style.right = '0';
+                      d.style.left = 'auto';
+                    }}
+                  }}
+                }};
+                if (!window._userDropdownInit) {{
+                  window._userDropdownInit = true;
+                  document.addEventListener('click', function(e) {{
+                    if (!e.target.closest('.user-avatar-wrap')) {{
+                      document.querySelectorAll('.user-dropdown-menu').forEach(function(m) {{ m.style.display = 'none'; }});
+                    }}
+                  }});
+                }}
+                </script>
                 """
         except:
             pass
             
     return """
     <a href="/register" class="user-avatar-wrap" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
-      <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:1px solid #94a3b8; display:flex; align-items:center; justify-content:center; overflow:hidden; transition:0.3s;">
+      <div class="user-avatar-circle" style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:1px solid #94a3b8; display:flex; align-items:center; justify-content:center; overflow:hidden; transition:0.3s; flex-shrink:0;">
         <i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>
       </div>
       <span style="color:#94a3b8; font-weight:bold; font-size:14px;">Přihlásit se</span>
