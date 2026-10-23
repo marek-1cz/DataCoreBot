@@ -10210,6 +10210,7 @@ def _get_avatar_html(req):
     """
 
 @mapa_bp.route('/mapa')
+@mapa_bp.route('/old/mapa')
 def stranka_mapa():
     try:
         from main import get_db
@@ -11460,11 +11461,13 @@ def api_admin_spz_meta_save():
 
 
 @mapa_bp.route('/historie')
+@mapa_bp.route('/old/historie')
 def stranka_historie_index():
     return _full_page("Historie", HTML_HISTORIE_INDEX)
 
 
 @mapa_bp.route('/historie/<spz>')
+@mapa_bp.route('/old/historie/<spz>')
 def stranka_historie_detail(spz):
     return _full_page(f"V\u016fz {spz}", HTML_HISTORIE_DETAIL.replace('__SPZ__', spz))
 

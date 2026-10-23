@@ -1725,21 +1725,113 @@ def api_download_launcher(token):
     
     return stream_proxy_file(launcher_url, filename, user[0]['discord_id'], user[0]['nick'])
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# AUTOMATICKÉ PŘESMĚROVÁNÍ NA /old (VŠECHEN VEŘEJNÝ TRAFFIC STARÉHO WEBU)
+# ═══════════════════════════════════════════════════════════════════════════════
+
 @app.route('/')
 def home():
-    return render_public(HTML_HOME)
+    return redirect('/old', code=302)
 
+@app.route('/download')
+def redirect_download():
+    return redirect('/old/download', code=302)
+
+@app.route('/team')
+def redirect_team():
+    return redirect('/old/team', code=302)
+
+@app.route('/supporters')
+def redirect_supporters():
+    return redirect('/old/supporters', code=302)
+
+@app.route('/stats', methods=['GET'])
+def redirect_stats():
+    qs = request.query_string.decode('utf-8') if request.query_string else ''
+    dest = '/old/stats' + (f'?{qs}' if qs else '')
+    return redirect(dest, code=302)
 
 @app.route('/provoz-idpk')
-def provoz_idpk():
+def redirect_provoz_idpk():
+    return redirect('/old/provoz-idpk', code=302)
+
+@app.route('/jizdni-rad')
+def redirect_jizdni_rad():
+    return redirect('/old/jizdni-rad', code=302)
+
+@app.route('/led-panel')
+def redirect_led_panel():
+    return redirect('/old/led-panel', code=302)
+
+@app.route('/led-panel/app')
+def redirect_led_panel_app():
+    return redirect('/old/led-panel/app', code=302)
+
+@app.route('/led-panel/view')
+def redirect_led_panel_view():
+    return redirect('/old/led-panel/view', code=302)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STARÝ WEB (URL: https://datacorebot.koyeb.app/old/"názvy slidů")
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/old')
+@app.route('/old/')
+def old_home():
+    return render_public(HTML_HOME)
+
+@app.route('/old/download')
+def old_download_home():
+    return render_public(HTML_DOWNLOADS_MAIN)
+
+@app.route('/old/team')
+def old_team():
+    try: team_members = get_db().table("team").select("*").execute().data or [] if get_db() else []
+    except: team_members = []
+    return render_public(HTML_TEAM, team=team_members)
+
+@app.route('/old/supporters')
+def old_supporters():
+    support_data = []
+    try:
+        db = get_db()
+        if db:
+            data = db.table("supporters").select("*").eq("status", "completed").execute().data or []
+            support_data = process_supporters(data)
+    except: pass
+    return render_public(HTML_SUPPORTERS, supporters=support_data)
+
+@app.route('/old/provoz-idpk')
+def old_provoz_idpk():
     """Rozcestník Provoz IDPK — Interaktivní mapa & Databáze autobusů"""
     return render_public(HTML_PROVOZ_IDPK)
 
-@app.route('/jizdni-rad')
-def jizdni_rad():
+@app.route('/old/jizdni-rad')
+def old_jizdni_rad():
     """Veřejný jízdní řád IDPK z GTFS dat"""
     from jizdni_rad import HTML_JIZDNI_RAD
     return HTML_JIZDNI_RAD
+
+@app.route('/old/led-panel')
+def old_led_panel_landing():
+    from led_panel_html import HTML_LED_PANEL
+    return HTML_LED_PANEL
+
+@app.route('/old/led-panel/app')
+def old_led_panel_app():
+    from led_panel_html import HTML_LED_PANEL
+    return HTML_LED_PANEL
+
+@app.route('/old/led-panel/view')
+def old_led_panel_view():
+    from led_panel_view import HTML_LED_PANEL_VIEW
+    return HTML_LED_PANEL_VIEW
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GTFS API
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @app.route('/api/gtfs-info')
 def api_gtfs_info():
@@ -1788,50 +1880,15 @@ def api_gtfs_line_updates():
     except Exception as e:
         return jsonify([]), 500
 
-@app.route('/led-panel')
-def led_panel_landing():
-    from led_panel_html import HTML_LED_PANEL
-    return HTML_LED_PANEL
-
-@app.route('/led-panel/app')
-def led_panel_app():
-    from led_panel_html import HTML_LED_PANEL
-    return HTML_LED_PANEL
-
-@app.route('/led-panel/view')
-def led_panel_view():
-    from led_panel_view import HTML_LED_PANEL_VIEW
-    return HTML_LED_PANEL_VIEW
-
 
 # /mapa je zpracovávána blueprintem z interaktivnimapa.py (mapa_bp)
 
-@app.route('/download')
-def download_home(): return render_public(HTML_DOWNLOADS_MAIN)
-
-@app.route('/team')
-def team():
-    try: team_members = get_db().table("team").select("*").execute().data or [] if get_db() else []
-    except: team_members = []
-    return render_public(HTML_TEAM, team=team_members)
-
-@app.route('/supporters')
-def supporters():
-    support_data = []
-    try:
-        db = get_db()
-        if db:
-            data = db.table("supporters").select("*").eq("status", "completed").execute().data or []
-            support_data = process_supporters(data)
-    except: pass
-    return render_public(HTML_SUPPORTERS, supporters=support_data)
-
-@app.route('/stats', methods=['GET'])
+@app.route('/old/stats', methods=['GET'])
 def public_stats():
     db = get_db()
     if not db:
         flash("Databáze není dostupná.", "error")
-        return redirect(url_for('home'))
+        return redirect('/old')
     search_query = request.args.get('q', '').strip()
     searched_user = None
     all_users = db.table("users").select("*").execute().data or []
@@ -1967,6 +2024,10 @@ def public_stats():
             searched_user_lines = all_searched_user_lines[:5]; searched_user_stops = all_searched_user_stops[:5]
         except: pass
     return render_public(HTML_PUBLIC_STATS, user_ver=user_ver, bt_ver=bt_ver, activated_users=activated_users, total_supporters=total_supporters, today_time_str=today_time_str, total_hours=total_hours, total_launches=total_launches, top_time=top_time_users, top_launches=top_launches, top_lines=top_lines, top_stops=top_stops, all_lines=all_lines, all_stops=all_stops, searched_user=searched_user, searched_user_lines=searched_user_lines, searched_user_stops=searched_user_stops, all_searched_user_lines=all_searched_user_lines, all_searched_user_stops=all_searched_user_stops, month_time_str=month_time_str, total_lines_driven=total_lines_driven, total_stops_announced=total_stops_announced, top_player_nick=top_player_nick, top_player_lines=top_player_lines, top_5_lines_users=top_5_lines_users, top_5_stops_users=top_5_stops_users, top_today_time_nick=top_today_time_nick, top_today_time_val=top_today_time_val, top_today_launch_nick=top_today_launch_nick, top_today_launch_val=top_today_launch_val)
+
+@app.route('/old/<path:subpath>')
+def old_catchall(subpath):
+    return redirect('/old', code=302)
 
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'])
 def api_supporters():

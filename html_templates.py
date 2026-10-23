@@ -209,15 +209,15 @@ document.addEventListener("DOMContentLoaded", function() {
 PUBLIC_LAYOUT = """
 <nav class="top-nav">
 <div class="nav-brand-mobile" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-<a href="/" class="logo"><img src="/static/img/datacorebot_pf-lepsi.png" alt="Logo" style="height: 30px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 8px rgba(56, 189, 248, 0.6));">OIS IDPK</a>
+<a href="/old" class="logo"><img src="/static/img/datacorebot_pf-lepsi.png" alt="Logo" style="height: 30px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 8px rgba(56, 189, 248, 0.6));">OIS IDPK</a>
 <div class="mobile-avatar-slot" style="display:none;">__AVATAR__</div>
 </div>
 <div class="nav-links" style="display:flex; align-items:center;">
 <a href="/dashboard" class="admin-link">Dashboard 🔒</a>
-<a href="/">Domů</a><a href="/download">Download</a><a href="/team">Náš Tým</a><a href="/stats">Statistiky</a>
-<a href="/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-heart"></i> Podporovatelé</a>
-<a href="/provoz-idpk" style="color: #10b981; font-weight: bold;"><i class="fas fa-bus"></i> Provoz IDPK</a>
-<a href="/led-panel" style="color: #f59e0b; font-weight: bold;"><i class="fas fa-tv"></i> LED Panel Simulátor</a>
+<a href="/old">Domů</a><a href="/old/download">Download</a><a href="/old/team">Náš Tým</a><a href="/old/stats">Statistiky</a>
+<a href="/old/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-heart"></i> Podporovatelé</a>
+<a href="/old/provoz-idpk" style="color: #10b981; font-weight: bold;"><i class="fas fa-bus"></i> Provoz IDPK</a>
+<a href="/old/led-panel" style="color: #f59e0b; font-weight: bold;"><i class="fas fa-tv"></i> LED Panel Simulátor</a>
 <div class="desktop-avatar-slot">__AVATAR__</div>
 </div>
 </nav>
@@ -357,7 +357,7 @@ HTML_HOME = """
         <p>Software simuluje zobrazování zastávek, průběh celé linky i další informace, které běžně vidí cestující během jízdy. Díky tomu si můžeš jednoduše vyzkoušet, jak se panel chová při jízdě po trase, jak se postupně mění zastávky nebo jak vypadají informace o aktuální části linky.</p>
         <p style="margin-bottom:0;">Celý projekt vznikl z nadšení pro dopravu, technologie a informační systems ve veřejné dopravě. Projekt není oficiálním produktem ani službou dopravců nebo organizací veřejné dopravy a nijak s nimi nespolupracuje. Jedná se čistě o fanouškovský projekt vytvořený pro zábavu, experimentování a zájem o dopravní technologie.</p>
     </div>
-    <a href="/download" class="btn" style="font-size: 18px; padding: 15px 40px; border-radius: 30px; box-shadow: 0 5px 15px rgba(56, 189, 248, 0.4);"><i class="fas fa-download"></i> Získat Software</a>
+    <a href="/old/download" class="btn" style="font-size: 18px; padding: 15px 40px; border-radius: 30px; box-shadow: 0 5px 15px rgba(56, 189, 248, 0.4);"><i class="fas fa-download"></i> Získat Software</a>
     <div style="margin-top: 50px;">
         <h2 style="color: var(--blue-main); margin-bottom: 20px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.4);">Ukázky z aplikace</h2>
         <div style="display: flex; flex-direction: column; gap: 25px; align-items: center;">
@@ -438,7 +438,7 @@ HTML_TEAM = """
 HTML_PUBLIC_STATS = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 20px;">
     <h1 style="color: var(--blue-main); font-size: 36px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4); margin: 0;"><i class="fas fa-chart-line"></i> Globální Statistiky</h1>
-    <form action="/stats" method="GET" style="display: flex; gap: 10px; align-items: center; background: var(--bg-panel); padding: 10px 15px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
+    <form action="/old/stats" method="GET" style="display: flex; gap: 10px; align-items: center; background: var(--bg-panel); padding: 10px 15px; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
         <i class="fas fa-search" style="color: var(--text-muted);"></i>
         <input type="text" name="q" placeholder="Hledat hráče (Nick nebo ID)..." style="margin: 0; padding: 8px; width: 250px; border: none; background: #0f172a; color: white; border-radius: 5px; font-size: 14px;" required>
         <button type="submit" class="btn" style="padding: 8px 15px; margin: 0;">Hledat</button>
@@ -486,7 +486,7 @@ HTML_PUBLIC_STATS = """
             </div>
         </div>
     </div>
-    <a href="/stats" class="btn btn-dark" style="margin-top: 20px; font-size: 12px;"><i class="fas fa-times"></i> Zavřít profil</a>
+    <a href="/old/stats" class="btn btn-dark" style="margin-top: 20px; font-size: 12px;"><i class="fas fa-times"></i> Zavřít profil</a>
 </div>
 {% endif %}
 <style>
@@ -2885,22 +2885,22 @@ HTML_PROVOZ_IDPK = """
   </div>
   <h1 style="color:#38bdf8; font-size:32px; margin-bottom:8px; text-shadow:0 0 15px rgba(56,189,248,.35);"><i class="fas fa-bus"></i> Provoz IDPK</h1>
   <p style="color:#94a3b8; margin-bottom:36px; font-size:15px;">Vyberte sekci:</p>
-  <a href="/mapa" class="prov-card" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6); box-shadow:0 5px 20px rgba(59,130,246,.35);">
+  <a href="/old/mapa" class="prov-card" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6); box-shadow:0 5px 20px rgba(59,130,246,.35);">
     <span class="ci"><i class="fas fa-map-marked-alt"></i></span>
     Interaktivní mapa
     <span class="cs">Live polohy autobusů IDPK s jízdními řády z Inflow</span>
   </a>
-  <a href="/historie" class="prov-card" style="background:linear-gradient(135deg,#064e3b,#10b981); box-shadow:0 5px 20px rgba(16,185,129,.35);">
+  <a href="/old/historie" class="prov-card" style="background:linear-gradient(135deg,#064e3b,#10b981); box-shadow:0 5px 20px rgba(16,185,129,.35);">
     <span class="ci"><i class="fas fa-database"></i></span>
     Databáze autobusů
     <span class="cs">SPZ záznamy a historie odjetých spojů linek 490 / 496</span>
   </a>
-  <a href="/jizdni-rad" class="prov-card" style="background:linear-gradient(135deg,#f59e0b,#d97706); box-shadow:0 5px 20px rgba(245,158,11,.35);">
+  <a href="/old/jizdni-rad" class="prov-card" style="background:linear-gradient(135deg,#f59e0b,#d97706); box-shadow:0 5px 20px rgba(245,158,11,.35);">
     <span class="ci"><i class="fas fa-table"></i></span>
     Jízdní Řády IDPK
     <span class="cs">Vyhledávač a prohlížeč GTFS dat pro všechny linky</span>
   </a>
-  <a href="/" class="prov-back"><i class="fas fa-arrow-left"></i> Zpět na hlavní stránku</a>
+  <a href="/old" class="prov-back"><i class="fas fa-arrow-left"></i> Zpět na hlavní stránku</a>
 </div>
 """
 
