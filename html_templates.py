@@ -234,7 +234,8 @@ DASHBOARD_LAYOUT = """
 <div class="sidebar">
 <div class="sidebar-header"><a href="/" class="logo" style="font-size: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;"><img src="/static/img/datacorebot_pf-lepsi.png" alt="Logo" style="height: 24px; width: auto; border-radius: 4px; filter: drop-shadow(0px 0px 6px rgba(56, 189, 248, 0.6));">OIS IDPK</a><div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Dashboard</div></div>
 <div class="sidebar-menu">
-<a href="/" class="sidebar-link" style="color: #10b981; border-bottom: 1px solid #334155; margin-bottom: 5px;"><i class="fas fa-globe"></i> Veřejný Web (Bypass)</a>
+<a href="/dashboard/view_new_web" class="sidebar-link" style="color: #38d6ff; font-weight: bold; border-bottom: 1px solid #334155; margin-bottom: 5px; background: rgba(56, 189, 248, 0.1);"><i class="fas fa-rocket"></i> Nový Web (Admin Bypass) 🚀</a>
+<a href="/old" target="_blank" class="sidebar-link" style="color: #94a3b8; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-globe"></i> Veřejný Starý Web (/old)</a>
 <a href="/dashboard" class="sidebar-link"><i class="fas fa-home"></i> Přehled</a>
 <a href="/dashboard/interaktivni-mapa" class="sidebar-link" style="color: #38bdf8; font-weight: 600;"><i class="fas fa-map-marked-alt"></i> Interaktivní mapa</a>
 <a href="/dashboard/stats" class="sidebar-link"><i class="fas fa-chart-line"></i> Statistiky Webu & Aplikace</a>

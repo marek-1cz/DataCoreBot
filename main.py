@@ -1726,12 +1726,89 @@ def api_download_launcher(token):
     return stream_proxy_file(launcher_url, filename, user[0]['discord_id'], user[0]['nick'])
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# AUTOMATICKÉ PŘESMĚROVÁNÍ NA /old (VŠECHEN VEŘEJNÝ TRAFFIC STARÉHO WEBU)
+# HLAVNÍ WEB (NOVÝ WEB NA / PRO ADMIN BYPASS, JINAK PŘESMĚROVÁNÍ NA /old)
 # ═══════════════════════════════════════════════════════════════════════════════
+
+ADMIN_BYPASS_BAR = """
+<!-- Admin Web Bypass Toolbar -->
+<div id="admin-bypass-bar" style="position:fixed; bottom:20px; right:20px; z-index:9999999; background:rgba(15,23,42,0.95); backdrop-filter:blur(12px); border:1.5px solid #38bdf8; box-shadow:0 10px 35px rgba(0,0,0,0.8), 0 0 20px rgba(56,189,248,0.4); border-radius:50px; padding:10px 20px; display:flex; align-items:center; gap:14px; font-family:system-ui,-apple-system,sans-serif; font-size:13px; color:#fff;">
+  <span style="display:inline-flex; align-items:center; gap:8px; color:#38d6ff; font-weight:700;">
+    <span style="width:10px; height:10px; border-radius:50%; background:#10b981; box-shadow:0 0 10px #10b981; display:inline-block;"></span> Nový Web (Admin Bypass)
+  </span>
+  <span style="color:#475569;">|</span>
+  <a href="/dashboard" style="color:#e2e8f0; text-decoration:none; display:inline-flex; align-items:center; gap:5px; font-weight:600;" onmouseover="this.style.color='#38bdf8'" onmouseout="this.style.color='#e2e8f0'">
+    🔒 Dashboard
+  </a>
+  <span style="color:#475569;">|</span>
+  <a href="/dashboard/exit_new_web" style="color:#f59e0b; text-decoration:none; display:inline-flex; align-items:center; gap:5px; font-weight:600;" onmouseover="this.style.color='#fcd34d'" onmouseout="this.style.color='#f59e0b'">
+    🔄 Přepnout na /old
+  </a>
+</div>
+"""
+
+def is_admin_bypass_active():
+    """Vrátí True pouze pokud má přihlášený administrátor aktivní Admin Web Bypass."""
+    # 1. URL parametr ?admin_bypass=1 nebo ?bypass=1
+    bypass_arg = request.args.get('admin_bypass') == '1' or request.args.get('bypass') == '1'
+    if bypass_arg:
+        if session.get('logged_in') or session.get('offline_mode'):
+            session['admin_web_bypass'] = True
+            return True
+        cookie_token = request.cookies.get('web_session_token')
+        if cookie_token:
+            u = get_cached_session_user(cookie_token)
+            if u and (any(r in (u.get('role') or '') for r in ['SA', 'DEV', 'SM']) or u.get('dashboard_access')):
+                session['admin_web_bypass'] = True
+                return True
+
+    # 2. Stav v session (pouze pokud je uživatel admin)
+    if session.get('admin_web_bypass'):
+        if session.get('logged_in') or session.get('offline_mode'):
+            return True
+        cookie_token = request.cookies.get('web_session_token')
+        if cookie_token:
+            u = get_cached_session_user(cookie_token)
+            if u and (any(r in (u.get('role') or '') for r in ['SA', 'DEV', 'SM']) or u.get('dashboard_access')):
+                return True
+
+    return False
 
 @app.route('/')
 def home():
+    if is_admin_bypass_active():
+        try:
+            with open("new_web.html", "r", encoding="utf-8") as f:
+                content = f.read()
+            content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+            return Response(content, mimetype="text/html; charset=utf-8")
+        except Exception as e:
+            flash(f"Chyba při načítání nového webu: {e}", "error")
+            return redirect('/old', code=302)
     return redirect('/old', code=302)
+
+@app.route('/dashboard/view_new_web')
+def dashboard_view_new_web():
+    if not session.get('logged_in') and not session.get('offline_mode'):
+        cookie_token = request.cookies.get('web_session_token')
+        u = get_cached_session_user(cookie_token) if cookie_token else None
+        if not u or not (any(r in (u.get('role') or '') for r in ['SA', 'DEV', 'SM']) or u.get('dashboard_access')):
+            flash("Přístup povolen pouze pro přihlášené administrátory.", "warning")
+            return redirect('/dashboard')
+    session['admin_web_bypass'] = True
+    return redirect('/?admin_bypass=1')
+
+@app.route('/dashboard/exit_new_web')
+def dashboard_exit_new_web():
+    session['admin_web_bypass'] = False
+    return redirect('/old')
+
+@app.route('/dashboard/toggle_web_bypass')
+def dashboard_toggle_web_bypass():
+    cur = session.get('admin_web_bypass', False)
+    session['admin_web_bypass'] = not cur
+    if session['admin_web_bypass']:
+        return redirect('/?admin_bypass=1')
+    return redirect('/old')
 
 @app.route('/download')
 def redirect_download():
@@ -2986,8 +3063,157 @@ def web_auth_me():
     if cookie_token:
         user = get_cached_session_user(cookie_token)
         if user:
-            return jsonify({"status": "success", "user": {"discord_id": user.get("discord_id"), "email": user.get("email"), "nick": user.get("nick")}})
+            return jsonify({
+                "status": "success",
+                "user": {
+                    "discord_id": user.get("discord_id"),
+                    "email": user.get("email"),
+                    "nick": user.get("nick"),
+                    "avatar_url": user.get("avatar_url") or ""
+                }
+            })
     return jsonify({"status": "unauthorized"}), 401
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NOVÝ WEB: AUTH & STATS COMPATIBILITY ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/auth/discord/start', methods=['POST'])
+def api_auth_discord_start():
+    data = request.get_json(silent=True) or {}
+    discord_id = str(data.get('discordId') or data.get('discord_id') or '').strip()
+    if not discord_id:
+        return jsonify({"ok": False, "error": "Chybí Discord ID."}), 400
+    with app.test_request_context(json={"discord_id": discord_id}, headers=request.headers):
+        res = web_auth_discord_request()
+        if hasattr(res, 'get_json'):
+            d = res.get_json()
+            if d.get('status') == 'success':
+                return jsonify({"ok": True, "discordId": discord_id})
+            return jsonify({"ok": False, "error": d.get('message', 'Chyba')}), 400
+    return jsonify({"ok": True})
+
+@app.route('/api/auth/discord/status', methods=['POST', 'GET'])
+def api_auth_discord_status():
+    data = request.get_json(silent=True) or {}
+    discord_id = str(data.get('discordId') or data.get('discord_id') or request.args.get('discord_id') or '').strip()
+    db = get_db()
+    if not db or not discord_id:
+        return jsonify({"confirmed": False})
+    user = db.table("users").select("nick, avatar_url, login_token, discord_id").eq("discord_id", discord_id).execute().data
+    if user and user[0].get('login_token') == 'approved':
+        new_token = str(uuid.uuid4())
+        db.table("users").update({"login_token": "", "web_session_token": new_token}).eq("discord_id", discord_id).execute()
+        resp = jsonify({
+            "confirmed": True,
+            "name": user[0].get('nick') or f"Discord {discord_id}",
+            "avatar": user[0].get('avatar_url')
+        })
+        resp.set_cookie('web_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
+        return resp
+    return jsonify({"confirmed": False})
+
+@app.route('/api/auth/email/start', methods=['POST'])
+def api_auth_email_start():
+    data = request.get_json(silent=True) or {}
+    email = str(data.get('email') or '').strip()
+    if not email:
+        return jsonify({"ok": False, "error": "Chybí e-mail."}), 400
+    with app.test_request_context(json={"email": email, "intent": "login"}, headers=request.headers):
+        res = web_auth_email_request()
+        if hasattr(res, 'get_json'):
+            d = res.get_json()
+            if d.get('status') == 'success':
+                return jsonify({"ok": True})
+            return jsonify({"ok": False, "error": d.get('message', 'Chyba')}), 400
+    return jsonify({"ok": True})
+
+@app.route('/api/auth/email/verify', methods=['POST'])
+def api_auth_email_verify():
+    data = request.get_json(silent=True) or {}
+    email = str(data.get('email') or '').strip()
+    code = str(data.get('code') or '').strip().upper()
+    db = get_db()
+    if not db or not email or not code:
+        return jsonify({"ok": False, "error": "Neplatný kód nebo e-mail."})
+    user = db.table("users").select("*").eq("email", email).execute().data
+    if not user:
+        return jsonify({"ok": False, "error": "Účet nenalezen."})
+    u = user[0]
+    expected_token = str(u.get("login_token") or "").strip().upper()
+    import time as _t
+    exp = u.get("login_token_expires_at") or 0
+    if exp and _t.time() > exp:
+        return jsonify({"ok": False, "error": "Platnost kódu vypršela. Nechte si poslat nový."})
+    if code != expected_token:
+        return jsonify({"ok": False, "error": "Zadaný kód nesouhlasí."})
+    new_token = str(uuid.uuid4())
+    db.table("users").update({"login_token": "", "web_session_token": new_token}).eq("email", email).execute()
+    resp = jsonify({
+        "ok": True,
+        "name": u.get("nick") or email,
+        "avatar": u.get("avatar_url")
+    })
+    resp.set_cookie('web_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
+    return resp
+
+@app.route('/api/auth/email/status', methods=['POST', 'GET'])
+def api_auth_email_status():
+    data = request.get_json(silent=True) or {}
+    email = str(data.get('email') or request.args.get('email') or '').strip()
+    db = get_db()
+    if not db or not email:
+        return jsonify({"confirmed": False})
+    user = db.table("users").select("nick, avatar_url, login_token, web_session_token").eq("email", email).execute().data
+    if user:
+        u = user[0]
+        if u.get('login_token') == 'approved':
+            new_token = str(uuid.uuid4())
+            db.table("users").update({"login_token": "", "web_session_token": new_token}).eq("email", email).execute()
+            resp = jsonify({
+                "confirmed": True,
+                "name": u.get("nick") or email,
+                "avatar": u.get("avatar_url")
+            })
+            resp.set_cookie('web_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
+            return resp
+    return jsonify({"confirmed": False})
+
+@app.route('/api/stats/user', methods=['POST'])
+def api_stats_user():
+    data = request.get_json(silent=True) or {}
+    name = str(data.get('name') or '').strip()
+    if not name:
+        return jsonify({"found": False})
+    db = get_db()
+    if not db:
+        return jsonify({"found": False})
+    u_res = db.table("users").select("discord_id, nick, avatar_url, total_time, launch_count").ilike("nick", f"%{name}%").limit(1).execute().data
+    if not u_res and name.isdigit():
+        u_res = db.table("users").select("discord_id, nick, avatar_url, total_time, launch_count").eq("discord_id", name).limit(1).execute().data
+    if not u_res:
+        return jsonify({"found": False})
+    u = u_res[0]
+    d_id = str(u.get('discord_id'))
+    hours = (int(u.get('total_time') or 0)) // 60
+    lines_count = 0
+    stops_count = 0
+    try:
+        l_res = db.table("user_stats_lines").select("play_count").eq("discord_id", d_id).execute().data or []
+        lines_count = sum(int(x.get('play_count', 0)) for x in l_res)
+    except: pass
+    try:
+        s_res = db.table("user_stats_stops").select("announce_count").eq("discord_id", d_id).execute().data or []
+        stops_count = sum(int(x.get('announce_count', 0)) for x in s_res)
+    except: pass
+    return jsonify({
+        "found": True,
+        "name": u.get('nick') or name,
+        "avatar": u.get('avatar_url') or None,
+        "lines": lines_count,
+        "stops": stops_count,
+        "hours": hours
+    })
 
 @app.route('/logout')
 def logout():
