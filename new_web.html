@@ -1646,12 +1646,12 @@ body.night .aurora{opacity:.4}
     <div id="statGlobal">
 
     <div class="statgrid">
-      <div class="card stat reveal"><div class="num count" data-to="21">0</div><div class="lbl">Aktivních uživatelů</div></div>
+      <div class="card stat reveal"><div class="num count" id="statActiveUsers" data-to="0">0</div><div class="lbl">Aktivních uživatelů</div></div>
       <div class="card stat reveal d1"><div class="num count" id="supportersCountStat" data-to="0">0</div><div class="lbl">Podporovatelů</div></div>
-      <div class="card stat reveal d2"><div class="num count" data-to="66" data-suffix=" h">0</div><div class="lbl">Celkově nahráno</div><div class="sub">Dnes: 0m · Měsíc: 2h 1m</div></div>
-      <div class="card stat reveal"><div class="num count" data-to="1148" data-suffix="×">0</div><div class="lbl">Celkově spuštěno</div></div>
-      <div class="card stat reveal d1"><div class="num count" data-to="399" data-suffix="×">0</div><div class="lbl">Odjetých linek</div></div>
-      <div class="card stat reveal d2"><div class="num count" data-to="2881" data-suffix="×">0</div><div class="lbl">Vyhlášených zastávek</div></div>
+      <div class="card stat reveal d2"><div class="num count" id="statTotalTime" data-to="0" data-suffix=" h">0</div><div class="lbl">Celkově nahráno</div></div>
+      <div class="card stat reveal"><div class="num count" id="statTotalLaunches" data-to="0" data-suffix="×">0</div><div class="lbl">Celkově spuštěno</div></div>
+      <div class="card stat reveal d1"><div class="num count" id="statTotalLines" data-to="0" data-suffix="×">0</div><div class="lbl">Odjetých linek</div></div>
+      <div class="card stat reveal d2"><div class="num count" id="statTotalStops" data-to="0" data-suffix="×">0</div><div class="lbl">Vyhlášených zastávek</div></div>
     </div>
 
     <div class="cols">
@@ -2170,22 +2170,42 @@ async function loadSupporters(){
   } catch(_) {}
 }
 loadSupporters();
-addEventListener('DOMContentLoaded',()=>{
-  try{
+window.loadGlobalStats = function() {
+  try {
     const statsUrl = (typeof CONFIG!=='undefined'&&CONFIG.stats) ? CONFIG.stats : '/api/stats/summary';
     fetch(statsUrl).then(r=>r.json()).then(d=>{
       if(!d) return;
       ['toplines','topstops','users','lines','stops','time'].forEach(k=>{
         if(d[k]) STATS[k]=d[k];
       });
+      const setNum = (id, val, suf='') => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.dataset.to = val;
+          el.textContent = val + suf;
+        }
+      };
+      if (d.total_users !== undefined) setNum('statActiveUsers', d.total_users);
+      if (d.total_hours !== undefined) setNum('statTotalTime', d.total_hours, ' h');
+      if (d.total_launches !== undefined) setNum('statTotalLaunches', d.total_launches, '×');
+      if (d.total_lines !== undefined) setNum('statTotalLines', d.total_lines, '×');
+      if (d.total_stops !== undefined) setNum('statTotalStops', d.total_stops, '×');
+
       drawGlobalLists();
-      if(Array.isArray(STATS.lines)&&STATS.lines.length) bars('s-lines',STATS.lines,'×');
-      if(Array.isArray(STATS.stops)&&STATS.stops.length) bars('s-stops',STATS.stops,'×');
-      if(Array.isArray(STATS.time)&&STATS.time.length) bars('s-time',STATS.time,' h');
+      bars('s-lines', STATS.lines, '×');
+      bars('s-stops', STATS.stops, '×');
+      bars('s-time', STATS.time, ' h');
       if(typeof window.refreshStatUsers === 'function') window.refreshStatUsers();
     }).catch(()=>{});
-  }catch(_){}
+  } catch(_) {}
+};
+window.loadGlobalStats();
+document.addEventListener('ois:page', e => {
+  if (e.detail === 'stats') window.loadGlobalStats();
 });
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', window.loadGlobalStats);
+}
 
 /* ===== v23: vyhledání uživatele ve statistikách ===== */
 (function(){
@@ -2236,7 +2256,7 @@ addEventListener('DOMContentLoaded',()=>{
     glob.hidden=true;box.hidden=false;
     box.scrollIntoView({behavior:'smooth',block:'start'});
   }
-  function back(){box.hidden=true;glob.hidden=false;inp.value='';sug.hidden=true;err.hidden=true}
+  function back(){box.hidden=true;glob.hidden=false;inp.value='';sug.hidden=true;err.hidden=true;if(typeof window.loadGlobalStats==='function')window.loadGlobalStats();}
   $('uBack').addEventListener('click',back);
   function suggest(){
     const q=norm(inp.value);err.hidden=true;

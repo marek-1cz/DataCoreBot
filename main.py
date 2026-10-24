@@ -354,8 +354,13 @@ def normalize_line_number(raw_line: str) -> str:
     raw = str(raw_line or "").strip()
     if not raw:
         return ""
-    if len(raw) >= 6 and raw.isdigit():
+    if len(raw) == 6 and raw.isdigit():
         return raw
+    # Ošetření interních GTFS route ID z linky 735 / Stříbro
+    if raw in ('R6120', 'R5080', 'R5082'):
+        return '490735'
+    if raw in ('R5079', 'R5081'):
+        return '490734'
     if raw in _LINE_MAPPING:
         return _LINE_MAPPING[raw]
     clean_num = raw.lstrip('0')
@@ -365,9 +370,9 @@ def normalize_line_number(raw_line: str) -> str:
 
 # Jednorázové kompletní promazání starých statistik linek a zastávek (čistý start podle požadavku)
 try:
-    _clean_stats_flag = os.path.join(os.path.dirname(__file__), ".clean_stats_reset_2026_v1")
+    _clean_stats_flag = os.path.join(os.path.dirname(__file__), ".clean_stats_reset_2026_v2")
     if not os.path.exists(_clean_stats_flag):
-        print("[STATS] Jednorázové promazávání starých tabulek linek a zastávek...", flush=True)
+        print("[STATS] Jednorázové promazávání starých tabulek linek a zastávek (v2)...", flush=True)
         try:
             from local_db import local_clear_all_stats
             local_clear_all_stats()
@@ -3306,18 +3311,18 @@ def api_stats_summary():
         merged_lines = {}
         for l in top_lines:
             ln = l.get('line_name')
-            if ln: merged_lines[ln] = merged_lines.get(ln, 0) + int(l.get('play_count') or 0)
+            if ln: merged_lines[ln] = max(merged_lines.get(ln, 0), int(l.get('play_count') or 0))
         for ln, cnt in local_s.get('lines', {}).items():
-            merged_lines[ln] = merged_lines.get(ln, 0) + int(cnt or 0)
+            merged_lines[ln] = max(merged_lines.get(ln, 0), int(cnt or 0))
             
         toplines_list = [[ln, cnt] for ln, cnt in sorted(merged_lines.items(), key=lambda x: x[1], reverse=True)[:20]]
         
         merged_stops = {}
         for s in top_stops:
             sn = s.get('stop_name')
-            if sn: merged_stops[sn] = merged_stops.get(sn, 0) + int(s.get('announce_count') or 0)
+            if sn: merged_stops[sn] = max(merged_stops.get(sn, 0), int(s.get('announce_count') or 0))
         for sn, cnt in local_s.get('stops', {}).items():
-            merged_stops[sn] = merged_stops.get(sn, 0) + int(cnt or 0)
+            merged_stops[sn] = max(merged_stops.get(sn, 0), int(cnt or 0))
             
         topstops_list = [[sn, cnt] for sn, cnt in sorted(merged_stops.items(), key=lambda x: x[1], reverse=True)[:20]]
         
@@ -3326,10 +3331,11 @@ def api_stats_summary():
         for ul in user_lines_data:
             did = str(ul.get('discord_id'))
             if did and did != 'None':
-                player_line_counts[did] = player_line_counts.get(did, 0) + int(ul.get('play_count') or 0)
+                player_line_counts[did] = max(player_line_counts.get(did, 0), int(ul.get('play_count') or 0))
         for did, lines_dict in local_s.get('user_lines', {}).items():
             if did and did != 'None':
-                player_line_counts[did] = player_line_counts.get(did, 0) + sum(int(c or 0) for c in lines_dict.values())
+                local_u_sum = sum(int(c or 0) for c in lines_dict.values())
+                player_line_counts[did] = max(player_line_counts.get(did, 0), local_u_sum)
 
         lines_list = [[nick_map.get(did, 'Neznámý'), count] for did, count in sorted(player_line_counts.items(), key=lambda x: x[1], reverse=True)[:5]]
         
@@ -3338,19 +3344,31 @@ def api_stats_summary():
         for us in user_stops_data:
             did = str(us.get('discord_id'))
             if did and did != 'None':
-                player_stop_counts[did] = player_stop_counts.get(did, 0) + int(us.get('announce_count') or 0)
+                player_stop_counts[did] = max(player_stop_counts.get(did, 0), int(us.get('announce_count') or 0))
         for did, stops_dict in local_s.get('user_stops', {}).items():
             if did and did != 'None':
-                player_stop_counts[did] = player_stop_counts.get(did, 0) + sum(int(c or 0) for c in stops_dict.values())
+                local_s_sum = sum(int(c or 0) for c in stops_dict.values())
+                player_stop_counts[did] = max(player_stop_counts.get(did, 0), local_s_sum)
 
         stops_list = [[nick_map.get(did, 'Neznámý'), count] for did, count in sorted(player_stop_counts.items(), key=lambda x: x[1], reverse=True)[:5]]
+        
+        total_lines_sum = sum(merged_lines.values())
+        total_stops_sum = sum(merged_stops.values())
+        total_hours = round(sum(int(u.get('total_time') or 0) for u in all_users) / 60)
+        total_launches = sum(int(u.get('launch_count') or 0) for u in all_users)
+        active_users_count = len(all_users)
         
         return jsonify({
             "toplines": toplines_list,
             "topstops": topstops_list,
             "lines": lines_list,
             "stops": stops_list,
-            "time": time_list
+            "time": time_list,
+            "total_lines": total_lines_sum,
+            "total_stops": total_stops_sum,
+            "total_users": active_users_count,
+            "total_hours": total_hours,
+            "total_launches": total_launches
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -3519,20 +3537,20 @@ def api_stats_user():
             l_res = db.table("user_stats_lines").select("line_name, play_count").eq("discord_id", d_id).order("play_count", desc=True).execute().data or []
             for x in l_res:
                 ln = x.get('line_name')
-                if ln: merged_u_lines[ln] = merged_u_lines.get(ln, 0) + int(x.get('play_count', 0))
+                if ln: merged_u_lines[ln] = max(merged_u_lines.get(ln, 0), int(x.get('play_count', 0)))
         except Exception: pass
         try:
             s_res = db.table("user_stats_stops").select("stop_name, announce_count").eq("discord_id", d_id).order("announce_count", desc=True).execute().data or []
             for x in s_res:
                 sn = x.get('stop_name')
-                if sn: merged_u_stops[sn] = merged_u_stops.get(sn, 0) + int(x.get('announce_count', 0))
+                if sn: merged_u_stops[sn] = max(merged_u_stops.get(sn, 0), int(x.get('announce_count', 0)))
         except Exception: pass
         
-        # Přidej lokální záznamy uživatele
+        # Přidej lokální záznamy uživatele (pouze max, nikdy nesčítat se Supabase!)
         for ln, cnt in ls.get('user_lines', {}).get(d_id, {}).items():
-            merged_u_lines[ln] = merged_u_lines.get(ln, 0) + int(cnt or 0)
+            merged_u_lines[ln] = max(merged_u_lines.get(ln, 0), int(cnt or 0))
         for sn, cnt in ls.get('user_stops', {}).get(d_id, {}).items():
-            merged_u_stops[sn] = merged_u_stops.get(sn, 0) + int(cnt or 0)
+            merged_u_stops[sn] = max(merged_u_stops.get(sn, 0), int(cnt or 0))
         
         if merged_u_lines:
             lines_list = [[k, v] for k, v in sorted(merged_u_lines.items(), key=lambda x: x[1], reverse=True)]
