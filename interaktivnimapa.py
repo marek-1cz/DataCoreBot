@@ -7995,6 +7995,9 @@ def upsert_to_history(db, c):
     }
     def _do_async_upsert(pl):
         try:
+            import main as _main_mod
+            if getattr(_main_mod, 'EGRESS_SAVE_MODE', False):
+                return
             db.table("bus_history").upsert(pl).execute()
         except Exception as e:
             err_str = str(e)
@@ -9220,6 +9223,9 @@ def background_map_worker():
                 def _bg_supabase_sync(rows_to_save, active_ids, eg_save):
                     global _bg_flush_in_progress
                     if _bg_flush_in_progress:
+                        return
+                    if eg_save:
+                        # V šetřícím režimu NIKDY neposílat SPZ cache do Supabase (šetří 100% egressu a logů)
                         return
                     _bg_flush_in_progress = True
                     try:

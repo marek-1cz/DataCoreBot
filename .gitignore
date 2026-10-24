@@ -15,6 +15,8 @@ __pycache__/
 daily_metrics.json
 *.bak
 *_backup*
+!users_backup.json
+!summary_backup.json
 *.db
 idpk_vehicles_state.json
 vehicle_state.json
