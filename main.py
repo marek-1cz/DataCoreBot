@@ -125,14 +125,19 @@ _CORS_ORIGINS = {
     'https://datacorebot.koyeb.app',
     'https://ois-idpk.cz',
     'https://www.ois-idpk.cz',
+    'http://localhost:5000',
+    'http://127.0.0.1:5000',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'null'
 }
 
 @app.after_request
 def add_security_headers(response):
-    # CORS – pouze whitelisted origins
+    # CORS – pouze whitelisted origins nebo veřejné informační endpointy
     origin = request.headers.get('Origin', '')
-    if origin in _CORS_ORIGINS:
-        response.headers['Access-Control-Allow-Origin'] = origin
+    if origin in _CORS_ORIGINS or request.path.startswith('/api/stats') or request.path.startswith('/api/supporters'):
+        response.headers['Access-Control-Allow-Origin'] = origin if origin and origin != 'null' else '*'
         response.headers['Vary'] = 'Origin'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Range'
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
@@ -3285,8 +3290,10 @@ def web_auth_me():
 # NOVÝ WEB: AUTH & STATS COMPATIBILITY ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@app.route('/api/stats/summary', methods=['GET'])
+@app.route('/api/stats/summary', methods=['GET', 'OPTIONS'])
 def api_stats_summary():
+    if request.method == 'OPTIONS':
+        return jsonify({})
     try:
         db = get_db()
         if not db:
@@ -3546,8 +3553,10 @@ def api_auth_email_status():
             return resp
     return jsonify({"confirmed": False})
 
-@app.route('/api/stats/user', methods=['POST'])
+@app.route('/api/stats/user', methods=['POST', 'OPTIONS'])
 def api_stats_user():
+    if request.method == 'OPTIONS':
+        return jsonify({})
     data = request.get_json(silent=True) or {}
     name = str(data.get('name') or '').strip()
     if not name:
@@ -3608,60 +3617,60 @@ def api_stats_user():
             stops_count = sum(v for _, v in stops_list)
 
     # 1. Pořadí v odehraném čase (Time Rank)
-    all_users = db.table("users").select("discord_id, nick, total_time").execute().data or []
-    sorted_time = sorted([int(x.get('total_time') or 0) for x in all_users if int(x.get('total_time') or 0) > 0], reverse=True)
+    all_users = db.table("users").select("discord_id, nick, total_time, launch_count").execute().data or []
+    valid_time_users = sorted([x for x in all_users if int(x.get('total_time') or 0) > 0], key=lambda x: int(x.get('total_time') or 0), reverse=True)
     time_rank = None
-    if total_time_mins > 0:
-        for idx, t_val in enumerate(sorted_time[:5]):
-            if total_time_mins >= t_val:
-                time_rank = idx + 1
-                break
+    for idx, ux in enumerate(valid_time_users):
+        if str(ux.get('discord_id')) == d_id or (u.get('nick') and ux.get('nick') == u.get('nick')):
+            time_rank = idx + 1
+            break
 
     # 2. Pořadí v odjetých linkách (Lines Rank - 100% dynamicky z DB)
     lines_rank = None
-    if lines_count > 0:
-        all_u_lines = db.table("user_stats_lines").select("discord_id, play_count").execute().data or []
-        all_line_sums = {}
-        for x in all_u_lines:
-            xdid = str(x.get('discord_id'))
-            if xdid and xdid != 'None':
-                all_line_sums[xdid] = all_line_sums.get(xdid, 0) + int(x.get('play_count') or 0)
-        for xdid, ldict in ls.get('user_lines', {}).items():
-            if xdid and xdid != 'None':
-                all_line_sums[xdid] = all_line_sums.get(xdid, 0) + sum(int(c or 0) for c in ldict.values())
-        sorted_line_counts = sorted(all_line_sums.values(), reverse=True)
-        for idx, cnt in enumerate(sorted_line_counts[:5]):
-            if lines_count >= cnt:
-                lines_rank = idx + 1
-                break
+    all_u_lines = db.table("user_stats_lines").select("discord_id, play_count").execute().data or []
+    all_line_sums = {}
+    for x in all_u_lines:
+        xdid = str(x.get('discord_id'))
+        if xdid and xdid != 'None':
+            all_line_sums[xdid] = all_line_sums.get(xdid, 0) + int(x.get('play_count') or 0)
+    for xdid, ldict in ls.get('user_lines', {}).items():
+        if xdid and xdid != 'None':
+            all_line_sums[xdid] = max(all_line_sums.get(xdid, 0), sum(int(c or 0) for c in ldict.values()))
+    if d_id and lines_count > 0:
+        all_line_sums[d_id] = max(all_line_sums.get(d_id, 0), lines_count)
+    sorted_users_lines = sorted([item for item in all_line_sums.items() if item[1] > 0], key=lambda x: x[1], reverse=True)
+    for idx, (xdid, cnt) in enumerate(sorted_users_lines):
+        if xdid == d_id:
+            lines_rank = idx + 1
+            break
 
     # 3. Pořadí ve vyhlášených zastávkách (Stops Rank - 100% dynamicky z DB)
     stops_rank = None
-    if stops_count > 0:
-        all_u_stops = db.table("user_stats_stops").select("discord_id, announce_count").execute().data or []
-        all_stop_sums = {}
-        for x in all_u_stops:
-            xdid = str(x.get('discord_id'))
-            if xdid and xdid != 'None':
-                all_stop_sums[xdid] = all_stop_sums.get(xdid, 0) + int(x.get('announce_count') or 0)
-        for xdid, sdict in ls.get('user_stops', {}).items():
-            if xdid and xdid != 'None':
-                all_stop_sums[xdid] = all_stop_sums.get(xdid, 0) + sum(int(c or 0) for c in sdict.values())
-        sorted_stop_counts = sorted(all_stop_sums.values(), reverse=True)
-        for idx, cnt in enumerate(sorted_stop_counts[:5]):
-            if stops_count >= cnt:
-                stops_rank = idx + 1
-                break
+    all_u_stops = db.table("user_stats_stops").select("discord_id, announce_count").execute().data or []
+    all_stop_sums = {}
+    for x in all_u_stops:
+        xdid = str(x.get('discord_id'))
+        if xdid and xdid != 'None':
+            all_stop_sums[xdid] = all_stop_sums.get(xdid, 0) + int(x.get('announce_count') or 0)
+    for xdid, sdict in ls.get('user_stops', {}).items():
+        if xdid and xdid != 'None':
+            all_stop_sums[xdid] = max(all_stop_sums.get(xdid, 0), sum(int(c or 0) for c in sdict.values()))
+    if d_id and stops_count > 0:
+        all_stop_sums[d_id] = max(all_stop_sums.get(d_id, 0), stops_count)
+    sorted_users_stops = sorted([item for item in all_stop_sums.items() if item[1] > 0], key=lambda x: x[1], reverse=True)
+    for idx, (xdid, cnt) in enumerate(sorted_users_stops):
+        if xdid == d_id:
+            stops_rank = idx + 1
+            break
 
     # 4. Pořadí v počtu spuštění (Launches Rank)
     launch_count = int(u.get('launch_count') or 0)
     launches_rank = None
-    if launch_count > 0:
-        sorted_launches = sorted([int(x.get('launch_count') or 0) for x in all_users if int(x.get('launch_count') or 0) > 0], reverse=True)
-        for idx, l_val in enumerate(sorted_launches[:5]):
-            if launch_count >= l_val:
-                launches_rank = idx + 1
-                break
+    valid_launch_users = sorted([x for x in all_users if int(x.get('launch_count') or 0) > 0], key=lambda x: int(x.get('launch_count') or 0), reverse=True)
+    for idx, ux in enumerate(valid_launch_users):
+        if str(ux.get('discord_id')) == d_id or (u.get('nick') and ux.get('nick') == u.get('nick')):
+            launches_rank = idx + 1
+            break
 
     return jsonify({
         "found": True,

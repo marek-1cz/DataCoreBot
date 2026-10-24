@@ -1128,8 +1128,12 @@ html.perf-low .dls,html.perf-min .dls{transition:none}
 .uav{width:60px;height:60px;border-radius:50%;display:grid;place-items:center;font-size:1.6rem;font-weight:800;background:linear-gradient(135deg,var(--blue),var(--cyan));flex:none;overflow:hidden}
 .utx{flex:1;min-width:0}.utx small{color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-size:.74rem}
 .utx h2{font-size:clamp(1.4rem,4vw,2rem);overflow-wrap:anywhere}
-#uGrid .stat .rk{margin-top:8px;display:inline-block;padding:3px 10px;border-radius:999px;font-size:.76rem;font-weight:700;background:rgba(255,255,255,.07);color:var(--muted)}
-#uGrid .stat .rk.top{background:rgba(255,201,51,.15);color:var(--yellow)}
+#uGrid .stat .rk{margin-top:8px;display:inline-block;padding:4px 12px;border-radius:999px;font-size:.76rem;font-weight:700;background:rgba(255,255,255,.07);color:var(--muted);border:1px solid rgba(255,255,255,.1)}
+#uGrid .stat .rk.gold{background:linear-gradient(135deg,rgba(255,215,0,.25),rgba(255,170,0,.35));color:#ffe066;border:1px solid rgba(255,215,0,.5);box-shadow:0 0 10px rgba(255,215,0,.25)}
+#uGrid .stat .rk.silver{background:linear-gradient(135deg,rgba(226,232,240,.2),rgba(148,163,184,.3));color:#f1f5f9;border:1px solid rgba(226,232,240,.4)}
+#uGrid .stat .rk.bronze{background:linear-gradient(135deg,rgba(245,158,11,.25),rgba(180,83,9,.35));color:#fcd34d;border:1px solid rgba(245,158,11,.4)}
+#uGrid .stat .rk.top4{background:rgba(56,189,248,.18);color:#38bdf8;border:1px solid rgba(56,189,248,.4)}
+#uGrid .stat .rk.top5{background:rgba(129,140,248,.18);color:#818cf8;border:1px solid rgba(129,140,248,.4)}
 
 /* v24: prohledávatelné seznamy a TOP 5 zvýraznění */
 .cols-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:18px}
@@ -1140,8 +1144,10 @@ html.perf-low .dls,html.perf-min .dls{transition:none}
 .lst .lscroll::-webkit-scrollbar{width:6px}.lst .lscroll::-webkit-scrollbar-thumb{background:rgba(120,165,255,.35);border-radius:6px}
 .lst .none{color:var(--muted);padding:16px 8px;font-size:.9rem;text-align:center}
 
-.lst .bar{position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px 11px;font-size:.93rem;border-radius:10px;background:rgba(255,255,255,.02);transition:background .2s}
+.lst .bar{position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px 11px;font-size:.93rem;border-radius:10px;background:rgba(255,255,255,.02);transition:background .2s,transform .2s,border-color .2s}
 .lst .bar:hover{background:rgba(255,255,255,.06)}
+.lst .bar.clickable{cursor:pointer}
+.lst .bar.clickable:hover{background:rgba(56,189,248,.12);border-color:rgba(56,189,248,.35);transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.25)}
 .lst .bar-left{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
 .lst .bar .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
 .lst .bar .v{color:var(--muted);white-space:nowrap;font-weight:600;font-variant-numeric:tabular-nums;font-size:.9rem}
@@ -2166,6 +2172,73 @@ body.night .aurora{opacity:.4}
 <div class="lightbox" id="lb"><img id="lbimg" alt=""></div>
 
 <script>
+/* ===== ZÁKLADNÍ KONFIGURACE A API HOST (funguje lokálně i na Koyeb) ===== */
+const API_HOST = (window.location.protocol === 'file:' || !window.location.host) ? 'https://datacorebot.koyeb.app' : '';
+const CONFIG = {
+  DEMO: false,
+  accountUrl: '/ucet',
+  loginUrl: '',
+  dlInfo: { version: '1.6.2', size: '~45 MB' },
+  stats: API_HOST + '/api/stats/summary',
+  adminLoginUrl: '/dashboard',
+  downloadUrl: 'https://discord.gg/vmTagbC9mF',
+  api: {
+    discordStart: API_HOST + '/api/auth/discord/start',
+    discordStatus: API_HOST + '/api/auth/discord/status',
+    emailStart: API_HOST + '/api/auth/email/start',
+    emailVerify: API_HOST + '/api/auth/email/verify',
+    emailStatus: API_HOST + '/api/auth/email/status',
+    me: API_HOST + '/api/auth/me',
+    userStats: API_HOST + '/api/stats/user'
+  }
+};
+
+/* ===== RYCHLÉ VYHLEDÁNÍ HRÁČE Z ŽEBŘÍČKU NEBO DNEŠNÍHO REKORDU ===== */
+window.searchUser = function(name) {
+  if (!name || name === 'Neznámý') return;
+  const inp = document.getElementById('uIn');
+  const form = document.getElementById('uForm');
+  if (inp && form) {
+    inp.value = name;
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    const box = document.getElementById('statUser');
+    if (box) {
+      setTimeout(() => {
+        box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+    }
+  }
+};
+
+/* ===== PLYNULÁ ANIMACE ČÍSEL V KPI KARTÁCH ===== */
+function animateNumber(el, targetVal, suffix = '', duration = 1100) {
+  if (!el) return;
+  const target = Number(targetVal) || 0;
+  el.dataset.to = target;
+  if (el.dataset.animId) {
+    cancelAnimationFrame(Number(el.dataset.animId));
+  }
+  const startVal = Number(el.dataset.currentVal || 0);
+  const startTime = performance.now();
+  
+  function update(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(1, elapsed / duration);
+    const ease = 1 - Math.pow(1 - progress, 3);
+    const current = Math.round(startVal + (target - startVal) * ease);
+    el.textContent = current.toLocaleString('cs-CZ') + suffix;
+    el.dataset.currentVal = current;
+    if (progress < 1) {
+      el.dataset.animId = requestAnimationFrame(update);
+    } else {
+      el.textContent = target.toLocaleString('cs-CZ') + suffix;
+      el.dataset.currentVal = target;
+      delete el.dataset.animId;
+    }
+  }
+  el.dataset.animId = requestAnimationFrame(update);
+}
+
 /* ===== DATA PRO STATISTIKY (načítají se dynamicky z /api/stats/summary) ===== */
 const STATS={
   lines:[],
@@ -2173,7 +2246,8 @@ const STATS={
   time:[],
   toplines:[],
   users:{},
-  topstops:[]
+  topstops:[],
+  launches:[]
 };
 function bars(id,rows,unit){
   const el=document.getElementById(id);
@@ -2207,7 +2281,7 @@ function bars(id,rows,unit){
       badge = `<span class="rk-badge top5" title="5. Místo">#5</span>`;
     }
     const pct = max > 0 ? (r[1] / max * 100).toFixed(0) : 0;
-    return `<div class="bar ${rkClass}"><div class="bar-left">${badge}<span class="n" title="${esc(r[0])}">${esc(r[0])}</span></div><span class="v">${r[1].toLocaleString('cs-CZ')} ${unit}</span><i style="--w:${pct}%"></i></div>`;
+    return `<div class="bar clickable ${rkClass}" onclick="window.searchUser('${esc(r[0])}')" title="Klikněte pro zobrazení osobních statistik hráče ${esc(r[0])}"><div class="bar-left">${badge}<span class="n" title="${esc(r[0])}">${esc(r[0])}</span></div><span class="v">${r[1].toLocaleString('cs-CZ')} ${unit}</span><i style="--w:${pct}%"></i></div>`;
   }).join('') + '</div>';
 }
 bars('s-time',STATS.time,' h');bars('s-launches',STATS.launches,'×');
@@ -2388,10 +2462,16 @@ async function loadSupporters(){
   const container = document.getElementById('hallSupportersContainer');
   const countEl = document.getElementById('supportersCountStat');
   try {
-    const res = await fetch('/api/supporters');
+    const res = await fetch((typeof API_HOST !== 'undefined' ? API_HOST : '') + '/api/supporters');
     const data = await res.json().catch(() => ({}));
     const list = (data && data.supporters) || [];
-    if (countEl) countEl.textContent = list.length || 0;
+    if (countEl) {
+      if (typeof animateNumber === 'function') {
+        animateNumber(countEl, list.length || 0);
+      } else {
+        countEl.textContent = list.length || 0;
+      }
+    }
     
     if (!container) return;
     if (list.length === 0) {
@@ -2442,30 +2522,42 @@ async function loadSupporters(){
 loadSupporters();
 window.loadGlobalStats = function() {
   try {
-    const statsUrl = (typeof CONFIG!=='undefined'&&CONFIG.stats) ? CONFIG.stats : '/api/stats/summary';
+    const statsUrl = (typeof CONFIG!=='undefined'&&CONFIG.stats) ? CONFIG.stats : ((typeof API_HOST!=='undefined'?API_HOST:'') + '/api/stats/summary');
     fetch(statsUrl).then(r=>r.json()).then(d=>{
       if(!d) return;
       ['toplines','topstops','users','lines','stops','time','launches'].forEach(k=>{
         if(d[k]) STATS[k]=d[k];
       });
-      const setNum = (id, val, suf='') => {
+      const anim = (id, val, suf='') => {
         const el = document.getElementById(id);
-        if (el) {
-          el.dataset.to = val;
-          el.textContent = val + suf;
+        if (!el) return;
+        if (typeof animateNumber === 'function') {
+          animateNumber(el, val, suf);
+        } else {
+          el.textContent = (Number(val) || 0).toLocaleString('cs-CZ') + suf;
         }
       };
-      if (d.total_users !== undefined) setNum('statActiveUsers', d.total_users);
-      if (d.total_hours !== undefined) setNum('statTotalTime', d.total_hours, ' h');
-      if (d.total_launches !== undefined) setNum('statTotalLaunches', d.total_launches, '×');
-      if (d.total_lines !== undefined) setNum('statTotalLines', d.total_lines, '×');
-      if (d.total_stops !== undefined) setNum('statTotalStops', d.total_stops, '×');
+      if (d.total_users !== undefined) anim('statActiveUsers', d.total_users);
+      if (d.total_hours !== undefined) anim('statTotalTime', d.total_hours, ' h');
+      if (d.total_launches !== undefined) anim('statTotalLaunches', d.total_launches, '×');
+      if (d.total_lines !== undefined) anim('statTotalLines', d.total_lines, '×');
+      if (d.total_stops !== undefined) anim('statTotalStops', d.total_stops, '×');
 
       if (d.today) {
         const tt = document.getElementById('todayTime');
-        if (tt && d.today.top_time_nick) tt.textContent = `${d.today.top_time_nick} · ${d.today.top_time_val} min`;
+        if (tt && d.today.top_time_nick) {
+          tt.textContent = `${d.today.top_time_nick} · ${d.today.top_time_val} min`;
+          tt.style.cursor = 'pointer';
+          tt.title = `Klikněte pro zobrazení statistik hráče ${d.today.top_time_nick}`;
+          tt.onclick = () => window.searchUser(d.today.top_time_nick);
+        }
         const tl = document.getElementById('todayLaunch');
-        if (tl && d.today.top_launch_nick) tl.textContent = `${d.today.top_launch_nick} · ${d.today.top_launch_val}×`;
+        if (tl && d.today.top_launch_nick) {
+          tl.textContent = `${d.today.top_launch_nick} · ${d.today.top_launch_val}×`;
+          tl.style.cursor = 'pointer';
+          tl.title = `Klikněte pro zobrazení statistik hráče ${d.today.top_launch_nick}`;
+          tl.onclick = () => window.searchUser(d.today.top_launch_nick);
+        }
       }
 
       drawGlobalLists();
@@ -2501,7 +2593,7 @@ if (document.readyState === 'loading') {
   };
   window.refreshStatUsers();
   async function lookup(name){
-    const a=(typeof CONFIG!=='undefined'&&CONFIG.api&&CONFIG.api.userStats)||'/api/stats/user';
+    const a=(typeof CONFIG!=='undefined'&&CONFIG.api&&CONFIG.api.userStats)||((typeof API_HOST!=='undefined'?API_HOST:'')+'/api/stats/user');
     if(a){try{const r=await fetch(a,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});const d=await r.json();
       if(d&&d.found){
         const baseU=Object.keys(STATS.users||{}).find(k=>norm(k)===norm(d.name||name));
@@ -2524,7 +2616,31 @@ if (document.readyState === 'loading') {
     const L=Object.keys(STATS.users||{}).find(k=>norm(k)===norm(u.name));
     return L?Object.assign({},u,{linesList:STATS.users[L].lines,stopsList:STATS.users[L].stops}):u;
   }
-  const card=(num,suf,lbl,rank,ico='📊')=>`<div class="card stat"><div class="stat-ico">${ico}</div><div class="num">${num===undefined||num===null?'0':num}${num===undefined||num===null?'':suf}</div><div class="lbl">${lbl}</div><span class="rk ${rank&&rank<=3?'top':''}">${rank?'#'+rank+' v žebříčku TOP 5':'mimo TOP 5'}</span></div>`;
+  const card=(num,suf,lbl,rank,ico='📊')=>{
+    let rkClass = '';
+    let rkText = 'mimo TOP 5';
+    const r = (rank !== null && rank !== undefined) ? Number(rank) : null;
+    if (r === 1) {
+      rkClass = 'gold';
+      rkText = '🥇 1. v TOP 5';
+    } else if (r === 2) {
+      rkClass = 'silver';
+      rkText = '🥈 2. v TOP 5';
+    } else if (r === 3) {
+      rkClass = 'bronze';
+      rkText = '🥉 3. v TOP 5';
+    } else if (r === 4) {
+      rkClass = 'top4';
+      rkText = '4. v TOP 5';
+    } else if (r === 5) {
+      rkClass = 'top5';
+      rkText = '5. v TOP 5';
+    } else if (r && r > 5) {
+      rkText = `#${r} v žebříčku`;
+    }
+    const valDisplay = (num === undefined || num === null) ? '0' : Number(num).toLocaleString('cs-CZ');
+    return `<div class="card stat"><div class="stat-ico">${ico}</div><div class="num">${valDisplay}${suf}</div><div class="lbl">${lbl}</div><span class="rk ${rkClass}">${rkText}</span></div>`;
+  };
   function show(u){
     err.hidden=true;sug.hidden=true;
     $('uName').textContent=u.name;
@@ -2561,15 +2677,9 @@ if (document.readyState === 'loading') {
   });
 })();
 
-/* ===== Jemné objevení prvků + počítání čísel ===== */
+/* ===== Jemné objevení prvků ===== */
 const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('show');io.unobserve(e.target)}}),{threshold:.12});
 document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
-const cio=new IntersectionObserver(es=>es.forEach(e=>{
-  if(!e.isIntersecting)return;cio.unobserve(e.target);
-  const el=e.target,to=+el.dataset.to,suf=el.dataset.suffix||'',t0=performance.now();
-  (function step(t){const p=Math.min(1,(t-t0)/1400),v=Math.round(to*(1-Math.pow(1-p,3)));el.textContent=v+suf;if(p<1)requestAnimationFrame(step)})(t0);
-}),{threshold:.4});
-document.querySelectorAll('.count').forEach(el=>cio.observe(el));
 
 /* ===== Světlo na kartách a mapě sleduje myš ===== */
 document.querySelectorAll('.card,.map').forEach(el=>{
@@ -2945,25 +3055,7 @@ document.querySelectorAll('.avatar img').forEach(img=>{
    CONFIG.DEMO = true  -> nic se neposílá, vše se jen předvádí.
    Až bude hotový server, přepni DEMO na false a doplň adresy v CONFIG.api.
    DŮLEŽITÉ: o tom, kdo smí stahovat, musí rozhodovat SERVER (např. cookie
-   po ověření). Stránka sama nikoho nechrání, to jde jen na serveru. */
-const CONFIG={
-  DEMO:false,
-  accountUrl:'/ucet',
-  loginUrl:'',
-  dlInfo:{version:'1.6.2',size:'~45 MB'},
-  stats:'/api/stats/summary',
-  adminLoginUrl:'/dashboard',
-  downloadUrl:'https://discord.gg/vmTagbC9mF',
-  api:{
-    discordStart:'/api/auth/discord/start',
-    discordStatus:'/api/auth/discord/status',
-    emailStart:'/api/auth/email/start',
-    emailVerify:'/api/auth/email/verify',
-    emailStatus:'/api/auth/email/status',
-    me:'/api/auth/me',
-    userStats:'/api/stats/user'
-  }
-};
+/* CONFIG je nadefinován na začátku skriptu */
 (function(){
   const modal=document.getElementById('authModal'),box=modal.querySelector('.mbox');
   const views=[...modal.querySelectorAll('[data-v]')];
