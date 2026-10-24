@@ -322,6 +322,17 @@ _STATS_SUMMARY_CACHE = {"ts": 0, "data": None}
 _SUMMARY_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "summary_backup.json")
 _USERS_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "users_backup.json")
 _AUTH_TOKEN_STATUS: dict = {}  # {str(discord_id): "approved" | "rejected" | "timeout" | "waiting"}
+_SUPPORTERS_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "supporters_backup.json")
+_SUPPORTERS_CACHE = {"ts": 0, "data": []}
+
+def _get_fallback_supporters():
+    try:
+        if os.path.exists(_SUPPORTERS_BACKUP_FILE):
+            with open(_SUPPORTERS_BACKUP_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return []
 
 
 def _get_fallback_users():
@@ -2242,13 +2253,35 @@ def old_catchall(subpath):
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'])
 def api_supporters():
     if request.method == 'OPTIONS': return _cors_jsonify({})
+    now = time.time()
+    if _SUPPORTERS_CACHE["data"] and (now - _SUPPORTERS_CACHE["ts"] < 300):
+        return _cors_jsonify({"supporters": _SUPPORTERS_CACHE["data"]})
     try:
         db = get_db()
-        if not db: return _cors_jsonify({"error": "DB not ready"}), 500
-        data = db.table("supporters").select("name, amount, message, created_at").eq("status", "completed").execute().data or []
-        support_data = process_supporters(data)
-        return _cors_jsonify({"supporters": support_data})
-    except Exception as e: return _cors_jsonify({"error": str(e)}), 500
+        data = []
+        if db and not EGRESS_SAVE_MODE:
+            try:
+                data = db.table("supporters").select("name, amount, message, created_at").eq("status", "completed").execute().data or []
+            except Exception:
+                pass
+        if data:
+            support_data = process_supporters(data)
+            _SUPPORTERS_CACHE["ts"] = now
+            _SUPPORTERS_CACHE["data"] = support_data
+            try:
+                with open(_SUPPORTERS_BACKUP_FILE, "w", encoding="utf-8") as f:
+                    json.dump(support_data, f, ensure_ascii=False, indent=2)
+            except Exception: pass
+            return _cors_jsonify({"supporters": support_data})
+    except Exception:
+        pass
+
+    fallback = _get_fallback_supporters()
+    if fallback:
+        _SUPPORTERS_CACHE["ts"] = now
+        _SUPPORTERS_CACHE["data"] = fallback
+        return _cors_jsonify({"supporters": fallback})
+    return _cors_jsonify({"supporters": []})
 
 @app.route('/claim', methods=['GET', 'POST'])
 def claim_role():

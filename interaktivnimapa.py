@@ -5952,7 +5952,14 @@ class BusFusionEngine:
             except Exception as e:
                 print(f"[WARN] Nepodařilo se uložit stav do {path}: {e}", flush=True)
 
-        # Supabase zápis s throttlingem (každých 300s nebo při force_db) v daemon vlákně
+        # Supabase zápis s throttlingem (pokud není aktivní EGRESS_SAVE_MODE)
+        try:
+            import main as _main_mod
+            if getattr(_main_mod, 'EGRESS_SAVE_MODE', False) and not force_db:
+                return
+        except Exception:
+            pass
+
         if force_db or (now_ts - getattr(self, "last_db_save", 0)) >= 300.0:
             db_c = db_client or get_db_client()
             if db_c:
