@@ -759,11 +759,17 @@ def _sync_web_visits_to_supabase(visits):
             if not db:
                 return
             val_json = json.dumps(visits[:1000], ensure_ascii=False)
-            db.table("settings").upsert({
-                "setting_key": "web_visits_backup",
-                "setting_value": val_json
-            }).execute()
-        except Exception as e:
+            res = db.table("depot_history").select("id").eq("bus_id", "SYSTEM_WEB_VISITS_BACKUP").execute()
+            if res.data:
+                db.table("depot_history").update({"depot_name": val_json}).eq("bus_id", "SYSTEM_WEB_VISITS_BACKUP").execute()
+            else:
+                db.table("depot_history").insert({
+                    "bus_id": "SYSTEM_WEB_VISITS_BACKUP",
+                    "spz": "BACKUP",
+                    "depot_name": val_json,
+                    "arrived_at": datetime.now().isoformat()
+                }).execute()
+        except Exception:
             pass
     threading.Thread(target=_do_sync, daemon=True).start()
 
@@ -774,11 +780,17 @@ def _sync_pvvd_disappearances_to_supabase(records):
             if not db:
                 return
             val_json = json.dumps(records[:500], ensure_ascii=False)
-            db.table("settings").upsert({
-                "setting_key": "pvvd_disappearances_backup",
-                "setting_value": val_json
-            }).execute()
-        except Exception as e:
+            res = db.table("depot_history").select("id").eq("bus_id", "SYSTEM_PVVD_DISAPPEARANCES_BACKUP").execute()
+            if res.data:
+                db.table("depot_history").update({"depot_name": val_json}).eq("bus_id", "SYSTEM_PVVD_DISAPPEARANCES_BACKUP").execute()
+            else:
+                db.table("depot_history").insert({
+                    "bus_id": "SYSTEM_PVVD_DISAPPEARANCES_BACKUP",
+                    "spz": "BACKUP",
+                    "depot_name": val_json,
+                    "arrived_at": datetime.now().isoformat()
+                }).execute()
+        except Exception:
             pass
     threading.Thread(target=_do_sync, daemon=True).start()
 
@@ -789,13 +801,13 @@ def _restore_web_visits_if_empty(conn):
         cnt = cur.fetchone()[0]
         if cnt == 0:
             visits = []
-            # 1. Zkus načíst trvalou zálohu ze Supabase (přežije nový deploy na Koyeb!)
+            # 1. Zkus načíst trvalou zálohu ze Supabase (garantovaně přežije nový deploy na Koyeb!)
             try:
                 db = _get_supabase_client()
                 if db:
-                    res = db.table("settings").select("setting_value").eq("setting_key", "web_visits_backup").execute()
-                    if res.data and res.data[0].get("setting_value"):
-                        visits = json.loads(res.data[0]["setting_value"])
+                    res = db.table("depot_history").select("depot_name").eq("bus_id", "SYSTEM_WEB_VISITS_BACKUP").execute()
+                    if res.data and res.data[0].get("depot_name"):
+                        visits = json.loads(res.data[0]["depot_name"])
             except Exception:
                 visits = []
 
@@ -835,9 +847,9 @@ def _restore_pvvd_disappearances_if_empty(conn):
             try:
                 db = _get_supabase_client()
                 if db:
-                    res = db.table("settings").select("setting_value").eq("setting_key", "pvvd_disappearances_backup").execute()
-                    if res.data and res.data[0].get("setting_value"):
-                        records = json.loads(res.data[0]["setting_value"])
+                    res = db.table("depot_history").select("depot_name").eq("bus_id", "SYSTEM_PVVD_DISAPPEARANCES_BACKUP").execute()
+                    if res.data and res.data[0].get("depot_name"):
+                        records = json.loads(res.data[0]["depot_name"])
             except Exception:
                 records = []
 
