@@ -8303,10 +8303,10 @@ def background_map_worker():
     while True:
         try:
             now = get_prague_time()
-            if db_client and (now - last_db_cleanup).total_seconds() > 86400:
+            if db_client and ((now - last_db_cleanup).total_seconds() > 86400 or (now - last_db_cleanup).total_seconds() < 0):
                 last_db_cleanup = now
 
-            if db_client and (now - last_overrides_poll).total_seconds() > 300:
+            if db_client and ((now - last_overrides_poll).total_seconds() > 300 or (now - last_overrides_poll).total_seconds() < 0):
                 last_overrides_poll = now
                 def _async_load_overrides():
                     try:
@@ -8319,14 +8319,17 @@ def background_map_worker():
                         pass
                 threading.Thread(target=_async_load_overrides, daemon=True).start()
 
-            # === SPZ MEMORY CLEANUP: smaz stare zaznamy (max 24h) ===
-            if (now - last_spz_memory_cleanup).total_seconds() > 3600:
+            # === SPZ MEMORY CLEANUP: smaz stare zaznamy (max 24h, imunní vůči posunu času) ===
+            if (now - last_spz_memory_cleanup).total_seconds() > 3600 or (now - last_spz_memory_cleanup).total_seconds() < 0:
                 last_spz_memory_cleanup = now
                 max_age = SPZ_MEMORY_MAX_AGE_HOURS * 3600
                 to_delete = []
                 for spz, mem in SPZ_MEMORY.items():
                     last_time = mem.get("last_arriva_time") or mem.get("last_pvvd_time") or now
-                    if (now - last_time).total_seconds() > max_age:
+                    diff_sec = (now - last_time).total_seconds()
+                    if diff_sec < 0:
+                        mem["last_arriva_time"] = now
+                    elif diff_sec > max_age:
                         to_delete.append(spz)
                 for spz in to_delete:
                     del SPZ_MEMORY[spz]
@@ -9216,7 +9219,8 @@ def background_map_worker():
                 _egress_save = False
             _flush_interval = 1800 if _egress_save else SPZ_CACHE_FLUSH_SEC
 
-            if (now - last_spz_cache_flush).total_seconds() >= _flush_interval:
+            spz_flush_diff = (now - last_spz_cache_flush).total_seconds()
+            if spz_flush_diff >= _flush_interval or spz_flush_diff < 0:
                 last_spz_cache_flush = now
                 cache_rows = []
                 for bid, bc in safe_bus_cache_items():
