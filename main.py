@@ -2698,9 +2698,13 @@ def login_request():
                                 if u: await u.send(embed=discord.Embed(title="🔐 Bezpečnostní ověření", description="Byl zaznamenán pokus o přihlášení do administračního panelu.", color=0x38bdf8), view=DashboardAuthView(token, discord_id))
                             except: pass
                         try:
-                            if hasattr(bot, 'is_ready') and bot.is_ready() and bot.loop:
-                                asyncio.run_coroutine_threadsafe(send(), bot.loop)
-                        except Exception: pass
+                            b_loop = get_bot_loop()
+                            if b_loop:
+                                asyncio.run_coroutine_threadsafe(send(), b_loop)
+                            else:
+                                print(f"[AUTH] Admin DM: bot loop neběží.")
+                        except Exception as e:
+                            print(f"[AUTH] Chyba v login_request DM: {e}")
                         if is_json:
                             return jsonify({"status": "ok", "discord_id": discord_id})
                         return redirect(url_for('wait_auth', discord_id=discord_id))
@@ -2907,64 +2911,86 @@ def auth_pages():
             return redirect(url_for('home'))
     return render_public(HTML_REGISTER) # HTML_REGISTER used for both login and register since it's passwordless
 
-@app.route('/api/auth/discord/request', methods=['POST'])
-def web_auth_discord_request():
-    # Rate limit: 5 pokusu / 2 minuty na IP
-    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
-    if not _rate_limit_check(f'auth_discord:{client_ip}', 5, 120):
-        return jsonify({'status': 'error', 'message': 'Příliš mnoho pokusů. Zkuste to za chvíli.'}), 429
-    discord_id = request.json.get('discord_id') if request.is_json else None
+def get_bot_loop():
+    try:
+        loop = getattr(bot, '_loop', None)
+        if loop and loop.is_running():
+            return loop
+    except Exception:
+        pass
+    try:
+        sentinel = getattr(discord.client, '_LoopSentinel', None)
+        loop = getattr(bot, 'loop', None)
+        if loop and (sentinel is None or not isinstance(loop, sentinel)) and loop.is_running():
+            return loop
+    except Exception:
+        pass
+    return None
+
+def process_web_auth_discord(discord_id, client_ip):
+    if not _rate_limit_check(f'auth_discord:{client_ip}', 10, 60):
+        return {'status': 'error', 'message': 'Příliš mnoho pokusů. Zkuste to za chvíli.'}, 429
+    discord_id_str = str(discord_id or '').strip()
+    if not discord_id_str or not discord_id_str.isdigit():
+        return {"status": "error", "message": "Neplatné Discord ID (musí být číselné)."}, 400
     db = get_db()
-    if not db or not discord_id or not str(discord_id).isdigit():
-        return jsonify({"status": "error", "message": "Neplatný požadavek."})
+    if not db:
+        return {"status": "error", "message": "Databáze není dostupná."}, 500
     
     try:
-        user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+        user = db.table("users").select("*").eq("discord_id", discord_id_str).execute().data
         if not user:
-            # Auto-assign next app_id and set defaults for new web users
             try:
                 highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
                 new_app_id = (highest[0]["app_id"] + 1) if (highest and highest[0].get("app_id")) else 1001
             except:
                 new_app_id = None
-            insert_data = {"discord_id": discord_id, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": ""}
+            insert_data = {"discord_id": discord_id_str, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": ""}
             if new_app_id: insert_data["app_id"] = new_app_id
             db.table("users").insert(insert_data).execute()
         
         token = str(uuid.uuid4())
-        db.table("users").update({"login_token": token}).eq("discord_id", discord_id).execute()
+        db.table("users").update({"login_token": token}).eq("discord_id", discord_id_str).execute()
         
         async def send():
             try:
-                u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+                if not bot.is_ready():
+                    await bot.wait_until_ready()
+                u = bot.get_user(int(discord_id_str)) or await bot.fetch_user(int(discord_id_str))
                 if u: 
-                    await u.send(embed=discord.Embed(title="🔐 Webové ověření", description="Kliknutím na tlačítko níže se přihlásíte do interaktivní mapy OIS IDPK.", color=0x38bdf8), view=WebAuthView(token, discord_id))
+                    await u.send(embed=discord.Embed(title="🔐 Webové ověření", description="Kliknutím na tlačítko níže se přihlásíte do interaktivní mapy a softwaru OIS IDPK.", color=0x38bdf8), view=WebAuthView(token, discord_id_str))
+                    print(f"[AUTH] DM úspěšně naplánováno a odesláno uživateli {discord_id_str}")
+                else:
+                    print(f"[AUTH] Uživatel {discord_id_str} nebyl nalezen na Discordu.")
+            except discord.errors.Forbidden:
+                print(f"[AUTH] Uživatel {discord_id_str} má zablokované / vypnuté soukromé zprávy (DM) od bota!")
             except Exception as e:
                 print(f"[AUTH] Nelze odeslat DM: {e}")
         
-        if bot.loop and bot.loop.is_running() and bot.is_ready(): 
-            asyncio.run_coroutine_threadsafe(send(), bot.loop)
+        b_loop = get_bot_loop()
+        if b_loop: 
+            asyncio.run_coroutine_threadsafe(send(), b_loop)
+        else:
+            print(f"[AUTH] Varování: bot.loop neběží / Discord bot není připojen.")
             
-        return jsonify({"status": "success", "discord_id": discord_id})
+        return {"status": "success", "discord_id": discord_id_str}, 200
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Došlo k chybě: {str(e)}"})
+        print(f"[AUTH] Chyba v process_web_auth_discord: {e}")
+        return {"status": "error", "message": f"Došlo k chybě: {str(e)}"}, 500
 
-@app.route('/api/auth/email/request', methods=['POST'])
-def web_auth_email_request():
-    # Rate limit: 3 pokusu / 5 minut na IP
-    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
-    if not _rate_limit_check(f'auth_email:{client_ip}', 3, 300):
-        return jsonify({'status': 'error', 'message': 'Příliš mnoho pokusů o zaslání e-mailu. Zkuste to za 5 minut.'}), 429
-    email = request.json.get('email') if request.is_json else None
-    intent = request.json.get('intent', 'login') if request.is_json else 'login'
+def process_web_auth_email(email, intent, client_ip):
+    if not _rate_limit_check(f'auth_email:{client_ip}', 6, 120):
+        return {'status': 'error', 'message': 'Příliš mnoho pokusů o zaslání e-mailu. Zkuste to za chvíli.'}, 429
+    email_str = str(email or '').strip()
+    if not email_str or '@' not in email_str:
+        return {"status": "error", "message": "Neplatný e-mail."}, 400
     db = get_db()
-    if not db or not email or '@' not in email:
-        return jsonify({"status": "error", "message": "Neplatný e-mail."})
+    if not db:
+        return {"status": "error", "message": "Databáze není dostupná."}, 500
     
     try:
-        user = db.table("users").select("*").eq("email", email).execute().data
+        user = db.table("users").select("*").eq("email", email_str).execute().data
         if not user:
-            # Auto-assign next app_id and set defaults for new web users
             try:
                 highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
                 if highest and highest[0].get("app_id"):
@@ -2974,23 +3000,41 @@ def web_auth_email_request():
                     new_app_id = 2001
             except:
                 new_app_id = 2001
-            insert_data = {"email": email, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": "", "discord_id": "čeká na odpověd"}
+            insert_data = {"email": email_str, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": "", "discord_id": "čeká na odpověd"}
             if new_app_id: insert_data["app_id"] = new_app_id
             db.table("users").insert(insert_data).execute()
         
         import time as _t
         import random
         import string
-        token = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5)) # 5-místný bezpečný kód pro ruční zadání i magic link
-        token_expiry = int(_t.time()) + 600  # 10 minut
-        db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("email", email).execute()
+        token = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+        token_expiry = int(_t.time()) + 600
+        db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("email", email_str).execute()
         
-        if send_magic_link_email(email, token, intent=intent):
-            return jsonify({"status": "success"})
+        if send_magic_link_email(email_str, token, intent=intent):
+            return {"status": "success"}, 200
         else:
-            return jsonify({"status": "error", "message": "E-mail se nepodařilo odeslat. Máte nastavený SMTP?"})
+            return {"status": "error", "message": "E-mail se nepodařilo odeslat. Zkontrolujte prosím nastavení SMTP nebo použijte přihlášení přes Discord."}, 500
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Došlo k chybě: {str(e)}"})
+        print(f"[AUTH] Chyba v process_web_auth_email: {e}")
+        return {"status": "error", "message": f"Došlo k chybě: {str(e)}"}, 500
+
+@app.route('/api/auth/discord/request', methods=['POST'])
+def web_auth_discord_request():
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+    data = request.get_json(silent=True) or {}
+    discord_id = data.get('discord_id') or data.get('discordId') or request.form.get('discord_id')
+    res, code = process_web_auth_discord(discord_id, client_ip)
+    return jsonify(res), code
+
+@app.route('/api/auth/email/request', methods=['POST'])
+def web_auth_email_request():
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+    data = request.get_json(silent=True) or {}
+    email = data.get('email') or request.form.get('email')
+    intent = data.get('intent', 'login')
+    res, code = process_web_auth_email(email, intent, client_ip)
+    return jsonify(res), code
 
 @app.route('/api/auth/status')
 def web_auth_status():
@@ -3226,18 +3270,15 @@ def api_stats_summary():
 
 @app.route('/api/auth/discord/start', methods=['POST'])
 def api_auth_discord_start():
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get('discordId') or data.get('discord_id') or '').strip()
     if not discord_id:
         return jsonify({"ok": False, "error": "Chybí Discord ID."}), 400
-    with app.test_request_context(json={"discord_id": discord_id}, headers=request.headers):
-        res = web_auth_discord_request()
-        if hasattr(res, 'get_json'):
-            d = res.get_json()
-            if d.get('status') == 'success':
-                return jsonify({"ok": True, "discordId": discord_id})
-            return jsonify({"ok": False, "error": d.get('message', 'Chyba')}), 400
-    return jsonify({"ok": True})
+    res, code = process_web_auth_discord(discord_id, client_ip)
+    if res.get('status') == 'success':
+        return jsonify({"ok": True, "discordId": str(discord_id)})
+    return jsonify({"ok": False, "error": res.get('message', 'Chyba')}), code
 
 @app.route('/api/auth/discord/status', methods=['POST', 'GET'])
 def api_auth_discord_status():
@@ -3246,33 +3287,42 @@ def api_auth_discord_status():
     db = get_db()
     if not db or not discord_id:
         return jsonify({"confirmed": False})
-    user = db.table("users").select("nick, avatar_url, login_token, discord_id").eq("discord_id", discord_id).execute().data
+    user = db.table("users").select("nick, avatar_url, login_token, discord_id, role, dashboard_access, dashboard_level").eq("discord_id", discord_id).execute().data
     if user and user[0].get('login_token') == 'approved':
+        u = user[0]
         new_token = str(uuid.uuid4())
         db.table("users").update({"login_token": "", "web_session_token": new_token}).eq("discord_id", discord_id).execute()
         resp = jsonify({
             "confirmed": True,
-            "name": user[0].get('nick') or f"Discord {discord_id}",
-            "avatar": user[0].get('avatar_url')
+            "name": u.get('nick') or f"Discord {discord_id}",
+            "avatar": u.get('avatar_url')
         })
         resp.set_cookie('web_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
+        if u.get('dashboard_access') == True or u.get('role') in ['Superadmin', 'Admin', 'DEV', 'SA']:
+            resp.set_cookie('admin_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
+            session.permanent = True
+            session['logged_in'] = True
+            session['discord_id'] = str(u.get('discord_id'))
+            session['discord_nick'] = u.get('nick') or str(u.get('discord_id'))
+            session['nick'] = u.get('nick')
+            session['role'] = u.get('role')
+            session['dashboard_level'] = u.get('dashboard_level') or 'admin'
         return resp
     return jsonify({"confirmed": False})
 
 @app.route('/api/auth/email/start', methods=['POST'])
 def api_auth_email_start():
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
     data = request.get_json(silent=True) or {}
     email = str(data.get('email') or '').strip()
+    mode = str(data.get('mode') or 'code')
+    intent = 'code' if mode == 'code' else 'login'
     if not email:
         return jsonify({"ok": False, "error": "Chybí e-mail."}), 400
-    with app.test_request_context(json={"email": email, "intent": "login"}, headers=request.headers):
-        res = web_auth_email_request()
-        if hasattr(res, 'get_json'):
-            d = res.get_json()
-            if d.get('status') == 'success':
-                return jsonify({"ok": True})
-            return jsonify({"ok": False, "error": d.get('message', 'Chyba')}), 400
-    return jsonify({"ok": True})
+    res, code = process_web_auth_email(email, intent, client_ip)
+    if res.get('status') == 'success':
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": res.get('message', 'Chyba')}), code
 
 @app.route('/api/auth/email/verify', methods=['POST'])
 def api_auth_email_verify():
@@ -3301,6 +3351,15 @@ def api_auth_email_verify():
         "avatar": u.get("avatar_url")
     })
     resp.set_cookie('web_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
+    if u.get('dashboard_access') == True or u.get('role') in ['Superadmin', 'Admin', 'DEV', 'SA']:
+        resp.set_cookie('admin_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
+        session.permanent = True
+        session['logged_in'] = True
+        session['discord_id'] = str(u.get('discord_id'))
+        session['discord_nick'] = u.get('nick') or str(u.get('discord_id'))
+        session['nick'] = u.get('nick')
+        session['role'] = u.get('role')
+        session['dashboard_level'] = u.get('dashboard_level') or 'admin'
     return resp
 
 @app.route('/api/auth/email/status', methods=['POST', 'GET'])
@@ -3310,7 +3369,7 @@ def api_auth_email_status():
     db = get_db()
     if not db or not email:
         return jsonify({"confirmed": False})
-    user = db.table("users").select("nick, avatar_url, login_token, web_session_token").eq("email", email).execute().data
+    user = db.table("users").select("*").eq("email", email).execute().data
     if user:
         u = user[0]
         if u.get('login_token') == 'approved':
@@ -3322,6 +3381,15 @@ def api_auth_email_status():
                 "avatar": u.get("avatar_url")
             })
             resp.set_cookie('web_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
+            if u.get('dashboard_access') == True or u.get('role') in ['Superadmin', 'Admin', 'DEV', 'SA']:
+                resp.set_cookie('admin_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
+                session.permanent = True
+                session['logged_in'] = True
+                session['discord_id'] = str(u.get('discord_id'))
+                session['discord_nick'] = u.get('nick') or str(u.get('discord_id'))
+                session['nick'] = u.get('nick')
+                session['role'] = u.get('role')
+                session['dashboard_level'] = u.get('dashboard_level') or 'admin'
             return resp
     return jsonify({"confirmed": False})
 

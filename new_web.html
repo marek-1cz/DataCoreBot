@@ -769,40 +769,60 @@ button.mx{font:inherit;color:inherit;cursor:pointer;appearance:none;-webkit-appe
 /* ===== v16: Síň slávy ===== */
 .hall-h{font-size:clamp(2.2rem,5.4vw,3.6rem);letter-spacing:-.03em;margin-bottom:34px}
 .hall-h::after{content:"✨";display:inline-block;margin-left:12px;animation:floaty 3s ease-in-out infinite}
-.hall2{display:grid;gap:22px;max-width:1000px;margin:0 auto}
+.hall2{display:grid;gap:26px;max-width:1050px;margin:0 auto}
 .hsmall{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px}
-.hcard{position:relative;overflow:hidden;isolation:isolate;display:flex;align-items:center;gap:20px;border-radius:26px;--bgc:#0a1128}
+.hcard{position:relative;overflow:hidden;isolation:isolate;display:flex;align-items:center;gap:26px;border-radius:28px;--bgc:#0a1128;transition:transform .35s var(--ease),box-shadow .35s}
+.hcard:hover{transform:translateY(-5px)}
 .hcard>*{position:relative;z-index:1}
-.hcard::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:38%;z-index:2;pointer-events:none;background:linear-gradient(100deg,transparent,rgba(255,255,255,.12),transparent);transform:skewX(-18deg);animation:sweep 6s ease-in-out infinite}
-.hc-t{flex:1;display:flex;flex-direction:column;gap:3px}.hc-t small{color:var(--muted)}
-.hc-a{font-weight:800}
-.hc-name{font-style:normal;opacity:.9}
-.hcard.h1{padding:24px 24px;background:var(--bgc);border:2px solid rgba(79,163,255,.32);animation:softP 4s ease-in-out infinite}
-.hcard.h1 .hc-crest{font-size:2rem;animation:floaty 4.5s ease-in-out infinite}
-.hcard.h1 .hc-t b{font-size:1.08rem}.hcard.h1 .hc-a{font-size:1.25rem;color:var(--green)}
-.hcard.h1:hover{transform:translateY(-4px);border-color:rgba(79,163,255,.7)}
-.hcard.h2{padding:44px 44px;border:3px solid transparent;
-  background:radial-gradient(90% 120% at 0% 50%,rgba(255,201,51,.16),transparent 60%) padding-box,linear-gradient(var(--bgc),var(--bgc)) padding-box,
-   conic-gradient(from var(--ang),rgba(255,201,51,.12),#ffc933,rgba(255,201,51,.12) 38%,rgba(255,201,51,.12) 55%,#ffe08a,rgba(255,201,51,.12)) border-box;
+.hcard::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:38%;z-index:2;pointer-events:none;background:linear-gradient(100deg,transparent,rgba(255,255,255,.16),transparent);transform:skewX(-18deg);animation:sweep 5s ease-in-out infinite}
+.hc-crest-wrap{flex:none;display:flex;align-items:center;justify-content:center}
+.hc-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.hc-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hc-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:999px;font-size:.78rem;font-weight:850;letter-spacing:.05em;text-transform:uppercase}
+.hc-date{color:var(--muted);font-size:.82rem;font-weight:500}
+.hc-name-hero{font-weight:950;line-height:1.15;margin:3px 0 4px;word-break:break-word}
+.hc-msg{display:inline-block;font-size:.95rem;color:rgba(255,255,255,.9);background:rgba(0,0,0,.32);border-left:3px solid var(--cyan);padding:8px 14px;border-radius:4px 12px 12px 4px;font-style:italic;max-width:fit-content;margin-top:4px}
+.hc-aside{flex:none;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;min-width:125px;text-align:right;gap:3px}
+.hc-amt-lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.hc-a{font-weight:950;line-height:1.1}
+
+/* Tier 1: Podporovatel */
+.hcard.h1{padding:26px 30px;background:var(--bgc);border:2px solid rgba(79,163,255,.35);box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.hcard.h1 .hc-crest{font-size:2.8rem;animation:floaty 4.5s ease-in-out infinite}
+.hcard.h1 .hc-badge{background:rgba(56,189,248,.15);border:1px solid rgba(56,189,248,.35);color:#7dd3fc}
+.hcard.h1 .hc-name-hero{font-size:clamp(1.9rem,4.2vw,2.5rem);color:#ffffff;text-shadow:0 2px 20px rgba(56,189,248,.45)}
+.hcard.h1 .hc-a{font-size:1.6rem;color:var(--green)}
+
+/* Tier 2: Velký podporovatel - VELKÉ ZÁŘIVÉ JMÉNO */
+.hcard.h2{padding:38px 36px;border:3px solid transparent;
+  background:radial-gradient(90% 120% at 0% 50%,rgba(255,201,51,.2),transparent 60%) padding-box,linear-gradient(var(--bgc),var(--bgc)) padding-box,
+   conic-gradient(from var(--ang),rgba(255,201,51,.15),#ffc933,rgba(255,201,51,.15) 38%,rgba(255,201,51,.15) 55%,#ffe08a,rgba(255,201,51,.15)) border-box;
   animation:ang 5s linear infinite,goldP 4s ease-in-out infinite}
 @keyframes goldP{0%,100%{box-shadow:0 0 50px -16px rgba(255,201,51,.5)}50%{box-shadow:0 0 90px -10px rgba(255,201,51,.75)}}
-.hcard.h2 .hc-crest{font-size:4rem;filter:drop-shadow(0 0 18px rgba(255,201,51,.8));animation:floaty 4s ease-in-out infinite}
-.hcard.h2 .hc-t b{font-size:1.8rem;background:linear-gradient(90deg,#fff,#ffe08a,#fff);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 4s linear infinite}
-.hcard.h2 .hc-a{font-size:2.6rem;color:#ffe08a;text-shadow:0 0 28px rgba(255,201,51,.6)}
+.hcard.h2 .hc-crest{font-size:4.4rem;filter:drop-shadow(0 0 20px rgba(255,201,51,.85));animation:floaty 4s ease-in-out infinite}
+.hcard.h2 .hc-badge{background:linear-gradient(90deg,#f59e0b,#d97706);color:#0b1329;box-shadow:0 0 16px rgba(245,158,11,.55)}
+.hcard.h2 .hc-name-hero{font-size:clamp(2.4rem,5.4vw,3.4rem);font-weight:950;letter-spacing:-.02em;background:linear-gradient(135deg,#ffffff 0%,#fde68a 45%,#f59e0b 100%);background-size:200% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 4s linear infinite;filter:drop-shadow(0 0 24px rgba(245,158,11,.6))}
+.hcard.h2 .hc-a{font-size:2.3rem;color:#ffe08a;text-shadow:0 0 24px rgba(255,201,51,.65)}
 .hcard.h2::after{animation-duration:3.8s;background:linear-gradient(100deg,transparent,rgba(255,224,138,.22),transparent)}
-.hcard.h3{padding:64px 54px;border:4px solid transparent;
-  background:radial-gradient(100% 140% at 50% 0%,rgba(53,208,127,.25),transparent 60%) padding-box,linear-gradient(var(--bgc),var(--bgc)) padding-box,
-   conic-gradient(from var(--ang),#35d07f,#38d6ff,#fff,#ffe08a,#ffc933,#ff7ab8,#35d07f) border-box;
-  animation:ang 2.8s linear infinite,auraP 3s ease-in-out infinite}
-.hcard.h3 .hc-crest{font-size:6rem;position:relative;filter:drop-shadow(0 0 30px rgba(255,201,51,.95));animation:floaty 3s ease-in-out infinite}
+
+/* Tier 3: Mega podporovatel - OBŘÍ KRÁLOVSKÉ JMÉNO */
+.hcard.h3{padding:48px 42px;border:4px solid transparent;
+  background:radial-gradient(100% 140% at 50% 0%,rgba(239,68,68,.28),transparent 65%) padding-box,linear-gradient(#080e22,#080e22) padding-box,
+   conic-gradient(from var(--ang),#ef4444,#f59e0b,#fff,#ffe08a,#ffc933,#38d6ff,#ef4444) border-box;
+  animation:ang 2.6s linear infinite,auraP 3s ease-in-out infinite;box-shadow:0 20px 60px rgba(239,68,68,.35),0 0 45px rgba(245,158,11,.25)}
+.hcard.h3 .hc-crest{font-size:5.6rem;position:relative;filter:drop-shadow(0 0 32px rgba(255,201,51,.98));animation:floaty 3s ease-in-out infinite}
 .hcard.h3 .hc-crest::before{content:"";position:absolute;inset:-70%;z-index:-1;background:conic-gradient(from 0deg,transparent,rgba(255,224,138,.5),transparent 18%,transparent 33%,rgba(255,224,138,.5),transparent 50%,transparent 66%,rgba(255,224,138,.5),transparent 83%);border-radius:50%;animation:spinr 8s linear infinite;-webkit-mask-image:radial-gradient(circle,#000 20%,transparent 68%);mask-image:radial-gradient(circle,#000 20%,transparent 68%)}
 @keyframes spinr{to{transform:rotate(360deg)}}
-.hcard.h3 .hc-t b{font-size:2.4rem;background:linear-gradient(90deg,#fff,#ffe08a,#7fe9b0,#8fd8ff,#fff);background-size:260% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 3s linear infinite}
-.hcard.h3 .hc-name{font-size:1.3rem;font-weight:700}
-.hcard.h3 .hc-a{font-size:3.4rem;color:#fff;text-shadow:0 0 40px rgba(255,224,138,.9)}
+.hcard.h3 .hc-badge{background:linear-gradient(90deg,#ef4444,#dc2626);color:#ffffff;box-shadow:0 0 20px rgba(239,68,68,.75)}
+.hcard.h3 .hc-name-hero{font-size:clamp(2.8rem,7vw,4.5rem);font-weight:1000;letter-spacing:-.03em;background:linear-gradient(135deg,#ffffff 0%,#fef08a 25%,#fca5a5 60%,#ef4444 90%,#ffffff 100%);background-size:250% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 3s linear infinite;filter:drop-shadow(0 0 30px rgba(239,68,68,.8)) drop-shadow(0 0 55px rgba(245,158,11,.55))}
+.hcard.h3 .hc-a{font-size:2.8rem;color:#fff;text-shadow:0 0 32px rgba(255,224,138,.95)}
 .hcard.h3::after{animation-duration:2.6s;background:linear-gradient(100deg,transparent,rgba(255,255,255,.3),transparent)}
-@media(max-width:700px){.hcard.h2{padding:30px 22px;gap:14px}.hcard.h2 .hc-crest{font-size:2.8rem}.hcard.h2 .hc-t b{font-size:1.3rem}.hcard.h2 .hc-a{font-size:1.8rem}
-  .hcard.h3{padding:36px 22px;gap:14px}.hcard.h3 .hc-crest{font-size:3.6rem}.hcard.h3 .hc-t b{font-size:1.5rem}.hcard.h3 .hc-a{font-size:2.1rem}}
+
+@media(max-width:760px){
+  .hcard{flex-direction:column;align-items:flex-start;padding:24px 20px!important;gap:16px}
+  .hc-aside{align-items:flex-start;text-align:left;margin-top:4px}
+  .hcard.h2 .hc-crest{font-size:3.2rem}.hcard.h3 .hc-crest{font-size:4rem}
+}
 
 /* ===== v16: menu křížek – pomalejší a výraznější ===== */
 @media(max-width:1240px){
@@ -2123,19 +2143,24 @@ async function loadSupporters(){
       const amt = s.amount || (tier === 3 ? '325 Kč' : (tier === 2 ? '195 Kč' : '65 Kč'));
       const dateStr = s.created_at || '';
       const name = s.name || 'Anonymní hrdina';
-      const msg = s.message ? `<div style="font-size:.85rem;color:var(--muted);margin-top:6px;font-style:italic">„${s.message}“</div>` : '';
+      const msg = s.message ? `<div class="hc-msg">💬 „${s.message}“</div>` : '';
 
       h += `
         <div class="hcard ${tierClass}">
           ${tier >= 2 ? '<div class="sparks" aria-hidden="true"><i style="--x:60%;--d:4.3s;--s:6px;--t:4.4s"></i><i style="--x:21%;--d:0.5s;--s:3px;--t:4.8s"></i><i style="--x:78%;--d:0.9s;--s:7px;--t:4.4s"></i></div>' : ''}
-          <div class="hc-crest">${icon}</div>
+          <div class="hc-crest-wrap"><div class="hc-crest">${icon}</div></div>
           <div class="hc-t">
-            <b>${tierName}</b>
-            <em class="hc-name" style="display:block;font-size:1.15rem;font-weight:700;color:#fff;margin:3px 0">${name}</em>
-            <small>${dateStr}</small>
+            <div class="hc-meta">
+              <span class="hc-badge">${icon} ${tierName}</span>
+              ${dateStr ? `<span class="hc-date">${dateStr}</span>` : ''}
+            </div>
+            <div class="hc-name-hero">${name}</div>
             ${msg}
           </div>
-          <div class="hc-a">${amt}</div>
+          <div class="hc-aside">
+            <span class="hc-amt-lbl">Podpora</span>
+            <div class="hc-a">${amt}</div>
+          </div>
         </div>
       `;
     });
@@ -2637,8 +2662,11 @@ const CONFIG={
       return{ok:true};
     }
     const r=await fetch(CONFIG.api[name],{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)});
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    return r.json();
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok){
+      return {ok: false, error: data.error || data.message || ('Chyba serveru HTTP ' + r.status)};
+    }
+    return data;
   }
 
   function setView(v){views.forEach(s=>s.hidden=s.dataset.v!==v)}
@@ -2701,11 +2729,17 @@ const CONFIG={
     showErr(errEl,'');setBusy(btn,true);
     try{
       const r=await api('discordStart',{discordId:id});
-      if(!r.ok)throw 0;
+      if(!r || !r.ok){
+        showErr(errEl, (r && r.error) || 'Nepodařilo se poslat zprávu do Discord DM. Zkontrolujte, zda máte povolené soukromé zprávy.');
+        setBusy(btn,false);
+        return;
+      }
       st.discordId=id;st.confirmed=false;setView('wait-discord');
       cooldown(modal.querySelector('[data-v=wait-discord] .resend'));
       startPoll('discordStatus',{discordId:id});
-    }catch(_){showErr(errEl,'Nepodařilo se poslat zprávu. Zkuste to prosím znovu.')}
+    }catch(err){
+      showErr(errEl, (err && err.message) || 'Nepodařilo se poslat zprávu. Zkuste to prosím znovu.');
+    }
     setBusy(btn,false);
   });
   document.getElementById('fEmail').addEventListener('submit',async e=>{
@@ -2715,7 +2749,11 @@ const CONFIG={
     showErr(errEl,'');setBusy(btn,true);
     try{
       const r=await api('emailStart',{email:em,mode:st.mode});
-      if(!r.ok)throw 0;
+      if(!r || !r.ok){
+        showErr(errEl, (r && r.error) || 'Nepodařilo se odeslat e-mail. Zkuste to prosím znovu nebo použijte přihlášení přes Discord.');
+        setBusy(btn,false);
+        return;
+      }
       st.email=em;st.confirmed=false;
       if(st.mode==='code'){
         document.getElementById('codeTo').textContent='Šestimístný kód byl odeslán na '+em+'.';
@@ -2725,7 +2763,9 @@ const CONFIG={
         setView('wait-link');cooldown(modal.querySelector('[data-v=wait-link] .resend'));
         startPoll('emailStatus',{email:em});
       }
-    }catch(_){showErr(errEl,'Nepodařilo se odeslat e-mail. Zkuste to prosím znovu.')}
+    }catch(err){
+      showErr(errEl, (err && err.message) || 'Nepodařilo se odeslat e-mail. Zkuste to prosím znovu.');
+    }
     setBusy(btn,false);
   });
 
