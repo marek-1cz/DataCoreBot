@@ -386,6 +386,13 @@ button.btn{border:0;cursor:pointer;font:inherit;font-weight:700;color:var(--text
 .lchips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .lchip{cursor:pointer;padding:6px 14px;border-radius:10px;background:#070707;border:1px solid rgba(255,201,51,.3);color:var(--yellow);font-family:ui-monospace,Consolas,monospace;font-weight:700;font-size:.92rem;transition:border-color .3s, transform .3s}
 .lchip:hover{border-color:var(--yellow);transform:translateY(-2px)}
+.lchip.sound{border-color:rgba(56,214,255,.45);color:var(--cyan);background:rgba(56,214,255,.06)}
+.lchip.sound:hover{border-color:var(--cyan);box-shadow:0 0 12px rgba(56,214,255,.3)}
+.lstat.sound-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 12px;border-radius:999px;font-size:.82rem;font-weight:700}
+.lstat.sound-badge.yes{background:rgba(56,214,255,.15);color:var(--cyan);border:1px solid rgba(56,214,255,.35)}
+.lstat.sound-badge.no{background:rgba(255,255,255,.05);color:var(--muted);border:1px solid rgba(255,255,255,.1)}
+.lstat.route-name{color:var(--text);font-weight:500;font-size:.95rem;margin:6px 0 10px}
+.ticker .ln.sound{color:var(--cyan);font-weight:700}
 .lmore{color:var(--muted);font-size:.85rem}
 .faq.home{margin-top:0;max-width:820px}
 
@@ -1346,7 +1353,7 @@ body.night .aurora{opacity:.4}
       <div class="reveal">
         <span class="kicker">Linky v aplikaci</span>
         <h2>Je mezi nimi <span class="grad">vaše linka?</span></h2>
-        <p class="lead">Aplikace obsahuje <b id="lineCount">0</b> linek. Zadejte číslo a ihned zjistíte, zda je v seznamu.</p>
+        <p class="lead">Aplikace obsahuje <b id="lineCount">251</b> linek z GTFS IDPK (<b id="soundLineCount">23</b> se zvukovým hlášením 🔊). Zadejte číslo linky nebo město na trase a ihned zjistíte, zda je v seznamu a zda má nahraný zvuk.</p>
         <div class="search">
           <input class="inp big" id="lineSearch" type="search" inputmode="numeric" placeholder="Zadejte číslo linky, např. 490" autocomplete="off" aria-label="Hledat linku">
         </div>
@@ -1403,35 +1410,6 @@ body.night .aurora{opacity:.4}
   </div>
 </section>
 
-
-<!-- DATACOREBOT -->
-<section>
-  <div class="wrap core">
-    <img class="reveal" src="/static/img/datacorebot_n.png" alt="DataCoreBot">
-    <div class="reveal d1">
-      <h2>Poháněno systémem <span class="grad">DataCoreBot</span></h2>
-      <p class="lead">Celá infrastruktura, od databází po ověřování uživatelů, běží na systému DataCoreBot. Stará se o rychlou synchronizaci dat, ochranu přes Hardware ID (HWID) a nepřetržitý chod palubních počítačů.</p>
-    </div>
-  </div>
-</section>
-<!-- ČASTÉ OTÁZKY -->
-<section id="faq">
-  <div class="wrap">
-    <div class="faq home reveal">
-      <span class="kicker">Nápověda</span>
-      <h2>Časté <span class="grad">otázky</span></h2>
-      <details><summary>Co je OIS IDPK?</summary><p>Software, který věrně simuluje vnitřní informační panely v autobusech Plzeňského kraje. Zobrazuje zastávky, průběh celé linky i další informace, které cestující běžně vidí během jízdy.</p></details>
-      <details><summary>Je to oficiální projekt?</summary><p>Ne. Projekt není oficiálním produktem ani službou dopravců či organizací veřejné dopravy a s nimi nijak nespolupracuje. Jde o nezávislý komunitní projekt.</p></details>
-      <details><summary>Jak aplikace funguje?</summary><p>Skládá se ze dvou částí: panelu pro cestující a ovladače. V ovladači se nastaví linka a panel začne zobrazovat zastávky.</p></details>
-      <details><summary>Jak software získám?</summary><p>Na stránce <a href="#/download">Download</a>. Po kliknutí na Stáhnout se přihlásíte přes Discord ID nebo e-mail a stažení se odemkne.</p></details>
-      <details><summary>Proč je potřeba přihlášení?</summary><p>Z důvodu ochrany projektu a samotného softwaru. Přihlášení umožňuje kontrolovat přístup a brání zneužití či neautorizovanému šíření.</p></details>
-      <details><summary>Co je DataCoreBot?</summary><p>Systém, na kterém běží celá infrastruktura, od databází po ověřování uživatelů. Stará se o rychlou synchronizaci dat, ochranu přes Hardware ID (HWID) a nepřetržitý chod palubních počítačů.</p></details>
-      <details><summary>Odkud jsou data na mapě?</summary><p>Jde o aktuální polohy autobusů IDPK s jízdními řády z Inflow. Stránka není oficiálním webem IDPK a data nemusí být zcela přesná, slouží pouze jako orientační přehled.</p></details>
-      <details><summary>Chybí mi moje oblíbená linka. Co teď?</summary><p>Vyhledejte ji výše v části Linky v aplikaci. Pokud v seznamu není, napište nám na <a href="https://discord.gg/vmTagbC9mF">Discordu</a>.</p></details>
-      <details><summary>Kdo za projektem stojí?</summary><p>Zakladatel marekk_czz a spoluzakladatel HynekBus. Více informací najdete na stránce <a href="#/team">Náš tým</a>.</p></details>
-    </div>
-  </div>
-</section>
 <!-- ONLINE UKÁZKA -->
 <section id="demo" class="wipsec">
   <div class="wiptape" aria-hidden="true"><div><span>WORK IN PROGRESS</span><i>◆</i><span>V PŘÍPRAVĚ</span><i>◆</i><span>WORK IN PROGRESS</span><i>◆</i><span>V PŘÍPRAVĚ</span><i>◆</i><span>WORK IN PROGRESS</span><i>◆</i><span>V PŘÍPRAVĚ</span><i>◆</i><span>WORK IN PROGRESS</span><i>◆</i><span>V PŘÍPRAVĚ</span><i>◆</i><span>WORK IN PROGRESS</span><i>◆</i><span>V PŘÍPRAVĚ</span><i>◆</i><span>WORK IN PROGRESS</span><i>◆</i><span>V PŘÍPRAVĚ</span><i>◆</i><span>WORK IN PROGRESS</span><i>◆</i><span>V PŘÍPRAVĚ</span><i>◆</i><span>WORK IN PROGRESS</span><i>◆</i><span>V PŘÍPRAVĚ</span><i>◆</i></div></div>
@@ -1468,6 +1446,36 @@ body.night .aurora{opacity:.4}
     </div>
   </div>
 </section>
+
+<!-- DATACOREBOT -->
+<section>
+  <div class="wrap core">
+    <img class="reveal" src="/static/img/datacorebot_n.png" alt="DataCoreBot">
+    <div class="reveal d1">
+      <h2>Poháněno systémem <span class="grad">DataCoreBot</span></h2>
+      <p class="lead">Celá infrastruktura, od databází po ověřování uživatelů, běží na systému DataCoreBot. Stará se o rychlou synchronizaci dat, ochranu přes Hardware ID (HWID) a nepřetržitý chod palubních počítačů.</p>
+    </div>
+  </div>
+</section>
+<!-- ČASTÉ OTÁZKY -->
+<section id="faq">
+  <div class="wrap">
+    <div class="faq home reveal">
+      <span class="kicker">Nápověda</span>
+      <h2>Časté <span class="grad">otázky</span></h2>
+      <details><summary>Co je OIS IDPK?</summary><p>Software, který věrně simuluje vnitřní informační panely v autobusech Plzeňského kraje. Zobrazuje zastávky, průběh celé linky i další informace, které cestující běžně vidí během jízdy.</p></details>
+      <details><summary>Je to oficiální projekt?</summary><p>Ne. Projekt není oficiálním produktem ani službou dopravců či organizací veřejné dopravy a s nimi nijak nespolupracuje. Jde o nezávislý komunitní projekt.</p></details>
+      <details><summary>Jak aplikace funguje?</summary><p>Skládá se ze dvou částí: panelu pro cestující a ovladače. V ovladači se nastaví linka a panel začne zobrazovat zastávky.</p></details>
+      <details><summary>Jak software získám?</summary><p>Na stránce <a href="#/download">Download</a>. Po kliknutí na Stáhnout se přihlásíte přes Discord ID nebo e-mail a stažení se odemkne.</p></details>
+      <details><summary>Proč je potřeba přihlášení?</summary><p>Z důvodu ochrany projektu a samotného softwaru. Přihlášení umožňuje kontrolovat přístup a brání zneužití či neautorizovanému šíření.</p></details>
+      <details><summary>Co je DataCoreBot?</summary><p>Systém, na kterém běží celá infrastruktura, od databází po ověřování uživatelů. Stará se o rychlou synchronizaci dat, ochranu přes Hardware ID (HWID) a nepřetržitý chod palubních počítačů.</p></details>
+      <details><summary>Odkud jsou data na mapě?</summary><p>Jde o aktuální polohy autobusů IDPK s jízdními řády z Inflow. Stránka není oficiálním webem IDPK a data nemusí být zcela přesná, slouží pouze jako orientační přehled.</p></details>
+      <details><summary>Chybí mi moje oblíbená linka. Co teď?</summary><p>Vyhledejte ji výše v části Linky v aplikaci. Pokud v seznamu není, napište nám na <a href="https://discord.gg/vmTagbC9mF">Discordu</a>.</p></details>
+      <details><summary>Kdo za projektem stojí?</summary><p>Zakladatel marekk_czz a spoluzakladatel HynekBus. Více informací najdete na stránce <a href="#/team">Náš tým</a>.</p></details>
+    </div>
+  </div>
+</section>
+
 </main>
 
 <!-- ############################################################
@@ -1754,15 +1762,33 @@ body.night .aurora{opacity:.4}
 <div class="modal" id="adminModal" aria-hidden="true">
   <div class="mbox" role="dialog" aria-modal="true" aria-labelledby="admTitle">
     <button class="mclose" type="button" id="admClose" aria-label="Zavřít">✕</button>
-    <div class="mhead"><span class="mark">🛡️</span><h3 id="admTitle">Admin přihlášení</h3><p>Přístup pouze pro správce projektu.</p></div>
-    <form id="admForm" autocomplete="off" novalidate>
-      <label for="admUser">Uživatelské jméno nebo e-mail</label>
-      <input class="inp" id="admUser" type="text" autocomplete="username" autocapitalize="off" spellcheck="false">
-      <label for="admPass" style="margin-top:14px">Heslo</label>
-      <input class="inp" id="admPass" type="password" autocomplete="current-password">
-      <p class="err" id="admErr" role="status"></p>
-      <button class="btn main wide" type="submit" style="margin-top:6px">Přihlásit se</button>
-    </form>
+    
+    <!-- KROK 1: Zadání Discord ID -->
+    <div id="admViewForm">
+      <div class="mhead"><span class="mark">🛡️</span><h3 id="admTitle">Admin přihlášení</h3><p>Přístup pouze pro ověřené správce projektu.</p></div>
+      <form id="admForm" autocomplete="off" novalidate>
+        <label for="admDiscordId">Discord ID administrátora</label>
+        <input class="inp" id="admDiscordId" type="text" inputmode="numeric" placeholder="Zadejte své Discord ID (např. 719896287301992449)" autocomplete="off" spellcheck="false" required>
+        <p class="hint" style="margin-top:8px;font-size:.82rem;color:var(--muted)">Heslo není potřeba. Po odeslání vám náš Discord bot zašle ověřovací zprávu s tlačítkem přímo do DM.</p>
+        <p class="err" id="admErr" role="status"></p>
+        <button class="btn main wide" id="admSubmitBtn" type="submit" style="margin-top:14px">Odeslat ověření do Discordu ↗</button>
+      </form>
+    </div>
+
+    <!-- KROK 2: Čekání na potvrzení v Discord DM -->
+    <div id="admViewWait" hidden style="text-align:center;padding:10px 0 16px">
+      <div class="mhead"><span class="mark" style="font-size:2.4rem">💬</span><h3>Čeká se na odpověď v DM</h3><p style="color:var(--muted);margin-top:6px">Odeslali jsme vám bezpečnostní výzvu do soukromých zpráv na Discordu.</p></div>
+      <div style="margin:20px 0;padding:16px;background:rgba(47,107,255,0.08);border:1px solid rgba(47,107,255,0.25);border-radius:14px">
+        <div style="display:flex;align-items:center;justify-content:center;gap:12px;font-weight:600;color:var(--cyan)">
+          <span class="adm-pulse-dot" style="width:10px;height:10px;border-radius:50%;background:var(--cyan);display:inline-block;animation:pulse 1.4s infinite"></span>
+          <span id="admWaitText">Čekám na kliknutí na „Povolit“ v Discordu…</span>
+        </div>
+        <p style="font-size:.82rem;color:var(--muted);margin-top:8px">Po potvrzení v Discordu budete okamžitě vpuštěni do administrace.</p>
+      </div>
+      <p class="err" id="admWaitErr" role="status"></p>
+      <button class="btn ghost wide" id="admCancelBtn" type="button" style="margin-top:8px">Zrušit / Zadat jiné ID</button>
+    </div>
+
   </div>
 </div>
 <div class="modal" id="authModal" aria-hidden="true">
@@ -1935,22 +1961,96 @@ bars('s-lines',STATS.lines,'×');bars('s-stops',STATS.stops,'×');bars('s-time',
 
 
 
-/* ===== v25: admin přihlášení (zatím nenapojeno) ===== */
+/* ===== v25: admin přihlášení s ověřením přes Discord DM ===== */
 const OIS_ADMIN=(function(){
-  const m=document.getElementById('adminModal'),f=document.getElementById('admForm'),er=document.getElementById('admErr'),u=document.getElementById('admUser'),p=document.getElementById('admPass');
-  function open(){er.textContent='';f.reset();m.classList.add('open');m.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';setTimeout(()=>u.focus(),60)}
-  function close(){m.classList.remove('open');m.setAttribute('aria-hidden','true');document.body.style.overflow=''}
+  const m=document.getElementById('adminModal');
+  const vForm=document.getElementById('admViewForm'),vWait=document.getElementById('admViewWait');
+  const f=document.getElementById('admForm'),er=document.getElementById('admErr');
+  const inId=document.getElementById('admDiscordId'),subBtn=document.getElementById('admSubmitBtn');
+  const waitTxt=document.getElementById('admWaitText'),cancelBtn=document.getElementById('admCancelBtn');
+  let pollTimer=null;
+
+  function stopPoll(){if(pollTimer){clearInterval(pollTimer);pollTimer=null}}
+  function setView(view){
+    vForm.hidden=(view!=='form');
+    vWait.hidden=(view!=='wait');
+  }
+  function open(){
+    stopPoll();er.textContent='';f.reset();
+    setView('form');
+    m.classList.add('open');m.setAttribute('aria-hidden','false');
+    document.body.style.overflow='hidden';
+    setTimeout(()=>inId.focus(),60);
+  }
+  function close(){
+    stopPoll();m.classList.remove('open');m.setAttribute('aria-hidden','true');
+    document.body.style.overflow='';
+  }
   document.getElementById('admClose').addEventListener('click',close);
   m.addEventListener('mousedown',e=>{if(e.target===m)close()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&m.classList.contains('open'))close()});
   document.getElementById('ftAdmin').addEventListener('click',open);
-  f.addEventListener('submit',e=>{
+  if(cancelBtn)cancelBtn.addEventListener('click',()=>{stopPoll();setView('form');setTimeout(()=>inId.focus(),50)});
+
+  f.addEventListener('submit',async e=>{
     e.preventDefault();
-    if(!u.value.trim()||!p.value){er.textContent='Vyplňte jméno i heslo.';return}
-    /* ověření probíhá na serveru; tady se nic nekontroluje ani neukládá */
-    if(CONFIG.adminLoginUrl){location.href=CONFIG.adminLoginUrl;return}
-    er.textContent='Administrace zatím není dostupná.';
+    const id=inId.value.trim();
+    if(!id||!/^\d{17,20}$/.test(id)){
+      er.textContent='Zadejte platné číselné Discord ID (17 až 20 číslic).';
+      return;
+    }
+    er.textContent='';
+    subBtn.disabled=true;
+    subBtn.textContent='Odesílám žádost do Discordu…';
+    try{
+      const res=await fetch('/login_request',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({discord_id:id})
+      });
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok||data.status==='error'){
+        er.textContent=data.message||'Nepodařilo se odeslat požadavek na přihlášení.';
+        subBtn.disabled=false;
+        subBtn.textContent='Odeslat ověření do Discordu ↗';
+        return;
+      }
+      
+      subBtn.disabled=false;
+      subBtn.textContent='Odeslat ověření do Discordu ↗';
+      waitTxt.textContent='Čekám na kliknutí na „Povolit“ v Discordu…';
+      setView('wait');
+
+      const until=Date.now()+5*60*1000;
+      stopPoll();
+      pollTimer=setInterval(async()=>{
+        if(Date.now()>until){
+          stopPoll();setView('form');
+          er.textContent='Časový limit pro potvrzení vypršel. Zkuste to znovu.';
+          return;
+        }
+        try{
+          const cRes=await fetch('/api/check_auth/'+encodeURIComponent(id));
+          const cData=await cRes.json().catch(()=>({}));
+          if(cData.status==='approved'){
+            stopPoll();
+            waitTxt.textContent='✓ Schváleno! Vstupuji do administrace…';
+            setTimeout(()=>{
+              window.location.href='/dashboard/login_finalize?discord_id='+encodeURIComponent(id);
+            },600);
+          }else if(cData.status==='rejected'){
+            stopPoll();setView('form');
+            er.textContent='Přihlášení bylo v Discordu zamítnuto.';
+          }
+        }catch(_){}
+      },2000);
+    }catch(err){
+      er.textContent='Chyba spojení se serverem. Zkuste to znovu.';
+      subBtn.disabled=false;
+      subBtn.textContent='Odeslat ověření do Discordu ↗';
+    }
   });
+
   return {open,close};
 })();
 
@@ -1988,7 +2088,21 @@ addEventListener('DOMContentLoaded',()=>{try{if(CONFIG.stats)fetch(CONFIG.stats)
   async function lookup(name){
     const a=(typeof CONFIG!=='undefined'&&CONFIG.api&&CONFIG.api.userStats)||'';
     if(a){try{const r=await fetch(a,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});const d=await r.json();
-      if(d&&d.found)return{name:d.name||name,lines:d.lines,stops:d.stops,time:d.hours,avatar:d.avatar,linesList:d.linesList,stopsList:d.stopsList}}catch(_){}}
+      if(d&&d.found){
+        const baseU=Object.keys(STATS.users||{}).find(k=>norm(k)===norm(d.name||name));
+        return {
+          name:d.name||name,
+          lines:d.lines,
+          stops:d.stops,
+          time:d.hours,
+          avatar:d.avatar,
+          linesList:(d.linesList&&d.linesList.length)?d.linesList:(baseU?STATS.users[baseU].lines:[]),
+          stopsList:(d.stopsList&&d.stopsList.length)?d.stopsList:(baseU?STATS.users[baseU].stops:[]),
+          linesRank:d.linesRank,
+          stopsRank:d.stopsRank,
+          timeRank:d.timeRank
+        };
+      }}catch(_){}}
     const u=users.get(norm(name));if(!u)return null;
     const L=Object.keys(STATS.users||{}).find(k=>norm(k)===norm(u.name));
     return L?Object.assign({},u,{linesList:STATS.users[L].lines,stopsList:STATS.users[L].stops}):u;
@@ -2050,24 +2164,30 @@ document.querySelectorAll('.card,.map').forEach(el=>{
 });
 
 /* ===== LINKY V APLIKACI + VYHLEDÁVÁNÍ =====
-   Sem patří čísla VŠECH linek, které aplikace má (zatím je tu 93 linek ze statistik).
-   Stačí seznam upravit, počet i panel se přizpůsobí sami. */
-const LINES=['490722','424','440336','739','400621','490735','1651','496711','490731','440322','490760','320144','490733','490734','490752','460331','795480','490737','490757','490723','450443','460345','562768','460367','400623','490738','336','430911','728440','420409','490761','562755','490755','420401','440332','621','490753','460683','450437','490762','450555','490759','490736','410407','470243','490754','450442','750','722','490750','440523','711','755','759','760','400633','400634','400871','400642','683','430852','400837','470239','400639','460353','490749','753','450441','480201','460344','795012','795001','631','400645','320182','361','446','430856','430966','562733','440334','400640','470233','440323','400643','735','460354','400833','440321','723','731','490763','754'];
+   Data ze systému GTFS Plzeňského kraje a manuálně nahraných hlasových hlášení.
+   Struktura: [číslo_linky, cis_kód, název_trasy, má_zvuk (1/0)] */
+const GTFS_LINES = [["336", "440336", "Plzeň-Tymákov-Lhůta-Starý Plzenec", 1], ["424", "440424", "Plzeň-Přeštice-Klatovy", 1], ["621", "400621", "Domažlice-Holýšov-Stod-Plzeň", 1], ["711", "496711", "MHD Stříbro: Železniční stanice-Západní předměstí-Průmyslová-Železniční stanice", 1], ["722", "490722", "Tachov-Bor-Stříbro-Plzeň", 1], ["723", "490723", "Tachov-Planá-Mariánské Lázně", 1], ["731", "490731", "Stříbro-Konstantinovy Lázně-Bezdružice-Úterý,Vidžín", 1], ["734", "490734", "Stříbro-Svojšín", 1], ["735", "490735", "Stříbro-Planá-Chodová Planá", 1], ["736", "490736", "Stříbro-Kladruby-Bor", 1], ["737", "490737", "Stříbro-Nýřany-Plzeň", 1], ["738", "490738", "Stříbro-Zhoř-Velký Malahov", 1], ["739", "490739", "Stříbro-Kostelec-Skapce-Zhoř", 1], ["749", "490749", "Tachov-Dlouhý Újezd", 1], ["750", "490750", "Tachov-Lesná,Stará Knížecí Huť", 1], ["752", "490752", "Tachov-Milíře-Milíře,Zadní Milíře", 1], ["753", "490753", "Tachov-Přimda-Třemešné,Pavlíkov", 1], ["754", "490754", "Tachov-Halže,Branka", 1], ["755", "490755", "Tachov-Chodský Újezd-Zadní Chodov", 1], ["757", "490757", "Planá-Chodský Újezd-Tachov", 1], ["759", "490759", "Planá-Planá,Křínov", 1], ["760", "490760", "Stříbro-Heřmanova Huť-Stod", 1], ["911", "430911", "Sušice,žel.st.-Sušice,nábřeží-Sušice,sídl.Vojtěška-Sušice,Volšovy", 1], ["1", "436001", "Klatovy,,městské lázně - Terminál - nám. Míru - Luby", 0], ["2", "436002", "Klatovy, Terminál-nádraží — nám. Míru - sídliště na Plánické ul.", 0], ["4", "436004", "Klatovy, u masokombinátu - Terminál - nádraží — náměstí Míru - sídliště na Plánické ulici - Luby", 0], ["211", "475211", "MHD Rokycany: Autobusové nádraží-Nemocnice-Hřbitov", 0], ["221", "470221", "Radnice-Chrást-Plzeň", 0], ["222", "470222", "Cheznovice-Strašice-Rokycany-Plzeň", 0], ["223", "470223", "Zvíkovec-Radnice-Rokycany", 0], ["224", "470224", "Zbiroh-Holoubkov-Rokycany-Plzeň", 0], ["231", "470231", "Volduchy-Bušovice-Chrást-Plzeň", 0], ["232", "470232", "Osek-Volduchy-Rokycany", 0], ["233", "470233", "Radnice-Hlohovice-Kladruby,Třímany", 0], ["234", "470234", "Liblín-Radnice", 0], ["235", "470235", "Břasy,Darová-Břasy,Stupno", 0], ["236", "470236", "Skomelno-Radnice", 0], ["237", "470237", "Radnice-Vejvanov-Zbiroh", 0], ["238", "470238", "Rokycany-Litohlavy-Klabava-Rokycany", 0], ["239", "470239", "Holoubkov-Hůrky-Hrádek,Nová Huť", 0], ["240", "470240", "Kařez-Zbiroh-Zvíkovec-Chříč", 0], ["241", "470241", "Kařízek-Kařez-Zbiroh-Líšná", 0], ["242", "470242", "Mýto-Medový Újezd-Holoubkov", 0], ["243", "470243", "Mlečice-Čilá-Hradiště", 0], ["244", "470244", "Rokycany-Mirošov-Příkosice-Borovno", 0], ["245", "470245", "Nevid-Rokycany", 0], ["246", "470246", "Dobřív-Mirošov", 0], ["247", "470247", "Cheznovice-Mýto", 0], ["248", "470248", "Rokycany-Skořice-Míšov-Věšín,Teslíny", 0], ["253", "440253", "Plzeň-Kyšice-Chrást", 0], ["254", "440254", "Plzeň-Dýšina,Nová Huť", 0], ["321", "440321", "Plzeň-Kralovice-Čistá-Rakovník", 0], ["322", "440322", "Plzeň-Horní Bříza-Dolní Bělá-Manětín-Nečtiny", 0], ["323", "440323", "Plzeň-Toužim-Karlovy Vary", 0], ["331", "460331", "Nadryby-Plzeň", 0], ["332", "440332", "Plzeň-Liblín", 0], ["333", "460333", "Horní Bříza-Česká Bříza-Hromnice,Nynice", 0], ["334", "440334", "Plzeň-Třemošná-Horní Bříza-Dobříč", 0], ["335", "460335", "Horní Bříza-Třemošná-Plzeň", 0], ["341", "460341", "Kralovice-Koryta-Kaznějov-Plasy", 0], ["342", "460342", "Kralovice-Kočín-Babina-Plasy", 0], ["343", "460343", "Plasy-Plasy,Lomnička", 0], ["344", "460344", "Plasy-Pláně-Manětín", 0], ["345", "460345", "Plasy-Mladotice-Žihle-Blatno-Lubenec", 0], ["351", "460351", "Kralovice-Liblín", 0], ["352", "460352", "Kralovice-Chříč-Kralovice", 0], ["353", "460353", "Manětín-Žlutice", 0], ["354", "460354", "Kralovice-Mladotice-Manětín,Rabštejn nad Střelou", 0], ["355", "460355", "Kralovice-Žihle-Manětín", 0], ["361", "460361", "Úterý-Všeruby-Plzeň", 0], ["362", "460362", "Dolní Bělá-Ledce-Plzeň", 0], ["363", "460363", "Zahrádka,Hůrky-Všeruby-Plzeň", 0], ["364", "460364", "Všeruby-Žilov-Horní Bříza", 0], ["365", "460365", "Plasy-Kaznějov-Dolní Bělá-Úněšov", 0], ["366", "460366", "Manětín-Bezvěrov-Bezdružice", 0], ["367", "460367", "Manětín-Nečtiny-Úněšov", 0], ["368", "460368", "Ostrov u Bezdružic-Pernarec-Město Touškov-Plzeň", 0], ["369", "460369", "Město Touškov-Pňovany-Město Touškov", 0], ["370", "460370", "Všeruby-Město Touškov-Plzeň", 0], ["371", "460371", "Město Touškov,Kůští-Plzeň", 0], ["411", "450411", "Nepomuk,město-Nepomuk,žel.st.", 0], ["421", "450421", "Přeštice-Předenice-Štěnovice-Plzeň", 0], ["422", "450422", "Blovice-Chlum-Plzeň", 0], ["423", "440423", "Plzeň-Klatovy-Čachrov,Gerlova Huť-Modrava", 0], ["431", "450431", "Letiny-Řenče-Dolní Lukavice-Plzeň", 0], ["432", "430432", "Plánice-Chocenice-Losiná-Plzeň", 0], ["433", "450433", "Přeštice-Řenče,Plevňov/Netunice", 0], ["434", "450434", "Nepomuk-Skašov-Horšice-Přeštice", 0], ["435", "450435", "Přeštice-Měčín-Měčín,Petrovice", 0], ["436", "450436", "Blovice-Letiny-Skašov", 0], ["437", "450437", "Blovice-Spálené Poříčí-Mirošov-Rokycany", 0], ["438", "450438", "Přeštice-Skašov-Měčín", 0], ["439", "440439", "Plzeň-Štěnovice-Chlum-Nebílovy", 0], ["440", "450440", "Blovice-Šťáhlavy-Plzeň", 0], ["441", "450441", "Mladý Smolivec-Spálené Poříčí-Nezvěstice", 0], ["442", "450442", "Nezvěstice-Chválenice-Nezvěstice", 0], ["443", "450443", "Čížkov,Chynín-Míšov-Nezvěstice", 0], ["444", "450444", "Nepomuk-Chocenice-Blovice", 0], ["445", "450445", "Čížkov-Blovice", 0], ["446", "450446", "Nepomuk-Kasejovice-Blatná", 0], ["447", "440447", "Plzeň-Spálené Poříčí-Věšín,Teslíny", 0], ["448", "450448", "Nepomuk-Neurazy-Plánice", 0], ["449", "450449", "Kasejovice,Chloumek-Kasejovice-Chanovice", 0], ["450", "440450", "Plzeň-Losiná-Plzeň", 0], ["451", "450451", "Nepomuk-Oselce-Kasejovice", 0], ["452", "450452", "Ždírec,Smederov-Blovice", 0], ["454", "450454", "Kasejovice,Kladrubce-Nepomuk", 0], ["455", "450455", "Polánka-Myslív-Nepomuk", 0], ["456", "450456", "Nepomuk-Chlumy", 0], ["458", "450458", "Srby-Nepomuk", 0], ["460", "450460", "Nepomuk-Čížkov-Mladý Smolivec-Kasejovice", 0], ["462", "440462", "Plzeň-Sušice-Kvilda", 0], ["521", "460521", "Nýřany-Zbůch-Plzeň", 0], ["523", "440523", "Plzeň - Spálené Poříčí - Rožmitál pod Třemšínem", 0], ["531", "440531", "Plzeň-Nýřany-Kostelec,Ostrov,prům.zóna", 0], ["532", "440532", "Plzeň-Vochov-Nýřany,Doubrava", 0], ["533", "460533", "Úherce-Nýřany-Město Touškov", 0], ["534", "440534", "Plzeň-Plzeň,Lábkova-Město Touškov", 0], ["535", "460535", "Město Touškov-Chotíkov-Plzeň", 0], ["550", "450550", "Stod-Holýšov", 0], ["551", "450551", "Stod-Merklín-Merklín,Lhota", 0], ["552", "450552", "Stod-Honezovice,Hradišťany", 0], ["553", "450553", "Stod-Heřmanova Huť-Kostelec", 0], ["554", "450554", "Stod-Chotěšov,Losina", 0], ["555", "450555", "Stod-Lisov-Honezovice", 0], ["560", "450560", "Přeštice-Dobřany-Plzeň", 0], ["561", "450561", "Merklín-Dobřany-Plzeň", 0], ["562", "450562", "Oplot-Chlumčany-Plzeň", 0], ["563", "450563", "Vstiš-Dobřany", 0], ["564", "450564", "Stod-Dobřany-Chlumčany", 0], ["565", "450565", "Přeštice-Dobřany", 0], ["566", "450566", "Dobřany-Plzeň,Lhota-Plzeň", 0], ["571", "450571", "Přeštice-Dnešice,Černotín-Dobřany", 0], ["572", "450572", "Přeštice-Merklín-Ptenín,Újezdec", 0], ["573", "450573", "Přeštice-Biřkov", 0], ["574", "470574", "Radnice - Liblín - Zvíkovec - Skryje - Křivoklát", 0], ["575", "450575", "Přeštice-Lužany,Dlouhá Louka-Nezdice", 0], ["576", "450576", "Merklín-Staňkov", 0], ["611", "405611", "MHD Domažlice: Nová nemocnice-Poděbradova-Cihlářská,závodiště", 0], ["623", "400623", "Horšovský Týn-Koloveč-Švihov", 0], ["631", "400631", "Domažlice-Staňkov-Holýšov", 0], ["632", "400632", "Hostouň-Bělá nad Radbuzou,Železná", 0], ["633", "400633", "Poběžovice-Draženov-Domažlice", 0], ["634", "400634", "Díly-Trhanov-Domažlice", 0], ["635", "400635", "Rybník-Hostouň-Poběžovice", 0], ["636", "400636", "Rybník-Poběžovice", 0], ["637", "400637", "Mnichov,Vranov-Poběžovice", 0], ["638", "400638", "Poběžovice,Sedlec-Poběžovice-Poběžovice,Ohnišťovice", 0], ["639", "400639", "Nemanice-Klenčí pod Čerchovem", 0], ["640", "400640", "Poběžovice-Horšovský Týn-Staňkov", 0], ["641", "400641", "Pec-Trhanov-Klenčí pod Čerchovem", 0], ["642", "400642", "Horšovský Týn-Srby-Hostouň,Babice", 0], ["643", "400643", "Horšovský Týn-Meclov-Domažlice", 0], ["644", "400644", "Horšovský Týn-Mířkov-Vidice-Horšovský Týn,Oplotec", 0], ["645", "400645", "Velký Malahov,Ostromeč-Horšovský Týn", 0], ["646", "400646", "Staňkov-Puclice-Horšovský Týn", 0], ["647", "400647", "Horšovský Týn-Blížejov-Hradiště u Domažlic", 0], ["648", "400648", "Horšovský Týn-Horšovský Týn,Tasnovice", 0], ["649", "440649", "Plzeň-Staňkov-Bělá nad Radbuzou-Přimda", 0], ["683", "460683", "Kralovice-Vysoká Libyně-Jesenice", 0], ["732", "490732", "Stříbro,Milíkov-Stříbro,Lhota", 0], ["733", "490733", "Stříbro-Pernarec-Ostrov u Bezdružic-Úněšov,Budeč", 0], ["740", "490740", "Kladruby-Prostiboř", 0], ["741", "490741", "Lestkov,Hanov-Bezdružice-Černošín", 0], ["742", "490742", "Planá-Bor", 0], ["743", "490743", "Bor,Lužná-Bor-Stráž-Staré Sedlo,Darmyšl", 0], ["744", "490744", "Bor-Stráž-Bor", 0], ["745", "490745", "Bor-Přimda-Rozvadov", 0], ["746", "490746", "Planá-Lestkov-Bezdružice", 0], ["747", "490747", "Tachov-Staré Sedliště-Bor", 0], ["748", "490748", "Přimda-Bělá nad Radbuzou-Tachov", 0], ["751", "490751", "Tachov-Hošťka-Rozvadov", 0], ["756", "490756", "Planá-Chodský Újezd-Broumov", 0], ["758", "490758", "Planá-Chodová Planá,Boněnov", 0], ["761", "490761", "Olbramov-Černošín-Svojšín-Bor", 0], ["762", "490762", "Planá-Tachov-Lesná,Stará Knížecí Huť", 0], ["763", "490763", "Bor-Mířkov-Horšovský Týn", 0], ["821", "400821", "Domažlice-Zahořany-Kdyně-Klatovy", 0], ["822", "450822", "Holýšov-Staňkov-Koloveč-Chudenice-Klatovy", 0], ["831", "400831", "Domažlice-Babylon-Česká Kubice-Spálenec-Folmava", 0], ["832", "400832", "Domažlice-Pasečnice-Pelechy", 0], ["833", "400833", "Domažlice-Mrákov-Tlumačov-Všeruby", 0], ["834", "400834", "Kdyně/Domažlice-Mrákov-Mrákov,Mlýneček", 0], ["835", "400835", "Kdyně-Všeruby-Všeruby,Hyršov", 0], ["836", "400836", "Kdyně-Brnířov-Všeruby,Hyršov-Všeruby", 0], ["837", "400837", "Kdyně-Kdyně,Podzámčí-Kdyně", 0], ["841", "450841", "Holýšov-Černovice", 0], ["842", "400842", "Domažlice-Blížejov-Staňkov-Holýšov", 0], ["843", "450843", "Holýšov-Holýšov,Kasárenská-Holýšov", 0], ["851", "430851", "Klatovy-Švihov-Borovy-Kbel", 0], ["852", "430852", "Klatovy-Švihov-Chudenice", 0], ["853", "430853", "Klatovy-Švihov-Křenice,Přetín", 0], ["854", "430854", "Klatovy-Tupadly-Tětětice-Bezděkov", 0], ["855", "430855", "Klatovy-Běhařov-Janovice nad Úhlavou", 0], ["856", "430856", "Klatovy-Klatovy,Tajanov-Klatovy", 0], ["857", "430857", "Klatovy-Otín-Dehtín-Klatovy", 0], ["858", "430858", "Švihov-Švihov,Kamýk-Švihov", 0], ["861", "400861", "Domažlice-Kanice-Koloveč", 0], ["862", "400862", "Domažlice-Němčice u Domažlic-Koloveč", 0], ["863", "400863", "Domažlice-Zahořany-Oprechtice-Hradiště u Domažlic", 0], ["864", "400864", "Koloveč-Srbice,Strýčkovice", 0], ["871", "400871", "Kdyně-Slavíkovice-Černíkov", 0], ["872", "400872", "Kdyně-Mezholezy-Černíkov", 0], ["873", "400873", "Koloveč-Černíkov", 0], ["874", "400874", "Kdyně-Chodská Lhota-Pocinovice,Orlovice-Pocinovice", 0], ["921", "430921", "Horažďovice-Plánice-Klatovy", 0], ["922", "430922", "Sušice-Kolinec-Klatovy", 0], ["931", "430931", "Horažďovice-Nalžovské Hory,Těchonice", 0], ["932", "430932", "Pačejov-Plánice", 0], ["933", "430933", "Plánice-Číhaň-Plánice,Zdebořice", 0], ["934", "430934", "Horažďovice-Chanovice-Oselce,Kotouň", 0], ["935", "430935", "Horažďovice-Pačejov-Plánice", 0], ["936", "430936", "Horažďovice-Pačejov-Nalžovské Hory,Neprochovy", 0], ["937", "430937", "Horažďovice,Svaté Pole-Hejná", 0], ["938", "430938", "Nezamyslice-Horažďovice", 0], ["939", "430939", "Hradešice-Rabí-Horažďovice", 0], ["940", "430940", "Klatovy-Ostřetice-Kbel", 0], ["941", "430941", "Klatovy-Měčín-Žinkovy", 0], ["942", "430942", "Klatovy-Klatovy,Habartice", 0], ["943", "430943", "Klatovy-Mochtín-Klatovy", 0], ["944", "430944", "Klatovy-Předslav-Plánice", 0], ["945", "430945", "Klatovy-Chlistov", 0], ["946", "430946", "Kolinec-Kolinec,Malonice", 0], ["947", "430947", "Sušice-Hrádek-Nalžovské Hory", 0], ["948", "430948", "Sušice-Žichovice-Nezamyslice", 0], ["950", "430950", "Chanovice-Kadov,Pole-Kasejovice", 0], ["951", "430951", "Horažďovice-Klatovy", 0], ["952", "430952", "Sušice-Rabí-Horažďovice", 0], ["960", "430960", "Klatovy-Nýrsko", 0], ["961", "430961", "Klatovy-Janovice nad Úhlavou-Strážov", 0], ["962", "430962", "Železná Ruda-Nýrsko", 0], ["963", "430963", "Nýrsko-Svatá Kateřina", 0], ["964", "430964", "Nýrsko-Chudenín-Liščí-Chudenín-Nýrsko", 0], ["965", "430965", "Nýrsko-Hodousice-Hadrava", 0], ["966", "430966", "Nýrsko-Hamry", 0], ["967", "430967", "Klatovy-Týnec-Javor-Janovice nad Úhlavou", 0], ["968", "430968", "Klatovy-Běšiny-Čachrov,Javorná", 0], ["969", "430969", "Divišovice-Strážov-Běšiny-Klatovy", 0], ["970", "430970", "Sušice-Petrovice u Sušice-Velhartice-Běšiny-Klatovy", 0], ["971", "430971", "Sušice-Petrovice u Sušice-Hory Matky Boží-Velhartice", 0], ["972", "430972", "Železná Ruda-Prášily-Hartmanice-Sušice", 0], ["973", "430973", "Sušice-Dlouhá Ves-Hartmanice-Prášily", 0], ["974", "431974", "Sušice-Kašperské Hory-Srní-Modrava-Kvilda", 0], ["975", "430975", "Sušice-Kašperské Hory-Stachy", 0], ["976", "430976", "Sušice-Ostružno-Nezdice na Šumavě-Strašín", 0], ["977", "430977", "Sušice-Soběšice-Nezdice na Šumavě-Kašperské Hory", 0], ["978", "430978", "Kašperské Hory,Červená-Kašperské Hory-Kašperské Hory,Tuškov", 0], ["979", "430979", "Železná Ruda-Prášily-Modrava-Kvilda", 0], ["980", "430980", "Horská Kvilda-Kvilda-Bučina", 0], ["981", "400981", "Domažlice-Klatovy-Prášily-Srní-Kvilda", 0], ["986", "430986", "Horažďovice-Záboří", 0]];
+const LINES = GTFS_LINES.map(r => r[0]);
+
 (function(){
   const inp=document.getElementById('lineSearch'),res=document.getElementById('lineRes'),panel=document.querySelector('.ticker');
   const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
-  document.getElementById('lineCount').textContent=LINES.length;
-  document.getElementById('ledCount').textContent=LINES.length;
+  
+  document.getElementById('lineCount').textContent=GTFS_LINES.length;
+  document.getElementById('ledCount').textContent=GTFS_LINES.length;
+  const sCountEl=document.getElementById('soundLineCount');
+  if(sCountEl) sCountEl.textContent=GTFS_LINES.filter(r=>r[3]===1).length;
+
   function fill(id,arr){
-    const h=arr.map(n=>`<span class="ln" data-n="${n}">${n}</span>`).join('');
-    document.querySelector('#'+id+' .tkin').innerHTML=h+h;       /* dvakrát = nekonečná smyčka */
+    const h=arr.map(r=>`<span class="ln ${r[3]?'sound':''}" data-n="${r[0]}">${r[0]}${r[3]?' 🔊':''}</span>`).join('');
+    document.querySelector('#'+id+' .tkin').innerHTML=h+h;
   }
-  const shift=Math.floor(LINES.length/2);
-  fill('tk1',LINES);
-  fill('tk2',LINES.slice(shift).concat(LINES.slice(0,shift)));
+  const shift=Math.floor(GTFS_LINES.length/2);
+  fill('tk1',GTFS_LINES);
+  fill('tk2',GTFS_LINES.slice(shift).concat(GTFS_LINES.slice(0,shift)));
 
   /* ---- dvě řady, každá jede svým směrem; dají se chytit a posouvat ---- */
-  const IDLE=2000;                                     /* po tolika ms od puštění jede panel zase sám */
+  const IDLE=2000;
   const rows=[{id:'tk1',dir:-1,speed:38},{id:'tk2',dir:1,speed:30}].map(r=>{
     r.box=document.getElementById(r.id);r.inner=r.box.querySelector('.tkin');
     r.x=0;r.vel=0;r.idle=0;r.auto=1;r.anim=null;r.drag=null;r.half=0;return r;
@@ -2093,13 +2213,13 @@ const LINES=['490722','424','440336','739','400621','490735','1651','496711','49
       const d=r.drag;if(!d||e.pointerId!==d.id)return;
       r.drag=null;r.box.classList.remove('drag');
       const now=performance.now();
-      if(d.moved<6&&d.ln&&e.type==='pointerup'){choose(d.ln.dataset.n)}       /* klepnutí na číslo = vyhledat */
-      else r.vel=Math.max(-2500,Math.min(2500,now-d.lt<90?d.v:0));             /* setrvačnost po švihnutí */
+      if(d.moved<6&&d.ln&&e.type==='pointerup'){choose(d.ln.dataset.n)}
+      else r.vel=Math.max(-2500,Math.min(2500,now-d.lt<90?d.v:0));
       r.idle=now+IDLE;
     };
     r.box.addEventListener('pointerup',end);
     r.box.addEventListener('pointercancel',end);
-    r.box.addEventListener('wheel',e=>{                /* horizontální kolečko / touchpad */
+    r.box.addEventListener('wheel',e=>{
       if(Math.abs(e.deltaX)>Math.abs(e.deltaY)){e.preventDefault();r.x-=e.deltaX;r.anim=null;r.auto=0;r.idle=performance.now()+IDLE}
     },{passive:false});
   });
@@ -2111,13 +2231,13 @@ const LINES=['490722','424','440336','739','400621','490735','1651','496711','49
       rows.forEach(r=>{
         if(!r.half)measure(r);
         if(!r.half)return;
-        if(r.drag){/* hýbe se prst */}
+        if(r.drag){}
         else if(r.anim){
           const a=r.anim,t=Math.min(1,(now-a.t0)/a.dur);
           r.x=a.from+(a.to-a.from)*(1-Math.pow(1-t,3));
           if(t>=1){r.anim=null;r.idle=now+IDLE}
         }else if(now<r.idle){r.x+=r.vel*dt;r.vel*=Math.exp(-dt*3.2);r.auto=0}
-        else{r.auto+=(1-r.auto)*Math.min(1,dt*2.5);if(!reduce&&OIS_PERF.tier!=='min')r.x+=r.dir*r.speed*r.auto*dt}   /* plynulý rozjezd */
+        else{r.auto+=(1-r.auto)*Math.min(1,dt*2.5);if(!reduce&&OIS_PERF.tier!=='min')r.x+=r.dir*r.speed*r.auto*dt}
         r.x=wrap(r.x,r.half);
         r.inner.style.transform='translate3d('+r.x+'px,0,0)';
       });
@@ -2136,7 +2256,7 @@ const LINES=['490722','424','440336','739','400621','490735','1651','496711','49
       r.inner.querySelectorAll('.ln').forEach(e=>{
         if(!e.dataset.n.includes(q))return;
         let s=vw/2-(e.offsetLeft+e.offsetWidth/2)-r.x;
-        s-=Math.round(s/r.half)*r.half;                /* nejkratší cesta (smyčka je nekonečná) */
+        s-=Math.round(s/r.half)*r.half;
         const score=Math.abs(s)-(e.dataset.n===q?1e6:0);
         if(score<bs){bs=score;best=s}
       });
@@ -2147,7 +2267,7 @@ const LINES=['490722','424','440336','739','400621','490735','1651','496711','49
   }
 
   /* ---- vyhledávání ---- */
-  const norm=s=>s.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const norm=s=>String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
   const plural=n=>n===1?'linka':(n>=2&&n<=4?'linky':'linek');
   function run(){
     const q=norm(inp.value);
@@ -2156,16 +2276,44 @@ const LINES=['490722','424','440336','739','400621','490735','1651','496711','49
       e.classList.toggle('hit',!!q&&e.dataset.n.includes(q));
       e.classList.toggle('exact',!!q&&e.dataset.n===q);
     });
-    if(!q){res.innerHTML='<p class="lstat info">Zadejte číslo linky, například 490.</p>';return}
-    const m=LINES.filter(n=>n.toLowerCase().includes(q)),exact=m.some(n=>n.toLowerCase()===q);
+    if(!q){res.innerHTML='<p class="lstat info">Zadejte číslo linky (např. 722, 424, 336) nebo město na trase.</p>';return}
+    
+    const matches=GTFS_LINES.filter(r=>{
+      const num=norm(r[0]);
+      const cis=norm(r[1]);
+      const name=norm(r[2]);
+      return num.includes(q)||cis.includes(q)||name.includes(q);
+    });
+    const exact=matches.find(r=>norm(r[0])===q||norm(r[1])===q);
+
     let h='';
-    if(exact)h+=`<p class="lstat ok">✓ Linka ${q} je v aplikaci</p>`;
-    else if(m.length)h+=`<p class="lstat info">Nalezeno ${m.length} ${plural(m.length)}.</p>`;
-    else h+=`<p class="lstat no">Linku „${q}“ tu zatím nemáme.</p><p class="lstat info">Chybí vám linka? Napište nám na <a href="https://discord.gg/vmTagbC9mF">Discordu</a>.</p>`;
-    const shown=m.filter(n=>n.toLowerCase()!==q).slice(0,36);
-    if(shown.length)h+='<div class="lchips">'+shown.map(n=>`<button type="button" class="lchip" data-n="${n}">${n}</button>`).join('')+(m.length>shown.length+(exact?1:0)?`<span class="lmore">+ další</span>`:'')+'</div>';
+    if(exact){
+      const isSound=exact[3]===1;
+      h+=`<div class="lstat-card" style="padding:14px 18px;border-radius:14px;background:rgba(255,255,255,0.03);border:1px solid ${isSound?'rgba(56,214,255,0.4)':'rgba(255,255,255,0.08)'};margin-bottom:14px">`;
+      h+=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">`;
+      h+=`<b style="font-size:1.15rem;color:var(--text)">Linka ${exact[0]}</b>`;
+      if(exact[1]&&exact[1]!==exact[0]) h+=`<span style="color:var(--muted);font-size:.86rem">(${exact[1]})</span>`;
+      if(isSound){
+        h+=`<span class="lstat sound-badge yes">🔊 Se zvukovým hlášením</span>`;
+      }else{
+        h+=`<span class="lstat sound-badge no">🔇 Bez nahraného zvuku</span>`;
+      }
+      h+=`</div>`;
+      if(exact[2]) h+=`<p class="lstat route-name">Trasa: ${exact[2]}</p>`;
+      h+=`<p class="lstat info" style="margin:0">${isSound?'Tato linka má v aplikaci kompletní nahraný hlas a hlášení zastávek.':'Linka je v jízdním řádu IDPK, v aplikaci je zatím bez nahraného zvuku.'}</p>`;
+      h+=`</div>`;
+    }else if(matches.length){
+      h+=`<p class="lstat info">Nalezeno ${matches.length} ${plural(matches.length)}.</p>`;
+    }else{
+      h+=`<p class="lstat no">Linku „${q}“ tu zatím nemáme.</p><p class="lstat info">Chybí vám linka? Napište nám na <a href="https://discord.gg/vmTagbC9mF" target="_blank" rel="noopener">Discordu</a>.</p>`;
+    }
+
+    const shown=matches.filter(r=>!exact||r[0]!==exact[0]).slice(0,36);
+    if(shown.length){
+      h+='<div class="lchips">'+shown.map(r=>`<button type="button" class="lchip ${r[3]?'sound':''}" data-n="${r[0]}" title="${r[2]}">${r[0]}${r[3]?' 🔊':''}</button>`).join('')+(matches.length>shown.length+(exact?1:0)?`<span class="lmore">+ další</span>`:'')+'</div>';
+    }
     res.innerHTML=h;
-    if(m.length)focusHit(q);
+    if(matches.length)focusHit(exact?exact[0]:matches[0][0]);
   }
   function choose(n){inp.value=n;run()}
   inp.addEventListener('input',run);
