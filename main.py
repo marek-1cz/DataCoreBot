@@ -3305,9 +3305,9 @@ def api_stats_summary():
             local_s = local_get_stats()
         except Exception: pass
 
-        # TOP lines & stops (Supabase + Local DB)
-        top_lines = db.table("stats_lines").select("line_name, play_count").order("play_count", desc=True).limit(50).execute().data or []
-        top_stops = db.table("stats_stops").select("stop_name, announce_count").order("announce_count", desc=True).limit(50).execute().data or []
+        # TOP lines & stops (Supabase + Local DB) - vracíme kompletní seznamy pro podrobné zobrazení
+        top_lines = db.table("stats_lines").select("line_name, play_count").order("play_count", desc=True).limit(1000).execute().data or []
+        top_stops = db.table("stats_stops").select("stop_name, announce_count").order("announce_count", desc=True).limit(2000).execute().data or []
         
         merged_lines = {}
         for l in top_lines:
@@ -3316,7 +3316,7 @@ def api_stats_summary():
         for ln, cnt in local_s.get('lines', {}).items():
             merged_lines[ln] = max(merged_lines.get(ln, 0), int(cnt or 0))
             
-        toplines_list = [[ln, cnt] for ln, cnt in sorted(merged_lines.items(), key=lambda x: x[1], reverse=True)[:20]]
+        toplines_list = [[ln, cnt] for ln, cnt in sorted(merged_lines.items(), key=lambda x: x[1], reverse=True)]
         
         merged_stops = {}
         for s in top_stops:
@@ -3325,7 +3325,7 @@ def api_stats_summary():
         for sn, cnt in local_s.get('stops', {}).items():
             merged_stops[sn] = max(merged_stops.get(sn, 0), int(cnt or 0))
             
-        topstops_list = [[sn, cnt] for sn, cnt in sorted(merged_stops.items(), key=lambda x: x[1], reverse=True)[:20]]
+        topstops_list = [[sn, cnt] for sn, cnt in sorted(merged_stops.items(), key=lambda x: x[1], reverse=True)]
         
         user_lines_data = db.table("user_stats_lines").select("discord_id, play_count").execute().data or []
         player_line_counts = {}
