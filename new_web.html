@@ -1133,9 +1133,9 @@ html.perf-low .dls,html.perf-min .dls{transition:none}
 
 /* v24: prohledávatelné seznamy a TOP 5 zvýraznění */
 .cols-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:18px}
-.lst .lsrch{width:100%;margin-bottom:12px;padding:12px 18px;border-radius:999px;border:1px solid var(--glass-border);background:rgba(255,255,255,.05);color:var(--text);font:inherit;font-size:15px;outline:none;transition:border-color .2s,box-shadow .2s}
+.lst .lsrch{width:100%;margin-bottom:12px;padding:12px 18px;border-radius:999px;border:1px solid var(--glass-border);background:rgba(255,255,255,.05);color:var(--text);font:inherit;font-size:15px;outline:none;transition:border-color .2s,box-shadow .2s;text-align:center}
 .lst .lsrch:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(47,107,255,.2);background:rgba(255,255,255,.08)}
-.lst .lmeta{color:var(--muted);font-size:.82rem;margin:0 6px 10px;font-weight:500}
+.lst .lmeta{color:var(--muted);font-size:.82rem;margin:0 auto 10px;font-weight:500;text-align:center}
 .lst .lscroll{max-height:460px;overflow-y:auto;padding-right:8px;scrollbar-width:thin;scrollbar-color:rgba(120,165,255,.35) transparent;display:flex;flex-direction:column;gap:5px}
 .lst .lscroll::-webkit-scrollbar{width:6px}.lst .lscroll::-webkit-scrollbar-thumb{background:rgba(120,165,255,.35);border-radius:6px}
 .lst .none{color:var(--muted);padding:16px 8px;font-size:.9rem;text-align:center}
@@ -1168,11 +1168,53 @@ html.perf-low .dls,html.perf-min .dls{transition:none}
 .lst .bar.rank-4 .v{color:#38bdf8;font-weight:700}
 .lst .bar.rank-5 .v{color:#818cf8;font-weight:700}
 
-/* v25: Náš tým na střed */
-[data-page=team] .phead{text-align:center}
-[data-page=team] .phead .lead{margin-left:auto;margin-right:auto}
-[data-page=team] .kicker::after{content:"";flex:none;width:28px;height:2px;border-radius:2px;background:linear-gradient(270deg,var(--blue),var(--cyan))}
+/* ===== Zarovnání na střed – sjednocení všech stránek a sekcí ===== */
+.page.sub .phead{text-align:center}
+.page.sub .phead .kicker{justify-content:center}
+.page.sub .phead .kicker::after{content:"";flex:none;width:28px;height:2px;border-radius:2px;background:linear-gradient(270deg,var(--blue),var(--cyan))}
+.page.sub .phead .lead{margin-left:auto;margin-right:auto;max-width:720px}
+
+/* Náš tým na střed */
 [data-page=team] .team{margin-left:auto;margin-right:auto;justify-content:center}
+
+/* Podporovatelé na střed */
+[data-page=supporters] .phead{text-align:center}
+[data-page=supporters] .phead .kicker{justify-content:center}
+[data-page=supporters] .phead .kicker::after{content:"";flex:none;width:28px;height:2px;border-radius:2px;background:linear-gradient(270deg,var(--blue),var(--cyan))}
+[data-page=supporters] .phead .lead{margin-left:auto;margin-right:auto}
+[data-page=supporters] .sup-actions{justify-content:center}
+[data-page=supporters] .infobox{margin-left:auto;margin-right:auto;max-width:860px;text-align:center;justify-content:center}
+[data-page=supporters] .infobox p{text-align:center}
+[data-page=supporters] .thanks{margin-left:auto;margin-right:auto;max-width:860px;text-align:center;justify-content:center}
+[data-page=supporters] .thanks p{text-align:center}
+[data-page=supporters] .sec-h{text-align:center}
+[data-page=supporters] .hall2{margin-left:auto;margin-right:auto}
+
+/* Provoz IDPK na střed */
+[data-page=provoz] .phead{text-align:center}
+[data-page=provoz] .phead .kicker{justify-content:center}
+[data-page=provoz] .phead .kicker::after{content:"";flex:none;width:28px;height:2px;border-radius:2px;background:linear-gradient(270deg,var(--blue),var(--cyan))}
+[data-page=provoz] .phead .lead{margin-left:auto;margin-right:auto}
+[data-page=provoz] .notice.bar{margin-left:auto;margin-right:auto;max-width:860px;text-align:center;justify-content:center}
+[data-page=provoz] .notice.bar p{text-align:center}
+[data-page=provoz] .pgrid{max-width:1060px;margin-left:auto;margin-right:auto}
+[data-page=provoz] .pcard{text-align:center;align-items:center}
+[data-page=provoz] .pcard p{text-align:center}
+[data-page=provoz] .pcard .go{align-self:center}
+
+/* FAQ a galerie a sekce na střed */
+.faq{margin-left:auto;margin-right:auto}
+.faq h2{text-align:center}
+.faq .kicker{display:flex;justify-content:center}
+.faq .kicker::after{content:"";flex:none;width:28px;height:2px;border-radius:2px;background:linear-gradient(270deg,var(--blue),var(--cyan))}
+.gallery .head{text-align:center}
+.gallery .head .lead{margin-left:auto;margin-right:auto}
+#demo .wrap{text-align:center}
+#demo .lead{margin-left:auto;margin-right:auto}
+.sbanner{margin-left:auto;margin-right:auto;max-width:860px}
+.asof{display:block!important;width:100%!important;text-align:center!important;margin:26px auto 0!important}
+.chip-mine{margin-left:auto;margin-right:auto}
+.ustat input{text-align:center}
 
 .fadmin{text-align:center;margin-top:14px}
 .fadmin button{background:none;border:0;color:var(--muted);font:inherit;font-size:.82rem;cursor:pointer;padding:6px 12px;border-radius:999px;opacity:.75;transition:opacity .3s,color .3s}
@@ -1367,8 +1409,10 @@ body.night .aurora{opacity:.4}
 <!-- CO TO JE -->
 <section>
   <div class="wrap">
-    <h2 class="reveal">Co to <span class="grad">vlastně je?</span></h2>
-    <p class="lead reveal d1">Software, který věrně simuluje vnitřní informační systémy v autobusech.</p>
+    <div style="text-align:center;margin-bottom:34px">
+      <h2 class="reveal">Co to <span class="grad">vlastně je?</span></h2>
+      <p class="lead reveal d1" style="margin-left:auto;margin-right:auto">Software, který věrně simuluje vnitřní informační systémy v autobusech.</p>
+    </div>
 
     <div class="bento">
       <div class="card c-half reveal">
@@ -1665,8 +1709,20 @@ body.night .aurora{opacity:.4}
       <div class="uhead"><div class="uav" id="uAv"></div><div class="utx"><small>Statistiky uživatele</small><h2 id="uName"></h2></div><button class="btn ghost" id="uBack" type="button">← Globální statistiky</button></div>
       <div class="statgrid" id="uGrid"></div>
       <div class="cols">
-        <div class="card"><h3>Odjeté linky uživatele</h3><div id="uLines" class="lst"></div></div>
-        <div class="card"><h3>Vyhlášené zastávky uživatele</h3><div id="uStops" class="lst"></div></div>
+        <div class="card">
+          <div style="text-align:center;margin-bottom:14px">
+            <h3 style="margin:0 0 4px">Odjeté linky uživatele</h3>
+            <span style="font-size:.82rem;color:var(--muted)">záznamy od 1×</span>
+          </div>
+          <div id="uLines" class="lst"></div>
+        </div>
+        <div class="card">
+          <div style="text-align:center;margin-bottom:14px">
+            <h3 style="margin:0 0 4px">Vyhlášené zastávky uživatele</h3>
+            <span style="font-size:.82rem;color:var(--muted)">záznamy od 1×</span>
+          </div>
+          <div id="uStops" class="lst"></div>
+        </div>
       </div>
       <p class="asof">Zobrazeny jsou pouze statistiky tohoto uživatele. Stav k 20. 10. 2026</p>
     </div>
@@ -1696,16 +1752,16 @@ body.night .aurora{opacity:.4}
 
     <div class="cols cols-2" style="margin-top:18px">
       <div class="card reveal">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <h3 style="margin:0">Odjeté linky</h3>
-          <span style="font-size:.8rem;color:var(--muted)">záznamy od 1×</span>
+        <div style="text-align:center;margin-bottom:14px">
+          <h3 style="margin:0 0 4px">Odjeté linky</h3>
+          <span style="font-size:.82rem;color:var(--muted)">záznamy od 1×</span>
         </div>
         <div id="s-toplines" class="lst"></div>
       </div>
       <div class="card reveal d1">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <h3 style="margin:0">Vyhlášené zastávky</h3>
-          <span style="font-size:.8rem;color:var(--muted)">záznamy od 1×</span>
+        <div style="text-align:center;margin-bottom:14px">
+          <h3 style="margin:0 0 4px">Vyhlášené zastávky</h3>
+          <span style="font-size:.82rem;color:var(--muted)">záznamy od 1×</span>
         </div>
         <div id="s-topstops" class="lst"></div>
       </div>
@@ -1793,7 +1849,7 @@ body.night .aurora{opacity:.4}
         <span class="go">Otevřít jízdní řády →</span>
       </a>
     </div>
-    <p style="margin-top:34px"><a class="btn ghost" style="margin:0" href="#/">← Zpět na hlavní stránku</a></p>
+    <p style="margin-top:34px;text-align:center"><a class="btn ghost" style="margin:0" href="#/">← Zpět na hlavní stránku</a></p>
   </div>
 </section>
 </main>
