@@ -417,19 +417,6 @@ def normalize_line_number(raw_line: str) -> str:
     return raw
 
 
-# Jednorázové promazání starých chybných dat tabulky page_visits podle požadavku
-try:
-    _flag_file = os.path.join(os.path.dirname(__file__), ".page_visits_reset_v2")
-    if not os.path.exists(_flag_file):
-        _db_init = get_db()
-        if _db_init:
-            print("[STATS] Jednorázové promazávání starých dat tabulky page_visits...", flush=True)
-            _db_init.table("page_visits").delete().neq("id", 0).execute()
-            with open(_flag_file, "w") as _f:
-                _f.write("reset_done")
-            print("[STATS] Tabulka page_visits byla úspěšně vyprázdněna.", flush=True)
-except Exception as _e_clear:
-    print(f"[STATS] Upozornění při promazávání page_visits: {_e_clear}", flush=True)
 
 def get_real_client_ip(req):
     """Získá skutečnou veřejnou IP adresu klienta z proxy hlaviček (Koyeb, Cloudflare apod.)."""

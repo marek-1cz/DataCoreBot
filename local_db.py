@@ -185,6 +185,7 @@ def init_local_db():
             """)
             conn.commit()
             _restore_stats_backup_if_empty(conn)
+            _restore_web_visits_if_empty(conn)
             # Automatické pročištění neplatných admin zámků (Neznámá / Aktivní hledání nesmí mít admin zámek)
             try:
                 conn.execute("""
@@ -713,21 +714,57 @@ def local_get_stats():
         print(f"[LOCAL DB] Chyba čtení statistik: {e}", flush=True)
     return res
 
-def local_log_web_visit(ip: str, country: str, visited_at: str):
-    """Zaznamená návštěvu webu do lokální SQLite tabulky."""
+_WEB_VISITS_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "web_visits_backup.json")
+
+def _restore_web_visits_if_empty(conn):
     try:
-        with _local_db_lock:
-            with _get_local_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM web_visits_local")
+        cnt = cur.fetchone()[0]
+        if cnt == 0 and os.path.exists(_WEB_VISITS_BACKUP_FILE):
+            with open(_WEB_VISITS_BACKUP_FILE, "r", encoding="utf-8") as f:
+                visits = json.load(f)
+            for v in reversed(visits):
                 conn.execute("""
                     INSERT INTO web_visits_local (ip, country, visited_at)
                     VALUES (?, ?, ?)
+                """, (v.get("ip"), v.get("country"), v.get("visited_at")))
+            conn.commit()
+            print(f"[LOCAL DB] Obnoveno {len(visits)} webových návštěv ze zálohy web_visits_backup.json", flush=True)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba obnovy návštěv ze zálohy: {e}", flush=True)
+
+def local_log_web_visit(ip: str, country: str, visited_at: str):
+    """Zaznamená návštěvu webu do lokální SQLite tabulky a záložního JSONu."""
+    try:
+        new_id = 0
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO web_visits_local (ip, country, visited_at)
+                    VALUES (?, ?, ?)
                 """, (ip, country, visited_at))
+                new_id = cur.lastrowid
                 conn.commit()
+
+            # Zápis do záložního JSONu (persistentního napříč deployi na Koyeb)
+            try:
+                visits = []
+                if os.path.exists(_WEB_VISITS_BACKUP_FILE):
+                    with open(_WEB_VISITS_BACKUP_FILE, "r", encoding="utf-8") as f:
+                        visits = json.load(f)
+                visits.insert(0, {"id": new_id, "ip": ip, "country": country, "visited_at": visited_at})
+                visits = visits[:2000]
+                with open(_WEB_VISITS_BACKUP_FILE, "w", encoding="utf-8") as f:
+                    json.dump(visits, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
     except Exception as e:
         pass
 
 def local_get_web_visits(limit: int = 2000):
-    """Vrátí historii návštěv webu z lokální SQLite tabulky."""
+    """Vrátí historii návštěv webu z lokální SQLite tabulky nebo ze záložního JSONu."""
     try:
         with _local_db_lock:
             with _get_local_conn() as conn:
@@ -739,9 +776,18 @@ def local_get_web_visits(limit: int = 2000):
                     LIMIT ?
                 """, (limit,))
                 rows = cur.fetchall()
-                return [{"id": r[0], "ip": r[1], "country": r[2], "visited_at": r[3]} for r in rows]
+                if rows:
+                    return [{"id": r[0], "ip": r[1], "country": r[2], "visited_at": r[3]} for r in rows]
     except Exception as e:
-        return []
+        pass
+
+    try:
+        if os.path.exists(_WEB_VISITS_BACKUP_FILE):
+            with open(_WEB_VISITS_BACKUP_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)[:limit]
+    except Exception:
+        pass
+    return []
 
 def local_clear_web_visits():
     """Vymaže lokální historii návštěv webu."""
@@ -750,6 +796,9 @@ def local_clear_web_visits():
             with _get_local_conn() as conn:
                 conn.execute("DELETE FROM web_visits_local")
                 conn.commit()
+        if os.path.exists(_WEB_VISITS_BACKUP_FILE):
+            with open(_WEB_VISITS_BACKUP_FILE, "w", encoding="utf-8") as f:
+                json.dump([], f)
     except Exception as e:
         pass
 
