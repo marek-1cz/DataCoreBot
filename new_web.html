@@ -1980,8 +1980,10 @@ const STATS={
   topstops:[['Plzeň, Terminál Hlavní nádraží',29],['Stříbro, aut. st.',28],['Tachov, aut. nádr.',23],['Tymákov, ObÚ',20],['Letkov',17],['Mokrouše, garáž ČSAD',16],['Tachov, u Rybeny',14],['Plzeň, K Bukové',13]]
 };
 function bars(id,rows,unit){
-  const max=Math.max(...rows.map(r=>r[1]));
-  document.getElementById(id).innerHTML=rows.map(r=>
+  const el=document.getElementById(id);
+  if(!el||!Array.isArray(rows)||!rows.length) return;
+  const max=Math.max(...rows.map(r=>r[1])) || 1;
+  el.innerHTML=rows.map(r=>
     `<div class="bar"><span class="n">${r[0]}</span><span class="v">${r[1]}${unit}</span><i style="--w:${(r[1]/max*100).toFixed(0)}%"></i></div>`).join('');
 }
 bars('s-lines',STATS.lines,'×');bars('s-stops',STATS.stops,'×');bars('s-time',STATS.time,' h');
@@ -2169,7 +2171,22 @@ async function loadSupporters(){
   } catch(_) {}
 }
 loadSupporters();
-addEventListener('DOMContentLoaded',()=>{try{if(CONFIG.stats)fetch(CONFIG.stats).then(r=>r.json()).then(d=>{['toplines','topstops','users','lines','stops','time'].forEach(k=>{if(d&&d[k])STATS[k]=d[k]});drawGlobalLists()}).catch(()=>{})}catch(_){}});
+addEventListener('DOMContentLoaded',()=>{
+  try{
+    const statsUrl = (typeof CONFIG!=='undefined'&&CONFIG.stats) ? CONFIG.stats : '/api/stats/summary';
+    fetch(statsUrl).then(r=>r.json()).then(d=>{
+      if(!d) return;
+      ['toplines','topstops','users','lines','stops','time'].forEach(k=>{
+        if(d[k]) STATS[k]=d[k];
+      });
+      drawGlobalLists();
+      if(Array.isArray(STATS.lines)&&STATS.lines.length) bars('s-lines',STATS.lines,'×');
+      if(Array.isArray(STATS.stops)&&STATS.stops.length) bars('s-stops',STATS.stops,'×');
+      if(Array.isArray(STATS.time)&&STATS.time.length) bars('s-time',STATS.time,' h');
+      if(typeof window.refreshStatUsers === 'function') window.refreshStatUsers();
+    }).catch(()=>{});
+  }catch(_){}
+});
 
 /* ===== v23: vyhledání uživatele ve statistikách ===== */
 (function(){
@@ -2180,9 +2197,15 @@ addEventListener('DOMContentLoaded',()=>{try{if(CONFIG.stats)fetch(CONFIG.stats)
   /* seznam uživatelů poskládaný z dat výše; po napojení nahraďte voláním API (CONFIG.api.userStats) */
   const users=new Map();
   const put=(rows,key)=>rows.forEach((r,i)=>{const k=norm(r[0]);if(!users.has(k))users.set(k,{name:r[0]});const u=users.get(k);u[key]=r[1];u[key+'Rank']=i+1});
-  put(STATS.lines,'lines');put(STATS.stops,'stops');put(STATS.time,'time');
+  window.refreshStatUsers=function(){
+    users.clear();
+    if(Array.isArray(STATS.lines)) put(STATS.lines,'lines');
+    if(Array.isArray(STATS.stops)) put(STATS.stops,'stops');
+    if(Array.isArray(STATS.time)) put(STATS.time,'time');
+  };
+  window.refreshStatUsers();
   async function lookup(name){
-    const a=(typeof CONFIG!=='undefined'&&CONFIG.api&&CONFIG.api.userStats)||'';
+    const a=(typeof CONFIG!=='undefined'&&CONFIG.api&&CONFIG.api.userStats)||'/api/stats/user';
     if(a){try{const r=await fetch(a,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});const d=await r.json();
       if(d&&d.found){
         const baseU=Object.keys(STATS.users||{}).find(k=>norm(k)===norm(d.name||name));
