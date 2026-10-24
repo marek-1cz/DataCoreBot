@@ -527,7 +527,7 @@ def resolve_ip_geo(ip, cf_hint=None):
     return res
 
 def log_web_visit_async(ip, cf_hint, path):
-    """Zaznamená návštěvu webu na pozadí v paměti (do Supabase nezapisujeme pro úsporu kvóty)."""
+    """Zaznamená návštěvu webu do lokální SQLite databáze (0% zátěž na Supabase)."""
     def _worker():
         try:
             if not ip:
@@ -537,6 +537,16 @@ def log_web_visit_async(ip, cf_hint, path):
             if now_ts - last_ts < 900:
                 return
             _RECENT_WEB_VISITS[ip] = now_ts
+
+            geo = resolve_ip_geo(ip, cf_hint)
+            now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+            clean_path = (path or "/").split("?")[0][:60]
+            combined = f"{geo['country_code']}|{geo['country_name']}|{geo['region']}|{geo['city']}|{clean_path}"
+            try:
+                from local_db import local_log_web_visit
+                local_log_web_visit(ip, combined, now_str)
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -4316,10 +4326,18 @@ def dashboard_stats_clear_web():
     if not session.get('logged_in'):
         return redirect(url_for('dashboard_main'))
     try:
+        try:
+            from local_db import local_clear_web_visits
+            local_clear_web_visits()
+        except Exception:
+            pass
         db = get_db()
-        if db:
-            db.table("page_visits").delete().neq("id", 0).execute()
-            flash("Data historie webových návštěv byla úspěšně vymazána.", "success")
+        if db and not EGRESS_SAVE_MODE:
+            try:
+                db.table("page_visits").delete().neq("id", 0).execute()
+            except Exception:
+                pass
+        flash("Data historie webových návštěv byla úspěšně vymazána.", "success")
     except Exception as e:
         flash(f"Chyba při mazání historie webu: {e}", "error")
     return redirect(url_for('dashboard_stats'))
@@ -4355,56 +4373,68 @@ def dashboard_stats():
 
     try:
         db = get_db()
+        # ── Načtení návštěvnosti WEBU (nejdřív z lokální SQLite, 0% zátěž na Supabase) ──
+        visits = []
+        try:
+            from local_db import local_get_web_visits
+            visits = local_get_web_visits(limit=2000)
+        except Exception:
+            pass
+
+        if not visits and db and not EGRESS_SAVE_MODE:
+            try:
+                visits = db.table("page_visits").select("*").order("id", desc=True).limit(2000).execute().data or []
+            except Exception:
+                pass
+
+        web_total_visits = len(visits)
+
+        for v in visits:
+            c_raw = (v.get('country') or '').strip()
+            parts = c_raw.split('|')
+            cc = parts[0].lower().strip() if len(parts) > 0 and parts[0] else "cz"
+            c_name = parts[1].strip() if len(parts) > 1 and parts[1] else "Česká republika"
+            reg = parts[2].strip() if len(parts) > 2 else ""
+            city = parts[3].strip() if len(parts) > 3 else ""
+            path = parts[4].strip() if len(parts) > 4 else "/"
+
+            flag_url = f"https://flagcdn.com/24x18/{cc}.png"
+            if cc not in country_totals:
+                country_totals[cc] = {"name": c_name, "count": 0, "flag": flag_url}
+            country_totals[cc]["count"] += 1
+
+            loc_label = f"{c_name} - {reg}" if reg else c_name
+            if loc_label not in region_totals:
+                region_totals[loc_label] = {"count": 0, "flag": flag_url, "city": city}
+            region_totals[loc_label]["count"] += 1
+
+            v_time_str = v.get('visited_at', '')
+            try:
+                v_time = datetime.strptime(v_time_str, "%d.%m.%Y %H:%M")
+                if (now_dt - v_time).days <= 7:
+                    web_last_7_days += 1
+                if v_time.date() == now_dt.date():
+                    web_today_visits += 1
+                    h_str = v_time.strftime("%H:00")
+                    if h_str in web_chart_24h:
+                        web_chart_24h[h_str] += 1
+                d_str = v_time.strftime("%d.%m.")
+                if d_str in web_chart_7d:
+                    web_chart_7d[d_str] += 1
+            except Exception:
+                pass
+
+            if len(recent_web_visits) < 25:
+                recent_web_visits.append({
+                    "ip": v.get("ip", "Neznámá"),
+                    "country_name": c_name,
+                    "flag": flag_url,
+                    "location": f"{city}, {reg}" if (city and reg) else (reg or city or c_name),
+                    "path": path,
+                    "visited_at": v_time_str
+                })
+
         if db:
-            # ── Načtení návštěvnosti WEBU ──
-            visits = db.table("page_visits").select("*").order("id", desc=True).limit(2000).execute().data or []
-            web_total_visits = len(visits)
-
-            for v in visits:
-                c_raw = (v.get('country') or '').strip()
-                parts = c_raw.split('|')
-                cc = parts[0].lower().strip() if len(parts) > 0 and parts[0] else "cz"
-                c_name = parts[1].strip() if len(parts) > 1 and parts[1] else "Česká republika"
-                reg = parts[2].strip() if len(parts) > 2 else ""
-                city = parts[3].strip() if len(parts) > 3 else ""
-                path = parts[4].strip() if len(parts) > 4 else "/"
-
-                flag_url = f"https://flagcdn.com/24x18/{cc}.png"
-                if cc not in country_totals:
-                    country_totals[cc] = {"name": c_name, "count": 0, "flag": flag_url}
-                country_totals[cc]["count"] += 1
-
-                loc_label = f"{c_name} - {reg}" if reg else c_name
-                if loc_label not in region_totals:
-                    region_totals[loc_label] = {"count": 0, "flag": flag_url, "city": city}
-                region_totals[loc_label]["count"] += 1
-
-                v_time_str = v.get('visited_at', '')
-                try:
-                    v_time = datetime.strptime(v_time_str, "%d.%m.%Y %H:%M")
-                    if (now_dt - v_time).days <= 7:
-                        web_last_7_days += 1
-                    if v_time.date() == now_dt.date():
-                        web_today_visits += 1
-                        h_str = v_time.strftime("%H:00")
-                        if h_str in web_chart_24h:
-                            web_chart_24h[h_str] += 1
-                    d_str = v_time.strftime("%d.%m.")
-                    if d_str in web_chart_7d:
-                        web_chart_7d[d_str] += 1
-                except Exception:
-                    pass
-
-                if len(recent_web_visits) < 25:
-                    recent_web_visits.append({
-                        "ip": v.get("ip", "Neznámá"),
-                        "country_name": c_name,
-                        "flag": flag_url,
-                        "location": f"{city}, {reg}" if (city and reg) else (reg or city or c_name),
-                        "path": path,
-                        "visited_at": v_time_str
-                    })
-
             # ── Načtení dat APLIKACE ──
             all_users = db.table("users").select("id, discord_id, nick, avatar_url, role, is_online, last_active, total_time, launch_count").execute().data or []
             user_map = {}

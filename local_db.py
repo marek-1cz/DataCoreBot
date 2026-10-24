@@ -174,6 +174,15 @@ def init_local_db():
                     PRIMARY KEY (discord_id, stop_name)
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS web_visits_local (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ip TEXT,
+                    country TEXT,
+                    visited_at TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             conn.commit()
             _restore_stats_backup_if_empty(conn)
             # Automatické pročištění neplatných admin zámků (Neznámá / Aktivní hledání nesmí mít admin zámek)
@@ -703,3 +712,44 @@ def local_get_stats():
     except Exception as e:
         print(f"[LOCAL DB] Chyba čtení statistik: {e}", flush=True)
     return res
+
+def local_log_web_visit(ip: str, country: str, visited_at: str):
+    """Zaznamená návštěvu webu do lokální SQLite tabulky."""
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                conn.execute("""
+                    INSERT INTO web_visits_local (ip, country, visited_at)
+                    VALUES (?, ?, ?)
+                """, (ip, country, visited_at))
+                conn.commit()
+    except Exception as e:
+        pass
+
+def local_get_web_visits(limit: int = 2000):
+    """Vrátí historii návštěv webu z lokální SQLite tabulky."""
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT id, ip, country, visited_at
+                    FROM web_visits_local
+                    ORDER BY id DESC
+                    LIMIT ?
+                """, (limit,))
+                rows = cur.fetchall()
+                return [{"id": r[0], "ip": r[1], "country": r[2], "visited_at": r[3]} for r in rows]
+    except Exception as e:
+        return []
+
+def local_clear_web_visits():
+    """Vymaže lokální historii návštěv webu."""
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                conn.execute("DELETE FROM web_visits_local")
+                conn.commit()
+    except Exception as e:
+        pass
+
