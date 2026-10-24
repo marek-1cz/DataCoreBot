@@ -152,11 +152,12 @@ h2{font-size:clamp(2rem,5vw,3.3rem);margin-bottom:16px}
 @keyframes bob{50%{transform:translateY(-8px)}}
 .hero h1{font-size:clamp(2.8rem,9vw,6.4rem)}
 .hero .lead{margin:22px auto 34px}
-.btn{display:inline-block;padding:15px 32px;border-radius:999px;font-weight:700;transition:transform .35s var(--ease), box-shadow .35s}
-.btn.main{background:linear-gradient(135deg,var(--blue),var(--cyan));color:#031028;box-shadow:0 10px 36px rgba(47,107,255,.4)}
-.btn.main:hover{transform:translateY(-2px);box-shadow:0 14px 44px rgba(56,214,255,.4)}
-.btn.ghost{margin-left:8px;background:var(--glass);border:1px solid var(--glass-border);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
-.btn.ghost:hover{background:rgba(255,255,255,.12)}
+.btn{display:inline-block;padding:15px 32px;border-radius:999px;font-weight:700;transition:transform .4s cubic-bezier(0.2,0.8,0.2,1),box-shadow .4s ease,translate .3s ease-out,background .3s}
+.btn.main{background:linear-gradient(135deg,var(--blue),var(--cyan));color:#031028;box-shadow:0 8px 26px rgba(47,107,255,.32)}
+.btn.main:hover{transform:translateY(-2px);box-shadow:0 12px 34px rgba(56,214,255,.38)}
+.btn.ghost{margin-left:8px;background:var(--glass);border:1px solid var(--glass-border);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);transition:transform .4s cubic-bezier(0.2,0.8,0.2,1),background .35s,border-color .35s,translate .3s ease-out}
+.btn.ghost:hover{background:rgba(255,255,255,.12);transform:translateY(-2px);border-color:rgba(255,255,255,.25)}
+.btn:active{transform:scale(.98) translateY(0)}
 .hero-chips{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:40px}
 .chip{padding:8px 16px;border-radius:999px;background:var(--glass);border:1px solid var(--glass-border);font-size:.88rem;color:var(--muted)}
 
@@ -1309,7 +1310,7 @@ body.night .aurora{opacity:.4}
   <div class="pillars">
     <div class="pillar"><span class="pe">🚌</span><b>Informační systém v autobuse</b><small>Aplikace vnitřního informačního panelu pro cestující</small></div>
     <div class="pillar"><span class="pe">🗺️</span><b>Interaktivní mapa provozu</b><small>Aktuální polohy vozidel v Plzeňském kraji</small></div>
-    <div class="pillar"><span class="pe">✨</span><b>Rozšířené funkce navíc</b><small>Pokročilé možnosti nad rámec běžného panelu</small></div>
+    <div class="pillar"><span class="pe">✨</span><b>Rozšířené funkce a databáze</b><small>DataCoreBot databáze a pokročilé možnosti nad rámec běžného panelu</small></div>
   </div>
 
 </section>
@@ -1335,7 +1336,7 @@ body.night .aurora{opacity:.4}
         </div>
         <div style="margin-top:18px">
           <a class="btn main" href="/mapa" id="bentoMapBtn" style="display:inline-flex;align-items:center;gap:8px" onclick="event.preventDefault();if(window.mapJump)window.mapJump();else location.href='/mapa';">
-            <span>Spustit mapu s animací</span> <span>→</span>
+            <span>Spustit interaktivní mapu</span> <span>→</span>
           </a>
         </div>
       </div>
@@ -1384,18 +1385,22 @@ body.night .aurora{opacity:.4}
 <!-- MAPA -->
 <section>
   <div class="wrap mapsec">
-    <div class="map reveal" id="map">
+    <div class="map-col reveal">
+      <div class="map" id="map">
       <svg viewBox="10 10 272 330" aria-hidden="true">
         <path id="kraj" d="M177 28 L176 31 L178 31 L180 33 L180 36 L177 39 L169 40 L168 41 L169 53 L167 55 L163 55 L154 47 L146 48 L144 46 L141 51 L130 55 L128 59 L123 59 L122 60 L123 66 L122 69 L118 73 L113 73 L109 70 L105 73 L102 73 L97 69 L86 69 L80 71 L81 74 L79 76 L74 76 L75 77 L74 80 L72 80 L69 75 L67 75 L61 80 L57 80 L53 78 L45 88 L45 93 L43 95 L41 95 L41 105 L38 109 L30 112 L28 114 L28 116 L31 122 L35 126 L44 128 L48 131 L49 133 L49 144 L48 146 L49 147 L53 147 L55 150 L57 167 L59 170 L65 171 L68 174 L68 180 L66 184 L67 194 L70 197 L74 197 L78 199 L84 204 L87 209 L88 217 L89 219 L92 221 L99 223 L103 223 L103 220 L105 218 L112 218 L117 220 L127 230 L131 231 L132 232 L132 241 L141 247 L145 258 L151 262 L156 267 L156 274 L160 279 L162 279 L165 281 L169 279 L174 279 L180 283 L191 294 L195 302 L194 315 L206 325 L208 325 L208 320 L210 318 L216 318 L215 315 L215 306 L216 303 L220 298 L224 299 L226 297 L226 294 L222 288 L222 284 L224 283 L223 274 L224 273 L227 273 L229 275 L232 275 L236 270 L241 270 L240 265 L243 262 L245 262 L244 259 L241 256 L241 251 L245 248 L242 244 L242 240 L243 239 L247 239 L246 232 L249 229 L254 228 L257 224 L257 219 L252 208 L253 203 L257 200 L253 196 L254 189 L251 187 L251 184 L254 179 L254 173 L250 173 L249 172 L249 167 L253 159 L253 154 L240 147 L241 144 L245 144 L241 141 L241 139 L238 136 L238 134 L242 126 L246 122 L253 121 L255 124 L256 121 L260 118 L257 116 L257 105 L258 104 L258 99 L261 91 L261 88 L263 86 L265 86 L265 83 L263 78 L264 74 L259 74 L252 72 L251 71 L251 64 L245 65 L241 61 L239 56 L237 54 L231 57 L224 56 L211 49 L211 47 L213 45 L216 45 L215 44 L196 47 L193 45 L193 41 L196 36 L198 35 L196 32 L194 34 L191 34 L189 32 L188 28 L186 31 L183 31 L182 28 Z"/>
         <g id="routes"></g>
       </svg>
+      </div>
+      <p class="map-subhint" style="text-align:center;font-size:0.78rem;color:var(--muted);margin-top:10px;opacity:0.8">Neodpovídá trasám v realitě</p>
     </div>
     <div class="reveal d1">
       <span class="kicker">Živý provoz příměstských autobusů v Plzeňském kraji</span>
       <h2>Interaktivní <span class="grad">mapa vozidel</span></h2>
       <p class="lead">Sledujte autobusy v Plzeňském kraji na mapě a jejich pohyb v reálném čase.</p>
-      <p class="hint" style="margin:18px 0 26px">Trasy na mapě jsou jen ukázkové a pokaždé se vykreslí jinak.</p>
-      <a class="btn main" href="/mapa">Vyzkoušet mapu</a>
+      <div style="margin-top:22px">
+        <a class="btn main" href="/mapa">Vyzkoušet mapu</a>
+      </div>
     </div>
   </div>
 </section>
@@ -3081,8 +3086,8 @@ function spotDemo(){
   /* 6) magnetická tlačítka + náklon karet (počítač) */
   if(matchMedia('(hover:hover)').matches&&!reduce&&OIS_PERF.tier==='high'){
     document.querySelectorAll('.btn.main,.btn.ghost').forEach(b=>{
-      b.addEventListener('pointermove',e=>{const r=b.getBoundingClientRect();b.style.translate=((e.clientX-r.left-r.width/2)*.12)+'px '+((e.clientY-r.top-r.height/2)*.22)+'px'});
-      b.addEventListener('pointerleave',()=>{b.style.translate=''});
+      b.addEventListener('pointermove',e=>{const r=b.getBoundingClientRect();b.style.translate=((e.clientX-r.left-r.width/2)*.035)+'px '+((e.clientY-r.top-r.height/2)*.045)+'px'});
+      b.addEventListener('pointerleave',()=>{b.style.translate='0px 0px';setTimeout(()=>{b.style.translate=''},350)});
     });
     document.querySelectorAll('.tier,.pcard,.hcard.h1').forEach(c=>{
       c.classList.add('tilt');
