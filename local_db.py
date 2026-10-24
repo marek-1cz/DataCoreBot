@@ -114,6 +114,34 @@ def init_local_db():
                     updated_by TEXT DEFAULT ''
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS stats_lines_local (
+                    line_name TEXT PRIMARY KEY,
+                    play_count INTEGER DEFAULT 0
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS stats_stops_local (
+                    stop_name TEXT PRIMARY KEY,
+                    announce_count INTEGER DEFAULT 0
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS user_stats_lines_local (
+                    discord_id TEXT,
+                    line_name TEXT,
+                    play_count INTEGER DEFAULT 0,
+                    PRIMARY KEY (discord_id, line_name)
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS user_stats_stops_local (
+                    discord_id TEXT,
+                    stop_name TEXT,
+                    announce_count INTEGER DEFAULT 0,
+                    PRIMARY KEY (discord_id, stop_name)
+                )
+            """)
             conn.commit()
             # Automatické pročištění neplatných admin zámků (Neznámá / Aktivní hledání nesmí mít admin zámek)
             try:
@@ -557,3 +585,72 @@ def local_spz_metadata_load_all() -> dict:
         print(f"[LOCAL DB] local_spz_metadata_load_all err: {e}", flush=True)
     return res
 
+
+
+def local_record_stats(line: str, stops: list, discord_id: str = ""):
+    """Spolehlivý lokální zápis statistik linek a zastávek z aplikace do SQLite."""
+    if not line:
+        return
+    line_str = str(line).strip()
+    did = str(discord_id or "").strip()
+    try:
+        with _get_local_conn() as conn:
+            # 1. Celkový počet odjetí linky
+            conn.execute("""
+                INSERT INTO stats_lines_local (line_name, play_count) VALUES (?, 1)
+                ON CONFLICT(line_name) DO UPDATE SET play_count = play_count + 1
+            """, (line_str,))
+            
+            # 2. Celkový počet vyhlášení každé zastávky
+            for st in (stops or []):
+                st_name = str(st).strip()
+                if st_name:
+                    conn.execute("""
+                        INSERT INTO stats_stops_local (stop_name, announce_count) VALUES (?, 1)
+                        ON CONFLICT(stop_name) DO UPDATE SET announce_count = announce_count + 1
+                    """, (st_name,))
+                    
+            # 3. Záznam pro konkrétního uživatele
+            if did and did not in ("None", ""):
+                conn.execute("""
+                    INSERT INTO user_stats_lines_local (discord_id, line_name, play_count) VALUES (?, ?, 1)
+                    ON CONFLICT(discord_id, line_name) DO UPDATE SET play_count = play_count + 1
+                """, (did, line_str))
+                
+                for st in (stops or []):
+                    st_name = str(st).strip()
+                    if st_name:
+                        conn.execute("""
+                            INSERT INTO user_stats_stops_local (discord_id, stop_name, announce_count) VALUES (?, ?, 1)
+                            ON CONFLICT(discord_id, stop_name) DO UPDATE SET announce_count = announce_count + 1
+                        """, (did, st_name))
+            conn.commit()
+            print(f"[LOCAL DB] Statistiky úspěšně zapsány: linka={line_str}, zastávek={len(stops or [])}, hráč={did}", flush=True)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba zápisu statistik: {e}", flush=True)
+
+def local_get_stats():
+    """Vrátí agregované statistiky z lokální databáze."""
+    res = {
+        "lines": {},       # {line_name: play_count}
+        "stops": {},       # {stop_name: announce_count}
+        "user_lines": {},  # {discord_id: {line_name: play_count}}
+        "user_stops": {}   # {discord_id: {stop_name: announce_count}}
+    }
+    try:
+        with _get_local_conn() as conn:
+            for r in conn.execute("SELECT line_name, play_count FROM stats_lines_local"):
+                res["lines"][r["line_name"]] = int(r["play_count"] or 0)
+            for r in conn.execute("SELECT stop_name, announce_count FROM stats_stops_local"):
+                res["stops"][r["stop_name"]] = int(r["announce_count"] or 0)
+            for r in conn.execute("SELECT discord_id, line_name, play_count FROM user_stats_lines_local"):
+                did = str(r["discord_id"])
+                if did not in res["user_lines"]: res["user_lines"][did] = {}
+                res["user_lines"][did][r["line_name"]] = int(r["play_count"] or 0)
+            for r in conn.execute("SELECT discord_id, stop_name, announce_count FROM user_stats_stops_local"):
+                did = str(r["discord_id"])
+                if did not in res["user_stops"]: res["user_stops"][did] = {}
+                res["user_stops"][did][r["stop_name"]] = int(r["announce_count"] or 0)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba čtení statistik: {e}", flush=True)
+    return res
