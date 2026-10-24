@@ -3063,13 +3063,17 @@ def web_auth_me():
     if cookie_token:
         user = get_cached_session_user(cookie_token)
         if user:
+            name = user.get("nick") or user.get("email") or "Uživatel"
+            avatar = user.get("avatar_url") or ""
             return jsonify({
                 "status": "success",
+                "name": name,
+                "avatar": avatar,
                 "user": {
                     "discord_id": user.get("discord_id"),
                     "email": user.get("email"),
                     "nick": user.get("nick"),
-                    "avatar_url": user.get("avatar_url") or ""
+                    "avatar_url": avatar
                 }
             })
     return jsonify({"status": "unauthorized"}), 401
@@ -3077,6 +3081,53 @@ def web_auth_me():
 # ═══════════════════════════════════════════════════════════════════════════════
 # NOVÝ WEB: AUTH & STATS COMPATIBILITY ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/stats/summary', methods=['GET'])
+def api_stats_summary():
+    try:
+        db = get_db()
+        if not db:
+            return jsonify({})
+        all_users = db.table("users").select("discord_id, nick, total_time, launch_count, avatar_url").execute().data or []
+        nick_map = {str(u.get('discord_id')): u.get('nick', 'Neznámý') for u in all_users}
+        
+        # TOP 5 time
+        valid_time_users = [u for u in all_users if int(u.get('total_time') or 0) > 0]
+        top_time_users = sorted(valid_time_users, key=lambda x: int(x.get('total_time') or 0), reverse=True)[:5]
+        time_list = [[u.get('nick') or 'Neznámý', round(int(u.get('total_time') or 0) / 60)] for u in top_time_users]
+        
+        # TOP lines & stops
+        top_lines = db.table("stats_lines").select("line_name, play_count").order("play_count", desc=True).limit(20).execute().data or []
+        top_stops = db.table("stats_stops").select("stop_name, announce_count").order("announce_count", desc=True).limit(20).execute().data or []
+        
+        toplines_list = [[l.get('line_name'), int(l.get('play_count') or 0)] for l in top_lines]
+        topstops_list = [[s.get('stop_name'), int(s.get('announce_count') or 0)] for s in top_stops]
+        
+        user_lines_data = db.table("user_stats_lines").select("discord_id, play_count").execute().data or []
+        player_line_counts = {}
+        for ul in user_lines_data:
+            did = str(ul.get('discord_id'))
+            if did and did != 'None':
+                player_line_counts[did] = player_line_counts.get(did, 0) + int(ul.get('play_count') or 0)
+        lines_list = [[nick_map.get(did, 'Neznámý'), count] for did, count in sorted(player_line_counts.items(), key=lambda x: x[1], reverse=True)[:5]]
+        
+        user_stops_data = db.table("user_stats_stops").select("discord_id, announce_count").execute().data or []
+        player_stop_counts = {}
+        for us in user_stops_data:
+            did = str(us.get('discord_id'))
+            if did and did != 'None':
+                player_stop_counts[did] = player_stop_counts.get(did, 0) + int(us.get('announce_count') or 0)
+        stops_list = [[nick_map.get(did, 'Neznámý'), count] for did, count in sorted(player_stop_counts.items(), key=lambda x: x[1], reverse=True)[:5]]
+        
+        return jsonify({
+            "toplines": toplines_list,
+            "topstops": topstops_list,
+            "lines": lines_list,
+            "stops": stops_list,
+            "time": time_list
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/auth/discord/start', methods=['POST'])
 def api_auth_discord_start():
