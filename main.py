@@ -291,7 +291,13 @@ def handle_exception(e):
 
     msg = "Chyba komunikace s databází nebo interní chyba serveru."
     if "402" in err_str or "egress" in err_str.lower() or "payment required" in err_str.lower():
-        msg = "Chyba databáze (překročen datový limit). Provoz bude brzy obnoven."
+        msg = "Chyba databáze (překročen datový limit). Provoz běží v nouzovém režimu ze zálohy."
+        try:
+            global EGRESS_SAVE_MODE
+            EGRESS_SAVE_MODE = True
+            send_log("🚨 Nouzový stav: Supabase 402 Detekováno!", "Byl detekován kód 402 / vyčerpaný limit Supabase. Systém automaticky aktivoval nouzový štít a přepnul provoz na lokální zálohy.", 0xef4444, pings=["👑| Project Owner", "-Executive Board-"])
+        except Exception:
+            pass
         
     return f"<div style='background:#0f172a; color:#ef4444; padding:40px; font-family:sans-serif; text-align:center;'><h2>{msg}</h2><p>Chyba byla automaticky nahlášena vývojářům na Discord.</p><a href='/' style='background:#334155;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;'>Zpět na úvodní stránku</a></div>", 500
 
@@ -622,13 +628,14 @@ def check_egress_quota():
 
     try:
         # Supabase Management API – usage metrics
-        svc_key = SUPABASE_SERVICE_KEY or SUPABASE_KEY or ""
-        if not svc_key:
+        # Podpora SUPABASE_ACCESS_TOKEN (Personal Access Token začínající sbp_)
+        mgmt_token = os.environ.get("SUPABASE_ACCESS_TOKEN") or SUPABASE_SERVICE_KEY or SUPABASE_KEY or ""
+        if not mgmt_token:
             return
 
         req = _ur.Request(
             f"https://api.supabase.com/v1/organizations/{org_id}/billing/usage",
-            headers={"Authorization": f"Bearer {svc_key}", "Content-Type": "application/json"}
+            headers={"Authorization": f"Bearer {mgmt_token}", "Content-Type": "application/json"}
         )
         with _ur.urlopen(req, timeout=10) as resp:
             data = _json.loads(resp.read())
