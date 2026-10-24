@@ -1260,23 +1260,70 @@ body.night .aurora{opacity:.4}
 .dshot figcaption{text-align:center;color:var(--muted);font-size:.92rem}
 @media(max-width:860px){.shots{grid-template-columns:1fr;max-width:520px;margin:0 auto}}
 
-/* v26: Statistiky – celá stránka na střed */
+/* v27: Statistiky – dokonalá symetrie a prémiový vzhled */
 [data-page=stats] .phead{text-align:center}
+[data-page=stats] .phead .kicker{justify-content:center}
+[data-page=stats] .phead .kicker::before{content:"";flex:none;width:28px;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--blue),var(--cyan))}
 [data-page=stats] .phead .kicker::after{content:"";flex:none;width:28px;height:2px;border-radius:2px;background:linear-gradient(270deg,var(--blue),var(--cyan))}
-[data-page=stats] .statgrid,[data-page=stats] .cols{max-width:1060px;margin-left:auto;margin-right:auto}
-[data-page=stats] .statgrid{grid-template-columns:repeat(3,1fr)}
+[data-page=stats] .statgrid,[data-page=stats] .cols,[data-page=stats] .today-grid{max-width:1060px;margin-left:auto;margin-right:auto}
+[data-page=stats] .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
 @media(max-width:860px){[data-page=stats] .statgrid{grid-template-columns:repeat(2,1fr)}}
-[data-page=stats] .stat{text-align:center}
-[data-page=stats] .cols h3{text-align:center}
-[data-page=stats] .today div{flex-direction:column;align-items:center;gap:2px;text-align:center}
-[data-page=stats] .asof{display:table;margin:26px auto 0}
-.ustat{max-width:720px;margin-left:auto;margin-right:auto;text-align:center}
-.ustat .usrch,.ustat .usug{justify-content:center}
+@media(max-width:540px){[data-page=stats] .statgrid{grid-template-columns:1fr}}
+
+[data-page=stats] .stat{
+  text-align:center;padding:26px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;border-radius:24px;border:1px solid var(--glass-border);
+  background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.015));
+  transition:transform .4s var(--ease),border-color .4s,box-shadow .4s;
+}
+[data-page=stats] .stat:hover{transform:translateY(-3px);border-color:rgba(56,214,255,.4);box-shadow:0 14px 34px rgba(0,0,0,.4)}
+.stat-ico{font-size:1.8rem;margin-bottom:8px;line-height:1;filter:drop-shadow(0 2px 8px rgba(47,107,255,.35))}
+[data-page=stats] .stat .num{
+  font-size:clamp(2.1rem,4.4vw,2.9rem);font-weight:900;line-height:1.1;letter-spacing:-.02em;
+  background:linear-gradient(135deg,#ffffff 15%,var(--cyan) 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+[data-page=stats] .stat .lbl{margin-top:6px;font-size:.88rem;color:var(--muted);font-weight:600}
+
+/* Symetrické denní rekordy (2 karty) */
+.today-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+@media(max-width:768px){.today-grid{grid-template-columns:1fr}}
+.today-card{
+  padding:20px 24px;border-radius:22px;display:flex;align-items:center;gap:18px;
+  background:linear-gradient(135deg,rgba(47,107,255,.09),rgba(255,255,255,.02));
+  border:1px solid rgba(120,165,255,.25);transition:border-color .3s,transform .3s;
+}
+.today-card:hover{border-color:rgba(56,214,255,.5);transform:translateY(-2px)}
+.today-ico-box{
+  width:46px;height:46px;border-radius:15px;display:grid;place-items:center;font-size:1.5rem;
+  background:rgba(47,107,255,.2);border:1px solid rgba(56,214,255,.3);flex:none;
+}
+.today-info{display:flex;flex-direction:column;gap:3px;min-width:0;text-align:left}
+.today-badge{font-size:.76rem;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan)}
+.today-val{font-size:1.22rem;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Hlavičky karet */
+.card-head-center{text-align:center;margin-bottom:16px;display:flex;flex-direction:column;align-items:center;gap:4px}
+.ch-badge{font-size:.74rem;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);background:rgba(56,214,255,.1);padding:3px 10px;border-radius:999px;border:1px solid rgba(56,214,255,.25);margin-bottom:2px}
+.card-head-center h3{margin:0;font-size:1.25rem}
+.ch-sub{font-size:.82rem;color:var(--muted)}
+
+.ustat{max-width:1060px;margin:0 auto 24px;text-align:center;padding:28px 24px}
+.ustat .usrch{display:flex;gap:12px;justify-content:center;align-items:center;max-width:560px;margin:0 auto}
+.ustat .usrch input{text-align:center;font-size:1rem;padding:13px 20px}
+.ustat .usug{justify-content:center}
+
 #statUser{max-width:1060px;margin:0 auto}
 .uhead{justify-content:center;text-align:center}
 .uhead .utx{flex:0 1 auto}
-#statUser .statgrid{max-width:none}
-#statUser .asof{display:table;margin:26px auto 0}
+#statUser .statgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;max-width:none}
+@media(max-width:960px){#statUser .statgrid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:540px){#statUser .statgrid{grid-template-columns:1fr}}
+
+.empty-box{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px 18px;text-align:center;gap:8px;color:var(--muted)}
+.empty-icon{font-size:2.4rem;line-height:1;margin-bottom:4px;filter:drop-shadow(0 0 12px rgba(47,107,255,.4))}
+.empty-box b{color:var(--text);font-size:1.05rem}
+.empty-box small{font-size:.84rem;max-width:340px;line-height:1.45;color:var(--muted)}
 .fadmin{padding:10px 0 96px!important;margin-top:8px!important}
 .fadmin button{display:inline-flex;align-items:center;gap:8px;padding:10px 20px!important;border:1px solid rgba(120,165,255,.35)!important;background:rgba(10,18,48,.7)!important;color:#c9d7f5!important;opacity:1!important;font-size:.9rem!important;font-weight:600}
 .fadmin button:hover{border-color:#6aa0ff!important;background:rgba(47,107,255,.2)!important}
@@ -1708,65 +1755,121 @@ body.night .aurora{opacity:.4}
     <div id="statUser" hidden>
       <div class="uhead"><div class="uav" id="uAv"></div><div class="utx"><small>Statistiky uživatele</small><h2 id="uName"></h2></div><button class="btn ghost" id="uBack" type="button">← Globální statistiky</button></div>
       <div class="statgrid" id="uGrid"></div>
-      <div class="cols">
+      <div class="cols cols-2" style="margin-top:18px">
         <div class="card">
-          <div style="text-align:center;margin-bottom:14px">
+          <div class="card-head-center">
+            <span class="ch-badge">🚌 Linky řidiče</span>
             <h3 style="margin:0 0 4px">Odjeté linky uživatele</h3>
-            <span style="font-size:.82rem;color:var(--muted)">záznamy od 1×</span>
+            <span class="ch-sub">záznamy od 1×</span>
           </div>
           <div id="uLines" class="lst"></div>
         </div>
         <div class="card">
-          <div style="text-align:center;margin-bottom:14px">
+          <div class="card-head-center">
+            <span class="ch-badge">🚏 Zastávky řidiče</span>
             <h3 style="margin:0 0 4px">Vyhlášené zastávky uživatele</h3>
-            <span style="font-size:.82rem;color:var(--muted)">záznamy od 1×</span>
+            <span class="ch-sub">záznamy od 1×</span>
           </div>
           <div id="uStops" class="lst"></div>
         </div>
       </div>
-      <p class="asof">Zobrazeny jsou pouze statistiky tohoto uživatele. Stav k 20. 10. 2026</p>
+      <p class="asof">Zobrazeny jsou pouze statistiky tohoto uživatele</p>
     </div>
 
     <div id="statGlobal">
 
+    <!-- 6 KPI karet v symetrické mřížce 3x2 -->
     <div class="statgrid">
-      <div class="card stat reveal"><div class="num count" id="statActiveUsers" data-to="0">0</div><div class="lbl">Aktivních uživatelů</div></div>
-      <div class="card stat reveal d1"><div class="num count" id="supportersCountStat" data-to="0">0</div><div class="lbl">Podporovatelů</div></div>
-      <div class="card stat reveal d2"><div class="num count" id="statTotalTime" data-to="0" data-suffix=" h">0</div><div class="lbl">Celkově nahráno</div></div>
-      <div class="card stat reveal"><div class="num count" id="statTotalLaunches" data-to="0" data-suffix="×">0</div><div class="lbl">Celkově spuštěno</div></div>
-      <div class="card stat reveal d1"><div class="num count" id="statTotalLines" data-to="0" data-suffix="×">0</div><div class="lbl">Odjetých linek</div></div>
-      <div class="card stat reveal d2"><div class="num count" id="statTotalStops" data-to="0" data-suffix="×">0</div><div class="lbl">Vyhlášených zastávek</div></div>
+      <div class="card stat reveal">
+        <div class="stat-ico">⏱️</div>
+        <div class="num count" id="statTotalTime" data-to="0" data-suffix=" h">0</div>
+        <div class="lbl">Celkově nahráno</div>
+      </div>
+      <div class="card stat reveal d1">
+        <div class="stat-ico">🚀</div>
+        <div class="num count" id="statTotalLaunches" data-to="0" data-suffix="×">0</div>
+        <div class="lbl">Celkově spuštěno</div>
+      </div>
+      <div class="card stat reveal d2">
+        <div class="stat-ico">🚌</div>
+        <div class="num count" id="statTotalLines" data-to="0" data-suffix="×">0</div>
+        <div class="lbl">Odjetých linek</div>
+      </div>
+      <div class="card stat reveal">
+        <div class="stat-ico">🚏</div>
+        <div class="num count" id="statTotalStops" data-to="0" data-suffix="×">0</div>
+        <div class="lbl">Vyhlášených zastávek</div>
+      </div>
+      <div class="card stat reveal d1">
+        <div class="stat-ico">👥</div>
+        <div class="num count" id="statActiveUsers" data-to="0">0</div>
+        <div class="lbl">Aktivních uživatelů</div>
+      </div>
+      <div class="card stat reveal d2">
+        <div class="stat-ico">⭐</div>
+        <div class="num count" id="supportersCountStat" data-to="0">0</div>
+        <div class="lbl">Podporovatelů</div>
+      </div>
     </div>
 
-    <div class="cols">
-      <div class="card reveal">
-        <h3>Dnešní statistiky</h3>
-        <div class="today">
-          <div><span>Nejdéle hrál</span><b id="todayTime">Neznámý · 0 min</b></div>
-          <div><span>Nejvíce spuštění</span><b id="todayLaunch">Neznámý · 0×</b></div>
+    <!-- Symetrické denní rekordy (2 karty) -->
+    <div class="today-grid">
+      <div class="card today-card reveal">
+        <div class="today-ico-box">⏱️</div>
+        <div class="today-info">
+          <span class="today-badge">Dnešní rekordman v čase</span>
+          <b class="today-val" id="todayTime">Neznámý · 0 min</b>
         </div>
       </div>
-      <div class="card reveal d1"><h3>TOP 5 · Nahraný čas</h3><div id="s-time"></div></div>
-      <div class="card reveal d2"><h3>TOP 5 · Počet spuštění</h3><div id="s-launches"></div></div>
+      <div class="card today-card reveal d1">
+        <div class="today-ico-box">⚡</div>
+        <div class="today-info">
+          <span class="today-badge">Dnešní nejvíce spuštění</span>
+          <b class="today-val" id="todayLaunch">Neznámý · 0×</b>
+        </div>
+      </div>
     </div>
 
+    <!-- Žebříček TOP 5 hráčů (2 symetrické karty vedle sebe) -->
     <div class="cols cols-2" style="margin-top:18px">
       <div class="card reveal">
-        <div style="text-align:center;margin-bottom:14px">
+        <div class="card-head-center">
+          <span class="ch-badge">⏱️ Žebříček času</span>
+          <h3 style="margin:0 0 4px">TOP 5 · Nahraný čas</h3>
+          <span class="ch-sub">hráči s nejvíce odehranými hodinami</span>
+        </div>
+        <div id="s-time" class="lst"></div>
+      </div>
+      <div class="card reveal d1">
+        <div class="card-head-center">
+          <span class="ch-badge">🚀 Žebříček aktivity</span>
+          <h3 style="margin:0 0 4px">TOP 5 · Počet spuštění</h3>
+          <span class="ch-sub">hráči s nejvíce spuštěními aplikace</span>
+        </div>
+        <div id="s-launches" class="lst"></div>
+      </div>
+    </div>
+
+    <!-- Všechny linky a zastávky s hledáním (2 symetrické karty vedle sebe) -->
+    <div class="cols cols-2" style="margin-top:18px">
+      <div class="card reveal">
+        <div class="card-head-center">
+          <span class="ch-badge">🚌 Žebříček linek</span>
           <h3 style="margin:0 0 4px">Odjeté linky</h3>
-          <span style="font-size:.82rem;color:var(--muted)">záznamy od 1×</span>
+          <span class="ch-sub">všechny odjeté linky od 1×</span>
         </div>
         <div id="s-toplines" class="lst"></div>
       </div>
       <div class="card reveal d1">
-        <div style="text-align:center;margin-bottom:14px">
+        <div class="card-head-center">
+          <span class="ch-badge">🚏 Žebříček zastávek</span>
           <h3 style="margin:0 0 4px">Vyhlášené zastávky</h3>
-          <span style="font-size:.82rem;color:var(--muted)">záznamy od 1×</span>
+          <span class="ch-sub">všechny vyhlášené zastávky od 1×</span>
         </div>
         <div id="s-topstops" class="lst"></div>
       </div>
     </div>
-    <p class="asof">Stav k 20. 10. 2026</p>
+    <p class="asof">Data se synchronizují v reálném čase z palubních počítačů a systému DataCoreBot</p>
     </div>
   </div>
 </section>
@@ -2075,15 +2178,39 @@ const STATS={
 function bars(id,rows,unit){
   const el=document.getElementById(id);
   if(!el) return;
-  if(!Array.isArray(rows)||!rows.length) {
-    el.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:12px 0;">Zatím žádná zaznamenaná data.</div>';
+  rows = (rows || []).slice().sort((a,b) => b[1] - a[1]).slice(0, 5);
+  if(!rows.length) {
+    el.innerHTML = '<div class="empty-box"><span class="empty-icon">📊</span><b>Zatím žádná data</b><small>Po spuštění aplikace nebo odehrání hry se zde objeví nejlepší hráči.</small></div>';
     return;
   }
   const max=Math.max(...rows.map(r=>r[1])) || 1;
-  el.innerHTML=rows.map(r=>
-    `<div class="bar"><span class="n">${r[0]}</span><span class="v">${r[1]}${unit}</span><i style="--w:${(r[1]/max*100).toFixed(0)}%"></i></div>`).join('');
+  const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  
+  el.innerHTML = '<div class="lscroll" style="max-height:none">' + rows.map((r, i) => {
+    const rank = i + 1;
+    let rkClass = 'rank-other';
+    let badge = `<span class="rk-badge normal">#${rank}</span>`;
+    if (rank === 1) {
+      rkClass = 'rank-1 top-rank';
+      badge = `<span class="rk-badge gold" title="1. Místo">🥇 #1</span>`;
+    } else if (rank === 2) {
+      rkClass = 'rank-2 top-rank';
+      badge = `<span class="rk-badge silver" title="2. Místo">🥈 #2</span>`;
+    } else if (rank === 3) {
+      rkClass = 'rank-3 top-rank';
+      badge = `<span class="rk-badge bronze" title="3. Místo">🥉 #3</span>`;
+    } else if (rank === 4) {
+      rkClass = 'rank-4 top-rank';
+      badge = `<span class="rk-badge top4" title="4. Místo">#4</span>`;
+    } else if (rank === 5) {
+      rkClass = 'rank-5 top-rank';
+      badge = `<span class="rk-badge top5" title="5. Místo">#5</span>`;
+    }
+    const pct = max > 0 ? (r[1] / max * 100).toFixed(0) : 0;
+    return `<div class="bar ${rkClass}"><div class="bar-left">${badge}<span class="n" title="${esc(r[0])}">${esc(r[0])}</span></div><span class="v">${r[1].toLocaleString('cs-CZ')} ${unit}</span><i style="--w:${pct}%"></i></div>`;
+  }).join('') + '</div>';
 }
-bars('s-lines',STATS.lines,'×');bars('s-stops',STATS.stops,'×');bars('s-time',STATS.time,' h');
+bars('s-time',STATS.time,' h');bars('s-launches',STATS.launches,'×');
 
 
 
@@ -2196,7 +2323,14 @@ function listCard(id,rows,unit,noun,placeholder){
   const el=document.getElementById(id);if(!el)return;
   const nz=s=>String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   rows=(rows||[]).slice().sort((a,b)=>b[1]-a[1]);
-  if(!rows.length){el.innerHTML='<p class="none">Zatím nebyly zaznamenány žádné záznamy.</p>';return}
+  if(!rows.length){
+    const isStop = id.toLowerCase().includes('stop');
+    const icon = isStop ? '🚏' : '🚌';
+    const label = isStop ? 'Zatím žádná vyhlášená zastávka' : 'Zatím žádná odjetá linka';
+    const sub = isStop ? 'Vyhlaste zastávku na panelu v autobuse pro zápis do žebříčku.' : 'Odjeďte linku v aplikaci pro automatické zapsání do statistik.';
+    el.innerHTML = `<div class="empty-box"><span class="empty-icon">${icon}</span><b>${label}</b><small>${sub}</small></div>`;
+    return;
+  }
   const total=rows.reduce((s,r)=>s+r[1],0),max=rows[0][1];
   
   const ranked = rows.map((r, i) => ({
@@ -2214,7 +2348,7 @@ function listCard(id,rows,unit,noun,placeholder){
     meta.textContent=q?('Nalezeno '+f.length+' z '+ranked.length):(ranked.length+' '+noun+' · celkem '+total.toLocaleString('cs-CZ')+' '+unit);
     
     if(!f.length){
-      sc.innerHTML='<p class="none">Nic nenalezeno odpovídající hledání.</p>';
+      sc.innerHTML='<div class="empty-box" style="padding:26px 12px"><span style="font-size:1.8rem">🔍</span><b>Nenalezen žádný záznam</b><small>Zkuste zadat jiné číslo linky nebo název zastávky.</small></div>';
       return;
     }
 
@@ -2390,13 +2524,13 @@ if (document.readyState === 'loading') {
     const L=Object.keys(STATS.users||{}).find(k=>norm(k)===norm(u.name));
     return L?Object.assign({},u,{linesList:STATS.users[L].lines,stopsList:STATS.users[L].stops}):u;
   }
-  const card=(num,suf,lbl,rank)=>`<div class="card stat"><div class="num">${num===undefined||num===null?'0':num}${num===undefined||num===null?'':suf}</div><div class="lbl">${lbl}</div><span class="rk ${rank&&rank<=3?'top':''}">${rank?'#'+rank+' v žebříčku TOP 5':'mimo TOP 5'}</span></div>`;
+  const card=(num,suf,lbl,rank,ico='📊')=>`<div class="card stat"><div class="stat-ico">${ico}</div><div class="num">${num===undefined||num===null?'0':num}${num===undefined||num===null?'':suf}</div><div class="lbl">${lbl}</div><span class="rk ${rank&&rank<=3?'top':''}">${rank?'#'+rank+' v žebříčku TOP 5':'mimo TOP 5'}</span></div>`;
   function show(u){
     err.hidden=true;sug.hidden=true;
     $('uName').textContent=u.name;
     const av=$('uAv');av.textContent='';
     if(u.avatar){const im=document.createElement('img');im.src=u.avatar;im.alt='';im.style.cssText='width:100%;height:100%;object-fit:cover';av.appendChild(im)}else av.textContent=[...u.name.replace(/^[^A-Za-z0-9ÁČĎÉĚÍŇÓŘŠŤÚŮÝŽáčďéěíňóřšťúůýž]+/,'')][0]?.toUpperCase()||'?';
-    $('uGrid').innerHTML=card(u.lines,'×','Odjetých linek',u.linesRank)+card(u.stops,'×','Vyhlášených zastávek',u.stopsRank)+card(u.time,' h','Nahraný čas',u.timeRank)+card(u.launches,'×','Počet spuštění',u.launchesRank);
+    $('uGrid').innerHTML=card(u.lines,'×','Odjetých linek',u.linesRank,'🚌')+card(u.stops,'×','Vyhlášených zastávek',u.stopsRank,'🚏')+card(u.time,' h','Nahraný čas',u.timeRank,'⏱️')+card(u.launches,'×','Počet spuštění',u.launchesRank,'🚀');
     listCard('uLines',u.linesList,'×','linek','Hledat linku');listCard('uStops',u.stopsList,'×','zastávek','Hledat zastávku');
     glob.hidden=true;box.hidden=false;
     box.scrollIntoView({behavior:'smooth',block:'start'});
