@@ -183,6 +183,23 @@ def init_local_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pvvd_disappearances_local (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bus_id TEXT,
+                    spz TEXT,
+                    vehicle_type TEXT,
+                    line TEXT,
+                    destination TEXT,
+                    driver TEXT,
+                    lat REAL,
+                    lng REAL,
+                    nearest_stop TEXT,
+                    disappeared_at TEXT,
+                    status_reason TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             conn.commit()
             _restore_stats_backup_if_empty(conn)
             _restore_web_visits_if_empty(conn)
@@ -801,4 +818,52 @@ def local_clear_web_visits():
                 json.dump([], f)
     except Exception as e:
         pass
+
+def local_log_pvvd_disappearance(bus_id: str, spz: str, vehicle_type: str, line: str, destination: str, driver: str, lat: float, lng: float, nearest_stop: str, disappeared_at: str, status_reason: str):
+    """Zaznamená přesný záznam o zmizení autobusu z PVVD mapy (včetně přesného data, času, GPS a typu)."""
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                conn.execute("""
+                    INSERT INTO pvvd_disappearances_local (bus_id, spz, vehicle_type, line, destination, driver, lat, lng, nearest_stop, disappeared_at, status_reason)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (str(bus_id or ''), str(spz or ''), str(vehicle_type or ''), str(line or ''), str(destination or ''), str(driver or ''), float(lat or 0), float(lng or 0), str(nearest_stop or ''), str(disappeared_at or ''), str(status_reason or 'Zmizel z mapy PVVD')))
+                conn.commit()
+    except Exception:
+        pass
+
+def local_get_pvvd_disappearances(limit: int = 100) -> list:
+    """Vrátí historii zmizení autobusů z PVVD mapy."""
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT id, bus_id, spz, vehicle_type, line, destination, driver, lat, lng, nearest_stop, disappeared_at, status_reason, created_at
+                    FROM pvvd_disappearances_local
+                    ORDER BY id DESC
+                    LIMIT ?
+                """, (limit,))
+                rows = cur.fetchall()
+                return [
+                    {
+                        "id": r[0],
+                        "bus_id": r[1],
+                        "spz": r[2],
+                        "vehicle_type": r[3],
+                        "line": r[4],
+                        "destination": r[5],
+                        "driver": r[6],
+                        "lat": r[7],
+                        "lng": r[8],
+                        "nearest_stop": r[9],
+                        "disappeared_at": r[10],
+                        "status_reason": r[11],
+                        "created_at": r[12]
+                    }
+                    for r in rows
+                ]
+    except Exception:
+        return []
+
 

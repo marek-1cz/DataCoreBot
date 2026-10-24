@@ -1181,6 +1181,41 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
           <div style="font-size:10px;color:#94a3b8;">Zobrazit čas u tečky vozu a detail signálu v okně</div>
         </div>
       </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;color:#e2e8f0;font-size:12px;">
+        <input type="checkbox" id="settings-only-pvvd" onchange="toggleOnlyPvvdBuses(this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:#38bdf8;">
+        <div>
+          <div style="font-weight:bold;">Vypnout polohu vozů mimo PVVD mapu</div>
+          <div style="font-size:10px;color:#94a3b8;">Skryje pouze a jen vozy mimo PVVD mapu (odstavené, zmizelé, Arriva) pro lepší orientaci</div>
+        </div>
+      </label>
+    </div>
+
+    <div style="margin-top:14px;">
+      <button type="button" onclick="openDisappearancesModal()" style="width:100%;padding:9px 12px;background:rgba(244,114,182,0.12);border:1px solid #f472b6;color:#fbcfe8;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.2s;" onmouseover="this.style.background='rgba(244,114,182,0.22)'" onmouseout="this.style.background='rgba(244,114,182,0.12)'">
+        <i class="fas fa-history" style="color:#f472b6;"></i> Záznamy zmizení vozů z PVVD mapy
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Záznamy zmizení vozů z PVVD mapy -->
+<div id="disappearances-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100%;background:rgba(15,23,42,0.85);z-index:9998;align-items:center;justify-content:center;backdrop-filter:blur(8px);">
+  <div style="background:#1e293b;border:1.5px solid #f472b6;border-radius:16px;width:94%;max-width:820px;max-height:86vh;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,0.85);display:flex;flex-direction:column;">
+    <div style="padding:14px 18px;border-bottom:1px solid rgba(244,114,182,0.25);display:flex;align-items:center;justify-content:space-between;background:rgba(244,114,182,0.08);">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f472b6;box-shadow:0 0 10px #f472b6;"></span>
+        <div>
+          <b style="color:#f472b6;font-size:15px;letter-spacing:0.3px;">Záznamy vozů, které zmizely z PVVD mapy</b>
+          <div style="font-size:11px;color:#94a3b8;">Přesný čas a datum, SPZ, typ autobusu, GPS souřadnice a zastávka při odpojení z PVVD</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button onclick="loadDisappearancesList()" style="background:rgba(255,255,255,0.06);border:1px solid #475569;color:#cbd5e1;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;"><i class="fas fa-sync-alt"></i> Obnovit</button>
+        <button onclick="closeDisappearancesModal()" style="background:transparent;border:none;color:#94a3b8;font-size:22px;cursor:pointer;padding:2px 6px;line-height:1;">&times;</button>
+      </div>
+    </div>
+    <div id="disappearances-modal-body" style="padding:16px;overflow-y:auto;max-height:calc(86vh - 70px);display:flex;flex-direction:column;gap:10px;">
+      <div style="text-align:center;color:#94a3b8;padding:30px 0;font-size:13px;">Načítám záznamy...</div>
     </div>
   </div>
 </div>
@@ -1438,6 +1473,98 @@ window.toggleOnlyMovingBuses = function(forceVal) {
     }
   }
   if (typeof fetchBuses === 'function') fetchBuses();
+};
+
+window.onlyPvvdBuses = (localStorage.getItem('only_pvvd_buses') === 'true');
+
+window.toggleOnlyPvvdBuses = function(forceVal) {
+  if (typeof forceVal === 'boolean') {
+    window.onlyPvvdBuses = forceVal;
+  } else {
+    window.onlyPvvdBuses = !window.onlyPvvdBuses;
+  }
+  localStorage.setItem('only_pvvd_buses', window.onlyPvvdBuses ? 'true' : 'false');
+  let cb = document.getElementById('settings-only-pvvd');
+  if (cb) cb.checked = window.onlyPvvdBuses;
+  if (typeof fetchBuses === 'function') fetchBuses();
+};
+
+window.openDisappearancesModal = function() {
+  let m = document.getElementById('disappearances-modal');
+  if (m) m.style.display = 'flex';
+  window.loadDisappearancesList();
+};
+
+window.closeDisappearancesModal = function() {
+  let m = document.getElementById('disappearances-modal');
+  if (m) m.style.display = 'none';
+};
+
+window.loadDisappearancesList = function() {
+  let b = document.getElementById('disappearances-modal-body');
+  if (!b) return;
+  b.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px 0;font-size:13px;"><i class="fas fa-spinner fa-spin"></i> Načítám záznamy zmizení...</div>';
+  fetch('/api/pvvd_disappearances?limit=100')
+    .then(r => r.json())
+    .then(data => {
+      if (!data || !data.disappearances || data.disappearances.length === 0) {
+        b.innerHTML = '<div style="text-align:center;color:#64748b;padding:30px 0;font-size:13px;">Zatím nejsou zaznamenána žádná zmizení autobusů z PVVD mapy.</div>';
+        return;
+      }
+      let html = '<div style="display:grid;grid-template-columns:1fr;gap:8px;">';
+      data.disappearances.forEach(item => {
+        let spzBadge = item.spz ? `<span style="background:#0f172a;border:1px solid #f472b6;color:#ffffff;padding:2px 8px;border-radius:4px;font-family:monospace;font-weight:bold;font-size:12px;">${item.spz}</span>` : '<span style="color:#64748b;">Neznámá SPZ</span>';
+        let lineInfo = item.line ? `<span style="background:#3b82f6;color:white;padding:2px 6px;border-radius:4px;font-weight:bold;font-size:11px;">${item.line}</span>` : '';
+        let destInfo = item.destination ? `<span style="color:#cbd5e1;font-size:11px;">➔ ${item.destination}</span>` : '';
+        let stop = item.nearest_stop || 'Neznámá zastávka';
+        let vType = item.vehicle_type || 'Neznámý typ';
+        let driver = item.driver ? `<span style="color:#94a3b8;font-size:10px;"><i class="fas fa-user" style="color:#38bdf8;"></i> ${item.driver}</span>` : '';
+        let coords = (item.lat && item.lng) ? `${Number(item.lat).toFixed(5)}, ${Number(item.lng).toFixed(5)}` : '';
+        let focusBtn = (item.lat && item.lng) ? `<button onclick="focusDisappearedBusOnMap(${item.lat}, ${item.lng}, '${item.bus_id}')" style="background:#f472b6;color:#0f172a;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 8px rgba(244,114,182,0.4);"><i class="fas fa-crosshairs"></i> Na mapu</button>` : '';
+
+        html += `
+          <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(244,114,182,0.2);border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;">
+            <div style="display:flex;flex-direction:column;gap:4px;min-width:220px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                ${spzBadge}
+                ${lineInfo}
+                ${destInfo}
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;font-size:11px;color:#94a3b8;flex-wrap:wrap;">
+                <span><i class="fas fa-bus-alt" style="color:#10b981;"></i> <b style="color:#e2e8f0;">${vType}</b></span>
+                <span><i class="fas fa-map-pin" style="color:#f59e0b;"></i> ${stop}</span>
+                ${driver}
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;">
+              <div style="text-align:right;">
+                <div style="color:#fbcfe8;font-size:12px;font-weight:bold;font-family:monospace;"><i class="far fa-clock" style="margin-right:4px;"></i>${item.disappeared_at || ''}</div>
+                <div style="color:#64748b;font-size:10px;font-family:monospace;">${coords}</div>
+              </div>
+              ${focusBtn}
+            </div>
+          </div>
+        `;
+      });
+      html += '</div>';
+      b.innerHTML = html;
+    })
+    .catch(err => {
+      b.innerHTML = '<div style="text-align:center;color:#ef4444;padding:20px 0;font-size:12px;">Chyba načítání záznamů: ' + err.message + '</div>';
+    });
+};
+
+window.focusDisappearedBusOnMap = function(lat, lng, busId) {
+  window.closeDisappearancesModal();
+  if (window.map) {
+    window.map.flyTo([lat, lng], 16, { animate: true, duration: 1 });
+    setTimeout(() => {
+      if (window.busMarkersMap && window.busMarkersMap.has(busId)) {
+        let m = window.busMarkersMap.get(busId);
+        if (m && typeof m.openPopup === 'function') m.openPopup();
+      }
+    }, 1100);
+  }
 };
 
 function animateMarkerTo(marker, targetLat, targetLng, durationMs = 800) {
@@ -4148,6 +4275,28 @@ async function fetchBuses(){
         }
       }
 
+      // FILTR: VYPNUTÍ POLOHY VOZŮ MIMO PVVD MAPU (pro lepší orientaci)
+      if (window.onlyPvvdBuses) {
+        let isOutsidePvvd = Boolean(
+          bus.is_offline ||
+          bus.is_arriva_fallback ||
+          bus.position_source === 'arriva' ||
+          bus.color_class === 'bg-lastpos' ||
+          bus.color_class === 'bg-gray' ||
+          bus.status === 'Poslední známá poloha' ||
+          bus.status === 'Zmizel z mapy PVVD' ||
+          (bus.status && (bus.status.includes('Zmizel z mapy') || bus.status.includes('Odstaven') || bus.status.includes('Odstáven')))
+        );
+        if (isOutsidePvvd) {
+          let existingMarker = window.busMarkersMap.get(bus.id);
+          if (existingMarker) {
+            ml.removeLayer(existingMarker);
+            window.busMarkersMap.delete(bus.id);
+          }
+          return;
+        }
+      }
+
       currentBusIds.add(bus.id);
       let mc=bus.color_class;
 
@@ -4246,8 +4395,46 @@ async function fetchBuses(){
       }
       let lastposW='';
       if(!inDepot && bus.is_offline && (mc==='bg-lastpos'||bus.status==='Poslední známá poloha'||bus.status==='Zmizel z mapy PVVD'||(bus.status&&bus.status.includes('Zmizel z mapy')))){
-        let tOffline = bus.offline_since_time ? ` v ${bus.offline_since_time}` : '';
-        lastposW=`<div style="background:linear-gradient(135deg,rgba(24,24,32,0.95),rgba(45,30,45,0.95));border:1.5px solid #f472b6;border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 10px rgba(244,114,182,0.25);"><b style="color:#f472b6;font-size:12px;letter-spacing:0.5px;">📍 POSLEDNÍ ZNÁMÁ POLOHA</b><br><span style="color:#cbd5e1;font-size:10px;">Vůz zmizel z mapy pvvd.idpk.cz${tOffline}. Ponechán na stejné pozici, než se znovu objeví.</span></div>`;
+        let exactDateTime = bus.offline_since_datetime || (bus.offline_since_time ? `${bus.offline_since_time}` : (bus.last_seen || 'Neznámý'));
+        let stopInfo = bus.nearest_stop || bus.real_zastavka || bus.last_stop_name || 'V úseku trati';
+        let vType = bus.vehicle_type || 'Neznámý typ';
+        let spzVal = bus.spz || 'Neznámá';
+        let coordsStr = (bus.lat && bus.lng) ? `${Number(bus.lat).toFixed(5)}, ${Number(bus.lng).toFixed(5)}` : 'Neznámé';
+
+        lastposW=`<div style="background:linear-gradient(135deg,rgba(26,20,32,0.98),rgba(15,23,42,0.98));border:1.5px solid #f472b6;border-radius:8px;padding:10px;margin:6px 0;font-size:11px;box-shadow:0 4px 15px rgba(244,114,182,0.22);text-align:left;">
+          <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(244,114,182,0.3);padding-bottom:6px;margin-bottom:8px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f472b6;box-shadow:0 0 8px #f472b6;"></span>
+              <b style="color:#f472b6;font-size:12px;letter-spacing:0.5px;">ZÁZNAM: ZMIZEL Z PVVD MAPY</b>
+            </div>
+            <span style="font-size:9px;color:#cbd5e1;background:rgba(244,114,182,0.15);padding:1px 6px;border-radius:4px;border:1px solid rgba(244,114,182,0.3);">Poslední poloha</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr;gap:5px;line-height:1.4;color:#e2e8f0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;">
+              <span style="color:#94a3b8;font-size:10px;"><i class="far fa-clock" style="color:#f472b6;margin-right:4px;"></i>Přesný čas a datum:</span>
+              <b style="color:#fbcfe8;font-size:11px;font-family:monospace;">${exactDateTime}</b>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;">
+              <span style="color:#94a3b8;font-size:10px;"><i class="fas fa-id-card" style="color:#38bdf8;margin-right:4px;"></i>SPZ vozu:</span>
+              <b style="background:#0f172a;border:1px solid rgba(244,114,182,0.4);color:#ffffff;padding:1px 7px;border-radius:4px;font-family:monospace;letter-spacing:0.5px;">${spzVal}</b>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;">
+              <span style="color:#94a3b8;font-size:10px;"><i class="fas fa-bus-alt" style="color:#10b981;margin-right:4px;"></i>Typ autobusu:</span>
+              <b style="color:#6ee7b7;font-size:11px;">${vType}</b>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;">
+              <span style="color:#94a3b8;font-size:10px;"><i class="fas fa-map-marker-alt" style="color:#f59e0b;margin-right:4px;"></i>Poloha / GPS:</span>
+              <span style="color:#fef08a;font-size:10px;font-family:monospace;">${coordsStr}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;">
+              <span style="color:#94a3b8;font-size:10px;"><i class="fas fa-map-pin" style="color:#a855f7;margin-right:4px;"></i>Místo / Zastávka:</span>
+              <b style="color:#e9d5ff;font-size:10px;text-align:right;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${stopInfo}">${stopInfo}</b>
+            </div>
+          </div>
+          <div style="margin-top:6px;font-size:9.5px;color:#94a3b8;line-height:1.3;text-align:center;border-top:1px dashed rgba(255,255,255,0.1);padding-top:5px;">
+            Vůz přestal vysílat na PVVD IDPK. Ponechán na zaznamenaném místě.
+          </div>
+        </div>`;
       }
       let arrivaW='';
       if(IS_ADMIN){
@@ -5115,6 +5302,9 @@ setInterval(loadDepotZones,20000); // refresh kazdych 20 sekund
     let cbMoving = document.getElementById('settings-only-moving');
     if (cbMoving) cbMoving.checked = window.onlyMovingBuses;
 
+    let cbPvvd = document.getElementById('settings-only-pvvd');
+    if (cbPvvd) cbPvvd.checked = window.onlyPvvdBuses;
+
     let cbTelemetry = document.getElementById('settings-advanced-telemetry');
     if (cbTelemetry) cbTelemetry.checked = window.isAdvancedTelemetryActive();
 
@@ -5463,12 +5653,17 @@ def _load_spz_settings(db_client=None):
                         loaded_from_supabase = True
                         print(f"[SPZ-SETTINGS] Načteno {len(SPZ_METADATA)} záznamů SPZ metadat přímo z persistentní Supabase (autoritativní).", flush=True)
             
-            sb_mode = db_c.table("settings").select("setting_value").eq("setting_key", "map_position_source_mode").execute()
-            if sb_mode and sb_mode.data and len(sb_mode.data) > 0:
-                raw_m = str(sb_mode.data[0].get("setting_value") or "").strip().lower()
-                if raw_m in ("pvvd", "arriva"):
-                    POSITION_SOURCE_MODE = raw_m
-                    print(f"[POSITION-MODE] Načten režim zdroje polohy ze Supabase: {POSITION_SOURCE_MODE.upper()}", flush=True)
+            # Uživatelský požadavek: Výchozí režim zdroje polohy vozidel je VŽDY "pvvd".
+            # Při restartu systému se poloha vozidel NIKDY nesmí sama přepnout na arrivu.
+            POSITION_SOURCE_MODE = "pvvd"
+            try:
+                db_c.table("settings").upsert({
+                    "setting_key": "map_position_source_mode",
+                    "setting_value": "pvvd"
+                }).execute()
+            except Exception:
+                pass
+            print(f"[POSITION-MODE] Výchozí režim zdroje polohy nastaven na: PVVD (autoritativní)", flush=True)
         except Exception as e_sb:
             print(f"[SPZ-SETTINGS] Supabase load err: {e_sb}", flush=True)
 
@@ -8622,6 +8817,10 @@ def background_map_worker():
                     c["is_arriva_fallback"] = is_arriva_fallback
                     c["position_source"] = "arriva" if (is_arriva_fallback or POSITION_SOURCE_MODE == "arriva") else "pvvd"
                     c.pop("offline_since_time", None)
+                    c.pop("offline_since_datetime", None)
+                    c.pop("offline_lat", None)
+                    c.pop("offline_lng", None)
+                    c.pop("offline_stop", None)
 
                     clean_line = curr_norm_line or raw_line or normalize_line(last_valid_line) or last_valid_line
                     display_line = clean_line
@@ -8827,14 +9026,24 @@ def background_map_worker():
                         display_line = normalize_line(c.get("line")) or c.get("line") or ""
                     else:
                         # Vůz prokazatelně zmizel z PVVD
+                        was_offline = bool(c.get("is_offline"))
                         c["is_offline"] = True
                         c["is_withdrawn"] = True
                         p_since = v.get("parked_since") or int(time.time())
+                        exact_now = datetime.now()
+                        disappeared_str = datetime.fromtimestamp(p_since).strftime('%d.%m.%Y %H:%M:%S') if p_since else exact_now.strftime('%d.%m.%Y %H:%M:%S')
+
+                        if not c.get("offline_since_datetime"):
+                            c["offline_since_datetime"] = disappeared_str
                         try:
-                            c["offline_since_time"] = datetime.fromtimestamp(p_since).strftime('%H:%M')
+                            c["offline_since_time"] = datetime.fromtimestamp(p_since).strftime('%H:%M:%S')
                         except Exception:
                             if not c.get("offline_since_time"):
-                                c["offline_since_time"] = now.strftime('%H:%M')
+                                c["offline_since_time"] = exact_now.strftime('%H:%M:%S')
+
+                        c["offline_lat"] = lat
+                        c["offline_lng"] = lng
+                        c["offline_stop"] = c.get("nearest_stop") or c.get("real_zastavka") or ""
 
                         if in_depot_zone:
                             c["color_class"] = "bg-yellow"
@@ -8847,6 +9056,27 @@ def background_map_worker():
 
                         clean_last = normalize_line(last_valid_line) or last_valid_line
                         display_line = clean_last or ""
+
+                        # Zaznamenat zmizení vozu z PVVD mapy do lokální persistentní DB
+                        if not was_offline and not in_depot_zone:
+                            try:
+                                from local_db import local_log_pvvd_disappearance
+                                local_log_pvvd_disappearance(
+                                    bus_id=str(bid),
+                                    spz=spz or c.get("spz") or "",
+                                    vehicle_type=sanitize_vehicle_type(c.get("vehicle_type")),
+                                    line=display_line,
+                                    destination=dest or c.get("destination") or "",
+                                    driver=c.get("admin_driver") or "",
+                                    lat=lat,
+                                    lng=lng,
+                                    nearest_stop=c.get("nearest_stop") or c.get("real_zastavka") or "",
+                                    disappeared_at=c["offline_since_datetime"],
+                                    status_reason="Zmizel z mapy PVVD"
+                                )
+                                print(f"[PVVD-DISAPPEAR] Vůz {bid} (SPZ: {spz or c.get('spz')}) zmizel z PVVD v {c['offline_since_datetime']}", flush=True)
+                            except Exception as e_dis:
+                                print(f"[PVVD-DISAPPEAR] Log err: {e_dis}", flush=True)
 
 
                 # Kontrola pohybu pro BUG
@@ -8916,6 +9146,10 @@ def background_map_worker():
                     "is_withdrawn": bool(c.get("is_withdrawn")),
                     "is_offline": bool(c.get("is_offline")),
                     "offline_since_time": c.get("offline_since_time"),
+                    "offline_since_datetime": c.get("offline_since_datetime"),
+                    "offline_lat": c.get("offline_lat") or c.get("lat"),
+                    "offline_lng": c.get("offline_lng") or c.get("lng"),
+                    "offline_stop": c.get("offline_stop") or c.get("nearest_stop") or c.get("real_zastavka"),
                     "spoj_num": c.get("spoj_num"),
                     "last_known_spoj": c.get("last_known_spoj") or c.get("spoj_num"),
                     "parked_since": v.get("parked_since"),
@@ -9044,16 +9278,26 @@ def background_map_worker():
                     continue
 
                 in_depot_zone, depot_zone_name = _check_depot_zones(lat_c, lng_c)
+                was_cached_offline = bool(c_cached.get("is_offline"))
                 c_cached["is_offline"] = True
                 c_cached["is_withdrawn"] = True
                 p_since = c_cached.get("parked_since") or int(time.time())
                 c_cached["parked_since"] = p_since
 
+                exact_now = datetime.now()
+                disappeared_str = datetime.fromtimestamp(p_since).strftime('%d.%m.%Y %H:%M:%S') if p_since else exact_now.strftime('%d.%m.%Y %H:%M:%S')
+                if not c_cached.get("offline_since_datetime"):
+                    c_cached["offline_since_datetime"] = disappeared_str
+
                 if not c_cached.get("offline_since_time"):
                     try:
-                        c_cached["offline_since_time"] = datetime.fromtimestamp(p_since).strftime('%H:%M')
+                        c_cached["offline_since_time"] = datetime.fromtimestamp(p_since).strftime('%H:%M:%S')
                     except Exception:
-                        c_cached["offline_since_time"] = now.strftime('%H:%M')
+                        c_cached["offline_since_time"] = exact_now.strftime('%H:%M:%S')
+
+                c_cached["offline_lat"] = lat_c
+                c_cached["offline_lng"] = lng_c
+                c_cached["offline_stop"] = c_cached.get("nearest_stop") or c_cached.get("real_zastavka") or ""
 
                 elapsed_min = max(0.0, (now.timestamp() - p_since) / 60.0)
                 c_cached["inactive_minutes"] = round(elapsed_min, 1)
@@ -9069,6 +9313,25 @@ def background_map_worker():
                     c_cached["status"] = c_cached.get("status") or "Zmizel z mapy PVVD"
 
                 clean_last = normalize_line(c_cached.get("line")) or c_cached.get("line") or ""
+
+                if not was_cached_offline and not in_depot_zone:
+                    try:
+                        from local_db import local_log_pvvd_disappearance
+                        local_log_pvvd_disappearance(
+                            bus_id=str(bid_cached),
+                            spz=c_cached.get("spz") or "",
+                            vehicle_type=sanitize_vehicle_type(c_cached.get("vehicle_type")),
+                            line=clean_last,
+                            destination=c_cached.get("destination") or "",
+                            driver=c_cached.get("admin_driver") or "",
+                            lat=lat_c,
+                            lng=lng_c,
+                            nearest_stop=c_cached.get("nearest_stop") or c_cached.get("real_zastavka") or "",
+                            disappeared_at=c_cached["offline_since_datetime"],
+                            status_reason="Zmizel z mapy PVVD"
+                        )
+                    except Exception:
+                        pass
 
                 new_live_data.append({
                     "id": bid_cached,
@@ -9115,6 +9378,10 @@ def background_map_worker():
                     "is_withdrawn": True,
                     "is_offline": True,
                     "offline_since_time": c_cached.get("offline_since_time"),
+                    "offline_since_datetime": c_cached.get("offline_since_datetime"),
+                    "offline_lat": c_cached.get("offline_lat") or lat_c,
+                    "offline_lng": c_cached.get("offline_lng") or lng_c,
+                    "offline_stop": c_cached.get("offline_stop") or c_cached.get("nearest_stop") or c_cached.get("real_zastavka"),
                     "spoj_num": c_cached.get("spoj_num"),
                     "last_known_spoj": c_cached.get("last_known_spoj") or c_cached.get("spoj_num"),
                     "parked_since": c_cached.get("parked_since"),
@@ -11089,6 +11356,21 @@ def api_admin_get_position_source_mode():
         "status": "success",
         "position_source_mode": POSITION_SOURCE_MODE
     })
+
+
+@mapa_bp.route('/api/disappearances_history', methods=['GET'])
+def api_get_disappearances_history():
+    try:
+        from local_db import local_get_pvvd_disappearances
+        limit = int(request.args.get('limit', 100))
+        records = local_get_pvvd_disappearances(limit=limit)
+        return jsonify({
+            "status": "success",
+            "total": len(records),
+            "disappearances": records
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @mapa_bp.route('/api/admin/spz_resolve_proposal', methods=['POST'])
