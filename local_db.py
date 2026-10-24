@@ -203,6 +203,7 @@ def init_local_db():
             conn.commit()
             _restore_stats_backup_if_empty(conn)
             _restore_web_visits_if_empty(conn)
+            _restore_pvvd_disappearances_if_empty(conn)
             # Automatické pročištění neplatných admin zámků (Neznámá / Aktivní hledání nesmí mít admin zámek)
             try:
                 conn.execute("""
@@ -732,27 +733,147 @@ def local_get_stats():
     return res
 
 _WEB_VISITS_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "web_visits_backup.json")
+_PVVD_DISAPPEARANCES_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "pvvd_disappearances_backup.json")
+
+def _get_supabase_client():
+    try:
+        from interaktivnimapa import get_db_client
+        c = get_db_client()
+        if c:
+            return c
+    except Exception:
+        pass
+    try:
+        from main import get_db
+        c = get_db()
+        if c:
+            return c
+    except Exception:
+        pass
+    return None
+
+def _sync_web_visits_to_supabase(visits):
+    def _do_sync():
+        try:
+            db = _get_supabase_client()
+            if not db:
+                return
+            val_json = json.dumps(visits[:1000], ensure_ascii=False)
+            db.table("settings").upsert({
+                "setting_key": "web_visits_backup",
+                "setting_value": val_json
+            }).execute()
+        except Exception as e:
+            pass
+    threading.Thread(target=_do_sync, daemon=True).start()
+
+def _sync_pvvd_disappearances_to_supabase(records):
+    def _do_sync():
+        try:
+            db = _get_supabase_client()
+            if not db:
+                return
+            val_json = json.dumps(records[:500], ensure_ascii=False)
+            db.table("settings").upsert({
+                "setting_key": "pvvd_disappearances_backup",
+                "setting_value": val_json
+            }).execute()
+        except Exception as e:
+            pass
+    threading.Thread(target=_do_sync, daemon=True).start()
 
 def _restore_web_visits_if_empty(conn):
     try:
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM web_visits_local")
         cnt = cur.fetchone()[0]
-        if cnt == 0 and os.path.exists(_WEB_VISITS_BACKUP_FILE):
-            with open(_WEB_VISITS_BACKUP_FILE, "r", encoding="utf-8") as f:
-                visits = json.load(f)
-            for v in reversed(visits):
-                conn.execute("""
-                    INSERT INTO web_visits_local (ip, country, visited_at)
-                    VALUES (?, ?, ?)
-                """, (v.get("ip"), v.get("country"), v.get("visited_at")))
-            conn.commit()
-            print(f"[LOCAL DB] Obnoveno {len(visits)} webových návštěv ze zálohy web_visits_backup.json", flush=True)
+        if cnt == 0:
+            visits = []
+            # 1. Zkus načíst trvalou zálohu ze Supabase (přežije nový deploy na Koyeb!)
+            try:
+                db = _get_supabase_client()
+                if db:
+                    res = db.table("settings").select("setting_value").eq("setting_key", "web_visits_backup").execute()
+                    if res.data and res.data[0].get("setting_value"):
+                        visits = json.loads(res.data[0]["setting_value"])
+            except Exception:
+                visits = []
+
+            # 2. Záložní čtení z lokálního souboru
+            if not visits and os.path.exists(_WEB_VISITS_BACKUP_FILE):
+                try:
+                    with open(_WEB_VISITS_BACKUP_FILE, "r", encoding="utf-8") as f:
+                        visits = json.load(f)
+                except Exception:
+                    visits = []
+
+            if visits:
+                for v in reversed(visits):
+                    conn.execute("""
+                        INSERT INTO web_visits_local (ip, country, visited_at)
+                        VALUES (?, ?, ?)
+                    """, (v.get("ip"), v.get("country"), v.get("visited_at")))
+                conn.commit()
+                # Ulož do lokálního souboru pro rychlý offline fallback
+                try:
+                    with open(_WEB_VISITS_BACKUP_FILE, "w", encoding="utf-8") as f:
+                        json.dump(visits, f, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
+                print(f"[LOCAL DB] Obnoveno {len(visits)} webových návštěv (ze Supabase/zálohy)", flush=True)
     except Exception as e:
         print(f"[LOCAL DB] Chyba obnovy návštěv ze zálohy: {e}", flush=True)
 
+def _restore_pvvd_disappearances_if_empty(conn):
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM pvvd_disappearances_local")
+        cnt = cur.fetchone()[0]
+        if cnt == 0:
+            records = []
+            # 1. Zkus načíst trvalou zálohu ze Supabase
+            try:
+                db = _get_supabase_client()
+                if db:
+                    res = db.table("settings").select("setting_value").eq("setting_key", "pvvd_disappearances_backup").execute()
+                    if res.data and res.data[0].get("setting_value"):
+                        records = json.loads(res.data[0]["setting_value"])
+            except Exception:
+                records = []
+
+            # 2. Záložní čtení z lokálního souboru
+            if not records and os.path.exists(_PVVD_DISAPPEARANCES_BACKUP_FILE):
+                try:
+                    with open(_PVVD_DISAPPEARANCES_BACKUP_FILE, "r", encoding="utf-8") as f:
+                        records = json.load(f)
+                except Exception:
+                    records = []
+
+            if records:
+                for r in reversed(records):
+                    conn.execute("""
+                        INSERT INTO pvvd_disappearances_local (bus_id, spz, vehicle_type, line, destination, driver, lat, lng, nearest_stop, disappeared_at, status_reason)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        str(r.get("bus_id") or ''),
+                        str(r.get("spz") or ''),
+                        str(r.get("vehicle_type") or ''),
+                        str(r.get("line") or ''),
+                        str(r.get("destination") or ''),
+                        str(r.get("driver") or ''),
+                        float(r.get("lat") or 0),
+                        float(r.get("lng") or 0),
+                        str(r.get("nearest_stop") or ''),
+                        str(r.get("disappeared_at") or ''),
+                        str(r.get("status_reason") or 'Zmizel z mapy PVVD')
+                    ))
+                conn.commit()
+                print(f"[LOCAL DB] Obnoveno {len(records)} záznamů zmizení vozů (ze Supabase/zálohy)", flush=True)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba obnovy zmizení ze zálohy: {e}", flush=True)
+
 def local_log_web_visit(ip: str, country: str, visited_at: str):
-    """Zaznamená návštěvu webu do lokální SQLite tabulky a záložního JSONu."""
+    """Zaznamená návštěvu webu do lokální SQLite tabulky, JSON zálohy a synchronizuje do Supabase."""
     try:
         new_id = 0
         with _local_db_lock:
@@ -765,18 +886,23 @@ def local_log_web_visit(ip: str, country: str, visited_at: str):
                 new_id = cur.lastrowid
                 conn.commit()
 
-            # Zápis do záložního JSONu (persistentního napříč deployi na Koyeb)
-            try:
-                visits = []
-                if os.path.exists(_WEB_VISITS_BACKUP_FILE):
+            visits = []
+            if os.path.exists(_WEB_VISITS_BACKUP_FILE):
+                try:
                     with open(_WEB_VISITS_BACKUP_FILE, "r", encoding="utf-8") as f:
                         visits = json.load(f)
-                visits.insert(0, {"id": new_id, "ip": ip, "country": country, "visited_at": visited_at})
-                visits = visits[:2000]
+                except Exception:
+                    visits = []
+            visits.insert(0, {"id": new_id, "ip": ip, "country": country, "visited_at": visited_at})
+            visits = visits[:2000]
+            try:
                 with open(_WEB_VISITS_BACKUP_FILE, "w", encoding="utf-8") as f:
                     json.dump(visits, f, ensure_ascii=False, indent=2)
             except Exception:
                 pass
+
+        # Synchronizace do Supabase (asynchronně v pozadí)
+        _sync_web_visits_to_supabase(visits)
     except Exception as e:
         pass
 
@@ -807,7 +933,7 @@ def local_get_web_visits(limit: int = 2000):
     return []
 
 def local_clear_web_visits():
-    """Vymaže lokální historii návštěv webu."""
+    """Vymaže lokální historii návštěv webu a vyčistí i v Supabase."""
     try:
         with _local_db_lock:
             with _get_local_conn() as conn:
@@ -816,19 +942,50 @@ def local_clear_web_visits():
         if os.path.exists(_WEB_VISITS_BACKUP_FILE):
             with open(_WEB_VISITS_BACKUP_FILE, "w", encoding="utf-8") as f:
                 json.dump([], f)
+        _sync_web_visits_to_supabase([])
     except Exception as e:
         pass
 
 def local_log_pvvd_disappearance(bus_id: str, spz: str, vehicle_type: str, line: str, destination: str, driver: str, lat: float, lng: float, nearest_stop: str, disappeared_at: str, status_reason: str):
-    """Zaznamená přesný záznam o zmizení autobusu z PVVD mapy (včetně přesného data, času, GPS a typu)."""
+    """Zaznamená přesný záznam o zmizení autobusu z PVVD mapy (do SQLite, JSONu a Supabase)."""
     try:
+        entry = {
+            "bus_id": str(bus_id or ''),
+            "spz": str(spz or ''),
+            "vehicle_type": str(vehicle_type or ''),
+            "line": str(line or ''),
+            "destination": str(destination or ''),
+            "driver": str(driver or ''),
+            "lat": float(lat or 0),
+            "lng": float(lng or 0),
+            "nearest_stop": str(nearest_stop or ''),
+            "disappeared_at": str(disappeared_at or ''),
+            "status_reason": str(status_reason or 'Zmizel z mapy PVVD')
+        }
         with _local_db_lock:
             with _get_local_conn() as conn:
                 conn.execute("""
                     INSERT INTO pvvd_disappearances_local (bus_id, spz, vehicle_type, line, destination, driver, lat, lng, nearest_stop, disappeared_at, status_reason)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (str(bus_id or ''), str(spz or ''), str(vehicle_type or ''), str(line or ''), str(destination or ''), str(driver or ''), float(lat or 0), float(lng or 0), str(nearest_stop or ''), str(disappeared_at or ''), str(status_reason or 'Zmizel z mapy PVVD')))
+                """, (entry["bus_id"], entry["spz"], entry["vehicle_type"], entry["line"], entry["destination"], entry["driver"], entry["lat"], entry["lng"], entry["nearest_stop"], entry["disappeared_at"], entry["status_reason"]))
                 conn.commit()
+
+            records = []
+            if os.path.exists(_PVVD_DISAPPEARANCES_BACKUP_FILE):
+                try:
+                    with open(_PVVD_DISAPPEARANCES_BACKUP_FILE, "r", encoding="utf-8") as f:
+                        records = json.load(f)
+                except Exception:
+                    records = []
+            records.insert(0, entry)
+            records = records[:500]
+            try:
+                with open(_PVVD_DISAPPEARANCES_BACKUP_FILE, "w", encoding="utf-8") as f:
+                    json.dump(records, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+
+        _sync_pvvd_disappearances_to_supabase(records)
     except Exception:
         pass
 
@@ -845,25 +1002,34 @@ def local_get_pvvd_disappearances(limit: int = 100) -> list:
                     LIMIT ?
                 """, (limit,))
                 rows = cur.fetchall()
-                return [
-                    {
-                        "id": r[0],
-                        "bus_id": r[1],
-                        "spz": r[2],
-                        "vehicle_type": r[3],
-                        "line": r[4],
-                        "destination": r[5],
-                        "driver": r[6],
-                        "lat": r[7],
-                        "lng": r[8],
-                        "nearest_stop": r[9],
-                        "disappeared_at": r[10],
-                        "status_reason": r[11],
-                        "created_at": r[12]
-                    }
-                    for r in rows
-                ]
+                if rows:
+                    return [
+                        {
+                            "id": r[0],
+                            "bus_id": r[1],
+                            "spz": r[2],
+                            "vehicle_type": r[3],
+                            "line": r[4],
+                            "destination": r[5],
+                            "driver": r[6],
+                            "lat": r[7],
+                            "lng": r[8],
+                            "nearest_stop": r[9],
+                            "disappeared_at": r[10],
+                            "status_reason": r[11],
+                            "created_at": r[12]
+                        }
+                        for r in rows
+                    ]
     except Exception:
-        return []
+        pass
+
+    try:
+        if os.path.exists(_PVVD_DISAPPEARANCES_BACKUP_FILE):
+            with open(_PVVD_DISAPPEARANCES_BACKUP_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)[:limit]
+    except Exception:
+        pass
+    return []
 
 

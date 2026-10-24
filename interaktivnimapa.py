@@ -1505,7 +1505,10 @@ window.loadDisappearancesList = function() {
   if (!b) return;
   b.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px 0;font-size:13px;"><i class="fas fa-spinner fa-spin"></i> Načítám záznamy zmizení...</div>';
   fetch('/api/pvvd_disappearances?limit=100')
-    .then(r => r.json())
+    .then(r => {
+      if (!r.ok) throw new Error('Server vrátil HTTP ' + r.status);
+      return r.json();
+    })
     .then(data => {
       if (!data || !data.disappearances || data.disappearances.length === 0) {
         b.innerHTML = '<div style="text-align:center;color:#64748b;padding:30px 0;font-size:13px;">Zatím nejsou zaznamenána žádná zmizení autobusů z PVVD mapy.</div>';
@@ -9914,7 +9917,11 @@ def _check_and_fire_notifications(db_client, bus_cache):
         if "BUG" in status_text.upper():
             continue
 
-        now_terminal = "Konečná" in status_text or "Konecna" in status_text
+        now_terminal = "konečná" in status_text.lower() or "konecna" in status_text.lower() or "cíl" in status_text.lower()
+        b_dest = str(bus_data.get("destination") or "").strip()
+        b_stop = str(bus_data.get("last_stop_name") or bus_data.get("nearest_stop") or "").strip()
+        if b_dest and b_stop and len(b_dest) >= 3 and _norm_txt(b_dest) in _norm_txt(b_stop) and ("stojí" in status_text.lower() or "čeká" in status_text.lower()):
+            now_terminal = True
         was_terminal = state.get("_terminal", False)
         if triggers.get("terminal"):
             if now_terminal and not was_terminal:
@@ -9953,18 +9960,25 @@ def _check_and_fire_notifications(db_client, bus_cache):
             now_near_stop = False
             ctx_text = ""
             status_val = ""
+            norm_target = _norm_txt(stop_name)
             
-            b_last_stop = bus_data.get("last_stop_name", "")
-            if b_last_stop and _norm_txt(stop_name) in _norm_txt(b_last_stop):
+            # 1. Zkontroluj zastávky hlášené telemetrií
+            matched_stop_name = ""
+            for s_candidate in [bus_data.get("last_stop_name"), bus_data.get("nearest_stop"), bus_data.get("real_zastavka")]:
+                if s_candidate and norm_target in _norm_txt(s_candidate):
+                    matched_stop_name = s_candidate
+                    break
+                    
+            if matched_stop_name:
                 now_near_stop = True
-                status_val = f"{status_text} ({b_last_stop})"
-                ctx_text = f"SPZ: {bus_data.get('spz')} | Blíží se do zastávky: {b_last_stop} (v {now_time_str})"
+                status_val = f"{status_text} ({matched_stop_name})"
+                ctx_text = f"SPZ: {bus_data.get('spz')} | Zastávka: {matched_stop_name} (v {now_time_str})"
             else:
                 b_lat = bus_data.get("lat", 0)
                 b_lon = bus_data.get("lng", 0)
                 if b_lat and b_lon and GTFS_LOADED:
-                    near = _nearest_stop_name(b_lat, b_lon, 450)
-                    if near and _norm_txt(stop_name) in _norm_txt(near):
+                    near = _nearest_stop_name(b_lat, b_lon, 750)
+                    if near and norm_target in _norm_txt(near):
                         now_near_stop = True
                         status_val = f"{status_text} ({near})"
                         ctx_text = f"SPZ: {bus_data.get('spz')} | Fyzicky poblíž zastávky: {near} (v {now_time_str})"
@@ -11358,6 +11372,7 @@ def api_admin_get_position_source_mode():
     })
 
 
+@mapa_bp.route('/api/pvvd_disappearances', methods=['GET'])
 @mapa_bp.route('/api/disappearances_history', methods=['GET'])
 def api_get_disappearances_history():
     try:
