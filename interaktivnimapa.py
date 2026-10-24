@@ -8090,9 +8090,40 @@ def background_map_worker():
         # === SPZ CACHE RESTORE: Obnov SPZ z predchoziho behu (zachrani data po restartu/deployi) ===
         try:
             _now_restore = get_prague_time()
-            cache_res = db_client.table("spz_cache").select("*").execute()
+            rows_to_restore = []
+
+            # 1. Priorita: Lokální SQLite (datacore_local.db - spz_cache_local)
+            try:
+                from local_db import local_spz_get_all
+                loc_data = local_spz_get_all()
+                if loc_data:
+                    rows_to_restore = loc_data
+                    print(f"[SPZ RESTORE] Obnoveno {len(rows_to_restore)} SPZ z lokální SQLite databáze (datacore_local.db)!", flush=True)
+            except Exception as e_loc:
+                print(f"[SPZ RESTORE] Lokální SQLite čtení: {e_loc}", flush=True)
+
+            # 2. Lokální JSON záloha (spz_cache_backup.json), pokud SQLite byla prázdná
+            if not rows_to_restore:
+                _spz_backup_file = os.path.join(os.path.dirname(__file__), "spz_cache_backup.json")
+                if os.path.exists(_spz_backup_file):
+                    try:
+                        with open(_spz_backup_file, "r", encoding="utf-8") as f:
+                            rows_to_restore = json.load(f)
+                            print(f"[SPZ RESTORE] Obnoveno {len(rows_to_restore)} SPZ z lokálního JSON souboru!", flush=True)
+                    except Exception as e_jf:
+                        print(f"[SPZ RESTORE] JSON záloha čtení: {e_jf}", flush=True)
+
+            # 3. Supabase fallback (pokud lokálně nic nebylo)
+            if not rows_to_restore and db_client:
+                try:
+                    cache_res = db_client.table("spz_cache").select("*").execute()
+                    rows_to_restore = cache_res.data or []
+                    print(f"[SPZ RESTORE] Obnoveno {len(rows_to_restore)} SPZ ze Supabase!", flush=True)
+                except Exception as e_sb:
+                    print(f"[SPZ RESTORE] Supabase RESTORE selhalo: {e_sb}", flush=True)
+
             restored = 0
-            for row in (cache_res.data or []):
+            for row in rows_to_restore:
                 bid = row.get("bus_id")
                 spz = row.get("spz")
                 
@@ -9211,10 +9242,13 @@ def background_map_worker():
                         "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
                     })
                 if cache_rows:
-                    # ★ Plán A: Lokální SQLite zálohování (vždy, bez ohledu na Supabase)
+                    # ★ Plán A: Lokální SQLite zálohování a JSON záloha (vždy, bez ohledu na Supabase)
                     try:
                         from local_db import local_spz_upsert as _local_upsert
                         _local_upsert(cache_rows)
+                        _spz_b_file = os.path.join(os.path.dirname(__file__), "spz_cache_backup.json")
+                        with open(_spz_b_file, "w", encoding="utf-8") as _f_sb:
+                            json.dump(cache_rows, _f_sb, ensure_ascii=False)
                     except Exception:
                         pass
 

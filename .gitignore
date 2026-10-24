@@ -17,6 +17,7 @@ daily_metrics.json
 *_backup*
 !users_backup.json
 !summary_backup.json
+!spz_cache_backup.json
 *.db
 idpk_vehicles_state.json
 vehicle_state.json
