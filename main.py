@@ -339,6 +339,53 @@ _SETTINGS_CACHE = {}  # {setting_key: (timestamp, value)}
 _IP_GEO_CACHE = {}     # {ip: (timestamp, dict)}
 _RECENT_WEB_VISITS = {} # {ip: last_timestamp}
 
+# ── GTFS normalizace linek (např. '734' -> '490734') ──────────────────────────
+_LINE_MAPPING = {}
+try:
+    _mapping_file = os.path.join(os.path.dirname(__file__), "gtfs_line_mapping.json")
+    if os.path.exists(_mapping_file):
+        with open(_mapping_file, "r", encoding="utf-8") as _mf:
+            _LINE_MAPPING = json.load(_mf)
+        print(f"[GTFS] Načtena mapa linek: {len(_LINE_MAPPING)} tras.", flush=True)
+except Exception as _e_map:
+    print(f"[GTFS] Nelze načíst gtfs_line_mapping.json: {_e_map}", flush=True)
+
+def normalize_line_number(raw_line: str) -> str:
+    raw = str(raw_line or "").strip()
+    if not raw:
+        return ""
+    if len(raw) >= 6 and raw.isdigit():
+        return raw
+    if raw in _LINE_MAPPING:
+        return _LINE_MAPPING[raw]
+    clean_num = raw.lstrip('0')
+    if clean_num in _LINE_MAPPING:
+        return _LINE_MAPPING[clean_num]
+    return raw
+
+# Jednorázové kompletní promazání starých statistik linek a zastávek (čistý start podle požadavku)
+try:
+    _clean_stats_flag = os.path.join(os.path.dirname(__file__), ".clean_stats_reset_2026_v1")
+    if not os.path.exists(_clean_stats_flag):
+        print("[STATS] Jednorázové promazávání starých tabulek linek a zastávek...", flush=True)
+        try:
+            from local_db import local_clear_all_stats
+            local_clear_all_stats()
+        except Exception as _e_loc_cl:
+            print(f"[STATS] Chyba local_clear_all_stats: {_e_loc_cl}", flush=True)
+        _db_init_stats = get_db()
+        if _db_init_stats:
+            for _tbl in ["user_stats_stops", "user_stats_lines", "stats_stops", "stats_lines"]:
+                try:
+                    _db_init_stats.table(_tbl).delete().gte("id", 0).execute()
+                    print(f"[STATS] Tabulka {_tbl} byla úspěšně vyprázdněna.", flush=True)
+                except Exception as _e_tbl:
+                    print(f"[STATS] Nelze promazat {_tbl}: {_e_tbl}", flush=True)
+        with open(_clean_stats_flag, "w", encoding="utf-8") as _f_st:
+            _f_st.write("reset_stats_done\n")
+except Exception as _e_stats_clear:
+    print(f"[STATS] Upozornění při promazávání statistik: {_e_stats_clear}", flush=True)
+
 # Jednorázové promazání starých chybných dat tabulky page_visits podle požadavku
 try:
     _flag_file = os.path.join(os.path.dirname(__file__), ".page_visits_reset_v2")
@@ -1585,16 +1632,22 @@ def api_egress_set():
 def api_submit_stats():
     if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
-    line = str(data.get("line", "")).strip()
+    raw_line = str(data.get("line", "")).strip()
     stops = data.get("stops", [])
     discord_id = str(data.get("discord_id", "")).strip()
-    if not line:
+    if not raw_line:
         return _cors_jsonify({"status": "error", "message": "Chybí parametr linky."})
+    
+    # ── Vždy normalizovat na oficiální 6místné licenční číslo (např. '734' -> '490734')
+    line = normalize_line_number(raw_line)
+    
+    # ── Deduplikace zastávek v rámci jedné jízdy (žádná zastávka se nepřičte víckrát než 1x)
+    unique_stops = list(dict.fromkeys(str(s).strip() for s in (stops or []) if str(s).strip()))
     
     # 1. Lokální 100% spolehlivý zápis do SQLite (nezávislý na RLS v Supabase)
     try:
         from local_db import local_record_stats
-        local_record_stats(line, stops, discord_id)
+        local_record_stats(line, unique_stops, discord_id)
     except Exception as e_loc:
         print(f"[STATS] Chyba lokálního zápisu: {e_loc}", flush=True)
 
@@ -1608,9 +1661,7 @@ def api_submit_stats():
         except Exception as e_sb1:
             print(f"[STATS] Supabase stats_lines (RLS nebo chyba): {e_sb1}", flush=True)
 
-        for stop in stops:
-            stop_name = str(stop).strip()
-            if not stop_name: continue
+        for stop_name in unique_stops:
             try:
                 stop_res = db.table("stats_stops").select("*").eq("stop_name", stop_name).execute().data
                 if stop_res: db.table("stats_stops").update({"announce_count": int(stop_res[0].get("announce_count", 0)) + 1}).eq("id", stop_res[0]["id"]).execute()
@@ -1626,9 +1677,7 @@ def api_submit_stats():
             except Exception as e_sb3:
                 pass
 
-            for stop in stops:
-                stop_name = str(stop).strip()
-                if not stop_name: continue
+            for stop_name in unique_stops:
                 try:
                     u_stop_res = db.table("user_stats_stops").select("*").eq("discord_id", discord_id).eq("stop_name", stop_name).execute().data
                     if u_stop_res: db.table("user_stats_stops").update({"announce_count": int(u_stop_res[0].get("announce_count", 0)) + 1}).eq("id", u_stop_res[0]["id"]).execute()
@@ -1636,7 +1685,7 @@ def api_submit_stats():
                 except Exception as e_sb4:
                     pass
 
-    return _cors_jsonify({"status": "success"})
+    return _cors_jsonify({"status": "success", "line": line, "stops_recorded": len(unique_stops)})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3261,9 +3310,7 @@ def api_stats_summary():
         for ln, cnt in local_s.get('lines', {}).items():
             merged_lines[ln] = merged_lines.get(ln, 0) + int(cnt or 0)
             
-        toplines_list = [[ln, cnt] for ln, cnt in sorted(merged_lines.items(), key=lambda x: x[1], reverse=True)[:20]] if merged_lines else [
-            ['490722', 37], ['424', 35], ['440336', 20], ['739', 18], ['400621', 16], ['490735', 16], ['1651', 16], ['496711', 12]
-        ]
+        toplines_list = [[ln, cnt] for ln, cnt in sorted(merged_lines.items(), key=lambda x: x[1], reverse=True)[:20]]
         
         merged_stops = {}
         for s in top_stops:
@@ -3272,9 +3319,7 @@ def api_stats_summary():
         for sn, cnt in local_s.get('stops', {}).items():
             merged_stops[sn] = merged_stops.get(sn, 0) + int(cnt or 0)
             
-        topstops_list = [[sn, cnt] for sn, cnt in sorted(merged_stops.items(), key=lambda x: x[1], reverse=True)[:20]] if merged_stops else [
-            ['Plzeň, Terminál Hlavní nádraží', 29], ['Stříbro, aut. st.', 28], ['Tachov, aut. nádr.', 23], ['Tymákov, ObÚ', 20], ['Letkov', 17], ['Mokrouše, garáž ČSAD', 16], ['Tachov, u Rybeny', 14], ['Plzeň, K Bukové', 13]
-        ]
+        topstops_list = [[sn, cnt] for sn, cnt in sorted(merged_stops.items(), key=lambda x: x[1], reverse=True)[:20]]
         
         user_lines_data = db.table("user_stats_lines").select("discord_id, play_count").execute().data or []
         player_line_counts = {}
@@ -3287,8 +3332,6 @@ def api_stats_summary():
                 player_line_counts[did] = player_line_counts.get(did, 0) + sum(int(c or 0) for c in lines_dict.values())
 
         lines_list = [[nick_map.get(did, 'Neznámý'), count] for did, count in sorted(player_line_counts.items(), key=lambda x: x[1], reverse=True)[:5]]
-        if not lines_list:
-            lines_list = [['marekk_czz', 235], ['_Runtik_🦖💗', 55], ['Dopravák z Karlovarska', 42], ['Itz_Winters', 30], ['Tomas_Jindra_Moravec_King', 11]]
         
         user_stops_data = db.table("user_stats_stops").select("discord_id, announce_count").execute().data or []
         player_stop_counts = {}
@@ -3301,8 +3344,6 @@ def api_stats_summary():
                 player_stop_counts[did] = player_stop_counts.get(did, 0) + sum(int(c or 0) for c in stops_dict.values())
 
         stops_list = [[nick_map.get(did, 'Neznámý'), count] for did, count in sorted(player_stop_counts.items(), key=lambda x: x[1], reverse=True)[:5]]
-        if not stops_list:
-            stops_list = [['_Runtik_🦖💗', 434], ['marekk_czz', 142], ['Itz_Winters', 110], ['Tomas_Jindra_Moravec_King', 52], ['Matesak', 27]]
         
         return jsonify({
             "toplines": toplines_list,
@@ -3452,72 +3493,46 @@ def api_stats_user():
     if not u_res and name.isdigit():
         u_res = db.table("users").select("discord_id, nick, avatar_url, total_time, launch_count").eq("discord_id", name).limit(1).execute().data
     
-    BASELINE_USERS = {
-        'marekk_czz': {
-            'lines': [['490722', 64], ['440336', 41], ['424', 38], ['739', 29], ['400621', 21], ['490735', 18]],
-            'stops': [['Plzeň, Terminál Hlavní nádraží', 31], ['Stříbro, aut. st.', 22], ['Tachov, aut. nádr.', 17], ['Tymákov, ObÚ', 12], ['Letkov', 9]],
-            'total_lines': 235,
-            'total_stops': 142
-        },
-        '_runtik_': {
-            'lines': [['424', 17], ['739', 14], ['490722', 11], ['1651', 8]],
-            'stops': [['Plzeň, Terminál Hlavní nádraží', 26], ['Plzeň, K Bukové', 18], ['Mokrouše, garáž ČSAD', 14], ['Letkov', 9]],
-            'total_lines': 55,
-            'total_stops': 434
-        },
-        'itz_winters': {
-            'lines': [['440336', 12], ['490735', 9], ['400621', 6]],
-            'stops': [['Tachov, aut. nádr.', 15], ['Stříbro, aut. st.', 11], ['Tachov, u Rybeny', 7]],
-            'total_lines': 30,
-            'total_stops': 110
-        }
-    }
-
-    norm_name = name.lower()
-    base_match = None
-    for k, v in BASELINE_USERS.items():
-        if k in norm_name or norm_name in k:
-            base_match = v
-            break
-
-    if not u_res and not base_match:
+    if not u_res:
         return jsonify({"found": False})
 
-    u = u_res[0] if u_res else {}
+    u = u_res[0]
     d_id = str(u.get('discord_id') or '')
     total_time_mins = int(u.get('total_time') or 0)
-    hours = (total_time_mins // 60) if total_time_mins > 0 else (22 if 'marek' in norm_name else 0)
+    hours = total_time_mins // 60
     
     lines_count = 0
     stops_count = 0
     lines_list = []
     stops_list = []
 
+    merged_u_lines = {}
+    merged_u_stops = {}
+    ls = {}
+    try:
+        from local_db import local_get_stats
+        ls = local_get_stats()
+    except Exception: pass
+
     if d_id:
-        merged_u_lines = {}
-        merged_u_stops = {}
         try:
             l_res = db.table("user_stats_lines").select("line_name, play_count").eq("discord_id", d_id).order("play_count", desc=True).execute().data or []
             for x in l_res:
                 ln = x.get('line_name')
                 if ln: merged_u_lines[ln] = merged_u_lines.get(ln, 0) + int(x.get('play_count', 0))
-        except: pass
+        except Exception: pass
         try:
             s_res = db.table("user_stats_stops").select("stop_name, announce_count").eq("discord_id", d_id).order("announce_count", desc=True).execute().data or []
             for x in s_res:
                 sn = x.get('stop_name')
                 if sn: merged_u_stops[sn] = merged_u_stops.get(sn, 0) + int(x.get('announce_count', 0))
-        except: pass
+        except Exception: pass
         
         # Přidej lokální záznamy uživatele
-        try:
-            from local_db import local_get_stats
-            ls = local_get_stats()
-            for ln, cnt in ls.get('user_lines', {}).get(d_id, {}).items():
-                merged_u_lines[ln] = merged_u_lines.get(ln, 0) + int(cnt or 0)
-            for sn, cnt in ls.get('user_stops', {}).get(d_id, {}).items():
-                merged_u_stops[sn] = merged_u_stops.get(sn, 0) + int(cnt or 0)
-        except Exception: pass
+        for ln, cnt in ls.get('user_lines', {}).get(d_id, {}).items():
+            merged_u_lines[ln] = merged_u_lines.get(ln, 0) + int(cnt or 0)
+        for sn, cnt in ls.get('user_stops', {}).get(d_id, {}).items():
+            merged_u_stops[sn] = merged_u_stops.get(sn, 0) + int(cnt or 0)
         
         if merged_u_lines:
             lines_list = [[k, v] for k, v in sorted(merged_u_lines.items(), key=lambda x: x[1], reverse=True)]
@@ -3526,49 +3541,51 @@ def api_stats_user():
             stops_list = [[k, v] for k, v in sorted(merged_u_stops.items(), key=lambda x: x[1], reverse=True)]
             stops_count = sum(v for _, v in stops_list)
 
-    if not lines_list and base_match:
-        lines_list = base_match['lines']
-        lines_count = base_match['total_lines']
-    if not stops_list and base_match:
-        stops_list = base_match['stops']
-        stops_count = base_match['total_stops']
-
-    # Rank calculation
+    # 1. Pořadí v odehraném čase (Time Rank)
     all_users = db.table("users").select("discord_id, nick, total_time").execute().data or []
     sorted_time = sorted([int(x.get('total_time') or 0) for x in all_users if int(x.get('total_time') or 0) > 0], reverse=True)
-    user_time = total_time_mins or (hours * 60)
     time_rank = None
-    if user_time > 0:
+    if total_time_mins > 0:
         for idx, t_val in enumerate(sorted_time[:5]):
-            if user_time >= t_val:
+            if total_time_mins >= t_val:
                 time_rank = idx + 1
                 break
-    if not time_rank and 'marek' in norm_name:
-        time_rank = 1
 
+    # 2. Pořadí v odjetých linkách (Lines Rank - 100% dynamicky z DB)
     lines_rank = None
-    if 'marek' in norm_name:
-        lines_rank = 1
-    elif 'runtik' in norm_name:
-        lines_rank = 2
-    elif 'karlovarsk' in norm_name:
-        lines_rank = 3
-    elif 'winters' in norm_name:
-        lines_rank = 4
-    elif 'jindra' in norm_name:
-        lines_rank = 5
+    if lines_count > 0:
+        all_u_lines = db.table("user_stats_lines").select("discord_id, play_count").execute().data or []
+        all_line_sums = {}
+        for x in all_u_lines:
+            xdid = str(x.get('discord_id'))
+            if xdid and xdid != 'None':
+                all_line_sums[xdid] = all_line_sums.get(xdid, 0) + int(x.get('play_count') or 0)
+        for xdid, ldict in ls.get('user_lines', {}).items():
+            if xdid and xdid != 'None':
+                all_line_sums[xdid] = all_line_sums.get(xdid, 0) + sum(int(c or 0) for c in ldict.values())
+        sorted_line_counts = sorted(all_line_sums.values(), reverse=True)
+        for idx, cnt in enumerate(sorted_line_counts[:5]):
+            if lines_count >= cnt:
+                lines_rank = idx + 1
+                break
 
+    # 3. Pořadí ve vyhlášených zastávkách (Stops Rank - 100% dynamicky z DB)
     stops_rank = None
-    if 'runtik' in norm_name:
-        stops_rank = 1
-    elif 'marek' in norm_name:
-        stops_rank = 2
-    elif 'winters' in norm_name:
-        stops_rank = 3
-    elif 'jindra' in norm_name:
-        stops_rank = 4
-    elif 'matesak' in norm_name:
-        stops_rank = 5
+    if stops_count > 0:
+        all_u_stops = db.table("user_stats_stops").select("discord_id, announce_count").execute().data or []
+        all_stop_sums = {}
+        for x in all_u_stops:
+            xdid = str(x.get('discord_id'))
+            if xdid and xdid != 'None':
+                all_stop_sums[xdid] = all_stop_sums.get(xdid, 0) + int(x.get('announce_count') or 0)
+        for xdid, sdict in ls.get('user_stops', {}).items():
+            if xdid and xdid != 'None':
+                all_stop_sums[xdid] = all_stop_sums.get(xdid, 0) + sum(int(c or 0) for c in sdict.values())
+        sorted_stop_counts = sorted(all_stop_sums.values(), reverse=True)
+        for idx, cnt in enumerate(sorted_stop_counts[:5]):
+            if stops_count >= cnt:
+                stops_rank = idx + 1
+                break
 
     return jsonify({
         "found": True,
@@ -3583,6 +3600,25 @@ def api_stats_user():
         "stopsRank": stops_rank,
         "timeRank": time_rank
     })
+
+@app.route('/api/admin/clean_reset_lines_stops', methods=['POST', 'GET'])
+def admin_clean_reset_lines_stops():
+    """Ruční vymazání statistik linek a zastávek pro čistý začátek."""
+    db = get_db()
+    deleted_tables = []
+    if db:
+        for tbl in ["user_stats_stops", "user_stats_lines", "stats_stops", "stats_lines"]:
+            try:
+                db.table(tbl).delete().gte("id", 0).execute()
+                deleted_tables.append(tbl)
+            except Exception as e:
+                pass
+    try:
+        from local_db import local_clear_all_stats
+        local_clear_all_stats()
+        deleted_tables.append("local_sqlite_stats")
+    except Exception: pass
+    return jsonify({"status": "ok", "cleared": deleted_tables})
 
 @app.route('/logout')
 def logout():

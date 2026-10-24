@@ -1965,23 +1965,22 @@ body.night .aurora{opacity:.4}
 <div class="lightbox" id="lb"><img id="lbimg" alt=""></div>
 
 <script>
-/* ===== DATA PRO STATISTIKY – změníš tady ===== */
+/* ===== DATA PRO STATISTIKY (načítají se dynamicky z /api/stats/summary) ===== */
 const STATS={
-  lines:[['marekk_czz',235],['_Runtik_🦖💗',55],['Dopravák z Karlovarska',42],['Itz_Winters',30],['Tomas_Jindra_Moravec_King',11]],
-  stops:[['_Runtik_🦖💗',434],['marekk_czz',142],['Itz_Winters',110],['Tomas_Jindra_Moravec_King',52],['Matesak',27]],
-  time:[['marekk_czz',22],['Itz_Winters',11],['_Runtik_🦖💗',9],['Patrik20201',5],['Dopravák z Karlovarska',5]],
-  toplines:[['490722',37],['424',35],['440336',20],['739',18],['400621',16],['490735',16],['1651',16],['496711',12]],
-  /* seznamy všech linek a zastávek: doplňte všechny řádky [název, počet]; po napojení serveru je dodá API */
-  users:{ /* podrobné seznamy jednotlivých uživatelů (ukázková data, nahraďte skutečnými) */
-    'marekk_czz':{lines:[['490722',64],['440336',41],['424',38],['739',29],['400621',21],['490735',18]],stops:[['Plzeň, Terminál Hlavní nádraží',31],['Stříbro, aut. st.',22],['Tachov, aut. nádr.',17],['Tymákov, ObÚ',12],['Letkov',9]]},
-    '_Runtik_🦖💗':{lines:[['424',17],['739',14],['490722',11],['1651',8]],stops:[['Plzeň, Terminál Hlavní nádraží',26],['Plzeň, K Bukové',18],['Mokrouše, garáž ČSAD',14],['Letkov',9]]},
-    'Itz_Winters':{lines:[['440336',12],['490735',9],['400621',6]],stops:[['Tachov, aut. nádr.',15],['Stříbro, aut. st.',11],['Tachov, u Rybeny',7]]}
-  },
-  topstops:[['Plzeň, Terminál Hlavní nádraží',29],['Stříbro, aut. st.',28],['Tachov, aut. nádr.',23],['Tymákov, ObÚ',20],['Letkov',17],['Mokrouše, garáž ČSAD',16],['Tachov, u Rybeny',14],['Plzeň, K Bukové',13]]
+  lines:[],
+  stops:[],
+  time:[],
+  toplines:[],
+  users:{},
+  topstops:[]
 };
 function bars(id,rows,unit){
   const el=document.getElementById(id);
-  if(!el||!Array.isArray(rows)||!rows.length) return;
+  if(!el) return;
+  if(!Array.isArray(rows)||!rows.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:12px 0;">Zatím žádná zaznamenaná data.</div>';
+    return;
+  }
   const max=Math.max(...rows.map(r=>r[1])) || 1;
   el.innerHTML=rows.map(r=>
     `<div class="bar"><span class="n">${r[0]}</span><span class="v">${r[1]}${unit}</span><i style="--w:${(r[1]/max*100).toFixed(0)}%"></i></div>`).join('');
