@@ -144,7 +144,11 @@ h2{font-size:clamp(2rem,5vw,3.3rem);margin-bottom:16px}
 
 /* ============ HERO + SCÉNA S AUTOBUSEM ============ */
 .hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding-bottom:60px;overflow:hidden}
-.hero-logo{width:104px;height:104px;border-radius:26px;margin-bottom:28px;box-shadow:0 0 70px rgba(47,107,255,.55);animation:bob 7s ease-in-out infinite}
+.hero-logo-box{position:relative;display:inline-flex;align-items:center;justify-content:center;margin-bottom:26px}
+.hero-logo-glow{position:absolute;inset:-24px;border-radius:50%;background:radial-gradient(circle,rgba(56,214,255,.45) 0%,rgba(47,107,255,.22) 48%,transparent 72%);filter:blur(24px);pointer-events:none;z-index:0;animation:glowPulse 5s ease-in-out infinite alternate}
+@keyframes glowPulse{0%{opacity:.65;transform:scale(.95)}100%{opacity:1;transform:scale(1.08)}}
+.hero-logo{position:relative;z-index:1;width:112px;height:auto;max-height:104px;object-fit:contain;border-radius:24px;border:1px solid rgba(56,214,255,.3);background:rgba(8,18,44,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 28px rgba(47,107,255,.35);animation:bob 7s ease-in-out infinite;transition:transform .35s var(--ease),border-color .35s,box-shadow .35s}
+.hero-logo:hover{transform:translateY(-5px) scale(1.05);border-color:rgba(56,214,255,.7);box-shadow:0 18px 44px rgba(0,0,0,.65),0 0 42px rgba(56,214,255,.6)}
 @keyframes bob{50%{transform:translateY(-8px)}}
 .hero h1{font-size:clamp(2.8rem,9vw,6.4rem)}
 .hero .lead{margin:22px auto 34px}
@@ -167,7 +171,7 @@ h2{font-size:clamp(2rem,5vw,3.3rem);margin-bottom:16px}
 .card .ico{font-size:1.8rem;margin-bottom:14px}
 .card h3{margin-bottom:10px;font-size:1.3rem}
 .card p{color:var(--muted)}
-.c-big{grid-column:span 4}.c-sm{grid-column:span 2}.c-full{grid-column:span 6}
+.c-big{grid-column:span 4}.c-sm{grid-column:span 2}.c-full{grid-column:span 6}.c-half{grid-column:span 3}
 .art{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;text-align:center}
 .art img{width:100%;max-width:170px;height:auto}
 .photo-slot{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;text-align:center;color:var(--muted);min-height:200px;border-style:dashed;padding:0}
@@ -409,7 +413,7 @@ button.btn{border:0;cursor:pointer;font:inherit;font-weight:700;color:var(--text
 
 @media(max-width:860px){
   .two,.mapsec{grid-template-columns:1fr;gap:36px}
-  .c-big,.c-sm,.c-full{grid-column:span 6}
+  .c-big,.c-sm,.c-full,.c-half{grid-column:span 6}
   .steps,.dl-steps{grid-template-columns:1fr}
   .minis{grid-template-columns:repeat(2,1fr)}
   .btn.ghost{margin:12px 0 0}
@@ -1291,7 +1295,10 @@ body.night .aurora{opacity:.4}
 <main class="page on" data-page="home">
 
 <section class="hero" id="top">
-  <img class="hero-logo" src="/static/img/datacorebot_pf-lepsi.png" alt="Logo OIS IDPK">
+  <div class="hero-logo-box">
+    <div class="hero-logo-glow" aria-hidden="true"></div>
+    <img class="hero-logo" src="/static/img/datacorebot_pf-lepsi.png" alt="Logo OIS IDPK">
+  </div>
   <span class="kicker">Nezávislý komunitní projekt</span>
   <h1>Projekt <span class="grad">OIS IDPK</span></h1>
   <p class="lead">Informační systém pro autobusy Plzeňského kraje: vnitřní panely pro cestující a interaktivní mapa provozu. Projekt s důrazem na věrnost skutečnému provozu.</p>
@@ -1314,33 +1321,35 @@ body.night .aurora{opacity:.4}
     <p class="lead reveal d1">Software, který věrně simuluje vnitřní informační systémy v autobusech.</p>
 
     <div class="bento">
-      <div class="card c-big reveal">
+      <div class="card c-half reveal">
         <div class="ico">🚌</div>
         <h3>Panel jako v autobuse</h3>
         <p>Vzhled i chování vycházejí ze skutečných informačních panelů v autobusech Plzeňského kraje. Software zobrazuje zastávky, průběh celé linky i další informace, které cestující běžně vidí během jízdy.</p>
       </div>
-      <div class="card c-sm art reveal d1">
-        <div class="ico">🚍</div>
-        <p>Autobusy Plzeňského kraje</p>
+
+      <div class="card c-half reveal d1" style="display:flex;flex-direction:column;justify-content:space-between">
+        <div>
+          <div class="ico">🗺️</div>
+          <h3>Interaktivní mapa provozu</h3>
+          <p>Sledujte aktuální polohu spojů v Plzeňském kraji v reálném čase. Kliknutím na vozidlo zobrazíte celou trasu linky, typ vozidla, SPZ i aktuální zpoždění. Nechybí chytrá upozornění ani možnost přizpůsobit si vzhled mapy a filtrů podle sebe.</p>
+        </div>
+        <div style="margin-top:18px">
+          <a class="btn main" href="/mapa" id="bentoMapBtn" style="display:inline-flex;align-items:center;gap:8px" onclick="event.preventDefault();if(window.mapJump)window.mapJump();else location.href='/mapa';">
+            <span>Spustit mapu s animací</span> <span>→</span>
+          </a>
+        </div>
       </div>
-      <div class="card c-sm reveal">
-        <div class="ico">🗺️</div>
-        <h3>Mapa vozidel</h3>
-        <p>Interaktivní mapa vozidel v Plzeňském kraji.</p>
-      </div>
-      <div class="card c-sm art reveal d1">
-        <div class="ico">🚏</div>
-        <p>Zastávky a celá linka</p>
-      </div>
-      <!-- FOTKA: vlož např. <img src="moje-foto.jpg" alt=""> místo textu uvnitř -->
-      <div class="card c-sm photo-slot reveal d2">
-        <span style="font-size:1.8rem">📷</span>
-        <span>Fotografie bude doplněna</span>
-      </div>
-      <div class="card c-full reveal">
+
+      <div class="card c-half reveal">
         <div class="ico">❤️</div>
         <h3>Nezávislý projekt</h3>
         <p>OIS IDPK není oficiálním produktem ani službou dopravců či organizací veřejné dopravy a s nimi nijak nespolupracuje. Vzniká jako komunitní projekt z nadšení pro dopravní technologie.</p>
+      </div>
+
+      <div class="card c-half reveal d1">
+        <div class="ico">🗄️</div>
+        <h3>Běží na DataCoreBot</h3>
+        <p>O chod systému se stará naše vlastní databáze DataCoreBot. Uchovává všechna systémová data i uživatelské předvolby a zajišťuje stabilní provoz, rychlé načítání informací a hladký chod celého projektu.</p>
       </div>
     </div>
   </div>
@@ -1612,7 +1621,7 @@ body.night .aurora{opacity:.4}
 
     <div class="statgrid">
       <div class="card stat reveal"><div class="num count" data-to="21">0</div><div class="lbl">Aktivních uživatelů</div></div>
-      <div class="card stat reveal d1"><div class="num count" data-to="4">0</div><div class="lbl">Podporovatelů</div></div>
+      <div class="card stat reveal d1"><div class="num count" id="supportersCountStat" data-to="0">0</div><div class="lbl">Podporovatelů</div></div>
       <div class="card stat reveal d2"><div class="num count" data-to="66" data-suffix=" h">0</div><div class="lbl">Celkově nahráno</div><div class="sub">Dnes: 0m · Měsíc: 2h 1m</div></div>
       <div class="card stat reveal"><div class="num count" data-to="1148" data-suffix="×">0</div><div class="lbl">Celkově spuštěno</div></div>
       <div class="card stat reveal d1"><div class="num count" data-to="399" data-suffix="×">0</div><div class="lbl">Odjetých linek</div></div>
@@ -1660,16 +1669,10 @@ body.night .aurora{opacity:.4}
     <div class="card thanks reveal"><div class="he">💙</div><div><h3>Děkujeme</h3><p>Každá podpora pomáhá hradit provoz databáze a serverů a umožňuje projekt dále rozvíjet. Děkujeme, že jste jeho součástí.</p></div></div>
 
     <h2 class="sec-h hall-h reveal" id="hall">Síň <span class="grad">slávy</span></h2>
-    <div class="hall2 reveal">
-      <!-- MEGA PODPOROVATEL (až někdo bude): zkopíruj tento blok před Velkého podporovatele a doplň jméno
-      <div class="hcard h3"><div class="hc-crest">👑</div><div class="hc-t"><b>Mega podporovatel</b><em class="hc-name">JMÉNO</em><small>měsíc rok</small></div><div class="hc-a">325 Kč</div></div>
-      -->
-      <div class="hcard h2"><div class="sparks " aria-hidden="true"><i style="--x:60%;--d:4.3s;--s:6px;--t:4.4s"></i><i style="--x:78%;--d:0.9s;--s:7px;--t:4.4s"></i><i style="--x:81%;--d:4.0s;--s:3px;--t:4.3s"></i><i style="--x:21%;--d:0.5s;--s:3px;--t:4.8s"></i><i style="--x:53%;--d:4.8s;--s:7px;--t:5.0s"></i><i style="--x:82%;--d:0.1s;--s:7px;--t:3.2s"></i><i style="--x:7%;--d:1.0s;--s:4px;--t:4.8s"></i><i style="--x:62%;--d:1.6s;--s:7px;--t:5.5s"></i><i style="--x:69%;--d:1.2s;--s:5px;--t:4.5s"></i><i style="--x:87%;--d:0.4s;--s:5px;--t:4.2s"></i><i style="--x:73%;--d:5.0s;--s:3px;--t:5.1s"></i><i style="--x:43%;--d:3.8s;--s:7px;--t:3.9s"></i><i style="--x:11%;--d:2.8s;--s:3px;--t:4.2s"></i><i style="--x:40%;--d:1.9s;--s:3px;--t:5.5s"></i></div><div class="hc-crest">🌟</div><div class="hc-t"><b>Velký podporovatel</b><small>březen 2026</small></div><div class="hc-a">195 Kč</div></div>
-      <div class="hsmall">
-        <div class="hcard h1"><div class="hc-crest">⭐</div><div class="hc-t"><b>Podporovatel</b><small>březen 2026</small></div><div class="hc-a">65 Kč</div></div>
-        <div class="hcard h1"><div class="hc-crest">⭐</div><div class="hc-t"><b>Podporovatel</b><small>březen 2026</small></div><div class="hc-a">65 Kč</div></div>
-        <div class="hcard h1"><div class="hc-crest">⭐</div><div class="hc-t"><b>Podporovatel</b><small>březen 2026</small></div><div class="hc-a">65 Kč</div></div>
-      </div>
+    <div class="hall2 reveal" id="hallSupportersContainer">
+      <div style="text-align:center;padding:24px;color:var(--muted);width:100%;grid-column:1/-1">Načítám Síň slávy…</div>
+    </div>
+  </div>
     </div>
 
     
@@ -1975,7 +1978,16 @@ const OIS_ADMIN=(function(){
     vForm.hidden=(view!=='form');
     vWait.hidden=(view!=='wait');
   }
-  function open(){
+  async function open(){
+    try {
+      const sRes = await fetch('/api/admin/check_session');
+      const sData = await sRes.json().catch(() => ({}));
+      if (sData && sData.logged_in) {
+        window.location.href = '/dashboard';
+        return;
+      }
+    } catch(_) {}
+
     stopPoll();er.textContent='';f.reset();
     setView('form');
     m.classList.add('open');m.setAttribute('aria-hidden','false');
@@ -2073,6 +2085,59 @@ function listCard(id,rows,unit,noun,placeholder){
 }
 function drawGlobalLists(){listCard('s-toplines',STATS.toplines,'×','linek','Hledat linku');listCard('s-topstops',STATS.topstops,'×','zastávek','Hledat zastávku')}
 drawGlobalLists();
+
+/* ===== Dynamické načtení podporovatelů ze serveru ===== */
+async function loadSupporters(){
+  const container = document.getElementById('hallSupportersContainer');
+  const countEl = document.getElementById('supportersCountStat');
+  try {
+    const res = await fetch('/api/supporters');
+    const data = await res.json().catch(() => ({}));
+    const list = (data && data.supporters) || [];
+    if (countEl) countEl.textContent = list.length || 0;
+    
+    if (!container) return;
+    if (list.length === 0) {
+      container.innerHTML = `
+        <div class="hall-empty" style="text-align:center;padding:36px 20px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:20px;margin-top:20px;width:100%;grid-column:1/-1">
+          <div style="font-size:2.8rem;margin-bottom:12px">🏆</div>
+          <h3 style="margin-bottom:8px">Síň slávy čeká na svého prvního hrdinu</h3>
+          <p style="color:var(--muted);max-width:520px;margin:0 auto 20px;font-size:.95rem">Zatím zde nejsou žádní zapsaní podporovatelé. Buďte první, jehož jméno bude navždy zapsáno v Síni slávy projektu OIS IDPK!</p>
+          <a class="btn main" href="https://buymeacoffee.com/marekk_czz" target="_blank" rel="noopener">☕ Podpořit na Buy Me a Coffee</a>
+        </div>
+      `;
+      return;
+    }
+
+    let h = '';
+    list.forEach(s => {
+      const tier = s.tier || 1;
+      const tierClass = tier === 3 ? 'h3' : (tier === 2 ? 'h2' : 'h1');
+      const icon = tier === 3 ? '👑' : (tier === 2 ? '🌟' : '⭐');
+      const tierName = tier === 3 ? 'Mega podporovatel' : (tier === 2 ? 'Velký podporovatel' : 'Podporovatel');
+      const amt = s.amount || (tier === 3 ? '325 Kč' : (tier === 2 ? '195 Kč' : '65 Kč'));
+      const dateStr = s.created_at || '';
+      const name = s.name || 'Anonymní hrdina';
+      const msg = s.message ? `<div style="font-size:.85rem;color:var(--muted);margin-top:6px;font-style:italic">„${s.message}“</div>` : '';
+
+      h += `
+        <div class="hcard ${tierClass}">
+          ${tier >= 2 ? '<div class="sparks" aria-hidden="true"><i style="--x:60%;--d:4.3s;--s:6px;--t:4.4s"></i><i style="--x:21%;--d:0.5s;--s:3px;--t:4.8s"></i><i style="--x:78%;--d:0.9s;--s:7px;--t:4.4s"></i></div>' : ''}
+          <div class="hc-crest">${icon}</div>
+          <div class="hc-t">
+            <b>${tierName}</b>
+            <em class="hc-name" style="display:block;font-size:1.15rem;font-weight:700;color:#fff;margin:3px 0">${name}</em>
+            <small>${dateStr}</small>
+            ${msg}
+          </div>
+          <div class="hc-a">${amt}</div>
+        </div>
+      `;
+    });
+    container.innerHTML = h;
+  } catch(_) {}
+}
+loadSupporters();
 addEventListener('DOMContentLoaded',()=>{try{if(CONFIG.stats)fetch(CONFIG.stats).then(r=>r.json()).then(d=>{['toplines','topstops','users','lines','stops','time'].forEach(k=>{if(d&&d[k])STATS[k]=d[k]});drawGlobalLists()}).catch(()=>{})}catch(_){}});
 
 /* ===== v23: vyhledání uživatele ve statistikách ===== */
@@ -3042,7 +3107,9 @@ function spotDemo(){
   const goHome=()=>{if((currentPage||'home')!=='home'){showPage('home');try{history.pushState(null,'','#/')}catch(_){}}};
   const hearts=()=>{for(let i=0;i<14;i++)setTimeout(()=>burst(Math.random()*innerWidth,innerHeight*(.3+Math.random()*.5),['💙','💚','💛','💙'],2),i*110)};
   const MAP_URL='/mapa';
+  window.mapJump=mapJump;
   function mapJump(){
+    window.mapJump = mapJump;
     const fx=document.getElementById('mapFx');if(!fx||!fx.hidden)return;
     const quick=reduce||document.documentElement.classList.contains('calm')||OIS_PERF.tier==='min';
     if(quick){say('Otevíráme interaktivní mapu');setTimeout(()=>{location.href=MAP_URL},500);return}

@@ -1828,6 +1828,8 @@ def redirect_team():
 
 @app.route('/supporters')
 def redirect_supporters():
+    if is_admin_bypass_active():
+        return redirect('/#/supporters')
     return redirect('/old/supporters', code=302)
 
 @app.route('/stats', methods=['GET'])
@@ -2754,6 +2756,44 @@ def check_auth(discord_id):
     except: pass
     return {"status": "waiting"}
 
+def check_persistent_admin_session():
+    if not session.get('logged_in'):
+        admin_tok = request.cookies.get('admin_session_token') or request.cookies.get('web_session_token')
+        if admin_tok:
+            try:
+                db = get_db()
+                if db:
+                    u_data = db.table("users").select("*").eq("web_session_token", admin_tok).execute().data
+                    if u_data:
+                        u = u_data[0]
+                        if u.get('dashboard_access') == True and not u.get('is_banned') and not u.get('is_deleted'):
+                            session.permanent = True
+                            session['logged_in'] = True
+                            session['discord_id'] = str(u.get('discord_id'))
+                            session['discord_nick'] = u.get('nick') or u.get('email') or str(u.get('discord_id'))
+                            session['nick'] = u.get('nick')
+                            session['email'] = u.get('email')
+                            session['role'] = u.get('role')
+                            session['dashboard_level'] = u.get('dashboard_level') or 'admin'
+            except Exception:
+                pass
+
+@app.before_request
+def auto_admin_session():
+    check_persistent_admin_session()
+
+@app.route('/api/admin/check_session', methods=['GET'])
+def api_admin_check_session():
+    check_persistent_admin_session()
+    if session.get('logged_in'):
+        return jsonify({
+            "logged_in": True,
+            "nick": session.get('discord_nick') or session.get('nick'),
+            "discord_id": session.get('discord_id'),
+            "level": session.get('dashboard_level') or 'admin'
+        })
+    return jsonify({"logged_in": False})
+
 @app.route('/dashboard/login_finalize')
 def login_finalize():
     discord_id = request.args.get('discord_id', '').strip()
@@ -2787,11 +2827,19 @@ def login_finalize():
                 session['role'] = u.get('role')
                 session['dashboard_level'] = u.get('dashboard_level') or 'admin'
                 
-                if token_val == "approved":
-                    db.table("users").update({"login_token": "used", "login_token_expires_at": int(_t.time()) + 10}).eq("discord_id", discord_id).execute()
+                import uuid
+                admin_token = str(uuid.uuid4())
+                try:
+                    db.table("users").update({
+                        "web_session_token": admin_token,
+                        "login_token": "used",
+                        "login_token_expires_at": int(_t.time()) + 10
+                    }).eq("discord_id", discord_id).execute()
+                except Exception:
+                    pass
                 
                 # Zabezpečení proti Safari/Chrome Mobile zahazování cookies při 302 redirectu
-                return """
+                resp = make_response("""
                 <html>
                 <head>
                     <meta http-equiv="refresh" content="0;url=/dashboard">
@@ -2805,7 +2853,10 @@ def login_finalize():
                     </script>
                 </body>
                 </html>
-                """
+                """)
+                resp.set_cookie('admin_session_token', admin_token, max_age=60*60*24*90, httponly=True, samesite='Lax')
+                resp.set_cookie('web_session_token', admin_token, max_age=60*60*24*90, httponly=True, samesite='Lax')
+                return resp
             elif token_exp > 0 and _t.time() > token_exp:
                 db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("discord_id", discord_id).execute()
                 return f"CHYBA: Platnost ověření vypršela. Zkuste to znovu od začátku. (Aktuální: {_t.time()}, Expirace: {token_exp})"
@@ -3403,7 +3454,10 @@ def api_stats_user():
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('home'))
+    resp = redirect(url_for('home'))
+    resp.delete_cookie('admin_session_token')
+    resp.delete_cookie('web_session_token')
+    return resp
 
 @app.route('/ucet')
 def stranka_ucet():
