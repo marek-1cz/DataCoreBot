@@ -4408,6 +4408,9 @@ def dashboard_stats():
                 pass
 
         web_total_visits = len(visits)
+        all_web_visits = []
+        web_ip_map = {}
+        web_chart_all_dict = {}
 
         for v in visits:
             c_raw = (v.get('country') or '').strip()
@@ -4417,6 +4420,7 @@ def dashboard_stats():
             reg = parts[2].strip() if len(parts) > 2 else ""
             city = parts[3].strip() if len(parts) > 3 else ""
             path = parts[4].strip() if len(parts) > 4 else "/"
+            ip = str(v.get('ip') or 'Neznámá').strip()
 
             flag_url = f"https://flagcdn.com/24x18/{cc}.png"
             if cc not in country_totals:
@@ -4427,6 +4431,23 @@ def dashboard_stats():
             if loc_label not in region_totals:
                 region_totals[loc_label] = {"count": 0, "flag": flag_url, "city": city}
             region_totals[loc_label]["count"] += 1
+
+            loc_display = f"{city}, {reg}" if (city and reg) else (reg or city or c_name)
+
+            # Agregace IP adres pro sledování opakovaných návštěvníků
+            if ip and ip != "Neznámá":
+                if ip not in web_ip_map:
+                    web_ip_map[ip] = {
+                        "ip": ip,
+                        "count": 0,
+                        "location": loc_display,
+                        "flag": flag_url,
+                        "last_visited": v.get('visited_at', ''),
+                        "paths": set()
+                    }
+                web_ip_map[ip]["count"] += 1
+                if path:
+                    web_ip_map[ip]["paths"].add(path)
 
             v_time_str = v.get('visited_at', '')
             try:
@@ -4441,18 +4462,49 @@ def dashboard_stats():
                 d_str = v_time.strftime("%d.%m.")
                 if d_str in web_chart_7d:
                     web_chart_7d[d_str] += 1
+
+                # Celá doba graf
+                d_all_key = v_time.strftime("%d.%m.")
+                web_chart_all_dict[d_all_key] = web_chart_all_dict.get(d_all_key, 0) + 1
             except Exception:
                 pass
 
-            if len(recent_web_visits) < 25:
-                recent_web_visits.append({
-                    "ip": v.get("ip", "Neznámá"),
-                    "country_name": c_name,
-                    "flag": flag_url,
-                    "location": f"{city}, {reg}" if (city and reg) else (reg or city or c_name),
-                    "path": path,
-                    "visited_at": v_time_str
-                })
+            all_web_visits.append({
+                "id": v.get("id"),
+                "ip": ip,
+                "country_name": c_name,
+                "flag": flag_url,
+                "location": loc_display,
+                "path": path,
+                "visited_at": v_time_str
+            })
+
+        # Nejčastěji opakované IP adresy seřazené podle počtu návštěv
+        top_repeated_ips = sorted(
+            [
+                {
+                    "ip": data["ip"],
+                    "count": data["count"],
+                    "location": data["location"],
+                    "flag": data["flag"],
+                    "last_visited": data["last_visited"],
+                    "paths_str": ", ".join(sorted(data["paths"]))[:50]
+                }
+                for data in web_ip_map.values()
+            ],
+            key=lambda x: x["count"],
+            reverse=True
+        )
+
+        try:
+            sorted_all_days = sorted(
+                web_chart_all_dict.keys(),
+                key=lambda d: datetime.strptime(d + str(now_dt.year), "%d.%m.%Y")
+            )
+        except Exception:
+            sorted_all_days = list(web_chart_all_dict.keys())
+        web_labels_all = sorted_all_days
+        web_data_all = [web_chart_all_dict[k] for k in sorted_all_days]
 
         if db:
             # ── Načtení dat APLIKACE ──
@@ -4533,9 +4585,10 @@ def dashboard_stats():
                     except Exception:
                         pass
 
-                if len(recent_app_sessions) < 20:
+                if len(recent_app_sessions) < 100:
                     recent_app_sessions.append({
                         "user_nick": u_obj.get("nick") or d_id or "Neznámý hráč",
+                        "discord_id": d_id,
                         "avatar_url": u_obj.get("avatar_url") or "",
                         "role": u_obj.get("role") or "User",
                         "start_time": st_str,
@@ -4559,9 +4612,13 @@ def dashboard_stats():
         web_today_visits=web_today_visits,
         country_totals=country_totals,
         region_totals=region_totals,
-        recent_web_visits=recent_web_visits,
+        recent_web_visits=all_web_visits[:25],
+        all_web_visits=all_web_visits,
+        top_repeated_ips=top_repeated_ips,
         web_labels_7d=json.dumps(list(web_chart_7d.keys())),
         web_data_7d=json.dumps(list(web_chart_7d.values())),
+        web_labels_all=json.dumps(web_labels_all),
+        web_data_all=json.dumps(web_data_all),
         web_labels_24h=json.dumps(list(web_chart_24h.keys())),
         web_data_24h=json.dumps(list(web_chart_24h.values())),
         

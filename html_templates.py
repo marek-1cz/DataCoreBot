@@ -1674,6 +1674,41 @@ HTML_STATS = """
   font-size: 10px;
   font-weight: bold;
 }
+.btn-time-filter {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid #334155;
+  color: #94a3b8;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-time-filter:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+.btn-time-filter.active {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(2, 132, 199, 0.4);
+}
+.stats-search-input {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid #334155;
+  color: #ffffff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.stats-search-input:focus {
+  border-color: #38bdf8;
+}
 </style>
 
 <div class="stats-header-bar">
@@ -1770,9 +1805,15 @@ HTML_STATS = """
 
     <!-- Grafy webu -->
     <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 20px;">
-      <h4 style="margin: 0 0 14px 0; color: #38bdf8; font-size: 14px; display: flex; align-items: center; gap: 8px;">
-        <i class="fas fa-calendar-week"></i> Návštěvnost webu za 7 dní
-      </h4>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+        <h4 style="margin: 0; color: #38bdf8; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+          <i class="fas fa-chart-line"></i> <span id="webChartTitleText">Návštěvnost webu za 7 dní</span>
+        </h4>
+        <div style="display: flex; gap: 6px; background: rgba(0,0,0,0.3); padding: 3px; border-radius: 8px; border: 1px solid #334155;">
+          <button type="button" class="btn-time-filter active" id="btnWebChart7d" onclick="setWebChartMode('7d')">7 dní</button>
+          <button type="button" class="btn-time-filter" id="btnWebChartAll" onclick="setWebChartMode('all')">Celá doba</button>
+        </div>
+      </div>
       <div style="position: relative; height: 210px; width: 100%;">
         <canvas id="chartWeb7d"></canvas>
       </div>
@@ -1784,6 +1825,60 @@ HTML_STATS = """
       </h4>
       <div style="position: relative; height: 180px; width: 100%;">
         <canvas id="chartWeb24h"></canvas>
+      </div>
+    </div>
+
+    <!-- Nejčastější IP adresy & Opakované návštěvy -->
+    <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <div>
+          <h4 style="margin: 0; color: #38bdf8; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-fingerprint"></i> Nejčastější IP adresy (Opakované návštěvy)
+          </h4>
+          <div style="color: #64748b; font-size: 11px; margin-top: 2px;">Kliknutím na jakoukoliv IP adresu vyfiltruješ kompletní historii jejích vstupů</div>
+        </div>
+        <span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: bold;">
+          {{ top_repeated_ips|length }} unikátních IP
+        </span>
+      </div>
+      <div style="overflow-x: auto; max-height: 280px;">
+        <table class="stats-table">
+          <thead>
+            <tr>
+              <th>IP adresa</th>
+              <th>Počet vstupů</th>
+              <th>Lokalita</th>
+              <th>Poslední vstup</th>
+              <th>Navštívené sekce</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ip_row in top_repeated_ips[:25] %}
+            <tr style="cursor: pointer;" onclick="filterWebTable('{{ ip_row.ip }}')" title="Klikni pro filtrování této IP">
+              <td style="color: #38bdf8; font-family: monospace; font-weight: bold; white-space: nowrap;">
+                <i class="fas fa-search" style="font-size: 10px; margin-right: 6px; opacity: 0.7;"></i>{{ ip_row.ip }}
+              </td>
+              <td>
+                <span style="background: {% if ip_row.count >= 8 %}#ef4444{% elif ip_row.count >= 4 %}#f59e0b{% else %}#0284c7{% endif %}; color: #ffffff; padding: 2px 8px; border-radius: 12px; font-weight: 900; font-size: 11px;">
+                  {{ ip_row.count }}x
+                </span>
+              </td>
+              <td style="white-space: nowrap;">
+                <span style="display:inline-flex; align-items:center; gap:6px;">
+                  <img src="{{ ip_row.flag }}" alt="" style="width:16px; height:12px; border-radius:2px;">
+                  <span>{{ ip_row.location }}</span>
+                </span>
+              </td>
+              <td style="color: #94a3b8; font-size: 11px; white-space: nowrap;">{{ ip_row.last_visited }}</td>
+              <td style="color: #cbd5e1; font-size: 11px; font-family: monospace; white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis;">{{ ip_row.paths_str }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="5" style="text-align:center; color:#64748b; padding:20px;">Zatím žádné zaznamenané opakované IP.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -1805,13 +1900,22 @@ HTML_STATS = """
       </div>
     </div>
 
-    <!-- Tabulka posledních návštěv webu -->
+    <!-- Kompletní tabulka návštěv webu s vyhledáváním -->
     <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 20px;">
-      <h4 style="margin: 0 0 14px 0; color: #e2e8f0; font-size: 14px; display: flex; align-items: center; gap: 8px;">
-        <i class="fas fa-list"></i> Poslední návštěvníci webu
-      </h4>
-      <div style="overflow-x: auto; max-height: 380px;">
-        <table class="stats-table">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <h4 style="margin: 0; color: #e2e8f0; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-list"></i> Historie návštěvníků webu (<span id="webVisitsCount">{{ all_web_visits|length }}</span>)
+          </h4>
+          <div style="color: #64748b; font-size: 11px; margin-top: 2px;">Všechny záznamy s okamžitým vyhledáváním a filtrováním</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input type="text" id="webTableSearch" class="stats-search-input" oninput="doWebTableSearch()" placeholder="🔍 Hledat IP, město, stránku..." style="width: 220px;">
+          <button type="button" onclick="clearWebFilter()" id="clearWebFilterBtn" style="display: none; background: #334155; border: none; color: #e2e8f0; padding: 6px 10px; border-radius: 6px; font-size: 11px; cursor: pointer;">Zrušit filtr</button>
+        </div>
+      </div>
+      <div style="overflow-x: auto; max-height: 480px;">
+        <table class="stats-table" id="allWebVisitsTable">
           <thead>
             <tr>
               <th>Čas vstupu</th>
@@ -1820,9 +1924,9 @@ HTML_STATS = """
               <th>IP adresa</th>
             </tr>
           </thead>
-          <tbody>
-            {% for v in recent_web_visits %}
-            <tr>
+          <tbody id="webVisitsBody">
+            {% for v in all_web_visits %}
+            <tr class="web-visit-row" data-ip="{{ v.ip }}" data-search="{{ v.ip|lower }} {{ v.location|lower }} {{ v.path|lower }} {{ v.visited_at|lower }}">
               <td style="color:#38bdf8; font-weight:600; white-space:nowrap;">{{ v.visited_at }}</td>
               <td style="white-space:nowrap;">
                 <span style="display:inline-flex; align-items:center; gap:6px;">
@@ -1831,7 +1935,9 @@ HTML_STATS = """
                 </span>
               </td>
               <td><span class="badge-path">{{ v.path }}</span></td>
-              <td style="color:#64748b; font-family:monospace; font-size:11px;">{{ v.ip }}</td>
+              <td style="color:#94a3b8; font-family:monospace; font-size:11px; cursor:pointer;" onclick="filterWebTable('{{ v.ip }}')" title="Klikni pro filtrování této IP">
+                <span style="border-bottom: 1px dashed #64748b;">{{ v.ip }}</span>
+              </td>
             </tr>
             {% else %}
             <tr>
@@ -1902,14 +2008,22 @@ HTML_STATS = """
 
     <!-- Tabulka posledních relací aplikace -->
     <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 12px; padding: 20px;">
-      <h4 style="margin: 0 0 14px 0; color: #e2e8f0; font-size: 14px; display: flex; align-items: center; gap: 8px;">
-        <i class="fas fa-history"></i> Poslední spuštění aplikace (relace)
-      </h4>
-      <div style="overflow-x: auto; max-height: 380px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <h4 style="margin: 0; color: #e2e8f0; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-history"></i> Kdo přesně aplikaci zapnul (relace)
+          </h4>
+          <div style="color: #64748b; font-size: 11px; margin-top: 2px;">Historie spuštění, Discord účtů a odehrané doby</div>
+        </div>
+        <div>
+          <input type="text" id="appSessionSearch" class="stats-search-input" oninput="doAppSessionSearch()" placeholder="🔍 Hledat hráče / ID..." style="width: 180px;">
+        </div>
+      </div>
+      <div style="overflow-x: auto; max-height: 480px;">
         <table class="stats-table">
           <thead>
             <tr>
-              <th>Hráč</th>
+              <th>Hráč & Účet</th>
               <th>Čas spuštění</th>
               <th>Doba trvání</th>
               <th>Stav</th>
@@ -1917,17 +2031,24 @@ HTML_STATS = """
           </thead>
           <tbody>
             {% for s in recent_app_sessions %}
-            <tr>
+            <tr class="app-session-row" data-search="{{ s.user_nick|lower }} {{ s.discord_id|lower }} {{ s.role|lower }}">
               <td style="white-space:nowrap;">
-                <span style="display:inline-flex; align-items:center; gap:8px;">
+                <div style="display:inline-flex; align-items:center; gap:8px;">
                   {% if s.avatar_url %}
-                  <img src="{{ s.avatar_url }}" alt="" style="width:22px; height:22px; border-radius:50%;">
+                  <img src="{{ s.avatar_url }}" alt="" style="width:24px; height:24px; border-radius:50%;">
                   {% else %}
-                  <i class="fas fa-user-circle" style="color:#94a3b8; font-size:20px;"></i>
+                  <i class="fas fa-user-circle" style="color:#94a3b8; font-size:22px;"></i>
                   {% endif %}
-                  <span style="color:#ffffff; font-weight:600;">{{ s.user_nick }}</span>
-                  <span class="badge-role">{{ s.role }}</span>
-                </span>
+                  <div>
+                    <div style="color:#ffffff; font-weight:600; font-size:12px; display:flex; align-items:center; gap:6px;">
+                      {{ s.user_nick }}
+                      <span class="badge-role">{{ s.role }}</span>
+                    </div>
+                    {% if s.discord_id %}
+                    <div style="color:#64748b; font-size:10px; font-family:monospace;">Discord ID: {{ s.discord_id }}</div>
+                    {% endif %}
+                  </div>
+                </div>
               </td>
               <td style="color:#94a3b8; font-size:11px; white-space:nowrap;">{{ s.start_time }}</td>
               <td style="color:#e2e8f0; font-weight:600;">{{ s.duration }}</td>
@@ -2029,6 +2150,8 @@ handleResize();
 // Inicializace Chart.js grafů
 const webLabels7d = {{ web_labels_7d | safe }};
 const webData7d = {{ web_data_7d | safe }};
+const webLabelsAll = {{ web_labels_all | safe }};
+const webDataAll = {{ web_data_all | safe }};
 const webLabels24h = {{ web_labels_24h | safe }};
 const webData24h = {{ web_data_24h | safe }};
 
@@ -2037,8 +2160,8 @@ const appData7d = {{ app_data_7d | safe }};
 const appLabels24h = {{ app_labels_24h | safe }};
 const appData24h = {{ app_data_24h | safe }};
 
-// 1. Web 7d
-new Chart(document.getElementById('chartWeb7d').getContext('2d'), {
+// 1. Web 7d / Celá doba
+let chartWebInstance = new Chart(document.getElementById('chartWeb7d').getContext('2d'), {
   type: 'line',
   data: {
     labels: webLabels7d,
@@ -2064,6 +2187,72 @@ new Chart(document.getElementById('chartWeb7d').getContext('2d'), {
     }
   }
 });
+
+function setWebChartMode(mode) {
+  const btn7d = document.getElementById('btnWebChart7d');
+  const btnAll = document.getElementById('btnWebChartAll');
+  const title = document.getElementById('webChartTitleText');
+  if (mode === 'all') {
+    if (btn7d) btn7d.classList.remove('active');
+    if (btnAll) btnAll.classList.add('active');
+    if (title) title.innerText = 'Návštěvnost webu za celou historii';
+    chartWebInstance.data.labels = webLabelsAll;
+    chartWebInstance.data.datasets[0].data = webDataAll;
+  } else {
+    if (btn7d) btn7d.classList.add('active');
+    if (btnAll) btnAll.classList.remove('active');
+    if (title) title.innerText = 'Návštěvnost webu za 7 dní';
+    chartWebInstance.data.labels = webLabels7d;
+    chartWebInstance.data.datasets[0].data = webData7d;
+  }
+  chartWebInstance.update();
+}
+
+function filterWebTable(ip) {
+  const s = document.getElementById('webTableSearch');
+  if (s) {
+    s.value = ip;
+    doWebTableSearch();
+    const t = document.getElementById('allWebVisitsTable');
+    if (t) t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+function doWebTableSearch() {
+  const val = (document.getElementById('webTableSearch').value || '').toLowerCase().trim();
+  const rows = document.querySelectorAll('.web-visit-row');
+  const clearBtn = document.getElementById('clearWebFilterBtn');
+  if (clearBtn) clearBtn.style.display = val ? 'inline-block' : 'none';
+  let visible = 0;
+  rows.forEach(r => {
+    const txt = (r.getAttribute('data-search') || '').toLowerCase();
+    if (!val || txt.includes(val)) {
+      r.style.display = '';
+      visible++;
+    } else {
+      r.style.display = 'none';
+    }
+  });
+  const countEl = document.getElementById('webVisitsCount');
+  if (countEl) countEl.innerText = visible;
+}
+
+function clearWebFilter() {
+  const s = document.getElementById('webTableSearch');
+  if (s) {
+    s.value = '';
+    doWebTableSearch();
+  }
+}
+
+function doAppSessionSearch() {
+  const val = (document.getElementById('appSessionSearch').value || '').toLowerCase().trim();
+  const rows = document.querySelectorAll('.app-session-row');
+  rows.forEach(r => {
+    const txt = (r.getAttribute('data-search') || '').toLowerCase();
+    r.style.display = (!val || txt.includes(val)) ? '' : 'none';
+  });
+}
 
 // 2. Web 24h
 new Chart(document.getElementById('chartWeb24h').getContext('2d'), {
