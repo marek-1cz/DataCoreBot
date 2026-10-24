@@ -606,8 +606,9 @@ def local_record_stats(line: str, stops: list, discord_id: str = ""):
         return
     line_str = str(line).strip()
     did = str(discord_id or "").strip()
-    # Deduplikace zastávek v rámci jednoho hlášení/jízdy
-    unique_stops = list(dict.fromkeys(str(st).strip() for st in (stops or []) if str(st).strip()))
+    from collections import Counter
+    # Spočítáme počet vyhlášení každé zastávky na tomto spoji (např. 2x stejná zastávka = 2x vyhlášení)
+    stop_counts = Counter(str(st).strip() for st in (stops or []) if str(st).strip())
     try:
         with _get_local_conn() as conn:
             # 1. Celkový počet odjetí linky
@@ -616,12 +617,12 @@ def local_record_stats(line: str, stops: list, discord_id: str = ""):
                 ON CONFLICT(line_name) DO UPDATE SET play_count = play_count + 1
             """, (line_str,))
             
-            # 2. Celkový počet vyhlášení každé zastávky (každá zastávka max 1x za jízdu)
-            for st_name in unique_stops:
+            # 2. Celkový počet vyhlášení každé zastávky
+            for st_name, cnt in stop_counts.items():
                 conn.execute("""
-                    INSERT INTO stats_stops_local (stop_name, announce_count) VALUES (?, 1)
-                    ON CONFLICT(stop_name) DO UPDATE SET announce_count = announce_count + 1
-                """, (st_name,))
+                    INSERT INTO stats_stops_local (stop_name, announce_count) VALUES (?, ?)
+                    ON CONFLICT(stop_name) DO UPDATE SET announce_count = announce_count + ?
+                """, (st_name, cnt, cnt))
                     
             # 3. Záznam pro konkrétního uživatele
             if did and did not in ("None", ""):
@@ -630,13 +631,13 @@ def local_record_stats(line: str, stops: list, discord_id: str = ""):
                     ON CONFLICT(discord_id, line_name) DO UPDATE SET play_count = play_count + 1
                 """, (did, line_str))
                 
-                for st_name in unique_stops:
+                for st_name, cnt in stop_counts.items():
                     conn.execute("""
-                        INSERT INTO user_stats_stops_local (discord_id, stop_name, announce_count) VALUES (?, ?, 1)
-                        ON CONFLICT(discord_id, stop_name) DO UPDATE SET announce_count = announce_count + 1
-                    """, (did, st_name))
+                        INSERT INTO user_stats_stops_local (discord_id, stop_name, announce_count) VALUES (?, ?, ?)
+                        ON CONFLICT(discord_id, stop_name) DO UPDATE SET announce_count = announce_count + ?
+                    """, (did, st_name, cnt, cnt))
             conn.commit()
-            print(f"[LOCAL DB] Statistiky úspěšně zapsány: linka={line_str}, zastávek={len(unique_stops)}, hráč={did}", flush=True)
+            print(f"[LOCAL DB] Statistiky úspěšně zapsány: linka={line_str}, zastávek={sum(stop_counts.values())}, hráč={did}", flush=True)
     except Exception as e:
         print(f"[LOCAL DB] Chyba zápisu statistik: {e}", flush=True)
 

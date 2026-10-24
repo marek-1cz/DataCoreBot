@@ -1646,13 +1646,14 @@ def api_submit_stats():
     # ── Vždy normalizovat na oficiální 6místné licenční číslo (např. '734' -> '490734')
     line = normalize_line_number(raw_line)
     
-    # ── Deduplikace zastávek v rámci jedné jízdy (žádná zastávka se nepřičte víckrát než 1x)
-    unique_stops = list(dict.fromkeys(str(s).strip() for s in (stops or []) if str(s).strip()))
+    from collections import Counter
+    # Spočítáme počet vyhlášení každé zastávky na tomto spoji (např. 2x vyhlášená stejná zastávka = 2x vyhlášení)
+    stop_counts = Counter(str(s).strip() for s in (stops or []) if str(s).strip())
     
     # 1. Lokální 100% spolehlivý zápis do SQLite (nezávislý na RLS v Supabase)
     try:
         from local_db import local_record_stats
-        local_record_stats(line, unique_stops, discord_id)
+        local_record_stats(line, stops, discord_id)
     except Exception as e_loc:
         print(f"[STATS] Chyba lokálního zápisu: {e_loc}", flush=True)
 
@@ -1666,11 +1667,11 @@ def api_submit_stats():
         except Exception as e_sb1:
             print(f"[STATS] Supabase stats_lines (RLS nebo chyba): {e_sb1}", flush=True)
 
-        for stop_name in unique_stops:
+        for stop_name, cnt in stop_counts.items():
             try:
                 stop_res = db.table("stats_stops").select("*").eq("stop_name", stop_name).execute().data
-                if stop_res: db.table("stats_stops").update({"announce_count": int(stop_res[0].get("announce_count", 0)) + 1}).eq("id", stop_res[0]["id"]).execute()
-                else: db.table("stats_stops").insert({"stop_name": stop_name, "announce_count": 1}).execute()
+                if stop_res: db.table("stats_stops").update({"announce_count": int(stop_res[0].get("announce_count", 0)) + cnt}).eq("id", stop_res[0]["id"]).execute()
+                else: db.table("stats_stops").insert({"stop_name": stop_name, "announce_count": cnt}).execute()
             except Exception as e_sb2:
                 pass
 
@@ -1682,15 +1683,15 @@ def api_submit_stats():
             except Exception as e_sb3:
                 pass
 
-            for stop_name in unique_stops:
+            for stop_name, cnt in stop_counts.items():
                 try:
                     u_stop_res = db.table("user_stats_stops").select("*").eq("discord_id", discord_id).eq("stop_name", stop_name).execute().data
-                    if u_stop_res: db.table("user_stats_stops").update({"announce_count": int(u_stop_res[0].get("announce_count", 0)) + 1}).eq("id", u_stop_res[0]["id"]).execute()
-                    else: db.table("user_stats_stops").insert({"discord_id": discord_id, "stop_name": stop_name, "announce_count": 1}).execute()
+                    if u_stop_res: db.table("user_stats_stops").update({"announce_count": int(u_stop_res[0].get("announce_count", 0)) + cnt}).eq("id", u_stop_res[0]["id"]).execute()
+                    else: db.table("user_stats_stops").insert({"discord_id": discord_id, "stop_name": stop_name, "announce_count": cnt}).execute()
                 except Exception as e_sb4:
                     pass
 
-    return _cors_jsonify({"status": "success", "line": line, "stops_recorded": len(unique_stops)})
+    return _cors_jsonify({"status": "success", "line": line, "stops_recorded": sum(stop_counts.values())})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3352,6 +3353,48 @@ def api_stats_summary():
 
         stops_list = [[nick_map.get(did, 'Neznámý'), count] for did, count in sorted(player_stop_counts.items(), key=lambda x: x[1], reverse=True)[:5]]
         
+        # TOP 5 launches (počet spuštění)
+        valid_launch_users = [u for u in all_users if int(u.get('launch_count') or 0) > 0]
+        top_launch_users = sorted(valid_launch_users, key=lambda x: int(x.get('launch_count') or 0), reverse=True)[:5]
+        launches_list = [[u.get('nick') or 'Neznámý', int(u.get('launch_count') or 0)] for u in top_launch_users]
+
+        # Dnešní statistiky
+        today_str = get_prague_time().strftime("%d.%m.%Y")
+        sessions_today = []
+        try:
+            sessions_today = db.table("app_sessions").select("discord_id, start_time, end_time").like("start_time", f"{today_str}%").execute().data or []
+        except Exception: pass
+        today_user_mins = {}
+        today_user_launches = {}
+        for s in sessions_today:
+            try:
+                st_str = s.get('start_time'); et_str = s.get('end_time')
+                did = s.get('discord_id')
+                if did and did != 'None':
+                    today_user_launches[did] = today_user_launches.get(did, 0) + 1
+                if st_str and et_str:
+                    fmt_st = "%d.%m.%Y %H:%M:%S" if st_str.count(':') == 2 else "%d.%m.%Y %H:%M"
+                    fmt_et = "%d.%m.%Y %H:%M:%S" if et_str.count(':') == 2 else "%d.%m.%Y %H:%M"
+                    st = datetime.strptime(st_str, fmt_st); et = datetime.strptime(et_str, fmt_et)
+                    diff = int((et - st).total_seconds() / 60)
+                    if diff > 0 and did and did != 'None':
+                        today_user_mins[did] = today_user_mins.get(did, 0) + diff
+            except: pass
+        top_today_time_id = max(today_user_mins, key=today_user_mins.get) if today_user_mins else None
+        top_today_time_nick = nick_map.get(str(top_today_time_id), "Neznámý") if top_today_time_id else "Neznámý"
+        top_today_time_val = today_user_mins.get(top_today_time_id, 0) if top_today_time_id else 0
+
+        top_today_launch_id = max(today_user_launches, key=today_user_launches.get) if today_user_launches else None
+        top_today_launch_nick = nick_map.get(str(top_today_launch_id), "Neznámý") if top_today_launch_id else "Neznámý"
+        top_today_launch_val = today_user_launches.get(top_today_launch_id, 0) if top_today_launch_id else 0
+
+        today_info = {
+            "top_time_nick": top_today_time_nick,
+            "top_time_val": top_today_time_val,
+            "top_launch_nick": top_today_launch_nick,
+            "top_launch_val": top_today_launch_val
+        }
+
         total_lines_sum = sum(merged_lines.values())
         total_stops_sum = sum(merged_stops.values())
         total_hours = round(sum(int(u.get('total_time') or 0) for u in all_users) / 60)
@@ -3364,6 +3407,8 @@ def api_stats_summary():
             "lines": lines_list,
             "stops": stops_list,
             "time": time_list,
+            "launches": launches_list,
+            "today": today_info,
             "total_lines": total_lines_sum,
             "total_stops": total_stops_sum,
             "total_users": active_users_count,
@@ -3605,6 +3650,16 @@ def api_stats_user():
                 stops_rank = idx + 1
                 break
 
+    # 4. Pořadí v počtu spuštění (Launches Rank)
+    launch_count = int(u.get('launch_count') or 0)
+    launches_rank = None
+    if launch_count > 0:
+        sorted_launches = sorted([int(x.get('launch_count') or 0) for x in all_users if int(x.get('launch_count') or 0) > 0], reverse=True)
+        for idx, l_val in enumerate(sorted_launches[:5]):
+            if launch_count >= l_val:
+                launches_rank = idx + 1
+                break
+
     return jsonify({
         "found": True,
         "name": u.get('nick') or name,
@@ -3612,11 +3667,13 @@ def api_stats_user():
         "lines": lines_count,
         "stops": stops_count,
         "hours": hours,
+        "launches": launch_count,
         "linesList": lines_list,
         "stopsList": stops_list,
         "linesRank": lines_rank,
         "stopsRank": stops_rank,
-        "timeRank": time_rank
+        "timeRank": time_rank,
+        "launchesRank": launches_rank
     })
 
 @app.route('/api/admin/clean_reset_lines_stops', methods=['POST', 'GET'])

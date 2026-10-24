@@ -1658,15 +1658,16 @@ body.night .aurora{opacity:.4}
       <div class="card reveal">
         <h3>Dnešní statistiky</h3>
         <div class="today">
-          <div><span>Nejdéle hrál</span><b>Neznámý · 0 min</b></div>
-          <div><span>Nejvíce spuštění</span><b>Neznámý · 0×</b></div>
+          <div><span>Nejdéle hrál</span><b id="todayTime">Neznámý · 0 min</b></div>
+          <div><span>Nejvíce spuštění</span><b id="todayLaunch">Neznámý · 0×</b></div>
         </div>
       </div>
       <div class="card reveal d1"><h3>TOP 5 · Odjeté linky</h3><div id="s-lines"></div></div>
       <div class="card reveal d2"><h3>TOP 5 · Vyhlášené zastávky</h3><div id="s-stops"></div></div>
       <div class="card reveal"><h3>TOP 5 · Nahraný čas</h3><div id="s-time"></div></div>
-      <div class="card reveal d1"><h3>Všechny odjeté linky</h3><div id="s-toplines" class="lst"></div></div>
-      <div class="card reveal d2"><h3>Všechny vyhlášené zastávky</h3><div id="s-topstops" class="lst"></div></div>
+      <div class="card reveal d1"><h3>TOP 5 · Počet spuštění</h3><div id="s-launches"></div></div>
+      <div class="card reveal d2"><h3>Všechny odjeté linky</h3><div id="s-toplines" class="lst"></div></div>
+      <div class="card reveal"><h3>Všechny vyhlášené zastávky</h3><div id="s-topstops" class="lst"></div></div>
     </div>
     <p class="asof">Stav k 20. 10. 2026</p>
     </div>
@@ -2175,7 +2176,7 @@ window.loadGlobalStats = function() {
     const statsUrl = (typeof CONFIG!=='undefined'&&CONFIG.stats) ? CONFIG.stats : '/api/stats/summary';
     fetch(statsUrl).then(r=>r.json()).then(d=>{
       if(!d) return;
-      ['toplines','topstops','users','lines','stops','time'].forEach(k=>{
+      ['toplines','topstops','users','lines','stops','time','launches'].forEach(k=>{
         if(d[k]) STATS[k]=d[k];
       });
       const setNum = (id, val, suf='') => {
@@ -2191,10 +2192,18 @@ window.loadGlobalStats = function() {
       if (d.total_lines !== undefined) setNum('statTotalLines', d.total_lines, '×');
       if (d.total_stops !== undefined) setNum('statTotalStops', d.total_stops, '×');
 
+      if (d.today) {
+        const tt = document.getElementById('todayTime');
+        if (tt && d.today.top_time_nick) tt.textContent = `${d.today.top_time_nick} · ${d.today.top_time_val} min`;
+        const tl = document.getElementById('todayLaunch');
+        if (tl && d.today.top_launch_nick) tl.textContent = `${d.today.top_launch_nick} · ${d.today.top_launch_val}×`;
+      }
+
       drawGlobalLists();
       bars('s-lines', STATS.lines, '×');
       bars('s-stops', STATS.stops, '×');
       bars('s-time', STATS.time, ' h');
+      bars('s-launches', STATS.launches, '×');
       if(typeof window.refreshStatUsers === 'function') window.refreshStatUsers();
     }).catch(()=>{});
   } catch(_) {}
@@ -2221,6 +2230,7 @@ if (document.readyState === 'loading') {
     if(Array.isArray(STATS.lines)) put(STATS.lines,'lines');
     if(Array.isArray(STATS.stops)) put(STATS.stops,'stops');
     if(Array.isArray(STATS.time)) put(STATS.time,'time');
+    if(Array.isArray(STATS.launches)) put(STATS.launches,'launches');
   };
   window.refreshStatUsers();
   async function lookup(name){
@@ -2233,12 +2243,14 @@ if (document.readyState === 'loading') {
           lines:d.lines,
           stops:d.stops,
           time:d.hours,
+          launches:d.launches,
           avatar:d.avatar,
           linesList:(d.linesList&&d.linesList.length)?d.linesList:(baseU?STATS.users[baseU].lines:[]),
           stopsList:(d.stopsList&&d.stopsList.length)?d.stopsList:(baseU?STATS.users[baseU].stops:[]),
           linesRank:d.linesRank,
           stopsRank:d.stopsRank,
-          timeRank:d.timeRank
+          timeRank:d.timeRank,
+          launchesRank:d.launchesRank
         };
       }}catch(_){}}
     const u=users.get(norm(name));if(!u)return null;
@@ -2251,7 +2263,7 @@ if (document.readyState === 'loading') {
     $('uName').textContent=u.name;
     const av=$('uAv');av.textContent='';
     if(u.avatar){const im=document.createElement('img');im.src=u.avatar;im.alt='';im.style.cssText='width:100%;height:100%;object-fit:cover';av.appendChild(im)}else av.textContent=[...u.name.replace(/^[^A-Za-z0-9ÁČĎÉĚÍŇÓŘŠŤÚŮÝŽáčďéěíňóřšťúůýž]+/,'')][0]?.toUpperCase()||'?';
-    $('uGrid').innerHTML=card(u.lines,'×','Odjetých linek',u.linesRank)+card(u.stops,'×','Vyhlášených zastávek',u.stopsRank)+card(u.time,' h','Nahraný čas',u.timeRank);
+    $('uGrid').innerHTML=card(u.lines,'×','Odjetých linek',u.linesRank)+card(u.stops,'×','Vyhlášených zastávek',u.stopsRank)+card(u.time,' h','Nahraný čas',u.timeRank)+card(u.launches,'×','Počet spuštění',u.launchesRank);
     listCard('uLines',u.linesList,'×','linek','Hledat linku');listCard('uStops',u.stopsList,'×','zastávek','Hledat zastávku');
     glob.hidden=true;box.hidden=false;
     box.scrollIntoView({behavior:'smooth',block:'start'});
