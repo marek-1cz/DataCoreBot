@@ -10,6 +10,7 @@ from datetime import datetime
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _LOCAL_DB_PATH = os.path.join(_BASE_DIR, "datacore_local.db")
 _OFFLINE_ADMINS_PATH = os.path.join(_BASE_DIR, "offline_admins.json")
+_STATS_BACKUP_PATH = os.path.join(_BASE_DIR, "stats_store.json")
 
 # Pokud soubor neexistuje ale je nastaven env var OFFLINE_ADMINS_B64, automaticky ho rozbalíme
 # (Koyeb – obsah souboru zakódován do base64 a uložen v environment variables)
@@ -29,6 +30,37 @@ def _maybe_restore_offline_admins():
         print(f"[LOCAL DB] Chyba obnovy offline_admins.json z env: {e}", flush=True)
 
 _maybe_restore_offline_admins()
+
+def _save_stats_backup(stats_dict):
+    try:
+        if not stats_dict: return
+        with open(_STATS_BACKUP_PATH, "w", encoding="utf-8") as f:
+            json.dump(stats_dict, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba zápisu stats_backup.json: {e}", flush=True)
+
+def _restore_stats_backup_if_empty(conn):
+    try:
+        cur = conn.execute("SELECT COUNT(*) AS c FROM stats_lines_local")
+        row = cur.fetchone()
+        cnt = row["c"] if row else 0
+        if cnt == 0 and os.path.exists(_STATS_BACKUP_PATH):
+            with open(_STATS_BACKUP_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for ln, play_cnt in data.get("lines", {}).items():
+                conn.execute("INSERT OR REPLACE INTO stats_lines_local (line_name, play_count) VALUES (?, ?)", (str(ln), int(play_cnt)))
+            for sn, ann_cnt in data.get("stops", {}).items():
+                conn.execute("INSERT OR REPLACE INTO stats_stops_local (stop_name, announce_count) VALUES (?, ?)", (str(sn), int(ann_cnt)))
+            for did, ulines in data.get("user_lines", {}).items():
+                for ln, play_cnt in ulines.items():
+                    conn.execute("INSERT OR REPLACE INTO user_stats_lines_local (discord_id, line_name, play_count) VALUES (?, ?, ?)", (str(did), str(ln), int(play_cnt)))
+            for did, ustops in data.get("user_stops", {}).items():
+                for sn, ann_cnt in ustops.items():
+                    conn.execute("INSERT OR REPLACE INTO user_stats_stops_local (discord_id, stop_name, announce_count) VALUES (?, ?, ?)", (str(did), str(sn), int(ann_cnt)))
+            conn.commit()
+            print("[LOCAL DB] Statistiky úspěšně obnoveny z stats_backup.json!", flush=True)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba obnovy ze stats_backup.json: {e}", flush=True)
 
 _local_db_lock = threading.Lock()
 
@@ -143,6 +175,7 @@ def init_local_db():
                 )
             """)
             conn.commit()
+            _restore_stats_backup_if_empty(conn)
             # Automatické pročištění neplatných admin zámků (Neznámá / Aktivní hledání nesmí mít admin zámek)
             try:
                 conn.execute("""
@@ -638,6 +671,10 @@ def local_record_stats(line: str, stops: list, discord_id: str = ""):
                     """, (did, st_name, cnt, cnt))
             conn.commit()
             print(f"[LOCAL DB] Statistiky úspěšně zapsány: linka={line_str}, zastávek={sum(stop_counts.values())}, hráč={did}", flush=True)
+            try:
+                _save_stats_backup(local_get_stats())
+            except Exception:
+                pass
     except Exception as e:
         print(f"[LOCAL DB] Chyba zápisu statistik: {e}", flush=True)
 

@@ -10,6 +10,7 @@ import discord
 from discord.ext import commands, tasks
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash, Response, stream_with_context, jsonify
 from functools import wraps
+import threading
 from threading import Thread
 from supabase import create_client
 from datetime import datetime, timedelta
@@ -338,6 +339,8 @@ _SESSION_CACHE = {}   # {web_session_token: (timestamp, user_dict)}
 _SETTINGS_CACHE = {}  # {setting_key: (timestamp, value)}
 _IP_GEO_CACHE = {}     # {ip: (timestamp, dict)}
 _RECENT_WEB_VISITS = {} # {ip: last_timestamp}
+_STATS_DEDUP_CACHE = {}   # {key: timestamp}
+_STATS_DEDUP_LOCK = threading.Lock()
 
 # ── GTFS normalizace linek (např. '734' -> '490734') ──────────────────────────
 _LINE_MAPPING = {}
@@ -368,28 +371,6 @@ def normalize_line_number(raw_line: str) -> str:
         return _LINE_MAPPING[clean_num]
     return raw
 
-# Jednorázové kompletní promazání starých statistik linek a zastávek (čistý start podle požadavku)
-try:
-    _clean_stats_flag = os.path.join(os.path.dirname(__file__), ".clean_stats_reset_2026_v2")
-    if not os.path.exists(_clean_stats_flag):
-        print("[STATS] Jednorázové promazávání starých tabulek linek a zastávek (v2)...", flush=True)
-        try:
-            from local_db import local_clear_all_stats
-            local_clear_all_stats()
-        except Exception as _e_loc_cl:
-            print(f"[STATS] Chyba local_clear_all_stats: {_e_loc_cl}", flush=True)
-        _db_init_stats = get_db()
-        if _db_init_stats:
-            for _tbl in ["user_stats_stops", "user_stats_lines", "stats_stops", "stats_lines"]:
-                try:
-                    _db_init_stats.table(_tbl).delete().gte("id", 0).execute()
-                    print(f"[STATS] Tabulka {_tbl} byla úspěšně vyprázdněna.", flush=True)
-                except Exception as _e_tbl:
-                    print(f"[STATS] Nelze promazat {_tbl}: {_e_tbl}", flush=True)
-        with open(_clean_stats_flag, "w", encoding="utf-8") as _f_st:
-            _f_st.write("reset_stats_done\n")
-except Exception as _e_stats_clear:
-    print(f"[STATS] Upozornění při promazávání statistik: {_e_stats_clear}", flush=True)
 
 # Jednorázové promazání starých chybných dat tabulky page_visits podle požadavku
 try:
@@ -1646,6 +1627,28 @@ def api_submit_stats():
     # ── Vždy normalizovat na oficiální 6místné licenční číslo (např. '734' -> '490734')
     line = normalize_line_number(raw_line)
     
+    # ── Deduplikace požadavků (proti násobnému odeslání z klienta - IPC + Beacon + fetch)
+    trip_uid = str(data.get("trip_uid", "")).strip()
+    if trip_uid:
+        dedup_key = f"uid:{trip_uid}"
+    else:
+        # Fallback deduplikace podle hráče, linky a přesného seznamu zastávek v okně 30 sekund
+        stops_sig = ",".join(str(s).strip() for s in (stops or []))
+        dedup_key = f"sig:{discord_id}:{line}:{stops_sig}"
+    
+    now_ts = time.time()
+    with _STATS_DEDUP_LOCK:
+        # Promazat staré záznamy (starší než 60 sekund)
+        expired = [k for k, ts in _STATS_DEDUP_CACHE.items() if now_ts - ts > 60]
+        for k in expired:
+            _STATS_DEDUP_CACHE.pop(k, None)
+        
+        if dedup_key in _STATS_DEDUP_CACHE and (now_ts - _STATS_DEDUP_CACHE[dedup_key] < 30):
+            print(f"[STATS DEDUP] Ignorován duplicitní záznam pro linku {line} ({dedup_key})", flush=True)
+            return _cors_jsonify({"status": "duplicate_ignored", "line": line, "message": "Statistika již byla započtena."})
+        
+        _STATS_DEDUP_CACHE[dedup_key] = now_ts
+
     from collections import Counter
     # Spočítáme počet vyhlášení každé zastávky na tomto spoji (např. 2x vyhlášená stejná zastávka = 2x vyhlášení)
     stop_counts = Counter(str(s).strip() for s in (stops or []) if str(s).strip())

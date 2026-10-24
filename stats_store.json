@@ -1,0 +1,60 @@
+{
+  "lines": {
+    "490753": 1,
+    "496711": 1,
+    "490749": 1,
+    "490735": 1,
+    "490734": 1
+  },
+  "stops": {
+    "Stříbro, pošta": 2,
+    "Tisová, u kostela": 1,
+    "Stříbro, kino": 1,
+    "Stříbro, žel. st.": 1,
+    "Dlouhý Újezd": 1,
+    "Staré Sedliště": 1,
+    "Stříbro, Západní předm.": 1,
+    "Stříbro, stadion": 1,
+    "Stříbro, Gymnázium": 1,
+    "Stříbro, nám.": 1,
+    "Stříbro, hotel Branka": 1,
+    "Stříbro, rest. Plzeňka": 1,
+    "Tachov, aut. nádr.": 1,
+    "Stříbro, Brožíkova": 1,
+    "Tachov, u Rybeny": 1,
+    "Tachov, u letiště": 1,
+    "Černošín": 1,
+    "Stříbro, aut. st.": 1
+  },
+  "user_lines": {
+    "719896287301992449": {
+      "490753": 1,
+      "496711": 1,
+      "490749": 1,
+      "490735": 1,
+      "490734": 1
+    }
+  },
+  "user_stops": {
+    "719896287301992449": {
+      "Stříbro, pošta": 2,
+      "Tisová, u kostela": 1,
+      "Stříbro, kino": 1,
+      "Stříbro, žel. st.": 1,
+      "Dlouhý Újezd": 1,
+      "Staré Sedliště": 1,
+      "Stříbro, Západní předm.": 1,
+      "Stříbro, stadion": 1,
+      "Stříbro, Gymnázium": 1,
+      "Stříbro, nám.": 1,
+      "Stříbro, hotel Branka": 1,
+      "Stříbro, rest. Plzeňka": 1,
+      "Tachov, aut. nádr.": 1,
+      "Stříbro, Brožíkova": 1,
+      "Tachov, u Rybeny": 1,
+      "Tachov, u letiště": 1,
+      "Černošín": 1,
+      "Stříbro, aut. st.": 1
+    }
+  }
+}
