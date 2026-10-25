@@ -20,6 +20,7 @@ daily_metrics.json
 !spz_cache_backup.json
 !supporters_backup.json
 !web_visits_backup.json
+!stats_backup.json
 *.db
 idpk_vehicles_state.json
 vehicle_state.json

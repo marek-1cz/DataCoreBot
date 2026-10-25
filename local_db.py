@@ -44,21 +44,46 @@ def _restore_stats_backup_if_empty(conn):
         cur = conn.execute("SELECT COUNT(*) AS c FROM stats_lines_local")
         row = cur.fetchone()
         cnt = row["c"] if row else 0
-        if cnt == 0 and os.path.exists(_STATS_BACKUP_PATH):
-            with open(_STATS_BACKUP_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            for ln, play_cnt in data.get("lines", {}).items():
-                conn.execute("INSERT OR REPLACE INTO stats_lines_local (line_name, play_count) VALUES (?, ?)", (str(ln), int(play_cnt)))
-            for sn, ann_cnt in data.get("stops", {}).items():
-                conn.execute("INSERT OR REPLACE INTO stats_stops_local (stop_name, announce_count) VALUES (?, ?)", (str(sn), int(ann_cnt)))
-            for did, ulines in data.get("user_lines", {}).items():
-                for ln, play_cnt in ulines.items():
-                    conn.execute("INSERT OR REPLACE INTO user_stats_lines_local (discord_id, line_name, play_count) VALUES (?, ?, ?)", (str(did), str(ln), int(play_cnt)))
-            for did, ustops in data.get("user_stops", {}).items():
-                for sn, ann_cnt in ustops.items():
-                    conn.execute("INSERT OR REPLACE INTO user_stats_stops_local (discord_id, stop_name, announce_count) VALUES (?, ?, ?)", (str(did), str(sn), int(ann_cnt)))
-            conn.commit()
-            print("[LOCAL DB] Statistiky úspěšně obnoveny z stats_backup.json!", flush=True)
+        if cnt == 0:
+            restored_from_cloud = False
+            try:
+                db = _get_supabase_client()
+                if db:
+                    lines_data = db.table("stats_lines").select("line_name, play_count").execute().data or []
+                    stops_data = db.table("stats_stops").select("stop_name, announce_count").execute().data or []
+                    u_lines_data = db.table("user_stats_lines").select("discord_id, line_name, play_count").execute().data or []
+                    u_stops_data = db.table("user_stats_stops").select("discord_id, stop_name, announce_count").execute().data or []
+
+                    if lines_data:
+                        for r in lines_data:
+                            conn.execute("INSERT OR REPLACE INTO stats_lines_local (line_name, play_count) VALUES (?, ?)", (str(r['line_name']), int(r.get('play_count', 1))))
+                        for r in stops_data:
+                            conn.execute("INSERT OR REPLACE INTO stats_stops_local (stop_name, announce_count) VALUES (?, ?)", (str(r['stop_name']), int(r.get('announce_count', 1))))
+                        for r in u_lines_data:
+                            conn.execute("INSERT OR REPLACE INTO user_stats_lines_local (discord_id, line_name, play_count) VALUES (?, ?, ?)", (str(r['discord_id']), str(r['line_name']), int(r.get('play_count', 1))))
+                        for r in u_stops_data:
+                            conn.execute("INSERT OR REPLACE INTO user_stats_stops_local (discord_id, stop_name, announce_count) VALUES (?, ?, ?)", (str(r['discord_id']), str(r['stop_name']), int(r.get('announce_count', 1))))
+                        conn.commit()
+                        restored_from_cloud = True
+                        print(f"[LOCAL DB] Statistiky ({len(lines_data)} linek, {len(stops_data)} zastávek) úspěšně obnoveny z Turso DB!", flush=True)
+            except Exception as e_cloud:
+                print(f"[LOCAL DB] Chyba obnovy statistik z Turso DB: {e_cloud}", flush=True)
+
+            if not restored_from_cloud and os.path.exists(_STATS_BACKUP_PATH):
+                with open(_STATS_BACKUP_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for ln, play_cnt in data.get("lines", {}).items():
+                    conn.execute("INSERT OR REPLACE INTO stats_lines_local (line_name, play_count) VALUES (?, ?)", (str(ln), int(play_cnt)))
+                for sn, ann_cnt in data.get("stops", {}).items():
+                    conn.execute("INSERT OR REPLACE INTO stats_stops_local (stop_name, announce_count) VALUES (?, ?)", (str(sn), int(ann_cnt)))
+                for did, ulines in data.get("user_lines", {}).items():
+                    for ln, play_cnt in ulines.items():
+                        conn.execute("INSERT OR REPLACE INTO user_stats_lines_local (discord_id, line_name, play_count) VALUES (?, ?, ?)", (str(did), str(ln), int(play_cnt)))
+                for did, ustops in data.get("user_stops", {}).items():
+                    for sn, ann_cnt in ustops.items():
+                        conn.execute("INSERT OR REPLACE INTO user_stats_stops_local (discord_id, stop_name, announce_count) VALUES (?, ?, ?)", (str(did), str(sn), int(ann_cnt)))
+                conn.commit()
+                print("[LOCAL DB] Statistiky úspěšně obnoveny z stats_backup.json!", flush=True)
     except Exception as e:
         print(f"[LOCAL DB] Chyba obnovy ze stats_backup.json: {e}", flush=True)
 

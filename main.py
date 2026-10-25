@@ -3604,17 +3604,23 @@ def api_stats_summary():
         if db and not EGRESS_SAVE_MODE:
             try:
                 user_lines_data = db.table("user_stats_lines").select("discord_id, play_count").execute().data or []
+                db_u_lines = {}
                 for ul in user_lines_data:
                     did = str(ul.get('discord_id'))
                     if did and did != 'None':
-                        player_line_counts[did] = max(player_line_counts.get(did, 0), int(ul.get('play_count') or 0))
+                        db_u_lines[did] = db_u_lines.get(did, 0) + int(ul.get('play_count') or 0)
+                for did, cnt in db_u_lines.items():
+                    player_line_counts[did] = max(player_line_counts.get(did, 0), cnt)
             except Exception: pass
             try:
                 user_stops_data = db.table("user_stats_stops").select("discord_id, announce_count").execute().data or []
+                db_u_stops = {}
                 for us in user_stops_data:
                     did = str(us.get('discord_id'))
                     if did and did != 'None':
-                        player_stop_counts[did] = max(player_stop_counts.get(did, 0), int(us.get('announce_count') or 0))
+                        db_u_stops[did] = db_u_stops.get(did, 0) + int(us.get('announce_count') or 0)
+                for did, cnt in db_u_stops.items():
+                    player_stop_counts[did] = max(player_stop_counts.get(did, 0), cnt)
             except Exception: pass
 
         lines_list = [[nick_map.get(did, 'Neznámý'), count] for did, count in sorted(player_line_counts.items(), key=lambda x: x[1], reverse=True)[:5]]

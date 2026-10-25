@@ -1,66 +1,4 @@
 {
-  "launches": [
-    [
-      "marekk_czz",
-      849
-    ],
-    [
-      "Itz_Winters",
-      84
-    ],
-    [
-      "Dopravák z Karlovarska",
-      46
-    ],
-    [
-      "_Runtik_🦖💗",
-      43
-    ],
-    [
-      "Matesak",
-      28
-    ]
-  ],
-  "lines": [
-    [
-      "marekk_czz",
-      14
-    ]
-  ],
-  "stops": [
-    [
-      "marekk_czz",
-      160
-    ]
-  ],
-  "time": [
-    [
-      "marekk_czz",
-      23
-    ],
-    [
-      "Itz_Winters",
-      11
-    ],
-    [
-      "_Runtik_🦖💗",
-      9
-    ],
-    [
-      "Patrik20201",
-      6
-    ],
-    [
-      "Dopravák z Karlovarska",
-      6
-    ]
-  ],
-  "today": {
-    "top_launch_nick": "marekk_czz",
-    "top_launch_val": 8,
-    "top_time_nick": "marekk_czz",
-    "top_time_val": 47
-  },
   "toplines": [
     [
       "490739",
@@ -677,9 +615,71 @@
       1
     ]
   ],
-  "total_hours": 67,
-  "total_launches": 1158,
+  "lines": [
+    [
+      "marekk_czz",
+      14
+    ]
+  ],
+  "stops": [
+    [
+      "marekk_czz",
+      160
+    ]
+  ],
+  "time": [
+    [
+      "marekk_czz",
+      23
+    ],
+    [
+      "Itz_Winters",
+      11
+    ],
+    [
+      "_Runtik_🦖💗",
+      9
+    ],
+    [
+      "Patrik20201",
+      6
+    ],
+    [
+      "Dopravák z Karlovarska",
+      6
+    ]
+  ],
+  "launches": [
+    [
+      "marekk_czz",
+      849
+    ],
+    [
+      "Itz_Winters",
+      84
+    ],
+    [
+      "Dopravák z Karlovarska",
+      46
+    ],
+    [
+      "_Runtik_🦖💗",
+      43
+    ],
+    [
+      "Matesak",
+      28
+    ]
+  ],
+  "today": {
+    "top_time_nick": "marekk_czz",
+    "top_time_val": 18,
+    "top_launch_nick": "marekk_czz",
+    "top_launch_val": 7
+  },
   "total_lines": 14,
   "total_stops": 160,
-  "total_users": 44
+  "total_users": 44,
+  "total_hours": 67,
+  "total_launches": 1158
 }
