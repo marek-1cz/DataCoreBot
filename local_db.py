@@ -234,6 +234,7 @@ def init_local_db():
             _restore_stats_backup_if_empty(conn)
             _restore_web_visits_if_empty(conn)
             _restore_pvvd_disappearances_if_empty(conn)
+            _restore_spz_metadata_if_empty(conn)
             # Automatické pročištění neplatných admin zámků (Neznámá / Aktivní hledání nesmí mít admin zámek)
             try:
                 conn.execute("""
@@ -1031,6 +1032,60 @@ def _restore_pvvd_disappearances_if_empty(conn):
                 print(f"[LOCAL DB] Obnoveno {len(records)} záznamů zmizení vozů (z Gist/Supabase/zálohy)", flush=True)
     except Exception as e:
         print(f"[LOCAL DB] Chyba obnovy zmizení ze zálohy: {e}", flush=True)
+
+def _restore_spz_metadata_if_empty(conn):
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM spz_metadata_local")
+        cnt = cur.fetchone()[0]
+        if cnt == 0:
+            meta = {}
+            # 1. Zkus načíst z Turso / Supabase settings
+            try:
+                from main import get_db
+                db = get_db()
+                if db:
+                    res = db.table("settings").select("setting_value").eq("setting_key", "spz_metadata").execute()
+                    if res.data and res.data[0].get("setting_value"):
+                        meta = json.loads(res.data[0]["setting_value"])
+            except Exception:
+                pass
+            # 2. Zkus načíst ze souboru spz_settings.json
+            if not meta and os.path.exists("spz_settings.json"):
+                try:
+                    with open("spz_settings.json", "r", encoding="utf-8") as f:
+                        d = json.load(f)
+                        if "spz_metadata" in d and isinstance(d["spz_metadata"], dict):
+                            meta = d["spz_metadata"]
+                except Exception:
+                    pass
+            # 3. Zkus načíst z master backupu
+            if not meta and os.path.exists("supabase_full_backup.json"):
+                try:
+                    with open("supabase_full_backup.json", "r", encoding="utf-8") as f:
+                        fb = json.load(f)
+                        raw_list = fb.get("tables", {}).get("local_spz_metadata_local", [])
+                        for r in raw_list:
+                            meta[r["spz_key"]] = r
+                except Exception:
+                    pass
+            if meta:
+                for k, v in meta.items():
+                    conn.execute("""
+                        INSERT OR REPLACE INTO spz_metadata_local (spz_key, spz_display, driver, note, updated_at, updated_by)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        k,
+                        v.get("spz", k),
+                        v.get("driver", ""),
+                        v.get("note", ""),
+                        v.get("updated_at", ""),
+                        v.get("updated_by", "Admin")
+                    ))
+                conn.commit()
+                print(f"[LOCAL DB] Obnoveno {len(meta)} záznamů SPZ metadat (řidiči a poznámky) do lokální SQLite databáze", flush=True)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba obnovení spz_metadata: {e}", flush=True)
 
 def local_log_web_visit(ip: str, country: str, visited_at: str):
     """Zaznamená návštěvu webu do lokální SQLite tabulky, JSON zálohy a synchronizuje do cloudu (Gist + Supabase)."""

@@ -12958,6 +12958,14 @@ def api_bus_route(bus_id):
 def api_depot_zones():
     """Verejny endpoint: vrati vsechny vozovny (polygon, nazev, barva)
     + aktualni pocet busu v kazde vozovne."""
+    global DEPOT_ZONES
+    if not DEPOT_ZONES:
+        try:
+            db = get_db_client()
+            if db:
+                _load_depot_zones(db)
+        except Exception:
+            pass
     zones_out = []
     for zone in DEPOT_ZONES:
         # Spocitej busy v teto vozovne
