@@ -309,14 +309,13 @@ SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
 BMAC_WEBHOOK_SECRET = os.environ.get("BMAC_WEBHOOK_SECRET", "")
 _db_client = None
 
-# ── Dynamický egress monitor a nouzový štít ──────────────────────────────────────
-# EGRESS_SAVE_MODE: True = šetřící režim (aktivní permanentně pro ochranu před překročením limitu)
-EGRESS_SAVE_MODE: bool = True
-EGRESS_USED_GB: float = 5.868
-EGRESS_LIMIT_GB: float = 5.0   # Free tier limit
-EGRESS_WARN_PCT: float = 80.0  # % limitu při kterém se aktivuje šetřící režim
+# ── Dynamický egress monitor a nouzový štít (Turso DB má 1 mld čtení/měsíc, bez limitu egressu) ──
+EGRESS_SAVE_MODE: bool = False
+EGRESS_USED_GB: float = 0.0
+EGRESS_LIMIT_GB: float = 500.0   # Turso Cloud limit
+EGRESS_WARN_PCT: float = 90.0
 _last_egress_check: float = 0.0
-_EGRESS_CHECK_INTERVAL: int = 3600  # kontrola každou hodinu
+_EGRESS_CHECK_INTERVAL: int = 3600
 
 _STATS_SUMMARY_CACHE = {"ts": 0, "data": None}
 _SUMMARY_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "summary_backup.json")

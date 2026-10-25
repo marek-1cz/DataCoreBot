@@ -44,7 +44,7 @@ def _restore_stats_backup_if_empty(conn):
         cur = conn.execute("SELECT COUNT(*) AS c FROM stats_lines_local")
         row = cur.fetchone()
         cnt = row["c"] if row else 0
-        if cnt == 0:
+        if cnt < 14:
             restored_from_cloud = False
             try:
                 db = _get_supabase_client()
@@ -69,8 +69,13 @@ def _restore_stats_backup_if_empty(conn):
             except Exception as e_cloud:
                 print(f"[LOCAL DB] Chyba obnovy statistik z Turso DB: {e_cloud}", flush=True)
 
-            if not restored_from_cloud and os.path.exists(_STATS_BACKUP_PATH):
-                with open(_STATS_BACKUP_PATH, "r", encoding="utf-8") as f:
+            backup_file = _STATS_BACKUP_PATH if os.path.exists(_STATS_BACKUP_PATH) else None
+            alt_backup = os.path.join(_BASE_DIR, "stats_backup.json")
+            if os.path.exists(alt_backup):
+                backup_file = alt_backup
+
+            if not restored_from_cloud and backup_file and os.path.exists(backup_file):
+                with open(backup_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 for ln, play_cnt in data.get("lines", {}).items():
                     conn.execute("INSERT OR REPLACE INTO stats_lines_local (line_name, play_count) VALUES (?, ?)", (str(ln), int(play_cnt)))
@@ -83,7 +88,7 @@ def _restore_stats_backup_if_empty(conn):
                     for sn, ann_cnt in ustops.items():
                         conn.execute("INSERT OR REPLACE INTO user_stats_stops_local (discord_id, stop_name, announce_count) VALUES (?, ?, ?)", (str(did), str(sn), int(ann_cnt)))
                 conn.commit()
-                print("[LOCAL DB] Statistiky úspěšně obnoveny z stats_backup.json!", flush=True)
+                print(f"[LOCAL DB] Statistiky úspěšně obnoveny z {backup_file}!", flush=True)
     except Exception as e:
         print(f"[LOCAL DB] Chyba obnovy ze stats_backup.json: {e}", flush=True)
 

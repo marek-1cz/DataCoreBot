@@ -652,7 +652,7 @@
   "launches": [
     [
       "marekk_czz",
-      849
+      852
     ],
     [
       "Itz_Winters",
@@ -675,11 +675,11 @@
     "top_time_nick": "marekk_czz",
     "top_time_val": 18,
     "top_launch_nick": "marekk_czz",
-    "top_launch_val": 7
+    "top_launch_val": 2
   },
   "total_lines": 14,
   "total_stops": 160,
-  "total_users": 44,
+  "total_users": 40,
   "total_hours": 67,
-  "total_launches": 1158
+  "total_launches": 1152
 }

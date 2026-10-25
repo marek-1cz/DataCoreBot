@@ -1,5 +1,17 @@
 [
   {
+    "id": 5,
+    "ip": "127.0.0.1",
+    "country": "cz|Lokální síť|Vývoj|Localhost|/old/stats",
+    "visited_at": "25.10.2026 12:24"
+  },
+  {
+    "id": 4,
+    "ip": "127.0.0.1",
+    "country": "cz|Lokální síť|Vývoj|Localhost|/statistiky",
+    "visited_at": "25.10.2026 12:24"
+  },
+  {
     "id": 3,
     "ip": "127.0.0.1",
     "country": "cz|Lokální síť|Vývoj|Localhost|/stats",
