@@ -27,10 +27,17 @@ def write_discord_msg(msg):
 def is_idpk_route(r_short):
     pass # Obsolete, but kept to not break anything if referenced elsewhere
 
+try:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from turso_db import get_turso_db
+    turso = get_turso_db()
+except Exception:
+    turso = None
+
 def main():
     print("Spouštím GTFS Updater...")
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        print("Chybí Supabase secrets!")
+    if not turso and (not SUPABASE_URL or not SUPABASE_SERVICE_KEY):
+        print("Chybí Turso i Supabase konfigurace!")
         sys.exit(1)
 
     print(f"Stahuji GTFS ze zdroje: {GTFS_SOURCE_URL}")
@@ -52,30 +59,40 @@ def main():
     with open("gtfs.zip", "wb") as f:
         f.write(content)
 
-    # Kontrola proti Supabase
-    headers = {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    try:
-        sb_resp = requests.get(f"{SUPABASE_URL}/rest/v1/gtfs_feed_versions?select=source_hash&order=id.desc&limit=1", headers=headers)
-        sb_resp.raise_for_status()
-        data = sb_resp.json()
-        if data and len(data) > 0:
-            last_hash = data[0].get("source_hash")
-            if last_hash == current_hash:
-                print("Hash je shodný s předchozí verzí. Data jsou aktuální, není třeba aktualizovat.")
-                # Uložíme zprávu pro Discord – bez selhání, jen info
-                with open(".discord_msg.txt", "w", encoding="utf-8") as f:
-                    f.write("✅ **GTFS Pipeline proběhla v pořádku.**\n- Data jsou **aktuální** – žádná nová verze od IDPK nebyla vydána.\n- Systém nebyl zbytečně zatížen.")
-                # Smazat .release_tag aby workflow nevytvářelo nový release
-                if os.path.exists(".release_tag"):
-                    os.remove(".release_tag")
-                sys.exit(0)
-    except Exception as e:
-        print(f"Varování: Nelze přečíst hash z databáze, pokračuji: {e}")
+    # Kontrola proti Turso / Supabase
+    last_hash = None
+    if turso:
+        try:
+            t_res = turso.table("gtfs_feed_versions").select("source_hash").order("id", desc=True).limit(1).execute()
+            if t_res.data and len(t_res.data) > 0:
+                last_hash = t_res.data[0].get("source_hash")
+        except Exception as e:
+            print("Chyba čtení z Turso:", e)
+
+    if not last_hash and SUPABASE_URL and SUPABASE_SERVICE_KEY:
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+            "Content-Type": "application/json"
+        }
+        try:
+            sb_resp = requests.get(f"{SUPABASE_URL}/rest/v1/gtfs_feed_versions?select=source_hash&order=id.desc&limit=1", headers=headers)
+            if sb_resp.ok:
+                data = sb_resp.json()
+                if data and len(data) > 0:
+                    last_hash = data[0].get("source_hash")
+        except Exception as e:
+            pass
+
+    if last_hash == current_hash:
+        print("Hash je shodný s předchozí verzí. Data jsou aktuální, není třeba aktualizovat.")
+        # Uložíme zprávu pro Discord – bez selhání, jen info
+        with open(".discord_msg.txt", "w", encoding="utf-8") as f:
+            f.write("✅ **GTFS Pipeline proběhla v pořádku.**\n- Data jsou **aktuální** – žádná nová verze od IDPK nebyla vydána.\n- Systém nebyl zbytečně zatížen.")
+        # Smazat .release_tag aby workflow nevytvářelo nový release
+        if os.path.exists(".release_tag"):
+            os.remove(".release_tag")
+        sys.exit(0)
 
     # Rozbalení zipu v paměti
     print("Rozbaluji ZIP...")
@@ -423,31 +440,46 @@ def main():
         send_discord("❌ **GTFS Update selhal:** Nalezeno podezřele málo zastávek.")
         sys.exit(1)
         
-    print(f"Ukládám novou verzi do Supabase...")
-    try:
-        new_row = {
-            "version_tag": tag_name,
-            "source_hash": current_hash,
-            "stop_count": total_stops_inserted,
-            "route_count": len(routes_idpk) + len(routes_fallback),
-            "trip_count": len(trips_idpk) + len(trips_fallback),
-            "validation_status": "OK",
-            "release_url": f"https://github.com/{os.environ.get('GITHUB_REPOSITORY', 'marek-1cz/DataCoreBot')}/releases/tag/{tag_name}"
-        }
-        sb_post = requests.post(f"{SUPABASE_URL}/rest/v1/gtfs_feed_versions", headers=headers, json=new_row)
-        sb_post.raise_for_status()
-    except Exception as e:
-        print(f"Nepodařilo se zapsat do Supabase: {e}")
+    print(f"Ukládám novou verzi do databáze...")
+    new_row = {
+        "version_tag": tag_name,
+        "source_hash": current_hash,
+        "stop_count": total_stops_inserted,
+        "route_count": len(routes_idpk) + len(routes_fallback),
+        "trip_count": len(trips_idpk) + len(trips_fallback),
+        "validation_status": "OK",
+        "release_url": f"https://github.com/{os.environ.get('GITHUB_REPOSITORY', 'marek-1cz/DataCoreBot')}/releases/tag/{tag_name}"
+    }
+    if turso:
+        try:
+            turso.table("gtfs_feed_versions").insert(new_row).execute()
+            print("Nová verze GTFS zapsána do Turso.")
+        except Exception as e:
+            print("Chyba zápisu do Turso:", e)
+    elif SUPABASE_URL and SUPABASE_SERVICE_KEY:
+        try:
+            sb_post = requests.post(f"{SUPABASE_URL}/rest/v1/gtfs_feed_versions", headers=headers, json=new_row)
+            sb_post.raise_for_status()
+        except Exception as e:
+            print(f"Nepodařilo se zapsat do Supabase: {e}")
 
     # Zpracování změn jednotlivých linek
     existing_hashes = {}
-    try:
-        r = requests.get(f"{SUPABASE_URL}/rest/v1/gtfs_line_updates?select=route_id,hash", headers=headers)
-        r.raise_for_status()
-        for x in r.json():
-            existing_hashes[x['route_id']] = x['hash']
-    except Exception as e:
-        print("Nepodařilo se stáhnout staré hashe linek:", e)
+    if turso:
+        try:
+            t_lines = turso.table("gtfs_line_updates").select("route_id, hash").execute()
+            for x in (t_lines.data or []):
+                existing_hashes[x['route_id']] = x['hash']
+        except Exception as e:
+            print("Chyba čtení hashů z Turso:", e)
+    elif SUPABASE_URL and SUPABASE_SERVICE_KEY:
+        try:
+            r = requests.get(f"{SUPABASE_URL}/rest/v1/gtfs_line_updates?select=route_id,hash", headers=headers)
+            r.raise_for_status()
+            for x in r.json():
+                existing_hashes[x['route_id']] = x['hash']
+        except Exception as e:
+            print("Nepodařilo se stáhnout staré hashe linek:", e)
         
     changed_route_ids = []
     updates_for_db = []
@@ -463,16 +495,25 @@ def main():
             })
             
     if updates_for_db:
-        try:
-            # Upsert
-            headers_upsert = headers.copy()
-            headers_upsert["Prefer"] = "resolution=merge-duplicates"
-            # Můžeme to poslat po dávkách, kdyby toho bylo moc
-            chunk_size = 1000
-            for i in range(0, len(updates_for_db), chunk_size):
-                requests.post(f"{SUPABASE_URL}/rest/v1/gtfs_line_updates", headers=headers_upsert, json=updates_for_db[i:i+chunk_size])
-        except Exception as e:
-            print("Nepodařilo se zapsat gtfs_line_updates:", e)
+        if turso:
+            try:
+                for item in updates_for_db:
+                    turso._execute_single(
+                        "INSERT INTO gtfs_line_updates (route_id, hash, last_updated_at) VALUES (?, ?, ?) ON CONFLICT(route_id) DO UPDATE SET hash=excluded.hash, last_updated_at=excluded.last_updated_at;",
+                        [item["route_id"], item["hash"], item["last_updated_at"]]
+                    )
+                print(f"Aktualizováno {len(updates_for_db)} linek v Turso.")
+            except Exception as e:
+                print("Chyba zápisu hashů do Turso:", e)
+        elif SUPABASE_URL and SUPABASE_SERVICE_KEY:
+            try:
+                headers_upsert = headers.copy()
+                headers_upsert["Prefer"] = "resolution=merge-duplicates"
+                chunk_size = 1000
+                for i in range(0, len(updates_for_db), chunk_size):
+                    requests.post(f"{SUPABASE_URL}/rest/v1/gtfs_line_updates", headers=headers_upsert, json=updates_for_db[i:i+chunk_size])
+            except Exception as e:
+                print("Nepodařilo se zapsat gtfs_line_updates do Supabase:", e)
 
     # Format validity dates for display
     def fmt_date(d):

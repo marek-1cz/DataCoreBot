@@ -335,9 +335,9 @@ def generate_ai_daily_report(metrics_data=None):
     # Databáze
     db_fail = metrics_data.get("db_ops_failed", 0)
     if db_fail == 0:
-        good_points.append("Spojení s databází Supabase a synchronizace GTFS probíhaly bez přerušení.")
+        good_points.append("Spojení s cloudovou databází Turso a synchronizace GTFS probíhaly bez přerušení.")
     else:
-        bad_points.append(f"Zaznamenáno {db_fail} chyb spojení s databází Supabase.")
+        bad_points.append(f"Zaznamenáno {db_fail} chyb spojení s databází Turso.")
 
     if not good_points:
         good_points.append("Základní procesy běžely bez zaznamenaných havárií.")

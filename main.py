@@ -2843,13 +2843,13 @@ def api_get_messages():
         valid_msgs = []
         now = get_prague_time().replace(tzinfo=None)
         for msg in all_msgs:
-            if str(msg.get("is_archived")).lower() == 'true': continue
+            if msg.get("is_archived") in (1, '1', True, 'true', 'True'): continue
             expires_at_str = msg.get("expires_at")
-            if expires_at_str and expires_at_str.strip():
+            if expires_at_str and str(expires_at_str).strip():
                 try:
-                    exp_dt = datetime.strptime(expires_at_str.strip(), "%d.%m.%Y %H:%M")
+                    exp_dt = datetime.strptime(str(expires_at_str).strip(), "%d.%m.%Y %H:%M")
                     if now > exp_dt:
-                        db.table("app_messages").update({"is_archived": True}).eq("message_id", msg["message_id"]).execute()
+                        db.table("app_messages").update({"is_archived": 1}).eq("message_id", msg["message_id"]).execute()
                         continue
                 except: pass
             target_type = msg.get("target_type", "GLOBAL")
@@ -2863,7 +2863,7 @@ def api_get_messages():
                 targets = [t.strip() for t in target_data.split(',')]
                 if discord_id in targets or app_id in targets or user_nick in targets: is_target = True
             if is_target:
-                is_repeat = str(msg.get('repeat')).lower() == 'true'
+                is_repeat = msg.get('repeat') in (1, '1', True, 'true', 'True')
                 if is_repeat or msg['message_id'] not in read_ids:
                     valid_msgs.append({"id": msg['message_id'], "title": msg['title'], "content": msg['content'], "link_url": msg.get('link_url', "")})
         return _cors_jsonify({"messages": valid_msgs})
@@ -5058,17 +5058,18 @@ def dashboard_notifications():
             msgs = db.table("app_messages").select("*").order("created_at", desc=True).execute().data or []
             now = get_prague_time().replace(tzinfo=None)
             for m in msgs:
-                if not str(m.get('is_archived')).lower() == 'true':
+                is_arch = m.get('is_archived') in (1, '1', True, 'true', 'True')
+                if not is_arch:
                     exp_str = m.get('expires_at')
-                    if exp_str and exp_str.strip():
+                    if exp_str and str(exp_str).strip():
                         try:
-                            exp_dt = datetime.strptime(exp_str.strip(), "%d.%m.%Y %H:%M")
+                            exp_dt = datetime.strptime(str(exp_str).strip(), "%d.%m.%Y %H:%M")
                             if now > exp_dt:
-                                db.table("app_messages").update({"is_archived": True}).eq("message_id", m["message_id"]).execute()
-                                m['is_archived'] = True
+                                db.table("app_messages").update({"is_archived": 1}).eq("message_id", m["message_id"]).execute()
+                                is_arch = True
                         except: pass
-                m['is_archived'] = str(m.get('is_archived')).lower() == 'true'
-                m['repeat'] = str(m.get('repeat')).lower() == 'true'
+                m['is_archived'] = is_arch
+                m['repeat'] = m.get('repeat') in (1, '1', True, 'true', 'True')
             messages = msgs
     except: pass
     return render_dashboard(HTML_NOTIFICATIONS, messages=messages, deploy_time=DEPLOY_TIME, announcements_json=announcements_json)
@@ -5161,11 +5162,11 @@ def add_version():
             "db_version": request.form.get("db_version"),
             "file_url": request.form.get("file_url"),
             "target_role": request.form.get("target_role"),
-            "is_active": True if request.form.get("is_active") else False,
+            "is_active": 1 if request.form.get("is_active") else 0,
             "eol_date": "",
-            "show_in_launcher": True if request.form.get("show_in_launcher") else False,
-            "can_download": True if request.form.get("can_download") else False,
-            "can_launch": True if request.form.get("can_launch") else False,
+            "show_in_launcher": 1 if request.form.get("show_in_launcher") else 0,
+            "can_download": 1 if request.form.get("can_download") else 0,
+            "can_launch": 1 if request.form.get("can_launch") else 0,
         }
         db.table("software_versions").insert(row).execute()
         flash('Nová verze vydána!', 'success')
@@ -5185,11 +5186,11 @@ def edit_version():
             "db_version": request.form.get("db_version"),
             "file_url": request.form.get("file_url"),
             "target_role": request.form.get("target_role"),
-            "is_active": True if request.form.get("is_active") else False,
+            "is_active": 1 if request.form.get("is_active") else 0,
             "eol_date": request.form.get("eol_date", ""),
-            "show_in_launcher": True if request.form.get("show_in_launcher") else False,
-            "can_download": True if request.form.get("can_download") else False,
-            "can_launch": True if request.form.get("can_launch") else False,
+            "show_in_launcher": 1 if request.form.get("show_in_launcher") else 0,
+            "can_download": 1 if request.form.get("can_download") else 0,
+            "can_launch": 1 if request.form.get("can_launch") else 0,
         }
         db.table("software_versions").update(row).eq("id", request.form.get("version_id")).execute()
         flash('Verze upravena.', 'success')
@@ -5293,15 +5294,19 @@ def api_launcher_versions():
             v_role = v.get('target_role', 'User')
             v_level = ROLE_HIERARCHY.get(v_role, 1)
             has_access = u_level >= v_level
+            show_l = v.get('show_in_launcher', 1)
+            is_show = bool(show_l) and str(show_l).lower() not in ('0', 'false')
+            can_dl = bool(v.get('can_download', 1)) and str(v.get('can_download', 1)).lower() not in ('0', 'false') and has_access
+            can_ln = bool(v.get('can_launch', 1)) and str(v.get('can_launch', 1)).lower() not in ('0', 'false') and has_access
             result.append({
                 'id': v.get('id'),
                 'version_name': v.get('version_name'),
                 'db_version': v.get('db_version'),
                 'file_url': v.get('file_url') if has_access else None,
                 'target_role': v_role,
-                'show_in_launcher': v.get('show_in_launcher', True),
-                'can_download': v.get('can_download', True) and has_access,
-                'can_launch': v.get('can_launch', True) and has_access,
+                'show_in_launcher': is_show,
+                'can_download': can_dl,
+                'can_launch': can_ln,
                 'has_access': has_access,
                 'eol_date': v.get('eol_date', ''),
             })
