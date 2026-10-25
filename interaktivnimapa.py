@@ -5333,6 +5333,7 @@ ADMIN_DELETED_BUSES = {}
 CUSTOM_ROUTES = {}
 ROUTE_STOP_OVERRIDES = {}
 DEPOT_ZONES = []  # list dict: {id, name, polygon [[lat,lng],...], color}
+DEPOT_ZONES_INITIAL_LOADED = False
 
 # === BEZPEČNÝ PŘÍSTUP KE GLOBAL_BUS_CACHE (OCHRANA PŘED RuntimeError: dictionary changed size) ===
 def safe_bus_cache_items():
@@ -6897,7 +6898,7 @@ def _load_stop_overrides(db):
 
 def _load_depot_zones(db):
     """Nacte vozovny (depot zones) ze Supabase do pameti."""
-    global DEPOT_ZONES
+    global DEPOT_ZONES, DEPOT_ZONES_INITIAL_LOADED
     if not db:
         return
     try:
@@ -6920,6 +6921,7 @@ def _load_depot_zones(db):
             })
         DEPOT_ZONES.clear()
         DEPOT_ZONES.extend(loaded)
+        DEPOT_ZONES_INITIAL_LOADED = True
         print(f"[DEPOT] Nacteno {len(loaded)} vozoven.", flush=True)
     except Exception as e:
         print(f"[DEPOT] Tabulka depot_zones nedostupna: {e}", flush=True)
@@ -12958,8 +12960,8 @@ def api_bus_route(bus_id):
 def api_depot_zones():
     """Verejny endpoint: vrati vsechny vozovny (polygon, nazev, barva)
     + aktualni pocet busu v kazde vozovne."""
-    global DEPOT_ZONES
-    if not DEPOT_ZONES:
+    global DEPOT_ZONES, DEPOT_ZONES_INITIAL_LOADED
+    if not DEPOT_ZONES_INITIAL_LOADED:
         try:
             db = get_db_client()
             if db:

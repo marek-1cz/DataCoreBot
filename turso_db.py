@@ -34,6 +34,8 @@ def _py_to_turso_arg(v):
         return {"type": "integer", "value": str(v)}
     elif isinstance(v, float):
         return {"type": "float", "value": v}
+    elif isinstance(v, (list, dict)):
+        return {"type": "text", "value": json.dumps(v, ensure_ascii=False)}
     else:
         return {"type": "text", "value": str(v)}
 
@@ -223,7 +225,7 @@ class TursoQueryBuilder:
                 cols = list(self.payload_data.keys())
                 col_str = ", ".join([f'"{c}"' for c in cols])
                 placeholders = ", ".join(["?" for _ in cols])
-                sql = f"INSERT INTO \"{self.table_name}\" ({col_str}) VALUES ({placeholders});"
+                sql = f"INSERT INTO \"{self.table_name}\" ({col_str}) VALUES ({placeholders}) RETURNING *;"
                 args = [_py_to_turso_arg(self.payload_data.get(c)) for c in cols]
                 return self.client._execute_single(sql, args, returning_data=[self.payload_data])
 
@@ -244,7 +246,7 @@ class TursoQueryBuilder:
                 cols = list(self.payload_data.keys())
                 col_str = ", ".join([f'"{c}"' for c in cols])
                 placeholders = ", ".join(["?" for _ in cols])
-                sql = f"INSERT OR REPLACE INTO \"{self.table_name}\" ({col_str}) VALUES ({placeholders});"
+                sql = f"INSERT OR REPLACE INTO \"{self.table_name}\" ({col_str}) VALUES ({placeholders}) RETURNING *;"
                 args = [_py_to_turso_arg(self.payload_data.get(c)) for c in cols]
                 return self.client._execute_single(sql, args, returning_data=[self.payload_data])
 
