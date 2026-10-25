@@ -4,167 +4,6 @@
   "watched_buses": [],
   "ignored_errors": [],
   "spz_metadata": {
-    "1P11111": {
-      "spz": "1P1 1111",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 17:45",
-      "updated_by": "Admin"
-    },
-    "2P22222": {
-      "spz": "2P2 2222",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 17:45",
-      "updated_by": "Admin"
-    },
-    "3P11111": {
-      "spz": "3P1 1111",
-      "driver": "Karel Novak",
-      "note": "Ranni linka",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P22222": {
-      "spz": "3P2 2222",
-      "driver": "Karel Novak",
-      "note": "Odpoledni linka",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P030003": {
-      "spz": "3P03 0003",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P040004": {
-      "spz": "3P04 0004",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P050005": {
-      "spz": "3P05 0005",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P060006": {
-      "spz": "3P06 0006",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P070007": {
-      "spz": "3P07 0007",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P080008": {
-      "spz": "3P08 0008",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P090009": {
-      "spz": "3P09 0009",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P100010": {
-      "spz": "3P10 0010",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P110011": {
-      "spz": "3P11 0011",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P120012": {
-      "spz": "3P12 0012",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P130013": {
-      "spz": "3P13 0013",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P140014": {
-      "spz": "3P14 0014",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P150015": {
-      "spz": "3P15 0015",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P160016": {
-      "spz": "3P16 0016",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P170017": {
-      "spz": "3P17 0017",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P180018": {
-      "spz": "3P18 0018",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P190019": {
-      "spz": "3P19 0019",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "3P200020": {
-      "spz": "3P20 0020",
-      "driver": "Karel Novak",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
-    "4P23333": {
-      "spz": "4P2 3333",
-      "driver": "Josef Maly",
-      "note": "",
-      "updated_at": "20.10.2026 18:20",
-      "updated_by": "Admin"
-    },
     "8P29755": {
       "spz": "8P2 9755",
       "driver": "",
@@ -176,13 +15,6 @@
       "spz": "8P2 9506",
       "driver": "Miroslav Lukáš",
       "note": "",
-      "updated_at": "2026-10-14T21:45:22.736721+02:00",
-      "updated_by": "Admin"
-    },
-    "8P29732": {
-      "spz": "8P2 9732",
-      "driver": "",
-      "note": "Náhradní autobus Stříbro",
       "updated_at": "2026-10-14T21:45:22.736721+02:00",
       "updated_by": "Admin"
     },
@@ -284,12 +116,12 @@
       "updated_at": "2026-10-14T21:45:22.737722+02:00",
       "updated_by": "Admin"
     },
-    "3P51111": {
-      "spz": "3P5 1111",
-      "driver": "Karel Novak",
-      "note": "Testovaci poznamka",
-      "updated_at": "16.10.2026 22:41:53",
-      "updated_by": "marekk_czz"
+    "8P29732": {
+      "spz": "8P2 9732",
+      "driver": "",
+      "note": "Náhradní autobus Stříbro",
+      "updated_at": "24.10.2026 21:00",
+      "updated_by": "Admin"
     }
   }
 }
