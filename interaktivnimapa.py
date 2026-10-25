@@ -6063,16 +6063,12 @@ def sanitize_vehicle_type(vt: str) -> str:
     return vt_str if is_valid_vehicle_type(vt_str) else ""
 
 def get_db_client():
-    if not HAS_SUPABASE:
+    try:
+        import turso_db
+        return turso_db.get_turso_db()
+    except Exception as e:
+        print(f"[MAPA TURSO ERROR] {e}", flush=True)
         return None
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
-    if url and key:
-        try:
-            return create_client(url, key)
-        except Exception:
-            return None
-    return None
 
 class BusFusionEngine:
     def __init__(self, state_file=STATE_FILE):

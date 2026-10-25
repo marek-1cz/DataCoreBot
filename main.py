@@ -391,17 +391,13 @@ def check_supabase_error(e):
 
 def get_db():
     global _db_client
-    if SUPABASE_RESTRICTED:
-        return None
     try:
-        if _db_client is None and SUPABASE_URL and SUPABASE_KEY:
-            # Používáme service key pokud je dostupný (service key přeskočí RLS = méně logů)
-            active_key = SUPABASE_SERVICE_KEY if SUPABASE_SERVICE_KEY else SUPABASE_KEY
-            _db_client = create_client(SUPABASE_URL, active_key)
+        if _db_client is None:
+            import turso_db
+            _db_client = turso_db.get_turso_db()
         return _db_client
     except Exception as e:
-        check_supabase_error(e)
-        print(f"Chyba připojení k DB: {e}")
+        print(f"[TURSO DB] Chyba připojení k DB: {e}", flush=True)
     return None
 
 _AUTH_CACHE = {}      # {discord_id: (timestamp, role, is_banned)}
