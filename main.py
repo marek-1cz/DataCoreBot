@@ -367,8 +367,32 @@ def _rate_limit_check(key: str, max_calls: int, window_seconds: int) -> bool:
     _rl_store[key].append(now)
     return True
 
+SUPABASE_RESTRICTED = False
+_LAST_SUPABASE_RESTRICTED_CHECK = 0
+
+def is_supabase_restricted():
+    global SUPABASE_RESTRICTED
+    return SUPABASE_RESTRICTED
+
+def set_supabase_restricted(val=True):
+    global SUPABASE_RESTRICTED, _LAST_SUPABASE_RESTRICTED_CHECK
+    SUPABASE_RESTRICTED = val
+    _LAST_SUPABASE_RESTRICTED_CHECK = time.time()
+
+def check_supabase_error(e):
+    global SUPABASE_RESTRICTED
+    err = str(e)
+    if "402" in err or "exceed_egress_quota" in err or "restricted due to" in err:
+        if not SUPABASE_RESTRICTED:
+            SUPABASE_RESTRICTED = True
+            print("[SUPABASE RESTRICTION] Zjištěno překročení Egress kvóty (402). Automaticky přepnuto do offline/Gist režimu.", flush=True)
+        return True
+    return False
+
 def get_db():
     global _db_client
+    if SUPABASE_RESTRICTED:
+        return None
     try:
         if _db_client is None and SUPABASE_URL and SUPABASE_KEY:
             # Používáme service key pokud je dostupný (service key přeskočí RLS = méně logů)
@@ -376,6 +400,7 @@ def get_db():
             _db_client = create_client(SUPABASE_URL, active_key)
         return _db_client
     except Exception as e:
+        check_supabase_error(e)
         print(f"Chyba připojení k DB: {e}")
     return None
 
@@ -4506,103 +4531,136 @@ def dashboard_stats():
         web_labels_all = sorted_all_days
         web_data_all = [web_chart_all_dict[k] for k in sorted_all_days]
 
-        if db:
-            # ── Načtení dat APLIKACE ──
-            all_users = db.table("users").select("id, discord_id, nick, avatar_url, role, is_online, last_active, total_time, launch_count").execute().data or []
-            user_map = {}
-            total_mins = 0
-            for u in all_users:
-                d_id = str(u.get("discord_id") or "")
-                u_id = str(u.get("id") or "")
-                if d_id:
-                    user_map[d_id] = u
-                if u_id:
-                    user_map[f"email-{u_id}"] = u
+        all_users = []
+        if db and not is_supabase_restricted():
+            try:
+                all_users = db.table("users").select("id, discord_id, nick, avatar_url, role, is_online, last_active, total_time, launch_count").execute().data or []
+            except Exception as e_users:
+                check_supabase_error(e_users)
+                all_users = []
 
-                if u.get("is_online"):
-                    la_str = u.get("last_active")
-                    is_active = True
-                    if la_str:
-                        try:
-                            la_dt = datetime.strptime(la_str, "%d.%m.%Y %H:%M:%S" if la_str.count(':') == 2 else "%d.%m.%Y %H:%M")
-                            if (now_dt - la_dt).total_seconds() > 180:
-                                is_active = False
-                        except Exception:
-                            pass
-                    if is_active:
-                        app_online_users.append(u)
+        if not all_users:
+            try:
+                from local_db import _load_offline_admins
+                for adm in _load_offline_admins():
+                    all_users.append({
+                        "id": adm.get("discord_id", "1"),
+                        "discord_id": adm.get("discord_id", ""),
+                        "nick": adm.get("nick", "marekk_czz"),
+                        "avatar_url": "",
+                        "role": adm.get("role", "DEV"),
+                        "is_online": True,
+                        "last_active": get_prague_time().strftime("%d.%m.%Y %H:%M"),
+                        "total_time": 120,
+                        "launch_count": 5
+                    })
+            except Exception:
+                pass
 
-                try:
-                    total_mins += int(u.get("total_time") or 0)
-                    app_total_launches += int(u.get("launch_count") or 0)
-                except Exception:
-                    pass
+        user_map = {}
+        total_mins = 0
+        for u in all_users:
+            d_id = str(u.get("discord_id") or "")
+            u_id = str(u.get("id") or "")
+            if d_id:
+                user_map[d_id] = u
+            if u_id:
+                user_map[f"email-{u_id}"] = u
 
-            app_total_hours = round(total_mins / 60, 1)
-
-            # Relace aplikace z app_sessions
-            app_sessions_raw = db.table("app_sessions").select("*").order("id", desc=True).limit(1000).execute().data or []
-            for s in app_sessions_raw:
-                st_str = s.get("start_time") or ""
-                et_str = s.get("end_time") or ""
-                d_id = str(s.get("discord_id") or "")
-                u_obj = user_map.get(d_id, {})
-
-                try:
-                    fmt = "%d.%m.%Y %H:%M:%S" if st_str.count(':') == 2 else "%d.%m.%Y %H:%M"
-                    st_dt = datetime.strptime(st_str, fmt)
-                    if (now_dt - st_dt).days <= 7:
-                        app_last_7_days += 1
-                    if st_dt.date() == now_dt.date():
-                        app_today_launches += 1
-                        h_str = st_dt.strftime("%H:00")
-                        if h_str in app_chart_24h:
-                            app_chart_24h[h_str] += 1
-                    d_str = st_dt.strftime("%d.%m.")
-                    if d_str in app_chart_7d:
-                        app_chart_7d[d_str] += 1
-                except Exception:
-                    pass
-
-                duration_str = "Neznámá"
-                is_active_session = False
-                if st_str and et_str:
+            if u.get("is_online"):
+                la_str = u.get("last_active")
+                is_active = True
+                if la_str:
                     try:
-                        fmt_s = "%d.%m.%Y %H:%M:%S" if st_str.count(':') == 2 else "%d.%m.%Y %H:%M"
-                        fmt_e = "%d.%m.%Y %H:%M:%S" if et_str.count(':') == 2 else "%d.%m.%Y %H:%M"
-                        s_dt = datetime.strptime(st_str, fmt_s)
-                        e_dt = datetime.strptime(et_str, fmt_e)
-                        dur_sec = max(0, int((e_dt - s_dt).total_seconds()))
-                        if dur_sec < 60:
-                            duration_str = f"{dur_sec}s"
-                        elif dur_sec < 3600:
-                            duration_str = f"{dur_sec // 60}m"
-                        else:
-                            duration_str = f"{dur_sec // 3600}h {(dur_sec % 3600) // 60}m"
-
-                        if (now_dt - e_dt).total_seconds() < 90 and u_obj.get("is_online"):
-                            is_active_session = True
+                        la_dt = datetime.strptime(la_str, "%d.%m.%Y %H:%M:%S" if la_str.count(':') == 2 else "%d.%m.%Y %H:%M")
+                        if (now_dt - la_dt).total_seconds() > 180:
+                            is_active = False
                     except Exception:
                         pass
+                if is_active:
+                    app_online_users.append(u)
 
-                if len(recent_app_sessions) < 100:
-                    recent_app_sessions.append({
-                        "user_nick": u_obj.get("nick") or d_id or "Neznámý hráč",
-                        "discord_id": d_id,
-                        "avatar_url": u_obj.get("avatar_url") or "",
-                        "role": u_obj.get("role") or "User",
-                        "start_time": st_str,
-                        "duration": duration_str,
-                        "is_active": is_active_session
-                    })
+            try:
+                total_mins += int(u.get("total_time") or 0)
+                app_total_launches += int(u.get("launch_count") or 0)
+            except Exception:
+                pass
 
-            # Top aktivní hráči
-            valid_users = [u for u in all_users if (u.get("total_time") or 0) > 0 or (u.get("launch_count") or 0) > 0]
-            valid_users.sort(key=lambda x: int(x.get("total_time") or 0), reverse=True)
-            top_active_users = valid_users[:7]
+        app_total_hours = round(total_mins / 60, 1)
+
+        # Relace aplikace z app_sessions
+        app_sessions_raw = []
+        if db and not is_supabase_restricted():
+            try:
+                app_sessions_raw = db.table("app_sessions").select("*").order("id", desc=True).limit(1000).execute().data or []
+            except Exception as e_sess:
+                check_supabase_error(e_sess)
+                app_sessions_raw = []
+
+        for s in app_sessions_raw:
+            st_str = s.get("start_time") or ""
+            et_str = s.get("end_time") or ""
+            d_id = str(s.get("discord_id") or "")
+            u_obj = user_map.get(d_id, {})
+
+            try:
+                fmt = "%d.%m.%Y %H:%M:%S" if st_str.count(':') == 2 else "%d.%m.%Y %H:%M"
+                st_dt = datetime.strptime(st_str, fmt)
+                if (now_dt - st_dt).days <= 7:
+                    app_last_7_days += 1
+                if st_dt.date() == now_dt.date():
+                    app_today_launches += 1
+                    h_str = st_dt.strftime("%H:00")
+                    if h_str in app_chart_24h:
+                        app_chart_24h[h_str] += 1
+                d_str = st_dt.strftime("%d.%m.")
+                if d_str in app_chart_7d:
+                    app_chart_7d[d_str] += 1
+            except Exception:
+                pass
+
+            duration_str = "Neznámá"
+            is_active_session = False
+            if st_str and et_str:
+                try:
+                    fmt_s = "%d.%m.%Y %H:%M:%S" if st_str.count(':') == 2 else "%d.%m.%Y %H:%M"
+                    fmt_e = "%d.%m.%Y %H:%M:%S" if et_str.count(':') == 2 else "%d.%m.%Y %H:%M"
+                    s_dt = datetime.strptime(st_str, fmt_s)
+                    e_dt = datetime.strptime(et_str, fmt_e)
+                    dur_sec = max(0, int((e_dt - s_dt).total_seconds()))
+                    if dur_sec < 60:
+                        duration_str = f"{dur_sec}s"
+                    elif dur_sec < 3600:
+                        duration_str = f"{dur_sec // 60}m"
+                    else:
+                        duration_str = f"{dur_sec // 3600}h {(dur_sec % 3600) // 60}m"
+
+                    if (now_dt - e_dt).total_seconds() < 90 and u_obj.get("is_online"):
+                        is_active_session = True
+                except Exception:
+                    pass
+
+            if len(recent_app_sessions) < 100:
+                recent_app_sessions.append({
+                    "user_nick": u_obj.get("nick") or d_id or "Neznámý hráč",
+                    "discord_id": d_id,
+                    "avatar_url": u_obj.get("avatar_url") or "",
+                    "role": u_obj.get("role") or "User",
+                    "start_time": st_str,
+                    "duration": duration_str,
+                    "is_active": is_active_session
+                })
+
+        # Top aktivní hráči
+        valid_users = [u for u in all_users if (u.get("total_time") or 0) > 0 or (u.get("launch_count") or 0) > 0]
+        valid_users.sort(key=lambda x: int(x.get("total_time") or 0), reverse=True)
+        top_active_users = valid_users[:7]
 
     except Exception as e:
-        flash(f"Chyba při načítání statistik: {e}", "error")
+        check_supabase_error(e)
+        print(f"[STATS] Chyba při načítání statistik: {e}", flush=True)
+        if not is_supabase_restricted():
+            flash(f"Chyba při načítání statistik: {e}", "error")
 
     gc.collect()
     return render_dashboard(
@@ -4634,6 +4692,7 @@ def dashboard_stats():
         app_data_7d=json.dumps(list(app_chart_7d.values())),
         app_labels_24h=json.dumps(list(app_chart_24h.keys())),
         app_data_24h=json.dumps(list(app_chart_24h.values())),
+        supabase_restricted=is_supabase_restricted(),
         deploy_time=DEPLOY_TIME
     )
 

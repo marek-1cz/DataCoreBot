@@ -1737,6 +1737,27 @@ HTML_STATS = """
   </div>
 </div>
 
+{% if supabase_restricted %}
+<div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.08) 100%); border: 1px solid rgba(245, 158, 11, 0.35); border-left: 4px solid #f59e0b; border-radius: 10px; padding: 14px 18px; margin-bottom: 22px; display: flex; align-items: center; justify-content: space-between; gap: 15px; flex-wrap: wrap;">
+  <div style="display: flex; align-items: center; gap: 14px;">
+    <div style="width: 40px; height: 40px; border-radius: 8px; background: rgba(245, 158, 11, 0.2); display: flex; align-items: center; justify-content: center; color: #f59e0b; font-size: 20px;">
+      <i class="fas fa-shield-alt"></i>
+    </div>
+    <div>
+      <div style="color: #fde68a; font-weight: bold; font-size: 14px;">Autonomní Režim (Supabase Egress kvóta 5.5 GB vyčerpána)</div>
+      <div style="color: #cbd5e1; font-size: 12px; margin-top: 3px; max-width: 850px; line-height: 1.5;">
+        Projekt Supabase dosáhl bezplatného limitu přenosu a dočasně omezil REST API do 6. 11. 2026. Aplikace automaticky přešla na <strong>GitHub Gist trvalé cloudové úložiště</strong> a lokální databázi. Návštěvy webu a historie zmizení vozů jsou plně v bezpečí a přetrvávají i po nových rebuildech na Koyeb.
+      </div>
+    </div>
+  </div>
+  <div style="display: flex; align-items: center; gap: 8px;">
+    <span style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; font-size: 11px; font-weight: bold; padding: 6px 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px;">
+      <i class="fas fa-check-circle"></i> Trvalý Gist aktivní
+    </span>
+  </div>
+</div>
+{% endif %}
+
 <!-- HLAVNÍ METRIKY (KPI KARTY) -->
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
   <!-- Web Celkem -->

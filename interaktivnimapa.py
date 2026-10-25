@@ -9727,20 +9727,37 @@ def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
     return embed, dm_text
 
 
+_CACHED_NOTIF_RULES = []
+_CACHED_NOTIF_RULES_TS = 0
+_CACHED_NOTIF_USERS = {}  # {user_session: (ts, u_data)}
+
 def _check_and_fire_notifications(db_client, bus_cache):
     """Zkontroluje pravidla notifikací a odesílá DM/email přihlášenému uživateli."""
-    global _NOTIF_STATE_CACHE
+    global _NOTIF_STATE_CACHE, _CACHED_NOTIF_RULES, _CACHED_NOTIF_RULES_TS, _CACHED_NOTIF_USERS
+    now_ts = time.time()
+    rules = []
+
     try:
-        res = db_client.table("bus_notifications").select("*").eq("is_active", True).execute()
-        rules = res.data or []
-    except Exception as e:
-        print(f"[NOTIF] Chyba pri nacitani pravidel: {e}", flush=True)
-        return
+        from main import is_supabase_restricted, check_supabase_error
+        is_restricted = is_supabase_restricted()
+    except Exception:
+        is_restricted = False
+        def check_supabase_error(x): return False
+
+    if is_restricted:
+        rules = _CACHED_NOTIF_RULES
+    else:
+        if (now_ts - _CACHED_NOTIF_RULES_TS > 60.0) or not _CACHED_NOTIF_RULES:
+            try:
+                res = db_client.table("bus_notifications").select("*").eq("is_active", True).execute()
+                _CACHED_NOTIF_RULES = res.data or []
+                _CACHED_NOTIF_RULES_TS = now_ts
+            except Exception as e:
+                check_supabase_error(e)
+                print(f"[NOTIF] Chyba pri nacitani pravidel: {e}", flush=True)
+        rules = _CACHED_NOTIF_RULES
 
     now = datetime.now(ZoneInfo("Europe/Prague")).replace(tzinfo=None)
-
-    # Cache user info per session (abychom nevolali DB pro každé pravidlo zvlášť)
-    _user_cache = {}
 
     for rule in rules:
         rule_id = str(rule["id"])
@@ -9752,38 +9769,39 @@ def _check_and_fire_notifications(db_client, bus_cache):
         if not identifier or not user_session:
             continue
 
-        # Načti info o uživateli (discord_id, email) z cache nebo DB
-        if user_session not in _user_cache:
-            try:
-                if str(user_session).startswith("admin_direct_email_"):
-                    _user_cache[user_session] = {"discord_id": None, "email": user_session.replace("admin_direct_email_", "")}
-                elif str(user_session).startswith("admin_direct_discord_"):
-                    _user_cache[user_session] = {"discord_id": user_session.replace("admin_direct_discord_", ""), "email": None}
-                else:
-                    u_data = None
+        # Načti info o uživateli (discord_id, email) z cache (TTL 1h) nebo z DB
+        cached_u = _CACHED_NOTIF_USERS.get(user_session)
+        if cached_u and (now_ts - cached_u[0] < 3600):
+            u_info = cached_u[1]
+        else:
+            u_data = None
+            if str(user_session).startswith("admin_direct_email_"):
+                u_data = {"discord_id": None, "email": user_session.replace("admin_direct_email_", "")}
+            elif str(user_session).startswith("admin_direct_discord_"):
+                u_data = {"discord_id": user_session.replace("admin_direct_discord_", ""), "email": None}
+            else:
+                if not is_restricted and db_client:
                     try:
                         uid = int(user_session) if str(user_session).isdigit() else user_session
                         u_res = db_client.table("users").select("discord_id, email").eq("id", uid).execute()
                         if u_res.data:
                             u_data = u_res.data[0]
-                    except Exception:
-                        pass
+                    except Exception as e_u1:
+                        check_supabase_error(e_u1)
                     if not u_data:
                         try:
                             u_data = find_user_by_session_token(db_client, user_session)
-                        except Exception:
-                            pass
+                        except Exception as e_u2:
+                            check_supabase_error(e_u2)
                     if not u_data:
                         try:
                             u_res = db_client.table("users").select("discord_id, email").eq("discord_id", user_session).execute()
                             if u_res.data:
                                 u_data = u_res.data[0]
-                        except Exception:
-                            pass
-                    _user_cache[user_session] = u_data or {}
-            except Exception:
-                _user_cache[user_session] = {}
-        u_info = _user_cache[user_session]
+                        except Exception as e_u3:
+                            check_supabase_error(e_u3)
+            u_info = u_data or {}
+            _CACHED_NOTIF_USERS[user_session] = (now_ts, u_info)
         discord_id = u_info.get("discord_id")
         email = u_info.get("email")
 
