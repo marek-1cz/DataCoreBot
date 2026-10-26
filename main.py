@@ -1267,17 +1267,47 @@ def user_exists_sync(identifier):
         pass
     return False
 
-async def send_user_dm(discord_identifier, title, description, color=0x38bdf8):
-    if not discord_identifier or not bot.is_ready(): return
+async def send_user_dm(discord_identifier, title, description, color=0x38bdf8, fields=None):
+    if not discord_identifier:
+        return False
+    if not bot.is_ready():
+        print(f"[SEND DM] Bot není připraven k odeslání DM uživateli {discord_identifier}", flush=True)
+        return False
+    d_str = str(discord_identifier).strip()
     try:
-        for guild in bot.guilds:
-            member = guild.get_member(int(discord_identifier)) if discord_identifier.isdigit() else None
-            if not member: member = discord.utils.find(lambda m: m.name.lower() == discord_identifier.lower() or (m.global_name and m.global_name.lower() == discord_identifier.lower()), guild.members)
-            if member:
-                await member.send(embed=discord.Embed(title=title, description=description, color=color))
-                return
-    except:
-        pass
+        user = None
+        if d_str.isdigit():
+            user = bot.get_user(int(d_str))
+            if not user:
+                try:
+                    user = await bot.fetch_user(int(d_str))
+                except Exception as e_fu:
+                    print(f"[DM FETCH USER ERR {d_str}] {e_fu}", flush=True)
+        if not user:
+            for guild in bot.guilds:
+                m = guild.get_member(int(d_str)) if d_str.isdigit() else None
+                if not m:
+                    m = discord.utils.find(
+                        lambda x: x.name.lower() == d_str.lower()
+                        or (x.global_name and x.global_name.lower() == d_str.lower())
+                        or (getattr(x, 'nick', None) and x.nick and x.nick.lower() == d_str.lower()),
+                        guild.members
+                    )
+                if m:
+                    user = m
+                    break
+        if user:
+            embed = discord.Embed(title=title, description=description, color=color)
+            if fields:
+                for f_name, f_val in fields:
+                    if f_name and f_val:
+                        embed.add_field(name=str(f_name), value=str(f_val)[:1024], inline=False)
+            embed.set_footer(text="Projekt OIS IDPK • Centrální podpora")
+            await user.send(embed=embed)
+            return True
+    except Exception as e_dm:
+        print(f"[SEND DM ERROR for {discord_identifier}] {e_dm}", flush=True)
+    return False
 
 async def assign_supporter_role(identifier, role_names_list):
     success = False
@@ -3205,30 +3235,97 @@ def api_submit_feedback():
     db = get_db()
     if not db: return _cors_jsonify({"status": "error", "message": "DB Error"})
     try:
-        d_id = str(data.get("discord_id", "")).strip()
+        reply_pref = str(data.get("reply_pref", "discord")).lower().strip()
+        contact_discord = str(data.get("contact_discord", "")).strip()
+        contact_email = str(data.get("contact_email", "")).strip()
+        contact = str(data.get("contact", "")).strip()
         nick = str(data.get("nick", "Neznámý Uživatel")).strip()
         type_str = str(data.get("type", "GENERAL")).strip()
         msg = str(data.get("message", "")).strip()
-        contact = str(data.get("contact", "")).strip()
-        if not d_id or d_id.lower() in ["není zadáno", "none", "null", ""]:
-            if contact:
-                d_id = contact
-            elif not re.search(r'\d{17,}', msg):
-                if type_str in ["HWID", "ADMIN_BYPASS"]:
-                    return _cors_jsonify({"status": "error", "message": "⚠️ OCHRANA: Napište prosím své číselné DISCORD ID přímo do textu žádosti!"})
-                else:
-                    d_id = "Webový formulář"
+        d_id = str(data.get("discord_id", "")).strip()
+
+        # Pokud přišel pouze obecný contact parametr
+        if not contact_discord and not contact_email and contact:
+            if "@" in contact:
+                contact_email = contact
+                reply_pref = "email"
             else:
-                d_id = "Napsáno v textu"
-        elif contact and contact != d_id and contact not in msg:
-            msg = f"{msg}\n\n[Kontakt: {contact}]"
-        db.table("feedback").insert({"discord_id": d_id, "nick": nick, "type": type_str, "message": msg, "status": "pending", "sys_note": "", "fcreated_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
+                contact_discord = contact
+
+        # Pokud do discord inputu zadali email
+        if contact_discord and "@" in contact_discord and not contact_email:
+            contact_email = contact_discord
+            contact_discord = ""
+            reply_pref = "email"
+
+        # Pokud do email inputu zadali discord nick/id (bez @)
+        if contact_email and "@" not in contact_email and not contact_discord:
+            contact_discord = contact_email
+            contact_email = ""
+            reply_pref = "discord"
+
+        # Zkusit dohledat a propojit existujícího uživatele z tabulky users
+        resolved_discord_id = ""
+        resolved_email = contact_email
+
+        if contact_discord.isdigit():
+            resolved_discord_id = contact_discord
+        elif d_id.isdigit():
+            resolved_discord_id = d_id
+
+        if db:
+            u_match = None
+            if not resolved_discord_id and contact_discord:
+                try:
+                    u_res = db.table("users").select("discord_id, email, nick").ilike("nick", contact_discord).execute().data
+                    if u_res: u_match = u_res[0]
+                except Exception: pass
+            if not u_match and nick and nick != "Neznámý Uživatel":
+                try:
+                    u_res = db.table("users").select("discord_id, email, nick").ilike("nick", nick).execute().data
+                    if u_res: u_match = u_res[0]
+                except Exception: pass
+            if not u_match and resolved_email:
+                try:
+                    u_res = db.table("users").select("discord_id, email, nick").ilike("email", resolved_email).execute().data
+                    if u_res: u_match = u_res[0]
+                except Exception: pass
+
+            if u_match:
+                if not resolved_discord_id and u_match.get("discord_id"):
+                    resolved_discord_id = str(u_match["discord_id"])
+                if not resolved_email and u_match.get("email"):
+                    resolved_email = str(u_match["email"])
+
+        final_discord_id = resolved_discord_id or contact_discord or d_id or "Webový formulář"
+
+        insert_payload = {
+            "discord_id": final_discord_id,
+            "nick": nick,
+            "type": type_str,
+            "message": msg,
+            "status": "pending",
+            "sys_note": "",
+            "fcreated_at": get_prague_time().strftime("%d.%m.%Y %H:%M"),
+            "reply_pref": reply_pref,
+            "contact_email": resolved_email,
+            "contact_discord": contact_discord or (resolved_discord_id if resolved_discord_id != final_discord_id else "")
+        }
+        db.table("feedback").insert(insert_payload).execute()
+
+        pref_label = "Discord DM" if reply_pref == "discord" else "E-mail"
+        contact_display = []
+        if contact_discord or resolved_discord_id: contact_display.append(f"Discord: `{resolved_discord_id or contact_discord}`")
+        if resolved_email: contact_display.append(f"Email: `{resolved_email}`")
+        contacts_str = " | ".join(contact_display) if contact_display else f"`{final_discord_id}`"
+
         if type_str == "HWID": log_title = "🚨 VYŽADUJE KONTROLU: Žádost o HWID a IP 🚨"; log_color = 0xef4444
         elif type_str == "ADMIN_BYPASS": log_title = "🔓 VYŽADUJE SCHVÁLENÍ: Admin Bypass 🔓"; log_color = 0xf59e0b
         elif type_str in ["BUG", "CHYBA"]: log_title = "🐛 HLÁŠENÍ CHYBY Z WEBU"; log_color = 0xef4444
         elif type_str in ["NOTIF", "QUESTION"]: log_title = "❓ DOTAZ / PODPORA Z WEBU"; log_color = 0x38bdf8
         else: log_title = "🔔 NOVÁ ZPĚTNÁ VAZBA"; log_color = 0xa855f7
-        send_log(log_title, f"**Od:** {nick} (`{d_id}`)\n**Zpráva:**\n*{msg}*", log_color)
+
+        send_log(log_title, f"**Od:** {nick}\n**Kontakty:** {contacts_str}\n**Požadovaná odpověď:** {pref_label}\n**Zpráva:**\n*{msg}*", log_color)
         return _cors_jsonify({"status": "success"})
     except Exception as e:
         return _cors_jsonify({"status": "error", "message": str(e)})
@@ -5935,6 +6032,17 @@ def dashboard_feedback():
     except: pass
     return render_dashboard(HTML_FEEDBACK, hwid_pending=hwid_p, bypass_pending=bypass_p, general_pending=gen_p, resolved_all=res_all, deploy_time=DEPLOY_TIME)
 
+def get_bot_loop():
+    """Bezpečně získá běžící asyncio loop Discord bota bez vyvolání AttributeError v Discord.py 2.0+."""
+    try:
+        if bot and hasattr(bot, 'is_ready') and bot.is_ready():
+            loop = bot.loop
+            if loop and hasattr(loop, 'is_running') and loop.is_running():
+                return loop
+    except Exception:
+        pass
+    return None
+
 @app.route('/dashboard/feedback_reset_hwid', methods=['POST'])
 @require_dash_level('admin')
 def feedback_reset_hwid():
@@ -5944,7 +6052,9 @@ def feedback_reset_hwid():
         now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
         db.table("users").update({"hwid": "", "ip_address": ""}).eq("discord_id", d_id).execute()
         db.table("feedback").update({"status": "resolved", "sys_note": f"HWID a IP resetovány [{now_str}]"}).eq("id", fb_id).execute()
-        if bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "🔄 Zámek PC Resetován", "Vaše žádost byla schválena. HWID a IP adresa byly resetovány.", 0x10b981), bot.loop)
+        b_loop = get_bot_loop()
+        if b_loop:
+            asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "🔄 Zámek PC Resetován", "Vaše žádost byla schválena. HWID a IP adresa byly resetovány.", 0x10b981), b_loop)
         flash('HWID a IP resetováno.', 'success')
     return redirect(url_for('dashboard_feedback'))
 
@@ -5956,52 +6066,156 @@ def feedback_reject():
     if db and fb_id:
         now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
         db.table("feedback").update({"status": "resolved", "sys_note": f"Zamítnuto: {reason} [{now_str}]"}).eq("id", fb_id).execute()
-        if d_id and bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "❌ Žádost zamítnuta", f"**Důvod:** {reason}", 0xef4444), bot.loop)
+        b_loop = get_bot_loop()
+        if d_id and b_loop:
+            asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "❌ Žádost zamítnuta", f"**Důvod:** {reason}", 0xef4444), b_loop)
         flash('Žádost zamítnuta.', 'success')
     return redirect(url_for('dashboard_feedback'))
+
+def dispatch_feedback_reply(fb_row, reply_text, delivery_channel="auto"):
+    """
+    Spolehlivě doručí odpověď na zpětnou vazbu / dotaz uživateli.
+    Podporuje Discord DM, E-mail i automatický fallback.
+    Vrací trojici: (is_success, detail_message, sys_note_string)
+    """
+    db = get_db()
+    reply_pref = (fb_row.get("reply_pref") or "discord").lower().strip()
+    target_email = str(fb_row.get("contact_email") or "").strip()
+    target_discord = str(fb_row.get("contact_discord") or fb_row.get("discord_id") or "").strip()
+    user_nick = str(fb_row.get("nick") or "").strip()
+    orig_msg = str(fb_row.get("message") or "").strip()
+
+    # Normalizace emailu pokud je zapsán v discord_id sloupci
+    if not target_email and "@" in target_discord:
+        target_email = target_discord
+    if target_discord.startswith("email-") and db:
+        try:
+            uid = target_discord.split("-")[1]
+            u = db.table("users").select("email, discord_id").eq("id", uid).execute().data
+            if u:
+                if u[0].get("email"): target_email = u[0]["email"]
+                if u[0].get("discord_id"): target_discord = str(u[0]["discord_id"])
+        except Exception:
+            pass
+
+    # Pokud target_discord není číselné snowflake ID, pokusit se dohledat v DB users
+    if db and not target_discord.isdigit():
+        lookup_candidates = [c for c in [target_discord, user_nick, target_email] if c]
+        for c in lookup_candidates:
+            try:
+                col = "email" if "@" in c else "nick"
+                u = db.table("users").select("discord_id, email").ilike(col, c).execute().data
+                if u and u[0].get("discord_id"):
+                    target_discord = str(u[0]["discord_id"])
+                    if not target_email and u[0].get("email"):
+                        target_email = str(u[0]["email"])
+                    break
+            except Exception:
+                pass
+
+    results = []
+    discord_sent = False
+    email_sent = False
+
+    # 1. Odeslání do Discord DM
+    want_discord = (delivery_channel in ("discord", "both")) or (delivery_channel == "auto" and reply_pref != "email")
+    if want_discord:
+        if target_discord:
+            b_loop = get_bot_loop()
+            if b_loop:
+                try:
+                    fields = [("Vaše původní zpráva", orig_msg[:1000])] if orig_msg else None
+                    fut = asyncio.run_coroutine_threadsafe(
+                        send_user_dm(target_discord, "📩 Odpověď na vaši zpětnou vazbu / dotaz", reply_text, 0x38bdf8, fields=fields),
+                        b_loop
+                    )
+                    ok = fut.result(timeout=6.0)
+                    if ok:
+                        discord_sent = True
+                        results.append("Discord DM doručeno")
+                    else:
+                        results.append("Discord DM: Nepodařilo se doručit (uživatel nemá povolené DM nebo nebyl nalezen)")
+                except Exception as e_fut:
+                    results.append(f"Discord DM chyba: {e_fut}")
+            else:
+                results.append("Discord DM: Bot momentálně neběží na tomto workeru")
+        else:
+            results.append("Discord DM: Chybí číselné Discord ID")
+
+    # 2. Odeslání na E-mail
+    want_email = (delivery_channel in ("email", "both")) or (delivery_channel == "auto" and reply_pref == "email")
+    # Pokud byla volba auto na Discord, ale Discord DM selhalo a máme e-mail, zkusit e-mail jako záchranu
+    if not discord_sent and delivery_channel == "auto" and target_email and "@" in target_email:
+        want_email = True
+
+    if want_email:
+        if target_email and "@" in target_email:
+            if SMTP_EMAIL and SMTP_PASSWORD:
+                try:
+                    embed_data = {
+                        "title": "📩 Odpověď na vaši zprávu / dotaz",
+                        "description": reply_text,
+                        "fields": [{"name": "Vaše původní zpráva", "value": orig_msg}] if orig_msg else []
+                    }
+                    send_notification_email_sync(target_email, embed_data, reply_text, is_one_time=True)
+                    email_sent = True
+                    results.append(f"E-mail odeslán na {target_email}")
+                except Exception as e_em:
+                    results.append(f"E-mail chyba: {e_em}")
+            else:
+                results.append("E-mail: SMTP server není nastaven")
+        else:
+            results.append("E-mail: Chybí platná e-mailová adresa")
+
+    # Pokud byla volba na E-mail, ale ten selhal a máme Discord ID, zkusit Discord DM jako záchranu
+    if not email_sent and not discord_sent and delivery_channel == "auto" and target_discord:
+        b_loop = get_bot_loop()
+        if b_loop:
+            try:
+                fields = [("Vaše původní zpráva", orig_msg[:1000])] if orig_msg else None
+                fut = asyncio.run_coroutine_threadsafe(
+                    send_user_dm(target_discord, "📩 Odpověď na vaši zpětnou vazbu / dotaz", reply_text, 0x38bdf8, fields=fields),
+                    b_loop
+                )
+                ok = fut.result(timeout=6.0)
+                if ok:
+                    discord_sent = True
+                    results.append("Discord DM doručeno (záchranný fallback)")
+            except Exception:
+                pass
+
+    status_tag = []
+    if discord_sent: status_tag.append("Discord DM")
+    if email_sent: status_tag.append("E-mail")
+    tag_str = f" [doručeno přes {', '.join(status_tag)}]" if status_tag else f" [uloženo v DB; {' | '.join(results)}]"
+
+    now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+    sys_note_msg = f"Odpověď: {reply_text.strip()}{tag_str} [{now_str}]"
+    return (discord_sent or email_sent), "; ".join(results), sys_note_msg
 
 @app.route('/dashboard/feedback_resolve', methods=['POST'])
 def feedback_resolve():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
     fb_id = request.form.get("feedback_id")
     reply_text = request.form.get("reply_text")
+    delivery_channel = request.form.get("delivery_channel", "auto")
     db = get_db()
     if db and fb_id:
         fb_data = db.table("feedback").select("*").eq("id", fb_id).execute()
         now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
-        
         sys_note_msg = f"Vyřešeno [{now_str}]"
         
         if fb_data.data and reply_text and reply_text.strip():
             f_row = fb_data.data[0]
-            discord_id = f_row.get("discord_id", "")
-            
-            sys_note_msg = f"Odpověď: {reply_text.strip()} [{now_str}]"
-            
-            if discord_id.startswith("email-"):
-                user_id = discord_id.split("-")[1]
-                u_resp = db.table("users").select("email").eq("id", user_id).execute()
-                if u_resp.data and u_resp.data[0].get("email"):
-                    email = u_resp.data[0].get("email")
-                    try:
-                        import asyncio
-                        embed_data = {
-                            "title": "Odpověď na vaši zpětnou vazbu",
-                            "description": reply_text.strip(),
-                            "fields": [{"name": "Vaše původní zpráva", "value": f_row.get("message", "")}]
-                        }
-                        if bot.loop and bot.loop.is_running() and bot.is_ready():
-                            asyncio.run_coroutine_threadsafe(asyncio.to_thread(send_notification_email_sync, email, embed_data, ""), bot.loop)
-                    except: pass
-            elif discord_id.isdigit():
-                try:
-                    import asyncio
-                    if bot.loop and bot.loop.is_running() and bot.is_ready():
-                        asyncio.run_coroutine_threadsafe(send_user_dm(discord_id, "Odpověď na vaši zpětnou vazbu", reply_text.strip(), 0x10b981), bot.loop)
-                except: pass
+            ok, detail_msg, sys_note_msg = dispatch_feedback_reply(f_row, reply_text.strip(), delivery_channel)
+            if ok:
+                flash(f'Odpověď úspěšně odeslána: {detail_msg}', 'success')
+            else:
+                flash(f'Odpověď uložena, ale doručení selhalo: {detail_msg}', 'warning')
+        else:
+            flash('Ticket uzavřen.', 'success')
                 
         db.table("feedback").update({"status": "resolved", "sys_note": sys_note_msg}).eq("id", fb_id).execute()
-        flash('Ticket uzavřen.', 'success')
     return redirect(url_for('dashboard_feedback'))
 
 @app.route('/dashboard/feedback_delete', methods=['POST'])
@@ -6017,13 +6231,20 @@ def feedback_delete():
 @app.route('/dashboard/feedback_reply', methods=['POST'])
 def feedback_reply():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    fb_id = request.form.get("feedback_id"); d_id = request.form.get("discord_id"); msg = request.form.get("message")
+    fb_id = request.form.get("feedback_id")
+    msg = request.form.get("message") or request.form.get("reply_text")
+    delivery_channel = request.form.get("delivery_channel", "auto")
     db = get_db()
     if db and fb_id and msg:
-        now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
-        db.table("feedback").update({"status": "resolved", "sys_note": f"Odpověď: {msg} [{now_str}]"}).eq("id", fb_id).execute()
-        if d_id and bot.loop and bot.loop.is_running() and bot.is_ready(): asyncio.run_coroutine_threadsafe(send_user_dm(d_id, "📩 Zpráva od administrace", msg, 0x38bdf8), bot.loop)
-        flash('Odpověď odeslána.', 'success')
+        fb_data = db.table("feedback").select("*").eq("id", fb_id).execute()
+        if fb_data.data:
+            f_row = fb_data.data[0]
+            ok, detail_msg, sys_note_msg = dispatch_feedback_reply(f_row, msg.strip(), delivery_channel)
+            db.table("feedback").update({"status": "resolved", "sys_note": sys_note_msg}).eq("id", fb_id).execute()
+            if ok:
+                flash(f'Odpověď odeslána: {detail_msg}', 'success')
+            else:
+                flash(f'Odpověď uložena: {detail_msg}', 'warning')
     return redirect(url_for('dashboard_feedback'))
 
 @app.route('/dashboard/bypass_approve', methods=['POST'])
@@ -6520,13 +6741,18 @@ def stranka_proc_notifikace():
 def stranka_podpora():
     # Zkusit předvyplnit uživatele, pokud je přihlášen
     user_nick = ""
-    user_contact = ""
+    user_discord = ""
+    user_email = ""
+    default_pref = "discord"
     try:
         cookie_tok = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
         u = get_cached_session_user(cookie_tok) if cookie_tok else None
         if u:
             user_nick = u.get("nick", "")
-            user_contact = u.get("email") or u.get("discord_id") or ""
+            user_discord = str(u.get("discord_id", "") or "")
+            user_email = str(u.get("email", "") or "")
+            if not user_discord and user_email:
+                default_pref = "email"
     except Exception:
         pass
 
@@ -6553,19 +6779,50 @@ def stranka_podpora():
           </select>
         </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px;">
-          <div>
-            <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Vaše jméno / Nick</label>
-            <input type="text" id="sp_nick" value="{user_nick}" placeholder="např. Jan Novák" required style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+        <div style="margin-bottom:16px;">
+          <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Vaše jméno / Nick</label>
+          <input type="text" id="sp_nick" value="{user_nick}" placeholder="např. Jan Novák nebo přezdívka" required style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+        </div>
+
+        <!-- Volba kam si přeje odpověď: spíše Discord, nebo e-mail -->
+        <div style="margin-bottom:16px; background:rgba(0,0,0,0.3); border:1px solid #334155; border-radius:10px; padding:14px;">
+          <label style="display:block; color:#38bdf8; font-size:12px; font-weight:bold; margin-bottom:8px; text-transform:uppercase;">
+            <i class="fas fa-reply"></i> Kam si přejete zaslat odpověď?
+          </label>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+            <button type="button" id="btn_pref_discord" onclick="switchReplyPref('discord')" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:10px; background:#5865F2; color:white; border:2px solid #818cf8; border-radius:8px; font-weight:bold; font-size:13px; cursor:pointer; transition:all 0.2s;">
+              <i class="fab fa-discord" style="font-size:16px;"></i> Discord DM (Doporučeno)
+            </button>
+            <button type="button" id="btn_pref_email" onclick="switchReplyPref('email')" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:10px; background:#1e293b; color:#94a3b8; border:2px solid #334155; border-radius:8px; font-weight:bold; font-size:13px; cursor:pointer; transition:all 0.2s;">
+              <i class="fas fa-envelope" style="font-size:16px;"></i> E-mail
+            </button>
           </div>
-          <div>
-            <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Kontakt (E-mail nebo Discord)</label>
-            <input type="text" id="sp_contact" value="{user_contact}" placeholder="email@domena.cz nebo Discord ID" required style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+          <input type="hidden" id="sp_reply_pref" value="{default_pref}">
+
+          <div id="box_discord_contact">
+            <label style="display:block; color:#cbd5e1; font-size:12px; font-weight:bold; margin-bottom:4px;">Discord Nick nebo Discord ID <span style="color:#ef4444;">*</span></label>
+            <input type="text" id="sp_contact_discord" value="{user_discord or user_nick}" placeholder="např. marekk_czz nebo 719896287301992449" style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+            <p style="margin:4px 0 0 0; color:#94a3b8; font-size:11px;">
+              <i class="fab fa-discord" style="color:#5865F2;"></i> Administrátor vám pošle odpověď přímo do soukromé zprávy (DM) na Discordu.
+            </p>
+          </div>
+
+          <div id="box_email_contact" style="display:none; margin-top:10px;">
+            <label style="display:block; color:#cbd5e1; font-size:12px; font-weight:bold; margin-bottom:4px;">Vaše E-mailová adresa <span style="color:#ef4444;">*</span></label>
+            <input type="email" id="sp_contact_email" value="{user_email}" placeholder="např. jan.novak@email.cz" style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+            <p style="margin:4px 0 0 0; color:#94a3b8; font-size:11px;">
+              <i class="fas fa-envelope" style="color:#38bdf8;"></i> Administrátor vám zašle odpověď přímo do e-mailové schránky.
+            </p>
+          </div>
+
+          <div id="box_secondary_contact" style="margin-top:12px; padding-top:10px; border-top:1px dashed #334155;">
+            <label id="lbl_secondary" style="display:block; color:#64748b; font-size:11px; margin-bottom:4px;">Záložní e-mail (nepovinné, pokud vás nezastihneme na Discordu):</label>
+            <input type="text" id="sp_secondary_input" value="{user_email}" placeholder="vas@email.cz" style="width:100%; padding:8px 10px; background:rgba(0,0,0,0.3); border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:12px; outline:none; box-sizing:border-box;">
           </div>
         </div>
 
         <div style="margin-bottom:20px;">
-          <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Popis problému nebo dotazu</label>
+          <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Popis problému nebo dotazu <span style="color:#ef4444;">*</span></label>
           <textarea id="sp_message" rows="5" placeholder="Podrobně popište, co se stalo, jakého autobusu/linky se to týká, nebo co potřebujete vyřešit..." required style="width:100%; padding:12px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; resize:vertical; box-sizing:border-box;"></textarea>
         </div>
 
@@ -6583,17 +6840,76 @@ def stranka_podpora():
     </div>
 
     <script>
+    let activePref = '{default_pref}';
+
+    function switchReplyPref(pref) {{
+      activePref = pref;
+      document.getElementById('sp_reply_pref').value = pref;
+      const btnDiscord = document.getElementById('btn_pref_discord');
+      const btnEmail = document.getElementById('btn_pref_email');
+      const boxDiscord = document.getElementById('box_discord_contact');
+      const boxEmail = document.getElementById('box_email_contact');
+      const lblSecondary = document.getElementById('lbl_secondary');
+      const inpSecondary = document.getElementById('sp_secondary_input');
+
+      if(pref === 'discord') {{
+        btnDiscord.style.background = '#5865F2';
+        btnDiscord.style.borderColor = '#818cf8';
+        btnDiscord.style.color = 'white';
+        btnEmail.style.background = '#1e293b';
+        btnEmail.style.borderColor = '#334155';
+        btnEmail.style.color = '#94a3b8';
+        boxDiscord.style.display = 'block';
+        boxEmail.style.display = 'none';
+        lblSecondary.innerText = 'Záložní e-mail (nepovinné, pokud vás nezastihneme na Discordu):';
+        inpSecondary.placeholder = 'vas@email.cz';
+      }} else {{
+        btnEmail.style.background = '#0284c7';
+        btnEmail.style.borderColor = '#38bdf8';
+        btnEmail.style.color = 'white';
+        btnDiscord.style.background = '#1e293b';
+        btnDiscord.style.borderColor = '#334155';
+        btnDiscord.style.color = '#94a3b8';
+        boxDiscord.style.display = 'none';
+        boxEmail.style.display = 'block';
+        lblSecondary.innerText = 'Záložní Discord (nepovinné, pokud budete offline na e-mailu):';
+        inpSecondary.placeholder = 'např. uzivatel nebo 123456789...';
+      }}
+    }}
+
+    // Výchozí inicializace
+    if(activePref === 'email') switchReplyPref('email');
+
     function submitSupportForm(e) {{
       e.preventDefault();
       const btn = document.getElementById('sp_btn');
       const statusEl = document.getElementById('sp_status');
       const type = document.getElementById('sp_type').value;
       const nick = document.getElementById('sp_nick').value.trim();
-      const contact = document.getElementById('sp_contact').value.trim();
       const message = document.getElementById('sp_message').value.trim();
+      const replyPref = activePref;
 
-      if(!nick || !contact || !message) {{
-        alert('Vyplňte prosím všechna pole formuláře.');
+      let contactDiscord = document.getElementById('sp_contact_discord').value.trim();
+      let contactEmail = document.getElementById('sp_contact_email').value.trim();
+      const secondary = document.getElementById('sp_secondary_input').value.trim();
+
+      if(replyPref === 'discord' && secondary && secondary.includes('@') && !contactEmail) {{
+        contactEmail = secondary;
+      }} else if(replyPref === 'email' && secondary && !contactDiscord) {{
+        contactDiscord = secondary;
+      }}
+
+      if(!nick || !message) {{
+        alert('Vyplňte prosím své jméno a popis problému.');
+        return;
+      }}
+
+      if(replyPref === 'discord' && !contactDiscord && !contactEmail) {{
+        alert('Zadejte prosím své Discord jméno nebo ID, kam vám administrátor může zaslat odpověď.');
+        return;
+      }}
+      if(replyPref === 'email' && !contactEmail && !contactDiscord) {{
+        alert('Zadejte prosím svou e-mailovou adresu pro odpověď.');
         return;
       }}
 
@@ -6606,8 +6922,11 @@ def stranka_podpora():
         headers: {{'Content-Type': 'application/json'}},
         body: JSON.stringify({{
           nick: nick,
-          contact: contact,
-          discord_id: contact,
+          reply_pref: replyPref,
+          contact_discord: contactDiscord,
+          contact_email: contactEmail,
+          contact: replyPref === 'discord' ? (contactDiscord || contactEmail) : (contactEmail || contactDiscord),
+          discord_id: contactDiscord || contactEmail,
           type: type,
           message: message
         }})
@@ -6621,7 +6940,7 @@ def stranka_podpora():
           statusEl.style.background = 'rgba(16,185,129,0.15)';
           statusEl.style.border = '1px solid #10b981';
           statusEl.style.color = '#34d399';
-          statusEl.innerHTML = '✅ <strong>Hlášení bylo úspěšně odesláno!</strong> Administrátoři zprávu obdrží v dashboardu.';
+          statusEl.innerHTML = '✅ <strong>Hlášení bylo úspěšně odesláno!</strong> Administrátoři zprávu obdrží v dashboardu a odpoví vám vybraným kanálem.';
           document.getElementById('sp_message').value = '';
         }} else {{
           statusEl.style.display = 'block';

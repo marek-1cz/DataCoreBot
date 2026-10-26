@@ -3003,13 +3003,99 @@ HTML_FEEDBACK = """
 </div>
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--blue-main); margin-bottom: 20px;">
     <h3 style="color: var(--blue-main); margin-top: 0;">Nové zprávy od uživatelů</h3>
-    <table><tr><th>Uživatel</th><th>Zpráva</th><th>Datum</th><th>Akce</th></tr>
-    {% for f in general_pending %}<tr><td style="color:white; font-weight:bold;">{{ f.get('nick', '') }}</td><td style="color:#ddd; font-style:italic;">{{ f.get('message', '') }}</td><td style="color:#aaa; font-size:12px;">{{ f.get('fcreated_at', '') }}</td><td style="display:flex; gap:10px;"><form action="/dashboard/feedback_resolve" method="POST" style="margin:0; display:flex; flex-direction:column; gap:5px;"><input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}"><textarea name="reply_text" rows="2" style="background:#2d3748; color:white; border:1px solid #4a5568; border-radius:5px; padding:5px; resize:vertical; font-size:12px; width:200px;" placeholder="Napsat odpověď (nepovinné)"></textarea><button type="submit" class="btn btn-success" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-paper-plane"></i> Odeslat a vyřešit</button></form><form action="/dashboard/feedback_delete" method="POST" style="margin:0;"><input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}"><button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-trash"></i></button></form></td></tr>{% else %}<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Žádná nová zpětná vazba.</td></tr>{% endfor %}</table>
+    <table>
+      <tr>
+        <th>Uživatel</th>
+        <th>Kontakt / Odpověď kam</th>
+        <th>Typ a Zpráva</th>
+        <th>Datum</th>
+        <th>Odpověď a vyřešení</th>
+      </tr>
+      {% for f in general_pending %}
+      <tr>
+        <td style="color:white; font-weight:bold;">
+          {{ f.get('nick', 'Uživatel') }}
+        </td>
+        <td>
+          {% if f.get('reply_pref') == 'email' %}
+            <span style="display:inline-flex; align-items:center; gap:4px; padding:2px 7px; background:rgba(14,165,233,0.15); border:1px solid rgba(14,165,233,0.4); color:#38bdf8; border-radius:4px; font-size:11px; font-weight:bold;">
+              <i class="fas fa-envelope"></i> E-mail (preferováno)
+            </span>
+            <div style="font-size:12px; color:#cbd5e1; margin-top:3px;">{{ f.get('contact_email') or f.get('discord_id', '') }}</div>
+            {% if f.get('contact_discord') %}<div style="font-size:10px; color:#94a3b8;"><i class="fab fa-discord"></i> {{ f.get('contact_discord') }}</div>{% endif %}
+          {% else %}
+            <span style="display:inline-flex; align-items:center; gap:4px; padding:2px 7px; background:rgba(88,101,242,0.15); border:1px solid rgba(88,101,242,0.4); color:#818cf8; border-radius:4px; font-size:11px; font-weight:bold;">
+              <i class="fab fa-discord"></i> Discord DM (preferováno)
+            </span>
+            <div style="font-size:12px; color:#cbd5e1; margin-top:3px;">{{ f.get('contact_discord') or f.get('discord_id', '') }}</div>
+            {% if f.get('contact_email') %}<div style="font-size:10px; color:#94a3b8;"><i class="fas fa-envelope"></i> {{ f.get('contact_email') }}</div>{% endif %}
+          {% endif %}
+        </td>
+        <td>
+          <span style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px; font-size:10px; font-weight:bold; color:#94a3b8;">{{ f.get('type', 'GENERAL') }}</span>
+          <div style="color:#ddd; margin-top:4px; font-style:italic; max-width:300px; word-break:break-word;">{{ f.get('message', '') }}</div>
+        </td>
+        <td style="color:#aaa; font-size:12px; white-space:nowrap;">{{ f.get('fcreated_at', '') }}</td>
+        <td>
+          <form action="/dashboard/feedback_resolve" method="POST" style="margin:0; display:flex; flex-direction:column; gap:5px;">
+            <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+            <textarea name="reply_text" rows="2" style="background:#1e293b; color:white; border:1px solid #475569; border-radius:6px; padding:6px; font-size:12px; width:220px; resize:vertical;" placeholder="Napsat odpověď uživateli..."></textarea>
+            <div style="display:flex; gap:5px; align-items:center;">
+              <select name="delivery_channel" style="background:#0f172a; color:#cbd5e1; border:1px solid #334155; border-radius:4px; padding:4px 5px; font-size:11px;">
+                <option value="auto">Auto (dle volby)</option>
+                <option value="discord">Pouze Discord</option>
+                <option value="email">Pouze E-mail</option>
+                <option value="both">Discord + E-mail</option>
+              </select>
+              <button type="submit" class="btn btn-success" style="padding: 4px 8px; font-size: 11px; display:inline-flex; align-items:center; gap:4px;">
+                <i class="fas fa-paper-plane"></i> Odeslat
+              </button>
+            </div>
+          </form>
+          <form action="/dashboard/feedback_delete" method="POST" style="margin-top:4px;">
+            <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+            <button type="submit" class="btn btn-danger" style="padding: 2px 6px; font-size: 10px;"><i class="fas fa-trash"></i> Smazat</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádná nová zpětná vazba.</td></tr>
+      {% endfor %}
+    </table>
 </div>
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
     <h3 style="color: var(--success); margin-top: 0;">Vyřešeno / Uzavřeno</h3>
-    <table><tr><th>Uživatel</th><th>Typ</th><th>Zpráva</th><th>Odpověď</th><th>Akce</th></tr>
-    {% for f in resolved_all %}<tr style="opacity: 0.7;"><td>{{ f.get('nick', '') }}</td><td>{{ f.get('type', '') }}</td><td style="color:#aaa; font-style:italic;">{{ f.get('message', '') }}</td><td style="color:var(--success);">{{ f.get('sys_note', '') }}</td><td><form action="/dashboard/feedback_delete" method="POST" style="margin:0;"><input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}"><button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-trash"></i></button></form></td></tr>{% else %}<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádné uzavřené tickety.</td></tr>{% endfor %}</table>
+    <table>
+      <tr>
+        <th>Uživatel</th>
+        <th>Kontakt</th>
+        <th>Typ</th>
+        <th>Zpráva</th>
+        <th>Odpověď a stav doručení</th>
+        <th>Akce</th>
+      </tr>
+      {% for f in resolved_all %}
+      <tr style="opacity: 0.85;">
+        <td>{{ f.get('nick', '') }}</td>
+        <td style="font-size:11px; color:#cbd5e1;">
+          {% if f.get('contact_discord') %}<i class="fab fa-discord" style="color:#818cf8;"></i> {{ f.get('contact_discord') }}<br>{% endif %}
+          {% if f.get('contact_email') %}<i class="fas fa-envelope" style="color:#38bdf8;"></i> {{ f.get('contact_email') }}{% endif %}
+          {% if not f.get('contact_discord') and not f.get('contact_email') %}{{ f.get('discord_id', '') }}{% endif %}
+        </td>
+        <td><span style="font-size:10px; padding:2px 5px; background:rgba(255,255,255,0.1); border-radius:3px;">{{ f.get('type', '') }}</span></td>
+        <td style="color:#aaa; font-style:italic; max-width:250px; word-break:break-word;">{{ f.get('message', '') }}</td>
+        <td style="color:#34d399; font-size:12px;">{{ f.get('sys_note', '') }}</td>
+        <td>
+          <form action="/dashboard/feedback_delete" method="POST" style="margin:0;">
+            <input type="hidden" name="feedback_id" value="{{ f.get('id', '') }}">
+            <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 11px;"><i class="fas fa-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Žádné uzavřené tickety.</td></tr>
+      {% endfor %}
+    </table>
 </div>
 """
 
