@@ -1954,42 +1954,157 @@ def api_submit_stats():
 # PUBLIC ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Paměťová cache aktivních tokenů pro stažení Launcheru (TTL 2 hodiny)
+LAUNCHER_TOKENS = {}
+
+def get_launcher_user(token):
+    """Získá uživatele pro stažení Launcheru - kontroluje paměťovou cache, DB i přihlášenou webovou relaci."""
+    if not token:
+        return None
+    token = str(token).strip()
+
+    # 1. Kontrola v paměťové cache
+    entry = LAUNCHER_TOKENS.get(token)
+    if entry:
+        if time.time() <= entry.get("expires_at", 0):
+            return entry
+        else:
+            LAUNCHER_TOKENS.pop(token, None)
+
+    # 2. Kontrola v databázi users
+    db = get_db()
+    if db:
+        try:
+            res = db.table("users").select("*").eq("download_token", token).execute().data
+            if res:
+                u = res[0]
+                LAUNCHER_TOKENS[token] = {
+                    "discord_id": str(u.get("discord_id", "")),
+                    "nick": u.get("nick") or "Uživatel",
+                    "is_banned": bool(u.get("is_banned")),
+                    "created_at": time.time(),
+                    "expires_at": time.time() + 7200
+                }
+                return u
+        except Exception as e_lk:
+            print(f"[LAUNCHER TOKEN DB LOOKUP ERR] {e_lk}", flush=True)
+
+    # 3. Fallback na přihlášeného uživatele v prohlížeči
+    try:
+        tok = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
+        if tok:
+            u = get_cached_session_user(tok)
+            if u:
+                return u
+    except Exception:
+        pass
+
+    return None
+
+@app.route('/download-launcher')
+def page_download_launcher_direct():
+    token = request.args.get('token')
+    if token:
+        return redirect(f"/launcher-page/{token}")
+
+    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
+    u = get_cached_session_user(cookie_token) if cookie_token else None
+    if u and not u.get('is_banned'):
+        import uuid
+        tok = str(uuid.uuid4())
+        LAUNCHER_TOKENS[tok] = {
+            "discord_id": str(u.get("discord_id", "")),
+            "nick": u.get("nick") or "Uživatel",
+            "is_banned": False,
+            "created_at": time.time(),
+            "expires_at": time.time() + 7200
+        }
+        db = get_db()
+        if db:
+            try:
+                db.table("users").update({"download_token": tok}).eq("id", u["id"]).execute()
+            except Exception:
+                pass
+        return redirect(f"/launcher-page/{tok}")
+
+    return render_public("""
+    <div style="max-width: 580px; margin: 60px auto; padding: 30px; background: rgba(15,23,42,0.85); backdrop-filter: blur(12px); border: 1px solid rgba(56,189,248,0.3); border-radius: 16px; text-align: center; color: white;">
+      <i class="fas fa-rocket" style="font-size: 3rem; color: #38bdf8; margin-bottom: 16px;"></i>
+      <h2 style="color: #38bdf8; margin: 0 0 10px 0;">Stažení IDPK Launcheru</h2>
+      <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">
+        Instalátor Launcheru je chráněn unikátním ověřovacím odkazem. Stažení zahájíte jednoduše na našem Discord serveru v sekci <strong>#stáhnout-hru</strong> kliknutím na tlačítko <em>Zahájit instalaci Launcheru</em>.
+      </p>
+      <div style="margin-top: 24px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
+        <a href="https://discord.gg/idpk" target="_blank" style="padding: 10px 20px; background: #5865F2; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px; display: inline-flex; align-items: center; gap: 8px;">
+          <i class="fab fa-discord"></i> Otevřít Discord
+        </a>
+        <a href="/ucet" style="padding: 10px 20px; background: #1e293b; border: 1px solid #334155; color: #38bdf8; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px;">
+          Přihlásit se na webu
+        </a>
+      </div>
+    </div>
+    """)
+
 @app.route('/launcher-page/<token>')
 def launcher_page(token):
-    db = get_db()
-    if not db: return "Databáze nedostupná."
-    user = db.table("users").select("*").eq("download_token", token).execute().data
-    if not user: return "Neplatný nebo expirovaný token."
-    if user[0].get('is_banned'): return "Přístup zamítnut: Máte BAN."
+    user = get_launcher_user(token)
+    if not user:
+        return render_public("""
+        <div style="max-width: 600px; margin: 60px auto; padding: 35px; background: rgba(15,23,42,0.85); backdrop-filter: blur(14px); border: 1px solid rgba(239,68,68,0.4); border-radius: 16px; text-align: center; color: white; box-shadow: 0 10px 40px rgba(0,0,0,0.6);">
+          <div style="font-size: 3rem; color: #ef4444; margin-bottom: 16px;"><i class="fas fa-exclamation-triangle"></i></div>
+          <h2 style="color: #f87171; margin-top: 0;">Neplatný nebo expirovaný odkaz</h2>
+          <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">
+            Tento odkaz ke stažení Launcheru již vypršel nebo je neplatný.<br>
+            Nový odkaz si můžete kdykoliv zdarma vygenerovat na Discordu v kanálu <strong>#stáhnout-hru</strong> kliknutím na tlačítko <em>Zahájit instalaci Launcheru</em>.
+          </p>
+          <div style="margin-top: 25px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
+            <a href="https://discord.gg/idpk" target="_blank" style="padding: 10px 20px; background: #5865F2; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px; display: inline-flex; align-items: center; gap: 8px;">
+              <i class="fab fa-discord"></i> Přejít na Discord
+            </a>
+            <a href="/podpora" style="padding: 10px 20px; background: #1e293b; border: 1px solid #334155; color: #38bdf8; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px;">
+              Podpora a dotazy
+            </a>
+          </div>
+        </div>
+        """), 403
+    if user.get('is_banned'):
+        return render_public("""
+        <div style="max-width: 600px; margin: 60px auto; padding: 35px; background: rgba(15,23,42,0.85); backdrop-filter: blur(14px); border: 1px solid rgba(239,68,68,0.4); border-radius: 16px; text-align: center; color: white;">
+          <h2 style="color: #ef4444; margin-top: 0;">⛔ Přístup zamítnut</h2>
+          <p style="color: #94a3b8;">Váš účet má aktivní BAN. Stažení Launcheru není povoleno.</p>
+        </div>
+        """), 403
 
     content = f"""
-    <div style="text-align: center; margin-top: 100px; padding: 40px; background: rgba(30, 41, 59, 0.7); border-radius: 16px; max-width: 600px; margin-left: auto; margin-right: auto; border: 1px solid rgba(56, 189, 248, 0.3); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <div style="text-align: center; margin-top: 60px; padding: 40px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border-radius: 16px; max-width: 600px; margin-left: auto; margin-right: auto; border: 1px solid rgba(56, 189, 248, 0.3); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
         <div id="icon-container" style="transition: all 0.5s ease;">
             <i class="fas fa-rocket" id="main-icon" style="font-size: 4rem; color: #38bdf8; margin-bottom: 20px; animation: bounce 2s infinite;"></i>
         </div>
         <h1 id="main-title" style="color: white; font-size: 2.2rem; margin-bottom: 15px;">Příprava ke stažení...</h1>
-        <p id="main-desc" style="color: #94a3b8; font-size: 1.1rem; margin-bottom: 30px;">
-            Váš unikátní odkaz se právě zpracovává. Prosím čekejte.
+        <p id="main-desc" style="color: #94a3b8; font-size: 1.1rem; margin-bottom: 25px;">
+            Váš unikátní ověřený odkaz je připraven.
         </p>
         
-        <div id="progress-bar-container" style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; margin-bottom: 30px;">
+        <div id="progress-bar-container" style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; margin-bottom: 25px;">
             <div id="progress-bar" style="width: 0%; height: 100%; background: #38bdf8; transition: width 0.1s linear;"></div>
         </div>
 
         <div id="success-msg" style="display: none; padding: 20px; background: rgba(16, 185, 129, 0.1); border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.3);">
             <p style="color: #10b981; font-weight: bold; font-size: 1.1rem; margin: 0;">
-                Stahování bylo automaticky zahájeno.
+                ✅ Stahování bylo zahájeno!
             </p>
-            <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 10px; margin-bottom: 0;">
-                Nyní můžete tuto stránku bezpečně zavřít.<br>
-                (Pokud se stahování přerušilo, vygenerujte si nový odkaz na Discordu)
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 10px; margin-bottom: 15px;">
+                Pokud se stahování nespustilo automaticky, klikněte na tlačítko níže:
             </p>
+            <a href="/api/download-launcher/{token}" id="manual-dl-btn" style="display:inline-flex; align-items:center; gap:8px; padding:12px 24px; background:#0284c7; color:white; border-radius:8px; text-decoration:none; font-weight:bold; font-size:14px;">
+              <i class="fas fa-download"></i> Stáhnout IDPK Launcher přímo
+            </a>
         </div>
 
         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
-            <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
-                <i class="fas fa-shield-alt" style="color: #10b981;"></i> Zabezpečeno speciálním tokenem.<br>
-                Odkaz je platný pouze pro jedno stažení a nesmí být sdílen.
+            <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5; margin:0;">
+                <i class="fas fa-shield-alt" style="color: #10b981;"></i> Zabezpečeno ověřovacím tokenem.<br>
+                Platnost odkazu je 2 hodiny pro vaše zařízení.
             </p>
         </div>
     </div>
@@ -2013,52 +2128,69 @@ def launcher_page(token):
         setTimeout(() => {{
             let w = 0;
             let intv = setInterval(() => {{
-                w += 2;
+                w += 4;
                 document.getElementById('progress-bar').style.width = w + '%';
                 if(w >= 100) {{
                     clearInterval(intv);
                     
-                    document.getElementById('main-icon').style.animation = 'flyAway 0.5s forwards';
+                    document.getElementById('main-icon').style.animation = 'flyAway 0.4s forwards';
                     
                     setTimeout(() => {{
-                        document.getElementById('icon-container').innerHTML = '<i class="fas fa-check-circle" style="font-size: 4rem; color: #10b981; margin-bottom: 20px; animation: popIn 0.5s forwards;"></i>';
-                        document.getElementById('main-title').innerText = 'Připraveno!';
-                        document.getElementById('main-desc').innerText = 'Váš zabezpečený soubor se stahuje.';
+                        document.getElementById('icon-container').innerHTML = '<i class="fas fa-check-circle" style="font-size: 4rem; color: #10b981; margin-bottom: 20px; animation: popIn 0.4s forwards;"></i>';
+                        document.getElementById('main-title').innerText = 'Připraveno ke stažení';
+                        document.getElementById('main-desc').innerText = 'Soubor byl ověřen a stahování začíná.';
                         document.getElementById('progress-bar-container').style.display = 'none';
                         document.getElementById('success-msg').style.display = 'block';
                         
-                        // Start automatic download
                         setTimeout(() => {{
                             window.location.href = '/api/download-launcher/{token}';
-                        }}, 1000);
-                    }}, 500);
+                        }}, 600);
+                    }}, 400);
                 }}
-            }}, 30);
-        }}, 500);
+            }}, 25);
+        }}, 300);
     </script>
     """
     return render_public(content)
 
 @app.route('/api/download-launcher/<token>')
 def api_download_launcher(token):
+    user = get_launcher_user(token)
+    if not user:
+        return "Neplatný nebo expirovaný token.", 403
+    if user.get('is_banned'):
+        return "Přístup zamítnut: Máte BAN.", 403
+
+    # Výchozí spolehlivá adresa na GitHub Release instalátoru Launcheru
+    launcher_url = "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/V1.6.2B/IDPK.Launcher.Setup.1.6.2.exe"
     db = get_db()
-    if not db: return "Databáze nedostupná."
-    user = db.table("users").select("*").eq("download_token", token).execute().data
-    if not user: return "Neplatný nebo expirovaný token."
-    
-    # Invalidate token
-    db.table("users").update({"download_token": ""}).eq("discord_id", user[0]['discord_id']).execute()
-    
-    # Get dynamic launcher URL
-    launcher_url = "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/latest/download/IDPK.Launcher.Setup.1.6.2.exe"
-    url_setting = db.table("settings").select("setting_value").eq("setting_key", "launcher_download_url").execute().data
-    if url_setting and url_setting[0].get('setting_value'):
-        launcher_url = url_setting[0]['setting_value']
-        
-    # Extract filename from URL or default to Launcher.exe
-    filename = launcher_url.split('/')[-1] if '/' in launcher_url else "Launcher.exe"
-    
-    return stream_proxy_file(launcher_url, filename, user[0]['discord_id'], user[0]['nick'])
+    if db:
+        try:
+            url_setting = db.table("settings").select("setting_value").eq("setting_key", "launcher_download_url").execute().data
+            if url_setting and url_setting[0].get('setting_value'):
+                val = str(url_setting[0]['setting_value']).strip()
+                # Použít nastavenou URL pouze pokud je to přímý odkaz na soubor (ne obecná stránka /releases)
+                if val and (val.endswith('.exe') or val.endswith('.zip') or '/download/' in val):
+                    launcher_url = val
+        except Exception:
+            pass
+
+    filename = launcher_url.split('/')[-1] if '/' in launcher_url else "IDPK.Launcher.Setup.1.6.2.exe"
+    discord_id = str(user.get('discord_id', ''))
+    nick = str(user.get('nick', 'Uživatel'))
+
+    # Zaznamenat do download logů
+    if db and discord_id:
+        try:
+            db.table("download_logs").insert({
+                "discord_id": discord_id,
+                "version_name": f"Launcher ({filename})",
+                "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
+            }).execute()
+        except Exception:
+            pass
+
+    return stream_proxy_file(launcher_url, filename, discord_id, nick)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HLAVNÍ WEB (NOVÝ WEB NA / PRO ADMIN BYPASS, JINAK PŘESMĚROVÁNÍ NA /old)
@@ -7352,22 +7484,56 @@ class LauncherRulesView(discord.ui.View):
         except Exception:
             pass
 
-        # Kontrola banu a generování tokenu
+        # Generování unikátního tokenu pro stažení
+        import uuid
+        token = str(uuid.uuid4())
+        link = f"https://datacorebot.koyeb.app/launcher-page/{token}"
+        d_id = str(interaction.user.id)
+        user_nick = interaction.user.display_name or interaction.user.name or "Uživatel"
+
+        # Uložit token do in-memory cache pro okamžitou validaci (TTL 2 hodiny)
+        LAUNCHER_TOKENS[token] = {
+            "discord_id": d_id,
+            "nick": user_nick,
+            "is_banned": False,
+            "created_at": time.time(),
+            "expires_at": time.time() + 7200
+        }
+
+        # Zápis do databáze a kontrola banu
         db = get_db()
-        token = ""
-        link = ""
         if db:
-            chk = db.table("users").select("is_banned").eq("discord_id", str(interaction.user.id)).execute()
-            if chk.data and chk.data[0].get("is_banned"):
-                return await interaction.followup.send(
-                    "**⛔ Přístup zamítnut:** Váš účet má aktivní BAN. Stažení Launcheru není povoleno.",
-                    ephemeral=True
-                )
-            
-            import uuid
-            token = str(uuid.uuid4())
-            db.table("users").update({"download_token": token}).eq("discord_id", str(interaction.user.id)).execute()
-            link = f"https://datacorebot.koyeb.app/launcher-page/{token}"
+            try:
+                chk = db.table("users").select("*").eq("discord_id", d_id).execute()
+                if chk.data:
+                    if chk.data[0].get("is_banned"):
+                        LAUNCHER_TOKENS.pop(token, None)
+                        return await interaction.followup.send(
+                            "**⛔ Přístup zamítnut:** Váš účet má aktivní BAN. Stažení Launcheru není povoleno.",
+                            ephemeral=True
+                        )
+                    db.table("users").update({"download_token": token}).eq("discord_id", d_id).execute()
+                else:
+                    # Uživatel dosud v DB neexistuje – zaregistrovat ho a uložit download_token
+                    hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
+                    nid = hid.data[0]["app_id"] + 1 if (hid.data and hid.data[0].get("app_id")) else 1000
+                    db.table("users").insert({
+                        "app_id": nid,
+                        "discord_id": d_id,
+                        "nick": user_nick,
+                        "role": "User",
+                        "hwid": "",
+                        "ip_address": "",
+                        "is_banned": False,
+                        "is_deleted": False,
+                        "deleted_at": "",
+                        "dashboard_access": False,
+                        "login_token": "",
+                        "download_token": token,
+                        "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
+                    }).execute()
+            except Exception as e_tok:
+                print(f"[LAUNCHER AGREE DB ERROR] {e_tok}", flush=True)
 
         await interaction.followup.send(
             content=(
