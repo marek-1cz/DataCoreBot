@@ -267,12 +267,176 @@ def get_prague_time():
 
 DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
 
+def render_error_page(code: int, title: str, summary: str, icon: str = "fa-triangle-exclamation"):
+    """Vykreslí moderní chybovou stránku v designu nového webu s hardware-aware animacemi."""
+    return f"""<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chyba {code} | DataCore</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * {{ margin:0; padding:0; box-sizing:border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }}
+    body {{
+      background: #070b14;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      overflow-x: hidden;
+      position: relative;
+    }}
+    body::before {{
+      content: "";
+      position: fixed;
+      top: -30%; left: -30%; width: 160%; height: 160%;
+      background: radial-gradient(circle at 50% 40%, rgba(239, 68, 68, 0.14), rgba(56, 189, 248, 0.05) 45%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }}
+    .err-card {{
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 520px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.85), 0 0 35px rgba(239, 68, 68, 0.18);
+      border-radius: 24px;
+      padding: 44px 32px;
+      text-align: center;
+    }}
+    @media (prefers-reduced-motion: no-preference) {{
+      .err-card {{
+        animation: errFade 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      }}
+      .err-icon-wrap {{
+        animation: iconPulse 3.5s ease-in-out infinite;
+      }}
+    }}
+    @keyframes errFade {{
+      from {{ opacity: 0; transform: translateY(20px) scale(0.97); }}
+      to {{ opacity: 1; transform: translateY(0) scale(1); }}
+    }}
+    @keyframes iconPulse {{
+      0%, 100% {{ transform: scale(1); filter: drop-shadow(0 0 16px rgba(239, 68, 68, 0.45)); }}
+      50% {{ transform: scale(1.06); filter: drop-shadow(0 0 28px rgba(239, 68, 68, 0.8)); }}
+    }}
+    .err-badge {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      color: #fca5a5;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 22px;
+    }}
+    .err-title {{
+      font-size: 24px;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 12px;
+      letter-spacing: -0.4px;
+    }}
+    .err-desc {{
+      font-size: 14px;
+      color: #94a3b8;
+      line-height: 1.6;
+      margin-bottom: 30px;
+      max-width: 420px;
+      margin-left: auto;
+      margin-right: auto;
+    }}
+    .err-actions {{
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }}
+    .btn-act {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 22px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.25s ease;
+      min-width: 140px;
+    }}
+    .btn-act-back {{
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid #334155;
+      color: #e2e8f0;
+    }}
+    .btn-act-back:hover {{
+      background: #334155;
+      color: #ffffff;
+      transform: translateY(-2px);
+    }}
+    .btn-act-home {{
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      border: none;
+      color: #070b14;
+      box-shadow: 0 4px 18px rgba(56, 189, 248, 0.35);
+    }}
+    .btn-act-home:hover {{
+      box-shadow: 0 6px 24px rgba(56, 189, 248, 0.55);
+      transform: translateY(-2px);
+      color: #000000;
+    }}
+  </style>
+</head>
+<body>
+  <div class="err-card">
+    <div class="err-badge"><i class="fas fa-triangle-exclamation"></i> Kód {code}</div>
+    <div class="err-icon-wrap" style="font-size: 52px; color: #ef4444; margin-bottom: 18px;">
+      <i class="fas {icon}"></i>
+    </div>
+    <h1 class="err-title">{title}</h1>
+    <p class="err-desc">{summary}</p>
+    <div class="err-actions">
+      <button class="btn-act btn-act-back" onclick="if(window.history.length > 1) {{ window.history.back(); }} else {{ window.location.href='/'; }}">
+        <i class="fas fa-arrow-left"></i> O krok zpět
+      </button>
+      <a href="/" class="btn-act btn-act-home">
+        <i class="fas fa-house"></i> Domů
+      </a>
+    </div>
+  </div>
+  <script>
+    if (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4) {{
+      let c = document.querySelector('.err-card');
+      if (c) {{ c.style.backdropFilter = 'none'; c.style.webkitBackdropFilter = 'none'; c.style.background = '#0f172a'; }}
+    }}
+  </script>
+</body>
+</html>"""
+
 @app.errorhandler(Exception)
 def handle_exception(e):
     if isinstance(e, HTTPException):
-        return f"<div style='background:#0f172a; color:#f59e0b; padding:40px; font-family:sans-serif; text-align:center; height:100vh; box-sizing:border-box;'><h2 style='font-size:40px;'>CHYBA {e.code}</h2><p style='font-size:18px; color:white;'>Stránka nebyla nalezena.</p><a href='/' style='display:inline-block; margin-top:20px; padding:10px 20px; background:#38bdf8; color:black; text-decoration:none; font-weight:bold; border-radius:5px;'>Zpět domů</a></div>", e.code
+        code = e.code or 404
+        title = "Stránka nenalezena" if code == 404 else f"Chyba {code}"
+        summary = "Požadovaná stránka na serveru neexistuje nebo byla přesunuta." if code == 404 else "Přístup k tomuto prostředku byl odepřen."
+        icon = "fa-compass" if code == 404 else "fa-shield-halved"
+        return render_error_page(code, title, summary, icon), code
     
-    # Zjistíme, jestli to není chyba Supabase (402 Payment Required atd.)
+    code = 500
     err_str = str(e)
     tb = traceback.format_exc()
     print('[ERROR 500]', tb, flush=True)
@@ -281,25 +445,39 @@ def handle_exception(e):
         TRACKER.record_request(500, request.path, err_str)
     except Exception:
         pass
-    
-    # Zalogovat na discord (max 2000 znaků pro Discord embed description)
-    try:
-        short_tb = tb[-1900:] if len(tb) > 1900 else tb
-        send_log("🔥 Kritická chyba serveru (500)", f"**Chyba:** {err_str}\n```py\n{short_tb}\n```", 0xef4444)
-    except Exception:
-        pass
 
-    msg = "Chyba komunikace s databází nebo interní chyba serveru."
+    # Zjistit uživatele pokud je přihlášen
+    user_info = "Nepřihlášený návštěvník"
+    cookie_token = request.cookies.get('web_session_token')
+    if cookie_token:
+        try:
+            u = get_cached_session_user(cookie_token)
+            if u:
+                u_nick = u.get('nick') or u.get('email') or 'Uživatel'
+                u_did = u.get('discord_id') or 'Nezadáno'
+                user_info = f"**{u_nick}** (Discord ID: `{u_did}`, User ID: `{u.get('id')}`)"
+        except Exception:
+            pass
+
+    # Zalogovat na discord do kanálu 📲・error-app (a záložně do logs)
+    try:
+        short_tb = tb[-1600:] if len(tb) > 1600 else tb
+        err_field = f"**Uživatel:** {user_info}\n**URL:** `{request.method} {request.path}`\n**Chyba:** `{err_str[:300]}`\n```py\n{short_tb}\n```"
+        send_log("📲 APLIKAČNÍ CHYBA (Web 500)", err_field, 0xef4444, channel_name="📲・error-app")
+    except Exception as ex_l:
+        print(f"[ERR LOG FAIL] {ex_l}", flush=True)
+
+    summary = "Při zpracování požadavku došlo k neočekávané chybě serveru. Chyba byla automaticky nahlášena vývojářům."
     if "402" in err_str or "egress" in err_str.lower() or "payment required" in err_str.lower():
-        msg = "Chyba databáze (překročen datový limit). Provoz běží v nouzovém režimu ze zálohy."
+        summary = "Byl překročen datový limit databáze. Provoz nyní běží v nouzovém režimu ze zálohy."
         try:
             global EGRESS_SAVE_MODE
             EGRESS_SAVE_MODE = True
-            send_log("🚨 Nouzový stav: Supabase 402 Detekováno!", "Byl detekován kód 402 / vyčerpaný limit Supabase. Systém automaticky aktivoval nouzový štít a přepnul provoz na lokální zálohy.", 0xef4444, pings=["👑| Project Owner", "-Executive Board-"])
+            send_log("🚨 Nouzový stav: Supabase 402 Detekováno!", "Byl detekován kód 402 / vyčerpaný limit Supabase.", 0xef4444, channel_name="📲・error-app", pings=["👑| Project Owner", "-Executive Board-"])
         except Exception:
             pass
-        
-    return f"<div style='background:#0f172a; color:#ef4444; padding:40px; font-family:sans-serif; text-align:center;'><h2>{msg}</h2><p>Chyba byla automaticky nahlášena vývojářům na Discord.</p><a href='/' style='background:#334155;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;'>Zpět na úvodní stránku</a></div>", 500
+
+    return render_error_page(500, "Vyskytla se chyba", summary, "fa-circle-exclamation"), 500
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -4192,8 +4370,14 @@ def stranka_ucet():
         n_id = r.get("id")
         label = r.get("label") or f"Bus {r.get('identifier')}"
         typ_badge = '<span style="background:rgba(124,58,237,0.25);color:#c4b5fd;border:1px solid #7c3aed;padding:2px 7px;border-radius:4px;font-weight:bold;font-size:11px;">⚡ Jednorázové</span>' if is_once else '<span style="background:rgba(2,132,199,0.25);color:#38bdf8;border:1px solid #0284c7;padding:2px 7px;border-radius:4px;font-weight:bold;font-size:11px;">🔁 Opakující se</span>'
-        cnt = r.get("fired_count") or 0
         triggers = r.get("triggers", {})
+        if isinstance(triggers, str):
+            try:
+                triggers = json.loads(triggers)
+            except Exception:
+                triggers = {}
+        if not isinstance(triggers, dict):
+            triggers = {}
         t_texts = []
         if triggers.get("terminal"): t_texts.append("Konečná")
         if triggers.get("new_line"): t_texts.append("Změna linky")
@@ -6157,21 +6341,47 @@ async def on_ready():
     start_msg = f"**BUILD:** {commit_msg}\nBot byl úspěšně restartován a běží."
     send_log("🔄 Systém Online", start_msg, 0x10b981)
     
-    # DM Notifikace uživatelům se zapnutým !aktulizace
+    # DM Notifikace uživatelům se zapnutým !aktualizace / !aktulizace
     async def send_startup_dms():
         try:
             db = get_db()
             if db:
-                res = db.table("bot_settings").select("discord_id").eq("dm_updates", "true").execute()
+                try:
+                    if hasattr(db, "execute_raw"):
+                        db.execute_raw("CREATE TABLE IF NOT EXISTS bot_settings (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE, dm_updates BOOLEAN DEFAULT 0, updated_at TEXT);")
+                except Exception:
+                    pass
+                # Načteme všechny záznamy z bot_settings a zkontrolujeme dm_updates flexibilně
+                res = db.table("bot_settings").select("discord_id, dm_updates").execute()
+                notified_count = 0
                 for row in (res.data or []):
-                    try:
-                        uid = int(row["discord_id"])
-                        user = bot.get_user(uid) or await bot.fetch_user(uid)
-                        if user:
-                            now = get_prague_time().strftime("%H:%M")
-                            await user.send(f"🔄 **Systém Online**\n\n**BUILD:** {commit_msg}\nBot byl úspěšně restartován a běží.\nDnes v {now}")
-                    except Exception: pass
-        except Exception as e: print(f"Chyba pri posilani DM start zpráv: {e}", flush=True)
+                    dm_flag = row.get("dm_updates")
+                    # Přijímáme boolean True, integer 1 i textové reprezentace
+                    if dm_flag in (True, 1, "1", "true", "True", "t"):
+                        raw_id = row.get("discord_id")
+                        if not raw_id:
+                            continue
+                        try:
+                            uid = int(raw_id)
+                            user = bot.get_user(uid) or await bot.fetch_user(uid)
+                            if user:
+                                now = get_prague_time().strftime("%H:%M")
+                                embed = discord.Embed(
+                                    title="🔄 Systém Online – Nový Build",
+                                    description=f"**BUILD:** `{commit_msg}`\n\nBot byl úspěšně restartován a běží.\nČas startu: **{now}**",
+                                    color=0x10b981
+                                )
+                                embed.set_footer(text="DataCoreBot • Automatická build notifikace")
+                                await user.send(embed=embed)
+                                notified_count += 1
+                                print(f"[STARTUP DM] Zpráva o novém buildu úspěšně odeslána uživateli {user} (ID: {uid})", flush=True)
+                        except discord.Forbidden:
+                            print(f"[STARTUP DM] Uživatel {raw_id} má zablokované přímé zprávy (DM) od bota.", flush=True)
+                        except Exception as e_user:
+                            print(f"[STARTUP DM] Selhalo odeslání pro ID {raw_id}: {e_user}", flush=True)
+                print(f"[STARTUP DM] Celkem rozesláno {notified_count} DM notifikací o novém buildu.", flush=True)
+        except Exception as e:
+            print(f"[STARTUP DM CHYBA] Chyba při posílání DM start zpráv: {e}", flush=True)
         
     bot.loop.create_task(send_startup_dms())
     try: bot.add_view(DynamicDownloadView())
@@ -6332,6 +6542,13 @@ async def notify_list(ctx, target_user: str = None):
         active_str = "Aktivní" if n.get("is_active") else "Neaktivní"
         
         t_dict = n.get("triggers") or {}
+        if isinstance(t_dict, str):
+            try:
+                t_dict = json.loads(t_dict)
+            except Exception:
+                t_dict = {}
+        if not isinstance(t_dict, dict):
+            t_dict = {}
         t_list = []
         if t_dict.get("terminal"): t_list.append("Konečná")
         if t_dict.get("new_line"): t_list.append("Nová linka")
@@ -6344,7 +6561,8 @@ async def notify_list(ctx, target_user: str = None):
         if t_dict.get("delay_change"): t_list.append("Změna zpoždění")
         t_str = ", ".join(t_list) or "Žádné"
         
-        embed.add_field(name=f"ID: {n['id'][:8]} | {lbl}", value=f"Typ: {n['identifier_type']} - Cíl: {n['identifier']} | Stav: {active_str}\nUdálosti: {t_str}", inline=False)
+        rule_short_id = str(n.get('id', ''))[:8]
+        embed.add_field(name=f"ID: {rule_short_id} | {lbl}", value=f"Typ: {n.get('identifier_type')} - Cíl: {n.get('identifier')} | Stav: {active_str}\nUdálosti: {t_str}", inline=False)
         
     await ctx.send(embed=embed)
 
@@ -6951,32 +7169,70 @@ async def cmd_website_block_mapa(ctx):
     except Exception as e:
         await ctx.send(f"❌ Chyba: `{e}`")
 
-@bot.command()
+@bot.command(name="aktualizace", aliases=["aktulizace", "buildnotif", "buildnotify"])
 async def aktulizace(ctx):
     db = get_db()
-    if not db: return
-    user_data = db.table("users").select("role").eq("discord_id", str(ctx.author.id)).execute().data
-    if not user_data or user_data[0].get("role") not in ["SA", "DEV"]:
-        return
+    if not db:
+        return await ctx.send("❌ Databáze není dostupná.", delete_after=10)
+    
+    # Ověření práv: SA, DEV, Superadmin, administrátor serveru nebo vlastník
+    is_allowed = False
+    if str(ctx.author.id) in ["719896287301992449"]:
+        is_allowed = True
+    elif ctx.author.guild_permissions.administrator:
+        is_allowed = True
+    else:
+        user_data = db.table("users").select("role").eq("discord_id", str(ctx.author.id)).execute().data
+        if user_data and user_data[0].get("role") in ["SA", "DEV", "Superadmin", "Admin"]:
+            is_allowed = True
+            
+    if not is_allowed:
+        return await ctx.send(f"❌ {ctx.author.mention} K tomuto příkazu nemáš oprávnění (vyžadována role SA/DEV).", delete_after=10)
+        
+    try:
+        if hasattr(db, "execute_raw"):
+            db.execute_raw("CREATE TABLE IF NOT EXISTS bot_settings (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE, dm_updates BOOLEAN DEFAULT 0, updated_at TEXT);")
+    except Exception:
+        pass
         
     res = db.table("bot_settings").select("dm_updates").eq("discord_id", str(ctx.author.id)).execute()
     current_state = False
     if res.data:
-        current_state = res.data[0].get("dm_updates", False)
+        val = res.data[0].get("dm_updates")
+        current_state = bool(val in (True, 1, "1", "true", "True", "t"))
         
     new_state = not current_state
-    db.table("bot_settings").upsert({"discord_id": str(ctx.author.id), "dm_updates": new_state}).execute()
+    now_ts = get_prague_time().isoformat()
+    db.table("bot_settings").upsert({
+        "discord_id": str(ctx.author.id),
+        "dm_updates": new_state,
+        "updated_at": now_ts
+    }).execute()
     
     if new_state:
-        msg = await ctx.send("🔔 DM upozornění na aktualizace a restarty: **ZAPNUTO**")
+        msg = await ctx.send(f"🔔 {ctx.author.mention} DM upozornění na nový build a restarty: **ZAPNUTO** ✅")
+        # Zkušební zpráva do DM pro okamžité ověření otevřených DM
+        try:
+            embed = discord.Embed(
+                title="🔔 DM Notifikace aktivovány",
+                description="Úspěšně jsi aktivoval upozornění na nové buildy a restarty bota.\nPři každém restartu / nasazení nového buildu ti sem automaticky přijde zpráva s popisem commitu.",
+                color=0x38bdf8
+            )
+            embed.set_footer(text="Pro vypnutí stačí v chatu znovu napsat !aktualizace")
+            await ctx.author.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send(f"⚠️ {ctx.author.mention} Máš zablokované přímé zprávy (DM) od členů serveru! Povol si příjem zpráv od bota.", delete_after=15)
+        except Exception:
+            pass
     else:
-        msg = await ctx.send("🔕 DM upozornění na aktualizace a restarty: **VYPNUTO**")
+        msg = await ctx.send(f"🔕 {ctx.author.mention} DM upozornění na nový build a restarty: **VYPNUTO** ❌")
         
-    await asyncio.sleep(3)
+    await asyncio.sleep(4)
     try:
         await msg.delete()
         await ctx.message.delete()
-    except: pass
+    except Exception:
+        pass
 
 
 @bot.command(name="data")

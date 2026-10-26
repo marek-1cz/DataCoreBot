@@ -4514,9 +4514,14 @@ async function fetchBuses(){
       let orangeW='';
       if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>🔍 Vyzkum - bus byl zasekly, nyni jede</b></div>`;
       let depotW='';
+      let dName = 'Vozovna';
       function hexToRgb(hex){let r=0,g=0,b=0;if(!hex)return '250,204,21';if(hex.length==4){r="0x"+hex[1]+hex[1];g="0x"+hex[2]+hex[2];b="0x"+hex[3]+hex[3];}else if(hex.length==7){r="0x"+hex[1]+hex[2];g="0x"+hex[3]+hex[4];b="0x"+hex[5]+hex[6];}return +r+","+ +g+","+ +b;}
       if(inDepot){
-        let dName = bus.depot_name || (bus.status && bus.status.includes(':') ? bus.status.split(':')[1].trim() : '') || 'Vozovna';
+        dName = bus.depot_name || (bus.status && bus.status.includes(':') ? bus.status.split(':')[1].trim() : '') || 'Vozovna';
+        if(dName.startsWith('#')){
+          let found = (window.depotZones || []).find(z => (z.color || '').toLowerCase() === dName.toLowerCase());
+          dName = found ? found.name : 'Vozovna';
+        }
         let dCol = bus.depot_color || '#facc15';
         depotW=`<div style="background:rgba(${hexToRgb(dCol)},0.15);border:1.5px solid ${dCol};border-radius:6px;padding:8px;margin:5px 0;font-size:11px;text-align:center;box-shadow:0 0 10px rgba(250,204,21,0.25);"><b style="color:${dCol};font-size:12px;letter-spacing:0.5px;">🅿️ VOZOVNA: ${dName}</b><br><span style="color:#cbd5e1;font-size:10px;">Autobus parkuje v areálu vozovny.</span></div>`;
       }
@@ -4615,7 +4620,7 @@ async function fetchBuses(){
         headerColor = 'color:#fbcfe8;';
       }
 
-      let displayStatus = inDepot ? (bus.status && bus.status.includes('Vozovna') ? bus.status : `Vozovna: ${bus.depot_name || 'Vozovna'}`) : bus.status;
+      let displayStatus = inDepot ? (bus.status && bus.status.includes('Vozovna') && !bus.status.includes('#') ? bus.status : `Vozovna: ${dName}`) : bus.status;
 
       let popH=`
         <div class="ph" style="${headerBg}">
@@ -7041,6 +7046,19 @@ def _check_depot_zones(lat, lng):
         if _point_in_polygon(f_lat, f_lng, zone["polygon"]):
             return zone["name"], zone.get("color", "#facc15")
     return None, None
+
+
+def resolve_depot_name(val):
+    """Vrací čitelný název vozovny. Pokud je předán hex kód barvy, namapuje ho na název z DEPOT_ZONES."""
+    if not val:
+        return ""
+    val_str = str(val).strip()
+    if val_str.startswith("#"):
+        for z in DEPOT_ZONES:
+            if str(z.get("color", "")).strip().lower() == val_str.lower():
+                return z.get("name", "Vozovna")
+        return "Vozovna"
+    return val_str
 
 
 def _process_depot_tracking(bus_id, c, now):
@@ -10073,11 +10091,20 @@ def _check_and_fire_notifications(db_client, bus_cache):
     now = datetime.now(ZoneInfo("Europe/Prague")).replace(tzinfo=None)
 
     for rule in rules:
-        rule_id = str(rule["id"])
+        rule_id = str(rule.get("id"))
         identifier = rule.get("identifier", "")
         id_type = rule.get("identifier_type", "spz")
+        
         triggers = rule.get("triggers") or {}
-        user_session = rule.get("user_session")
+        if isinstance(triggers, str):
+            try:
+                triggers = json.loads(triggers)
+            except Exception:
+                triggers = {}
+        if not isinstance(triggers, dict):
+            triggers = {}
+            
+        user_session = str(rule.get("user_session") or "").strip()
 
         if not identifier or not user_session:
             continue
@@ -10096,19 +10123,20 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 if not is_restricted and db_client:
                     try:
                         uid = int(user_session) if str(user_session).isdigit() else user_session
-                        u_res = db_client.table("users").select("discord_id, email").eq("id", uid).execute()
+                        u_res = db_client.table("users").select("id, nick, discord_id, email").eq("id", uid).execute()
                         if u_res.data:
                             u_data = u_res.data[0]
                     except Exception as e_u1:
                         check_supabase_error(e_u1)
                     if not u_data:
                         try:
+                            from session_manager import find_user_by_session_token
                             u_data = find_user_by_session_token(db_client, user_session)
                         except Exception as e_u2:
                             check_supabase_error(e_u2)
                     if not u_data:
                         try:
-                            u_res = db_client.table("users").select("discord_id, email").eq("discord_id", user_session).execute()
+                            u_res = db_client.table("users").select("id, nick, discord_id, email").eq("discord_id", user_session).execute()
                             if u_res.data:
                                 u_data = u_res.data[0]
                         except Exception as e_u3:
@@ -10119,6 +10147,14 @@ def _check_and_fire_notifications(db_client, bus_cache):
         email = u_info.get("email")
 
         deliv_channels = rule.get("delivery_channels") or []
+        if isinstance(deliv_channels, str):
+            try:
+                deliv_channels = json.loads(deliv_channels)
+            except Exception:
+                deliv_channels = [deliv_channels]
+        if not isinstance(deliv_channels, list):
+            deliv_channels = [str(deliv_channels)]
+
         if "discord" not in deliv_channels:
             discord_id = None
         if "email" not in deliv_channels:
