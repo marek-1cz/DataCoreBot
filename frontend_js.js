@@ -1183,30 +1183,37 @@ async function loadNotifRules() {
     let list = document.getElementById('notif-rules-list');
     if (!list) return;
     if (!d.rules || !d.rules.length) {
-      list.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:10px;">Nemáte žádná aktivní pravidla.</div>';
+      list.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:15px;background:rgba(0,0,0,0.2);border-radius:8px;">Nemáte žádná aktivní pravidla ani jednorázová upozornění.</div>';
       return;
     }
     list.innerHTML = '';
-    d.rules.forEach(rule => {
-      let row = document.createElement('div');
-      row.style.cssText = 'background:#1e293b;border:1px solid #334155;border-radius:8px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:4px;';
-      let fired = rule.fired_count || 0;
+
+    const parseTriggers = (rule) => {
       let t_list = [];
       let t = rule.triggers || {};
-      if(t.terminal) t_list.push("Konečná");
-      if(t.new_line) t_list.push("Nová linka");
-      if(t.depot_in) t_list.push("Do vozovny");
-      if(t.depot_out) t_list.push("Z vozovny");
-      if(t.started_moving) t_list.push("Rozjezd");
-      if(t.stop_near) t_list.push("Zastávka");
-      if(t.delay_threshold) t_list.push("Zpoždění > " + t.delay_threshold + " min");
-      if(t.delay_change) t_list.push("Změna zpoždění");
-      let t_str = t_list.join(", ") || "Událost";
+      if (typeof t === 'string') {
+        try { t = JSON.parse(t); } catch(e) { t = {}; }
+      }
+      if (t.terminal) t_list.push("Konečná");
+      if (t.new_line) t_list.push("Nová linka");
+      if (t.depot_in) t_list.push("Do vozovny");
+      if (t.depot_out) t_list.push("Z vozovny");
+      if (t.started_moving) t_list.push("Rozjezd");
+      if (t.stop_near) t_list.push("Zastávka: " + t.stop_near);
+      if (t.delay_threshold) t_list.push("Zpoždění > " + t.delay_threshold + " min");
+      if (t.delay_change) t_list.push("Změna zpoždění");
+      return t_list.join(", ") || "Událost";
+    };
 
-      let typeBadge = rule.is_one_time 
-        ? '<span style="background:rgba(124,58,237,0.25);color:#c4b5fd;border:1px solid #7c3aed;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:bold;">⚡ Jednorázové</span>'
-        : '<span style="background:rgba(2,132,199,0.25);color:#38bdf8;border:1px solid #0284c7;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:bold;">🔁 Opakující se</span>';
+    const renderCard = (rule, isOnce) => {
+      let fired = rule.fired_count || 0;
+      let t_str = parseTriggers(rule);
+      let typeBadge = isOnce 
+        ? '<span style="background:rgba(124,58,237,0.25);color:#c4b5fd;border:1px solid #7c3aed;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">⚡ Jednorázové</span>'
+        : '<span style="background:rgba(2,132,199,0.25);color:#38bdf8;border:1px solid #0284c7;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">🔁 Opakující se</span>';
 
+      let row = document.createElement('div');
+      row.style.cssText = 'background:#1e293b;border:1px solid #334155;border-radius:8px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:6px;';
       row.innerHTML = `<div style="display:flex;flex-direction:column;gap:3px;">
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="color:#e2e8f0;font-weight:bold;">${rule.label || rule.identifier}</span>
@@ -1214,9 +1221,37 @@ async function loadNotifRules() {
         </div>
         <span style="color:#94a3b8;font-size:11px;">Akce: ${t_str} &bull; Odesláno: ${fired}x</span>
       </div>
-      <button onclick="deleteNotifRule('${rule.id}')" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid #ef4444;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;" title="Smazat pravidlo">✕</button>`;
-      list.appendChild(row);
-    });
+      <button onclick="deleteNotifRule('${rule.id}')" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid #ef4444;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;margin-left:8px;" title="Smazat">✕</button>`;
+      return row;
+    };
+
+    let repeatRules = d.rules.filter(r => !r.is_one_time);
+    let onceRules = d.rules.filter(r => !!r.is_one_time);
+
+    // 1. Opakující se pravidla
+    if (repeatRules.length > 0) {
+      let hdr = document.createElement('div');
+      hdr.style.cssText = 'color:#38bdf8;font-size:11px;font-weight:bold;margin:6px 0 4px 0;display:flex;align-items:center;gap:4px;';
+      hdr.innerHTML = `🔁 Moje pravidla (${repeatRules.length})`;
+      list.appendChild(hdr);
+      repeatRules.forEach(r => list.appendChild(renderCard(r, false)));
+    }
+
+    // 2. Aktuální jednorázová upozornění
+    if (onceRules.length > 0) {
+      let hdr = document.createElement('div');
+      hdr.style.cssText = 'color:#a78bfa;font-size:11px;font-weight:bold;margin:10px 0 4px 0;display:flex;align-items:center;gap:4px;';
+      hdr.innerHTML = `⚡ Aktuální jednorázové notifikace (${onceRules.length})`;
+      list.appendChild(hdr);
+      onceRules.forEach(r => list.appendChild(renderCard(r, true)));
+    }
+
+    // Odkaz na /ucet pro historii starých notifikací
+    let note = document.createElement('div');
+    note.style.cssText = 'text-align:center;margin-top:12px;padding-top:10px;border-top:1px solid #334155;font-size:11px;color:#94a3b8;';
+    note.innerHTML = `📜 Historii všech doručených notifikací najdete ve svém <a href="/ucet" style="color:#38bdf8;text-decoration:underline;font-weight:bold;">Nastavení účtu (/ucet)</a>`;
+    list.appendChild(note);
+
   } catch(e) {}
 }
 

@@ -8,7 +8,7 @@ from datetime import datetime
 import time
 import discord
 from discord.ext import commands, tasks
-from flask import Flask, render_template_string, request, redirect, url_for, session, flash, Response, stream_with_context, jsonify
+from flask import Flask, render_template_string, request, redirect, url_for, session, flash, Response, stream_with_context, jsonify, make_response
 from functools import wraps
 import threading
 from threading import Thread
@@ -1337,8 +1337,11 @@ async def async_send_log(title, description, color=0x38bdf8, channel_name="🖥�
             break
 
 def send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacore-logs", pings=None):
-    if bot.loop and bot.loop.is_running() and bot.is_ready():
-        asyncio.run_coroutine_threadsafe(async_send_log(title, description, color, channel_name, pings), bot.loop)
+    try:
+        if bot.is_ready() and bot.loop and bot.loop.is_running():
+            asyncio.run_coroutine_threadsafe(async_send_log(title, description, color, channel_name, pings), bot.loop)
+    except Exception:
+        pass
 
 
 def get_current_admin_name():
@@ -3074,13 +3077,24 @@ def api_submit_feedback():
         nick = str(data.get("nick", "Neznámý Uživatel")).strip()
         type_str = str(data.get("type", "GENERAL")).strip()
         msg = str(data.get("message", "")).strip()
+        contact = str(data.get("contact", "")).strip()
         if not d_id or d_id.lower() in ["není zadáno", "none", "null", ""]:
-            if not re.search(r'\d{17,}', msg):
-                return _cors_jsonify({"status": "error", "message": "⚠️ OCHRANA: Napište prosím své číselné DISCORD ID přímo do textu žádosti!"})
-            else: d_id = "Napsáno v textu"
+            if contact:
+                d_id = contact
+            elif not re.search(r'\d{17,}', msg):
+                if type_str in ["HWID", "ADMIN_BYPASS"]:
+                    return _cors_jsonify({"status": "error", "message": "⚠️ OCHRANA: Napište prosím své číselné DISCORD ID přímo do textu žádosti!"})
+                else:
+                    d_id = "Webový formulář"
+            else:
+                d_id = "Napsáno v textu"
+        elif contact and contact != d_id and contact not in msg:
+            msg = f"{msg}\n\n[Kontakt: {contact}]"
         db.table("feedback").insert({"discord_id": d_id, "nick": nick, "type": type_str, "message": msg, "status": "pending", "sys_note": "", "fcreated_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
         if type_str == "HWID": log_title = "🚨 VYŽADUJE KONTROLU: Žádost o HWID a IP 🚨"; log_color = 0xef4444
         elif type_str == "ADMIN_BYPASS": log_title = "🔓 VYŽADUJE SCHVÁLENÍ: Admin Bypass 🔓"; log_color = 0xf59e0b
+        elif type_str in ["BUG", "CHYBA"]: log_title = "🐛 HLÁŠENÍ CHYBY Z WEBU"; log_color = 0xef4444
+        elif type_str in ["NOTIF", "QUESTION"]: log_title = "❓ DOTAZ / PODPORA Z WEBU"; log_color = 0x38bdf8
         else: log_title = "🔔 NOVÁ ZPĚTNÁ VAZBA"; log_color = 0xa855f7
         send_log(log_title, f"**Od:** {nick} (`{d_id}`)\n**Zpráva:**\n*{msg}*", log_color)
         return _cors_jsonify({"status": "success"})
@@ -4206,263 +4220,379 @@ def logout():
 
 @app.route('/ucet')
 def stranka_ucet():
-    cookie_token = request.cookies.get('web_session_token')
-    db = get_db()
-    if not cookie_token or not db:
-        return redirect('/register')
-    u = get_cached_session_user(cookie_token)
-    if not u:
-        resp = redirect('/register')
-        resp.delete_cookie('web_session_token')
-        return resp
-        
-    nick = u.get('nick') or ""
-    avatar_url = u.get('avatar_url') or ""
-    
-    if avatar_url:
-        avatar_img_html = f'<img src="{avatar_url}">'
-    else:
-        avatar_img_html = '<i class="fas fa-user-circle" style="color:#94a3b8;"></i>'
-        
-    has_discord = bool(u.get('discord_id') and u.get('discord_id') != "čeká na odpověd")
-    has_email = bool(u.get('email'))
-    
-    discord_status = '<div class="link-status status-yes"><i class="fas fa-check-circle"></i> Připojeno</div>' if has_discord else '<div class="link-status status-no"><i class="fas fa-times-circle"></i> Nepřipojeno</div>'
-    discord_btn = '' if has_discord else '<button class="btn-link btn-link-discord" onclick="reqDiscord()"><i class="fab fa-discord"></i> Propojit</button>'
-    
-    email_status = '<div class="link-status status-yes"><i class="fas fa-check-circle"></i> Připojeno</div>' if has_email else '<div class="link-status status-no"><i class="fas fa-times-circle"></i> Nepřipojeno</div>'
-    email_btn = '' if has_email else f'<button class="btn-link btn-link-email" onclick="reqEmail()"><i class="fas fa-envelope"></i> Propojit</button>'
-    
-    # Hack pro pouziti stavajicich js funkci v html_templates
-    link_scripts = """
-    <script>
-    let checkInterval = null;
-    function showStatus(text, desc, isError) {
-        alert(text + " - " + desc);
-    }
-    function startPolling(discord_id) {
-        if(checkInterval) clearInterval(checkInterval);
-        checkInterval = setInterval(() => {
-            fetch('/api/auth/status?discord_id=' + discord_id)
-            .then(r=>r.json()).then(data => {
-                if(data.status === 'approved' && data.linked) {
-                    clearInterval(checkInterval);
-                    alert('Discord úspěšně propojen!');
-                    location.reload();
-                } else if(data.status === 'rejected') {
-                    clearInterval(checkInterval);
-                    alert('Propojení zamítnuto v Discordu.');
-                }
-            });
-        }, 2000);
-    }
-    function reqDiscord() {
-        const d_id = prompt('Zadejte vaše Discord ID pro propojení:');
-        if(!d_id) return;
-        fetch('/api/auth/discord/request', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({discord_id: d_id})
-        }).then(r=>r.json()).then(data => {
-            if(data.status === 'success') {
-                alert('Byla vám zaslána zpráva na Discord pro potvrzení propojení. Přijměte ji a okno se automaticky obnoví.');
-                startPolling(d_id);
-            } else alert('Chyba: ' + data.message);
-        });
-    }
-    function reqEmail() {
-        const e = prompt('Zadejte váš E-mail pro propojení:');
-        if(!e || !e.includes('@')) return;
-        fetch('/api/auth/email/request', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({email: e, intent: 'link'})
-        }).then(r=>r.json()).then(data => {
-            if(data.status === 'success') {
-                const code = prompt('Odeslán e-mail s odkazem k propojení. Zadejte 5místný kód z e-mailu:');
-                if(code && code.trim().length === 5) {
-                    window.location.href = `/api/auth/finalize?token=${code.trim()}&type=email&intent=link`;
-                } else if(code) {
-                    alert('Neplatný kód.');
-                }
-            }
-            else alert('Chyba: ' + data.message);
-        });
-    }
-    </script>
-    """
-    
-    app_id = u.get('app_id')
-    if app_id:
-        app_id_badge = f'<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.4);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:bold;color:#38bdf8;margin-top:5px;"><i class="fas fa-id-badge"></i> App ID #{app_id}</div>'
-    else:
-        app_id_badge = '<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(100,116,139,0.1);border:1px solid #334155;border-radius:20px;padding:4px 12px;font-size:12px;color:#64748b;margin-top:5px;"><i class="fas fa-clock"></i> App ID přidělováno...</div>'
-
     try:
-        fresh_u = db.table("users").select("*").eq("id", u["id"]).execute().data
-        if fresh_u:
-            u = fresh_u[0]
-            _SESSION_CACHE[cookie_token] = (time.time(), u)
-    except Exception:
-        pass
+        db = get_db()
+        cookie_token = request.cookies.get('web_session_token')
+        admin_token = request.cookies.get('admin_session_token')
+        u = None
+        set_new_cookie = False
 
-    from session_manager import get_user_sessions
-    user_sessions = get_user_sessions(u)
-    sessions_count = len(user_sessions)
-    
-    sessions_html = ""
-    for s in user_sessions:
-        s_id = s.get("id", "")
-        s_token = s.get("token", "")
-        is_curr = (s_token == cookie_token)
-        dev_name = s.get("device", "Neznámé zařízení")
-        icon = s.get("icon", "fa-desktop")
-        ip = s.get("ip", "Neznámá")
-        created_at = s.get("created_at", "Neznámé")
-        last_active = s.get("last_active", "Neznámé")
-        
-        curr_badge = '<span style="background:rgba(16,185,129,0.2); border:1px solid #10b981; color:#10b981; font-size:10px; padding:2px 8px; border-radius:12px; font-weight:bold; letter-spacing:0.5px;">TOTO ZAŘÍZENÍ</span>' if is_curr else ''
-        
-        sessions_html += f"""
-        <div id="session-card-{s_id}" class="session-card" data-is-current="{str(is_curr).lower()}" style="background: rgba(0,0,0,0.35); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center; transition: all 0.3s ease;">
-          <div style="display:flex; align-items:center; gap:12px;">
-            <div style="width:42px; height:42px; border-radius:10px; background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); display:flex; align-items:center; justify-content:center; color:#38bdf8; font-size:18px; flex-shrink:0;">
-              <i class="fas {icon}"></i>
-            </div>
-            <div>
-              <div style="color:white; font-size:14px; font-weight:bold; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                {dev_name} {curr_badge}
-              </div>
-              <div style="color:#94a3b8; font-size:12px; margin-top:2px;">
-                Naposledy aktivní: <span style="color:#38bdf8; font-weight:600;">{last_active}</span>
-              </div>
-              <div style="color:#64748b; font-size:11px; margin-top:1px;">
-                Přihlášeno: {created_at} &bull; IP: {ip}
-              </div>
-            </div>
-          </div>
-          <div>
-            <button onclick="deleteSession('{s_id}', {str(is_curr).lower()})" style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.35); color:#ef4444; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold; transition:0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.15)'; this.style.color='#ef4444';" title="Odhlásit toto zařízení">
-              <i class="fas fa-trash-alt"></i> Smazat
-            </button>
-          </div>
-        </div>
-        """
-    if not sessions_html:
-        sessions_html = '<div style="color:#64748b; font-size:13px; text-align:center; padding:15px; background:rgba(0,0,0,0.2); border-radius:8px;">Žádná aktivní přihlášená zařízení.</div>'
+        if cookie_token:
+            u = get_cached_session_user(cookie_token)
+            if not u and db:
+                try:
+                    from session_manager import find_user_by_session_token
+                    u = find_user_by_session_token(db, cookie_token)
+                except Exception:
+                    pass
 
-    try:
-        notif_res = db.table("bus_notifications").select("*").eq("user_session", str(u["id"])).execute().data or []
-    except Exception:
-        notif_res = []
-        
-    notif_html = ""
-    once_rules = [r for r in notif_res if r.get("is_one_time")]
-    repeat_rules = [r for r in notif_res if not r.get("is_one_time")]
+        if not u and admin_token:
+            u = get_cached_session_user(admin_token)
+            if not u and db:
+                try:
+                    from session_manager import find_user_by_session_token
+                    u = find_user_by_session_token(db, admin_token)
+                except Exception:
+                    pass
+            if not u and db:
+                try:
+                    u_data = db.table("users").select("*").eq("web_session_token", admin_token).execute().data
+                    if u_data:
+                        u = u_data[0]
+                except Exception:
+                    pass
+            if u:
+                set_new_cookie = True
+                cookie_token = admin_token
 
-    try:
-        from local_db import local_notif_get_history
-        u_history = local_notif_get_history(user_session=str(u["id"]), limit=15)
-    except Exception:
-        u_history = []
-
-    def _render_rule_card(r, is_once):
-        n_id = r.get("id")
-        label = r.get("label") or f"Bus {r.get('identifier')}"
-        typ_badge = '<span style="background:rgba(124,58,237,0.25);color:#c4b5fd;border:1px solid #7c3aed;padding:2px 7px;border-radius:4px;font-weight:bold;font-size:11px;">⚡ Jednorázové</span>' if is_once else '<span style="background:rgba(2,132,199,0.25);color:#38bdf8;border:1px solid #0284c7;padding:2px 7px;border-radius:4px;font-weight:bold;font-size:11px;">🔁 Opakující se</span>'
-        triggers = r.get("triggers", {})
-        if isinstance(triggers, str):
+        if not u and session.get('discord_id') and db:
             try:
-                triggers = json.loads(triggers)
+                u_data = db.table("users").select("*").eq("discord_id", str(session.get('discord_id'))).execute().data
+                if u_data:
+                    u = u_data[0]
+                    set_new_cookie = True
             except Exception:
-                triggers = {}
-        if not isinstance(triggers, dict):
-            triggers = {}
-        t_texts = []
-        if triggers.get("terminal"): t_texts.append("Konečná")
-        if triggers.get("new_line"): t_texts.append("Změna linky")
-        if triggers.get("depot_in"):
-            dpt = triggers.get("depot_in")
-            t_texts.append(f"Do vozovny ({'Všechny' if dpt=='all' else dpt})")
-        if triggers.get("depot_out"): t_texts.append("Z vozovny")
-        if triggers.get("trip_change"): t_texts.append("Přepnutí spoje")
-        if triggers.get("started_moving"): t_texts.append("Rozjetí")
-        if triggers.get("stop_near"): t_texts.append(f"Zastávka: {triggers.get('stop_near')}")
-        if triggers.get("delay_threshold"): t_texts.append(f"Zpoždění > {triggers.get('delay_threshold')} min")
-        if triggers.get("delay_change"): t_texts.append("Skok zpoždění")
-        trig_str = ", ".join(t_texts) or "Událost"
-        return f"""
-        <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-              <span style="color:white; font-weight:bold; font-size:14px;">{label}</span>
-              {typ_badge}
-            </div>
-            <div style="color:#94a3b8; font-size:12px; margin-bottom:4px;">Události: {trig_str}</div>
-            <div style="color:#64748b; font-size:11px;">Odesláno: {cnt}x</div>
-          </div>
-          <button onclick="deleteNotificationRule('{n_id}')" style="background:transparent; border:none; color:#ef4444; font-size:18px; cursor:pointer; padding:10px;" title="Smazat upozornění"><i class="fas fa-trash"></i></button>
-        </div>
+                pass
+
+        if not u and session.get('logged_in') and session.get('nick') and db:
+            try:
+                u_data = db.table("users").select("*").eq("nick", str(session.get('nick'))).execute().data
+                if u_data:
+                    u = u_data[0]
+                    set_new_cookie = True
+            except Exception:
+                pass
+
+        if not u:
+            tok_check = cookie_token or admin_token
+            if tok_check:
+                for bu in _get_fallback_users():
+                    if bu.get("web_session_token") == tok_check or str(bu.get("id")) == tok_check:
+                        u = bu
+                        break
+
+        if not u:
+            resp = redirect('/register')
+            if cookie_token:
+                resp.delete_cookie('web_session_token')
+            return resp
+
+        # Pokud jsme našli uživatele, ale neměl v prohlížeči web_session_token cookie, vytvoříme relaci
+        if not cookie_token or set_new_cookie:
+            try:
+                import uuid
+                new_tok = str(uuid.uuid4())
+                from session_manager import add_user_session
+                add_user_session(db, u, new_tok, request)
+                cookie_token = new_tok
+                set_new_cookie = True
+            except Exception:
+                if not cookie_token:
+                    cookie_token = str(u.get("web_session_token") or u.get("id"))
+
+        nick = u.get('nick') or ""
+        avatar_url = u.get('avatar_url') or ""
+        
+        if avatar_url:
+            avatar_img_html = f'<img src="{avatar_url}">'
+        else:
+            avatar_img_html = '<i class="fas fa-user-circle" style="color:#94a3b8;"></i>'
+            
+        has_discord = bool(u.get('discord_id') and u.get('discord_id') != "čeká na odpověd")
+        has_email = bool(u.get('email'))
+        
+        discord_status = '<div class="link-status status-yes"><i class="fas fa-check-circle"></i> Připojeno</div>' if has_discord else '<div class="link-status status-no"><i class="fas fa-times-circle"></i> Nepřipojeno</div>'
+        discord_btn = '' if has_discord else '<button class="btn-link btn-link-discord" onclick="reqDiscord()"><i class="fab fa-discord"></i> Propojit</button>'
+        
+        email_status = '<div class="link-status status-yes"><i class="fas fa-check-circle"></i> Připojeno</div>' if has_email else '<div class="link-status status-no"><i class="fas fa-times-circle"></i> Nepřipojeno</div>'
+        email_btn = '' if has_email else f'<button class="btn-link btn-link-email" onclick="reqEmail()"><i class="fas fa-envelope"></i> Propojit</button>'
+        
+        # Hack pro pouziti stavajicich js funkci v html_templates
+        link_scripts = """
+        <script>
+        let checkInterval = null;
+        function showStatus(text, desc, isError) {
+            alert(text + " - " + desc);
+        }
+        function startPolling(discord_id) {
+            if(checkInterval) clearInterval(checkInterval);
+            checkInterval = setInterval(() => {
+                fetch('/api/auth/status?discord_id=' + discord_id)
+                .then(r=>r.json()).then(data => {
+                    if(data.status === 'approved' && data.linked) {
+                        clearInterval(checkInterval);
+                        alert('Discord úspěšně propojen!');
+                        location.reload();
+                    } else if(data.status === 'rejected') {
+                        clearInterval(checkInterval);
+                        alert('Propojení zamítnuto v Discordu.');
+                    }
+                });
+            }, 2000);
+        }
+        function reqDiscord() {
+            const d_id = prompt('Zadejte vaše Discord ID pro propojení:');
+            if(!d_id) return;
+            fetch('/api/auth/discord/request', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({discord_id: d_id})
+            }).then(r=>r.json()).then(data => {
+                if(data.status === 'success') {
+                    alert('Byla vám zaslána zpráva na Discord pro potvrzení propojení. Přijměte ji a okno se automaticky obnoví.');
+                    startPolling(d_id);
+                } else alert('Chyba: ' + data.message);
+            });
+        }
+        function reqEmail() {
+            const e = prompt('Zadejte váš E-mail pro propojení:');
+            if(!e || !e.includes('@')) return;
+            fetch('/api/auth/email/request', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email: e, intent: 'link'})
+            }).then(r=>r.json()).then(data => {
+                if(data.status === 'success') {
+                    const code = prompt('Odeslán e-mail s odkazem k propojení. Zadejte 5místný kód z e-mailu:');
+                    if(code && code.trim().length === 5) {
+                        window.location.href = `/api/auth/finalize?token=${code.trim()}&type=email&intent=link`;
+                    } else if(code) {
+                        alert('Neplatný kód.');
+                    }
+                }
+                else alert('Chyba: ' + data.message);
+            });
+        }
+        </script>
         """
-
-    # 1. Opakující se pravidla
-    if repeat_rules:
-        notif_html += '<div style="color:#38bdf8;font-size:13px;font-weight:bold;margin:12px 0 6px 0;display:flex;align-items:center;gap:6px;">🔁 Opakující se pravidla (' + str(len(repeat_rules)) + ')</div>'
-        for r in repeat_rules:
-            notif_html += _render_rule_card(r, False)
-
-    # 2. Jednorázová upozornění
-    if once_rules:
-        notif_html += '<div style="color:#a78bfa;font-size:13px;font-weight:bold;margin:12px 0 6px 0;display:flex;align-items:center;gap:6px;">⚡ Jednorázová upozornění (' + str(len(once_rules)) + ')</div>'
-        for r in once_rules:
-            notif_html += _render_rule_card(r, True)
-
-    if not once_rules and not repeat_rules:
-        notif_html += '<div style="color:#64748b; font-size:13px; text-align:center; padding:15px; background:rgba(0,0,0,0.2); border-radius:8px;">Zatím nemáte žádná aktivní upozornění na spoje. Můžete si je nastavit přímo na mapě kliknutím na autobus.</div>'
-
-    # 3. Historie proběhlých notifikací
-    notif_html += '<div style="color:#e2e8f0;font-size:13px;font-weight:bold;margin:20px 0 8px 0;border-top:1px solid #334155;padding-top:14px;display:flex;align-items:center;gap:6px;">📜 Historie odeslaných notifikací</div>'
-    if u_history:
-        notif_html += '<div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;">'
-        for h in u_history:
-            notif_html += f"""
-            <div style="background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:6px;padding:8px 12px;font-size:11px;display:flex;justify-content:space-between;align-items:center;">
-              <div>
-                <div style="color:#e2e8f0;font-weight:600;">{h.get('message') or h.get('trigger')}</div>
-                <div style="color:#64748b;font-size:10px;">{h.get('fired_at', '')} &bull; Kanál: {h.get('channel', 'DM')}</div>
+        
+        app_id = u.get('app_id')
+        if app_id:
+            app_id_badge = f'<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.4);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:bold;color:#38bdf8;margin-top:5px;"><i class="fas fa-id-badge"></i> App ID #{app_id}</div>'
+        else:
+            app_id_badge = '<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(100,116,139,0.1);border:1px solid #334155;border-radius:20px;padding:4px 12px;font-size:12px;color:#64748b;margin-top:5px;"><i class="fas fa-clock"></i> App ID přidělováno...</div>'
+    
+        try:
+            fresh_u = db.table("users").select("*").eq("id", u["id"]).execute().data
+            if fresh_u:
+                u = fresh_u[0]
+                if cookie_token:
+                    _SESSION_CACHE[cookie_token] = (time.time(), u)
+        except Exception:
+            pass
+    
+        from session_manager import get_user_sessions
+        user_sessions = get_user_sessions(u)
+        sessions_count = len(user_sessions)
+        
+        sessions_html = ""
+        for s in user_sessions:
+            s_id = s.get("id", "")
+            s_token = s.get("token", "")
+            is_curr = (s_token == cookie_token)
+            dev_name = s.get("device", "Neznámé zařízení")
+            icon = s.get("icon", "fa-desktop")
+            ip = s.get("ip", "Neznámá")
+            created_at = s.get("created_at", "Neznámé")
+            last_active = s.get("last_active", "Neznámé")
+            
+            curr_badge = '<span style="background:rgba(16,185,129,0.2); border:1px solid #10b981; color:#10b981; font-size:10px; padding:2px 8px; border-radius:12px; font-weight:bold; letter-spacing:0.5px;">TOTO ZAŘÍZENÍ</span>' if is_curr else ''
+            
+            sessions_html += f"""
+            <div id="session-card-{s_id}" class="session-card" data-is-current="{str(is_curr).lower()}" style="background: rgba(0,0,0,0.35); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center; transition: all 0.3s ease;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:42px; height:42px; border-radius:10px; background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); display:flex; align-items:center; justify-content:center; color:#38bdf8; font-size:18px; flex-shrink:0;">
+                  <i class="fas {icon}"></i>
+                </div>
+                <div>
+                  <div style="color:white; font-size:14px; font-weight:bold; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    {dev_name} {curr_badge}
+                  </div>
+                  <div style="color:#94a3b8; font-size:12px; margin-top:2px;">
+                    Naposledy aktivní: <span style="color:#38bdf8; font-weight:600;">{last_active}</span>
+                  </div>
+                  <div style="color:#64748b; font-size:11px; margin-top:1px;">
+                    Přihlášeno: {created_at} &bull; IP: {ip}
+                  </div>
+                </div>
               </div>
-              <span style="background:rgba(16,185,129,0.15);color:#10b981;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">Odesláno</span>
+              <div>
+                <button onclick="deleteSession('{s_id}', {str(is_curr).lower()})" style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.35); color:#ef4444; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold; transition:0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.15)'; this.style.color='#ef4444';" title="Odhlásit toto zařízení">
+                  <i class="fas fa-trash-alt"></i> Smazat
+                </button>
+              </div>
             </div>
             """
-        notif_html += '</div>'
-    else:
-        notif_html += '<div style="color:#64748b; font-size:12px; text-align:center; padding:10px;">Zatím žádná zaznamenaná historie.</div>'
-
-    revoke_btn_display = "inline-flex" if sessions_count > 1 else "none"
-    html = HTML_UCET.replace('__AVATAR_IMG__', avatar_img_html)
-    html = html.replace('__NICK__', nick)
-    html = html.replace('__AVATAR_URL__', avatar_url)
-    html = html.replace('__DISCORD_STATUS__', discord_status)
-    html = html.replace('__DISCORD_BTN__', discord_btn)
-    html = html.replace('__EMAIL_STATUS__', email_status)
-    html = html.replace('__EMAIL_BTN__', email_btn)
-    html = html.replace('__APP_ID_BADGE__', app_id_badge)
-    html = html.replace('__SESSIONS_COUNT__', str(sessions_count))
-    html = html.replace('__REVOKE_BTN_DISPLAY__', revoke_btn_display)
-    html = html.replace('__SESSIONS_LIST__', sessions_html)
-    html = html.replace('__NOTIFICATIONS__', notif_html)
-    html += link_scripts
+        if not sessions_html:
+            sessions_html = '<div style="color:#64748b; font-size:13px; text-align:center; padding:15px; background:rgba(0,0,0,0.2); border-radius:8px;">Žádná aktivní přihlášená zařízení.</div>'
     
-    return render_public(html)
+        try:
+            u_id_str = str(u.get("id") or "")
+            d_id_str = str(u.get("discord_id") or "")
+            notifs_1 = []
+            if u_id_str:
+                notifs_1 = db.table("bus_notifications").select("*").eq("user_session", u_id_str).execute().data or []
+            notifs_2 = []
+            if d_id_str and d_id_str != u_id_str and d_id_str != "čeká na odpověd":
+                notifs_2 = db.table("bus_notifications").select("*").eq("user_session", d_id_str).execute().data or []
+            
+            seen_ids = set()
+            notif_res = []
+            for item in (notifs_1 + notifs_2):
+                if item.get("id") not in seen_ids:
+                    seen_ids.add(item.get("id"))
+                    notif_res.append(item)
+        except Exception:
+            notif_res = []
+            
+        notif_html = ""
+        once_rules = [r for r in notif_res if r.get("is_one_time")]
+        repeat_rules = [r for r in notif_res if not r.get("is_one_time")]
+    
+        try:
+            from local_db import local_notif_get_history
+            u_history_1 = local_notif_get_history(user_session=str(u.get("id")), limit=25)
+            u_history_2 = []
+            if u.get("discord_id") and str(u.get("discord_id")) != str(u.get("id")):
+                u_history_2 = local_notif_get_history(user_session=str(u.get("discord_id")), limit=25)
+            seen_h_keys = set()
+            u_history = []
+            for h in (u_history_1 + u_history_2):
+                h_k = (h.get("id"), h.get("fired_at"), h.get("message"))
+                if h_k not in seen_h_keys:
+                    seen_h_keys.add(h_k)
+                    u_history.append(h)
+            u_history.sort(key=lambda x: str(x.get("fired_at") or ""), reverse=True)
+            u_history = u_history[:25]
+        except Exception:
+            u_history = []
+    
+        def _render_rule_card(r, is_once):
+            n_id = r.get("id")
+            label = r.get("label") or f"Bus {r.get('identifier')}"
+            typ_badge = '<span style="background:rgba(124,58,237,0.25);color:#c4b5fd;border:1px solid #7c3aed;padding:2px 7px;border-radius:4px;font-weight:bold;font-size:11px;">⚡ Jednorázové</span>' if is_once else '<span style="background:rgba(2,132,199,0.25);color:#38bdf8;border:1px solid #0284c7;padding:2px 7px;border-radius:4px;font-weight:bold;font-size:11px;">🔁 Opakující se pravidlo</span>'
+            triggers = r.get("triggers", {})
+            if isinstance(triggers, str):
+                try:
+                    triggers = json.loads(triggers)
+                except Exception:
+                    triggers = {}
+            if not isinstance(triggers, dict):
+                triggers = {}
+            t_texts = []
+            if triggers.get("terminal"): t_texts.append("Konečná")
+            if triggers.get("new_line"): t_texts.append("Změna linky")
+            if triggers.get("depot_in"):
+                dpt = triggers.get("depot_in")
+                t_texts.append(f"Do vozovny ({'Všechny' if dpt=='all' else dpt})")
+            if triggers.get("depot_out"): t_texts.append("Z vozovny")
+            if triggers.get("trip_change"): t_texts.append("Přepnutí spoje")
+            if triggers.get("started_moving"): t_texts.append("Rozjetí")
+            if triggers.get("stop_near"): t_texts.append(f"Zastávka: {triggers.get('stop_near')}")
+            if triggers.get("delay_threshold"): t_texts.append(f"Zpoždění > {triggers.get('delay_threshold')} min")
+            if triggers.get("delay_change"): t_texts.append("Skok zpoždění")
+            trig_str = ", ".join(t_texts) or "Událost"
+            cnt = r.get("fired_count") or r.get("fire_count") or 0
+            unsub_btn = f'<a href="/api/notifications/unsubscribe?id={n_id}" target="_blank" style="text-decoration:none;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);color:#ef4444;font-size:11px;padding:4px 8px;border-radius:6px;margin-right:8px;font-weight:bold;" title="Vypnout toto pravidlo">🔕 Vypnout</a>' if not is_once else ''
+            return f"""
+            <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
+                  <span style="color:white; font-weight:bold; font-size:14px;">{label}</span>
+                  {typ_badge}
+                </div>
+                <div style="color:#94a3b8; font-size:12px; margin-bottom:4px;">Události: <span style="color:#e2e8f0;">{trig_str}</span></div>
+                <div style="color:#64748b; font-size:11px;">Odesláno: {cnt}x</div>
+              </div>
+              <div style="display:flex; align-items:center;">
+                {unsub_btn}
+                <button onclick="deleteNotificationRule('{n_id}')" style="background:transparent; border:none; color:#ef4444; font-size:18px; cursor:pointer; padding:8px;" title="Smazat upozornění"><i class="fas fa-trash"></i></button>
+              </div>
+            </div>
+            """
+    
+        # 1. Opakující se pravidla
+        if repeat_rules:
+            notif_html += '<div style="color:#38bdf8;font-size:13px;font-weight:bold;margin:12px 0 6px 0;display:flex;align-items:center;gap:6px;">🔁 Opakující se pravidla (' + str(len(repeat_rules)) + ')</div>'
+            for r in repeat_rules:
+                notif_html += _render_rule_card(r, False)
+    
+        # 2. Aktuální jednorázová upozornění
+        if once_rules:
+            notif_html += '<div style="color:#a78bfa;font-size:13px;font-weight:bold;margin:16px 0 6px 0;display:flex;align-items:center;gap:6px;">⚡ Aktuální jednorázová upozornění (' + str(len(once_rules)) + ')</div>'
+            for r in once_rules:
+                notif_html += _render_rule_card(r, True)
+    
+        if not once_rules and not repeat_rules:
+            notif_html += '<div style="color:#64748b; font-size:13px; text-align:center; padding:15px; background:rgba(0,0,0,0.2); border-radius:8px; margin-bottom:12px;">Zatím nemáte žádná aktivní pravidla ani jednorázové notifikace.<br><a href="/mapa" style="color:#38bdf8;text-decoration:none;font-weight:bold;display:inline-block;margin-top:6px;">🗺️ Otevřít mapu a nastavit upozornění</a></div>'
+    
+        # 3. Historie proběhlých notifikací (staré notifikace)
+        notif_html += '<div style="color:#e2e8f0;font-size:13px;font-weight:bold;margin:20px 0 8px 0;border-top:1px solid #334155;padding-top:14px;display:flex;align-items:center;gap:6px;">📜 Historie odeslaných notifikací (staré notifikace)</div>'
+        if u_history:
+            notif_html += '<div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;">'
+            for h in u_history:
+                notif_html += f"""
+                <div style="background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:6px;padding:8px 12px;font-size:11px;display:flex;justify-content:space-between;align-items:center;">
+                  <div>
+                    <div style="color:#e2e8f0;font-weight:600;">{h.get('message') or h.get('trigger')}</div>
+                    <div style="color:#64748b;font-size:10px;">{h.get('fired_at', '')} &bull; Kanál: {h.get('channel', 'DM')}</div>
+                  </div>
+                  <span style="background:rgba(16,185,129,0.15);color:#10b981;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">Odesláno</span>
+                </div>
+                """
+            notif_html += '</div>'
+        else:
+            notif_html += '<div style="color:#64748b; font-size:12px; text-align:center; padding:10px;">Zatím žádná proběhlá upozornění.</div>'
+    
+        revoke_btn_display = "inline-flex" if sessions_count > 1 else "none"
+        html = HTML_UCET.replace('__AVATAR_IMG__', avatar_img_html)
+        html = html.replace('__NICK__', nick)
+        html = html.replace('__AVATAR_URL__', avatar_url)
+        html = html.replace('__DISCORD_STATUS__', discord_status)
+        html = html.replace('__DISCORD_BTN__', discord_btn)
+        html = html.replace('__EMAIL_STATUS__', email_status)
+        html = html.replace('__EMAIL_BTN__', email_btn)
+        html = html.replace('__APP_ID_BADGE__', app_id_badge)
+        html = html.replace('__SESSIONS_COUNT__', str(sessions_count))
+        html = html.replace('__REVOKE_BTN_DISPLAY__', revoke_btn_display)
+        html = html.replace('__SESSIONS_LIST__', sessions_html)
+        html = html.replace('__NOTIFICATIONS__', notif_html)
+        html += link_scripts
+        
+        resp = make_response(render_public(html))
+        if set_new_cookie and cookie_token:
+            resp.set_cookie('web_session_token', cookie_token, max_age=30*86400, httponly=True, samesite='Lax')
+        return resp
+    
+    except Exception as e_ucet:
+        print(f"[UCET ERROR] {e_ucet}", flush=True)
+        try:
+            tb = traceback.format_exc()
+            send_log("📲 APLIKAČNÍ CHYBA (/ucet)", f"Chyba na stránce /ucet: `{e_ucet}`\n```py\n{tb[-1000:]}\n```", 0xef4444, channel_name="📲・error-app")
+        except Exception:
+            pass
+        return render_error_page(500, "Vyskytla se chyba", "Při načítání profilu došlo k chybě. Zkuste to prosím za okamžik znovu."), 500
 
 @app.route('/api/ucet/sessions', methods=['GET'])
 def api_ucet_sessions_get():
-    cookie_token = request.cookies.get('web_session_token')
+    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
     db = get_db()
     if not cookie_token or not db:
         return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
     from session_manager import find_user_by_session_token, get_user_sessions
     u = find_user_by_session_token(db, cookie_token)
+    if not u:
+        u = get_cached_session_user(cookie_token)
     if not u:
         return jsonify({"status": "error", "message": "Uživatel nenalezen"}), 401
     
@@ -4484,12 +4614,14 @@ def api_ucet_sessions_get():
 
 @app.route('/api/ucet/sessions/delete', methods=['POST'])
 def api_ucet_session_delete():
-    cookie_token = request.cookies.get('web_session_token')
+    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
     db = get_db()
     if not cookie_token or not db:
         return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
     from session_manager import find_user_by_session_token, remove_user_session_by_id
     u = find_user_by_session_token(db, cookie_token)
+    if not u:
+        u = get_cached_session_user(cookie_token)
     if not u:
         return jsonify({"status": "error", "message": "Uživatel nenalezen"}), 401
     data = request.get_json(silent=True) or {}
@@ -4512,12 +4644,14 @@ def api_ucet_session_delete():
 
 @app.route('/api/ucet/sessions/revoke_others', methods=['POST'])
 def api_ucet_sessions_revoke_others():
-    cookie_token = request.cookies.get('web_session_token')
+    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
     db = get_db()
     if not cookie_token or not db:
         return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
     from session_manager import find_user_by_session_token, revoke_all_other_sessions
     u = find_user_by_session_token(db, cookie_token)
+    if not u:
+        u = get_cached_session_user(cookie_token)
     if not u:
         return jsonify({"status": "error", "message": "Uživatel nenalezen"}), 401
     
@@ -4530,7 +4664,7 @@ def api_ucet_sessions_revoke_others():
 
 @app.route('/api/ucet/update', methods=['POST'])
 def api_ucet_update():
-    cookie_token = request.cookies.get('web_session_token')
+    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
     db = get_db()
     if not cookie_token or not db:
         return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
@@ -4546,6 +4680,9 @@ def api_ucet_update():
         return jsonify({"status": "error", "message": "Avatar musí být obrázek."})
         
     u = get_cached_session_user(cookie_token)
+    if not u:
+        from session_manager import find_user_by_session_token
+        u = find_user_by_session_token(db, cookie_token)
     if not u:
         return jsonify({"status": "error", "message": "Uživatel nenalezen"}), 401
         
@@ -6021,28 +6158,70 @@ async def check_notification_queue():
             discord_id = item.get("discord_id")
             dm_text = item.get("dm_text", "")
             embed_data = item.get("embed")
+            rule_id = item.get("rule_id")
+            is_one_time = bool(item.get("is_one_time"))
 
             # Pošli Discord DM
             if discord_id:
                 try:
                     d_id = int(str(discord_id).strip())
                     user = await bot.fetch_user(d_id)
+                    sent_ok = False
+
+                    # Sestavení tlačítek (View) pro Discord DM
+                    view = None
+                    try:
+                        view = discord.ui.View()
+                        if not is_one_time and rule_id and not str(rule_id).startswith("admin_direct"):
+                            unsub_href = f"https://datacorebot.koyeb.app/api/notifications/unsubscribe?id={rule_id}"
+                            view.add_item(discord.ui.Button(label="🔕 Vypnout notifikace", url=unsub_href, style=discord.ButtonStyle.link))
+                        view.add_item(discord.ui.Button(label="ℹ️ Proč mi chodí upozornění?", url="https://datacorebot.koyeb.app/proc-notifikace", style=discord.ButtonStyle.link))
+                    except Exception as e_v:
+                        view = None
+
                     if embed_data:
-                        em = discord.Embed(
-                            title=embed_data.get("title", "🔔 Upozornění"),
-                            description=embed_data.get("description", ""),
-                            color=embed_data.get("color", 0x38bdf8)
-                        )
-                        for field in embed_data.get("fields", []):
-                            em.add_field(name=field["name"], value=field["value"], inline=field.get("inline", False))
-                        em.set_footer(text=embed_data.get("footer", {}).get("text", "OIS IDPK"))
-                        await user.send(embed=em)
-                    else:
-                        await user.send(dm_text)
+                        try:
+                            title_txt = str(embed_data.get("title", "🔔 Upozornění")).replace("\r", "").replace("\n", " ")[:250]
+                            desc_txt = str(embed_data.get("description", ""))[:2000]
+                            em = discord.Embed(
+                                title=title_txt,
+                                description=desc_txt,
+                                color=embed_data.get("color", 0x38bdf8)
+                            )
+                            for field in embed_data.get("fields", []):
+                                f_name = str(field.get("name") or "Info")[:256].strip() or "Info"
+                                f_val = str(field.get("value") or "-")[:1024].strip() or "-"
+                                em.add_field(name=f_name, value=f_val, inline=field.get("inline", False))
+                            em.set_footer(text=str(embed_data.get("footer", {}).get("text", "OIS IDPK"))[:2000])
+                            
+                            try:
+                                if view:
+                                    await user.send(embed=em, view=view)
+                                else:
+                                    await user.send(embed=em)
+                            except Exception:
+                                await user.send(embed=em)
+                            sent_ok = True
+                        except Exception as e_embed:
+                            print(f"[NOTIF DM EMBED FAIL] {e_embed}, zkouším poslat prostý text...", flush=True)
+                    if not sent_ok and dm_text:
+                        try:
+                            if view:
+                                await user.send(dm_text[:2000], view=view)
+                            else:
+                                await user.send(dm_text[:2000])
+                        except Exception:
+                            await user.send(dm_text[:2000])
+                        sent_ok = True
                     print(f"[NOTIF DM] Odesláno DM uživateli {discord_id}", flush=True)
                     try:
                         from daily_reporter import TRACKER
                         TRACKER.record_notification("discord", True)
+                    except Exception: pass
+                except discord.Forbidden:
+                    print(f"[NOTIF DM] Uživatel {discord_id} má zablokované přímé zprávy (DM)!", flush=True)
+                    try:
+                        send_log("⚠️ NOTIFIKACE: Nelze doručit DM", f"Uživateli <@{discord_id}> nelze odeslat soukromou zprávu (DM), protože má v nastavení Discordu zakázané zprávy od členů serveru.\nNotifikace:\n{dm_text[:400]}", 0xf59e0b, channel_name="📲・error-app")
                     except Exception: pass
                 except Exception as e:
                     print(f"[NOTIF DM] Chyba při odesílání DM {discord_id}: {e}", flush=True)
@@ -6055,7 +6234,7 @@ async def check_notification_queue():
             email = item.get("email")
             if email:
                 try:
-                    await asyncio.to_thread(send_notification_email_sync, email, embed_data, dm_text)
+                    await asyncio.to_thread(send_notification_email_sync, email, embed_data, dm_text, rule_id, is_one_time)
                     print(f"[NOTIF EMAIL] Odeslán e-mail uživateli {email}", flush=True)
                     try:
                         from daily_reporter import TRACKER
@@ -6070,7 +6249,7 @@ async def check_notification_queue():
     except Exception as e:
         print(f"[NOTIF DM] Chyba fronty: {e}", flush=True)
 
-def send_notification_email_sync(to_email, embed_data, dm_text):
+def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is_one_time=False):
     if not SMTP_EMAIL or not SMTP_PASSWORD:
         return False
     try:
@@ -6082,6 +6261,21 @@ def send_notification_email_sync(to_email, embed_data, dm_text):
         msg["Subject"] = embed_data.get("title", "🔔 Upozornění na autobus") if embed_data else "🔔 Upozornění na autobus"
         msg["From"] = f"DataCore Bot <{SMTP_EMAIL}>"
         msg["To"] = to_email
+
+        # Tlačítka pro odhlášení a vysvětlení
+        action_buttons_html = ""
+        btn_items = []
+        if not is_one_time and rule_id and not str(rule_id).startswith("admin_direct"):
+            unsub_href = f"https://datacorebot.koyeb.app/api/notifications/unsubscribe?id={rule_id}"
+            btn_items.append(f'<a href="{unsub_href}" target="_blank" style="display:inline-block;padding:9px 16px;background-color:#ef4444;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:13px;margin-right:10px;margin-bottom:8px;">🔕 Vypnout pravidelné notifikace</a>')
+        why_href = "https://datacorebot.koyeb.app/proc-notifikace"
+        btn_items.append(f'<a href="{why_href}" target="_blank" style="display:inline-block;padding:7px 13px;background-color:#f1f5f9;color:#475569;text-decoration:none;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-bottom:8px;">ℹ️ Proč mi chodí upozornění?</a>')
+        if btn_items:
+            action_buttons_html = f"""
+            <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;">
+              {' '.join(btn_items)}
+            </div>
+            """
 
         # Sestavení HTML
         if embed_data:
@@ -6100,7 +6294,8 @@ def send_notification_email_sync(to_email, embed_data, dm_text):
                 <ul>
                   {fields_html}
                 </ul>
-                <p>Hezký den přeje<br>Tým Projekt OIS IDPK</p>
+                {action_buttons_html}
+                <p style="margin-top:20px;color:#64748b;font-size:12px;">Hezký den přeje<br>Tým Projekt OIS IDPK</p>
               </body>
             </html>
             """
@@ -6113,7 +6308,8 @@ def send_notification_email_sync(to_email, embed_data, dm_text):
             <html>
               <body style="background-color: #ffffff; color: #000000; font-family: sans-serif; padding: 20px;">
                 <p>{html_text}</p>
-                <p>Hezký den přeje<br>Tým Projekt OIS IDPK</p>
+                {action_buttons_html}
+                <p style="margin-top:20px;color:#64748b;font-size:12px;">Hezký den přeje<br>Tým Projekt OIS IDPK</p>
               </body>
             </html>
             """
@@ -6128,6 +6324,194 @@ def send_notification_email_sync(to_email, embed_data, dm_text):
     except Exception as e:
         print(f"[NOTIF EMAIL] Chyba odesílání e-mailu sync: {e}")
         raise e
+
+@app.route('/proc-notifikace')
+def stranka_proc_notifikace():
+    html_content = """
+    <div style="max-width: 720px; margin: 40px auto; padding: 24px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);">
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px; border-bottom:1px solid #334155; padding-bottom:16px;">
+        <div style="width:54px; height:54px; border-radius:14px; background:rgba(56,189,248,0.15); border:1px solid #38bdf8; display:flex; align-items:center; justify-content:center; font-size:26px; color:#38bdf8;">
+          <i class="fas fa-bell"></i>
+        </div>
+        <div>
+          <h1 style="color:#38bdf8; font-size:22px; margin:0 0 4px 0; font-weight:bold;">Proč mi chodí upozornění?</h1>
+          <p style="color:#94a3b8; font-size:13px; margin:0;">Vysvětlení notifikací systému OIS IDPK</p>
+        </div>
+      </div>
+
+      <div style="color:#e2e8f0; font-size:14px; line-height:1.7;">
+        <p>
+          Tato zpráva vám dorazila, protože je na váš účet, e-mail nebo Discord navázáno aktivní sledování autobusu či linky.
+        </p>
+
+        <div style="background:rgba(56,189,248,0.08); border-left:4px solid #38bdf8; padding:14px 18px; border-radius:0 8px 8px 0; margin:18px 0;">
+          <strong style="color:#38bdf8;">📍 Kde se notifikace vzala?</strong><br>
+          S největší pravděpodobností jste si toto upozornění <strong>sami zaklikli na naší interaktivní mapě</strong>.
+          Při prohlížení autobusu, spoje nebo zastávky stačí kliknout na ikonu zvonečku 🔔 a vybrat si sledované události (např. příjezd k zastávce, konečná stanice, výjezd z vozovny, zpoždění apod.).
+        </div>
+
+        <h3 style="color:#f8fafc; font-size:16px; margin:22px 0 10px 0;">Co můžete udělat, pokud už upozornění nechcete?</h3>
+        <ul style="padding-left:20px; margin:0 0 20px 0; color:#cbd5e1;">
+          <li style="margin-bottom:8px;"><strong>Vypnout jedním kliknutím:</strong> V každé pravidelné notifikaci (v e-mailu i na Discordu) je přímé tlačítko <em>🔕 Vypnout notifikace</em>. Kliknutím na něj se pravidlo ihned zruší.</li>
+          <li style="margin-bottom:8px;"><strong>Správa v účtu:</strong> Všechna vaše aktivní pravidla i proběhlá upozornění můžete kdykoliv spravovat a mazat ve svém <a href="/ucet#notifikace" style="color:#38bdf8; text-decoration:none; font-weight:bold;">Uživatelském účtu</a>.</li>
+          <li style="margin-bottom:8px;"><strong>Jednorázová upozornění:</strong> Pokud šlo o jednorázovou notifikaci (např. „upozorni mě, až spoj dorazí do zastávky“), tato notifikace se po doručení sama automaticky smaže.</li>
+        </ul>
+
+        <div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:10px; padding:16px; margin:20px 0;">
+          <h4 style="color:#f87171; margin:0 0 6px 0; font-size:15px; display:flex; align-items:center; gap:8px;">
+            <i class="fas fa-question-circle"></i> Myslíte si, že jste si notifikaci nenastavili?
+          </h4>
+          <p style="margin:0; font-size:13px; color:#fca5a5;">
+            Pokud jste si jistí, že jste notifikaci nezadali (např. někdo mohl omylem uvést váš kontakt), nebo pokud se domníváte, že došlo k chybě v systému, obraťte se na nás prostřednictvím stránky pro dotazy a hlášení chyb. Rádi to prověříme a kontakt odhlásíme.
+          </p>
+        </div>
+
+        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:24px; justify-content:center;">
+          <a href="/mapa" style="background:#1e293b; border:1px solid #334155; color:#38bdf8; padding:10px 18px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:8px;">
+            <i class="fas fa-map-marked-alt"></i> Interaktivní mapa
+          </a>
+          <a href="/ucet#notifikace" style="background:#1e293b; border:1px solid #334155; color:#a78bfa; padding:10px 18px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:8px;">
+            <i class="fas fa-user-cog"></i> Správa mých upozornění
+          </a>
+          <a href="/podpora" style="background:#0284c7; color:white; padding:10px 18px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:8px;">
+            <i class="fas fa-headset"></i> Nahlásit chybu / Dotazy
+          </a>
+        </div>
+      </div>
+    </div>
+    """
+    return render_public(html_content)
+
+@app.route('/podpora')
+@app.route('/hlaseni-chyb')
+@app.route('/dotazy')
+def stranka_podpora():
+    # Zkusit předvyplnit uživatele, pokud je přihlášen
+    user_nick = ""
+    user_contact = ""
+    try:
+        cookie_tok = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
+        u = get_cached_session_user(cookie_tok) if cookie_tok else None
+        if u:
+            user_nick = u.get("nick", "")
+            user_contact = u.get("email") or u.get("discord_id") or ""
+    except Exception:
+        pass
+
+    html_content = f"""
+    <div style="max-width: 680px; margin: 40px auto; padding: 28px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);">
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px; border-bottom:1px solid #334155; padding-bottom:16px;">
+        <div style="width:54px; height:54px; border-radius:14px; background:rgba(56,189,248,0.15); border:1px solid #38bdf8; display:flex; align-items:center; justify-content:center; font-size:26px; color:#38bdf8;">
+          <i class="fas fa-life-ring"></i>
+        </div>
+        <div>
+          <h1 style="color:#38bdf8; font-size:22px; margin:0 0 4px 0; font-weight:bold;">Dotazy a hlášení chyb</h1>
+          <p style="color:#94a3b8; font-size:13px; margin:0;">Zpráva bude předána administrátorům přímo do centrálního dashboardu</p>
+        </div>
+      </div>
+
+      <form id="supportForm" onsubmit="submitSupportForm(event)">
+        <div style="margin-bottom:16px;">
+          <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Typ podnětu</label>
+          <select id="sp_type" style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none;">
+            <option value="BUG">🐛 Nahlásit chybu v systému nebo datech</option>
+            <option value="NOTIF">🔔 Problém nebo dotaz k notifikacím</option>
+            <option value="QUESTION">❓ Obecný dotaz k fungování spojů</option>
+            <option value="FEEDBACK">💡 Návrh na vylepšení</option>
+          </select>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px;">
+          <div>
+            <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Vaše jméno / Nick</label>
+            <input type="text" id="sp_nick" value="{user_nick}" placeholder="např. Jan Novák" required style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Kontakt (E-mail nebo Discord)</label>
+            <input type="text" id="sp_contact" value="{user_contact}" placeholder="email@domena.cz nebo Discord ID" required style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+          </div>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Popis problému nebo dotazu</label>
+          <textarea id="sp_message" rows="5" placeholder="Podrobně popište, co se stalo, jakého autobusu/linky se to týká, nebo co potřebujete vyřešit..." required style="width:100%; padding:12px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; resize:vertical; box-sizing:border-box;"></textarea>
+        </div>
+
+        <button type="submit" id="sp_btn" style="width:100%; padding:12px; background:#0284c7; color:white; border:none; border-radius:8px; font-size:15px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
+          <i class="fas fa-paper-plane"></i> Odeslat hlášení administrátorům
+        </button>
+      </form>
+
+      <div id="sp_status" style="margin-top:16px; display:none; padding:12px; border-radius:8px; font-size:14px; text-align:center;"></div>
+
+      <div style="margin-top:24px; padding-top:16px; border-top:1px solid #334155; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <a href="/proc-notifikace" style="color:#94a3b8; font-size:12px; text-decoration:none;"><i class="fas fa-info-circle"></i> Proč mi chodí notifikace?</a>
+        <a href="/ucet#notifikace" style="color:#38bdf8; font-size:12px; text-decoration:none;"><i class="fas fa-user-circle"></i> Můj účet a správa notifikací</a>
+      </div>
+    </div>
+
+    <script>
+    function submitSupportForm(e) {{
+      e.preventDefault();
+      const btn = document.getElementById('sp_btn');
+      const statusEl = document.getElementById('sp_status');
+      const type = document.getElementById('sp_type').value;
+      const nick = document.getElementById('sp_nick').value.trim();
+      const contact = document.getElementById('sp_contact').value.trim();
+      const message = document.getElementById('sp_message').value.trim();
+
+      if(!nick || !contact || !message) {{
+        alert('Vyplňte prosím všechna pole formuláře.');
+        return;
+      }}
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Odesílám...';
+      statusEl.style.display = 'none';
+
+      fetch('/api/submit_feedback', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{
+          nick: nick,
+          contact: contact,
+          discord_id: contact,
+          type: type,
+          message: message
+        }})
+      }})
+      .then(r => r.json())
+      .then(data => {{
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Odeslat hlášení administrátorům';
+        if(data.status === 'success') {{
+          statusEl.style.display = 'block';
+          statusEl.style.background = 'rgba(16,185,129,0.15)';
+          statusEl.style.border = '1px solid #10b981';
+          statusEl.style.color = '#34d399';
+          statusEl.innerHTML = '✅ <strong>Hlášení bylo úspěšně odesláno!</strong> Administrátoři zprávu obdrží v dashboardu.';
+          document.getElementById('sp_message').value = '';
+        }} else {{
+          statusEl.style.display = 'block';
+          statusEl.style.background = 'rgba(239,68,68,0.15)';
+          statusEl.style.border = '1px solid #ef4444';
+          statusEl.style.color = '#f87171';
+          statusEl.innerHTML = '❌ <strong>Chyba:</strong> ' + (data.message || 'Nepodařilo se zprávu odeslat');
+        }}
+      }})
+      .catch(err => {{
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Odeslat hlášení administrátorům';
+        statusEl.style.display = 'block';
+        statusEl.style.background = 'rgba(239,68,68,0.15)';
+        statusEl.style.border = '1px solid #ef4444';
+        statusEl.style.color = '#f87171';
+        statusEl.innerHTML = '❌ <strong>Chyba spojení se serverem.</strong> Zkuste to prosím znovu.';
+      }});
+    }}
+    </script>
+    """
+    return render_public(html_content)
 
 
 def format_prague_time(iso_str):
