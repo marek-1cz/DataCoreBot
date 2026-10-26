@@ -898,8 +898,13 @@ class DashboardAuthView(discord.ui.View):
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
-intents.presences = True
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=None, max_messages=10)
+bot = commands.Bot(
+    command_prefix=commands.when_mentioned_or('!'),
+    case_insensitive=True,
+    intents=intents,
+    help_command=None,
+    max_messages=100
+)
 bot.invites_cache = {}
 
 def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
@@ -5771,16 +5776,40 @@ _DASH_ADMINS_HTML = '''
 # DISCORD BOT
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _has_admin_perms(member_or_user, guild=None):
+    try:
+        uid = str(member_or_user.id)
+        # Bot owner / developer Marek
+        if uid in ("719896287301992449",):
+            return True
+        if guild and hasattr(member_or_user, "roles"):
+            if getattr(member_or_user, "guild_permissions", None) and member_or_user.guild_permissions.administrator:
+                return True
+            role_names = [r.name.lower() for r in member_or_user.roles]
+            if any(r in role_names for r in ["sm", "web-sa", "sa", "dev", "admin", "správce", "spravce", "moderator", "server manager"]):
+                return True
+        # Zkontroluj roli uživatele v databázi users (funguje i v DM)
+        db = get_db()
+        if db:
+            u_data = db.table("users").select("role").eq("discord_id", uid).execute().data
+            if u_data:
+                role_val = str(u_data[0].get("role", "")).upper()
+                if any(x in role_val for x in ["SA", "DEV", "SM", "ADMIN", "SUPERADMIN"]):
+                    return True
+    except Exception as e:
+        print(f"[AUTH ERROR] _has_admin_perms error: {e}", flush=True)
+    return False
+
 def check_web_sa():
     async def predicate(ctx):
-        if discord.utils.get(ctx.author.roles, name="web-sa") or ctx.author.guild_permissions.administrator: return True
+        if _has_admin_perms(ctx.author, ctx.guild): return True
         await ctx.send(f"❌ {ctx.author.mention}, nemáš oprávnění.", delete_after=10)
         return False
     return commands.check(predicate)
 
 def check_sm_role():
     async def predicate(ctx):
-        if discord.utils.get(ctx.author.roles, name="SM") or ctx.author.guild_permissions.administrator: return True
+        if _has_admin_perms(ctx.author, ctx.guild): return True
         await ctx.send(f"❌ {ctx.author.mention}, nemáš oprávnění.", delete_after=10)
         return False
     return commands.check(predicate)
@@ -5934,11 +5963,11 @@ def format_prague_time(iso_str):
 async def update_depot_discord_messages():
     channel = None
     for guild in bot.guilds:
-        channel = discord.utils.find(lambda c: "vozovna" in c.name.lower(), guild.text_channels)
+        channel = discord.utils.find(lambda c: any(k in c.name.lower() for k in ["vozov", "depo", "garaz", "garáž", "odstav"]), guild.text_channels)
         if channel: break
         
     if not channel: 
-        print("[DEPOT DISCORD] Nenalezen kanal obsahujici 'vozovna'", flush=True)
+        print("[DEPOT DISCORD] Nenalezen kanal obsahujici 'vozov', 'depo' nebo 'garaz'", flush=True)
         return
         
     db = get_db()
@@ -5946,17 +5975,55 @@ async def update_depot_discord_messages():
         print("[DEPOT DISCORD] Databaze neni dostupna", flush=True)
         return
 
-    if not DEPOT_ZONES:
-        print("[DEPOT DISCORD] DEPOT_ZONES je prazdny seznam", flush=True)
+    zones_map = {}
+    from interaktivnimapa import DEPOT_ZONES
+    for z in (DEPOT_ZONES or []):
+        if z.get("name"):
+            zones_map[z["name"]] = z
 
-    for zone in DEPOT_ZONES:
-        depot_name = zone["name"]
+    try:
+        res_z = db.table("depot_zones").select("*").execute()
+        for z in (res_z.data or []):
+            if z.get("name"):
+                zones_map[z["name"]] = z
+    except Exception as e_z:
+        print(f"[DEPOT DISCORD] Nelze nacist depot_zones z DB: {e_z}", flush=True)
+
+    zones = list(zones_map.values())
+    if not zones:
+        print("[DEPOT DISCORD] Zadne vozovny v pameti ani v databazi", flush=True)
+        return
+
+    # Nacti historii kanalu jednou pro vsechny vozovny (setri Discord API rate limit)
+    try:
+        history = [m async for m in channel.history(limit=100)]
+    except Exception as e_hist:
+        print(f"[DEPOT DISCORD] Nelze nacist historii kanalu {channel.name}: {e_hist}", flush=True)
+        history = []
+
+    for zone in zones:
+        depot_name = zone.get("name")
+        if not depot_name:
+            continue
         
-        all_records = db.table("depot_history").select("*").eq("depot_name", depot_name).order("arrived_at", desc=True).limit(100).execute().data
+        color_val = 0xf59e0b
+        c_hex = zone.get("color")
+        if c_hex and isinstance(c_hex, str) and c_hex.startswith("#") and len(c_hex) == 7:
+            try:
+                color_val = int(c_hex[1:], 16)
+            except Exception:
+                pass
+
+        try:
+            all_records = db.table("depot_history").select("*").eq("depot_name", depot_name).neq("spz", "BACKUP").order("arrived_at", desc=True).limit(50).execute().data or []
+        except Exception as e_rec:
+            print(f"[DEPOT DISCORD] Chyba cteni depot_history pro {depot_name}: {e_rec}", flush=True)
+            all_records = []
+
         active = [r for r in all_records if not r.get("left_at")]
         recent = [r for r in all_records if r.get("left_at")][:5]
         
-        embed = discord.Embed(title=f"🅿️ Vozovna: {depot_name}", color=0xf59e0b)
+        embed = discord.Embed(title=f"🅿️ Vozovna: {depot_name}", color=color_val)
         
         active_str = ""
         if active:
@@ -5969,7 +6036,7 @@ async def update_depot_discord_messages():
         else:
             active_str = "*Prázdno*"
             
-        embed.add_field(name="🟢 Aktuálně parkuje", value=active_str, inline=False)
+        embed.add_field(name=f"🟢 Aktuálně parkuje ({len(active)})", value=active_str, inline=False)
         
         recent_str = ""
         if recent:
@@ -5983,9 +6050,8 @@ async def update_depot_discord_messages():
             recent_str = "*Žádné nedávné odjezdy*"
             
         embed.add_field(name="🔴 Nedávné odjezdy", value=recent_str, inline=False)
-        embed.set_footer(text="Automaticky aktualizováno")
+        embed.set_footer(text=f"Automaticky aktualizováno • {get_prague_time().strftime('%d.%m.%Y %H:%M:%S')}")
         
-        history = [m async for m in channel.history(limit=50)]
         target_msg = None
         for m in history:
             if m.author == bot.user and m.embeds and m.embeds[0].title == f"🅿️ Vozovna: {depot_name}":
@@ -6000,13 +6066,17 @@ async def update_depot_discord_messages():
                 except discord.HTTPException as he:
                     if he.code == 30046 or "Maximum number of edits" in str(he):
                         await target_msg.delete()
-                        await channel.send(embed=embed)
-                        print(f"[DEPOT DISCORD] Zprava pro {depot_name} byla smazana a odeslana nova (limit editaci vycerpan)", flush=True)
+                        sent = await channel.send(embed=embed)
+                        history.append(sent)
+                        print(f"[DEPOT DISCORD] Zprava pro {depot_name} smazana a odeslana nova (limit editaci)", flush=True)
                     else:
                         raise he
             else:
-                await channel.send(embed=embed)
+                sent = await channel.send(embed=embed)
+                history.append(sent)
                 print(f"[DEPOT DISCORD] Odeslana nova zprava pro: {depot_name}", flush=True)
+            
+            await asyncio.sleep(0.5)  # setri Discord rate limits
         except Exception as e:
             print(f"[DEPOT DISCORD] Chyba pri odesilani/editaci zpravy pro {depot_name}: {e}", flush=True)
 
@@ -6152,22 +6222,25 @@ async def cmd_debugvozovna(ctx):
     try:
         await ctx.send("Spouštím diagnostiku vozoven...")
         
-        channel = discord.utils.find(lambda c: "vozovna" in c.name.lower(), ctx.guild.text_channels)
+        channel = discord.utils.find(lambda c: any(k in c.name.lower() for k in ["vozov", "depo", "garaz", "garáž", "odstav"]), ctx.guild.text_channels)
         if not channel:
-            await ctx.send("❌ Nenalezen žádný textový kanál obsahující slovo 'vozovna'.")
+            all_chans = [c.name for c in ctx.guild.text_channels]
+            await ctx.send(f"❌ Nenalezen žádný textový kanál odpovídající vozovnám/depům. Dostupné kanály: {', '.join(all_chans[:15])}")
             return
-        await ctx.send(f"✅ Nalezen kanál: {channel.mention} (ID: {channel.id})")
+        await ctx.send(f"✅ Nalezen kanál: {channel.mention} (ID: `{channel.id}`)")
         
         db = get_db()
         if not db:
-            await ctx.send("❌ Připojení k databázi (Supabase) selhalo.")
+            await ctx.send("❌ Připojení k databázi selhalo.")
             return
         await ctx.send("✅ Připojení k DB v pořádku.")
         
-        if not DEPOT_ZONES:
-            await ctx.send("❌ Proměnná DEPOT_ZONES je prázdná. Vozovny se ještě nenačetly z databáze nebo neexistují.")
-            return
-        await ctx.send(f"✅ Načteno {len(DEPOT_ZONES)} vozoven z paměti: {', '.join(z['name'] for z in DEPOT_ZONES)}")
+        from interaktivnimapa import DEPOT_ZONES
+        zones = list(DEPOT_ZONES)
+        if not zones:
+            res_z = db.table("depot_zones").select("*").execute()
+            zones = res_z.data or []
+        await ctx.send(f"✅ Nalezeno {len(zones)} vozoven: {', '.join(z.get('name', 'Neznámá') for z in zones)}")
         
         await ctx.send(f"Testuji práva kanálu {channel.mention}...")
         try:
@@ -6182,6 +6255,8 @@ async def cmd_debugvozovna(ctx):
         await ctx.send("✅ Hlavní funkce proběhla bez pádu.")
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         await ctx.send(f"❌ Neočekávaná chyba při diagnostice: {e}")
 
 bot.remove_command("help")
@@ -6192,10 +6267,19 @@ async def on_member_join(member):
 
 @bot.event
 async def on_command_error(ctx, error):
-    if isinstance(error, commands.MissingRequiredArgument): await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát!**", delete_after=15)
-    elif isinstance(error, commands.MemberNotFound) or isinstance(error, commands.UserNotFound): await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!**", delete_after=15)
-    elif isinstance(error, commands.CommandNotFound): await ctx.send(f"❌ **Tento příkaz neexistuje.** Zadej `!help` pro zobrazení seznamu příkazů.", delete_after=15)
-    elif isinstance(error, commands.CheckFailure) or isinstance(error, commands.MissingRole): await ctx.send(f"{ctx.author.mention} ❌ **Nemáš oprávnění použít tento příkaz!**", delete_after=15)
+    import traceback
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"{ctx.author.mention} ❌ **Špatný formát nebo chybějící parametr!** Zadej `!help` pro formát příkazu `{ctx.command.name if ctx.command else ''}`.", delete_after=15)
+    elif isinstance(error, (commands.MemberNotFound, commands.UserNotFound)):
+        await ctx.send(f"{ctx.author.mention} ❌ **Cíl nenalezen!** Zkontroluj zadané ID nebo označení uživatele.", delete_after=15)
+    elif isinstance(error, commands.CommandNotFound):
+        await ctx.send(f"❌ **Tento příkaz neexistuje.** Zadej `!help` pro zobrazení seznamu příkazů.", delete_after=15)
+    elif isinstance(error, (commands.CheckFailure, commands.MissingRole)):
+        await ctx.send(f"{ctx.author.mention} ❌ **Nemáš oprávnění použít tento příkaz!**", delete_after=15)
+    else:
+        print(f"[DISCORD COMMAND ERROR] Příkaz {ctx.command} selhal: {error}", flush=True)
+        traceback.print_exception(type(error), error, error.__traceback__)
+        await ctx.send(f"❌ **Došlo k chybě při provádění příkazu:** `{error}`", delete_after=20)
 
 @bot.command()
 async def ping(ctx): await ctx.send(f"🏓 Pong! Odezva: **{round(bot.latency * 1000)}ms**.")
@@ -6219,7 +6303,7 @@ async def notify_group(ctx):
 @notify_group.command(name="list")
 async def notify_list(ctx, target_user: str = None):
     if target_user:
-        is_admin = discord.utils.get(ctx.author.roles, name="SM") or discord.utils.get(ctx.author.roles, name="web-sa") or discord.utils.get(ctx.author.roles, name="DEV") or ctx.author.guild_permissions.administrator
+        is_admin = _has_admin_perms(ctx.author, ctx.guild)
         if not is_admin:
             await ctx.send("❌ K prohlížení notifikací ostatních musíš být administrátor.")
             return
@@ -6267,7 +6351,7 @@ async def notify_list(ctx, target_user: str = None):
 @notify_group.command(name="clear")
 async def notify_clear(ctx, target_user: str = None):
     if target_user:
-        is_admin = discord.utils.get(ctx.author.roles, name="SM") or discord.utils.get(ctx.author.roles, name="web-sa") or discord.utils.get(ctx.author.roles, name="DEV") or ctx.author.guild_permissions.administrator
+        is_admin = _has_admin_perms(ctx.author, ctx.guild)
         if not is_admin:
             await ctx.send("❌ Ke smazání notifikací ostatních musíš být administrátor.")
             return
@@ -6289,7 +6373,7 @@ async def notify_clear(ctx, target_user: str = None):
     await ctx.send(f"✅ Všechna upozornění pro uživatele <@{target_discord_id}> byla smazána.")
 
 @bot.command()
-@commands.has_role('web-sa')
+@check_web_sa()
 async def dashadd(ctx, target_id: str, role: str):
     role = role.lower()
     if role not in ["viewer", "admin", "superadmin", "sa", "dev", "bt", "user"]:
@@ -6300,20 +6384,22 @@ async def dashadd(ctx, target_id: str, role: str):
     elif role in ["admin", "dev"]: r_str = "DEV"
     elif role in ["viewer", "bt"]: r_str = "BT"
     
+    clean_id = _clean_discord_id(target_id, ctx)
     db = get_db()
     if db:
-        res = db.table("users").update({"dashboard_access": True, "role": r_str}).eq("discord_id", target_id).execute()
-        if not res.data: await ctx.send(f"❌ Uživatel `{target_id}` nebyl v databázi nalezen.")
-        else: await ctx.send(f"✅ Dashboard přístup '{role}' udělen.")
+        res = db.table("users").update({"dashboard_access": True, "role": r_str}).eq("discord_id", clean_id).execute()
+        if not res.data: await ctx.send(f"❌ Uživatel `{clean_id}` nebyl v databázi nalezen.")
+        else: await ctx.send(f"✅ Dashboard přístup '{role}' udělen pro `{clean_id}`.")
 
 @bot.command()
-@commands.has_role('web-sa')
+@check_web_sa()
 async def dashremove(ctx, target_id: str):
+    clean_id = _clean_discord_id(target_id, ctx)
     db = get_db()
     if db:
-        res = db.table("users").update({"dashboard_access": False}).eq("discord_id", target_id).execute()
-        if not res.data: await ctx.send(f"❌ Uživatel `{target_id}` nebyl v databázi nalezen.")
-        else: await ctx.send(f"✅ Dashboard přístup odebrán pro `{target_id}`.")
+        res = db.table("users").update({"dashboard_access": False}).eq("discord_id", clean_id).execute()
+        if not res.data: await ctx.send(f"❌ Uživatel `{clean_id}` nebyl v databázi nalezen.")
+        else: await ctx.send(f"✅ Dashboard přístup odebrán pro `{clean_id}`.")
 
 
 @bot.command()
@@ -6349,15 +6435,24 @@ async def verze(ctx):
         embed.add_field(name=f"{v['version_name']} [{v.get('db_version', '')}]", value=f"Pro: `{v['target_role']}` | Stav: {status}", inline=False)
     await ctx.send(embed=embed)
 
+def _clean_discord_id(val, ctx=None):
+    if ctx and getattr(ctx.message, "mentions", None) and len(ctx.message.mentions) > 0:
+        return str(ctx.message.mentions[0].id)
+    if not val: return ""
+    m = re.search(r'\b\d{16,21}\b', str(val))
+    if m: return m.group(0)
+    return str(val).strip().lstrip("<@!").lstrip("<@").rstrip(">").strip()
+
 @bot.command()
 @check_sm_role()
 async def info(ctx, discord_id: str = None):
     """Zobrazí info o uživateli. Vyžaduje roli SM."""
-    if not discord_id: return await ctx.send("❌ Zadejte ID.")
+    cleaned_id = _clean_discord_id(discord_id, ctx)
+    if not cleaned_id: return await ctx.send("❌ Zadejte ID nebo označte uživatele.")
     db = get_db()
     if not db: return
-    u = db.table("users").select("*").eq("discord_id", discord_id).execute().data
-    if not u: return await ctx.send("❌ Nenalezen.")
+    u = db.table("users").select("*").eq("discord_id", cleaned_id).execute().data
+    if not u: return await ctx.send("❌ Uživatel nenalezen.")
     embed = discord.Embed(title=f"Uživatel: {u[0].get('nick')}", color=0x38bdf8)
     embed.add_field(name="App ID", value=f"#{u[0].get('app_id')}", inline=True)
     embed.add_field(name="Discord ID", value=u[0].get('discord_id'), inline=True)
@@ -6368,40 +6463,48 @@ async def info(ctx, discord_id: str = None):
 @bot.command()
 @check_sm_role()
 async def ban(ctx, discord_id: str):
+    cleaned_id = _clean_discord_id(discord_id, ctx)
+    if not cleaned_id: return await ctx.send("❌ Zadejte ID nebo označte uživatele.")
     db = get_db()
     if not db: return
-    db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", discord_id).execute()
-    await send_user_dm(discord_id, "🔨 Účet zablokován", "Váš přístup do aplikace byl zablokován.", 0xef4444)
-    await ctx.send(f"🔨 Uživateli `{discord_id}` byl udělen BAN.")
+    db.table("users").update({"is_banned": True, "dashboard_access": False}).eq("discord_id", cleaned_id).execute()
+    await send_user_dm(cleaned_id, "🔨 Účet zablokován", "Váš přístup do aplikace byl zablokován.", 0xef4444)
+    await ctx.send(f"🔨 Uživateli `{cleaned_id}` byl udělen BAN.")
 
 @bot.command()
 @check_sm_role()
 async def unban(ctx, discord_id: str):
+    cleaned_id = _clean_discord_id(discord_id, ctx)
+    if not cleaned_id: return await ctx.send("❌ Zadejte ID nebo označte uživatele.")
     db = get_db()
     if not db: return
-    db.table("users").update({"is_banned": False}).eq("discord_id", discord_id).execute()
-    await send_user_dm(discord_id, "🕊️ Účet odblokován", "Váš přístup do aplikace byl obnoven.", 0x10b981)
-    await ctx.send(f"🕊️ Uživateli `{discord_id}` byl zrušen BAN.")
+    db.table("users").update({"is_banned": False}).eq("discord_id", cleaned_id).execute()
+    await send_user_dm(cleaned_id, "🕊️ Účet odblokován", "Váš přístup do aplikace byl obnoven.", 0x10b981)
+    await ctx.send(f"🕊️ Uživateli `{cleaned_id}` byl zrušen BAN.")
 
 @bot.command(name="db")
 @check_sm_role()
 async def db_cmd(ctx, discord_id: str):
+    cleaned_id = _clean_discord_id(discord_id, ctx)
+    if not cleaned_id: return await ctx.send("❌ Zadejte ID nebo označte uživatele.")
     db_conn = get_db()
     if not db_conn: return
-    user_data = db_conn.table("users").select("dashboard_access").eq("discord_id", discord_id).execute().data
+    user_data = db_conn.table("users").select("dashboard_access").eq("discord_id", cleaned_id).execute().data
     if not user_data: return await ctx.send("❌ Uživatel nenalezen.")
     new_status = not user_data[0].get("dashboard_access", False)
-    db_conn.table("users").update({"dashboard_access": new_status}).eq("discord_id", discord_id).execute()
-    await ctx.send(f"⚙️ Přístup do DB pro ID `{discord_id}`: **{'POVOLEN ✅' if new_status else 'ODEBRÁN ❌'}**.")
+    db_conn.table("users").update({"dashboard_access": new_status}).eq("discord_id", cleaned_id).execute()
+    await ctx.send(f"⚙️ Přístup do DB pro ID `{cleaned_id}`: **{'POVOLEN ✅' if new_status else 'ODEBRÁN ❌'}**.")
 
 @bot.command()
 @check_sm_role()
 async def delete(ctx, discord_id: str):
+    cleaned_id = _clean_discord_id(discord_id, ctx)
+    if not cleaned_id: return await ctx.send("❌ Zadejte ID nebo označte uživatele.")
     db = get_db()
     if not db: return
     now = get_prague_time().strftime("%d.%m.%Y %H:%M")
-    db.table("users").update({"is_deleted": True, "deleted_at": now, "dashboard_access": False}).eq("discord_id", discord_id).execute()
-    await ctx.send(f"☠️ Účet `{discord_id}` byl smazán.")
+    db.table("users").update({"is_deleted": True, "deleted_at": now, "dashboard_access": False}).eq("discord_id", cleaned_id).execute()
+    await ctx.send(f"☠️ Účet `{cleaned_id}` byl smazán.")
 
 class PerDeleteConfirm(discord.ui.View):
     def __init__(self, target_id, author_id):
@@ -6456,9 +6559,76 @@ async def register(ctx, target_id: str = None):
         db.table("users").insert({"app_id": new_app_id, "discord_id": discord_id, "nick": nick, "role": "User", "hwid": "", "ip_address": "", "is_banned": False, "is_deleted": False, "deleted_at": "", "dashboard_access": False, "login_token": "", "registered_at": now_str}).execute()
         await ctx.send(f"✅ Zaregistrován! App ID: **#{new_app_id}**.")
 
+async def _resolve_discord_user(user_arg, ctx=None):
+    if not user_arg and (not ctx or not getattr(ctx.message, "mentions", None)):
+        return None
+    # 1. Přímé označení (mention)
+    if ctx and getattr(ctx.message, "mentions", None) and len(ctx.message.mentions) > 0:
+        return ctx.message.mentions[0]
+        
+    user_str = str(user_arg).strip()
+    
+    # 2. Extrakce číselného Discord ID
+    m_id = re.search(r'\b\d{16,21}\b', user_str)
+    if m_id:
+        try:
+            uid = int(m_id.group(0))
+            u = bot.get_user(uid) or await bot.fetch_user(uid)
+            if u: return u
+        except Exception:
+            pass
+            
+    # 3. Vyčištění stringu
+    clean_arg = user_str.lstrip("<@!").lstrip("<@").rstrip(">").strip()
+    if clean_arg.isdigit():
+        try:
+            uid = int(clean_arg)
+            u = bot.get_user(uid) or await bot.fetch_user(uid)
+            if u: return u
+        except Exception:
+            pass
+            
+    # 4. Prohledání členů serveru
+    if ctx and ctx.guild:
+        mem = ctx.guild.get_member_named(clean_arg)
+        if not mem:
+            mem = discord.utils.find(
+                lambda x: x.name.lower() == clean_arg.lower() 
+                or (getattr(x, 'global_name', None) and x.global_name.lower() == clean_arg.lower())
+                or x.display_name.lower() == clean_arg.lower(),
+                ctx.guild.members
+            )
+        if mem:
+            return mem
+        try:
+            query_res = await ctx.guild.query_members(clean_arg, limit=1)
+            if query_res:
+                return query_res[0]
+        except Exception:
+            pass
+            
+    # 5. Databáze users (podle nicku nebo emailu)
+    try:
+        db = get_db()
+        if db:
+            u_data = db.table("users").select("discord_id").ilike("nick", clean_arg).execute().data
+            if not u_data:
+                u_data = db.table("users").select("discord_id").ilike("email", clean_arg).execute().data
+            if u_data and u_data[0].get("discord_id"):
+                uid_str = str(u_data[0]["discord_id"]).strip()
+                if uid_str.isdigit():
+                    u = bot.get_user(int(uid_str)) or await bot.fetch_user(int(uid_str))
+                    if u: return u
+    except Exception:
+        pass
+    return None
+
 @bot.command()
 @check_sm_role()
-async def dm(ctx, user: discord.User, *, text: str):
+async def dm(ctx, target_user: str, *, text: str):
+    user = await _resolve_discord_user(target_user, ctx)
+    if not user:
+        return await ctx.send(f"❌ Uživatel `{target_user}` nebyl nalezen. Zadej @označení nebo ID.")
     try:
         embed = discord.Embed(title="📩 Zpráva od administrace", description=text, color=0x38bdf8)
         embed.set_footer(text="Toto je automatická zpráva, na kterou lze odepsat.")
@@ -6467,16 +6637,44 @@ async def dm(ctx, user: discord.User, *, text: str):
     except discord.Forbidden: await ctx.send(f"❌ Uživatel `{user.display_name}` má zablokované DM.")
     except Exception as e: await ctx.send(f"❌ Chyba: `{e}`")
 
-@bot.command()
+@bot.command(name="dmhistory", aliases=["dm_history", "historydm", "dmhist"])
 @check_sm_role()
-async def dmhistory(ctx, user: discord.User):
-    status_msg = await ctx.send("<a:loading:123> Načítám historii zpráv...")
+async def dmhistory(ctx, *, user_arg: str = None):
+    # Podpora volání: !dmhistory @user [limit] nebo !dmhistory [ID] [limit] nebo !dmhistory
+    limit = 100
+    target_str = user_arg
+    if user_arg:
+        parts = user_arg.strip().split()
+        if len(parts) >= 2 and parts[-1].isdigit():
+            limit = min(max(1, int(parts[-1])), 200)
+            target_str = " ".join(parts[:-1])
+
+    status_msg = await ctx.send("⏳ Načítám historii DM zpráv...")
     try:
-        if not user.dm_channel: await user.create_dm()
-        messages = [msg async for msg in user.dm_channel.history(limit=100)]
+        user = await _resolve_discord_user(target_str, ctx)
+        if not user and not target_str:
+            return await status_msg.edit(content="❌ **Zadej uživatele!** Použití: `!dmhistory @uživatel [počet]` nebo `!dmhistory [ID] [počet]`")
+        if not user:
+            return await status_msg.edit(content=f"❌ Uživatel `{target_str}` nebyl nalezen.")
+
+        # Získej DM kanál
+        dm_chan = user.dm_channel
+        if not dm_chan:
+            try:
+                dm_chan = await user.create_dm()
+            except Exception as e_dm:
+                return await status_msg.edit(content=f"❌ Nelze otevřít DM s `{user.display_name}`: {e_dm}")
+
+        if not dm_chan:
+            return await status_msg.edit(content=f"❌ DM kanál s `{user.display_name}` není dostupný.")
+
+        messages = [msg async for msg in dm_chan.history(limit=limit)]
         messages.reverse()
-        if not messages: return await status_msg.edit(content=f"📭 DM s `{user.display_name}` je prázdné.")
-        log_content = f"--- HISTORIE ZPRÁV DM S UŽIVATELEM {user.display_name.upper()} ({user.id}) ---\n\n"
+        if not messages:
+            return await status_msg.edit(content=f"📭 DM mezi botem a uživatelem `{user.display_name}` je prázdné (uživatel si s botem zatím nepsal).")
+
+        log_content = f"--- HISTORIE ZPRÁV DM S UŽIVATELEM {user.display_name.upper()} ({user.id}) ---\n"
+        log_content += f"--- VYGENEROVÁNO: {get_prague_time().strftime('%d.%m.%Y %H:%M:%S')} ---\n\n"
         for m in messages:
             time_str = (m.created_at + timedelta(hours=1)).strftime("%d.%m.%Y %H:%M:%S")
             author_name = "🤖 BOT" if m.author.bot else f"👤 {m.author.display_name}"
@@ -6500,11 +6698,19 @@ async def dmhistory(ctx, user: discord.User):
             log_content += "-"*50 + "\n\n"
             
         file_stream = io.BytesIO(log_content.encode('utf-8'))
-        file = discord.File(file_stream, filename=f"HistorieDM_{user.display_name}.txt")
-        await status_msg.delete()
-        await ctx.send(f"📄 Posledních 100 zpráv s `{user.display_name}`:", file=file)
-    except discord.Forbidden: await status_msg.edit(content="❌ Nemám oprávnění k DM.")
-    except Exception as e: await status_msg.edit(content=f"❌ Chyba: `{e}`")
+        safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', user.name or user.display_name) or "user"
+        file = discord.File(file_stream, filename=f"HistorieDM_{safe_name}.txt")
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+        await ctx.send(f"📄 Posledních {len(messages)} zpráv s `{user.display_name}`:", file=file)
+    except discord.Forbidden:
+        await status_msg.edit(content="❌ Nemám oprávnění k DM tohoto uživatele (má zablokované zprávy od botů).")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        await status_msg.edit(content=f"❌ Chyba: `{e}`")
 
 @bot.command()
 @check_sm_role()

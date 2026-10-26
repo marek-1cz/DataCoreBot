@@ -29,6 +29,12 @@ def get_prague_time():
     except Exception:
         return datetime.now()
 
+def get_prague_iso():
+    try:
+        return datetime.now(ZoneInfo('Europe/Prague')).isoformat()
+    except Exception:
+        return datetime.now().isoformat()
+
 def to_naive_prague(dt):
     """Zaručí převod libovolného datetime (naive, aware nebo ISO string) na naive Prague čas."""
     if not dt:
@@ -705,6 +711,9 @@ body.dark-map #settings-toggle-btn, body.bw-dark-map #settings-toggle-btn, body.
 body.dark-map #settings-toggle-btn:hover, body.bw-dark-map #settings-toggle-btn:hover, body.traffic-dark-map #settings-toggle-btn:hover { background: rgba(56, 189, 248, 0.3); border-color: #38bdf8; color: #38bdf8; box-shadow: 0 0 30px rgba(56, 189, 248, 0.5), inset 0 0 20px rgba(56, 189, 248, 0.4); }
 #settings-toggle-btn .st-text{font-size:13px;font-weight:700;width:0px;opacity:0;transition:all 0.4s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;overflow:hidden;margin-left:0px;}
 #settings-toggle-btn:hover .st-text{width:75px;opacity:1;margin-left:6px;}
+#settings-toggle-btn .st-text-full{font-size:13px;font-weight:700;white-space:nowrap;margin-left:6px;}
+@media (max-width:600px){#settings-toggle-btn .st-text-full{display:none !important;}
+#settings-btn-wrap{top:60px;right:10px;}}
 
 body.nav-static #top-nav { top: 0 !important; }
 body.nav-glass #top-nav { top: 15px !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; width: max-content !important; max-width: 98vw !important; border-radius: 16px !important; padding: 6px 12px !important; gap: 6px !important; flex-wrap: nowrap !important; background: rgba(15, 23, 42, 0.25) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important; }
@@ -1122,10 +1131,12 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
 <div id="settings-btn-wrap" style="position:fixed;top:75px;right:20px;z-index:5000;display:flex;flex-direction:column;align-items:flex-end;">
   <button id="settings-toggle-btn" onclick="toggleSettingsPanel()">
     <i class="fas fa-cog"></i>
-    <span class="st-text">Nastavení</span>
+    <span class="st-text" style="display:inline;"></span><span class="st-text-full" style="display:inline;">Nastavení</span>
   </button>
+  <!-- Overlay pro zavření kliknutím mimo panel -->
+  <div id="settings-overlay" onclick="closeSettingsPanel()" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:4999;"></div>
   
-  <div id="settings-panel" style="display:none;margin-top:15px;background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(56,189,248,0.4);border-radius:16px;width:280px;box-shadow:0 10px 40px rgba(0,0,0,0.8);padding:20px;transform-origin:top right;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+  <div id="settings-panel" style="display:none;margin-top:8px;background:rgba(15,23,42,0.97);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(56,189,248,0.4);border-radius:16px;width:min(280px,90vw);max-height:calc(100vh - 120px);overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.8);padding:20px;transform-origin:top right;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);position:relative;z-index:5001;">
     <div style="color:#38bdf8;font-weight:800;font-size:15px;margin-bottom:16px;text-align:center;letter-spacing:1px;text-transform:uppercase;">Nastavení</div>
     
     <div style="color:white;font-size:12px;font-weight:bold;margin-bottom:8px;padding-left:4px;">Základní mapa</div>
@@ -2731,62 +2742,96 @@ window.requestSpoj = async function(busId, btn) {
 
 // === SDÍLENÍ AUTOBUSU ===
 window.shareBus = function(busId) {
-  let trackUrl = location.origin + '/mapa?track=' + busId;
+  let trackUrl = location.origin + '/mapa?track=' + encodeURIComponent(busId);
   let bus = (typeof lastArr !== 'undefined') ? lastArr.find(b => b.id === busId) : null;
   if (!bus) { showMapToast('Autobus nenalezen.'); return; }
   
   let now = new Date();
   let timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
-  
   let delay = (typeof bus.delay !== 'undefined') ? bus.delay : '?';
-  
   let spzText = (bus.spz !== 'Neznama' && bus.spz) ? bus.spz : bus.id;
   let stopName = bus.real_zastavka || bus.nearest_stop || bus.last_stop_name || 'Neznámá';
   if (stopName === 'Jízda' || stopName.includes('Ceka na data')) stopName = 'Neznámá';
-  let real_spoj = bus.real_linka_spoj || bus.line;
+  let real_spoj = bus.real_linka_spoj || bus.line || 'Neznámá linka';
   
   let shareText = `🚌 Autobus SPZ: ${spzText}\n` +
                   `📍 Jede poblíž zastávky: ${stopName}\n` +
-                  `🚍 linka: ${real_spoj}\n` +
-                  `🏁 Směr: ${bus.destination}\n` +
+                  `🚍 Linka: ${real_spoj}\n` +
+                  `🏁 Směr: ${bus.destination || 'Neznámý'}\n` +
                   `⏱️ Zpoždění: ${delay} min\n\n` +
-                  `Sleduj ho taky na interaktivní mapě:\n` +
+                  `Sleduj ho na interaktivní mapě:\n` +
                   `${trackUrl}`;
   
   let modal = document.createElement('div');
+  modal.id = 'share-bus-modal';
   modal.style.position = 'fixed';
   modal.style.top = '0'; modal.style.left = '0'; modal.style.width = '100%'; modal.style.height = '100%';
-  modal.style.background = 'rgba(0,0,0,0.7)';
+  modal.style.background = 'rgba(0,0,0,0.75)';
   modal.style.display = 'flex'; modal.style.justifyContent = 'center'; modal.style.alignItems = 'center';
   modal.style.zIndex = '10001';
-  modal.style.backdropFilter = 'blur(4px)';
+  modal.style.backdropFilter = 'blur(6px)';
+  modal.onclick = function(e) { if(e.target === modal) modal.remove(); };
   
   let box = document.createElement('div');
-  box.style.background = '#1e293b'; box.style.padding = '20px'; box.style.borderRadius = '12px';
-  box.style.width = '90%'; box.style.maxWidth = '360px'; box.style.color = '#fff';
-  box.style.border = '1px solid #334155';
-  box.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
+  box.style.background = '#1e293b'; box.style.padding = '20px'; box.style.borderRadius = '14px';
+  box.style.width = '90%'; box.style.maxWidth = '380px'; box.style.color = '#fff';
+  box.style.border = '1px solid #38bdf8';
+  box.style.boxShadow = '0 10px 30px rgba(0,0,0,0.7)';
   
   box.innerHTML = `
-    <h3 style="margin-top:0;margin-bottom:15px;text-align:center;color:#38bdf8;">📤 Sdílet spoj</h3>
-    
-    <div style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:15px;font-size:13px;line-height:1.6;margin-bottom:15px;white-space:pre-wrap;">${shareText.replace(/</g, "&lt;")}</div>
-    
-    <div style="display:flex;flex-direction:column;gap:12px;">
-      <button onclick="navigator.clipboard.writeText(shareText).then(()=>showMapToast('📋 Zkopírováno!'));this.parentElement.parentElement.parentElement.remove()" style="background:#10b981;color:white;border:none;padding:15px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:15px;box-shadow:0 4px 6px rgba(0,0,0,0.2);text-transform:uppercase;">📋 KOPÍROVAT ODKAZ A TEXT</button>
-      
-      <div id="share-api-btn-container" style="display:none; text-align:center;">
-        <button onclick="navigator.share({title:\'Sdílet spoj\', text:shareText})" style="background:#8b5cf6;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;box-shadow:0 4px 6px rgba(0,0,0,0.2);">📲 Sdílet na Messenger, IG, TikTok...</button>
-      </div>
-      
-      <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background:#475569;color:white;border:none;padding:12px;border-radius:8px;cursor:pointer;width:100%;font-size:14px;font-weight:bold;">Zavřít</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;color:#38bdf8;font-size:17px;"><i class="fas fa-share-alt"></i> Sdílet spoj</h3>
+      <button id="share-close-x" style="background:transparent;border:none;color:#94a3b8;font-size:18px;cursor:pointer;padding:4px;"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:12px;font-size:13px;line-height:1.5;margin-bottom:14px;white-space:pre-wrap;max-height:180px;overflow-y:auto;">${shareText.replace(/</g, "&lt;")}</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button id="share-copy-btn" style="background:#10b981;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 10px rgba(16,185,129,0.3);"><i class="fas fa-copy"></i> KOPÍROVAT ODKAZ A TEXT</button>
+      <button id="share-native-btn" style="display:none;background:#8b5cf6;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;align-items:center;justify-content:center;gap:8px;"><i class="fas fa-share-nodes"></i> Sdílet přes aplikaci...</button>
     </div>
   `;
   
   modal.appendChild(box);
   document.body.appendChild(modal);
   
-  setTimeout(() => { if(navigator.share) document.getElementById('share-api-btn-container').style.display = 'block'; }, 10);
+  const copyBtn = box.querySelector('#share-copy-btn');
+  const closeX = box.querySelector('#share-close-x');
+  const nativeBtn = box.querySelector('#share-native-btn');
+  
+  closeX.onclick = () => modal.remove();
+  
+  copyBtn.onclick = function() {
+    function fallbackCopy(text) {
+      let ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { document.execCommand('copy'); showMapToast('📋 Zkopírováno do schránky!'); }
+      catch(err) { showMapToast('Nepodařilo se zkopírovat.'); }
+      document.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(shareText).then(() => {
+        showMapToast('📋 Zkopírováno do schránky!');
+        modal.remove();
+      }).catch(() => {
+        fallbackCopy(shareText);
+        modal.remove();
+      });
+    } else {
+      fallbackCopy(shareText);
+      modal.remove();
+    }
+  };
+  
+  if (navigator.share) {
+    nativeBtn.style.display = 'flex';
+    nativeBtn.onclick = function() {
+      navigator.share({ title: 'Sdílet spoj', text: shareText, url: trackUrl }).catch(() => {});
+    };
+  }
 };
 
 function showMapToast(msg) {
@@ -3798,9 +3843,26 @@ let _lineColorOrder=[];
 // Paleta: první vždy červená, zbytek rotuje přes bezpečné barvy (žádná zelená/žlutozelená)
 const _LINE_PALETTE=['#ef4444','#a855f7','#f97316','#38bdf8','#e879f9','#fb923c','#818cf8','#c084fc','#f43f5e','#0ea5e9','#c026d3','#7c3aed'];
 
+function closeSettingsPanel(){
+  let p=document.getElementById('settings-panel');
+  let ov=document.getElementById('settings-overlay');
+  if(p) p.style.display='none';
+  if(ov) ov.style.display='none';
+}
 function toggleSettingsPanel() {
   let p = document.getElementById('settings-panel');
-  if(p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  let ov = document.getElementById('settings-overlay');
+  if(!p) return;
+  let isOpen = p.style.display !== 'none';
+  if(isOpen) {
+    p.style.display = 'none';
+    if(ov) ov.style.display = 'none';
+  } else {
+    p.style.display = 'block';
+    if(ov) ov.style.display = 'block';
+    // Na mobilu scroll panel na vrch pokud je mimo viewport
+    setTimeout(()=>{ try{ p.scrollTop=0; }catch(e){} },50);
+  }
 }
 function toggleLowGraphics(enabled) {
   localStorage.setItem('low_graphics_mode', enabled ? '1' : '0');
@@ -6934,12 +6996,14 @@ def _load_depot_active_sessions(db):
         res = db.table("depot_history").select("*").is_("left_at", "null").execute()
         loaded = {}
         for row in (res.data or []):
-            bid = row.get("bus_id") or f"unknown_{row['id']}"
+            if row.get("spz") == "BACKUP" or str(row.get("bus_id", "")).startswith("SYSTEM_"):
+                continue
+            bid = str(row.get("bus_id") or f"unknown_{row['id']}")
             loaded[bid] = {
                 "id": row["id"],
                 "depot_name": row["depot_name"],
                 "arrived_at": row["arrived_at"],
-                "is_imprecise": row.get("is_imprecise", False),
+                "is_imprecise": bool(row.get("is_imprecise", False)),
                 "spz": row.get("spz")
             }
         DEPOT_ACTIVE_SESSIONS = loaded
@@ -6965,10 +7029,171 @@ def _point_in_polygon(lat, lng, polygon):
 def _check_depot_zones(lat, lng):
     """Zkontroluj zda je bod (lat, lng) uvnitr nektere vozovny.
     Vraci tuple (nazev, barva) nebo (None, None)."""
+    if not lat or not lng:
+        return None, None
+    try:
+        f_lat = float(lat)
+        f_lng = float(lng)
+    except (ValueError, TypeError):
+        return None, None
+
     for zone in DEPOT_ZONES:
-        if _point_in_polygon(lat, lng, zone["polygon"]):
+        if _point_in_polygon(f_lat, f_lng, zone["polygon"]):
             return zone["name"], zone.get("color", "#facc15")
     return None, None
+
+
+def _process_depot_tracking(bus_id, c, now):
+    """
+    Spravuje evidenci vjezdů a výjezdů autobusů do/z vozoven (depot_history).
+    - Pokud vůz vjede do vozovny -> zapíše nový záznam do depot_history a DEPOT_ACTIVE_SESSIONS, notifikuje Discord.
+    - Pokud se změní SPZ vozu v depu -> aktualizuje záznam v depot_history a notifikuje Discord.
+    - Pokud vůz opustí vozovnu -> zapíše left_at do depot_history a odebere z DEPOT_ACTIVE_SESSIONS, notifikuje Discord.
+    """
+    global DEPOT_ACTIVE_SESSIONS, DEPOT_DISCORD_QUEUE
+    if not c or c.get("is_train") or c.get("color_class") == "bg-bug":
+        return
+
+    bid_str = str(bus_id)
+    lat = c.get("lat")
+    lng = c.get("lng")
+    depot_name, depot_color = _check_depot_zones(lat, lng) if (lat and lng) else (None, None)
+
+    if depot_name:
+        # Vůz JE ve vozovně
+        c["_in_depot"] = True
+        c["_depot_name"] = depot_name
+        c["_depot_color"] = depot_color or "#facc15"
+        c["in_depot"] = True
+        c["depot_name"] = depot_name
+        if not c.get("admin_lock_display") and c.get("color_class") != "bg-bug":
+            c["color_class"] = "bg-yellow"
+            c["status"] = f"Vozovna: {depot_name}"
+            c["is_withdrawn"] = False
+
+        spz_val = c.get("spz")
+        eff_spz = spz_val if (spz_val and spz_val not in ("Neznámá", "Neznama", "?", "", "None")) else f"[ID: {bid_str}]"
+
+        if bid_str not in DEPOT_ACTIVE_SESSIONS:
+            # Nový příjezd!
+            is_imprecise = (now - SCRIPT_START_TIME).total_seconds() < 120 if SCRIPT_START_TIME else False
+            arr_time = get_prague_iso()
+            db_c = get_db_client()
+            new_id = None
+            if db_c:
+                try:
+                    resp = db_c.table("depot_history").insert({
+                        "spz": eff_spz,
+                        "bus_id": bid_str,
+                        "depot_name": depot_name,
+                        "arrived_at": arr_time,
+                        "is_imprecise": 1 if is_imprecise else 0
+                    }).execute()
+                    if resp.data:
+                        new_id = resp.data[0]["id"]
+                except Exception as e_ins:
+                    print(f"[DEPOT] Chyba zapisu DB prijezdu pro bus_id={bid_str}: {e_ins}", flush=True)
+
+            DEPOT_ACTIVE_SESSIONS[bid_str] = {
+                "id": new_id,
+                "depot_name": depot_name,
+                "arrived_at": arr_time,
+                "is_imprecise": is_imprecise,
+                "spz": eff_spz
+            }
+            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
+            try:
+                log_automation_action(
+                    "depot_in",
+                    bid_str,
+                    f"Vůz #{bid_str} vjel do vozovny '{depot_name}'",
+                    f"Linka {c.get('line') or '?'}, SPZ: {eff_spz}. Detekováno v polygonu depa.",
+                    spz=eff_spz,
+                    line=c.get("line")
+                )
+            except Exception:
+                pass
+            print(f"[DEPOT] Vůz {bid_str} ({eff_spz}) vjel do vozovny '{depot_name}'", flush=True)
+        else:
+            # Vůz již je evidován ve vozovně
+            sess = DEPOT_ACTIVE_SESSIONS[bid_str]
+            sess_spz = sess.get("spz")
+            if eff_spz and eff_spz not in ("Neznámá", "Neznama", "?", "") and not eff_spz.startswith("[ID:") and eff_spz != sess_spz:
+                sess["spz"] = eff_spz
+                db_c = get_db_client()
+                if db_c and sess.get("id"):
+                    try:
+                        db_c.table("depot_history").update({"spz": eff_spz}).eq("id", sess["id"]).execute()
+                        DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
+                    except Exception:
+                        pass
+
+            # Pokud přejel do jiné vozovny
+            if depot_name != sess.get("depot_name"):
+                old_depot = sess.get("depot_name")
+                left_time = get_prague_iso()
+                db_c = get_db_client()
+                if db_c and sess.get("id"):
+                    try:
+                        db_c.table("depot_history").update({"left_at": left_time}).eq("id", sess["id"]).execute()
+                    except Exception:
+                        pass
+                new_id = None
+                if db_c:
+                    try:
+                        resp = db_c.table("depot_history").insert({
+                            "spz": eff_spz,
+                            "bus_id": bid_str,
+                            "depot_name": depot_name,
+                            "arrived_at": left_time,
+                            "is_imprecise": 0
+                        }).execute()
+                        if resp.data:
+                            new_id = resp.data[0]["id"]
+                    except Exception:
+                        pass
+                DEPOT_ACTIVE_SESSIONS[bid_str] = {
+                    "id": new_id,
+                    "depot_name": depot_name,
+                    "arrived_at": left_time,
+                    "is_imprecise": False,
+                    "spz": eff_spz
+                }
+                DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
+    else:
+        # Vůz NENÍ ve vozovně
+        if c.get("_in_depot") or bid_str in DEPOT_ACTIVE_SESSIONS:
+            if bid_str in DEPOT_ACTIVE_SESSIONS:
+                sess = DEPOT_ACTIVE_SESSIONS[bid_str]
+                session_id = sess.get("id")
+                old_depot = sess.get("depot_name", "Vozovna")
+                left_time = get_prague_iso()
+                db_c = get_db_client()
+                if db_c and session_id:
+                    try:
+                        db_c.table("depot_history").update({"left_at": left_time}).eq("id", session_id).execute()
+                    except Exception as e_left:
+                        print(f"[DEPOT] Chyba zapisu DB odjezdu pro {bid_str}: {e_left}", flush=True)
+                del DEPOT_ACTIVE_SESSIONS[bid_str]
+                DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
+                try:
+                    log_automation_action(
+                        "depot_out",
+                        bid_str,
+                        f"Vůz #{bid_str} opustil vozovnu '{old_depot}'",
+                        f"Linka {c.get('line') or '?'}, SPZ: {c.get('spz') or 'Aktivní hledání'}. Vozidlo vyjelo do provozu.",
+                        spz=c.get("spz"),
+                        line=c.get("line")
+                    )
+                except Exception:
+                    pass
+                print(f"[DEPOT] Vůz {bid_str} opustil vozovnu '{old_depot}'", flush=True)
+
+            c["_in_depot"] = False
+            c["_depot_name"] = None
+            c["_depot_color"] = None
+            c["in_depot"] = False
+            c["depot_name"] = None
 
 
 def _bearing_diff(b1, b2):
@@ -8149,9 +8374,51 @@ def close_previous_trips(db, spz, current_trip_id, end_time_str):
         pass
 
 
+def close_trip_on_disappear(db, c, end_time_str, end_lat=None, end_lng=None, reason="Zmizel z PVVD"):
+    """Uzavře otevřený bus_history záznam (nastaví end_actual, end_lat, end_lng) když vůz zmizí z PVVD.
+    Zabrání tomu, aby jízdy zůstávaly otevřené navždy."""
+    if not db:
+        return
+    trip_id = c.get("trip_id")
+    spz = c.get("spz")
+    if not trip_id or not spz or spz in ("Neznámá", "Neznama", "?", "", "None"):
+        return
+    # Kontrola: zapsal jsme tento trip do DB?
+    if not c.get("_history_written"):
+        return
+    # Nekončit znovu pokud už je uzavřeno
+    if c.get("_trip_closed"):
+        return
+    def _do_close(tid, t_end, t_lat, t_lng, t_reason):
+        try:
+            import main as _main_mod
+            if getattr(_main_mod, 'EGRESS_SAVE_MODE', False):
+                return
+            update_payload = {
+                "end_actual": t_end,
+                "status": t_reason,
+                "updated_at": get_prague_time().isoformat(),
+            }
+            if t_lat is not None:
+                update_payload["last_lat"] = t_lat
+            if t_lng is not None:
+                update_payload["last_lng"] = t_lng
+            db.table("bus_history").update(update_payload).eq("trip_id", tid).is_("end_actual", None).execute()
+        except Exception as e:
+            print(f"[HISTORY-CLOSE] Chyba uzavírání trip {tid}: {e}", flush=True)
+    threading.Thread(target=_do_close, args=(trip_id, end_time_str, end_lat, end_lng, reason), daemon=True).start()
+    c["_trip_closed"] = True
+
+
 def _is_tracked_line(linka_str):
+    if not linka_str:
+        return False
     num = re.sub(r'\D', '', re.sub(r'/.*', '', str(linka_str)).strip())
-    return num.startswith("490") or num.startswith("496")
+    if num.startswith("490") or num.startswith("496"):
+        return True
+    if len(num) == 3 and (num.startswith("7") or num.startswith("4") or num.startswith("2") or num.startswith("3")):
+        return True
+    return False
 
 
 def upsert_to_history(db, c):
@@ -8202,6 +8469,9 @@ def upsert_to_history(db, c):
             if getattr(_main_mod, 'EGRESS_SAVE_MODE', False):
                 return
             db.table("bus_history").upsert(pl).execute()
+            # Označit že jsme záznam zapsali (pro close_trip_on_disappear)
+            c["_history_written"] = True
+            c["_trip_closed"] = False  # reset - nový upsert = otevřený
         except Exception as e:
             err_str = str(e)
             if "PGRST204" in err_str or "spz_3factor" in err_str or "spz_conflict_warn" in err_str:
@@ -8209,6 +8479,8 @@ def upsert_to_history(db, c):
                                     if k not in ("spz_3factor", "spz_conflict_warn")}
                 try:
                     db.table("bus_history").upsert(payload_fallback).execute()
+                    c["_history_written"] = True
+                    c["_trip_closed"] = False
                 except Exception:
                     pass
 
@@ -8448,10 +8720,20 @@ def background_map_worker():
 
                     elapsed_min = max(0.0, (_now_restore.timestamp() - p_since_p) / 60.0)
                     ghost_p["inactive_minutes"] = round(elapsed_min, 1)
-                    in_dep, d_name = _check_depot_zones(lat_p, lng_p)
-                    if in_dep:
+                    d_name, d_col = _check_depot_zones(lat_p, lng_p)
+                    if d_name:
+                        ghost_p["_in_depot"] = True
+                        ghost_p["_depot_name"] = d_name
+                        ghost_p["_depot_color"] = d_col or "#facc15"
+                        ghost_p["in_depot"] = True
+                        ghost_p["depot_name"] = d_name
                         ghost_p["color_class"] = "bg-yellow"
                         ghost_p["status"] = f"Vozovna: {d_name}"
+                        ghost_p["is_withdrawn"] = False
+                        try:
+                            _process_depot_tracking(p_id_str, ghost_p, _now_restore)
+                        except Exception:
+                            pass
                     elif elapsed_min >= 10.0 and rec.get("status_text") != "Zmizel z mapy PVVD":
                         ghost_p["color_class"] = "bg-gray"
                         ghost_p["status"] = f"Odstaveno ({int(elapsed_min)} min)"
@@ -8719,9 +9001,11 @@ def background_map_worker():
                 is_moving = inact < 2.0 or dm >= 15.0
 
                 # Detekce zón vozoven
-                in_depot_zone, depot_zone_name = _check_depot_zones(lat, lng)
+                depot_zone_name, depot_color = _check_depot_zones(lat, lng)
+                in_depot_zone = bool(depot_zone_name)
                 c["_in_depot"] = in_depot_zone
                 c["_depot_name"] = depot_zone_name if in_depot_zone else ""
+                c["_depot_color"] = depot_color or "#facc15"
                 c["in_depot"] = in_depot_zone
                 c["depot_name"] = depot_zone_name if in_depot_zone else ""
 
@@ -9013,7 +9297,8 @@ def background_map_worker():
                             queue_tt_fetch(1, bid, c)
 
                         # DB historie upsert
-                        if spz and _is_tracked_line(raw_line):
+                        final_chk_line = c.get("real_linka_spoj") or c.get("line") or raw_line or ""
+                        if spz and _is_tracked_line(final_chk_line):
                             upsert_to_history(db_client, c)
 
                 else:
@@ -9078,6 +9363,19 @@ def background_map_worker():
                                 print(f"[PVVD-DISAPPEAR] Vůz {bid} (SPZ: {spz or c.get('spz')}) zmizel z PVVD v {c['offline_since_datetime']}", flush=True)
                             except Exception as e_dis:
                                 print(f"[PVVD-DISAPPEAR] Log err: {e_dis}", flush=True)
+                            # ── Uzavření bus_history záznamu při zmizení vozu z PVVD ──
+                            # Nastaví end_actual + finální GPS polohu, aby jízda nebyla otevřená navždy
+                            try:
+                                disappear_end_time = exact_now.strftime('%H:%M')
+                                close_trip_on_disappear(
+                                    db_client, c,
+                                    end_time_str=disappear_end_time,
+                                    end_lat=lat,
+                                    end_lng=lng,
+                                    reason=f"Ukončeno (Zmizel z PVVD, posl. zast.: {c.get('nearest_stop') or c.get('real_zastavka') or '?'})"
+                                )
+                            except Exception as e_close:
+                                print(f"[HISTORY-CLOSE] Chyba uzavírání při zmizení {bid}: {e_close}", flush=True)
 
 
                 # Kontrola pohybu pro BUG
@@ -9092,6 +9390,9 @@ def background_map_worker():
                         c["bug_locked"] = True
                         c["color_class"] = "bg-bug"
                         c["status"] = "BUG / Nereálná poloha (označeno adminem)"
+
+                # Evidence a správa vozoven
+                _process_depot_tracking(bid, c, now)
 
                 # Admin overrides
                 if c.get("admin_color_override"):
@@ -9204,10 +9505,17 @@ def background_map_worker():
                     if a_bus.get("finalStopName"):
                         c_cached["destination"] = a_bus["finalStopName"]
 
-                    in_depot_zone, depot_zone_name = _check_depot_zones(lat_c, lng_c)
+                    depot_zone_name, depot_color = _check_depot_zones(lat_c, lng_c)
+                    in_depot_zone = bool(depot_zone_name)
                     if in_depot_zone:
+                        c_cached["_in_depot"] = True
+                        c_cached["_depot_name"] = depot_zone_name
+                        c_cached["_depot_color"] = depot_color or "#facc15"
+                        c_cached["in_depot"] = True
+                        c_cached["depot_name"] = depot_zone_name
                         c_cached["color_class"] = "bg-yellow"
                         c_cached["status"] = f"Vozovna: {depot_zone_name}"
+                        _process_depot_tracking(bid_cached, c_cached, now)
                     elif a_delay >= 10:
                         c_cached["color_class"] = "bg-red"
                         c_cached["status"] = f"Jízda (+{a_delay} min)"
@@ -9278,7 +9586,8 @@ def background_map_worker():
                 if not (lat_c and lng_c):
                     continue
 
-                in_depot_zone, depot_zone_name = _check_depot_zones(lat_c, lng_c)
+                depot_zone_name, depot_color = _check_depot_zones(lat_c, lng_c)
+                in_depot_zone = bool(depot_zone_name)
                 was_cached_offline = bool(c_cached.get("is_offline"))
                 c_cached["is_offline"] = True
                 c_cached["is_withdrawn"] = True
@@ -9304,8 +9613,14 @@ def background_map_worker():
                 c_cached["inactive_minutes"] = round(elapsed_min, 1)
 
                 if in_depot_zone:
+                    c_cached["_in_depot"] = True
+                    c_cached["_depot_name"] = depot_zone_name
+                    c_cached["_depot_color"] = depot_color or "#facc15"
+                    c_cached["in_depot"] = True
+                    c_cached["depot_name"] = depot_zone_name
                     c_cached["color_class"] = "bg-yellow"
                     c_cached["status"] = f"Vozovna: {depot_zone_name}"
+                    _process_depot_tracking(bid_cached, c_cached, now)
                 elif "Odstaveno" in str(c_cached.get("status", "")) or (elapsed_min >= 10.0 and c_cached.get("status") != "Zmizel z mapy PVVD"):
                     c_cached["color_class"] = "bg-gray"
                     c_cached["status"] = f"Odstaveno ({int(elapsed_min)} min)"
