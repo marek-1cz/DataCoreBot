@@ -4313,16 +4313,40 @@ function renderDashRules(rules) {
   rules.forEach(r => {
     const tr = document.createElement('tr');
     tr.style.borderBottom = '1px solid #334155';
+    let trigObj = r.triggers || {};
+    if (typeof trigObj === 'string') {
+      try { trigObj = JSON.parse(trigObj); } catch(e) { trigObj = {}; }
+    }
     let triggersArr = [];
-    if (r.triggers) {
-      for (const [k, v] of Object.entries(r.triggers)) {
-        if (v && v !== 'none' && v !== false) triggersArr.push(k);
+    if (trigObj && typeof trigObj === 'object') {
+      const triggerLabels = {
+        'terminal': '🏁 Konečná',
+        'new_line': '🔄 Nová linka',
+        'depot_in': '🅿️ Vozovna IN',
+        'depot_out': '🚀 Vozovna OUT',
+        'started_moving': '🟢 Rozjezd',
+        'stop_near': '🚏 Zastávka',
+        'delay_threshold': '⏱️ Zpoždění'
+      };
+      for (const [k, v] of Object.entries(trigObj)) {
+        if (v && v !== 'none' && v !== false) {
+          if (k === 'delay_threshold' && (typeof v === 'number' || typeof v === 'string')) {
+            triggersArr.push(`⏱️ Zpoždění > ${v}m`);
+          } else {
+            triggersArr.push(triggerLabels[k] || k);
+          }
+        }
       }
     }
     const trigStr = triggersArr.join(', ') || '-';
-    const channels = Array.isArray(r.delivery_channels) ? r.delivery_channels.join(', ') : (r.channel || 'discord');
+    let ch = r.delivery_channels;
+    if (typeof ch === 'string') {
+      try { ch = JSON.parse(ch); } catch(e) { ch = [ch]; }
+    }
+    const channels = Array.isArray(ch) ? ch.join(', ') : (r.channel || 'discord');
 
     let uNick = r.user_nick || '';
+    let uAppId = r.user_app_id ? String(r.user_app_id) : '';
     let uDid = r.user_discord_id || '';
     let uEmail = r.user_email || '';
     let uRole = r.user_role || '';
@@ -4330,16 +4354,21 @@ function renderDashRules(rules) {
 
     let mainName = uNick;
     if (!mainName) {
-      if (uSess.startsWith('admin_direct_discord_')) mainName = 'Discord DM #' + uSess.replace('admin_direct_discord_', '');
+      if (uAppId) mainName = 'Uživatel #' + uAppId;
+      else if (uSess.startsWith('admin_direct_discord_')) mainName = 'Discord DM #' + uSess.replace('admin_direct_discord_', '');
       else if (uSess.startsWith('admin_direct_email_')) mainName = 'E-mail ' + uSess.replace('admin_direct_email_', '');
-      else if (uSess) mainName = 'Uživatel #' + uSess;
-      else mainName = 'Neznámý';
+      else if (uSess && !isNaN(uSess) && Number(uSess) >= 1000) mainName = 'Uživatel #' + uSess;
+      else mainName = 'Uživatel';
     }
 
     let subDetails = [];
+    if (uAppId) {
+      subDetails.push(`<span title="Herní App ID" style="display:inline-flex;align-items:center;gap:3px;color:#38bdf8;font-weight:600;"><i class="fas fa-id-badge"></i> #${uAppId}</span>`);
+    } else if (uSess && !isNaN(uSess) && Number(uSess) >= 1000) {
+      subDetails.push(`<span title="Herní App ID" style="display:inline-flex;align-items:center;gap:3px;color:#38bdf8;font-weight:600;"><i class="fas fa-id-badge"></i> #${uSess}</span>`);
+    }
     if (uDid && uDid !== mainName) subDetails.push(`<span title="Discord ID" style="display:inline-flex;align-items:center;gap:3px;"><i class="fab fa-discord" style="color:#5865F2;"></i> ${uDid}</span>`);
     if (uEmail && uEmail !== mainName) subDetails.push(`<span title="E-mail" style="display:inline-flex;align-items:center;gap:3px;"><i class="fas fa-envelope" style="color:#38bdf8;"></i> ${uEmail}</span>`);
-    if (uSess && !uSess.startsWith('admin_direct_')) subDetails.push(`<span style="color:#64748b;">(ID: ${uSess})</span>`);
 
     let userHtml = `
       <div style="display:flex;flex-direction:column;gap:3px;">
@@ -4388,6 +4417,7 @@ function filterDashRules() {
     String(r.label || '').toLowerCase().includes(q) ||
     String(r.user_session || '').toLowerCase().includes(q) ||
     String(r.user_nick || '').toLowerCase().includes(q) ||
+    String(r.user_app_id || '').toLowerCase().includes(q) ||
     String(r.user_discord_id || '').toLowerCase().includes(q) ||
     String(r.user_email || '').toLowerCase().includes(q) ||
     String(r.id || '').toLowerCase().includes(q)

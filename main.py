@@ -4801,16 +4801,20 @@ def stranka_ucet():
         try:
             u_id_str = str(u.get("id") or "")
             d_id_str = str(u.get("discord_id") or "")
+            a_id_str = str(u.get("app_id") or "")
             notifs_1 = []
             if u_id_str:
                 notifs_1 = db.table("bus_notifications").select("*").eq("user_session", u_id_str).execute().data or []
             notifs_2 = []
             if d_id_str and d_id_str != u_id_str and d_id_str != "čeká na odpověd":
                 notifs_2 = db.table("bus_notifications").select("*").eq("user_session", d_id_str).execute().data or []
+            notifs_3 = []
+            if a_id_str and a_id_str not in (u_id_str, d_id_str):
+                notifs_3 = db.table("bus_notifications").select("*").eq("user_session", a_id_str).execute().data or []
             
             seen_ids = set()
             notif_res = []
-            for item in (notifs_1 + notifs_2):
+            for item in (notifs_1 + notifs_2 + notifs_3):
                 if item.get("id") not in seen_ids:
                     seen_ids.add(item.get("id"))
                     notif_res.append(item)
@@ -4827,9 +4831,12 @@ def stranka_ucet():
             u_history_2 = []
             if u.get("discord_id") and str(u.get("discord_id")) != str(u.get("id")):
                 u_history_2 = local_notif_get_history(user_session=str(u.get("discord_id")), limit=25)
+            u_history_3 = []
+            if u.get("app_id") and str(u.get("app_id")) not in (str(u.get("id")), str(u.get("discord_id"))):
+                u_history_3 = local_notif_get_history(user_session=str(u.get("app_id")), limit=25)
             seen_h_keys = set()
             u_history = []
-            for h in (u_history_1 + u_history_2):
+            for h in (u_history_1 + u_history_2 + u_history_3):
                 h_k = (h.get("id"), h.get("fired_at"), h.get("message"))
                 if h_k not in seen_h_keys:
                     seen_h_keys.add(h_k)

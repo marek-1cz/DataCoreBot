@@ -11363,11 +11363,18 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 if not is_restricted and db_client:
                     try:
                         uid = int(user_session) if str(user_session).isdigit() else user_session
-                        u_res = db_client.table("users").select("id, nick, discord_id, email").eq("id", uid).execute()
+                        u_res = db_client.table("users").select("id, app_id, nick, discord_id, email").eq("id", uid).execute()
                         if u_res.data:
                             u_data = u_res.data[0]
                     except Exception as e_u1:
                         check_supabase_error(e_u1)
+                    if not u_data and str(user_session).isdigit():
+                        try:
+                            u_res = db_client.table("users").select("id, app_id, nick, discord_id, email").eq("app_id", int(user_session)).execute()
+                            if u_res.data:
+                                u_data = u_res.data[0]
+                        except Exception as e_u_app:
+                            check_supabase_error(e_u_app)
                     if not u_data:
                         try:
                             from session_manager import find_user_by_session_token
@@ -11376,7 +11383,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                             check_supabase_error(e_u2)
                     if not u_data:
                         try:
-                            u_res = db_client.table("users").select("id, nick, discord_id, email").eq("discord_id", user_session).execute()
+                            u_res = db_client.table("users").select("id, app_id, nick, discord_id, email").eq("discord_id", user_session).execute()
                             if u_res.data:
                                 u_data = u_res.data[0]
                         except Exception as e_u3:
@@ -11838,21 +11845,21 @@ def api_notif_create():
 
     try:
         if admin_discord_id:
-            adm_res = db.table("users").select("id, role, discord_id, email").eq("discord_id", admin_discord_id).execute()
+            adm_res = db.table("users").select("id, app_id, role, discord_id, email").eq("discord_id", admin_discord_id).execute()
             if adm_res.data:
                 a_u = adm_res.data[0]
                 role = a_u.get("role") or ""
                 if 'SA' in role or 'DEV' in role:
                     is_admin = True
                 if not cookie_token:
-                    user_session_val = str(a_u["id"])
+                    user_session_val = str(a_u.get("app_id") or a_u["id"])
                     discord_id = a_u.get("discord_id")
                     email = a_u.get("email")
                     
         if cookie_token:
             u = find_user_by_session_token(db, cookie_token)
             if u:
-                user_session_val = str(u["id"])
+                user_session_val = str(u.get("app_id") or u["id"])
                 discord_id = u.get("discord_id")
                 email = u.get("email")
                 role = u.get("role") or ""
@@ -11865,10 +11872,10 @@ def api_notif_create():
     target_user = str(data.get("target_user", "")).strip()
     
     if is_admin and target_user:
-        target_res = db.table("users").select("id, discord_id, email").or_(f"discord_id.eq.{target_user},email.eq.{target_user}").execute()
+        target_res = db.table("users").select("id, app_id, nick, discord_id, email").or_(f"discord_id.eq.{target_user},email.eq.{target_user},nick.eq.{target_user},app_id.eq.{target_user}").execute()
         if target_res.data:
             t_u = target_res.data[0]
-            user_session_val = str(t_u["id"])
+            user_session_val = str(t_u.get("app_id") or t_u["id"])
             discord_id = t_u.get("discord_id")
             email = t_u.get("email")
         else:
@@ -12037,7 +12044,9 @@ def api_notif_list():
             if adm_res.data: u = adm_res.data[0]
 
         if u:
-            user_session_val = str(u["id"])
+            user_session_val = str(u.get("app_id") or u["id"])
+            user_db_id = str(u["id"])
+            user_app_id = str(u.get("app_id") or "").strip()
             user_discord_id = str(u.get("discord_id") or "").strip()
             role = u.get("role") or ""
             if 'SA' in role or 'DEV' in role:
@@ -12047,7 +12056,9 @@ def api_notif_list():
             return jsonify({"status": "error", "rules": []})
 
         select_cols = "id, identifier, identifier_type, triggers, label, is_active, is_one_time, fired_count, last_fired_at, created_at, user_session"
-        user_conds = [f"user_session.eq.{user_session_val}"]
+        user_conds = [f"user_session.eq.{user_db_id}"]
+        if user_app_id and user_app_id != user_db_id:
+            user_conds.append(f"user_session.eq.{user_app_id}")
         if user_discord_id:
             user_conds.append(f"user_session.eq.{user_discord_id}")
         if is_admin:
@@ -15387,6 +15398,7 @@ def admin_notifications_page():
           let sText = (
             String(rule.user_session || '') + ' ' +
             String(rule.user_nick || '') + ' ' +
+            String(rule.user_app_id || '') + ' ' +
             String(rule.user_discord_id || '') + ' ' +
             String(rule.user_email || '') + ' ' +
             String(rule.identifier || '') + ' ' +
@@ -15409,6 +15421,9 @@ def admin_notifications_page():
         
         let t_list = [];
         let t = rule.triggers || {};
+        if (typeof t === 'string') {
+          try { t = JSON.parse(t); } catch(e) { t = {}; }
+        }
         if(t.terminal) t_list.push("🏁 Konečná");
         if(t.new_line) t_list.push("🔄 Linka");
         if(t.depot_in) t_list.push("🅿️ Vozovna IN");
@@ -15423,6 +15438,7 @@ def admin_notifications_page():
           : '<span style="background:rgba(2,132,199,0.25);color:#38bdf8;border:1px solid #0284c7;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">🔁 Opakující se</span>';
 
         let uNick = rule.user_nick || '';
+        let uAppId = rule.user_app_id ? String(rule.user_app_id) : '';
         let uDid = rule.user_discord_id || '';
         let uEmail = rule.user_email || '';
         let uRole = rule.user_role || '';
@@ -15430,16 +15446,21 @@ def admin_notifications_page():
 
         let mainName = uNick;
         if (!mainName) {
-          if (uSess.startsWith('admin_direct_discord_')) mainName = 'Discord DM #' + uSess.replace('admin_direct_discord_', '');
+          if (uAppId) mainName = 'Uživatel #' + uAppId;
+          else if (uSess.startsWith('admin_direct_discord_')) mainName = 'Discord DM #' + uSess.replace('admin_direct_discord_', '');
           else if (uSess.startsWith('admin_direct_email_')) mainName = 'E-mail ' + uSess.replace('admin_direct_email_', '');
-          else if (uSess) mainName = 'Uživatel #' + uSess;
-          else mainName = 'Neznámý';
+          else if (uSess && !isNaN(uSess) && Number(uSess) >= 1000) mainName = 'Uživatel #' + uSess;
+          else mainName = 'Uživatel';
         }
 
         let subDetails = [];
+        if (uAppId) {
+          subDetails.push(`<span title="Herní App ID" style="display:inline-flex;align-items:center;gap:3px;color:#38bdf8;font-weight:600;"><i class="fas fa-id-badge"></i> #${uAppId}</span>`);
+        } else if (uSess && !isNaN(uSess) && Number(uSess) >= 1000) {
+          subDetails.push(`<span title="Herní App ID" style="display:inline-flex;align-items:center;gap:3px;color:#38bdf8;font-weight:600;"><i class="fas fa-id-badge"></i> #${uSess}</span>`);
+        }
         if (uDid && uDid !== mainName) subDetails.push(`<span title="Discord ID" style="display:inline-flex;align-items:center;gap:3px;"><i class="fab fa-discord" style="color:#5865F2;"></i> ${uDid}</span>`);
         if (uEmail && uEmail !== mainName) subDetails.push(`<span title="E-mail" style="display:inline-flex;align-items:center;gap:3px;"><i class="fas fa-envelope" style="color:#38bdf8;"></i> ${uEmail}</span>`);
-        if (uSess && !uSess.startsWith('admin_direct_')) subDetails.push(`<span style="color:#64748b;">(ID: ${uSess})</span>`);
 
         let userHtml = `
           <div style="display:flex;flex-direction:column;gap:3px;">
@@ -15963,35 +15984,88 @@ def api_admin_notif_all_rules():
         if user_ids:
             try:
                 unique_ids = list(set(user_ids))
-                u_res = db.table("users").select("id, nick, username, discord_id, email, role").in_("id", unique_ids).execute()
+                # 1. Hledání podle id
+                u_res = db.table("users").select("id, app_id, nick, discord_id, email, role").in_("id", unique_ids).execute()
                 for u in (u_res.data or []):
                     users_map[str(u.get("id"))] = u
+                    if u.get("app_id"):
+                        users_map[str(u.get("app_id"))] = u
+                    if u.get("discord_id"):
+                        users_map[str(u.get("discord_id"))] = u
+
+                # 2. Hledání podle app_id pro ID, která se nenašla
+                missing_ids = [uid for uid in unique_ids if str(uid) not in users_map]
+                if missing_ids:
+                    u_res_app = db.table("users").select("id, app_id, nick, discord_id, email, role").in_("app_id", missing_ids).execute()
+                    for u in (u_res_app.data or []):
+                        users_map[str(u.get("id"))] = u
+                        if u.get("app_id"):
+                            users_map[str(u.get("app_id"))] = u
+                        if u.get("discord_id"):
+                            users_map[str(u.get("discord_id"))] = u
             except Exception as e_u:
                 print(f"[ADMIN NOTIF] Chyba načtení uživatelů: {e_u}", flush=True)
 
         for r in rules:
             us = str(r.get("user_session") or "").strip()
+            if us and not us.isdigit() and not us.startswith("admin_direct_") and us not in users_map:
+                try:
+                    from session_manager import find_user_by_session_token
+                    u = find_user_by_session_token(db, us)
+                    if u:
+                        users_map[us] = u
+                        if u.get("id"):
+                            users_map[str(u.get("id"))] = u
+                        if u.get("app_id"):
+                            users_map[str(u.get("app_id"))] = u
+                except Exception:
+                    pass
+
+        for r in rules:
+            if isinstance(r.get("triggers"), str):
+                try:
+                    r["triggers"] = json.loads(r["triggers"])
+                except Exception:
+                    pass
+            if isinstance(r.get("delivery_channels"), str):
+                try:
+                    r["delivery_channels"] = json.loads(r["delivery_channels"])
+                except Exception:
+                    pass
+
+            us = str(r.get("user_session") or "").strip()
             user_info = users_map.get(us)
             if user_info:
-                nick = user_info.get("nick") or user_info.get("username") or f"Uživatel #{us}"
+                app_id_val = str(user_info.get("app_id") or "").strip()
+                nick = user_info.get("nick") or ""
+                if not nick:
+                    nick = f"Hráč #{app_id_val}" if app_id_val else f"Uživatel"
                 r["user_nick"] = nick
+                r["user_app_id"] = app_id_val
                 r["user_discord_id"] = str(user_info.get("discord_id") or "")
                 r["user_email"] = str(user_info.get("email") or "")
                 r["user_role"] = str(user_info.get("role") or "")
             elif us.startswith("admin_direct_discord_"):
                 did = us.replace("admin_direct_discord_", "")
                 r["user_nick"] = f"Discord #{did}"
+                r["user_app_id"] = ""
                 r["user_discord_id"] = did
                 r["user_email"] = ""
                 r["user_role"] = "Direct DM"
             elif us.startswith("admin_direct_email_"):
                 em = us.replace("admin_direct_email_", "")
                 r["user_nick"] = em
+                r["user_app_id"] = ""
                 r["user_discord_id"] = ""
                 r["user_email"] = em
                 r["user_role"] = "Direct Email"
             else:
-                r["user_nick"] = f"Uživatel #{us}" if us.isdigit() else (us if us else "Neznámý")
+                if us.isdigit() and int(us) >= 1000:
+                    r["user_nick"] = f"Uživatel #{us}"
+                    r["user_app_id"] = us
+                else:
+                    r["user_nick"] = "Uživatel" if us.isdigit() else (us if us else "Neznámý")
+                    r["user_app_id"] = ""
                 r["user_discord_id"] = ""
                 r["user_email"] = ""
                 r["user_role"] = ""
