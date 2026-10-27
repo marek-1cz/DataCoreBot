@@ -201,6 +201,45 @@ document.addEventListener("DOMContentLoaded", function() {
         .catch(err => console.error("Discord popup check error:", err));
 });
 </script>
+<script>
+// Globální odchytávání neočekávaných chyb v prohlížeči a automatické hlášení administrátorům
+window.addEventListener('error', function(e) {
+    if (!e || !e.message) return;
+    var msg = String(e.message);
+    if (msg.includes('ResizeObserver') || msg.includes('Script error')) return;
+    console.error("[KLIENTSKÁ CHYBA]", e);
+    try {
+        fetch('/api/client_error', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                message: msg,
+                source: e.filename || location.pathname,
+                line: e.lineno || 0,
+                col: e.colno || 0,
+                url: location.href
+            })
+        }).catch(function(){});
+    } catch(ign){}
+});
+
+window.addEventListener('unhandledrejection', function(e) {
+    if (!e || !e.reason) return;
+    var reasonStr = String(e.reason && e.reason.message ? e.reason.message : e.reason);
+    console.error("[UNHANDLED REJECTION]", reasonStr);
+    try {
+        fetch('/api/client_error', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                message: reasonStr,
+                source: location.pathname,
+                url: location.href
+            })
+        }).catch(function(){});
+    } catch(ign){}
+});
+</script>
 
 </body>
 </html>
@@ -4035,7 +4074,7 @@ HTML_DASHBOARD_NOTIFICATIONS_MGMT = """
           <div>Auditní stopa: Zaznamenáno do Discord logů a historie notifikací</div>
         </div>
 
-        <button type="submit" id="btn-submit-direct" class="btn" style="width: 100%; background: linear-gradient(135deg, #7c3aed, #4f46e5); color: white; padding: 12px; font-size: 14px; font-weight: 700; border-radius: 8px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);">
+        <button type="button" onclick="handleSendDirectMsg(event)" id="btn-submit-direct" class="btn" style="width: 100%; background: linear-gradient(135deg, #7c3aed, #4f46e5); color: white; padding: 12px; font-size: 14px; font-weight: 700; border-radius: 8px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35); cursor: pointer;">
           <i class="fas fa-paper-plane"></i> Odeslat zprávu uživateli
         </button>
       </form>
@@ -4156,21 +4195,40 @@ function switchDashTab(tab) {
 }
 
 async function handleSendDirectMsg(e) {
-  e.preventDefault();
-  const target = document.getElementById('direct-target').value.trim();
-  const title = document.getElementById('direct-title').value.trim();
-  const message = document.getElementById('direct-message').value.trim();
-  const channel = document.querySelector('input[name="direct-channel"]:checked')?.value || 'both';
+  if (e && e.preventDefault) e.preventDefault();
+  const targetEl = document.getElementById('direct-target');
+  const titleEl = document.getElementById('direct-title');
+  const msgEl = document.getElementById('direct-message');
   const statusEl = document.getElementById('direct-msg-status');
   const btn = document.getElementById('btn-submit-direct');
 
-  if (!target || !message) return;
+  const target = (targetEl ? targetEl.value : '').trim();
+  const title = (titleEl ? titleEl.value : '').trim();
+  const message = (msgEl ? msgEl.value : '').trim();
+  const channel = document.querySelector('input[name="direct-channel"]:checked')?.value || 'both';
 
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Odesílám...';
+  if (!statusEl) return false;
   statusEl.style.display = 'block';
+
+  if (!target) {
+    statusEl.className = 'alert alert-danger';
+    statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Chyba:</strong> Zadejte prosím cíl (nick, #AppID, Discord ID nebo e-mail).';
+    if (targetEl) targetEl.focus();
+    return false;
+  }
+  if (!message) {
+    statusEl.className = 'alert alert-danger';
+    statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Chyba:</strong> Zadejte text zprávy k odeslání.';
+    if (msgEl) msgEl.focus();
+    return false;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Odesílám...';
+  }
   statusEl.className = 'alert alert-info';
-  statusEl.innerHTML = 'Zařazuji zprávu do odesílací fronty...';
+  statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Zpracovávám odeslání zprávy příjemci...';
 
   try {
     const res = await fetch('/api/admin/notifications/send_direct', {
@@ -4179,24 +4237,27 @@ async function handleSendDirectMsg(e) {
       body: JSON.stringify({ target, title, message, channel })
     });
     const data = await res.json();
-    if (data.status === 'success') {
+    if (res.ok && data.status === 'success') {
       statusEl.className = 'alert alert-success';
-      statusEl.innerHTML = '<i class="fas fa-check-circle"></i> ' + (data.message || 'Zpráva byla úspěšně odeslána!');
-      document.getElementById('direct-message').value = '';
+      statusEl.innerHTML = '<i class="fas fa-check-circle"></i> <strong>Úspěšně odesláno:</strong> ' + (data.message || 'Zpráva byla úspěšně doručena!');
+      if (msgEl) msgEl.value = '';
       const infoEl = document.getElementById('direct-selected-info');
       if (infoEl) infoEl.style.display = 'none';
       loadDashHist();
     } else {
       statusEl.className = 'alert alert-danger';
-      statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> ' + (data.message || 'Chyba při odesílání');
+      statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Chyba odeslání:</strong> ' + (data.message || 'Nepodařilo se odeslat zprávu.');
     }
   } catch (err) {
     statusEl.className = 'alert alert-danger';
-    statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Chyba spojení se serverem: ' + err.message;
+    statusEl.innerHTML = '<i class="fas fa-wifi"></i> <strong>Chyba spojení se serverem:</strong> ' + err.message;
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Odeslat zprávu uživateli';
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-paper-plane"></i> Odeslat zprávu uživateli';
+    }
   }
+  return false;
 }
 
 function formatCzechDateTime(isoStr) {
@@ -4319,8 +4380,6 @@ function filterDashRules() {
     String(r.user_email || '').toLowerCase().includes(q) ||
     String(r.id || '').toLowerCase().includes(q)
   );
-  renderDashRules(filtered);
-}
   renderDashRules(filtered);
 }
 

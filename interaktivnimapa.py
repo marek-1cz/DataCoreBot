@@ -15857,10 +15857,16 @@ def api_admin_notif_send_direct():
             "message": f"Zpráva byla úspěšně odeslána pro {log_target} ({', '.join(results)})"
         })
     else:
+        err_msg = f"Doručení selhalo: {'; '.join(results) if results else 'Žádný komunikační kanál nebyl dostupný nebo uživatel nemá povolené zprávy'}"
+        try:
+            from main import send_log
+            send_log("⚠️ Selhání odeslání přímé zprávy", f"**Správce:** {admin_display_name}\n**Cíl:** `{log_target}`\n**Kanál:** `{channel}`\n**Důvod:** {err_msg}", 0xef4444, channel_name="📲・error-app")
+        except Exception:
+            pass
         return jsonify({
             "status": "error",
-            "message": f"Doručení selhalo: {', '.join(results)}"
-        }), 500
+            "message": err_msg
+        }), 400
 
 
 @mapa_bp.route('/api/admin/users/search')

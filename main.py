@@ -1865,16 +1865,44 @@ class DynamicDownloadView(discord.ui.View):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @app.route('/api/report_error', methods=['POST', 'OPTIONS'], strict_slashes=False)
+@app.route('/api/client_error', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_report_error():
     if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
-    discord_id = str(data.get("discord_id", "Neznámé ID"))
-    nick = str(data.get("nick", "Neznámý"))
-    error_type = str(data.get("type", "ERROR"))
-    msg = str(data.get("message", "Neznámá chyba"))
-    
-    send_log(f"⚠️ APLIKAČNÍ CHYBA: {error_type}", f"**Hráč:** {nick} (`{discord_id}`)\n**Chyba:**\n`{msg}`", 0xef4444, "📲・error-app")
-    
+    discord_id = str(data.get("discord_id", "")).strip()
+    nick = str(data.get("nick", "")).strip()
+    error_type = str(data.get("type", "KLIENTSKÁ CHYBA (Prohlížeč)"))
+    msg = str(data.get("message", "Neznámá chyba"))[:800]
+    page_url = str(data.get("url", request.referrer or "")).strip()[:300]
+    source = str(data.get("source", "")).strip()[:200]
+    line = data.get("line")
+
+    if not nick or not discord_id:
+        try:
+            tok = request.cookies.get("web_session_token") or request.cookies.get("admin_session_token")
+            u = get_cached_session_user(tok) if tok else None
+            if u:
+                nick = u.get("nick") or nick or "Přihlášený uživatel"
+                discord_id = u.get("discord_id") or discord_id or "-"
+        except Exception:
+            pass
+
+    user_label = f"**{nick or 'Návštěvník'}** (`{discord_id or 'Bez Discord ID'}`)"
+    log_content = f"**Uživatel:** {user_label}\n"
+    if page_url:
+        log_content += f"**URL:** `{page_url}`\n"
+    if source:
+        loc_str = f"{source}:{line}" if line else source
+        log_content += f"**Místo:** `{loc_str}`\n"
+    log_content += f"**Chyba:**\n`{msg}`"
+
+    try:
+        from daily_reporter import TRACKER
+        TRACKER.record_client_error()
+    except Exception:
+        pass
+
+    send_log(f"⚠️ APLIKAČNÍ CHYBA: {error_type}", log_content, 0xef4444, "📲・error-app")
     return _cors_jsonify({"status": "success"})
 
 @app.route('/api/keepalive', methods=['GET', 'OPTIONS'], strict_slashes=False)
