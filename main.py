@@ -971,27 +971,76 @@ def send_magic_link_email(to_email, token, intent='login'):
         print("[AUTH] SMTP není nastaveno!")
         return False
     try:
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.mime.image import MIMEImage
+        import smtplib
+        import os
+
         to_email = str(to_email or "").strip()
-        msg = MIMEMultipart("alternative")
+        msg = MIMEMultipart("related")
         msg["Subject"] = "Přihlášení do aplikace OIS IDPK"
         msg["From"] = f"DataCore Bot <{SMTP_EMAIL}>"
         msg["To"] = to_email
 
+        msg_alt = MIMEMultipart("alternative")
+        msg.attach(msg_alt)
+
+        logo_cid_available = False
+        try:
+            logo_path = os.path.join(os.path.dirname(__file__), "static", "img", "datacorebot_n.png")
+            if os.path.exists(logo_path):
+                with open(logo_path, "rb") as f_logo:
+                    logo_mime = MIMEImage(f_logo.read(), _subtype="png")
+                    logo_mime.add_header('Content-ID', '<datacore_logo>')
+                    logo_mime.add_header('Content-Disposition', 'inline', filename='datacorebot_logo.png')
+                    msg.attach(logo_mime)
+                    logo_cid_available = True
+        except Exception as e_l:
+            print(f"[AUTH LOGO ERR] {e_l}", flush=True)
+
         base_url = request.url_root.rstrip('/')
         login_url = f"{base_url}/api/auth/finalize?token={token}&type=email&intent={intent}"
         
+        logo_tag = '<img src="cid:datacore_logo" alt="DataCoreBot Logo" style="max-height:48px;width:auto;vertical-align:middle;border:0;display:inline-block;" />' if logo_cid_available else '<img src="https://datacorebot.koyeb.app/static/img/datacorebot_n.png" alt="DataCoreBot Logo" style="max-height:48px;width:auto;vertical-align:middle;border:0;display:inline-block;" />'
+
         html = f"""
+        <!DOCTYPE html>
         <html>
-          <body style="background-color: #ffffff; color: #000000; font-family: sans-serif; padding: 40px; text-align: center;">
-            <p style="color: #000000; font-size: 16px; text-align: left; max-width: 500px; margin: 0 auto 20px auto;">Dobrý den,<br><br>posíláme odkaz pro přístup do aplikace OIS IDPK. Pro dokončení přihlášení stačí kliknout na tlačítko níže:</p>
-            <a href="{login_url}" style="display: inline-block; background-color: #38bdf8; color: #000000; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; margin-bottom: 20px;">Potvrdit přihlášení</a>
-            <p style="color: #000000; font-size: 16px; text-align: left; max-width: 500px; margin: 0 auto 20px auto;">Nebo můžete ručně zadat tento 5místný kód: <strong>{token}</strong></p>
-            <p style="color: #000000; font-size: 14px; text-align: left; max-width: 500px; margin: 30px auto 10px auto;">Pokud se právě do aplikace nepřihlašujete, nic se neděje a e-mail můžete v klidu smazat. Váš účet je v bezpečí.</p>
-            <p style="color: #000000; font-size: 14px; text-align: left; max-width: 500px; margin: 0 auto;">Hezký den přeje<br><br>Tým Projekt OIS IDPK</p>
+          <head><meta charset="utf-8"></head>
+          <body style="margin: 0; padding: 20px 10px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+            <div style="max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
+              <div style="background: linear-gradient(135deg, #0b0f19 0%, #1e1b4b 100%); padding: 26px 20px; text-align: center; border-bottom: 2px solid #7c3aed;">
+                {logo_tag}
+                <div style="color: #94a3b8; font-size: 11px; margin-top: 8px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 700;">Projekt OIS IDPK • Ověření přístupu</div>
+              </div>
+              <div style="padding: 30px 24px; text-align: center;">
+                <h2 style="color: #0f172a; margin-top: 0; margin-bottom: 14px; font-size: 20px; font-weight: 700;">Přihlášení do aplikace</h2>
+                <p style="color: #475569; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
+                  Dobrý den,<br>posíláme jednorázový odkaz pro bezpečné přihlášení do aplikace OIS IDPK.
+                </p>
+                <div style="margin: 26px 0;">
+                  <a href="{login_url}" style="display: inline-block; background: linear-gradient(135deg, #38bdf8, #0284c7); color: #ffffff; padding: 13px 28px; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 15px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);">
+                    🚀 Potvrdit a přihlásit se
+                  </a>
+                </div>
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin: 20px 0; font-size: 14px; color: #334155;">
+                  Nebo zadejte tento 5místný ověřovací kód: <strong style="font-size: 18px; color: #7c3aed; letter-spacing: 3px; font-family: monospace;">{token}</strong>
+                </div>
+                <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin-top: 24px; margin-bottom: 0;">
+                  Pokud jste se k přihlášení nepřihlásili vy, můžete tento e-mail v klidu ignorovat. Váš účet zůstává chráněn.
+                </p>
+              </div>
+              <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b;">
+                <div>Hezký den přeje <strong>Tým DataCore Bot & Projekt OIS IDPK</strong></div>
+              </div>
+            </div>
           </body>
         </html>
         """
-        msg.attach(MIMEText(html, "html", "utf-8"))
+        plain = f"Dobrý den,\n\nOdkaz pro přihlášení do aplikace OIS IDPK:\n{login_url}\n\nOvěřovací kód: {token}\n\nHezký den přeje Tým Projekt OIS IDPK"
+        msg_alt.attach(MIMEText(plain, "plain", "utf-8"))
+        msg_alt.attach(MIMEText(html, "html", "utf-8"))
         
         server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15)
         server.login(SMTP_EMAIL, SMTP_PASSWORD)
@@ -1315,11 +1364,41 @@ async def send_user_dm(discord_identifier, title, description, color=0x38bdf8, f
                 for f_name, f_val in fields:
                     if f_name and f_val:
                         embed.add_field(name=str(f_name), value=str(f_val)[:1024], inline=False)
+            discord_file = None
             if image_url:
                 try:
-                    embed.set_image(url=image_url)
-                except Exception:
-                    pass
+                    img_str = str(image_url).strip()
+                    if img_str.startswith("data:image/"):
+                        import base64
+                        import io
+                        header, b64_data = img_str.split(",", 1)
+                        ext = "png"
+                        if "jpeg" in header or "jpg" in header: ext = "jpg"
+                        elif "webp" in header: ext = "webp"
+                        elif "gif" in header: ext = "gif"
+                        img_bytes = base64.b64decode(b64_data)
+                        fname = f"notification_image.{ext}"
+                        discord_file = discord.File(io.BytesIO(img_bytes), filename=fname)
+                        embed.set_image(url=f"attachment://{fname}")
+                    elif img_str.startswith("http://") or img_str.startswith("https://"):
+                        try:
+                            import urllib.request
+                            import io
+                            req = urllib.request.Request(img_str, headers={'User-Agent': 'Mozilla/5.0'})
+                            with urllib.request.urlopen(req, timeout=5) as resp:
+                                img_bytes = resp.read()
+                            ext = "png"
+                            if ".jpg" in img_str.lower() or ".jpeg" in img_str.lower(): ext = "jpg"
+                            elif ".webp" in img_str.lower(): ext = "webp"
+                            elif ".gif" in img_str.lower(): ext = "gif"
+                            fname = f"notification_image.{ext}"
+                            discord_file = discord.File(io.BytesIO(img_bytes), filename=fname)
+                            embed.set_image(url=f"attachment://{fname}")
+                        except Exception:
+                            embed.set_image(url=img_str)
+                except Exception as e_img:
+                    print(f"[DM IMAGE ERR] {e_img}", flush=True)
+
             embed.set_footer(text="Projekt OIS IDPK • Centrální podpora")
 
             if view is None and is_admin_direct:
@@ -1330,14 +1409,30 @@ async def send_user_dm(discord_identifier, title, description, color=0x38bdf8, f
                 except Exception:
                     view = None
 
+            send_kwargs = {"embed": embed}
+            if discord_file:
+                send_kwargs["file"] = discord_file
             if view:
-                try:
-                    await user.send(embed=embed, view=view)
-                    return True
-                except Exception:
-                    pass
-            await user.send(embed=embed)
-            return True
+                send_kwargs["view"] = view
+            try:
+                await user.send(**send_kwargs)
+                return True
+            except Exception:
+                if view:
+                    send_kwargs.pop("view", None)
+                    try:
+                        await user.send(**send_kwargs)
+                        return True
+                    except Exception:
+                        pass
+                if discord_file:
+                    send_kwargs.pop("file", None)
+                    try:
+                        await user.send(**send_kwargs)
+                        return True
+                    except Exception:
+                        pass
+            return False
     except Exception as e_dm:
         print(f"[SEND DM ERROR for {discord_identifier}] {e_dm}", flush=True)
     return False
@@ -6691,13 +6786,63 @@ async def check_notification_queue():
                                 em.add_field(name=f_name, value=f_val, inline=field.get("inline", False))
                             em.set_footer(text=str(embed_data.get("footer", {}).get("text", "OIS IDPK"))[:2000])
                             
+                            img_dict = embed_data.get("image")
+                            img_url = (img_dict.get("url") if isinstance(img_dict, dict) else img_dict) if img_dict else None
+                            discord_file = None
+                            if img_url:
+                                try:
+                                    img_str = str(img_url).strip()
+                                    if img_str.startswith("data:image/"):
+                                        import base64
+                                        import io
+                                        header, b64_data = img_str.split(",", 1)
+                                        ext = "png"
+                                        if "jpeg" in header or "jpg" in header: ext = "jpg"
+                                        elif "webp" in header: ext = "webp"
+                                        elif "gif" in header: ext = "gif"
+                                        img_bytes = base64.b64decode(b64_data)
+                                        fname = f"notification_image.{ext}"
+                                        discord_file = discord.File(io.BytesIO(img_bytes), filename=fname)
+                                        em.set_image(url=f"attachment://{fname}")
+                                    elif img_str.startswith("http://") or img_str.startswith("https://"):
+                                        try:
+                                            import urllib.request
+                                            import io
+                                            req = urllib.request.Request(img_str, headers={'User-Agent': 'Mozilla/5.0'})
+                                            with urllib.request.urlopen(req, timeout=5) as resp:
+                                                img_bytes = resp.read()
+                                            ext = "png"
+                                            if ".jpg" in img_str.lower() or ".jpeg" in img_str.lower(): ext = "jpg"
+                                            elif ".webp" in img_str.lower(): ext = "webp"
+                                            elif ".gif" in img_str.lower(): ext = "gif"
+                                            fname = f"notification_image.{ext}"
+                                            discord_file = discord.File(io.BytesIO(img_bytes), filename=fname)
+                                            em.set_image(url=f"attachment://{fname}")
+                                        except Exception:
+                                            em.set_image(url=img_str)
+                                except Exception as e_img:
+                                    print(f"[NOTIF DM IMAGE ERR] {e_img}", flush=True)
+
+                            send_kwargs = {"embed": em}
+                            if discord_file:
+                                send_kwargs["file"] = discord_file
+                            if view:
+                                send_kwargs["view"] = view
                             try:
-                                if view:
-                                    await user.send(embed=em, view=view)
-                                else:
-                                    await user.send(embed=em)
+                                await user.send(**send_kwargs)
                             except Exception:
-                                await user.send(embed=em)
+                                if view:
+                                    send_kwargs.pop("view", None)
+                                    try:
+                                        await user.send(**send_kwargs)
+                                    except Exception:
+                                        pass
+                                if discord_file:
+                                    send_kwargs.pop("file", None)
+                                    try:
+                                        await user.send(**send_kwargs)
+                                    except Exception:
+                                        pass
                             sent_ok = True
                         except Exception as e_embed:
                             print(f"[NOTIF DM EMBED FAIL] {e_embed}, zkouším poslat prostý text...", flush=True)
@@ -6755,12 +6900,69 @@ def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is
     try:
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
+        from email.mime.image import MIMEImage
         import smtplib
+        import base64
+        import re
+        import os
         
-        msg = MIMEMultipart("alternative")
+        msg = MIMEMultipart("related")
         msg["Subject"] = embed_data.get("title", "🔔 Upozornění na autobus") if embed_data else "🔔 Upozornění na autobus"
         msg["From"] = f"DataCore Bot <{SMTP_EMAIL}>"
         msg["To"] = to_email
+
+        msg_alt = MIMEMultipart("alternative")
+        msg.attach(msg_alt)
+
+        # 1. Logo DataCoreBot jako inline CID příloha
+        logo_cid_available = False
+        try:
+            logo_path = os.path.join(os.path.dirname(__file__), "static", "img", "datacorebot_n.png")
+            if os.path.exists(logo_path):
+                with open(logo_path, "rb") as f_logo:
+                    logo_mime = MIMEImage(f_logo.read(), _subtype="png")
+                    logo_mime.add_header('Content-ID', '<datacore_logo>')
+                    logo_mime.add_header('Content-Disposition', 'inline', filename='datacorebot_logo.png')
+                    msg.attach(logo_mime)
+                    logo_cid_available = True
+        except Exception as e_l:
+            print(f"[EMAIL LOGO ERR] {e_l}", flush=True)
+
+        # 2. Přiložený obrázek od uživatele/admina
+        img_dict = embed_data.get("image") if embed_data else None
+        img_url = (img_dict.get("url") if isinstance(img_dict, dict) else img_dict) if img_dict else None
+        attached_cid_available = False
+        attached_ext = "png"
+        if img_url:
+            try:
+                img_bytes = None
+                img_str = str(img_url).strip()
+                if img_str.startswith("data:image/"):
+                    hdr, b64_d = img_str.split(",", 1)
+                    if "jpeg" in hdr or "jpg" in hdr: attached_ext = "jpeg"
+                    elif "webp" in hdr: attached_ext = "webp"
+                    elif "gif" in hdr: attached_ext = "gif"
+                    img_bytes = base64.b64decode(b64_d)
+                elif img_str.startswith("http://") or img_str.startswith("https://"):
+                    try:
+                        import urllib.request
+                        req = urllib.request.Request(img_str, headers={'User-Agent': 'Mozilla/5.0'})
+                        with urllib.request.urlopen(req, timeout=5) as resp:
+                            img_bytes = resp.read()
+                        if ".jpg" in img_str.lower() or ".jpeg" in img_str.lower(): attached_ext = "jpeg"
+                        elif ".webp" in img_str.lower(): attached_ext = "webp"
+                        elif ".gif" in img_str.lower(): attached_ext = "gif"
+                    except Exception:
+                        pass
+                
+                if img_bytes:
+                    att_mime = MIMEImage(img_bytes, _subtype=attached_ext)
+                    att_mime.add_header('Content-ID', '<attached_image>')
+                    att_mime.add_header('Content-Disposition', 'inline', filename=f'priloha.{attached_ext}')
+                    msg.attach(att_mime)
+                    attached_cid_available = True
+            except Exception as e_att:
+                print(f"[EMAIL ATTACH IMAGE ERR] {e_att}", flush=True)
 
         # Tlačítka pro odhlášení a vysvětlení
         action_buttons_html = ""
@@ -6768,76 +6970,129 @@ def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is
         is_admin_direct = bool(rule_id and str(rule_id).startswith("admin_direct"))
         if not is_one_time and rule_id and not is_admin_direct:
             unsub_href = f"https://datacorebot.koyeb.app/api/notifications/unsubscribe?id={rule_id}"
-            btn_items.append(f'<a href="{unsub_href}" target="_blank" style="display:inline-block;padding:9px 16px;background-color:#ef4444;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:13px;margin-right:10px;margin-bottom:8px;">🔕 Vypnout pravidelné notifikace</a>')
+            btn_items.append(f'<a href="{unsub_href}" target="_blank" style="display:inline-block;padding:9px 18px;background-color:#ef4444;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:13px;margin-right:10px;margin-bottom:8px;">🔕 Vypnout pravidelné notifikace</a>')
 
         if is_admin_direct:
             why_href = "https://datacorebot.koyeb.app/proc-notifikace?typ=admin"
-            btn_items.append(f'<a href="{why_href}" target="_blank" style="display:inline-block;padding:8px 14px;background-color:#7c3aed;color:#ffffff;text-decoration:none;border-radius:6px;font-size:12px;font-weight:600;margin-right:10px;margin-bottom:8px;">ℹ️ Proč mi přišla tato zpráva od administrátora?</a>')
+            btn_items.append(f'<a href="{why_href}" target="_blank" style="display:inline-block;padding:9px 16px;background-color:#7c3aed;color:#ffffff;text-decoration:none;border-radius:6px;font-size:12px;font-weight:600;margin-right:10px;margin-bottom:8px;">ℹ️ Proč mi přišla tato zpráva od administrátora?</a>')
             support_href = "https://datacorebot.koyeb.app/podpora"
-            btn_items.append(f'<a href="{support_href}" target="_blank" style="display:inline-block;padding:8px 14px;background-color:#f1f5f9;color:#475569;text-decoration:none;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-bottom:8px;">💬 Napsat na podporu / Odpovědět</a>')
+            btn_items.append(f'<a href="{support_href}" target="_blank" style="display:inline-block;padding:9px 16px;background-color:#f1f5f9;color:#475569;text-decoration:none;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-bottom:8px;">💬 Napsat na podporu / Odpovědět</a>')
         else:
             why_href = "https://datacorebot.koyeb.app/proc-notifikace"
-            btn_items.append(f'<a href="{why_href}" target="_blank" style="display:inline-block;padding:7px 13px;background-color:#f1f5f9;color:#475569;text-decoration:none;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-bottom:8px;">ℹ️ Proč mi chodí upozornění?</a>')
+            btn_items.append(f'<a href="{why_href}" target="_blank" style="display:inline-block;padding:8px 14px;background-color:#f1f5f9;color:#475569;text-decoration:none;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-bottom:8px;">ℹ️ Proč mi chodí upozornění?</a>')
 
         if btn_items:
             action_buttons_html = f"""
-            <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;">
+            <div style="margin-top:24px;padding-top:18px;border-top:1px solid #e2e8f0;text-align:center;">
               {' '.join(btn_items)}
             </div>
             """
 
-        # Sestavení HTML
+        # Header s logem DataCoreBot
+        logo_tag = '<img src="cid:datacore_logo" alt="DataCoreBot Logo" style="max-height:48px;width:auto;vertical-align:middle;border:0;display:inline-block;" />' if logo_cid_available else '<img src="https://datacorebot.koyeb.app/static/img/datacorebot_n.png" alt="DataCoreBot Logo" style="max-height:48px;width:auto;vertical-align:middle;border:0;display:inline-block;" />'
+        
+        email_header = f"""
+        <div style="background: linear-gradient(135deg, #0b0f19 0%, #1e1b4b 100%); padding: 26px 20px; border-radius: 12px 12px 0 0; text-align: center; border-bottom: 2px solid #7c3aed;">
+          {logo_tag}
+          <div style="color: #94a3b8; font-size: 11px; margin-top: 8px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 700;">Projekt OIS IDPK • Centrální Systém</div>
+        </div>
+        """
+
+        # Sekce s přiloženým obrázkem
+        image_block_html = ""
+        if attached_cid_available:
+            image_block_html = """
+            <div style="margin: 22px 0; background: #0f172a; padding: 14px; border-radius: 10px; border: 1px solid #334155; text-align: center;">
+              <img src="cid:attached_image" alt="Přiložený obrázek" style="max-width: 100%; max-height: 480px; border-radius: 8px; display: block; margin: 0 auto; box-shadow: 0 4px 14px rgba(0,0,0,0.4);" />
+              <div style="color: #94a3b8; font-size: 11px; margin-top: 8px;">📷 Přiložený obrázek / screenshot</div>
+            </div>
+            """
+        elif img_url and (str(img_url).startswith("http://") or str(img_url).startswith("https://")):
+            image_block_html = f"""
+            <div style="margin: 22px 0; background: #0f172a; padding: 14px; border-radius: 10px; border: 1px solid #334155; text-align: center;">
+              <a href="{img_url}" target="_blank">
+                <img src="{img_url}" alt="Přiložený obrázek" style="max-width: 100%; max-height: 480px; border-radius: 8px; display: block; margin: 0 auto; box-shadow: 0 4px 14px rgba(0,0,0,0.4);" />
+              </a>
+              <div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">Kliknutím otevřete obrázek v plné velikosti</div>
+            </div>
+            """
+
+        # Sestavení těla HTML
         if embed_data:
-            import re
             fields_html = ""
             for f in embed_data.get("fields", []):
                 val = str(f.get("value", ""))
                 val = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" style="color: #38bdf8; text-decoration: none;">\1</a>', val)
-                fields_html += f"<li><strong>{f.get('name', '')}:</strong> {val}</li>"
-                
-            image_block_html = ""
-            img_dict = embed_data.get("image")
-            img_url = (img_dict.get("url") if isinstance(img_dict, dict) else img_dict) if img_dict else None
-            if img_url:
-                image_block_html = f"""
-                <div style="margin: 18px 0; text-align: center;">
-                  <a href="{img_url}" target="_blank">
-                    <img src="{img_url}" alt="Přiložený obrázek" style="max-width: 100%; max-height: 420px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.08);" />
-                  </a>
-                  <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Kliknutím otevřete obrázek v plné velikosti</div>
-                </div>
+                fields_html += f"""
+                <tr style="border-bottom: 1px solid #f1f5f9;">
+                  <td style="padding: 8px 12px; font-weight: 700; color: #475569; font-size: 13px; width: 35%;">{f.get('name', '')}:</td>
+                  <td style="padding: 8px 12px; color: #0f172a; font-size: 13px;">{val}</td>
+                </tr>
+                """
+            
+            fields_table = ""
+            if fields_html:
+                fields_table = f"""
+                <table style="width: 100%; border-collapse: collapse; background: #f8fafc; border-radius: 8px; overflow: hidden; margin: 16px 0; border: 1px solid #e2e8f0;">
+                  <tbody>
+                    {fields_html}
+                  </tbody>
+                </table>
                 """
 
+            title_val = str(embed_data.get("title", "Upozornění")).strip()
+            desc_val = str(embed_data.get("description", "")).replace("\n", "<br>")
+
             html = f"""
+            <!DOCTYPE html>
             <html>
-              <body style="background-color: #ffffff; color: #000000; font-family: sans-serif; padding: 20px;">
-                <h2 style="color: #38bdf8;">{embed_data.get("title", "Upozornění")}</h2>
-                <p><strong>{embed_data.get("description", "")}</strong></p>
-                <ul>
-                  {fields_html}
-                </ul>
-                {image_block_html}
-                {action_buttons_html}
-                <p style="margin-top:20px;color:#64748b;font-size:12px;">Hezký den přeje<br>Tým Projekt OIS IDPK</p>
+              <head><meta charset="utf-8"></head>
+              <body style="margin: 0; padding: 20px 10px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
+                  {email_header}
+                  <div style="padding: 28px 24px;">
+                    <h2 style="color: #0f172a; margin-top: 0; margin-bottom: 14px; font-size: 20px; font-weight: 700;">{title_val}</h2>
+                    <div style="font-size: 15px; color: #334155; line-height: 1.65; margin-bottom: 18px;">{desc_val}</div>
+                    {fields_table}
+                    {image_block_html}
+                    {action_buttons_html}
+                  </div>
+                  <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b;">
+                    <div>Hezký den přeje <strong>Tým DataCore Bot & Projekt OIS IDPK</strong></div>
+                    <div style="margin-top: 4px; font-size: 11px; color: #94a3b8;">Tato zpráva byla automaticky vygenerována systémem DataCore OIS IDPK.</div>
+                  </div>
+                </div>
               </body>
             </html>
             """
         else:
-            import re
-            html_text = dm_text.replace(chr(10), '<br>')
+            html_text = dm_text.replace("\n", "<br>")
             html_text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" style="color: #38bdf8;">\1</a>', html_text)
             
             html = f"""
+            <!DOCTYPE html>
             <html>
-              <body style="background-color: #ffffff; color: #000000; font-family: sans-serif; padding: 20px;">
-                <p>{html_text}</p>
-                {action_buttons_html}
-                <p style="margin-top:20px;color:#64748b;font-size:12px;">Hezký den přeje<br>Tým Projekt OIS IDPK</p>
+              <head><meta charset="utf-8"></head>
+              <body style="margin: 0; padding: 20px 10px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
+                  {email_header}
+                  <div style="padding: 28px 24px;">
+                    <div style="font-size: 15px; color: #334155; line-height: 1.65;">{html_text}</div>
+                    {image_block_html}
+                    {action_buttons_html}
+                  </div>
+                  <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b;">
+                    <div>Hezký den přeje <strong>Tým DataCore Bot & Projekt OIS IDPK</strong></div>
+                    <div style="margin-top: 4px; font-size: 11px; color: #94a3b8;">Tato zpráva byla automaticky vygenerována systémem DataCore OIS IDPK.</div>
+                  </div>
+                </div>
               </body>
             </html>
             """
 
-        msg.attach(MIMEText(html, "html", "utf-8"))
+        clean_plain_text = re.sub(r'data:image\/[^;]+;base64,[A-Za-z0-9+/=]+', '[Přiložený obrázek]', dm_text)
+        msg_alt.attach(MIMEText(clean_plain_text, "plain", "utf-8"))
+        msg_alt.attach(MIMEText(html, "html", "utf-8"))
         
         server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15)
         server.login(SMTP_EMAIL, SMTP_PASSWORD)

@@ -4071,10 +4071,34 @@ HTML_DASHBOARD_NOTIFICATIONS_MGMT = """
 
         <div style="margin-bottom: 20px;">
           <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">
-            <i class="fas fa-image" style="color: #38bdf8;"></i> Obrázek / Screenshot (URL adresa - nepovinné):
+            <i class="fas fa-image" style="color: #38bdf8;"></i> Přiložit obrázek / Screenshot (nepovinné):
           </label>
-          <input type="url" id="direct-image-url" placeholder="https://... (např. odkaz na screenshot, imgur, discord cdn)" style="margin: 0; padding: 11px 14px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px;">
-          <div style="color: #64748b; font-size: 11px; margin-top: 4px;">📸 Obrázek se zobrazí přímo v Discord zprávě i v těle e-mailu.</div>
+          <input type="file" id="direct-image-file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" onchange="handleDirectFileSelect(event)">
+          
+          <div id="direct-upload-dropzone" onclick="document.getElementById('direct-image-file').click()" style="border: 2px dashed #475569; border-radius: 10px; padding: 16px; text-align: center; cursor: pointer; background: rgba(15, 23, 42, 0.4); transition: border-color 0.2s, background 0.2s;">
+            <i class="fas fa-cloud-upload-alt" style="font-size: 26px; color: #38bdf8; margin-bottom: 6px;"></i>
+            <div style="font-size: 13px; color: #f8fafc; font-weight: 600;">Klikněte nebo přetáhněte obrázek (.png, .jpg, .webp, .gif)</div>
+            <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Obrázek se vloží přímo do těla e-mailu i do Discord zprávy</div>
+          </div>
+
+          <div id="direct-image-preview-container" style="display: none; margin-top: 10px; border-radius: 8px; border: 1px solid #334155; background: rgba(0,0,0,0.5); padding: 10px; text-align: center;">
+            <img id="direct-image-preview" src="" alt="Náhled obrázku" style="max-height: 180px; max-width: 100%; border-radius: 6px; display: block; margin: 0 auto; box-shadow: 0 4px 10px rgba(0,0,0,0.3);" />
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding: 0 4px;">
+              <span id="direct-image-name" style="font-size: 11px; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;"></span>
+              <button type="button" onclick="clearDirectImage(event)" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+                <i class="fas fa-times"></i> Odebrat obrázek
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top: 8px;">
+            <a href="javascript:void(0)" onclick="toggleDirectUrlInput()" style="color: #94a3b8; font-size: 11px; text-decoration: underline;">
+              <i class="fas fa-link"></i> Nebo zadat URL adresu obrázku ručně
+            </a>
+            <div id="direct-url-wrap" style="display: none; margin-top: 6px;">
+              <input type="url" id="direct-image-url" placeholder="https://... (např. odkaz na screenshot, imgur, discord cdn)" oninput="handleDirectUrlInput(this.value)" style="margin: 0; padding: 9px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 13px; width: 100%; box-sizing: border-box;">
+            </div>
+          </div>
         </div>
 
         <div style="background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: 8px; padding: 12px 15px; margin-bottom: 20px; font-size: 12px; color: #c4b5fd;">
@@ -4203,6 +4227,78 @@ function switchDashTab(tab) {
   if (tab === 'hist' && _dashHist.length === 0) loadDashHist();
 }
 
+let _directImageData = '';
+
+function handleDirectFileSelect(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    _directImageData = evt.target.result;
+    document.getElementById('direct-image-preview').src = _directImageData;
+    document.getElementById('direct-image-name').textContent = file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+    document.getElementById('direct-image-preview-container').style.display = 'block';
+    document.getElementById('direct-upload-dropzone').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearDirectImage(e) {
+  if (e) e.stopPropagation();
+  _directImageData = '';
+  const fileEl = document.getElementById('direct-image-file');
+  if (fileEl) fileEl.value = '';
+  const preview = document.getElementById('direct-image-preview');
+  if (preview) preview.src = '';
+  document.getElementById('direct-image-preview-container').style.display = 'none';
+  document.getElementById('direct-upload-dropzone').style.display = 'block';
+  const urlEl = document.getElementById('direct-image-url');
+  if (urlEl) urlEl.value = '';
+}
+
+function toggleDirectUrlInput() {
+  const wrap = document.getElementById('direct-url-wrap');
+  if (wrap) wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+}
+
+function handleDirectUrlInput(val) {
+  if (!val.trim()) return;
+  _directImageData = val.trim();
+  document.getElementById('direct-image-preview').src = _directImageData;
+  document.getElementById('direct-image-name').textContent = 'Odkaz: ' + val.trim();
+  document.getElementById('direct-image-preview-container').style.display = 'block';
+  document.getElementById('direct-upload-dropzone').style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const dropzone = document.getElementById('direct-upload-dropzone');
+  if (dropzone) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone.addEventListener(eventName, e => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.style.borderColor = '#38bdf8';
+        dropzone.style.background = 'rgba(56, 189, 248, 0.1)';
+      }, false);
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone.addEventListener(eventName, e => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.style.borderColor = '#475569';
+        dropzone.style.background = 'rgba(15, 23, 42, 0.4)';
+      }, false);
+    });
+    dropzone.addEventListener('drop', e => {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files && files[0]) {
+        handleDirectFileSelect({ target: { files: files } });
+      }
+    }, false);
+  }
+});
+
 async function handleSendDirectMsg(e) {
   if (e && e.preventDefault) e.preventDefault();
   const targetEl = document.getElementById('direct-target');
@@ -4214,7 +4310,7 @@ async function handleSendDirectMsg(e) {
   const target = (targetEl ? targetEl.value : '').trim();
   const title = (titleEl ? titleEl.value : '').trim();
   const message = (msgEl ? msgEl.value : '').trim();
-  const image_url = (document.getElementById('direct-image-url')?.value || '').trim();
+  const image_url = _directImageData || (document.getElementById('direct-image-url')?.value || '').trim();
   const channel = document.querySelector('input[name="direct-channel"]:checked')?.value || 'both';
 
   if (!statusEl) return false;
@@ -4251,8 +4347,7 @@ async function handleSendDirectMsg(e) {
       statusEl.className = 'alert alert-success';
       statusEl.innerHTML = '<i class="fas fa-check-circle"></i> <strong>Úspěšně odesláno:</strong> ' + (data.message || 'Zpráva byla úspěšně doručena!');
       if (msgEl) msgEl.value = '';
-      const imgEl = document.getElementById('direct-image-url');
-      if (imgEl) imgEl.value = '';
+      clearDirectImage();
       const infoEl = document.getElementById('direct-selected-info');
       if (infoEl) infoEl.style.display = 'none';
       loadDashHist();

@@ -15214,6 +15214,26 @@ def admin_notifications_page():
             <label style="color:#cbd5e1;font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Obsah zprávy *</label>
             <textarea id="direct-msg" rows="3" placeholder="Sem zadejte text zprávy, který bude odeslán příjemci na Discord nebo E-mail..." style="width:100%;padding:10px 12px;background:#0f172a;color:white;border:1px solid #334155;border-radius:8px;font-size:13px;box-sizing:border-box;font-family:system-ui,sans-serif;"></textarea>
           </div>
+          <div style="margin-bottom:14px;">
+            <label style="color:#cbd5e1;font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Přiložit obrázek / Screenshot (nepovinné)</label>
+            <input type="file" id="standalone-direct-image-file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" onchange="handleStandaloneFileSelect(event)">
+            
+            <div id="standalone-upload-dropzone" onclick="document.getElementById('standalone-direct-image-file').click()" style="border: 2px dashed #475569; border-radius: 8px; padding: 12px; text-align: center; cursor: pointer; background: rgba(15, 23, 42, 0.4);">
+              <i class="fas fa-cloud-upload-alt" style="font-size: 22px; color: #38bdf8; margin-bottom: 4px;"></i>
+              <div style="font-size: 12px; color: #f8fafc; font-weight: 600;">Klikněte pro nahrání obrázku (.png, .jpg, .webp, .gif)</div>
+              <div style="font-size: 11px; color: #94a3b8;">Zobrazí se přímo v Discord zprávě i v těle e-mailu</div>
+            </div>
+
+            <div id="standalone-image-preview-container" style="display: none; margin-top: 8px; border-radius: 8px; border: 1px solid #334155; background: rgba(0,0,0,0.5); padding: 8px; text-align: center;">
+              <img id="standalone-image-preview" src="" alt="Náhled" style="max-height: 140px; max-width: 100%; border-radius: 6px; display: block; margin: 0 auto;" />
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px;">
+                <span id="standalone-image-name" style="font-size: 11px; color: #cbd5e1;"></span>
+                <button type="button" onclick="clearStandaloneDirectImage(event)" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 2px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+                  Odebrat
+                </button>
+              </div>
+            </div>
+          </div>
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div id="direct-status" style="font-size:13px;font-weight:600;"></div>
             <button onclick="sendDirectMessage()" style="padding:10px 24px;background:#7c3aed;color:white;border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:13px;box-shadow:0 4px 12px rgba(124,58,237,0.4);transition:.2s;">
@@ -15577,6 +15597,31 @@ def admin_notifications_page():
       }
     }
 
+    let _standaloneImageData = '';
+
+    function handleStandaloneFileSelect(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        _standaloneImageData = evt.target.result;
+        document.getElementById('standalone-image-preview').src = _standaloneImageData;
+        document.getElementById('standalone-image-name').textContent = file.name;
+        document.getElementById('standalone-image-preview-container').style.display = 'block';
+        document.getElementById('standalone-upload-dropzone').style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearStandaloneDirectImage(e) {
+      if (e) e.stopPropagation();
+      _standaloneImageData = '';
+      const f = document.getElementById('standalone-direct-image-file');
+      if (f) f.value = '';
+      document.getElementById('standalone-image-preview-container').style.display = 'none';
+      document.getElementById('standalone-upload-dropzone').style.display = 'block';
+    }
+
     async function sendDirectMessage() {
       let target = document.getElementById('admin-target').value.trim();
       let title = document.getElementById('direct-title').value.trim();
@@ -15592,12 +15637,13 @@ def admin_notifications_page():
         let r = await fetch('/api/admin/notifications/send_direct', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({target, title, message: msg})
+          body: JSON.stringify({target, title, message: msg, image_url: _standaloneImageData})
         });
         let d = await r.json();
         if (d.status === 'success') {
           stEl.innerHTML = `<span style="color:#10b981;">✅ ${d.message}</span>`;
           document.getElementById('direct-msg').value = '';
+          clearStandaloneDirectImage();
           loadAdminHistory();
         } else {
           stEl.innerHTML = `<span style="color:#ef4444;">❌ ${d.message || 'Chyba'}</span>`;
@@ -15819,7 +15865,10 @@ def api_admin_notif_send_direct():
 
     dm_text = f"🔔 **{title}**\n\n{message}"
     if image_url:
-        dm_text += f"\n\n📷 [Přiložený obrázek: {image_url}]"
+        if image_url.startswith("http://") or image_url.startswith("https://"):
+            dm_text += f"\n\n📷 [Přiložený obrázek: {image_url}]"
+        else:
+            dm_text += "\n\n📷 [Přiložen obrázek]"
     dm_text += f"\n\n*Odesílatel: Administrátor ({admin_display_name}) • {now_str}*"
 
     # 1. Pokud máme E-mail a je zvolen kanál 'both' nebo 'email'
