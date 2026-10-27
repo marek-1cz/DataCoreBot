@@ -3982,12 +3982,17 @@ HTML_DASHBOARD_NOTIFICATIONS_MGMT = """
       </p>
 
       <form onsubmit="handleSendDirectMsg(event)">
-        <div style="margin-bottom: 15px;">
+        <div style="margin-bottom: 15px; position: relative;" id="direct-target-wrapper">
           <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">
             Cílový uživatel (Nick, App ID, Discord ID nebo E-mail): <span style="color:#ef4444;">*</span>
           </label>
-          <input type="text" id="direct-target" placeholder="Např. marekk_czz, #1, 714856037042585641 nebo uzivatel@email.cz" required style="margin: 0; padding: 11px 14px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px;">
-          <div style="color: #64748b; font-size: 11px; margin-top: 4px;">Můžete zadat herní nick, App ID (#1), číselné Discord ID nebo e-mail.</div>
+          <div style="position: relative;">
+            <input type="text" id="direct-target" autocomplete="off" placeholder="Napište nick (např. marekk_czz), #AppID nebo vložte Discord ID..." required style="margin: 0; padding: 11px 14px; padding-right: 36px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px; width: 100%; box-sizing: border-box;">
+            <span id="direct-target-spinner" style="position: absolute; right: 12px; top: 12px; color: #94a3b8; display: none;"><i class="fas fa-spinner fa-spin"></i></span>
+          </div>
+          <div id="users-search-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: #0f172a; border: 1px solid #475569; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.6); max-height: 260px; overflow-y: auto; z-index: 100; margin-top: 4px;"></div>
+          <div id="direct-selected-info" style="display: none; margin-top: 8px; padding: 8px 12px; border-radius: 6px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); font-size: 12px; color: #bae6fd;"></div>
+          <div style="color: #64748b; font-size: 11px; margin-top: 4px;">⚡ Našeptávač: Pište nick, #AppID nebo vložte Discord ID. Kliknutím ze seznamu uživatele vyberete.</div>
         </div>
 
         <div style="margin-bottom: 15px;">
@@ -4366,9 +4371,111 @@ function filterDashHist() {
   renderDashHist(filtered);
 }
 
-// Inicializace počtů při načtení
+let _userSearchDebounce = null;
+function initUserAutocomplete() {
+  const input = document.getElementById('direct-target');
+  const dropdown = document.getElementById('users-search-dropdown');
+  const spinner = document.getElementById('direct-target-spinner');
+  const infoEl = document.getElementById('direct-selected-info');
+  if (!input || !dropdown) return;
+
+  async function doSearch(query) {
+    if (spinner) spinner.style.display = 'inline-block';
+    try {
+      const res = await fetch('/api/admin/users/search?q=' + encodeURIComponent(query));
+      const data = await res.json();
+      renderDropdownUsers(data.users || []);
+    } catch (err) {
+      console.error('Chyba hledání uživatelů:', err);
+    } finally {
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
+  function renderDropdownUsers(users) {
+    dropdown.innerHTML = '';
+    if (!users || users.length === 0) {
+      dropdown.innerHTML = '<div style="padding: 12px; color: #94a3b8; font-size: 13px; text-align: center;"><i class="fas fa-search" style="margin-right: 6px;"></i>Žádný uživatel nebyl nalezen.</div>';
+      dropdown.style.display = 'block';
+      return;
+    }
+
+    users.forEach(u => {
+      const row = document.createElement('div');
+      row.style.cssText = 'padding: 10px 14px; border-bottom: 1px solid #1e293b; cursor: pointer; transition: background 0.15s; display: flex; flex-direction: column; gap: 3px;';
+      row.onmouseenter = () => row.style.background = '#1e293b';
+      row.onmouseleave = () => row.style.background = 'transparent';
+
+      const nick = u.nick || 'Bez nicku';
+      const appId = u.app_id ? '#' + u.app_id : '';
+      const discordId = u.discord_id || '';
+      const email = u.email || '';
+      const role = u.role || 'USER';
+
+      row.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-weight: 700; color: #f8fafc; font-size: 14px;">${nick}</span>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            ${appId ? `<span style="font-size: 11px; background: rgba(56,189,248,0.15); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-weight: 600;">${appId}</span>` : ''}
+            <span style="font-size: 10px; background: #334155; color: #cbd5e1; padding: 1px 5px; border-radius: 4px; font-weight: 700;">${role}</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; font-size: 11px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <span><i class="fab fa-discord" style="color: #818cf8; margin-right: 4px;"></i>${discordId ? discordId : '<em style="color:#64748b;">nemá</em>'}</span>
+          <span><i class="fas fa-envelope" style="color: #38bdf8; margin-right: 4px;"></i>${email ? email : '<em style="color:#64748b;">nemá</em>'}</span>
+        </div>
+      `;
+
+      row.onclick = () => {
+        input.value = nick;
+        dropdown.style.display = 'none';
+        if (infoEl) {
+          infoEl.style.display = 'block';
+          infoEl.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <i class="fas fa-user-check" style="color: #38bdf8; margin-right: 6px;"></i>
+                Vybrán: <strong style="color: #fff;">${nick}</strong> 
+                ${appId ? `<span style="color:#94a3b8; margin-left: 4px;">(${appId})</span>` : ''}
+              </div>
+              <div style="font-size: 11px; color: #94a3b8;">
+                ${discordId ? `Discord: <code style="color:#c4b5fd;">${discordId}</code>` : '<span style="color:#ef4444;">Nemá Discord</span>'} • 
+                ${email ? `Email: <code style="color:#7dd3fc;">${email}</code>` : '<span style="color:#ef4444;">Nemá email</span>'}
+              </div>
+            </div>
+          `;
+        }
+      };
+
+      dropdown.appendChild(row);
+    });
+
+    dropdown.style.display = 'block';
+  }
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    clearTimeout(_userSearchDebounce);
+    if (infoEl) infoEl.style.display = 'none';
+    _userSearchDebounce = setTimeout(() => doSearch(q), 250);
+  });
+
+  input.addEventListener('focus', () => {
+    doSearch(input.value.trim());
+  });
+
+  document.addEventListener('click', (e) => {
+    const wrap = document.getElementById('direct-target-wrapper');
+    if (wrap && !wrap.contains(e.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
+}
+
+// Inicializace počtů a našeptávače při načtení
 loadDashRules();
 loadDashHist();
+initUserAutocomplete();
 </script>
 """
 

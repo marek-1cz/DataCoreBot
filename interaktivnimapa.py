@@ -15663,41 +15663,93 @@ def api_admin_notif_send_direct():
     resolved_discord = None
     resolved_nick = target_raw
 
-    # Přímý email
-    if "@" in target_raw:
-        resolved_email = target_raw
-    # Přímé Discord ID
-    elif bool(re.match(r'^\d{15,22}$', target_raw)):
-        resolved_discord = target_raw
-    else:
-        # Dohledání v databázi podle App ID, nicku nebo emailu
+    target_clean = target_raw.strip()
+    digits_only = re.sub(r'[^0-9]', '', target_clean)
+
+    # 1. Je to E-mail?
+    if "@" in target_clean and "." in target_clean:
+        resolved_email = target_clean
         db = get_db_client()
-        found_u = None
-        clean_tid = target_raw.lstrip('#').strip()
         if db:
             try:
-                if clean_tid.isdigit():
-                    res = db.table("users").select("discord_id, email, nick, username").eq("app_id", int(clean_tid)).execute().data
-                    if res: found_u = res[0]
-                if not found_u:
-                    res = db.table("users").select("discord_id, email, nick, username").ilike("nick", target_raw).execute().data
-                    if res: found_u = res[0]
-                if not found_u:
-                    res = db.table("users").select("discord_id, email, nick, username").ilike("username", target_raw).execute().data
-                    if res: found_u = res[0]
-            except Exception as e_lookup:
-                sys_log(f"[ADMIN NOTIF] Chyba hledání uživatele: {e_lookup}")
+                res = db.table("users").select("id, app_id, nick, discord_id, email").ilike("email", target_clean).execute().data
+                if res:
+                    resolved_nick = res[0].get("nick") or target_clean
+                    if res[0].get("discord_id") and str(res[0]["discord_id"]).isdigit():
+                        resolved_discord = str(res[0]["discord_id"])
+            except Exception: pass
 
+    # 2. Je to Discord ID? (15–22 číslic, i když před ním je # nebo <@...>)
+    elif len(digits_only) >= 15:
+        resolved_discord = digits_only
+        db = get_db_client()
+        if db:
+            try:
+                res = db.table("users").select("id, app_id, nick, discord_id, email").eq("discord_id", digits_only).execute().data
+                if res:
+                    resolved_nick = res[0].get("nick") or target_raw
+                    if res[0].get("email") and "@" in str(res[0]["email"]):
+                        resolved_email = str(res[0]["email"]).strip()
+            except Exception: pass
+
+    # 3. Je to App ID? (#1024 nebo 1024 o délce < 15)
+    elif digits_only and (target_clean.startswith('#') or (digits_only == target_clean and len(digits_only) < 15)):
+        db = get_db_client()
+        found_u = None
+        if db:
+            try:
+                res = db.table("users").select("id, app_id, nick, discord_id, email").eq("app_id", int(digits_only)).execute().data
+                if res: found_u = res[0]
+            except Exception as e_app:
+                sys_log(f"[ADMIN NOTIF] Chyba hledání App ID: {e_app}")
         if found_u:
-            resolved_nick = found_u.get("nick") or found_u.get("username") or target_raw
+            resolved_nick = found_u.get("nick") or f"App #{digits_only}"
+            if found_u.get("discord_id") and str(found_u["discord_id"]).isdigit():
+                resolved_discord = str(found_u["discord_id"])
             if found_u.get("email") and "@" in str(found_u["email"]):
                 resolved_email = str(found_u["email"]).strip()
-            if found_u.get("discord_id") and str(found_u["discord_id"]).strip().isdigit():
-                resolved_discord = str(found_u["discord_id"]).strip()
         else:
             return jsonify({
                 "status": "error",
-                "message": f"Uživatel '{target_raw}' nebyl v databázi nalezen. Zadejte platný nick, App ID (např. #1), Discord ID nebo e-mail."
+                "message": f"Uživatel s App ID #{digits_only} nebyl v databázi nalezen."
+            }), 400
+
+    # 4. Hledání podle herního Nicku
+    else:
+        db = get_db_client()
+        found_u = None
+        if db:
+            try:
+                res = db.table("users").select("id, app_id, nick, discord_id, email").ilike("nick", target_clean).execute().data
+                if res: found_u = res[0]
+                if not found_u:
+                    res = db.table("users").select("id, app_id, nick, discord_id, email").ilike("nick", f"%{target_clean}%").limit(1).execute().data
+                    if res: found_u = res[0]
+            except Exception as e_nick:
+                sys_log(f"[ADMIN NOTIF] Chyba hledání nicku: {e_nick}")
+        if not found_u:
+            try:
+                from main import _get_fallback_users
+                all_u = _get_fallback_users()
+                for u in all_u:
+                    if target_clean.lower() == str(u.get('nick','')).lower():
+                        found_u = u; break
+                if not found_u:
+                    for u in all_u:
+                        if target_clean.lower() in str(u.get('nick','')).lower():
+                            found_u = u; break
+            except Exception: pass
+
+        if found_u:
+            resolved_nick = found_u.get("nick") or target_clean
+            if found_u.get("discord_id") and str(found_u["discord_id"]).isdigit():
+                resolved_discord = str(found_u["discord_id"])
+            if found_u.get("email") and "@" in str(found_u["email"]):
+                resolved_email = str(found_u["email"]).strip()
+        else:
+            return jsonify({
+                "status": "error",
+                "message": f"Uživatel '{target_raw}' nebyl v databázi nalezen. Zadejte platný nick, App ID (např. #1024), Discord ID nebo e-mail."
             }), 400
 
     now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
@@ -15786,6 +15838,53 @@ def api_admin_notif_send_direct():
             "status": "error",
             "message": f"Doručení selhalo: {', '.join(results)}"
         }), 500
+
+
+@mapa_bp.route('/api/admin/users/search')
+def api_admin_users_search():
+    """Vrátí seznam uživatelů pro našeptávač a chytré vyhledávání v administraci."""
+    is_admin, _ = _check_admin_request()
+    if not is_admin:
+        return jsonify({"status": "error", "users": []}), 401
+
+    q = str(request.args.get("q", "")).strip()
+    db = get_db_client()
+    users = []
+    if db:
+        try:
+            digits = re.sub(r'[^0-9]', '', q)
+            if digits and len(digits) >= 15:
+                res = db.table("users").select("id, app_id, nick, discord_id, email, role").eq("discord_id", digits).limit(10).execute()
+                users = res.data or []
+            elif digits and q.startswith('#'):
+                res = db.table("users").select("id, app_id, nick, discord_id, email, role").eq("app_id", int(digits)).limit(10).execute()
+                users = res.data or []
+            elif q:
+                res = db.table("users").select("id, app_id, nick, discord_id, email, role").ilike("nick", f"%{q}%").limit(10).execute()
+                users = res.data or []
+                if not users and '@' in q:
+                    res = db.table("users").select("id, app_id, nick, discord_id, email, role").ilike("email", f"%{q}%").limit(10).execute()
+                    users = res.data or []
+            else:
+                res = db.table("users").select("id, app_id, nick, discord_id, email, role").order("id", desc=True).limit(20).execute()
+                users = res.data or []
+        except Exception as e:
+            sys_log(f"[ADMIN USERS SEARCH] Chyba: {e}")
+            users = []
+
+    if not users:
+        try:
+            from main import _get_fallback_users
+            all_u = _get_fallback_users()
+            if q:
+                q_l = q.lower().lstrip('#')
+                users = [u for u in all_u if q_l in str(u.get('nick','')).lower() or q_l in str(u.get('discord_id','')) or q_l in str(u.get('app_id','')) or q_l in str(u.get('email','')).lower()][:10]
+            else:
+                users = all_u[:20]
+        except Exception:
+            pass
+
+    return jsonify({"status": "success", "users": users})
 
 
 @mapa_bp.route('/api/admin/notifications/all_rules')
