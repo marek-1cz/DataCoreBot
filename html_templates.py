@@ -3995,6 +3995,26 @@ HTML_DASHBOARD_NOTIFICATIONS_MGMT = """
           <div style="color: #64748b; font-size: 11px; margin-top: 4px;">⚡ Našeptávač: Pište nick, #AppID nebo vložte Discord ID. Kliknutím ze seznamu uživatele vyberete.</div>
         </div>
 
+        <div style="margin-bottom: 18px;">
+          <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">
+            Kam zprávu odeslat: <span style="color:#ef4444;">*</span>
+          </label>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc; transition: border-color 0.2s;">
+              <input type="radio" name="direct-channel" value="both" checked style="accent-color: #38bdf8;">
+              <span><strong>🌐 Obojí</strong> <span style="color: #94a3b8; font-size: 11px; display: block;">Discord + E-mail</span></span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc; transition: border-color 0.2s;">
+              <input type="radio" name="direct-channel" value="discord" style="accent-color: #818cf8;">
+              <span><i class="fab fa-discord" style="color: #818cf8;"></i> <strong>Pouze Discord</strong> <span style="color: #94a3b8; font-size: 11px; display: block;">Do soukromé DM</span></span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc; transition: border-color 0.2s;">
+              <input type="radio" name="direct-channel" value="email" style="accent-color: #38bdf8;">
+              <span><i class="fas fa-envelope" style="color: #38bdf8;"></i> <strong>Pouze E-mail</strong> <span style="color: #94a3b8; font-size: 11px; display: block;">Do e-mailu</span></span>
+            </label>
+          </div>
+        </div>
+
         <div style="margin-bottom: 15px;">
           <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">
             Nadpis / Předmět:
@@ -4140,6 +4160,7 @@ async function handleSendDirectMsg(e) {
   const target = document.getElementById('direct-target').value.trim();
   const title = document.getElementById('direct-title').value.trim();
   const message = document.getElementById('direct-message').value.trim();
+  const channel = document.querySelector('input[name="direct-channel"]:checked')?.value || 'both';
   const statusEl = document.getElementById('direct-msg-status');
   const btn = document.getElementById('btn-submit-direct');
 
@@ -4155,13 +4176,15 @@ async function handleSendDirectMsg(e) {
     const res = await fetch('/api/admin/notifications/send_direct', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ target, title, message })
+      body: JSON.stringify({ target, title, message, channel })
     });
     const data = await res.json();
     if (data.status === 'success') {
       statusEl.className = 'alert alert-success';
       statusEl.innerHTML = '<i class="fas fa-check-circle"></i> ' + (data.message || 'Zpráva byla úspěšně odeslána!');
       document.getElementById('direct-message').value = '';
+      const infoEl = document.getElementById('direct-selected-info');
+      if (infoEl) infoEl.style.display = 'none';
       loadDashHist();
     } else {
       statusEl.className = 'alert alert-danger';

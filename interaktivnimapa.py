@@ -15653,6 +15653,9 @@ def api_admin_notif_send_direct():
     target_raw = str(data.get("target", "")).strip()
     title = str(data.get("title", "")).strip() or "🔔 Zpráva administrátora DataCore"
     message = str(data.get("message", "")).strip()
+    channel = str(data.get("channel", "both")).strip().lower()
+    if channel not in ["both", "discord", "email"]:
+        channel = "both"
 
     if not target_raw:
         return jsonify({"status": "error", "message": "Zadejte cílové Discord ID, herní nick, App ID nebo E-mail"}), 400
@@ -15752,6 +15755,19 @@ def api_admin_notif_send_direct():
                 "message": f"Uživatel '{target_raw}' nebyl v databázi nalezen. Zadejte platný nick, App ID (např. #1024), Discord ID nebo e-mail."
             }), 400
 
+    # Kontrola dostupnosti zvoleného kanálu
+    if channel == "email" and not resolved_email:
+        return jsonify({
+            "status": "error",
+            "message": f"Uživatel '{resolved_nick}' nemá v databázi evidovaný e-mail. Zvolte prosím 'Pouze Discord' nebo zadejte e-mail přímo."
+        }), 400
+
+    if channel == "discord" and not resolved_discord:
+        return jsonify({
+            "status": "error",
+            "message": f"Uživatel '{resolved_nick}' nemá v databázi evidované číselné Discord ID. Zvolte prosím 'Pouze E-mail' nebo vložte Discord ID přímo."
+        }), 400
+
     now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
     admin_display_name = admin_name or "marekk_czz"
     results = []
@@ -15770,8 +15786,8 @@ def api_admin_notif_send_direct():
     }
     dm_text = f"🔔 **{title}**\n\n{message}\n\n*Odesílatel: Administrátor ({admin_display_name}) • {now_str}*"
 
-    # 1. Pokud máme E-mail, odešli ho přímo
-    if resolved_email:
+    # 1. Pokud máme E-mail a je zvolen kanál 'both' nebo 'email'
+    if resolved_email and channel in ["both", "email"]:
         try:
             from main import send_notification_email_sync
             send_notification_email_sync(resolved_email, embed_data, dm_text, rule_id=f"admin_direct_{int(time.time())}", is_one_time=True)
@@ -15780,14 +15796,21 @@ def api_admin_notif_send_direct():
         except Exception as e_em:
             results.append(f"E-mail ({resolved_email}) selhal: {e_em}")
 
-    # 2. Pokud máme Discord ID, zkus odeslat do Discord DM
-    if resolved_discord:
+    # 2. Pokud máme Discord ID a je zvolen kanál 'both' nebo 'discord'
+    if resolved_discord and channel in ["both", "discord"]:
         try:
             from main import get_bot_loop, send_user_dm
             b_loop = get_bot_loop()
             if b_loop:
                 fut = asyncio.run_coroutine_threadsafe(
-                    send_user_dm(resolved_discord, title, message, 0x8b5cf6, fields=[("Odesílatel", f"Administrátor ({admin_display_name})"), ("Čas", now_str)]),
+                    send_user_dm(
+                        resolved_discord,
+                        title,
+                        message,
+                        0x8b5cf6,
+                        fields=[("Odesílatel", f"Administrátor ({admin_display_name})"), ("Čas", now_str)],
+                        is_admin_direct=True
+                    ),
                     b_loop
                 )
                 ok = fut.result(timeout=6.0)

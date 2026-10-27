@@ -1280,7 +1280,7 @@ def user_exists_sync(identifier):
         pass
     return False
 
-async def send_user_dm(discord_identifier, title, description, color=0x38bdf8, fields=None):
+async def send_user_dm(discord_identifier, title, description, color=0x38bdf8, fields=None, view=None, is_admin_direct=False):
     if not discord_identifier:
         return False
     if not bot.is_ready():
@@ -1316,6 +1316,21 @@ async def send_user_dm(discord_identifier, title, description, color=0x38bdf8, f
                     if f_name and f_val:
                         embed.add_field(name=str(f_name), value=str(f_val)[:1024], inline=False)
             embed.set_footer(text="Projekt OIS IDPK • Centrální podpora")
+
+            if view is None and is_admin_direct:
+                try:
+                    view = discord.ui.View()
+                    view.add_item(discord.ui.Button(label="ℹ️ Proč mi přišla zpráva?", url="https://datacorebot.koyeb.app/proc-notifikace?typ=admin", style=discord.ButtonStyle.link))
+                    view.add_item(discord.ui.Button(label="💬 Podpora a odpověď", url="https://datacorebot.koyeb.app/podpora", style=discord.ButtonStyle.link))
+                except Exception:
+                    view = None
+
+            if view:
+                try:
+                    await user.send(embed=embed, view=view)
+                    return True
+                except Exception:
+                    pass
             await user.send(embed=embed)
             return True
     except Exception as e_dm:
@@ -6584,10 +6599,14 @@ async def check_notification_queue():
                     view = None
                     try:
                         view = discord.ui.View()
-                        if not is_one_time and rule_id and not str(rule_id).startswith("admin_direct"):
-                            unsub_href = f"https://datacorebot.koyeb.app/api/notifications/unsubscribe?id={rule_id}"
-                            view.add_item(discord.ui.Button(label="🔕 Vypnout notifikace", url=unsub_href, style=discord.ButtonStyle.link))
-                        view.add_item(discord.ui.Button(label="ℹ️ Proč mi chodí upozornění?", url="https://datacorebot.koyeb.app/proc-notifikace", style=discord.ButtonStyle.link))
+                        if rule_id and str(rule_id).startswith("admin_direct"):
+                            view.add_item(discord.ui.Button(label="ℹ️ Proč mi přišla zpráva?", url="https://datacorebot.koyeb.app/proc-notifikace?typ=admin", style=discord.ButtonStyle.link))
+                            view.add_item(discord.ui.Button(label="💬 Podpora a odpověď", url="https://datacorebot.koyeb.app/podpora", style=discord.ButtonStyle.link))
+                        else:
+                            if not is_one_time and rule_id:
+                                unsub_href = f"https://datacorebot.koyeb.app/api/notifications/unsubscribe?id={rule_id}"
+                                view.add_item(discord.ui.Button(label="🔕 Vypnout notifikace", url=unsub_href, style=discord.ButtonStyle.link))
+                            view.add_item(discord.ui.Button(label="ℹ️ Proč mi chodí upozornění?", url="https://datacorebot.koyeb.app/proc-notifikace", style=discord.ButtonStyle.link))
                     except Exception as e_v:
                         view = None
 
@@ -6680,11 +6699,20 @@ def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is
         # Tlačítka pro odhlášení a vysvětlení
         action_buttons_html = ""
         btn_items = []
-        if not is_one_time and rule_id and not str(rule_id).startswith("admin_direct"):
+        is_admin_direct = bool(rule_id and str(rule_id).startswith("admin_direct"))
+        if not is_one_time and rule_id and not is_admin_direct:
             unsub_href = f"https://datacorebot.koyeb.app/api/notifications/unsubscribe?id={rule_id}"
             btn_items.append(f'<a href="{unsub_href}" target="_blank" style="display:inline-block;padding:9px 16px;background-color:#ef4444;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:13px;margin-right:10px;margin-bottom:8px;">🔕 Vypnout pravidelné notifikace</a>')
-        why_href = "https://datacorebot.koyeb.app/proc-notifikace"
-        btn_items.append(f'<a href="{why_href}" target="_blank" style="display:inline-block;padding:7px 13px;background-color:#f1f5f9;color:#475569;text-decoration:none;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-bottom:8px;">ℹ️ Proč mi chodí upozornění?</a>')
+
+        if is_admin_direct:
+            why_href = "https://datacorebot.koyeb.app/proc-notifikace?typ=admin"
+            btn_items.append(f'<a href="{why_href}" target="_blank" style="display:inline-block;padding:8px 14px;background-color:#7c3aed;color:#ffffff;text-decoration:none;border-radius:6px;font-size:12px;font-weight:600;margin-right:10px;margin-bottom:8px;">ℹ️ Proč mi přišla tato zpráva od administrátora?</a>')
+            support_href = "https://datacorebot.koyeb.app/podpora"
+            btn_items.append(f'<a href="{support_href}" target="_blank" style="display:inline-block;padding:8px 14px;background-color:#f1f5f9;color:#475569;text-decoration:none;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-bottom:8px;">💬 Napsat na podporu / Odpovědět</a>')
+        else:
+            why_href = "https://datacorebot.koyeb.app/proc-notifikace"
+            btn_items.append(f'<a href="{why_href}" target="_blank" style="display:inline-block;padding:7px 13px;background-color:#f1f5f9;color:#475569;text-decoration:none;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-bottom:8px;">ℹ️ Proč mi chodí upozornění?</a>')
+
         if btn_items:
             action_buttons_html = f"""
             <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;">
@@ -6742,6 +6770,63 @@ def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is
 
 @app.route('/proc-notifikace')
 def stranka_proc_notifikace():
+    typ = str(request.args.get('typ', '')).strip().lower()
+    is_admin = (typ == 'admin')
+
+    if is_admin:
+        html_content = """
+        <div style="max-width: 720px; margin: 40px auto; padding: 24px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);">
+          <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px; border-bottom:1px solid #334155; padding-bottom:16px;">
+            <div style="width:54px; height:54px; border-radius:14px; background:rgba(168,85,247,0.15); border:1px solid #a855f7; display:flex; align-items:center; justify-content:center; font-size:26px; color:#c084fc;">
+              <i class="fas fa-user-shield"></i>
+            </div>
+            <div>
+              <h1 style="color:#c084fc; font-size:22px; margin:0 0 4px 0; font-weight:bold;">Proč mi přišla zpráva od administrátora?</h1>
+              <p style="color:#94a3b8; font-size:13px; margin:0;">Oficiální sdělení vedení projektu DataCore / OIS IDPK</p>
+            </div>
+          </div>
+
+          <div style="color:#e2e8f0; font-size:14px; line-height:1.7;">
+            <div style="background:rgba(168,85,247,0.12); border-left:4px solid #a855f7; padding:16px 18px; border-radius:0 8px 8px 0; margin:16px 0;">
+              <strong style="color:#d8b4fe; font-size:15px;">✉️ Osobní zpráva od administrace</strong><br>
+              Tuto zprávu vám zaslal <strong>přímo administrátor systému</strong> (např. <code>marekk_czz</code>).
+              <div style="margin-top:6px; color:#cbd5e1;">
+                <strong>Nejedná se o automatické sledování autobusů z mapy</strong>, ale o individuální komunikaci vedení projektu DataCore / OIS IDPK.
+              </div>
+            </div>
+
+            <h3 style="color:#f8fafc; font-size:16px; margin:22px 0 10px 0;">Nejčastější důvody odeslání:</h3>
+            <ul style="padding-left:20px; margin:0 0 20px 0; color:#cbd5e1;">
+              <li style="margin-bottom:8px;"><strong>Odpověď na vaši žádost nebo dotaz:</strong> Reakce administrátora na vámi nahlášenou chybu, dotaz či požadavek na podporu.</li>
+              <li style="margin-bottom:8px;"><strong>Informace k vašemu účtu:</strong> Oznámení o schválení přístupu, resetu HWID zámku nebo důležité provozní upozornění k aplikaci.</li>
+              <li style="margin-bottom:8px;"><strong>Provozní a organizační sdělení:</strong> Důležitá zpráva určená přímo vám jako uživateli, řidiči či podporovateli projektu.</li>
+            </ul>
+
+            <div style="background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.25); border-radius:10px; padding:16px; margin:20px 0;">
+              <h4 style="color:#38bdf8; margin:0 0 6px 0; font-size:15px; display:flex; align-items:center; gap:8px;">
+                <i class="fas fa-reply"></i> Jak můžete odpovědět?
+              </h4>
+              <p style="margin:0; font-size:13px; color:#bae6fd;">
+                Pokud potřebujete na zprávu reagovat, můžete využít náš kontaktní formulář na stránce podpory nebo napsat přímo na náš oficiální Discord server.
+              </p>
+            </div>
+
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:24px; justify-content:center;">
+              <a href="/podpora" style="background:#7c3aed; color:white; padding:10px 18px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:8px; box-shadow: 0 4px 12px rgba(124,58,237,0.35);">
+                <i class="fas fa-headset"></i> Napsat na podporu / Odpovědět
+              </a>
+              <a href="/ucet" style="background:#1e293b; border:1px solid #334155; color:#38bdf8; padding:10px 18px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:8px;">
+                <i class="fas fa-user"></i> Můj účet
+              </a>
+              <a href="/proc-notifikace" style="background:#1e293b; border:1px solid #334155; color:#94a3b8; padding:10px 18px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:8px;">
+                <i class="fas fa-bell"></i> Informace o notifikacích z mapy
+              </a>
+            </div>
+          </div>
+        </div>
+        """
+        return render_public(html_content)
+
     html_content = """
     <div style="max-width: 720px; margin: 40px auto; padding: 24px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);">
       <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px; border-bottom:1px solid #334155; padding-bottom:16px;">
@@ -6771,6 +6856,16 @@ def stranka_proc_notifikace():
           <li style="margin-bottom:8px;"><strong>Správa v účtu:</strong> Všechna vaše aktivní pravidla i proběhlá upozornění můžete kdykoliv spravovat a mazat ve svém <a href="/ucet#notifikace" style="color:#38bdf8; text-decoration:none; font-weight:bold;">Uživatelském účtu</a>.</li>
           <li style="margin-bottom:8px;"><strong>Jednorázová upozornění:</strong> Pokud šlo o jednorázovou notifikaci (např. „upozorni mě, až spoj dorazí do zastávky“), tato notifikace se po doručení sama automaticky smaže.</li>
         </ul>
+
+        <!-- Sekce pro přímé zprávy administrátora -->
+        <div style="background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.3); border-radius:10px; padding:16px; margin:20px 0;">
+          <h4 style="color:#c084fc; margin:0 0 6px 0; font-size:15px; display:flex; align-items:center; gap:8px;">
+            <i class="fas fa-shield-alt"></i> Přišla vám přímá zpráva od administrátora?
+          </h4>
+          <p style="margin:0; font-size:13px; color:#e2e8f0;">
+            Pokud jste obdrželi zprávu přímo od správce systému (např. marekk_czz), nejedná se o sledování autobusu z mapy, ale o oficiální sdělení administrátora. <a href="/proc-notifikace?typ=admin" style="color:#d8b4fe; font-weight:bold; text-decoration:underline;">Zobrazit podrobnosti k administrátorským zprávám &raquo;</a>
+          </p>
+        </div>
 
         <div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:10px; padding:16px; margin:20px 0;">
           <h4 style="color:#f87171; margin:0 0 6px 0; font-size:15px; display:flex; align-items:center; gap:8px;">
