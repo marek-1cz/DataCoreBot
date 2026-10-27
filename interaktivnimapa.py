@@ -1643,8 +1643,8 @@ body.nt-add-active #map{cursor:crosshair !important;}
   #close-route-btn { top: auto !important; bottom: 70px !important; left: 50% !important; transform: translateX(-50%) !important; padding: 8px 22px !important; font-size: 13px !important; z-index: 5000 !important; }
   #edit-route-btn, #save-route-btn { top: auto !important; bottom: 110px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 5000 !important; }
 
-  /* Settings button centered below nav */
-  #settings-btn-wrap { top: 66px !important; bottom: auto !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; z-index: 5000 !important; }
+  /* Settings button in right corner */
+  #settings-btn-wrap { top: 66px !important; bottom: auto !important; right: 12px !important; left: auto !important; transform: none !important; z-index: 5000 !important; align-items: flex-end !important; }
   
   /* Center all tutorial boxes on mobile and hide arrows */
   .tut-box {
@@ -1690,59 +1690,56 @@ body.ultra-graphics .leaflet-marker-icon div { filter: drop-shadow(0 2px 5px rgb
 #settings-btn-wrap {
   position: fixed;
   top: 72px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 16px;
+  left: auto;
+  transform: none;
   z-index: 5000;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
 }
 #settings-toggle-btn {
   background: #000000 !important;
   border: 1px solid rgba(255, 255, 255, 0.25) !important;
   color: #ffffff !important;
   border-radius: 50%;
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   padding: 0;
-  font-size: 17px;
+  font-size: 16px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.85);
-  transition: all 0.35s cubic-bezier(.34,1.56,.64,1);
-  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.7);
+  transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
   position: relative;
+  z-index: 5002;
 }
-#settings-toggle-btn .st-text {
-  font-size: 13px;
-  font-weight: 700;
-  max-width: 0;
-  opacity: 0;
-  transition: all 0.35s cubic-bezier(.34,1.56,.64,1);
-  white-space: nowrap;
-  overflow: hidden;
-  margin-left: 0;
+#settings-toggle-btn i {
+  transition: transform 0.35s ease;
 }
-#settings-toggle-btn:hover,
-#settings-toggle-btn.st-expanded,
-#settings-toggle-btn.is-open {
-  width: auto;
-  border-radius: 22px;
-  padding: 0 16px;
-  background: #000000 !important;
+#settings-toggle-btn:hover {
+  background: #0a0f1d !important;
   border-color: #38bdf8 !important;
   color: #38bdf8 !important;
-  box-shadow: 0 0 25px rgba(56,189,248,0.5), 0 6px 20px rgba(0,0,0,0.9);
-  transform: translateY(-1px);
+  box-shadow: 0 0 16px rgba(56,189,248,0.35), 0 4px 14px rgba(0,0,0,0.8);
+  transform: scale(1.04);
 }
-#settings-toggle-btn:hover .st-text,
-#settings-toggle-btn.st-expanded .st-text,
-#settings-toggle-btn.is-open .st-text {
-  max-width: 100px;
-  opacity: 1;
-  margin-left: 8px;
+#settings-toggle-btn:hover i {
+  transform: rotate(30deg);
+}
+#settings-toggle-btn.is-open {
+  background: #0284c7 !important;
+  border-color: #38bdf8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 18px rgba(56,189,248,0.5), 0 4px 14px rgba(0,0,0,0.8);
+}
+#settings-toggle-btn.is-open i {
+  transform: rotate(90deg);
+}
+#settings-toggle-btn .st-text {
+  display: none !important;
 }
 /* Tmavé mapy: zachovat čistě černé pozadí a bílou/modrou ikonu - NIKDY průhledné modré */
 body.dark-map #settings-toggle-btn, body.bw-dark-map #settings-toggle-btn, body.traffic-dark-map #settings-toggle-btn {
@@ -1751,20 +1748,25 @@ body.dark-map #settings-toggle-btn, body.bw-dark-map #settings-toggle-btn, body.
   color: #ffffff !important;
   box-shadow: 0 4px 18px rgba(0,0,0,0.85) !important;
 }
-body.dark-map #settings-toggle-btn:hover, body.bw-dark-map #settings-toggle-btn:hover, body.traffic-dark-map #settings-toggle-btn:hover,
-body.dark-map #settings-toggle-btn.st-expanded, body.bw-dark-map #settings-toggle-btn.st-expanded, body.traffic-dark-map #settings-toggle-btn.st-expanded,
-body.dark-map #settings-toggle-btn.is-open, body.bw-dark-map #settings-toggle-btn.is-open, body.traffic-dark-map #settings-toggle-btn.is-open {
-  background: #000000 !important;
+body.dark-map #settings-toggle-btn:hover, body.bw-dark-map #settings-toggle-btn:hover, body.traffic-dark-map #settings-toggle-btn:hover {
+  background: #0a0f1d !important;
   border-color: #38bdf8 !important;
   color: #38bdf8 !important;
-  box-shadow: 0 0 25px rgba(56, 189, 248, 0.6), 0 4px 20px rgba(0,0,0,0.9) !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4), 0 4px 14px rgba(0,0,0,0.85) !important;
+}
+body.dark-map #settings-toggle-btn.is-open, body.bw-dark-map #settings-toggle-btn.is-open, body.traffic-dark-map #settings-toggle-btn.is-open {
+  background: #0284c7 !important;
+  border-color: #38bdf8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.6), 0 4px 16px rgba(0,0,0,0.9) !important;
 }
 @media (max-width: 768px) {
   #settings-btn-wrap {
     top: 66px !important;
-    left: 50% !important;
-    right: auto !important;
-    transform: translateX(-50%) !important;
+    right: 12px !important;
+    left: auto !important;
+    transform: none !important;
+    align-items: flex-end !important;
   }
 }
 
@@ -2178,17 +2180,16 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
 </div>
 
 <div id="settings-btn-wrap">
-  <button id="settings-toggle-btn" onclick="toggleSettingsPanel()" title="Nastavení">
+  <button id="settings-toggle-btn" onclick="toggleSettingsPanel(event)" title="Nastavení" aria-label="Nastavení">
     <i class="fas fa-cog"></i>
-    <span class="st-text">Nastavení</span>
   </button>
   <!-- Overlay pro zavření kliknutím mimo panel -->
-  <div id="settings-overlay" onclick="closeSettingsPanel()" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:4999;"></div>
+  <div id="settings-overlay" onclick="closeSettingsPanel(event)" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:4999;"></div>
   
-  <div id="settings-panel" style="display:none;margin-top:8px;background:rgba(15,23,42,0.97);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(56,189,248,0.4);border-radius:16px;width:min(290px,92vw);max-height:calc(100vh - 120px);overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.8);padding:20px;transform-origin:top center;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);position:relative;z-index:5001;">
+  <div id="settings-panel" style="display:none;margin-top:8px;background:rgba(15,23,42,0.97);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(56,189,248,0.4);border-radius:16px;width:min(290px,92vw);max-height:calc(100vh - 120px);overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.8);padding:20px;transform-origin:top right;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);position:relative;z-index:5001;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
       <div style="color:#38bdf8;font-weight:800;font-size:15px;letter-spacing:1px;text-transform:uppercase;">Nastavení</div>
-      <button onclick="closeSettingsPanel()" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;padding:0 4px;" title="Zavřít">✕</button>
+      <button onclick="closeSettingsPanel(event)" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;padding:0 4px;" title="Zavřít">✕</button>
     </div>
     
     <div style="color:white;font-size:12px;font-weight:bold;margin-bottom:8px;padding-left:4px;">Základní mapa</div>
@@ -4895,7 +4896,11 @@ let _lineColorOrder=[];
 // Paleta: první vždy červená, zbytek rotuje přes bezpečné barvy (žádná zelená/žlutozelená)
 const _LINE_PALETTE=['#ef4444','#a855f7','#f97316','#38bdf8','#e879f9','#fb923c','#818cf8','#c084fc','#f43f5e','#0ea5e9','#c026d3','#7c3aed'];
 
-function closeSettingsPanel() {
+let _lastSettingsCloseTime = 0;
+
+function closeSettingsPanel(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  _lastSettingsCloseTime = Date.now();
   let p = document.getElementById('settings-panel');
   let ov = document.getElementById('settings-overlay');
   let b = document.getElementById('settings-toggle-btn');
@@ -4906,22 +4911,25 @@ function closeSettingsPanel() {
     b.classList.remove('st-expanded');
   }
 }
-function toggleSettingsPanel() {
+function toggleSettingsPanel(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  if (e && e.preventDefault) e.preventDefault();
+  if (Date.now() - _lastSettingsCloseTime < 250) return;
+
   let p = document.getElementById('settings-panel');
   let ov = document.getElementById('settings-overlay');
   let b = document.getElementById('settings-toggle-btn');
   if(!p) return;
-  let isOpen = p.style.display !== 'none';
+  let isOpen = p.style.display !== 'none' && p.style.display !== '';
   if(isOpen) {
-    closeSettingsPanel();
+    closeSettingsPanel(e);
   } else {
     p.style.display = 'block';
     if(ov) ov.style.display = 'block';
     if(b) {
       b.classList.add('is-open');
-      b.classList.add('st-expanded');
     }
-    setTimeout(()=>{ try{ p.scrollTop=0; }catch(e){} },50);
+    setTimeout(()=>{ try{ p.scrollTop=0; }catch(err){} },50);
   }
 }
 function toggleLowGraphics(enabled) {
