@@ -21,7 +21,7 @@ if(t)document.documentElement.classList.add('ios');})();
 <meta property="og:description" content="Informační systém pro autobusy Plzeňského kraje a interaktivní mapa provozu.">
 <meta property="og:type" content="website"><meta property="og:locale" content="cs_CZ">
 <meta name="twitter:card" content="summary">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='88'%3E%F0%9F%9A%8C%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/png" href="/static/img/datacorebot_pf-lepsi.png">
 <script>
 /* ===== Výkonnostní profil: při prvním načtení odhadne sílu zařízení a připojení ===== */
 (function(){
@@ -125,7 +125,8 @@ h2{font-size:clamp(2rem,5vw,3.3rem);margin-bottom:16px}
 .ois-nav a.logo{display:inline-flex;align-items:center;gap:10px;padding:6px 16px 6px 8px;font-weight:800;letter-spacing:-.01em}
 .ois-nav a.logo img{width:32px;height:32px;object-fit:contain;border-radius:0;filter:drop-shadow(0 0 10px rgba(56,214,255,.45));transition:transform .3s var(--ease)}
 .ois-nav a.logo:hover img{transform:scale(1.08)}
-.ois-nav a.cta{background:linear-gradient(135deg,var(--blue),var(--cyan));color:#031028}
+.ois-nav a.cta{background:rgba(255,255,255,.08);color:#94a3b8;border:1px solid rgba(255,255,255,.14);box-shadow:none;transition:background .3s,color .3s,border-color .3s}
+.ois-nav a.cta:hover{background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.24)}
 
 /* ============ STRÁNKY (přepínání bez načítání) ============ */
 .page{display:none}
@@ -241,8 +242,28 @@ h2{font-size:clamp(2rem,5vw,3.3rem);margin-bottom:16px}
 
 /* ============ DATACOREBOT ============ */
 .core{display:flex;gap:50px;align-items:center;justify-content:center;flex-wrap:wrap}
-.core img{width:160px;border-radius:30px;box-shadow:0 0 70px rgba(47,107,255,.45)}
+.core-logo-wrap{position:relative;display:flex;align-items:center;justify-content:center}
+.core-logo-wrap::before{content:"";position:absolute;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,rgba(47,107,255,.45) 0%,rgba(56,214,255,.16) 45%,transparent 70%);filter:blur(24px);pointer-events:none;z-index:0}
+.core img{position:relative;z-index:1;width:165px;height:auto;border-radius:0;box-shadow:none;filter:drop-shadow(0 8px 24px rgba(47,107,255,.6)) drop-shadow(0 0 35px rgba(56,214,255,.35));transition:transform .4s var(--ease),filter .4s}
+.core img:hover{transform:scale(1.05);filter:drop-shadow(0 12px 30px rgba(47,107,255,.8)) drop-shadow(0 0 50px rgba(56,214,255,.5))}
 .core div{max-width:560px}
+
+/* ============ ŠEDÁ TLAČÍTKA PRO DEMO VERZI ============ */
+.btn.ghost[href*="demo"],.btn.demo-btn{background:rgba(255,255,255,.05);color:#94a3b8;border:1px solid rgba(255,255,255,.12);box-shadow:none}
+.btn.ghost[href*="demo"]:hover,.btn.demo-btn:hover{background:rgba(255,255,255,.12);color:#e2e8f0;border-color:rgba(255,255,255,.24);box-shadow:none}
+.mx.demo{background:rgba(255,255,255,.04)!important;border-color:rgba(255,255,255,.1)!important;color:#94a3b8!important}
+.mx.demo .dot{background:#64748b!important;box-shadow:none!important}
+.mx.demo .go{color:#64748b!important}
+
+/* ============ DISCORD MODAL PRO DEMO ============ */
+.discord-card-btn{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:18px;background:linear-gradient(135deg,#5865F2,#4752c4);color:#fff!important;text-decoration:none!important;box-shadow:0 8px 24px rgba(88,101,242,.45);transition:transform .3s var(--ease),box-shadow .3s var(--ease),background .3s}
+.discord-card-btn:hover{transform:translateY(-2px);background:linear-gradient(135deg,#6775f5,#505cd6);box-shadow:0 12px 32px rgba(88,101,242,.65)}
+.discord-card-btn svg{width:36px;height:36px;flex:none;fill:#fff}
+.discord-card-btn div{text-align:left;flex:1}
+.discord-card-btn b{display:block;font-size:1.02rem;line-height:1.2;color:#fff}
+.discord-card-btn small{font-size:.8rem;color:rgba(255,255,255,.8)}
+.discord-card-btn .arr{font-size:1.4rem;font-weight:700;transition:transform .3s;color:#fff}
+.discord-card-btn:hover .arr{transform:translateX(4px)}
 
 /* ============ DOWNLOAD ============ */
 .notice{border-left:3px solid var(--yellow)}
@@ -1570,12 +1591,13 @@ body.night .aurora{opacity:.4}
         <g id="routes"></g>
       </svg>
       </div>
-      <p class="map-subhint" style="text-align:center;font-size:0.78rem;color:var(--muted);margin-top:10px;opacity:0.8">Neodpovídá trasám v realitě</p>
+      <p class="map-subhint" style="text-align:center;font-size:0.78rem;color:var(--muted);margin-top:10px;opacity:0.8">Grafika neodpovídá trasám v realitě</p>
     </div>
     <div class="reveal d1">
       <span class="kicker">Živý provoz příměstských autobusů v Plzeňském kraji</span>
       <h2>Interaktivní <span class="grad">mapa vozidel</span></h2>
       <p class="lead">Sledujte autobusy v Plzeňském kraji na mapě a jejich pohyb v reálném čase.</p>
+      <p class="lead" style="font-size:0.92rem;color:var(--muted);margin-top:12px;line-height:1.55">Jedná se o reálnou polohu meziměstských autobusů (a okrajově i vlaků v omezené míře). Na mapě lze vidět více informací a detailů než na původních stránkách, odkud data pocházejí: <a href="https://pvvd.idpk.cz/" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:underline">pvvd.idpk.cz</a> a <a href="https://www.arriva.cz/cs/dopravni-info/aktualni-poloha-autobusu-online" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:underline">arriva.cz</a>.</p>
       <div style="margin-top:22px">
         <a class="btn main" href="/mapa">Vyzkoušet mapu</a>
       </div>
@@ -1642,7 +1664,9 @@ body.night .aurora{opacity:.4}
 <!-- DATACOREBOT -->
 <section>
   <div class="wrap core">
-    <img class="reveal" src="/static/img/datacorebot_n.png" alt="DataCoreBot">
+    <div class="core-logo-wrap reveal">
+      <img src="/static/img/datacorebot_n.png" alt="DataCoreBot">
+    </div>
     <div class="reveal d1">
       <h2>Poháněno systémem <span class="grad">DataCoreBot</span></h2>
       <p class="lead">Celá infrastruktura, od databází po ověřování uživatelů, běží na systému DataCoreBot. Stará se o rychlou synchronizaci dat, ochranu přes Hardware ID (HWID) a nepřetržitý chod palubních počítačů.</p>
@@ -2026,6 +2050,25 @@ body.night .aurora{opacity:.4}
   <p class="fadmin"><button type="button" id="ftAdmin">🔒 Admin přihlášení</button></p>
 </footer>
 
+
+<div class="modal" id="demoWipModal" aria-hidden="true">
+  <div class="mbox" role="dialog" aria-modal="true" style="text-align:center;max-width:440px">
+    <button class="mclose" type="button" id="demoWipClose" aria-label="Zavřít">✕</button>
+    <div style="font-size:3.2rem;margin:6px 0 14px;filter:drop-shadow(0 0 20px rgba(255,201,51,.5))">🚧</div>
+    <h3 style="font-size:1.5rem;margin-bottom:8px">Demo verze je ve vývoji</h3>
+    <p style="color:var(--muted);font-size:0.93rem;line-height:1.55;margin-bottom:24px">
+      Tato část webu je aktuálně ve vývoji. Další podrobnosti, novinky o vydání a živé ukázky najdete na našem Discord serveru.
+    </p>
+    <a href="https://discord.gg/vmTagbC9mF" target="_blank" rel="noopener" class="discord-card-btn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+      <div>
+        <b>Připojit se na Discord</b>
+        <small>Novinky o vývoji a ukázky</small>
+      </div>
+      <span class="arr">→</span>
+    </a>
+  </div>
+</div>
 
 <div class="modal" id="adminModal" aria-hidden="true">
   <div class="mbox" role="dialog" aria-modal="true" aria-labelledby="admTitle">
@@ -3383,11 +3426,31 @@ function showPage(h){
 }
 const fromHash=()=>location.hash.replace(/^#\/?/,'')||'home';
 /* každý odkaz začínající #/ přepne stránku hned po kliknutí */
+function openDemoWip(e){
+  if(e&&e.preventDefault)e.preventDefault();
+  const m=document.getElementById('demoWipModal');
+  if(m){m.classList.add('open');m.removeAttribute('aria-hidden')}
+}
+function closeDemoWip(){
+  const m=document.getElementById('demoWipModal');
+  if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true')}
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDemoWip()});
+const demoWipClose=document.getElementById('demoWipClose');
+if(demoWipClose)demoWipClose.addEventListener('click',closeDemoWip);
+const demoWipModal=document.getElementById('demoWipModal');
+if(demoWipModal)demoWipModal.addEventListener('click',e=>{if(e.target===demoWipModal)closeDemoWip()});
+
 document.addEventListener('click',e=>{
   const a=e.target.closest&&e.target.closest('a[href^="#/"]');
   if(!a)return;
-  e.preventDefault();
   const href=a.getAttribute('href');
+  if(href==='#/demo'||a.dataset.r==='demo'){
+    e.preventDefault();
+    openDemoWip(e);
+    return;
+  }
+  e.preventDefault();
   showPage(href.replace(/^#\/?/,'')||'home');
   try{history.pushState(null,'',href)}catch(_){}
 });
@@ -3602,7 +3665,7 @@ function spotDemo(){
   up.addEventListener('click',()=>{window.scrollTo({top:0,behavior:'smooth'});burst(up.getBoundingClientRect().left+25,up.getBoundingClientRect().top,['🚌','💨'],4)});
   /* 8) titulek záložky, když se vrátíte */
   const T0=document.title;
-  window.__ttl=T0;document.addEventListener('visibilitychange',()=>{document.title=document.hidden?'Vraťte se na OIS IDPK':window.__ttl});
+  window.__ttl=T0||'Projekt OIS IDPK';document.addEventListener('visibilitychange',()=>{document.title=document.hidden?'Projekt OIS IDPK · Čekáme na vás':window.__ttl});
 
   /* ---- tajná slova (stačí napsat na klávesnici, mimo textová pole) ---- */
   const goHome=()=>{if((currentPage||'home')!=='home'){showPage('home');try{history.pushState(null,'','#/')}catch(_){}}};
@@ -3745,7 +3808,7 @@ function spotDemo(){
   const CMDS=[
     ['🏠','Domů','stránka',()=>go('home')],['⬇️','Download','stránka stáhnout software',()=>go('download')],['👥','Náš tým','stránka lidé',()=>go('team')],
     ['📊','Statistiky','stránka data',()=>go('stats')],['⭐','Podporovatelé','stránka podpora síň slávy',()=>go('supporters')],['🚦','Provoz IDPK','stránka provoz',()=>go('provoz')],
-    ['▶️','Demo verze','vyzkoušet online panel',()=>go('demo')],
+    ['▶️','Demo verze','tato část je ve vývoji',()=>openDemoWip()],
     ['🗺️','Interaktivní mapa IDPK','otevře mapu',()=>{location.href='/mapa'}],
     ['🚌','LED Panel Simulátor','otevře simulátor',()=>{location.href='/led-panel'}],
     ['🔎','Vyhledat linku','číslo linky hledání',()=>{go('home');setTimeout(()=>{const s=document.getElementById('linky');if(s)window.scrollTo({top:s.getBoundingClientRect().top+scrollY-60,behavior:'smooth'});setTimeout(()=>{const i=document.getElementById('lineSearch');if(i)i.focus({preventScroll:true})},500)},200)}],
