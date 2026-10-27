@@ -15656,6 +15656,7 @@ def api_admin_notif_send_direct():
     channel = str(data.get("channel", "both")).strip().lower()
     if channel not in ["both", "discord", "email"]:
         channel = "both"
+    image_url = str(data.get("image_url", "")).strip()
 
     if not target_raw:
         return jsonify({"status": "error", "message": "Zadejte cílové Discord ID, herní nick, App ID nebo E-mail"}), 400
@@ -15784,7 +15785,13 @@ def api_admin_notif_send_direct():
         ],
         "footer": {"text": f"Odeslal administrátor {admin_display_name} • DataCore OIS IDPK"}
     }
-    dm_text = f"🔔 **{title}**\n\n{message}\n\n*Odesílatel: Administrátor ({admin_display_name}) • {now_str}*"
+    if image_url:
+        embed_data["image"] = {"url": image_url}
+
+    dm_text = f"🔔 **{title}**\n\n{message}"
+    if image_url:
+        dm_text += f"\n\n📷 [Přiložený obrázek: {image_url}]"
+    dm_text += f"\n\n*Odesílatel: Administrátor ({admin_display_name}) • {now_str}*"
 
     # 1. Pokud máme E-mail a je zvolen kanál 'both' nebo 'email'
     if resolved_email and channel in ["both", "email"]:
@@ -15809,7 +15816,8 @@ def api_admin_notif_send_direct():
                         message,
                         0x8b5cf6,
                         fields=[("Odesílatel", f"Administrátor ({admin_display_name})"), ("Čas", now_str)],
-                        is_admin_direct=True
+                        is_admin_direct=True,
+                        image_url=image_url or None
                     ),
                     b_loop
                 )

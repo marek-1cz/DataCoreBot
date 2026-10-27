@@ -1280,7 +1280,7 @@ def user_exists_sync(identifier):
         pass
     return False
 
-async def send_user_dm(discord_identifier, title, description, color=0x38bdf8, fields=None, view=None, is_admin_direct=False):
+async def send_user_dm(discord_identifier, title, description, color=0x38bdf8, fields=None, view=None, is_admin_direct=False, image_url=None):
     if not discord_identifier:
         return False
     if not bot.is_ready():
@@ -1315,6 +1315,11 @@ async def send_user_dm(discord_identifier, title, description, color=0x38bdf8, f
                 for f_name, f_val in fields:
                     if f_name and f_val:
                         embed.add_field(name=str(f_name), value=str(f_val)[:1024], inline=False)
+            if image_url:
+                try:
+                    embed.set_image(url=image_url)
+                except Exception:
+                    pass
             embed.set_footer(text="Projekt OIS IDPK • Centrální podpora")
 
             if view is None and is_admin_direct:
@@ -3302,19 +3307,29 @@ def api_submit_feedback():
         contact_discord = str(data.get("contact_discord", "")).strip()[:120]
         contact_email = str(data.get("contact_email", "")).strip()[:120]
         contact = str(data.get("contact", "")).strip()[:120]
-        nick = str(data.get("nick", "Neznámý Uživatel")).strip()[:60]
+        nick = str(data.get("nick", "")).strip()[:60]
+        image_url = str(data.get("image_url", "")).strip()[:500]
 
-        # Povolit pouze bezpečné typy podnětů, nepovolovat HWID / ADMIN_BYPASS z veřejného formuláře
+        # Povolit pouze bezpečné typy podnětů
         raw_type = str(data.get("type", "GENERAL")).strip().upper()
-        type_str = raw_type if raw_type in ("BUG", "NOTIF", "QUESTION", "FEEDBACK") else "GENERAL"
+        allowed_types = (
+            "BUG", "BUG_GENERAL", "MAP_NOTIF", "MAP_BUG", "MAP_DATA", "GTFS",
+            "FEEDBACK", "WEB_ERROR", "GENERAL", "OTHER", "NOTIF", "QUESTION"
+        )
+        type_str = raw_type if raw_type in allowed_types else "GENERAL"
 
         msg = str(data.get("message", "")).strip()[:2000]
         d_id = str(data.get("discord_id", "")).strip()[:120]
 
         if not msg:
             return _cors_jsonify({"status": "error", "message": "Popis problému nebo dotazu nesmí být prázdný."}), 400
+
+        # Kontrola povinného údaje: Nick nebo E-mail je povinný
+        if not nick and not contact_email and not ("@" in contact):
+            return _cors_jsonify({"status": "error", "message": "Zadejte prosím své jméno / herní nick nebo e-mailovou adresu."}), 400
+
         if not nick:
-            nick = "Neznámý Uživatel"
+            nick = contact_email.split('@')[0] if contact_email else "Návštěvník webu"
 
         # Pokud přišel pouze obecný contact parametr
         if not contact_discord and not contact_email and contact:
@@ -3371,11 +3386,15 @@ def api_submit_feedback():
 
         final_discord_id = resolved_discord_id or contact_discord or d_id or "Webový formulář"
 
+        saved_msg = msg
+        if image_url:
+            saved_msg += f"\n\n📷 [Přiložený screenshot: {image_url}]"
+
         insert_payload = {
             "discord_id": final_discord_id,
             "nick": nick,
             "type": type_str,
-            "message": msg,
+            "message": saved_msg,
             "status": "pending",
             "sys_note": "",
             "fcreated_at": get_prague_time().strftime("%d.%m.%Y %H:%M"),
@@ -3391,17 +3410,29 @@ def api_submit_feedback():
         if resolved_email: contact_display.append(f"Email: `{resolved_email}`")
         contacts_str = " | ".join(contact_display) if contact_display else f"`{final_discord_id}`"
 
-        if type_str in ["BUG", "CHYBA"]: log_title = "🐛 HLÁŠENÍ CHYBY Z WEBU"; log_color = 0xef4444
-        elif type_str in ["NOTIF", "QUESTION"]: log_title = "❓ DOTAZ / PODPORA Z WEBU"; log_color = 0x38bdf8
-        elif type_str == "FEEDBACK": log_title = "💡 NÁVRH NA VYLEPŠENÍ Z WEBU"; log_color = 0x10b981
-        else: log_title = "🔔 NOVÁ ZPĚTNÁ VAZBA"; log_color = 0xa855f7
+        if type_str in ["BUG", "BUG_GENERAL", "CHYBA", "WEB_ERROR", "MAP_BUG"]:
+            log_title = "🐛 HLÁŠENÍ CHYBY Z WEBU"; log_color = 0xef4444
+        elif type_str in ["NOTIF", "MAP_NOTIF"]:
+            log_title = "🔔 PROBLÉM S NOTIFIKACEMI / SLEDOVÁNÍM"; log_color = 0xf59e0b
+        elif type_str == "MAP_DATA":
+            log_title = "🚌 CHYBĚJÍCÍ SPOJ NEBO LINKA"; log_color = 0x38bdf8
+        elif type_str == "GTFS":
+            log_title = "📊 DOTAZ K GTFS / JÍZDNÍM ŘÁDŮM"; log_color = 0x6366f1
+        elif type_str == "FEEDBACK":
+            log_title = "💡 NÁVRH NA VYLEPŠENÍ Z WEBU"; log_color = 0x10b981
+        elif type_str == "QUESTION":
+            log_title = "❓ DOTAZ / PODPORA Z WEBU"; log_color = 0x38bdf8
+        elif type_str == "GENERAL":
+            log_title = "💬 OBECNÁ ZPRÁVA Z WEBU"; log_color = 0xa855f7
+        else:
+            log_title = "📁 NOVÝ PODNĚT / OSTATNÍ"; log_color = 0x8b5cf6
 
         # Ošetření proti zneužití @everyone/@here a markdownu
         safe_nick = nick.replace("@", "@\u200b")
         safe_contacts = contacts_str.replace("@", "@\u200b")
-        safe_msg = msg.replace("@", "@\u200b")
+        safe_msg = saved_msg.replace("@", "@\u200b")
 
-        send_log(log_title, f"**Od:** {safe_nick}\n**Kontakty:** {safe_contacts}\n**Požadovaná odpověď:** {pref_label}\n**Zpráva:**\n*{safe_msg}*", log_color)
+        send_log(log_title, f"**Od:** {safe_nick}\n**Typ:** `{type_str}`\n**Kontakty:** {safe_contacts}\n**Požadovaná odpověď:** {pref_label}\n**Zpráva:**\n*{safe_msg}*", log_color)
         return _cors_jsonify({"status": "success"})
     except Exception as e:
         print(f"[FEEDBACK ERROR] {e}", flush=True)
@@ -6757,6 +6788,19 @@ def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is
                 val = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" style="color: #38bdf8; text-decoration: none;">\1</a>', val)
                 fields_html += f"<li><strong>{f.get('name', '')}:</strong> {val}</li>"
                 
+            image_block_html = ""
+            img_dict = embed_data.get("image")
+            img_url = (img_dict.get("url") if isinstance(img_dict, dict) else img_dict) if img_dict else None
+            if img_url:
+                image_block_html = f"""
+                <div style="margin: 18px 0; text-align: center;">
+                  <a href="{img_url}" target="_blank">
+                    <img src="{img_url}" alt="Přiložený obrázek" style="max-width: 100%; max-height: 420px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.08);" />
+                  </a>
+                  <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Kliknutím otevřete obrázek v plné velikosti</div>
+                </div>
+                """
+
             html = f"""
             <html>
               <body style="background-color: #ffffff; color: #000000; font-family: sans-serif; padding: 20px;">
@@ -6765,6 +6809,7 @@ def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is
                 <ul>
                   {fields_html}
                 </ul>
+                {image_block_html}
                 {action_buttons_html}
                 <p style="margin-top:20px;color:#64748b;font-size:12px;">Hezký den přeje<br>Tým Projekt OIS IDPK</p>
               </body>
@@ -6946,6 +6991,7 @@ def stranka_podpora():
     safe_contact_discord = html.escape(user_discord or user_nick, quote=True)
     safe_email = html.escape(user_email, quote=True)
     safe_pref = html.escape(default_pref, quote=True)
+    secondary_initial_val = safe_email if default_pref == "discord" else safe_contact_discord
 
     html_content = f"""
     <div style="max-width: 680px; margin: 40px auto; padding: 28px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);">
@@ -6963,16 +7009,23 @@ def stranka_podpora():
         <div style="margin-bottom:16px;">
           <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Typ podnětu</label>
           <select id="sp_type" style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none;">
-            <option value="BUG">🐛 Nahlásit chybu v systému nebo datech</option>
-            <option value="NOTIF">🔔 Problém nebo dotaz k notifikacím</option>
-            <option value="QUESTION">❓ Obecný dotaz k fungování spojů</option>
-            <option value="FEEDBACK">💡 Návrh na vylepšení</option>
+            <option value="BUG_GENERAL">🐛 Nahlásit chybu (všeobecná)</option>
+            <option value="MAP_NOTIF">🔔 Interaktivní mapa – Notifikace a sledování spojů</option>
+            <option value="MAP_BUG">🗺️ Interaktivní mapa – Chyba mapy / polohy vozidla</option>
+            <option value="MAP_DATA">🚌 Interaktivní mapa – Chybějící spoj, linka nebo zastávka</option>
+            <option value="GTFS">📊 Dotazy k GTFS datům a fungování jízdních řádů</option>
+            <option value="FEEDBACK">💡 Návrh na zlepšení</option>
+            <option value="WEB_ERROR">🌐 Nefunkčnost webové stránky</option>
+            <option value="GENERAL">💬 Obecná / otevřená zpráva (bez tématu)</option>
+            <option value="OTHER">📁 Ostatní</option>
           </select>
         </div>
 
         <div style="margin-bottom:16px;">
-          <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Vaše jméno / Nick</label>
-          <input type="text" id="sp_nick" value="{safe_nick}" placeholder="např. Jan Novák nebo přezdívka" required style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+          <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">
+            Vaše jméno / Herní Nick <span style="color:#38bdf8;">(povinný nick NEBO e-mail)</span>
+          </label>
+          <input type="text" id="sp_nick" value="{safe_nick}" placeholder="např. Jan Novák nebo přezdívka" style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
         </div>
 
         <!-- Volba kam si přeje odpověď: spíše Discord, nebo e-mail -->
@@ -7008,13 +7061,21 @@ def stranka_podpora():
 
           <div id="box_secondary_contact" style="margin-top:12px; padding-top:10px; border-top:1px dashed #334155;">
             <label id="lbl_secondary" style="display:block; color:#64748b; font-size:11px; margin-bottom:4px;">Záložní e-mail (nepovinné, pokud vás nezastihneme na Discordu):</label>
-            <input type="text" id="sp_secondary_input" value="{safe_email}" placeholder="vas@email.cz" style="width:100%; padding:8px 10px; background:rgba(0,0,0,0.3); border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:12px; outline:none; box-sizing:border-box;">
+            <input type="text" id="sp_secondary_input" value="{secondary_initial_val}" placeholder="vas@email.cz (nepovinné)" style="width:100%; padding:8px 10px; background:rgba(0,0,0,0.3); border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:12px; outline:none; box-sizing:border-box;">
           </div>
         </div>
 
-        <div style="margin-bottom:20px;">
+        <div style="margin-bottom:16px;">
           <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Popis problému nebo dotazu <span style="color:#ef4444;">*</span></label>
           <textarea id="sp_message" rows="5" placeholder="Podrobně popište, co se stalo, jakého autobusu/linky se to týká, nebo co potřebujete vyřešit..." required style="width:100%; padding:12px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; resize:vertical; box-sizing:border-box;"></textarea>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">
+            <i class="fas fa-image" style="color:#38bdf8;"></i> Snímek obrazovky / Obrázek chyby (nepovinné URL)
+          </label>
+          <input type="url" id="sp_image_url" placeholder="https://... (odkaz na screenshot chyby, imgur, discord cdn - nepovinné)" style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+          <div style="color:#64748b; font-size:11px; margin-top:4px;">📸 Pomůže administrátorům rychleji identifikovat a opravit chybu.</div>
         </div>
 
         <button type="submit" id="sp_btn" style="width:100%; padding:12px; background:#0284c7; color:white; border:none; border-radius:8px; font-size:15px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
@@ -7032,8 +7093,20 @@ def stranka_podpora():
 
     <script>
     let activePref = '{default_pref}';
+    let savedDiscord = '{safe_contact_discord}';
+    let savedEmail = '{safe_email}';
 
     function switchReplyPref(pref) {{
+      const inpSecondary = document.getElementById('sp_secondary_input');
+      const valSecondary = (inpSecondary ? inpSecondary.value : '').trim();
+
+      // Před přepnutím uložit, co uživatel zadal
+      if (activePref === 'discord' && valSecondary && valSecondary.includes('@')) {{
+        savedEmail = valSecondary;
+      }} else if (activePref === 'email' && valSecondary && !valSecondary.includes('@')) {{
+        savedDiscord = valSecondary;
+      }}
+
       activePref = pref;
       document.getElementById('sp_reply_pref').value = pref;
       const btnDiscord = document.getElementById('btn_pref_discord');
@@ -7041,7 +7114,6 @@ def stranka_podpora():
       const boxDiscord = document.getElementById('box_discord_contact');
       const boxEmail = document.getElementById('box_email_contact');
       const lblSecondary = document.getElementById('lbl_secondary');
-      const inpSecondary = document.getElementById('sp_secondary_input');
 
       if(pref === 'discord') {{
         btnDiscord.style.background = '#5865F2';
@@ -7053,7 +7125,10 @@ def stranka_podpora():
         boxDiscord.style.display = 'block';
         boxEmail.style.display = 'none';
         lblSecondary.innerText = 'Záložní e-mail (nepovinné, pokud vás nezastihneme na Discordu):';
-        inpSecondary.placeholder = 'vas@email.cz';
+        if(inpSecondary) {{
+          inpSecondary.placeholder = 'vas@email.cz (nepovinné)';
+          inpSecondary.value = savedEmail;
+        }}
       }} else {{
         btnEmail.style.background = '#0284c7';
         btnEmail.style.borderColor = '#38bdf8';
@@ -7064,7 +7139,10 @@ def stranka_podpora():
         boxDiscord.style.display = 'none';
         boxEmail.style.display = 'block';
         lblSecondary.innerText = 'Záložní Discord (nepovinné, pokud budete offline na e-mailu):';
-        inpSecondary.placeholder = 'např. uzivatel nebo 123456789...';
+        if(inpSecondary) {{
+          inpSecondary.placeholder = 'např. uzivatel nebo 123456789... (nepovinné)';
+          inpSecondary.value = savedDiscord;
+        }}
       }}
     }}
 
@@ -7078,11 +7156,12 @@ def stranka_podpora():
       const type = document.getElementById('sp_type').value;
       const nick = document.getElementById('sp_nick').value.trim();
       const message = document.getElementById('sp_message').value.trim();
+      const imageUrl = (document.getElementById('sp_image_url')?.value || '').trim();
       const replyPref = activePref;
 
       let contactDiscord = document.getElementById('sp_contact_discord').value.trim();
       let contactEmail = document.getElementById('sp_contact_email').value.trim();
-      const secondary = document.getElementById('sp_secondary_input').value.trim();
+      const secondary = (document.getElementById('sp_secondary_input')?.value || '').trim();
 
       if(replyPref === 'discord' && secondary && secondary.includes('@') && !contactEmail) {{
         contactEmail = secondary;
@@ -7090,8 +7169,13 @@ def stranka_podpora():
         contactDiscord = secondary;
       }}
 
-      if(!nick || !message) {{
-        alert('Vyplňte prosím své jméno a popis problému.');
+      if(!nick && !contactEmail) {{
+        alert('Vyplňte prosím své jméno / herní nick nebo e-mailovou adresu.');
+        return;
+      }}
+
+      if(!message) {{
+        alert('Vyplňte prosím popis problému nebo dotazu.');
         return;
       }}
 
@@ -7119,7 +7203,8 @@ def stranka_podpora():
           contact: replyPref === 'discord' ? (contactDiscord || contactEmail) : (contactEmail || contactDiscord),
           discord_id: contactDiscord,
           type: type,
-          message: message
+          message: message,
+          image_url: imageUrl
         }})
       }})
       .then(r => r.json())
@@ -7133,6 +7218,8 @@ def stranka_podpora():
           statusEl.style.color = '#34d399';
           statusEl.innerHTML = '✅ <strong>Hlášení bylo úspěšně odesláno!</strong> Administrátoři zprávu obdrží v dashboardu a odpoví vám vybraným kanálem.';
           document.getElementById('sp_message').value = '';
+          const imgEl = document.getElementById('sp_image_url');
+          if (imgEl) imgEl.value = '';
         }} else {{
           statusEl.style.display = 'block';
           statusEl.style.background = 'rgba(239,68,68,0.15)';

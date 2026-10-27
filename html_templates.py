@@ -257,6 +257,7 @@ PUBLIC_LAYOUT = """
 <a href="/old/supporters" style="color: var(--blue-main); font-weight: bold; text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"><i class="fas fa-heart"></i> Podporovatelé</a>
 <a href="/old/provoz-idpk" style="color: #10b981; font-weight: bold;"><i class="fas fa-bus"></i> Provoz IDPK</a>
 <a href="/old/led-panel" style="color: #f59e0b; font-weight: bold;"><i class="fas fa-tv"></i> LED Panel Simulátor</a>
+<a href="/podpora" style="color: #38bdf8; font-weight: bold;"><i class="fas fa-life-ring"></i> Podpora</a>
 <div class="desktop-avatar-slot">__AVATAR__</div>
 </div>
 </nav>
@@ -4068,6 +4069,14 @@ HTML_DASHBOARD_NOTIFICATIONS_MGMT = """
           <textarea id="direct-message" rows="5" placeholder="Napište text zprávy pro uživatele..." required style="margin: 0; padding: 12px 14px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px; resize: vertical;"></textarea>
         </div>
 
+        <div style="margin-bottom: 20px;">
+          <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">
+            <i class="fas fa-image" style="color: #38bdf8;"></i> Obrázek / Screenshot (URL adresa - nepovinné):
+          </label>
+          <input type="url" id="direct-image-url" placeholder="https://... (např. odkaz na screenshot, imgur, discord cdn)" style="margin: 0; padding: 11px 14px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px;">
+          <div style="color: #64748b; font-size: 11px; margin-top: 4px;">📸 Obrázek se zobrazí přímo v Discord zprávě i v těle e-mailu.</div>
+        </div>
+
         <div style="background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: 8px; padding: 12px 15px; margin-bottom: 20px; font-size: 12px; color: #c4b5fd;">
           <div style="font-weight: bold; margin-bottom: 4px;">🔍 Stopa administrátora v odeslané zprávě:</div>
           <div>Odesílatel: <strong>Administrátor ({{ admin_nick }})</strong></div>
@@ -4205,6 +4214,7 @@ async function handleSendDirectMsg(e) {
   const target = (targetEl ? targetEl.value : '').trim();
   const title = (titleEl ? titleEl.value : '').trim();
   const message = (msgEl ? msgEl.value : '').trim();
+  const image_url = (document.getElementById('direct-image-url')?.value || '').trim();
   const channel = document.querySelector('input[name="direct-channel"]:checked')?.value || 'both';
 
   if (!statusEl) return false;
@@ -4234,13 +4244,15 @@ async function handleSendDirectMsg(e) {
     const res = await fetch('/api/admin/notifications/send_direct', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ target, title, message, channel })
+      body: JSON.stringify({ target, title, message, channel, image_url })
     });
     const data = await res.json();
     if (res.ok && data.status === 'success') {
       statusEl.className = 'alert alert-success';
       statusEl.innerHTML = '<i class="fas fa-check-circle"></i> <strong>Úspěšně odesláno:</strong> ' + (data.message || 'Zpráva byla úspěšně doručena!');
       if (msgEl) msgEl.value = '';
+      const imgEl = document.getElementById('direct-image-url');
+      if (imgEl) imgEl.value = '';
       const infoEl = document.getElementById('direct-selected-info');
       if (infoEl) infoEl.style.display = 'none';
       loadDashHist();
