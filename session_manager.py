@@ -133,6 +133,23 @@ def add_user_session(db, user_or_id, token: str, req=None) -> list:
     if isinstance(user_or_id, dict):
         user_id = user_or_id.get("id")
         user = user_or_id
+        try:
+            if user_id:
+                res = db.table("users").select("*").eq("id", user_id).execute()
+                if res.data:
+                    user = res.data[0]
+            elif user.get("discord_id"):
+                res = db.table("users").select("*").eq("discord_id", str(user["discord_id"])).execute()
+                if res.data:
+                    user = res.data[0]
+                    user_id = user.get("id")
+            elif user.get("email"):
+                res = db.table("users").select("*").eq("email", str(user["email"])).execute()
+                if res.data:
+                    user = res.data[0]
+                    user_id = user.get("id")
+        except Exception:
+            pass
     else:
         user_id = user_or_id
         res = db.table("users").select("*").eq("id", user_id).execute()
@@ -171,11 +188,18 @@ def add_user_session(db, user_or_id, token: str, req=None) -> list:
 
     json_str = json.dumps(sessions, ensure_ascii=False)
     try:
-        db.table("users").update({
+        update_data = {
             "web_session_token": json_str,
             "web_login_at": now_str,
             "login_token": ""
-        }).eq("id", user["id"]).execute()
+        }
+        if user_id:
+            db.table("users").update(update_data).eq("id", user_id).execute()
+        elif user.get("discord_id"):
+            db.table("users").update(update_data).eq("discord_id", str(user["discord_id"])).execute()
+        elif user.get("email"):
+            db.table("users").update(update_data).eq("email", str(user["email"])).execute()
+        user["web_session_token"] = json_str
     except Exception as e:
         print(f"[SESSION] Chyba při ukládání relací: {e}", flush=True)
 

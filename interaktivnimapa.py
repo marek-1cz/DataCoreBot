@@ -11675,10 +11675,11 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 state[f"_stop_near:{stop_name}"] = False
 
         # 4. Trigger: Vjezd do vozovny
+        was_in_depot = state.get("_in_depot")
         depot_name = triggers.get("depot_in", "")
         if depot_name and depot_name != "none":
-            if not was_in_depot and now_in_depot:
-                if depot_name == "all" or depot_name == True or depot_name.lower() in status_text.lower():
+            if was_in_depot is False and now_in_depot:
+                if depot_name in ("all", True, "true") or str(depot_name).lower() in status_text.lower():
                     if _fire("depot_in", "in", f"SPZ: {bus_data.get('spz')} přijel do vozovny v {now_time_str}"):
                         state["_in_depot"] = True
             elif not now_in_depot:
@@ -11687,12 +11688,13 @@ def _check_and_fire_notifications(db_client, bus_cache):
         # 5. Trigger: Výjezd z vozovny
         depot_out_name = triggers.get("depot_out", "")
         if depot_out_name and depot_out_name != "none":
-            if was_in_depot and not now_in_depot:
+            if was_in_depot is True and not now_in_depot:
                 last_depot = state.get("_depot_name_text", "")
-                if depot_out_name == "all" or depot_out_name == True or depot_out_name.lower() in last_depot.lower():
+                if depot_out_name in ("all", True, "true") or str(depot_out_name).lower() in last_depot.lower():
                     if _fire("depot_out", "out", f"SPZ: {bus_data.get('spz')} vyjel z vozovny ({last_depot}) v {now_time_str}"):
                         state["_in_depot"] = False
 
+        state["_in_depot"] = now_in_depot
         if now_in_depot:
             state["_depot_name_text"] = status_text
 

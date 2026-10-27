@@ -785,19 +785,31 @@ def get_cached_session_user(token):
     now = time.time()
     if token in _SESSION_CACHE:
         ts, u = _SESSION_CACHE[token]
-        if now - ts < 120:  # 2 minuty
+        if now - ts < 120 and u:  # 2 minuty
             return u
     db = get_db()
-    if not db:
-        return None
-    try:
-        from session_manager import find_user_by_session_token, touch_session_activity
-        u = find_user_by_session_token(db, token)
-        if u:
-            touch_session_activity(db, u, token)
-    except Exception:
-        u = None
-    _SESSION_CACHE[token] = (now, u)
+    u = None
+    if db:
+        try:
+            from session_manager import find_user_by_session_token, touch_session_activity
+            u = find_user_by_session_token(db, token)
+            if u:
+                touch_session_activity(db, u, token)
+        except Exception:
+            u = None
+    if not u:
+        try:
+            from session_manager import user_has_session_token
+            for bu in _get_fallback_users():
+                if user_has_session_token(bu, token):
+                    u = bu
+                    break
+        except Exception:
+            pass
+    if u:
+        _SESSION_CACHE[token] = (now, u)
+    else:
+        _SESSION_CACHE.pop(token, None)
     return u
 
 def get_cached_setting(key, default=None, ttl=60):
@@ -3231,18 +3243,34 @@ def api_mark_message_read():
 @app.route('/api/submit_feedback', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_submit_feedback():
     if request.method == 'OPTIONS': return _cors_jsonify({})
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+    if not _rate_limit_check(f'feedback:{client_ip}', 6, 3600):
+        return _cors_jsonify({"status": "error", "message": "Příliš mnoho odeslaných zpráv. Zkuste to prosím za chvíli."}), 429
+
     data = request.get_json(silent=True) or {}
     db = get_db()
-    if not db: return _cors_jsonify({"status": "error", "message": "DB Error"})
+    if not db: return _cors_jsonify({"status": "error", "message": "Databáze je dočasně nedostupná."}), 500
     try:
         reply_pref = str(data.get("reply_pref", "discord")).lower().strip()
-        contact_discord = str(data.get("contact_discord", "")).strip()
-        contact_email = str(data.get("contact_email", "")).strip()
-        contact = str(data.get("contact", "")).strip()
-        nick = str(data.get("nick", "Neznámý Uživatel")).strip()
-        type_str = str(data.get("type", "GENERAL")).strip()
-        msg = str(data.get("message", "")).strip()
-        d_id = str(data.get("discord_id", "")).strip()
+        if reply_pref not in ("discord", "email"):
+            reply_pref = "discord"
+
+        contact_discord = str(data.get("contact_discord", "")).strip()[:120]
+        contact_email = str(data.get("contact_email", "")).strip()[:120]
+        contact = str(data.get("contact", "")).strip()[:120]
+        nick = str(data.get("nick", "Neznámý Uživatel")).strip()[:60]
+
+        # Povolit pouze bezpečné typy podnětů, nepovolovat HWID / ADMIN_BYPASS z veřejného formuláře
+        raw_type = str(data.get("type", "GENERAL")).strip().upper()
+        type_str = raw_type if raw_type in ("BUG", "NOTIF", "QUESTION", "FEEDBACK") else "GENERAL"
+
+        msg = str(data.get("message", "")).strip()[:2000]
+        d_id = str(data.get("discord_id", "")).strip()[:120]
+
+        if not msg:
+            return _cors_jsonify({"status": "error", "message": "Popis problému nebo dotazu nesmí být prázdný."}), 400
+        if not nick:
+            nick = "Neznámý Uživatel"
 
         # Pokud přišel pouze obecný contact parametr
         if not contact_discord and not contact_email and contact:
@@ -3319,16 +3347,26 @@ def api_submit_feedback():
         if resolved_email: contact_display.append(f"Email: `{resolved_email}`")
         contacts_str = " | ".join(contact_display) if contact_display else f"`{final_discord_id}`"
 
-        if type_str == "HWID": log_title = "🚨 VYŽADUJE KONTROLU: Žádost o HWID a IP 🚨"; log_color = 0xef4444
-        elif type_str == "ADMIN_BYPASS": log_title = "🔓 VYŽADUJE SCHVÁLENÍ: Admin Bypass 🔓"; log_color = 0xf59e0b
-        elif type_str in ["BUG", "CHYBA"]: log_title = "🐛 HLÁŠENÍ CHYBY Z WEBU"; log_color = 0xef4444
+        if type_str in ["BUG", "CHYBA"]: log_title = "🐛 HLÁŠENÍ CHYBY Z WEBU"; log_color = 0xef4444
         elif type_str in ["NOTIF", "QUESTION"]: log_title = "❓ DOTAZ / PODPORA Z WEBU"; log_color = 0x38bdf8
+        elif type_str == "FEEDBACK": log_title = "💡 NÁVRH NA VYLEPŠENÍ Z WEBU"; log_color = 0x10b981
         else: log_title = "🔔 NOVÁ ZPĚTNÁ VAZBA"; log_color = 0xa855f7
 
-        send_log(log_title, f"**Od:** {nick}\n**Kontakty:** {contacts_str}\n**Požadovaná odpověď:** {pref_label}\n**Zpráva:**\n*{msg}*", log_color)
+        # Ošetření proti zneužití @everyone/@here a markdownu
+        safe_nick = nick.replace("@", "@\u200b")
+        safe_contacts = contacts_str.replace("@", "@\u200b")
+        safe_msg = msg.replace("@", "@\u200b")
+
+        send_log(log_title, f"**Od:** {safe_nick}\n**Kontakty:** {safe_contacts}\n**Požadovaná odpověď:** {pref_label}\n**Zpráva:**\n*{safe_msg}*", log_color)
         return _cors_jsonify({"status": "success"})
     except Exception as e:
-        return _cors_jsonify({"status": "error", "message": str(e)})
+        print(f"[FEEDBACK ERROR] {e}", flush=True)
+        try:
+            tb = traceback.format_exc()
+            send_log("📲 APLIKAČNÍ CHYBA (/api/submit_feedback)", f"Chyba při ukládání feedbacku: `{e}`\n```py\n{tb[-800:]}\n```", 0xef4444, channel_name="📲・error-app")
+        except Exception:
+            pass
+        return _cors_jsonify({"status": "error", "message": "Při odesílání hlášení došlo k chybě na serveru. Zkuste to prosím za okamžik znovu."}), 500
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3470,17 +3508,22 @@ def check_persistent_admin_session():
                 db = get_db()
                 u = None
                 if db:
+                    u = get_cached_session_user(admin_tok)
+                    if not u:
+                        try:
+                            from session_manager import find_user_by_session_token
+                            u = find_user_by_session_token(db, admin_tok)
+                        except Exception:
+                            pass
+                if not u:
                     try:
-                        u_data = db.table("users").select("*").eq("web_session_token", admin_tok).execute().data
-                        if u_data:
-                            u = u_data[0]
+                        from session_manager import user_has_session_token
+                        for bu in _get_fallback_users():
+                            if user_has_session_token(bu, admin_tok) or bu.get("web_session_token") == admin_tok:
+                                u = bu
+                                break
                     except Exception:
                         pass
-                if not u:
-                    for bu in _get_fallback_users():
-                        if bu.get("web_session_token") == admin_tok:
-                            u = bu
-                            break
                 if u:
                     if u.get('dashboard_access') == True and not u.get('is_banned') and not u.get('is_deleted'):
                         session.permanent = True
@@ -3523,7 +3566,7 @@ def login_finalize():
     db = get_db()
     if db and discord_id:
         import time as _t
-        user = db.table("users").select("login_token, login_token_expires_at, dashboard_access, nick, email, role, dashboard_level").eq("discord_id", discord_id).execute().data
+        user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
         if user:
             u = user[0]
             # Ověřit: token, expiry a dashboard_access
@@ -3546,11 +3589,14 @@ def login_finalize():
                 import uuid
                 admin_token = str(uuid.uuid4())
                 try:
+                    from session_manager import add_user_session
+                    add_user_session(db, u, admin_token, request)
                     db.table("users").update({
-                        "web_session_token": admin_token,
                         "login_token": "used",
                         "login_token_expires_at": int(_t.time()) + 10
                     }).eq("discord_id", discord_id).execute()
+                    _invalidate_session_cache(user_id=u.get("id"))
+                    _SESSION_CACHE[admin_token] = (time.time(), u)
                 except Exception:
                     pass
                 
@@ -3776,7 +3822,10 @@ def web_auth_status():
         _SESSION_CACHE[perm_token] = (time.time(), user_obj)
         try:
             db = get_db()
-            if db: db.table("users").update({"login_token": "", "web_session_token": perm_token}).eq("discord_id", discord_id).execute()
+            if db:
+                from session_manager import add_user_session
+                add_user_session(db, user_obj, perm_token, request)
+                _invalidate_session_cache(user_id=user_obj.get("id"))
         except Exception: pass
         return jsonify({"status": "approved", "token": perm_token})
     elif mem_status == "rejected":
@@ -4150,11 +4199,14 @@ def api_auth_discord_status():
     db = get_db()
     if not db or not discord_id:
         return jsonify({"confirmed": False})
-    user = db.table("users").select("nick, avatar_url, login_token, discord_id, role, dashboard_access, dashboard_level").eq("discord_id", discord_id).execute().data
+    user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
     if user and user[0].get('login_token') == 'approved':
         u = user[0]
         new_token = str(uuid.uuid4())
-        db.table("users").update({"login_token": "", "web_session_token": new_token}).eq("discord_id", discord_id).execute()
+        from session_manager import add_user_session
+        add_user_session(db, u, new_token, request)
+        _invalidate_session_cache(user_id=u.get("id"))
+        _SESSION_CACHE[new_token] = (time.time(), u)
         resp = jsonify({
             "confirmed": True,
             "name": u.get('nick') or f"Discord {discord_id}",
@@ -4207,7 +4259,10 @@ def api_auth_email_verify():
     if code != expected_token:
         return jsonify({"ok": False, "error": "Zadaný kód nesouhlasí."})
     new_token = str(uuid.uuid4())
-    db.table("users").update({"login_token": "", "web_session_token": new_token}).eq("email", email).execute()
+    from session_manager import add_user_session
+    add_user_session(db, u, new_token, request)
+    _invalidate_session_cache(user_id=u.get("id"))
+    _SESSION_CACHE[new_token] = (time.time(), u)
     resp = jsonify({
         "ok": True,
         "name": u.get("nick") or email,
@@ -4237,7 +4292,10 @@ def api_auth_email_status():
         u = user[0]
         if u.get('login_token') == 'approved':
             new_token = str(uuid.uuid4())
-            db.table("users").update({"login_token": "", "web_session_token": new_token}).eq("email", email).execute()
+            from session_manager import add_user_session
+            add_user_session(db, u, new_token, request)
+            _invalidate_session_cache(user_id=u.get("id"))
+            _SESSION_CACHE[new_token] = (time.time(), u)
             resp = jsonify({
                 "confirmed": True,
                 "name": u.get("nick") or email,
@@ -6748,13 +6806,19 @@ def stranka_podpora():
         cookie_tok = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
         u = get_cached_session_user(cookie_tok) if cookie_tok else None
         if u:
-            user_nick = u.get("nick", "")
-            user_discord = str(u.get("discord_id", "") or "")
-            user_email = str(u.get("email", "") or "")
+            user_nick = str(u.get("nick") or "")
+            user_discord = str(u.get("discord_id") or "")
+            user_email = str(u.get("email") or "")
             if not user_discord and user_email:
                 default_pref = "email"
     except Exception:
         pass
+
+    import html
+    safe_nick = html.escape(user_nick, quote=True)
+    safe_contact_discord = html.escape(user_discord or user_nick, quote=True)
+    safe_email = html.escape(user_email, quote=True)
+    safe_pref = html.escape(default_pref, quote=True)
 
     html_content = f"""
     <div style="max-width: 680px; margin: 40px auto; padding: 28px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);">
@@ -6781,7 +6845,7 @@ def stranka_podpora():
 
         <div style="margin-bottom:16px;">
           <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Vaše jméno / Nick</label>
-          <input type="text" id="sp_nick" value="{user_nick}" placeholder="např. Jan Novák nebo přezdívka" required style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+          <input type="text" id="sp_nick" value="{safe_nick}" placeholder="např. Jan Novák nebo přezdívka" required style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
         </div>
 
         <!-- Volba kam si přeje odpověď: spíše Discord, nebo e-mail -->
@@ -6797,11 +6861,11 @@ def stranka_podpora():
               <i class="fas fa-envelope" style="font-size:16px;"></i> E-mail
             </button>
           </div>
-          <input type="hidden" id="sp_reply_pref" value="{default_pref}">
+          <input type="hidden" id="sp_reply_pref" value="{safe_pref}">
 
           <div id="box_discord_contact">
             <label style="display:block; color:#cbd5e1; font-size:12px; font-weight:bold; margin-bottom:4px;">Discord Nick nebo Discord ID <span style="color:#ef4444;">*</span></label>
-            <input type="text" id="sp_contact_discord" value="{user_discord or user_nick}" placeholder="např. marekk_czz nebo 719896287301992449" style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+            <input type="text" id="sp_contact_discord" value="{safe_contact_discord}" placeholder="např. marekk_czz nebo 719896287301992449" style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
             <p style="margin:4px 0 0 0; color:#94a3b8; font-size:11px;">
               <i class="fab fa-discord" style="color:#5865F2;"></i> Administrátor vám pošle odpověď přímo do soukromé zprávy (DM) na Discordu.
             </p>
@@ -6809,7 +6873,7 @@ def stranka_podpora():
 
           <div id="box_email_contact" style="display:none; margin-top:10px;">
             <label style="display:block; color:#cbd5e1; font-size:12px; font-weight:bold; margin-bottom:4px;">Vaše E-mailová adresa <span style="color:#ef4444;">*</span></label>
-            <input type="email" id="sp_contact_email" value="{user_email}" placeholder="např. jan.novak@email.cz" style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+            <input type="email" id="sp_contact_email" value="{safe_email}" placeholder="např. jan.novak@email.cz" style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
             <p style="margin:4px 0 0 0; color:#94a3b8; font-size:11px;">
               <i class="fas fa-envelope" style="color:#38bdf8;"></i> Administrátor vám zašle odpověď přímo do e-mailové schránky.
             </p>
@@ -6817,7 +6881,7 @@ def stranka_podpora():
 
           <div id="box_secondary_contact" style="margin-top:12px; padding-top:10px; border-top:1px dashed #334155;">
             <label id="lbl_secondary" style="display:block; color:#64748b; font-size:11px; margin-bottom:4px;">Záložní e-mail (nepovinné, pokud vás nezastihneme na Discordu):</label>
-            <input type="text" id="sp_secondary_input" value="{user_email}" placeholder="vas@email.cz" style="width:100%; padding:8px 10px; background:rgba(0,0,0,0.3); border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:12px; outline:none; box-sizing:border-box;">
+            <input type="text" id="sp_secondary_input" value="{safe_email}" placeholder="vas@email.cz" style="width:100%; padding:8px 10px; background:rgba(0,0,0,0.3); border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:12px; outline:none; box-sizing:border-box;">
           </div>
         </div>
 
@@ -6926,7 +6990,7 @@ def stranka_podpora():
           contact_discord: contactDiscord,
           contact_email: contactEmail,
           contact: replyPref === 'discord' ? (contactDiscord || contactEmail) : (contactEmail || contactDiscord),
-          discord_id: contactDiscord || contactEmail,
+          discord_id: contactDiscord,
           type: type,
           message: message
         }})
