@@ -15644,70 +15644,148 @@ def admin_notifications_page():
 
 @mapa_bp.route('/api/admin/notifications/send_direct', methods=['POST'])
 def api_admin_notif_send_direct():
-    """Umožní administrátorovi odeslat zprávu na jakékoliv Discord ID nebo E-mail přímo z rozhraní."""
+    """Umožní administrátorovi odeslat zprávu na Discord ID, herní nick, App ID nebo E-mail přímo z rozhraní."""
     is_admin, admin_name = _check_admin_request()
     if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizováno - vyžadována administrátorská práva"}), 401
 
     data = request.get_json(silent=True) or {}
-    target = str(data.get("target", "")).strip()
+    target_raw = str(data.get("target", "")).strip()
     title = str(data.get("title", "")).strip() or "🔔 Zpráva administrátora DataCore"
     message = str(data.get("message", "")).strip()
 
-    if not target:
-        return jsonify({"status": "error", "message": "Zadejte cílové Discord ID nebo E-mail"}), 400
+    if not target_raw:
+        return jsonify({"status": "error", "message": "Zadejte cílové Discord ID, herní nick, App ID nebo E-mail"}), 400
     if not message:
         return jsonify({"status": "error", "message": "Zadejte text zprávy"}), 400
 
-    is_email = "@" in target
-    is_discord = bool(re.match(r'^\d{15,22}$', target)) or (target.isdigit() and len(target) >= 10)
+    resolved_email = None
+    resolved_discord = None
+    resolved_nick = target_raw
 
-    if not is_email and not is_discord:
-        return jsonify({"status": "error", "message": f"'{target}' není platné Discord ID (číslo) ani e-mail"}), 400
+    # Přímý email
+    if "@" in target_raw:
+        resolved_email = target_raw
+    # Přímé Discord ID
+    elif bool(re.match(r'^\d{15,22}$', target_raw)):
+        resolved_discord = target_raw
+    else:
+        # Dohledání v databázi podle App ID, nicku nebo emailu
+        db = get_db_client()
+        found_u = None
+        clean_tid = target_raw.lstrip('#').strip()
+        if db:
+            try:
+                if clean_tid.isdigit():
+                    res = db.table("users").select("discord_id, email, nick, username").eq("app_id", int(clean_tid)).execute().data
+                    if res: found_u = res[0]
+                if not found_u:
+                    res = db.table("users").select("discord_id, email, nick, username").ilike("nick", target_raw).execute().data
+                    if res: found_u = res[0]
+                if not found_u:
+                    res = db.table("users").select("discord_id, email, nick, username").ilike("username", target_raw).execute().data
+                    if res: found_u = res[0]
+            except Exception as e_lookup:
+                sys_log(f"[ADMIN NOTIF] Chyba hledání uživatele: {e_lookup}")
+
+        if found_u:
+            resolved_nick = found_u.get("nick") or found_u.get("username") or target_raw
+            if found_u.get("email") and "@" in str(found_u["email"]):
+                resolved_email = str(found_u["email"]).strip()
+            if found_u.get("discord_id") and str(found_u["discord_id"]).strip().isdigit():
+                resolved_discord = str(found_u["discord_id"]).strip()
+        else:
+            return jsonify({
+                "status": "error",
+                "message": f"Uživatel '{target_raw}' nebyl v databázi nalezen. Zadejte platný nick, App ID (např. #1), Discord ID nebo e-mail."
+            }), 400
 
     now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
     admin_display_name = admin_name or "marekk_czz"
-    
-    # Zařazení do odesílací fronty
-    NOTIFICATION_DM_QUEUE.put({
-        "discord_id": target if is_discord else None,
-        "email": target if is_email else None,
-        "dm_text": f"🔔 **{title}**\n\n{message}\n\n*Odesílatel: Administrátor ({admin_display_name}) • {now_str}*",
-        "embed": {
-            "title": title,
-            "description": message,
-            "color": 0x8b5cf6,
-            "fields": [
-                {"name": "Odesílatel", "value": f"Administrátor ({admin_display_name})", "inline": True},
-                {"name": "Čas", "value": now_str, "inline": True}
-            ],
-            "footer": {"text": f"Odeslal administrátor {admin_display_name} • DataCore OIS IDPK"}
-        },
-        "rule_id": f"admin_direct_{int(time.time())}",
-        "trigger": "admin_direct_message",
-    })
+    results = []
+    email_sent = False
+    discord_sent = False
+
+    embed_data = {
+        "title": title,
+        "description": message,
+        "color": 0x8b5cf6,
+        "fields": [
+            {"name": "Odesílatel", "value": f"Administrátor ({admin_display_name})", "inline": True},
+            {"name": "Čas", "value": now_str, "inline": True}
+        ],
+        "footer": {"text": f"Odeslal administrátor {admin_display_name} • DataCore OIS IDPK"}
+    }
+    dm_text = f"🔔 **{title}**\n\n{message}\n\n*Odesílatel: Administrátor ({admin_display_name}) • {now_str}*"
+
+    # 1. Pokud máme E-mail, odešli ho přímo
+    if resolved_email:
+        try:
+            from main import send_notification_email_sync
+            send_notification_email_sync(resolved_email, embed_data, dm_text, rule_id=f"admin_direct_{int(time.time())}", is_one_time=True)
+            email_sent = True
+            results.append(f"E-mail doručen na {resolved_email}")
+        except Exception as e_em:
+            results.append(f"E-mail ({resolved_email}) selhal: {e_em}")
+
+    # 2. Pokud máme Discord ID, zkus odeslat do Discord DM
+    if resolved_discord:
+        try:
+            from main import get_bot_loop, send_user_dm
+            b_loop = get_bot_loop()
+            if b_loop:
+                fut = asyncio.run_coroutine_threadsafe(
+                    send_user_dm(resolved_discord, title, message, 0x8b5cf6, fields=[("Odesílatel", f"Administrátor ({admin_display_name})"), ("Čas", now_str)]),
+                    b_loop
+                )
+                ok = fut.result(timeout=6.0)
+                if ok:
+                    discord_sent = True
+                    results.append(f"Discord DM doručeno na `{resolved_discord}`")
+                else:
+                    results.append(f"Discord DM na `{resolved_discord}` selhalo (uživatel má vypnuté DM nebo není na serveru)")
+            else:
+                # Zařazení do odesílací fronty jako fallback
+                NOTIFICATION_DM_QUEUE.put({
+                    "discord_id": resolved_discord,
+                    "email": None,
+                    "dm_text": dm_text,
+                    "embed": embed_data,
+                    "rule_id": f"admin_direct_{int(time.time())}",
+                    "trigger": "admin_direct_message",
+                })
+                results.append(f"Discord DM zařazeno do fronty (bot se připojuje)")
+        except Exception as e_dc:
+            results.append(f"Discord DM chyba: {e_dc}")
 
     # Zápis do lokální historie
+    log_target = resolved_nick if resolved_nick != target_raw else (resolved_email or resolved_discord or target_raw)
     try:
         from local_db import local_notif_log_history
-        channel_name = "email" if is_email else "discord"
-        local_notif_log_history(target, f"admin_{admin_display_name}", "DIRECT_MSG", "admin_message", channel_name, message)
+        channel_name = ("email + discord" if email_sent and discord_sent else ("email" if email_sent else "discord"))
+        local_notif_log_history(log_target, f"admin_{admin_display_name}", "DIRECT_MSG", "admin_message", channel_name, message)
     except Exception:
         pass
 
-    sys_log(f"[ADMIN NOTIF] Přímá zpráva zařazena k odeslání pro: {target} (admin: {admin_display_name})")
+    sys_log(f"[ADMIN NOTIF] Přímá zpráva pro: {log_target} (admin: {admin_display_name}, výsledek: {'; '.join(results)})")
 
     # Discord audit log
     try:
         from main import send_log
-        send_log("✉️ Přímá Zpráva Administrátora", f"**Odesílatel:** {admin_display_name}\n**Příjemce:** `{target}` ({'E-mail' if is_email else 'Discord DM'})\n**Předmět:** {title}\n**Zpráva:**\n{message[:400]}", 0x8b5cf6)
+        send_log("✉️ Přímá Zpráva Administrátora", f"**Odesílatel:** {admin_display_name}\n**Příjemce:** `{log_target}` ({', '.join(results)})\n**Předmět:** {title}\n**Zpráva:**\n{message[:400]}", 0x8b5cf6)
     except Exception:
         pass
 
-    return jsonify({
-        "status": "success",
-        "message": f"Zpráva byla úspěšně odeslána od {admin_display_name} pro {target} ({'E-mail' if is_email else 'Discord DM'})"
-    })
+    if email_sent or discord_sent:
+        return jsonify({
+            "status": "success",
+            "message": f"Zpráva byla úspěšně odeslána pro {log_target} ({', '.join(results)})"
+        })
+    else:
+        return jsonify({
+            "status": "error",
+            "message": f"Doručení selhalo: {', '.join(results)}"
+        }), 500
 
 
 @mapa_bp.route('/api/admin/notifications/all_rules')

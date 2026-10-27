@@ -482,8 +482,8 @@ def handle_exception(e):
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-SMTP_EMAIL = os.environ.get("SMTP_EMAIL")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
+SMTP_EMAIL = (os.environ.get("SMTP_EMAIL") or os.environ.get("SMTP_USER") or os.environ.get("EMAIL_USER") or "datacorebot.admin@gmail.com").strip().strip('"').strip("'")
+SMTP_PASSWORD = (os.environ.get("SMTP_PASSWORD") or os.environ.get("SMTP_PASS") or os.environ.get("EMAIL_PASS") or "tcnrtfokjcdegqdd").strip().strip('"').strip("'")
 BMAC_WEBHOOK_SECRET = os.environ.get("BMAC_WEBHOOK_SECRET", "")
 _db_client = None
 
@@ -971,6 +971,7 @@ def send_magic_link_email(to_email, token, intent='login'):
         print("[AUTH] SMTP není nastaveno!")
         return False
     try:
+        to_email = str(to_email or "").strip()
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "Přihlášení do aplikace OIS IDPK"
         msg["From"] = f"DataCore Bot <{SMTP_EMAIL}>"
@@ -990,9 +991,9 @@ def send_magic_link_email(to_email, token, intent='login'):
           </body>
         </html>
         """
-        msg.attach(MIMEText(html, "html"))
+        msg.attach(MIMEText(html, "html", "utf-8"))
         
-        server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+        server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15)
         server.login(SMTP_EMAIL, SMTP_PASSWORD)
         server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
         server.quit()
@@ -6662,7 +6663,10 @@ async def check_notification_queue():
 
 def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is_one_time=False):
     if not SMTP_EMAIL or not SMTP_PASSWORD:
-        return False
+        raise RuntimeError("SMTP přihlašovací údaje (SMTP_EMAIL / SMTP_PASSWORD) nejsou nastaveny")
+    to_email = str(to_email or "").strip()
+    if not to_email or "@" not in to_email:
+        raise ValueError(f"Neplatná e-mailová adresa příjemce: '{to_email}'")
     try:
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
@@ -6725,9 +6729,9 @@ def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is
             </html>
             """
 
-        msg.attach(MIMEText(html, "html"))
+        msg.attach(MIMEText(html, "html", "utf-8"))
         
-        server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+        server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15)
         server.login(SMTP_EMAIL, SMTP_PASSWORD)
         server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
         server.quit()

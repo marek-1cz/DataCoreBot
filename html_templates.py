@@ -3984,10 +3984,10 @@ HTML_DASHBOARD_NOTIFICATIONS_MGMT = """
       <form onsubmit="handleSendDirectMsg(event)">
         <div style="margin-bottom: 15px;">
           <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">
-            Cílové Discord ID nebo E-mail: <span style="color:#ef4444;">*</span>
+            Cílový uživatel (Nick, App ID, Discord ID nebo E-mail): <span style="color:#ef4444;">*</span>
           </label>
-          <input type="text" id="direct-target" placeholder="Např. 714856037042585641 nebo uzivatel@email.cz" required style="margin: 0; padding: 11px 14px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px;">
-          <div style="color: #64748b; font-size: 11px; margin-top: 4px;">U Discord ID zadejte číselné ID uživatele (17–20 cifer).</div>
+          <input type="text" id="direct-target" placeholder="Např. marekk_czz, #1, 714856037042585641 nebo uzivatel@email.cz" required style="margin: 0; padding: 11px 14px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px;">
+          <div style="color: #64748b; font-size: 11px; margin-top: 4px;">Můžete zadat herní nick, App ID (#1), číselné Discord ID nebo e-mail.</div>
         </div>
 
         <div style="margin-bottom: 15px;">
