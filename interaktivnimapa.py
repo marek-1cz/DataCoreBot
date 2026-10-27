@@ -11,6 +11,7 @@ import html
 
 DEPOT_DISCORD_QUEUE = queue.Queue()
 NOTIFICATION_DM_QUEUE = queue.Queue()  # {discord_id, email, message, embed_data}
+NOTIFICATION_DELIVERY_TRACKER = {}  # {queue_id: {"status": "queued"|"delivered"|"failed", "target": ..., "time": ..., "detail": ...}}
 
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, Response, request, session, redirect, render_template_string
@@ -6667,7 +6668,14 @@ def _load_automation_log():
         print(f"[AUTOMATION-LOG] Chyba načtení historie: {e}", flush=True)
     return []
 
+_last_automation_save = 0.0
+
 def _save_automation_log():
+    global _last_automation_save
+    now_t = time.time()
+    if now_t - _last_automation_save < 3.0:
+        return
+    _last_automation_save = now_t
     try:
         with open(_AUTOMATION_LOG_PATH, "w", encoding="utf-8") as f:
             json.dump(AUTOMATION_ACTIVITY_LOG[:_AUTOMATION_ACTIVITY_LOG_MAX], f, ensure_ascii=False, indent=2)
@@ -7948,6 +7956,7 @@ def _load_gtfs():
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         
+        conn.execute("PRAGMA cache_size = -2000;")
         # Novy dotaz s agregaci:
         cur.execute("""
             SELECT s.name AS n, AVG(s.lat) AS la, AVG(s.lon) AS lo, 
@@ -7987,6 +7996,8 @@ def _load_gtfs():
             for t in tk:
                 token_idx.setdefault(t, []).append(idx)
         conn.close()
+        import gc
+        gc.collect()
         GTFS_STOPS, GTFS_NAME_IDX, GTFS_GRID = stops, name_idx, grid
         GTFS_TOKENS, GTFS_TOKEN_IDX = tokens_list, token_idx
         GTFS_MODES = modes
@@ -10013,6 +10024,7 @@ def background_map_worker():
     last_spz_memory_cleanup = get_prague_time()
     last_spz_cache_flush = get_prague_time()
     last_overrides_poll = get_prague_time()
+    last_gc_run = get_prague_time()
     last_arriva_fetch_ts = 0.0
     TRIP_COUNTER = int(time.time())
     last_successful_pvvd = []
@@ -10022,6 +10034,14 @@ def background_map_worker():
     while True:
         try:
             now = get_prague_time()
+            if (now - last_gc_run).total_seconds() >= 60.0 or (now - last_gc_run).total_seconds() < 0:
+                last_gc_run = now
+                try:
+                    import gc
+                    gc.collect()
+                except Exception:
+                    pass
+
             if db_client and ((now - last_db_cleanup).total_seconds() > 86400 or (now - last_db_cleanup).total_seconds() < 0):
                 last_db_cleanup = now
 
@@ -15628,10 +15648,10 @@ def admin_notifications_page():
       let msg = document.getElementById('direct-msg').value.trim();
       let stEl = document.getElementById('direct-status');
 
-      if (!target) { stEl.innerHTML = '<span style="color:#ef4444;">❌ Vyplňte pole Komu a kam (Discord ID nebo E-mail)</span>'; return; }
-      if (!msg) { stEl.innerHTML = '<span style="color:#ef4444;">❌ Vyplňte text zprávy</span>'; return; }
+      if (!target) { stEl.innerHTML = '<span style="color:#ef4444;">❌ Vyplňte pole Komu a kam (Discord ID, nick, #AppID nebo E-mail)</span>'; return; }
+      if (!msg) { stEl.innerHTML = '<span style="color:#ef4444;">❌ Vyplňte text zprávy k odeslání</span>'; return; }
 
-      stEl.innerHTML = '<span style="color:#38bdf8;">⏳ Odesílám zprávu...</span>';
+      stEl.innerHTML = '<span style="color:#38bdf8;"><i class="fas fa-spinner fa-spin"></i> Odesílám zprávu a ověřuji dostupnost příjemce...</span>';
 
       try {
         let r = await fetch('/api/admin/notifications/send_direct', {
@@ -15641,15 +15661,48 @@ def admin_notifications_page():
         });
         let d = await r.json();
         if (d.status === 'success') {
-          stEl.innerHTML = `<span style="color:#10b981;">✅ ${d.message}</span>`;
-          document.getElementById('direct-msg').value = '';
-          clearStandaloneDirectImage();
-          loadAdminHistory();
+          if (d.queued && d.queue_id) {
+            stEl.innerHTML = `<span style="color:#38bdf8;"><i class="fas fa-spinner fa-spin"></i> <strong>Zařazeno do fronty:</strong> Bot se synchronizuje s Discordem. Sleduji potvrzení doručení v reálném čase...</span>`;
+            let attempts = 0;
+            const timer = setInterval(async () => {
+              attempts++;
+              try {
+                let qRes = await fetch('/api/admin/notifications/check_queue_status?queue_id=' + encodeURIComponent(d.queue_id));
+                if (qRes.ok) {
+                  let qData = await qRes.json();
+                  if (qData.status === 'delivered') {
+                    clearInterval(timer);
+                    stEl.innerHTML = `<span style="color:#10b981;">✅ <strong>Úspěšně doručeno!</strong> Zpráva byla doručena uživateli přímo do Discord DM (${qData.time || 'právě teď'}).</span>`;
+                    document.getElementById('direct-msg').value = '';
+                    clearStandaloneDirectImage();
+                    loadAdminHistory();
+                    return;
+                  } else if (qData.status === 'failed') {
+                    clearInterval(timer);
+                    stEl.innerHTML = `<span style="color:#ef4444;">❌ <strong>Doručení selhalo:</strong> ${qData.detail || 'Zprávu se nepodařilo doručit.'}</span>`;
+                    return;
+                  }
+                }
+              } catch(e) {}
+              if (attempts >= 12) {
+                clearInterval(timer);
+                stEl.innerHTML = `<span style="color:#f59e0b;">⏳ <strong>Zpráva je ve frontě:</strong> Bot se stále probouzí. Zpráva bude automaticky doručena za okamžik.</span>`;
+                document.getElementById('direct-msg').value = '';
+                clearStandaloneDirectImage();
+                loadAdminHistory();
+              }
+            }, 1500);
+          } else {
+            stEl.innerHTML = `<span style="color:#10b981;">✅ ${d.message}</span>`;
+            document.getElementById('direct-msg').value = '';
+            clearStandaloneDirectImage();
+            loadAdminHistory();
+          }
         } else {
-          stEl.innerHTML = `<span style="color:#ef4444;">❌ ${d.message || 'Chyba'}</span>`;
+          stEl.innerHTML = `<span style="color:#ef4444;">❌ <strong>Chyba:</strong> ${d.message || 'Nepodařilo se odeslat zprávu.'}</span>`;
         }
       } catch(e) {
-        stEl.innerHTML = '<span style="color:#ef4444;">❌ Chyba spojení</span>';
+        stEl.innerHTML = '<span style="color:#ef4444;">❌ <strong>Chyba spojení:</strong> Nepodařilo se navázat spojení se serverem.</span>';
       }
     }
 
@@ -15849,6 +15902,8 @@ def api_admin_notif_send_direct():
     results = []
     email_sent = False
     discord_sent = False
+    discord_queued = False
+    queue_id = None
 
     embed_data = {
         "title": title,
@@ -15884,38 +15939,86 @@ def api_admin_notif_send_direct():
     # 2. Pokud máme Discord ID a je zvolen kanál 'both' nebo 'discord'
     if resolved_discord and channel in ["both", "discord"]:
         try:
-            from main import get_bot_loop, send_user_dm
+            from main import get_bot_loop, send_user_dm, bot
             b_loop = get_bot_loop()
-            if b_loop:
-                fut = asyncio.run_coroutine_threadsafe(
-                    send_user_dm(
-                        resolved_discord,
-                        title,
-                        message,
-                        0x8b5cf6,
-                        fields=[("Odesílatel", f"Administrátor ({admin_display_name})"), ("Čas", now_str)],
-                        is_admin_direct=True,
-                        image_url=image_url or None
-                    ),
-                    b_loop
-                )
-                ok = fut.result(timeout=6.0)
-                if ok:
-                    discord_sent = True
-                    results.append(f"Discord DM doručeno na `{resolved_discord}`")
-                else:
-                    results.append(f"Discord DM na `{resolved_discord}` selhalo (uživatel má vypnuté DM nebo není na serveru)")
+            is_ready = bool(bot and hasattr(bot, 'is_ready') and bot.is_ready())
+            if b_loop and is_ready:
+                try:
+                    fut = asyncio.run_coroutine_threadsafe(
+                        send_user_dm(
+                            resolved_discord,
+                            title,
+                            message,
+                            0x8b5cf6,
+                            fields=[("Odesílatel", f"Administrátor ({admin_display_name})"), ("Čas", now_str)],
+                            is_admin_direct=True,
+                            image_url=image_url or None
+                        ),
+                        b_loop
+                    )
+                    ok = fut.result(timeout=6.0)
+                    if ok:
+                        discord_sent = True
+                        results.append(f"Discord DM doručeno na `{resolved_discord}`")
+                    else:
+                        # Dočasné selhání přímého volání -> zařadit do fronty jako spolehlivou záchranu
+                        queue_id = f"dm_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+                        NOTIFICATION_DELIVERY_TRACKER[queue_id] = {
+                            "status": "queued",
+                            "target": resolved_discord,
+                            "created_at": time.time(),
+                            "detail": "Zařazeno do fronty (probíhá doručení)"
+                        }
+                        NOTIFICATION_DM_QUEUE.put({
+                            "discord_id": resolved_discord,
+                            "email": None,
+                            "dm_text": dm_text,
+                            "embed": embed_data,
+                            "rule_id": f"admin_direct_{int(time.time())}",
+                            "queue_id": queue_id,
+                            "trigger": "admin_direct_message",
+                        })
+                        discord_queued = True
+                        results.append("Discord DM zařazeno do fronty k doručení")
+                except Exception as e_fut:
+                    queue_id = f"dm_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+                    NOTIFICATION_DELIVERY_TRACKER[queue_id] = {
+                        "status": "queued",
+                        "target": resolved_discord,
+                        "created_at": time.time(),
+                        "detail": "Zařazeno do fronty (bot se synchronizuje)"
+                    }
+                    NOTIFICATION_DM_QUEUE.put({
+                        "discord_id": resolved_discord,
+                        "email": None,
+                        "dm_text": dm_text,
+                        "embed": embed_data,
+                        "rule_id": f"admin_direct_{int(time.time())}",
+                        "queue_id": queue_id,
+                        "trigger": "admin_direct_message",
+                    })
+                    discord_queued = True
+                    results.append("Discord DM zařazeno do fronty")
             else:
-                # Zařazení do odesílací fronty jako fallback
+                # Zařazení do odesílací fronty jako fallback (bot se právě připojuje)
+                queue_id = f"dm_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+                NOTIFICATION_DELIVERY_TRACKER[queue_id] = {
+                    "status": "queued",
+                    "target": resolved_discord,
+                    "created_at": time.time(),
+                    "detail": "Zařazeno do fronty (bot se připojuje k Discordu)"
+                }
                 NOTIFICATION_DM_QUEUE.put({
                     "discord_id": resolved_discord,
                     "email": None,
                     "dm_text": dm_text,
                     "embed": embed_data,
                     "rule_id": f"admin_direct_{int(time.time())}",
+                    "queue_id": queue_id,
                     "trigger": "admin_direct_message",
                 })
-                results.append(f"Discord DM zařazeno do fronty (bot se připojuje)")
+                discord_queued = True
+                results.append("Discord DM zařazeno do fronty (bot se připojuje)")
         except Exception as e_dc:
             results.append(f"Discord DM chyba: {e_dc}")
 
@@ -15923,7 +16026,7 @@ def api_admin_notif_send_direct():
     log_target = resolved_nick if resolved_nick != target_raw else (resolved_email or resolved_discord or target_raw)
     try:
         from local_db import local_notif_log_history
-        channel_name = ("email + discord" if email_sent and discord_sent else ("email" if email_sent else "discord"))
+        channel_name = ("email + discord" if email_sent and (discord_sent or discord_queued) else ("email" if email_sent else "discord"))
         local_notif_log_history(log_target, f"admin_{admin_display_name}", "DIRECT_MSG", "admin_message", channel_name, message)
     except Exception:
         pass
@@ -15940,7 +16043,15 @@ def api_admin_notif_send_direct():
     if email_sent or discord_sent:
         return jsonify({
             "status": "success",
+            "queued": False,
             "message": f"Zpráva byla úspěšně odeslána pro {log_target} ({', '.join(results)})"
+        })
+    elif discord_queued:
+        return jsonify({
+            "status": "success",
+            "queued": True,
+            "queue_id": queue_id,
+            "message": f"Zpráva byla zařazena do fronty k doručení pro {log_target} (bot se synchronizuje s Discordem a doručí ji během chvíle)."
         })
     else:
         err_msg = f"Doručení selhalo: {'; '.join(results) if results else 'Žádný komunikační kanál nebyl dostupný nebo uživatel nemá povolené zprávy'}"
@@ -15953,6 +16064,21 @@ def api_admin_notif_send_direct():
             "status": "error",
             "message": err_msg
         }), 400
+
+
+@mapa_bp.route('/api/admin/notifications/check_queue_status')
+def api_admin_notifications_check_queue_status():
+    """Vrátí stav doručení zprávy ve frontě v reálném čase pro live feedback v administraci."""
+    is_admin, _ = _check_admin_request()
+    if not is_admin:
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
+    qid = request.args.get("queue_id", "").strip()
+    if not qid:
+        return jsonify({"status": "error", "message": "Chybí parametr queue_id"}), 400
+    info = NOTIFICATION_DELIVERY_TRACKER.get(qid)
+    if not info:
+        return jsonify({"status": "unknown", "detail": "Zpráva nebyla nalezena ve frontě (pravděpodobně již zpracována)"}), 404
+    return jsonify(info)
 
 
 @mapa_bp.route('/api/admin/users/search')

@@ -4344,20 +4344,26 @@ async function handleSendDirectMsg(e) {
     });
     const data = await res.json();
     if (res.ok && data.status === 'success') {
-      statusEl.className = 'alert alert-success';
-      statusEl.innerHTML = '<i class="fas fa-check-circle"></i> <strong>Úspěšně odesláno:</strong> ' + (data.message || 'Zpráva byla úspěšně doručena!');
-      if (msgEl) msgEl.value = '';
-      clearDirectImage();
-      const infoEl = document.getElementById('direct-selected-info');
-      if (infoEl) infoEl.style.display = 'none';
-      loadDashHist();
+      if (data.queued && data.queue_id) {
+        statusEl.className = 'alert alert-info';
+        statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <strong>Zařazeno do fronty:</strong> Bot se připojuje k Discordu. Sleduji potvrzení doručení v reálném čase...';
+        trackDirectQueueDelivery(data.queue_id, statusEl, msgEl);
+      } else {
+        statusEl.className = 'alert alert-success';
+        statusEl.innerHTML = '<i class="fas fa-check-circle"></i> <strong>Úspěšně odesláno:</strong> ' + (data.message || 'Zpráva byla úspěšně doručena!');
+        if (msgEl) msgEl.value = '';
+        clearDirectImage();
+        const infoEl = document.getElementById('direct-selected-info');
+        if (infoEl) infoEl.style.display = 'none';
+        loadDashHist();
+      }
     } else {
       statusEl.className = 'alert alert-danger';
       statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Chyba odeslání:</strong> ' + (data.message || 'Nepodařilo se odeslat zprávu.');
     }
   } catch (err) {
     statusEl.className = 'alert alert-danger';
-    statusEl.innerHTML = '<i class="fas fa-wifi"></i> <strong>Chyba spojení se serverem:</strong> ' + err.message;
+    statusEl.innerHTML = '<i class="fas fa-wifi"></i> <strong>Chyba spojení se serverem:</strong> Nepodařilo se navázat spojení se serverem.';
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -4365,6 +4371,43 @@ async function handleSendDirectMsg(e) {
     }
   }
   return false;
+}
+
+function trackDirectQueueDelivery(queueId, statusEl, msgEl) {
+  let attempts = 0;
+  const timer = setInterval(async () => {
+    attempts++;
+    try {
+      const qRes = await fetch('/api/admin/notifications/check_queue_status?queue_id=' + encodeURIComponent(queueId));
+      if (qRes.ok) {
+        const qData = await qRes.json();
+        if (qData.status === 'delivered') {
+          clearInterval(timer);
+          statusEl.className = 'alert alert-success';
+          statusEl.innerHTML = '<i class="fas fa-check-circle"></i> <strong>Úspěšně doručeno!</strong> Zpráva byla doručena uživateli přímo do Discord DM (' + (qData.time || 'právě teď') + ').';
+          if (msgEl) msgEl.value = '';
+          clearDirectImage();
+          const infoEl = document.getElementById('direct-selected-info');
+          if (infoEl) infoEl.style.display = 'none';
+          loadDashHist();
+          return;
+        } else if (qData.status === 'failed') {
+          clearInterval(timer);
+          statusEl.className = 'alert alert-danger';
+          statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Doručení selhalo:</strong> ' + (qData.detail || 'Zprávu se nepodařilo doručit.');
+          return;
+        }
+      }
+    } catch(e) {}
+    if (attempts >= 12) {
+      clearInterval(timer);
+      statusEl.className = 'alert alert-warning';
+      statusEl.innerHTML = '<i class="fas fa-clock"></i> <strong>Zpráva je ve frontě:</strong> Bot se stále probouzí. Zpráva bude automaticky doručena za okamžik.';
+      if (msgEl) msgEl.value = '';
+      clearDirectImage();
+      loadDashHist();
+    }
+  }, 1500);
 }
 
 function formatCzechDateTime(isoStr) {

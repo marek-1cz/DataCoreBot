@@ -97,6 +97,12 @@ _local_db_lock = threading.Lock()
 def _get_local_conn():
     conn = sqlite3.connect(_LOCAL_DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA cache_size = -2000;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
+    except Exception:
+        pass
     return conn
 
 get_local_db = _get_local_conn

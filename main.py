@@ -1,16 +1,23 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
+
+# === OPTIMALIZACE PAMĚTI PRO 512 MB CONTAINER (KOYEB OOM EXIT 9 PREVENCE) ===
+os.environ.setdefault("MALLOC_ARENA_MAX", "2")
+import threading
+try:
+    threading.stack_size(512 * 1024)  # 512 KB zásobník na vlákno místo výchozích 8 MB na Linuxu
+except Exception:
+    pass
+
 import time
 import signal
 import atexit
 from datetime import datetime
-import time
 import discord
 from discord.ext import commands, tasks
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash, Response, stream_with_context, jsonify, make_response
 from functools import wraps
-import threading
 from threading import Thread
 from supabase import create_client
 from datetime import datetime, timedelta
@@ -1477,7 +1484,7 @@ async def announce_new_supporter(discord_nick, amount_str, message, role_names_l
             except: pass
             break
 
-async def async_send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacore-logs", pings=None):
+async def async_send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacore-logs", pings=None, image_url=None):
     if not bot.is_ready(): return
     for guild in bot.guilds:
         channel = discord.utils.get(guild.channels, name=channel_name)
@@ -1490,14 +1497,48 @@ async def async_send_log(title, description, color=0x38bdf8, channel_name="🖥�
                         roles_to_ping.append(r.mention)
                 if roles_to_ping:
                     content_str = " ".join(roles_to_ping) + " ⚠️ **Kritické upozornění!**"
-            try: await channel.send(content=content_str, embed=discord.Embed(title=title, description=description, color=color, timestamp=get_prague_time()))
-            except: pass
+            
+            embed = discord.Embed(title=title, description=description, color=color, timestamp=get_prague_time())
+            discord_file = None
+            if image_url:
+                try:
+                    img_str = str(image_url).strip()
+                    if img_str.startswith("data:image/"):
+                        import base64
+                        import io
+                        header, b64_data = img_str.split(",", 1)
+                        ext = "png"
+                        if "jpeg" in header or "jpg" in header: ext = "jpg"
+                        elif "webp" in header: ext = "webp"
+                        elif "gif" in header: ext = "gif"
+                        img_bytes = base64.b64decode(b64_data)
+                        fname = f"log_screenshot.{ext}"
+                        discord_file = discord.File(io.BytesIO(img_bytes), filename=fname)
+                        embed.set_image(url=f"attachment://{fname}")
+                    elif img_str.startswith("http://") or img_str.startswith("https://"):
+                        embed.set_image(url=img_str)
+                except Exception as e_img:
+                    print(f"[LOG IMAGE ERR] {e_img}", flush=True)
+
+            send_kwargs = {"embed": embed}
+            if content_str:
+                send_kwargs["content"] = content_str
+            if discord_file:
+                send_kwargs["file"] = discord_file
+            try:
+                await channel.send(**send_kwargs)
+            except Exception:
+                if discord_file:
+                    send_kwargs.pop("file", None)
+                    try: await channel.send(**send_kwargs)
+                    except: pass
             break
 
-def send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacore-logs", pings=None):
+def send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacore-logs", pings=None, image_url=None):
     try:
-        if bot.is_ready() and bot.loop and bot.loop.is_running():
-            asyncio.run_coroutine_threadsafe(async_send_log(title, description, color, channel_name, pings), bot.loop)
+        b_loop = get_bot_loop()
+        if bot.is_ready() and b_loop and b_loop.is_running():
+            asyncio.run_coroutine_threadsafe(async_send_log(title, description, color, channel_name, pings, image_url=image_url), b_loop)
     except Exception:
         pass
 
@@ -3403,7 +3444,12 @@ def api_submit_feedback():
         contact_email = str(data.get("contact_email", "")).strip()[:120]
         contact = str(data.get("contact", "")).strip()[:120]
         nick = str(data.get("nick", "")).strip()[:60]
-        image_url = str(data.get("image_url", "")).strip()[:500]
+        raw_img = str(data.get("image_url", "")).strip()
+        image_url = ""
+        if raw_img.startswith("data:image/") and len(raw_img) < 8000000:
+            image_url = raw_img
+        elif (raw_img.startswith("http://") or raw_img.startswith("https://")) and len(raw_img) < 1000:
+            image_url = raw_img
 
         # Povolit pouze bezpečné typy podnětů
         raw_type = str(data.get("type", "GENERAL")).strip().upper()
@@ -3483,7 +3529,10 @@ def api_submit_feedback():
 
         saved_msg = msg
         if image_url:
-            saved_msg += f"\n\n📷 [Přiložený screenshot: {image_url}]"
+            if image_url.startswith("data:image/"):
+                saved_msg += "\n\n📷 [Přiložen screenshot ze souboru (.png/.jpg)]"
+            else:
+                saved_msg += f"\n\n📷 [Přiložený screenshot: {image_url}]"
 
         insert_payload = {
             "discord_id": final_discord_id,
@@ -3527,7 +3576,7 @@ def api_submit_feedback():
         safe_contacts = contacts_str.replace("@", "@\u200b")
         safe_msg = saved_msg.replace("@", "@\u200b")
 
-        send_log(log_title, f"**Od:** {safe_nick}\n**Typ:** `{type_str}`\n**Kontakty:** {safe_contacts}\n**Požadovaná odpověď:** {pref_label}\n**Zpráva:**\n*{safe_msg}*", log_color)
+        send_log(log_title, f"**Od:** {safe_nick}\n**Typ:** `{type_str}`\n**Kontakty:** {safe_contacts}\n**Požadovaná odpověď:** {pref_label}\n**Zpráva:**\n*{safe_msg}*", log_color, image_url=image_url)
         return _cors_jsonify({"status": "success"})
     except Exception as e:
         print(f"[FEEDBACK ERROR] {e}", flush=True)
@@ -3847,7 +3896,15 @@ def auth_pages():
             return redirect(url_for('home'))
     return render_public(HTML_REGISTER) # HTML_REGISTER used for both login and register since it's passwordless
 
+BOT_ASYNC_LOOP = None
+
 def get_bot_loop():
+    global BOT_ASYNC_LOOP
+    try:
+        if BOT_ASYNC_LOOP and BOT_ASYNC_LOOP.is_running():
+            return BOT_ASYNC_LOOP
+    except Exception:
+        pass
     try:
         loop = getattr(bot, '_loop', None)
         if loop and loop.is_running():
@@ -6269,11 +6326,16 @@ def dashboard_feedback():
 
 def get_bot_loop():
     """Bezpečně získá běžící asyncio loop Discord bota bez vyvolání AttributeError v Discord.py 2.0+."""
+    global BOT_ASYNC_LOOP
     try:
-        if bot and hasattr(bot, 'is_ready') and bot.is_ready():
-            loop = bot.loop
-            if loop and hasattr(loop, 'is_running') and loop.is_running():
-                return loop
+        if BOT_ASYNC_LOOP and BOT_ASYNC_LOOP.is_running():
+            return BOT_ASYNC_LOOP
+    except Exception:
+        pass
+    try:
+        loop = getattr(bot, 'loop', None) or getattr(bot, '_loop', None)
+        if loop and hasattr(loop, 'is_running') and loop.is_running():
+            return loop
     except Exception:
         pass
     return None
@@ -6369,11 +6431,41 @@ def dispatch_feedback_reply(fb_row, reply_text, delivery_channel="auto"):
                         discord_sent = True
                         results.append("Discord DM doručeno")
                     else:
-                        results.append("Discord DM: Nepodařilo se doručit (uživatel nemá povolené DM nebo nebyl nalezen)")
+                        from interaktivnimapa import NOTIFICATION_DM_QUEUE
+                        NOTIFICATION_DM_QUEUE.put({
+                            "discord_id": target_discord,
+                            "email": None,
+                            "dm_text": f"📩 **Odpověď na vaši zpětnou vazbu / dotaz**\n\n{reply_text}",
+                            "embed": {
+                                "title": "📩 Odpověď na vaši zpětnou vazbu / dotaz",
+                                "description": reply_text,
+                                "color": 0x38bdf8,
+                                "fields": ([{"name": "Vaše původní zpráva", "value": orig_msg[:1000]}] if orig_msg else [])
+                            },
+                            "rule_id": f"admin_reply_{int(time.time())}",
+                            "trigger": "admin_feedback_reply",
+                        })
+                        results.append("Discord DM zařazeno do fronty (bot se připojuje)")
+                        discord_sent = True
                 except Exception as e_fut:
                     results.append(f"Discord DM chyba: {e_fut}")
             else:
-                results.append("Discord DM: Bot momentálně neběží na tomto workeru")
+                from interaktivnimapa import NOTIFICATION_DM_QUEUE
+                NOTIFICATION_DM_QUEUE.put({
+                    "discord_id": target_discord,
+                    "email": None,
+                    "dm_text": f"📩 **Odpověď na vaši zpětnou vazbu / dotaz**\n\n{reply_text}",
+                    "embed": {
+                        "title": "📩 Odpověď na vaši zpětnou vazbu / dotaz",
+                        "description": reply_text,
+                        "color": 0x38bdf8,
+                        "fields": ([{"name": "Vaše původní zpráva", "value": orig_msg[:1000]}] if orig_msg else [])
+                    },
+                    "rule_id": f"admin_reply_{int(time.time())}",
+                    "trigger": "admin_feedback_reply",
+                })
+                results.append("Discord DM zařazeno do fronty (bot se připojuje)")
+                discord_sent = True
         else:
             results.append("Discord DM: Chybí číselné Discord ID")
 
@@ -6723,8 +6815,11 @@ def check_sm_role():
         return False
     return commands.check(predicate)
 
+_last_depot_discord_run = 0.0
+
 @tasks.loop(seconds=5)
 async def check_depot_queue():
+    global _last_depot_discord_run
     try:
         updated = False
         while not DEPOT_DISCORD_QUEUE.empty():
@@ -6732,7 +6827,13 @@ async def check_depot_queue():
             if msg.get("type") == "update_all":
                 updated = True
         if updated:
-            await update_depot_discord_messages()
+            now_t = time.time()
+            if now_t - _last_depot_discord_run >= 25.0:
+                _last_depot_discord_run = now_t
+                await update_depot_discord_messages()
+            else:
+                # Pokud ještě neuběhl limit 25s, zachovej událost ve frontě
+                DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
     except Exception as e:
         print(f"[DEPOT DISCORD] Chyba: {e}", flush=True)
 
@@ -6747,6 +6848,7 @@ async def check_notification_queue():
             dm_text = item.get("dm_text", "")
             embed_data = item.get("embed")
             rule_id = item.get("rule_id")
+            queue_id = item.get("queue_id")
             is_one_time = bool(item.get("is_one_time"))
 
             # Pošli Discord DM
@@ -6830,20 +6932,22 @@ async def check_notification_queue():
                                 send_kwargs["view"] = view
                             try:
                                 await user.send(**send_kwargs)
+                                sent_ok = True
                             except Exception:
                                 if view:
                                     send_kwargs.pop("view", None)
                                     try:
                                         await user.send(**send_kwargs)
+                                        sent_ok = True
                                     except Exception:
                                         pass
-                                if discord_file:
+                                if not sent_ok and discord_file:
                                     send_kwargs.pop("file", None)
                                     try:
                                         await user.send(**send_kwargs)
+                                        sent_ok = True
                                     except Exception:
                                         pass
-                            sent_ok = True
                         except Exception as e_embed:
                             print(f"[NOTIF DM EMBED FAIL] {e_embed}, zkouším poslat prostý text...", flush=True)
                     if not sent_ok and dm_text:
@@ -6852,21 +6956,60 @@ async def check_notification_queue():
                                 await user.send(dm_text[:2000], view=view)
                             else:
                                 await user.send(dm_text[:2000])
+                            sent_ok = True
                         except Exception:
-                            await user.send(dm_text[:2000])
-                        sent_ok = True
-                    print(f"[NOTIF DM] Odesláno DM uživateli {discord_id}", flush=True)
-                    try:
-                        from daily_reporter import TRACKER
-                        TRACKER.record_notification("discord", True)
-                    except Exception: pass
+                            try:
+                                await user.send(dm_text[:2000])
+                                sent_ok = True
+                            except Exception:
+                                pass
+                    if sent_ok:
+                        print(f"[NOTIF DM] Odesláno DM uživateli {discord_id}", flush=True)
+                        if queue_id:
+                            try:
+                                from interaktivnimapa import NOTIFICATION_DELIVERY_TRACKER
+                                NOTIFICATION_DELIVERY_TRACKER[queue_id] = {
+                                    "status": "delivered",
+                                    "time": get_prague_time().strftime("%H:%M:%S"),
+                                    "detail": "Zpráva byla úspěšně doručena do Discord DM"
+                                }
+                            except Exception: pass
+                        try:
+                            from daily_reporter import TRACKER
+                            TRACKER.record_notification("discord", True)
+                        except Exception: pass
+                    else:
+                        if queue_id:
+                            try:
+                                from interaktivnimapa import NOTIFICATION_DELIVERY_TRACKER
+                                NOTIFICATION_DELIVERY_TRACKER[queue_id] = {
+                                    "status": "failed",
+                                    "detail": "Uživatel má vypnuté soukromé zprávy nebo odmítl doručení"
+                                }
+                            except Exception: pass
                 except discord.Forbidden:
                     print(f"[NOTIF DM] Uživatel {discord_id} má zablokované přímé zprávy (DM)!", flush=True)
+                    if queue_id:
+                        try:
+                            from interaktivnimapa import NOTIFICATION_DELIVERY_TRACKER
+                            NOTIFICATION_DELIVERY_TRACKER[queue_id] = {
+                                "status": "failed",
+                                "detail": "Uživatel má v nastavení Discordu zakázané soukromé zprávy (DM) od členů serveru"
+                            }
+                        except Exception: pass
                     try:
                         send_log("⚠️ NOTIFIKACE: Nelze doručit DM", f"Uživateli <@{discord_id}> nelze odeslat soukromou zprávu (DM), protože má v nastavení Discordu zakázané zprávy od členů serveru.\nNotifikace:\n{dm_text[:400]}", 0xf59e0b, channel_name="📲・error-app")
                     except Exception: pass
                 except Exception as e:
                     print(f"[NOTIF DM] Chyba při odesílání DM {discord_id}: {e}", flush=True)
+                    if queue_id:
+                        try:
+                            from interaktivnimapa import NOTIFICATION_DELIVERY_TRACKER
+                            NOTIFICATION_DELIVERY_TRACKER[queue_id] = {
+                                "status": "failed",
+                                "detail": "Uživatel s tímto ID nebyl na Discordu nalezen"
+                            }
+                        except Exception: pass
                     try:
                         from daily_reporter import TRACKER
                         TRACKER.record_notification("discord", False, str(e))
@@ -7334,9 +7477,34 @@ def stranka_podpora():
 
         <div style="margin-bottom:20px;">
           <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">
-            <i class="fas fa-image" style="color:#38bdf8;"></i> Snímek obrazovky / Obrázek chyby (nepovinné URL)
+            <i class="fas fa-image" style="color:#38bdf8;"></i> Snímek obrazovky / Fotografie chyby (nepovinné)
           </label>
-          <input type="url" id="sp_image_url" placeholder="https://... (odkaz na screenshot chyby, imgur, discord cdn - nepovinné)" style="width:100%; padding:10px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; box-sizing:border-box;">
+          <input type="file" id="sp_image_file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" onchange="handleSupportFileSelect(event)">
+          
+          <div id="sp_upload_dropzone" onclick="document.getElementById('sp_image_file').click()" ondragover="handleSupportDragOver(event)" ondragleave="handleSupportDragLeave(event)" ondrop="handleSupportDrop(event)" style="border:2px dashed #475569; border-radius:12px; padding:18px; text-align:center; cursor:pointer; background:rgba(15,23,42,0.4); transition:all 0.2s;">
+            <i class="fas fa-cloud-upload-alt" style="font-size:28px; color:#38bdf8; margin-bottom:6px; display:block;"></i>
+            <div style="font-size:13px; color:#f8fafc; font-weight:600;">Klikněte pro výběr fotky / screenshotu nebo ji sem přetáhněte</div>
+            <div style="font-size:11px; color:#94a3b8; margin-top:4px;">Podporovány formáty: <strong>.png, .jpg, .jpeg, .webp, .gif</strong> (nebo vložte screenshot stiskem <strong>Ctrl+V</strong>)</div>
+          </div>
+
+          <div id="sp_image_preview_container" style="display:none; margin-top:10px; border-radius:10px; border:1px solid #334155; background:rgba(0,0,0,0.5); padding:10px; text-align:center;">
+            <img id="sp_image_preview" src="" alt="Náhled snímku" style="max-height:200px; max-width:100%; border-radius:8px; display:block; margin:0 auto; box-shadow:0 4px 14px rgba(0,0,0,0.4);" />
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; padding:0 4px;">
+              <span id="sp_image_name" style="font-size:11px; color:#cbd5e1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70%;"></span>
+              <button type="button" onclick="clearSupportImage(event)" style="background:rgba(239,68,68,0.2); border:1px solid #ef4444; color:#fca5a5; padding:4px 10px; border-radius:6px; font-size:11px; cursor:pointer;">
+                <i class="fas fa-times"></i> Odebrat obrázek
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top:8px;">
+            <a href="javascript:void(0)" onclick="toggleSupportUrlInput()" style="color:#94a3b8; font-size:11px; text-decoration:underline;">
+              <i class="fas fa-link"></i> Nebo zadat URL adresu obrázku ručně
+            </a>
+            <div id="sp_url_wrap" style="display:none; margin-top:6px;">
+              <input type="url" id="sp_image_url" placeholder="https://... (odkaz na screenshot chyby, imgur, discord cdn)" oninput="handleSupportUrlInput(this.value)" style="width:100%; padding:9px 12px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:13px; outline:none; box-sizing:border-box;">
+            </div>
+          </div>
           <div style="color:#64748b; font-size:11px; margin-top:4px;">📸 Pomůže administrátorům rychleji identifikovat a opravit chybu.</div>
         </div>
 
@@ -7357,6 +7525,145 @@ def stranka_podpora():
     let activePref = '{default_pref}';
     let savedDiscord = '{safe_contact_discord}';
     let savedEmail = '{safe_email}';
+    let _supportImageData = '';
+
+    function handleSupportDragOver(e) {{
+      e.preventDefault();
+      e.stopPropagation();
+      const dz = document.getElementById('sp_upload_dropzone');
+      if (dz) {{
+        dz.style.borderColor = '#38bdf8';
+        dz.style.background = 'rgba(56,189,248,0.12)';
+      }}
+    }}
+
+    function handleSupportDragLeave(e) {{
+      e.preventDefault();
+      e.stopPropagation();
+      const dz = document.getElementById('sp_upload_dropzone');
+      if (dz) {{
+        dz.style.borderColor = '#475569';
+        dz.style.background = 'rgba(15,23,42,0.4)';
+      }}
+    }}
+
+    function handleSupportDrop(e) {{
+      e.preventDefault();
+      e.stopPropagation();
+      handleSupportDragLeave(e);
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files[0]) {{
+        processSupportFile(dt.files[0]);
+      }}
+    }}
+
+    function handleSupportFileSelect(e) {{
+      const file = e.target.files && e.target.files[0];
+      if (file) processSupportFile(file);
+    }}
+
+    function processSupportFile(file) {{
+      if (!file.type.startsWith('image/')) {{
+        showSupportStatus('warning', 'Vybraný soubor není platný obrázek. Podporovány jsou formáty .png, .jpg, .jpeg, .webp, .gif.');
+        return;
+      }}
+      const reader = new FileReader();
+      reader.onload = function(evt) {{
+        const rawData = evt.target.result;
+        compressImageIfNeeded(rawData, 1600, 0.85, function(compressedData) {{
+          _supportImageData = compressedData;
+          document.getElementById('sp_image_preview').src = _supportImageData;
+          const szKb = Math.round(file.size / 1024);
+          document.getElementById('sp_image_name').textContent = file.name + ' (' + szKb + ' KB)';
+          document.getElementById('sp_image_preview_container').style.display = 'block';
+          document.getElementById('sp_upload_dropzone').style.display = 'none';
+        }});
+      }};
+      reader.readAsDataURL(file);
+    }}
+
+    function compressImageIfNeeded(dataUrl, maxDim, quality, cb) {{
+      const img = new Image();
+      img.onload = function() {{
+        let w = img.width, h = img.height;
+        if (w <= maxDim && h <= maxDim && dataUrl.length < 500000) {{
+          return cb(dataUrl);
+        }}
+        if (w > maxDim || h > maxDim) {{
+          if (w > h) {{ h = Math.round(h * (maxDim / w)); w = maxDim; }}
+          else {{ w = Math.round(w * (maxDim / h)); h = maxDim; }}
+        }}
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const outUrl = canvas.toDataURL('image/jpeg', quality);
+        cb(outUrl);
+      }};
+      img.onerror = function() {{ cb(dataUrl); }};
+      img.src = dataUrl;
+    }}
+
+    function clearSupportImage(e) {{
+      if (e) e.stopPropagation();
+      _supportImageData = '';
+      const f = document.getElementById('sp_image_file');
+      if (f) f.value = '';
+      const u = document.getElementById('sp_image_url');
+      if (u) u.value = '';
+      document.getElementById('sp_image_preview_container').style.display = 'none';
+      document.getElementById('sp_upload_dropzone').style.display = 'block';
+    }}
+
+    function toggleSupportUrlInput() {{
+      const w = document.getElementById('sp_url_wrap');
+      if (w) w.style.display = (w.style.display === 'none' ? 'block' : 'none');
+    }}
+
+    function handleSupportUrlInput(val) {{
+      const v = (val || '').trim();
+      if (v) {{
+        _supportImageData = v;
+      }}
+    }}
+
+    // Podpora vložení screenshotu ze schránky (Ctrl+V)
+    window.addEventListener('paste', function(e) {{
+      if (e.clipboardData && e.clipboardData.items) {{
+        for (let i = 0; i < e.clipboardData.items.length; i++) {{
+          const item = e.clipboardData.items[i];
+          if (item.type.indexOf('image') !== -1) {{
+            const blob = item.getAsFile();
+            if (blob) {{
+              processSupportFile(blob);
+              break;
+            }}
+          }}
+        }}
+      }}
+    }});
+
+    function showSupportStatus(type, msg) {{
+      const statusEl = document.getElementById('sp_status');
+      if (!statusEl) return;
+      statusEl.style.display = 'block';
+      if (type === 'success') {{
+        statusEl.style.background = 'rgba(16,185,129,0.15)';
+        statusEl.style.border = '1px solid #10b981';
+        statusEl.style.color = '#34d399';
+        statusEl.innerHTML = '<i class="fas fa-check-circle"></i> ' + msg;
+      }} else if (type === 'warning') {{
+        statusEl.style.background = 'rgba(245,158,11,0.15)';
+        statusEl.style.border = '1px solid #f59e0b';
+        statusEl.style.color = '#fbbf24';
+        statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> ' + msg;
+      }} else {{
+        statusEl.style.background = 'rgba(239,68,68,0.15)';
+        statusEl.style.border = '1px solid #ef4444';
+        statusEl.style.color = '#f87171';
+        statusEl.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + msg;
+      }}
+    }}
 
     function switchReplyPref(pref) {{
       const inpSecondary = document.getElementById('sp_secondary_input');
@@ -7418,7 +7725,8 @@ def stranka_podpora():
       const type = document.getElementById('sp_type').value;
       const nick = document.getElementById('sp_nick').value.trim();
       const message = document.getElementById('sp_message').value.trim();
-      const imageUrl = (document.getElementById('sp_image_url')?.value || '').trim();
+      const rawUrl = (document.getElementById('sp_image_url')?.value || '').trim();
+      const imageUrl = _supportImageData || rawUrl;
       const replyPref = activePref;
 
       let contactDiscord = document.getElementById('sp_contact_discord').value.trim();
@@ -7432,27 +7740,31 @@ def stranka_podpora():
       }}
 
       if(!nick && !contactEmail) {{
-        alert('Vyplňte prosím své jméno / herní nick nebo e-mailovou adresu.');
+        showSupportStatus('warning', '<strong>Chybí kontakt:</strong> Vyplňte prosím své jméno / herní nick nebo e-mailovou adresu, abychom vás mohli kontaktovat.');
+        document.getElementById('sp_nick').focus();
         return;
       }}
 
       if(!message) {{
-        alert('Vyplňte prosím popis problému nebo dotazu.');
+        showSupportStatus('warning', '<strong>Chybí popis:</strong> Podrobně popište váš dotaz nebo problém.');
+        document.getElementById('sp_message').focus();
         return;
       }}
 
       if(replyPref === 'discord' && !contactDiscord && !contactEmail) {{
-        alert('Zadejte prosím své Discord jméno nebo ID, kam vám administrátor může zaslat odpověď.');
+        showSupportStatus('warning', '<strong>Chybí Discord kontakt:</strong> Zadejte prosím své Discord jméno nebo ID pro zaslání odpovědi.');
+        document.getElementById('sp_contact_discord').focus();
         return;
       }}
       if(replyPref === 'email' && !contactEmail && !contactDiscord) {{
-        alert('Zadejte prosím svou e-mailovou adresu pro odpověď.');
+        showSupportStatus('warning', '<strong>Chybí e-mail:</strong> Zadejte prosím svou e-mailovou adresu pro zaslání odpovědi.');
+        document.getElementById('sp_contact_email').focus();
         return;
       }}
 
       btn.disabled = true;
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Odesílám...';
-      statusEl.style.display = 'none';
+      showSupportStatus('warning', '<i class="fas fa-spinner fa-spin"></i> Odesílám hlášení administrátorům a nahrávám přílohy...');
 
       fetch('/api/submit_feedback', {{
         method: 'POST',
@@ -7474,30 +7786,17 @@ def stranka_podpora():
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-paper-plane"></i> Odeslat hlášení administrátorům';
         if(data.status === 'success') {{
-          statusEl.style.display = 'block';
-          statusEl.style.background = 'rgba(16,185,129,0.15)';
-          statusEl.style.border = '1px solid #10b981';
-          statusEl.style.color = '#34d399';
-          statusEl.innerHTML = '✅ <strong>Hlášení bylo úspěšně odesláno!</strong> Administrátoři zprávu obdrží v dashboardu a odpoví vám vybraným kanálem.';
+          showSupportStatus('success', '<strong>Hlášení bylo úspěšně odesláno!</strong> Administrátoři obdrželi vaši zprávu v dashboardu a odpoví vám vybraným kanálem.');
           document.getElementById('sp_message').value = '';
-          const imgEl = document.getElementById('sp_image_url');
-          if (imgEl) imgEl.value = '';
+          clearSupportImage();
         }} else {{
-          statusEl.style.display = 'block';
-          statusEl.style.background = 'rgba(239,68,68,0.15)';
-          statusEl.style.border = '1px solid #ef4444';
-          statusEl.style.color = '#f87171';
-          statusEl.innerHTML = '❌ <strong>Chyba:</strong> ' + (data.message || 'Nepodařilo se zprávu odeslat');
+          showSupportStatus('error', '<strong>Chyba:</strong> ' + (data.message || 'Nepodařilo se zprávu odeslat. Zkuste to prosím za chvíli.'));
         }}
       }})
       .catch(err => {{
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-paper-plane"></i> Odeslat hlášení administrátorům';
-        statusEl.style.display = 'block';
-        statusEl.style.background = 'rgba(239,68,68,0.15)';
-        statusEl.style.border = '1px solid #ef4444';
-        statusEl.style.color = '#f87171';
-        statusEl.innerHTML = '❌ <strong>Chyba spojení se serverem.</strong> Zkuste to prosím znovu.';
+        showSupportStatus('error', '<strong>Chyba spojení se serverem.</strong> Zkontrolujte připojení a zkuste to prosím znovu.');
       }});
     }}
     </script>
@@ -7639,12 +7938,20 @@ async def update_depot_discord_messages():
         except Exception as e:
             print(f"[DEPOT DISCORD] Chyba pri odesilani/editaci zpravy pro {depot_name}: {e}", flush=True)
 
+    try:
+        import gc
+        gc.collect()
+    except Exception:
+        pass
+
 @tasks.loop(minutes=5)
 async def keepalive_ping():
     try:
         url = "https://datacorebot.koyeb.app/api/keepalive"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
+        import gc
+        gc.collect()
     except: pass
 
 _LAST_DAILY_REPORT_DATE = None
@@ -8741,7 +9048,9 @@ def api_admin_daily_report_main():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def run_discord_bot(bot_token):
+    global BOT_ASYNC_LOOP
     loop = asyncio.new_event_loop()
+    BOT_ASYNC_LOOP = loop
     asyncio.set_event_loop(loop)
     while True:
         try:
