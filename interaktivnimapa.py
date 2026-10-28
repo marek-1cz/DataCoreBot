@@ -13641,13 +13641,209 @@ def api_admin_spz_meta_save():
 @mapa_bp.route('/historie')
 @mapa_bp.route('/old/historie')
 def stranka_historie_index():
+    if request.path.startswith('/old'):
+        return _full_page("Historie", HTML_HISTORIE_INDEX)
+
+    # Nový web pro adminy (nebo admin bypass)
+    bypass_active = False
+    try:
+        from main import is_admin_bypass_active
+        bypass_active = is_admin_bypass_active()
+    except Exception:
+        bypass_active = bool(session.get('admin_web_bypass') or session.get('logged_in'))
+
+    if bypass_active or session.get('admin_web_bypass') or session.get('logged_in'):
+        try:
+            curr_dir = os.path.dirname(os.path.abspath(__file__))
+            template_path = os.path.join(curr_dir, "new_web_historie.html")
+            if not os.path.exists(template_path):
+                template_path = os.path.join(os.path.dirname(curr_dir), "new_web_historie.html")
+            with open(template_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            try:
+                from main import ADMIN_BYPASS_BAR
+                if ADMIN_BYPASS_BAR and "</body>" in content:
+                    content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+            except Exception:
+                pass
+            return Response(content, mimetype="text/html; charset=utf-8")
+        except Exception as e:
+            print(f"[HISTORIE NEW WEB ERROR] {e}", flush=True)
+
     return _full_page("Historie", HTML_HISTORIE_INDEX)
 
 
 @mapa_bp.route('/historie/<spz>')
 @mapa_bp.route('/old/historie/<spz>')
 def stranka_historie_detail(spz):
+    if request.path.startswith('/old'):
+        return _full_page(f"V\u016fz {spz}", HTML_HISTORIE_DETAIL.replace('__SPZ__', spz))
+
+    bypass_active = False
+    try:
+        from main import is_admin_bypass_active
+        bypass_active = is_admin_bypass_active()
+    except Exception:
+        bypass_active = bool(session.get('admin_web_bypass') or session.get('logged_in'))
+
+    if bypass_active or session.get('admin_web_bypass') or session.get('logged_in'):
+        import urllib.parse
+        return redirect(f"/historie?spz={urllib.parse.quote(spz)}#tab=vozidla", code=302)
+
     return _full_page(f"V\u016fz {spz}", HTML_HISTORIE_DETAIL.replace('__SPZ__', spz))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# API ENDPOINTY PRO NOVÝ WEB HISTORIE (VOZOVNY, ZÁZNAMY, VOZIDLA)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@mapa_bp.route('/api/historie/depots')
+def api_historie_depots():
+    """Vrací seznam všech evidovaných vozoven pro nový web historie."""
+    global DEPOT_ZONES, DEPOT_ZONES_INITIAL_LOADED
+    db = get_db_client()
+    if not DEPOT_ZONES_INITIAL_LOADED and db:
+        try:
+            _load_depot_zones(db)
+        except Exception:
+            pass
+
+    depots_out = []
+    seen_names = set()
+    for z in DEPOT_ZONES:
+        name = resolve_depot_name(z.get("name") or z.get("color") or "Vozovna")
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+        depots_out.append({
+            "name": name,
+            "color": z.get("color") or "#2f6bff",
+            "capacity": 40
+        })
+    return jsonify(depots_out)
+
+
+@mapa_bp.route('/api/historie/records')
+def api_historie_records():
+    """Vrací historii vjezdů a výjezdů vozoven (depot_history) pro nový web."""
+    db = get_db_client()
+    if not db:
+        return jsonify([])
+    try:
+        res = db.table("depot_history").select("depot_name, spz, arrived_at, left_at").order("arrived_at", desc=True).limit(1000).execute()
+        records_out = []
+        for r in (res.data or []):
+            spz = str(r.get("spz") or "").strip()
+            if not spz or spz.upper() == "BACKUP" or spz.startswith("SYSTEM_"):
+                continue
+            records_out.append({
+                "depot_name": resolve_depot_name(r.get("depot_name") or ""),
+                "spz": spz,
+                "arrived_at": r.get("arrived_at"),
+                "left_at": r.get("left_at")
+            })
+        return jsonify(records_out)
+    except Exception as e:
+        print(f"[API HISTORIE RECORDS ERROR] {e}", flush=True)
+        return jsonify([])
+
+
+@mapa_bp.route('/api/historie/vehicles')
+def api_historie_vehicles():
+    """Vrací seznam unikátních vozidel, jejich aktuální stav, linku a poslední jízdy."""
+    vehicles_dict = {}
+
+    # 1. Nejprve z živé cache mapy
+    for bid, bc in safe_bus_cache_items():
+        if bc.get("is_train") or bc.get("color_class") == "bg-bug":
+            continue
+        spz = str(bc.get("spz") or "").strip()
+        if not spz or spz in ("Neznámá", "Neznama", "?", "", "None") or spz.startswith("[ID:"):
+            continue
+
+        in_depot = bool(bc.get("_in_depot") or bc.get("in_depot"))
+        status = "depot" if in_depot else "run"
+        depot = resolve_depot_name(bc.get("_depot_name") or bc.get("depot_name") or "") if in_depot else ""
+
+        last_seen = None
+        if bc.get("last_seen_epoch"):
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            try:
+                last_seen = datetime.fromtimestamp(bc["last_seen_epoch"], tz=ZoneInfo("Europe/Prague")).isoformat()
+            except Exception:
+                pass
+
+        v_type = bc.get("vehicle_type") or SPZ_MEMORY.get(spz, {}).get("vehicle_type") or "Autobus IDPK"
+        op = bc.get("operator") or bc.get("dopravce") or ("Arriva" if any(x in str(v_type) for x in ["Arriva", "SOR", "Iveco", "MAN", "Setra"]) else "IDPK")
+
+        vehicles_dict[spz] = {
+            "spz": spz,
+            "type": v_type,
+            "operator": op,
+            "line": str(bc.get("line") or ""),
+            "dest": bc.get("destination") or "",
+            "last_seen": last_seen,
+            "status": status,
+            "depot": depot,
+            "trips": []
+        }
+
+    # 2. Doplníme z paměti SPZ_MEMORY
+    for spz, mem in SPZ_MEMORY.items():
+        if not spz or spz in ("Neznámá", "Neznama", "?", "", "None") or spz.startswith("[ID:") or spz in vehicles_dict:
+            continue
+        v_type = mem.get("vehicle_type") or "Autobus IDPK"
+        vehicles_dict[spz] = {
+            "spz": spz,
+            "type": v_type,
+            "operator": "IDPK",
+            "line": str(mem.get("line") or ""),
+            "dest": mem.get("destination") or "",
+            "last_seen": None,
+            "status": "off",
+            "depot": "",
+            "trips": []
+        }
+
+    # 3. Z bus_history vytáhneme poslední jízdy a další SPZ
+    db = get_db_client()
+    if db:
+        try:
+            h_res = db.table("bus_history").select("spz, linka, status, start_actual, end_actual, created_at").order("created_at", desc=True).limit(500).execute()
+            for row in (h_res.data or []):
+                s = str(row.get("spz") or "").strip()
+                if not s or s in ("Neznámá", "Neznama", "?", "") or s.startswith("[ID:"):
+                    continue
+                if s not in vehicles_dict:
+                    vehicles_dict[s] = {
+                        "spz": s,
+                        "type": "Autobus IDPK",
+                        "operator": "IDPK",
+                        "line": str(row.get("linka") or ""),
+                        "dest": "",
+                        "last_seen": row.get("end_actual") or row.get("start_actual") or row.get("created_at"),
+                        "status": "off",
+                        "depot": "",
+                        "trips": []
+                    }
+                if len(vehicles_dict[s]["trips"]) < 5:
+                    dest = ""
+                    stat = str(row.get("status") or "")
+                    if "posl. zast.:" in stat:
+                        dest = stat.split("posl. zast.:")[-1].replace(")", "").strip()
+                    elif "Konečná:" in stat:
+                        dest = stat.split("Konečná:")[-1].split("(")[0].strip()
+                    vehicles_dict[s]["trips"].append({
+                        "line": str(row.get("linka") or ""),
+                        "dest": dest or stat,
+                        "from": row.get("start_actual") or row.get("created_at"),
+                        "to": row.get("end_actual") or None
+                    })
+        except Exception as e_h:
+            print(f"[API HISTORIE VEHICLES ERROR] {e_h}", flush=True)
+
+    return jsonify(list(vehicles_dict.values()))
 
 
 @mapa_bp.route('/api/priority_spoj/<bus_id>', methods=['POST'])
