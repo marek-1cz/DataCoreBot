@@ -7338,6 +7338,10 @@ class BusFusionEngine:
         for a in raw_arriva:
             if str(a.get("mainType", "")).upper() == "TRAIN":
                 continue
+            # Omezení Arriva dat výhradně na Plzeňský kraj a okolí (Typ dopravy: Plzeňsko)
+            a_type = str(a.get("type", "")).strip().lower()
+            if a_type and a_type not in ("plzeňsko", "plzensko"):
+                continue
             spz = (a.get("spz") or "").strip()
             if not spz or spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NONE", "?", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"):
                 continue
@@ -8080,16 +8084,22 @@ def _load_depot_active_sessions(db):
         res = db.table("depot_history").select("*").is_("left_at", "null").execute()
         loaded = {}
         for row in (res.data or []):
-            if row.get("spz") == "BACKUP" or str(row.get("bus_id", "")).startswith("SYSTEM_"):
+            spz_val = str(row.get("spz") or "").strip()
+            if spz_val == "BACKUP" or str(row.get("bus_id", "")).startswith("SYSTEM_"):
                 continue
             bid = str(row.get("bus_id") or f"unknown_{row['id']}")
-            loaded[bid] = {
+            sess_data = {
                 "id": row["id"],
                 "depot_name": row["depot_name"],
                 "arrived_at": row["arrived_at"],
                 "is_imprecise": bool(row.get("is_imprecise", False)),
-                "spz": row.get("spz")
+                "spz": spz_val,
+                "bus_id": bid
             }
+            # Uložíme pod bus_id i pod normalizovanou SPZ (pro přežití restartů a změn trip_id)
+            loaded[bid] = sess_data
+            if spz_val and not spz_val.startswith("[ID:"):
+                loaded[normalize_spz_key(spz_val)] = sess_data
         DEPOT_ACTIVE_SESSIONS = loaded
         print(f"[DEPOT] Nacteno {len(loaded)} aktivnich navstev ve vozovnach.", flush=True)
     except Exception as e:
@@ -8169,9 +8179,11 @@ def _check_depot_zones(lat, lng):
 def _process_depot_tracking(bus_id, c, now):
     """
     Spravuje evidenci vjezdů a výjezdů autobusů do/z vozoven (depot_history).
-    - Pokud vůz vjede do vozovny -> zapíše nový záznam do depot_history a DEPOT_ACTIVE_SESSIONS, notifikuje Discord.
-    - Pokud se změní SPZ vozu v depu -> aktualizuje záznam v depot_history a notifikuje Discord.
-    - Pokud vůz opustí vozovnu -> zapíše left_at do depot_history a odebere z DEPOT_ACTIVE_SESSIONS, notifikuje Discord.
+    Klíčování primárně podle SPZ vozidla (s fallbackem na bus_id).
+    - Pokud vůz vjede do vozovny a ještě tam není evidován -> zapíše nový záznam do depot_history.
+    - Pokud vůz zmizí z PVVD / jde offline -> ZŮSTÁVÁ NADÁLE VE VOZOVNĚ (left_at se nezapisuje!).
+    - Pokud se vůz ráno/později objeví s aktivní polohou MIMO vozovnu -> zapíše left_at = čas výjezdu.
+    - Pokud přejede přímo do jiné vozovny -> uzavře starou a zapíše novou.
     """
     global DEPOT_ACTIVE_SESSIONS, DEPOT_DISCORD_QUEUE
     if not c or c.get("is_train") or c.get("color_class") == "bg-bug":
@@ -8181,6 +8193,30 @@ def _process_depot_tracking(bus_id, c, now):
     lat = c.get("lat")
     lng = c.get("lng")
     depot_name, depot_color = _check_depot_zones(lat, lng) if (lat and lng) else (None, None)
+
+    spz_val = c.get("spz")
+    eff_spz = spz_val if (spz_val and spz_val not in ("Neznámá", "Neznama", "?", "", "None", "Aktivní hledání", "Aktivni hledani")) else None
+    
+    # Ochrana: Ostrvské busy (SPZ s 'T' na 2. pozici) do databáze Plzeňska nepatří
+    if eff_spz:
+        clean_check = eff_spz.replace(" ", "").upper()
+        if len(clean_check) >= 3 and clean_check[1] == 'T':
+            return
+
+    # Primární klíč pro sledování je SPZ, sekundární je bus_id
+    tracking_key = normalize_spz_key(eff_spz) if eff_spz else f"ID_{bid_str}"
+
+    # Najdeme existující aktivní session pro toto vozidlo (podle SPZ i podle bus_id)
+    active_sess = None
+    active_key = None
+    if eff_spz:
+        norm_spz = normalize_spz_key(eff_spz)
+        if norm_spz in DEPOT_ACTIVE_SESSIONS:
+            active_sess = DEPOT_ACTIVE_SESSIONS[norm_spz]
+            active_key = norm_spz
+    if not active_sess and bid_str in DEPOT_ACTIVE_SESSIONS:
+        active_sess = DEPOT_ACTIVE_SESSIONS[bid_str]
+        active_key = bid_str
 
     if depot_name:
         # Vůz JE ve vozovně
@@ -8192,12 +8228,10 @@ def _process_depot_tracking(bus_id, c, now):
         if not c.get("admin_lock_display") and c.get("color_class") != "bg-bug":
             c["color_class"] = "bg-yellow"
             c["status"] = f"Vozovna: {depot_name}"
-            c["is_withdrawn"] = False
 
-        spz_val = c.get("spz")
-        eff_spz = spz_val if (spz_val and spz_val not in ("Neznámá", "Neznama", "?", "", "None")) else f"[ID: {bid_str}]"
+        db_spz = eff_spz or f"[ID: {bid_str}]"
 
-        if bid_str not in DEPOT_ACTIVE_SESSIONS:
+        if not active_sess:
             # Nový příjezd!
             is_imprecise = (now - SCRIPT_START_TIME).total_seconds() < 120 if SCRIPT_START_TIME else False
             arr_time = get_prague_iso()
@@ -8206,7 +8240,7 @@ def _process_depot_tracking(bus_id, c, now):
             if db_c:
                 try:
                     resp = db_c.table("depot_history").insert({
-                        "spz": eff_spz,
+                        "spz": db_spz,
                         "bus_id": bid_str,
                         "depot_name": depot_name,
                         "arrived_at": arr_time,
@@ -8215,116 +8249,121 @@ def _process_depot_tracking(bus_id, c, now):
                     if resp.data:
                         new_id = resp.data[0]["id"]
                 except Exception as e_ins:
-                    print(f"[DEPOT] Chyba zapisu DB prijezdu pro bus_id={bid_str}: {e_ins}", flush=True)
+                    print(f"[DEPOT] Chyba zapisu DB prijezdu pro spz={db_spz}: {e_ins}", flush=True)
 
-            DEPOT_ACTIVE_SESSIONS[bid_str] = {
+            sess_data = {
                 "id": new_id,
                 "depot_name": depot_name,
                 "arrived_at": arr_time,
                 "is_imprecise": is_imprecise,
-                "spz": eff_spz
+                "spz": db_spz,
+                "bus_id": bid_str
             }
+            DEPOT_ACTIVE_SESSIONS[tracking_key] = sess_data
+            if tracking_key != bid_str:
+                DEPOT_ACTIVE_SESSIONS[bid_str] = sess_data
             DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
             try:
                 log_automation_action(
                     "depot_in",
                     bid_str,
-                    f"Vůz #{bid_str} vjel do vozovny '{depot_name}'",
-                    f"Linka {c.get('line') or '?'}, SPZ: {eff_spz}. Detekováno v polygonu depa.",
-                    spz=eff_spz,
+                    f"Vůz {db_spz} (bus_id={bid_str}) vjel do vozovny '{depot_name}'",
+                    f"Linka {c.get('line') or '?'}, SPZ: {db_spz}. Detekováno v polygonu depa.",
+                    spz=db_spz,
                     line=c.get("line")
                 )
             except Exception:
                 pass
-            print(f"[DEPOT] Vůz {bid_str} ({eff_spz}) vjel do vozovny '{depot_name}'", flush=True)
+            print(f"[DEPOT] Vůz {db_spz} (bus_id={bid_str}) vjel do vozovny '{depot_name}'", flush=True)
         else:
             # Vůz již je evidován ve vozovně
-            sess = DEPOT_ACTIVE_SESSIONS[bid_str]
-            sess_spz = sess.get("spz")
-            if eff_spz and eff_spz not in ("Neznámá", "Neznama", "?", "") and not eff_spz.startswith("[ID:") and eff_spz != sess_spz:
-                sess["spz"] = eff_spz
+            # 1. Pokud neměl SPZ a teď ji má, aktualizujeme
+            if eff_spz and (not active_sess.get("spz") or str(active_sess.get("spz")).startswith("[ID:")):
+                active_sess["spz"] = eff_spz
                 db_c = get_db_client()
-                if db_c and sess.get("id"):
+                if db_c and active_sess.get("id"):
                     try:
-                        db_c.table("depot_history").update({"spz": eff_spz}).eq("id", sess["id"]).execute()
-                        DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
+                        db_c.table("depot_history").update({"spz": eff_spz}).eq("id", active_sess["id"]).execute()
                     except Exception:
                         pass
+                norm_spz = normalize_spz_key(eff_spz)
+                DEPOT_ACTIVE_SESSIONS[norm_spz] = active_sess
 
-            # Pokud přejel do jiné vozovny
-            if depot_name != sess.get("depot_name"):
-                old_depot = sess.get("depot_name")
-                left_time = get_prague_iso()
+            # 2. Pokud přejel do JINÉ vozovny
+            if depot_name != active_sess.get("depot_name"):
+                old_depot = active_sess.get("depot_name")
+                switch_time = get_prague_iso()
                 db_c = get_db_client()
-                if db_c and sess.get("id"):
+                if db_c and active_sess.get("id"):
                     try:
-                        db_c.table("depot_history").update({"left_at": left_time}).eq("id", sess["id"]).execute()
+                        db_c.table("depot_history").update({"left_at": switch_time}).eq("id", active_sess["id"]).execute()
                     except Exception:
                         pass
                 new_id = None
                 if db_c:
                     try:
                         resp = db_c.table("depot_history").insert({
-                            "spz": eff_spz,
+                            "spz": active_sess.get("spz") or db_spz,
                             "bus_id": bid_str,
                             "depot_name": depot_name,
-                            "arrived_at": left_time,
+                            "arrived_at": switch_time,
                             "is_imprecise": 0
                         }).execute()
                         if resp.data:
                             new_id = resp.data[0]["id"]
                     except Exception:
                         pass
-                DEPOT_ACTIVE_SESSIONS[bid_str] = {
+                sess_data = {
                     "id": new_id,
                     "depot_name": depot_name,
-                    "arrived_at": left_time,
+                    "arrived_at": switch_time,
                     "is_imprecise": False,
-                    "spz": eff_spz
+                    "spz": active_sess.get("spz") or db_spz,
+                    "bus_id": bid_str
                 }
+                DEPOT_ACTIVE_SESSIONS[tracking_key] = sess_data
+                if tracking_key != bid_str:
+                    DEPOT_ACTIVE_SESSIONS[bid_str] = sess_data
                 DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
     else:
-        # Vůz NENÍ ve vozovně
-        if c.get("_in_depot") or bid_str in DEPOT_ACTIVE_SESSIONS:
-            if bid_str in DEPOT_ACTIVE_SESSIONS:
-                sess = DEPOT_ACTIVE_SESSIONS[bid_str]
-                session_id = sess.get("id")
-                old_depot = sess.get("depot_name", "Vozovna")
-                left_time = get_prague_iso()
-                db_c = get_db_client()
-                if db_c and session_id:
-                    try:
-                        db_c.table("depot_history").update({"left_at": left_time}).eq("id", session_id).execute()
-                    except Exception as e_left:
-                        print(f"[DEPOT] Chyba zapisu DB odjezdu pro {bid_str}: {e_left}", flush=True)
-                del DEPOT_ACTIVE_SESSIONS[bid_str]
-                DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
+        # Vůz NENÍ ve vozovně (depot_name is None)
+        # KRITICKÉ: Pokud je vůz offline nebo zmizel z mapy PVVD (řidič zhasnul motor na noc),
+        # ZŮSTÁVÁ NADÁLE VE VOZOVNĚ! Nesmíme ho odepsat!
+        is_offline = bool(c.get("is_offline")) or "Zmizel z mapy" in str(c.get("status", ""))
+        
+        # Odjezd se zapíše POUZE tehdy, když se vůz objeví ŽIVĚ s platnou GPS polohou MIMO areál vozovny!
+        if active_sess and not is_offline and lat and lng:
+            session_id = active_sess.get("id")
+            old_depot = active_sess.get("depot_name", "Vozovna")
+            left_time = get_prague_iso()
+            db_c = get_db_client()
+            if db_c and session_id:
                 try:
-                    log_automation_action(
-                        "depot_out",
-                        bid_str,
-                        f"Vůz #{bid_str} opustil vozovnu '{old_depot}'",
-                        f"Linka {c.get('line') or '?'}, SPZ: {c.get('spz') or 'Aktivní hledání'}. Vozidlo vyjelo do provozu.",
-                        spz=c.get("spz"),
-                        line=c.get("line")
-                    )
-                except Exception:
-                    pass
-                print(f"[DEPOT] Vůz {bid_str} opustil vozovnu '{old_depot}'", flush=True)
-
+                    db_c.table("depot_history").update({"left_at": left_time}).eq("id", session_id).execute()
+                except Exception as e_left:
+                    print(f"[DEPOT] Chyba zapisu DB odjezdu pro {tracking_key}: {e_left}", flush=True)
+            
+            # Smažeme z aktivních session
+            DEPOT_ACTIVE_SESSIONS.pop(tracking_key, None)
+            DEPOT_ACTIVE_SESSIONS.pop(bid_str, None)
+            if active_key:
+                DEPOT_ACTIVE_SESSIONS.pop(active_key, None)
+            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
+            try:
+                log_automation_action(
+                    "depot_out",
+                    bid_str,
+                    f"Vůz {active_sess.get('spz')} (bus_id={bid_str}) opustil vozovnu '{old_depot}'",
+                    f"Linka {c.get('line') or '?'}, SPZ: {active_sess.get('spz')}. Vozidlo vyjelo do provozu.",
+                    spz=active_sess.get("spz"),
+                    line=c.get("line")
+                )
+            except Exception:
+                pass
+            print(f"[DEPOT] Vůz {active_sess.get('spz')} opustil vozovnu '{old_depot}' v {left_time}", flush=True)
             c["_in_depot"] = False
-            c["_depot_name"] = None
-            c["_depot_color"] = None
             c["in_depot"] = False
-            c["depot_name"] = None
 
-
-def _bearing_diff(b1, b2):
-    """Kruhovy rozdil dvou smerovych uhlu (0-360 deg). Vzdy vrati 0-180."""
-    if b1 is None or b2 is None:
-        return 0
-    diff = abs(int(b1) - int(b2)) % 360
-    return min(diff, 360 - diff)
 
 
 def are_destinations_compatible(dest_local, dest_arriva):
@@ -9774,7 +9813,11 @@ def start_arriva_bg_worker():
                 elif isinstance(resp2, dict):
                     arr = resp2.get("data", {}).get("busesCurrentLocations", [])
                 if arr:
-                    arr_buses = [b for b in arr if str(b.get("mainType", "")).upper() != "TRAIN"]
+                    arr_buses = [
+                        b for b in arr
+                        if str(b.get("mainType", "")).upper() != "TRAIN"
+                        and str(b.get("type", "")).strip().lower() in ("plzeňsko", "plzensko")
+                    ]
                     LATEST_ARRIVA_DATA = list(arr_buses)
                     _arriva_fetch_stats["ok"] += 1
                     _arriva_fetch_stats["last_ok_cnt"] = len(arr_buses)
@@ -13736,6 +13779,9 @@ def api_historie_records():
             spz = str(r.get("spz") or "").strip()
             if not spz or spz.upper() == "BACKUP" or spz.startswith("SYSTEM_"):
                 continue
+            clean_s = spz.replace(" ", "").upper()
+            if len(clean_s) >= 3 and clean_s[1] == 'T':
+                continue
             records_out.append({
                 "depot_name": resolve_depot_name(r.get("depot_name") or ""),
                 "spz": spz,
@@ -13814,6 +13860,9 @@ def api_historie_vehicles():
             for row in (h_res.data or []):
                 s = str(row.get("spz") or "").strip()
                 if not s or s in ("Neznámá", "Neznama", "?", "") or s.startswith("[ID:"):
+                    continue
+                clean_s = s.replace(" ", "").upper()
+                if len(clean_s) >= 3 and clean_s[1] == 'T':
                     continue
                 if s not in vehicles_dict:
                     vehicles_dict[s] = {

@@ -323,6 +323,10 @@ footer p{max-width:640px;margin:0 auto;line-height:1.6}
   <div class="kicker">Historie provozu</div>
   <h1>Databáze vozidel a <span class="grad">vozovny</span></h1>
   <p class="lead">Dvě propojené sekce: databáze všech vozidel a přehled vozoven s evidencí. Z vozidla se dostanete do jeho vozovny a z vozovny zpět na vozidla.</p>
+  <div class="disclaimer-bar" style="margin:16px auto 0;max-width:760px;padding:10px 18px;border-radius:14px;background:rgba(255,201,51,0.08);border:1px solid rgba(255,201,51,0.25);color:#ffd152;font-size:0.84rem;display:flex;align-items:center;justify-content:center;gap:10px;text-align:center;">
+    <span style="font-size:1.1rem;">⚠️</span>
+    <span><b>Upozornění:</b> Zobrazená data o polohách vozidel, vjezdech a odjezdech z areálů vozoven jsou generována automaticky z telemetrie a mohou mít odchylky.</span>
+  </div>
 
   <div class="tiles" aria-live="polite">
     <button class="tile" type="button" data-go="vozidla"><span class="num" id="tV" data-to="0">0</span><small>Vozidel v databázi</small></button>
@@ -812,6 +816,16 @@ function resetShown(){S.vShown=S.eShown=CONFIG.pageSize}
 /* =====================================================================
    DETAIL VOZIDLA
    ===================================================================== */
+window.openSeznamAutobusu = function(rawSpz) {
+  if (!rawSpz) return;
+  let s = String(rawSpz).replace(/[^a-zA-Z0-9]/g, '');
+  let formattedSpz = rawSpz;
+  if (s.length > 4) {
+    formattedSpz = s.substring(0, s.length - 4) + ' ' + s.substring(s.length - 4);
+  }
+  window.open('https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz), '_blank');
+};
+
 function openDetail(spz){
   const v=S.bySpz.get(spz);if(!v)return;
   const rs=S.records.filter(x=>x.spz===spz).sort((a,b)=>b.arr-a.arr);
@@ -832,8 +846,19 @@ function openDetail(spz){
    '<div><small>Příjezdů za 30 dní</small><b>'+r30.length+'</b></div>'+
    '<div><small>Průměrné stání</small><b>'+dur(avg)+'</b></div>'+
    '<div><small>Nejčastěji</small><b>'+(fav?'<button class="xl" type="button" data-depot-go="'+esc(fav[0])+'">'+esc(fav[0])+'</button>':'–')+'</b></div></div>'+
-   '<div class="dact">'+(v.depot?'<button class="btnx" type="button" data-depot-go="'+esc(v.depot)+'">Otevřít vozovnu →</button>':'')+'<button class="btnx" type="button" data-ev-spz="'+esc(v.spz)+'">Evidence tohoto vozidla →</button><a class="btnx" href="/mapa?track='+encodeURIComponent(v.spz)+'" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">🗺️ Zobrazit na mapě →</a></div>'+
-   '<h3>Historie</h3>'+(ev.length?'<ul class="tl">'+ev.slice(0,40).map(e=>'<li class="'+e.c+'"><b>'+esc(e.h)+'</b><small>'+dt(e.t)+(e.s?' · '+esc(e.s):'')+'</small></li>').join('')+'</ul>':'<div class="muted">Pro toto vozidlo zatím nejsou žádné záznamy.</div>');
+   '<div class="dact">'+(v.depot?'<button class="btnx" type="button" data-depot-go="'+esc(v.depot)+'">Otevřít vozovnu →</button>':'')+'<button class="btnx" type="button" data-ev-spz="'+esc(v.spz)+'">Evidence tohoto vozidla →</button><a class="btnx" href="/mapa?track='+encodeURIComponent(v.spz)+'" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">🗺️ Zobrazit na mapě →</a><button class="btnx" type="button" onclick="openSeznamAutobusu(\''+esc(v.spz)+'\')">📸 Fotky vozu (Seznam-Autobusů) →</button></div>'+
+   '<div style="margin:16px 0;padding:12px 16px;border-radius:14px;background:rgba(37,99,235,0.12);border:1px solid rgba(59,130,246,0.3);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">'+
+   '  <div style="display:flex;align-items:center;gap:10px;">'+
+   '    <span style="font-size:22px;">🚌</span>'+
+   '    <div><b style="color:#eaf0ff;font-size:13px;display:block;">Fotogalerie a karta na Seznam-Autobusů.cz</b>'+
+   '    <span style="font-size:11px;color:#9fb0d6;">Reálné fotografie, nátěry, výrobní číslo a dopravce pro vůz '+esc(v.spz)+'</span></div>'+
+   '  </div>'+
+   '  <button class="btnx" type="button" onclick="openSeznamAutobusu(\''+esc(v.spz)+'\')" style="background:linear-gradient(135deg,#2563eb,#38bdf8);color:#fff;font-weight:700;border:0;padding:8px 15px;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">'+
+   '    📸 Otevřít fotky na Seznam-Autobusů →'+
+   '  </button>'+
+   '</div>'+
+   '<h3>Historie</h3>'+(ev.length?'<ul class="tl">'+ev.slice(0,40).map(e=>'<li class="'+e.c+'"><b>'+esc(e.h)+'</b><small>'+dt(e.t)+(e.s?' · '+esc(e.s):'')+'</small></li>').join('')+'</ul>':'<div class="muted">Pro toto vozidlo zatím nejsou žádné záznamy.</div>')+
+   '<div style="margin-top:16px;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.03);color:#94a3b8;font-size:11px;text-align:center;">ℹ️ Data o vjezdech, odjezdech a jízdách mají informativní charakter a nemusí být 100% přesná.</div>';
   const d=$('#dlg');if(!d.open)d.showModal();$('#dbox').scrollTop=0;
 }
 
@@ -984,10 +1009,47 @@ function syncSortSel(){const v=S.vSort.k+':'+S.vSort.d,s=$('#vSort');s.value=[..
 
 function exportCSV(){
   const a=eList();if(!a.length){toast('Není co exportovat');return}
-  const cell=s=>{s=String(s==null?'':s);if(/^[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'};
-  const f=ms=>ms==null?'':new Intl.DateTimeFormat('cs-CZ',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(ms);
-  const rows=[['SPZ','Vozovna','Přijel','Odjel','Doba stání (min)']].concat(a.map(x=>[x.spz,x.depot,f(x.arr),x.active?'parkuje':f(x.left),x.dur==null?'':Math.round(x.dur/6e4)]));
-  const blob=new Blob(['﻿'+rows.map(r=>r.map(cell).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'});
+  // Bezpečné formátování textu pro Excel, aby NIKDY nezobrazil #####
+  const cellTxt=s=>'="'+String(s==null?'':s).replace(/"/g,'""')+'"';
+  const cellVal=s=>{s=String(s==null?'':s);if(/^[=+\-@	]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'};
+  
+  const fD=ms=>{
+    if(ms==null)return '';
+    const d=new Date(ms);
+    const day=String(d.getDate()).padStart(2,'0');
+    const mo=String(d.getMonth()+1).padStart(2,'0');
+    return `${day}.${mo}.${d.getFullYear()}`;
+  };
+  const fT=ms=>{
+    if(ms==null)return '';
+    const d=new Date(ms);
+    const h=String(d.getHours()).padStart(2,'0');
+    const mi=String(d.getMinutes()).padStart(2,'0');
+    const se=String(d.getSeconds()).padStart(2,'0');
+    return `${h}:${mi}:${se}`;
+  };
+
+  const rows=[
+    ['SPZ','Vozovna','Datum příjezdu','Čas příjezdu','Datum odjezdu','Čas odjezdu','Stav','Doba stání (min)']
+  ].concat(a.map(x=>{
+    const arrD = fD(x.arr), arrT = fT(x.arr);
+    const leftD = x.active ? '' : fD(x.left);
+    const leftT = x.active ? '' : fT(x.left);
+    const durMin = x.dur == null ? '' : Math.max(0, Math.round(x.dur/6e4));
+    const stav = x.active ? 'Stále ve vozovně (parkuje)' : 'Odjezd dokončen';
+    return [
+      cellTxt(x.spz),
+      cellVal(x.depot),
+      cellTxt(arrD),
+      cellTxt(arrT),
+      cellTxt(leftD),
+      cellTxt(leftT),
+      cellVal(stav),
+      cellVal(durMin)
+    ];
+  }));
+  
+  const blob=new Blob(['\ufeff'+rows.map(r=>r.join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'});
   const u=URL.createObjectURL(blob),l=document.createElement('a');l.href=u;l.download='evidence-vozoven.csv';document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);
   toast('Export připraven ('+a.length+' záznamů)');
 }
