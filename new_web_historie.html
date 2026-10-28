@@ -46,36 +46,52 @@ h1,h2,h3{line-height:1.1;letter-spacing:-.02em}
 @keyframes drift{to{transform:translate(6vw,4vh)}}
 html.lite .aurora span{animation:none;filter:blur(70px)}
 
-/* ============ HORNÍ SKLENĚNÝ PANEL ============ */
-.ois-nav{position:fixed;top:calc(env(safe-area-inset-top,0px) + 16px);left:0;right:0;margin:0 auto;width:fit-content;z-index:100;
-  display:flex;gap:4px;align-items:center;padding:7px;border-radius:999px;max-width:calc(100vw - 20px);
+/* ============ HORNÍ SKLENĚNÝ PANEL (PŘESNĚ JAKO NA HOME) ============ */
+.ois-nav{
+  position:fixed;top:16px;left:0;right:0;margin-left:auto;margin-right:auto;width:fit-content;width:-moz-fit-content;transform:none;z-index:100;box-sizing:border-box;
+  display:flex;gap:4px;align-items:center;padding:7px;border-radius:999px;
   background:rgba(255,255,255,.07);border:1px solid var(--glass-border);
   -webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);
-  box-shadow:0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12)}
-html.lite .ois-nav{background:rgba(10,18,48,.95);-webkit-backdrop-filter:none;backdrop-filter:none}
-.ois-nav a{padding:10px 15px;border-radius:999px;white-space:nowrap;font-size:.88rem;font-weight:600;transition:background .3s}
-.ois-nav a:hover{background:rgba(255,255,255,.1)}
-.ois-nav a.active{background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,.1));box-shadow:inset 0 0 0 1px rgba(255,255,255,.3),0 4px 18px rgba(47,107,255,.3)}
-.ois-nav a.logo{display:flex;align-items:center;gap:8px;padding:5px 14px 5px 6px}
-.ois-nav a.logo img{width:30px;height:30px;border-radius:50%}
-.ois-nav a.cta{background:linear-gradient(135deg,var(--blue),var(--cyan));color:#031028}
-.burger{display:none;align-items:center;gap:10px;padding:8px 14px;border-radius:999px;font-weight:700;font-size:.88rem}
-.burger i{display:block;width:16px;height:2px;border-radius:2px;background:#fff;position:relative;transition:transform .3s var(--ease)}
-.burger i::before{content:"";position:absolute;left:0;top:-5px;width:16px;height:2px;border-radius:2px;background:#fff;transition:transform .3s var(--ease)}
-.ois-nav.open .burger i{transform:rotate(45deg)}
-.ois-nav.open .burger i::before{transform:translateY(5px) rotate(-90deg)}
-.msheet{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 74px);z-index:99;padding:10px;border-radius:26px;display:none;
-  background:rgba(10,18,48,.96);border:1px solid var(--glass-border);box-shadow:0 20px 60px rgba(0,0,0,.6);grid-template-columns:1fr 1fr;gap:8px}
-.msheet.on{display:grid;animation:rise .35s var(--ease)}
-.msheet a{padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);font-weight:600;font-size:.92rem}
-.msheet a.active{border-color:rgba(56,214,255,.6);background:rgba(47,107,255,.2)}
-.msheet a.cta{background:linear-gradient(135deg,var(--blue),var(--cyan));color:#031028;border:0}
-@keyframes rise{from{opacity:0;transform:translateY(-8px)}}
-@media(max-width:1060px){
-  .ois-nav{left:12px;right:12px;width:auto;justify-content:space-between;padding:6px}
-  .ois-nav a:not(.logo){display:none}
-  .burger{display:flex}
+  box-shadow:0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12);
+  max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none;
 }
+.ois-nav::-webkit-scrollbar{display:none}
+.ois-nav a{position:relative;z-index:1;padding:10px 17px;border-radius:999px;white-space:nowrap;font-size:.9rem;font-weight:600;transition:background .3s, color .3s}
+.ois-nav a:not(.active):not(.cta):hover{background:rgba(255,255,255,.1)}
+.ois-nav a.active{background:transparent}
+.ois-nav{transition:background .5s, box-shadow .5s}
+.ois-nav.moving{background:rgba(255,255,255,.1);box-shadow:0 14px 50px rgba(47,107,255,.28), inset 0 1px 0 rgba(255,255,255,.2)}
+.nav-pill{position:absolute;left:0;top:0;z-index:0;border-radius:999px;pointer-events:none;opacity:0;background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,.1));border:1px solid rgba(255,255,255,.3);box-shadow:0 4px 18px rgba(47,107,255,.3), inset 0 1px 0 rgba(255,255,255,.35);transition:transform .6s cubic-bezier(.3,1.25,.4,1), width .6s cubic-bezier(.3,1.25,.4,1), height .6s cubic-bezier(.3,1.25,.4,1), opacity .4s}
+.nav-pill.ready{opacity:1}
+.nav-pill.still{transition:none}
+.ois-nav a.logo{display:inline-flex;align-items:center;gap:10px;padding:6px 16px 6px 8px;font-weight:800;letter-spacing:-.01em}
+.ois-nav a.logo img{width:32px;height:32px;object-fit:contain;border-radius:0;filter:drop-shadow(0 0 10px rgba(56,214,255,.45));transition:transform .3s var(--ease)}
+.ois-nav a.logo:hover img{transform:scale(1.08)}
+.ois-nav a.cta{background:rgba(255,255,255,.08);color:#94a3b8;border:1px solid rgba(255,255,255,.14);box-shadow:none;transition:background .3s,color .3s,border-color .3s}
+.ois-nav a.cta:hover{background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.24)}
+.nav-arr{position:sticky;flex:none;width:0;z-index:5;pointer-events:none;align-self:stretch}
+.nav-arr i{position:absolute;top:-7px;bottom:-7px;width:34px;display:flex;align-items:center;font-style:normal;font-size:1.5rem;font-weight:700;color:var(--cyan);opacity:0;transition:opacity .35s var(--ease)}
+.nav-arr.l{left:0}.nav-arr.l i{left:-7px;padding-left:10px;border-radius:999px 0 0 999px;background:linear-gradient(90deg,#0a1230 30%,transparent)}
+.nav-arr.r{right:0}.nav-arr.r i{right:-7px;justify-content:flex-end;padding-right:10px;border-radius:0 999px 999px 0;background:linear-gradient(270deg,#0a1230 30%,transparent);animation:nudge 1.8s ease-in-out infinite}
+.ois-nav.can-l .nav-arr.l i,.ois-nav.can-r .nav-arr.r i{opacity:1}
+.nav-burger{display:none}
+.msheet{display:none}
+@media(max-width:1240px){
+  .ois-nav{left:12px;right:12px;margin-left:0;margin-right:0;transform:none;max-width:none;width:auto;justify-content:space-between;overflow:visible;padding:6px}
+  .ois-nav a:not(.logo),.nav-arr,.nav-pill{display:none!important}
+  .nav-burger{display:flex;align-items:center;gap:12px;margin-left:auto;padding:9px 12px 9px 18px;border-radius:999px;border:1px solid var(--glass-border);background:rgba(255,255,255,.09);color:var(--text);font:inherit;font-weight:700;font-size:.95rem;cursor:pointer}
+  .nb-ico{display:flex;flex-direction:column;gap:4px;width:18px}
+  .nb-ico i{display:block;height:2px;border-radius:2px;background:var(--cyan);transition:transform .35s var(--ease),opacity .25s}
+  .ois-nav.open .nb-ico i:nth-child(1){transform:translateY(3px) rotate(45deg)}
+  .ois-nav.open .nb-ico i:nth-child(2){transform:translateY(-3px) rotate(-45deg)}
+  .msheet{display:flex;flex-direction:column;position:fixed;inset:0;z-index:99;padding:92px 16px 24px;overflow-y:auto;
+    background:rgba(5,7,15,.88);-webkit-backdrop-filter:blur(26px) saturate(160%);backdrop-filter:blur(26px) saturate(160%);
+    opacity:0;visibility:hidden;transition:opacity .35s var(--ease),visibility 0s .35s}
+  .msheet.open{opacity:1;visibility:visible;transition:opacity .35s var(--ease)}
+  .msheet a{padding:14px 20px;border-radius:16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);font-weight:700;display:block;margin-bottom:8px}
+  .msheet a.active{background:rgba(47,107,255,.2);border-color:rgba(56,214,255,.4);color:var(--cyan)}
+}
+@media(max-width:860px){.ois-nav a{padding:10px 13px}.ois-nav{gap:2px}}
 
 /* ============ HLAVIČKA STRÁNKY ============ */
 .hero{padding:150px 0 30px;text-align:center}
@@ -296,24 +312,39 @@ footer p{max-width:640px;margin:0 auto;line-height:1.6}
 
 <div class="aurora" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span><span class="e"></span></div>
 
-<!-- ================= HORNÍ PANEL (odkazy vedou na hlavní web, viz CONFIG.site) ================= -->
-<div class="ois-nav" id="nav" role="navigation" aria-label="Hlavní navigace">
-  <a class="logo" data-h="/#/"><img src="/static/img/datacorebot_pf-lepsi.png" onerror="this.src='https://datacorebot.koyeb.app/static/img/datacorebot_pf-lepsi.png'" alt="" onerror="this.style.display='none'">OIS IDPK</a>
-  <a data-h="/#/">Domů</a>
-  <a data-h="/#/download">Download</a>
-  <a data-h="/#/team">Náš tým</a>
-  <a data-h="/#/stats">Statistiky</a>
-  <a data-h="/#/supporters">Podporovatelé</a>
-  <a data-h="/#/provoz">Provoz IDPK</a>
-  <a class="active" href="#" aria-current="page">Historie</a>
-  <a data-h="/mapa">Interaktivní mapa</a>
-  <a class="cta" data-h="/#/demo">Demo verze</a>
-  <button class="burger" id="burger" type="button" aria-expanded="false" aria-controls="msheet">Historie <i></i></button>
+<!-- ================= HORNÍ SKLENĚNÝ PANEL (JAKO NA HOME) ================= -->
+<div class="ois-nav" role="navigation" aria-label="Hlavní navigace"><span class="nav-pill" aria-hidden="true"></span><span class="nav-arr l" aria-hidden="true"><i>‹</i></span>
+  <a class="logo" href="/"><img src="/static/img/datacorebot_pf-lepsi.png" alt="">OIS IDPK</a>
+  <a href="/">Domů</a>
+  <a href="/#download">Download</a>
+  <a href="/#team">Náš tým</a>
+  <a href="/#stats">Statistiky</a>
+  <a href="/#supporters">Podporovatelé</a>
+  <a href="/#provoz">Provoz IDPK</a>
+  <a href="/historie" class="active">Historie</a>
+  <a href="/mapa">Interaktivní mapa</a>
+  <a href="/led-panel">LED Panel Simulátor</a>
+  <a href="/podpora" target="_blank" style="color:var(--cyan);"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-3px;margin-right:4px;display:inline-block;"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l3.54 3.54M15.53 15.53l3.54 3.54M4.93 19.07l3.54-3.54M15.53 8.47l3.54-3.54"/></svg>Podpora / Hlášení</a>
+  <a class="cta" href="/#demo">Demo verze</a>
+  <span class="nav-arr r" aria-hidden="true"><i>›</i></span>
+  <button class="nav-burger" id="burger" type="button" aria-expanded="false" aria-label="Menu"><span id="navLabel">Historie</span><span class="nb-ico" aria-hidden="true"><i></i><i></i></span></button>
 </div>
-<div class="msheet" id="msheet">
-  <a data-h="/#/">Domů</a><a data-h="/#/download">Download</a><a data-h="/#/team">Náš tým</a><a data-h="/#/stats">Statistiky</a>
-  <a data-h="/#/supporters">Podporovatelé</a><a data-h="/#/provoz">Provoz IDPK</a><a class="active" href="#">Historie</a><a data-h="/mapa">Interaktivní mapa</a>
-  <a class="cta" data-h="/#/demo" style="grid-column:1/-1;text-align:center">Demo verze</a>
+
+<!-- Mobilní rozbalovací menu -->
+<div class="msheet" id="msheet" aria-hidden="true">
+  <div style="display:flex;flex-direction:column;gap:10px;max-width:400px;margin:0 auto;width:100%;">
+    <a href="/">Domů</a>
+    <a href="/#download">Download</a>
+    <a href="/#team">Náš tým</a>
+    <a href="/#stats">Statistiky</a>
+    <a href="/#supporters">Podporovatelé</a>
+    <a href="/#provoz">Provoz IDPK</a>
+    <a href="/historie" class="active">Historie</a>
+    <a href="/mapa">Interaktivní mapa</a>
+    <a href="/led-panel">LED Panel Simulátor</a>
+    <a href="/podpora" target="_blank" style="color:var(--cyan);">Podpora / Hlášení</a>
+    <a href="/#demo" style="background:linear-gradient(135deg,var(--blue),var(--cyan));color:#031028;text-align:center;">Demo verze</a>
+  </div>
 </div>
 
 <main>
@@ -323,9 +354,9 @@ footer p{max-width:640px;margin:0 auto;line-height:1.6}
   <div class="kicker">Historie provozu</div>
   <h1>Databáze vozidel a <span class="grad">vozovny</span></h1>
   <p class="lead">Dvě propojené sekce: databáze všech vozidel a přehled vozoven s evidencí. Z vozidla se dostanete do jeho vozovny a z vozovny zpět na vozidla.</p>
-  <div class="disclaimer-bar" style="margin:16px auto 0;max-width:760px;padding:10px 18px;border-radius:14px;background:rgba(255,201,51,0.08);border:1px solid rgba(255,201,51,0.25);color:#ffd152;font-size:0.84rem;display:flex;align-items:center;justify-content:center;gap:10px;text-align:center;">
-    <span style="font-size:1.1rem;">⚠️</span>
-    <span><b>Upozornění:</b> Zobrazená data o polohách vozidel, vjezdech a odjezdech z areálů vozoven jsou generována automaticky z telemetrie a mohou mít odchylky.</span>
+  <div style="margin:16px auto 0;display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:12px;background:rgba(255,201,51,.1);border:1px solid rgba(255,201,51,.25);color:var(--yellow);font-size:.85rem;max-width:750px;text-align:left;">
+    <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span><b>Upozornění:</b> Telemetrická a provozní data z map a GPS modulů mají informativní charakter a nemusí být 100% přesná.</span>
   </div>
 
   <div class="tiles" aria-live="polite">
@@ -447,7 +478,7 @@ footer p{max-width:640px;margin:0 auto;line-height:1.6}
 /* =====================================================================
    NASTAVENÍ – tady napojíš databázi
    ---------------------------------------------------------------------
-   DEMO:true  = jen 3 jasně označené VZORY (vzor:true), nic se nevolá na server
+   DEMO:false  = jen 3 jasně označené VZORY (vzor:true), nic se nevolá na server
    DEMO:false = stránka zavolá tři adresy níže (GET, JSON, cookies se posílají)
 
    1) api.depots   → pole vozoven   (tabulka depot_zones)
@@ -816,14 +847,21 @@ function resetShown(){S.vShown=S.eShown=CONFIG.pageSize}
 /* =====================================================================
    DETAIL VOZIDLA
    ===================================================================== */
+
 window.openSeznamAutobusu = function(rawSpz) {
-  if (!rawSpz) return;
-  let s = String(rawSpz).replace(/[^a-zA-Z0-9]/g, '');
+  let s = (rawSpz || '').replace(/[^a-zA-Z0-9]/g, '');
   let formattedSpz = rawSpz;
   if (s.length > 4) {
     formattedSpz = s.substring(0, s.length - 4) + ' ' + s.substring(s.length - 4);
   }
-  window.open('https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz), '_blank');
+  let newTab = window.open('about:blank', '_blank');
+  if (!newTab) {
+    window.open('https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz), '_blank');
+    return;
+  }
+  newTab.document.write('<!DOCTYPE html><html><head><title>Načítám seznam autobusů...</title><meta charset="utf-8"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"></head><body style="background:#0f172a;color:white;font-family:sans-serif;display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;margin:0;"><i class="fas fa-circle-notch fa-spin" style="font-size:3rem;color:#38bdf8;margin-bottom:20px;"></i><h2 style="margin:0;">Otevírám databázi vozidel...</h2><p style="color:#94a3b8;margin-top:15px;text-align:center;max-width:400px;line-height:1.5;">Vyhledávám vůz <b>' + esc(formattedSpz) + '</b> na stránce https://seznam-autobusu.cz/<br>Prosím o strpení, navazuji spojení s cílovým serverem (cca 5 sekund)...</p></body></html>');
+  newTab.document.close();
+  newTab.location.href = 'https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz);
 };
 
 function openDetail(spz){
@@ -846,19 +884,8 @@ function openDetail(spz){
    '<div><small>Příjezdů za 30 dní</small><b>'+r30.length+'</b></div>'+
    '<div><small>Průměrné stání</small><b>'+dur(avg)+'</b></div>'+
    '<div><small>Nejčastěji</small><b>'+(fav?'<button class="xl" type="button" data-depot-go="'+esc(fav[0])+'">'+esc(fav[0])+'</button>':'–')+'</b></div></div>'+
-   '<div class="dact">'+(v.depot?'<button class="btnx" type="button" data-depot-go="'+esc(v.depot)+'">Otevřít vozovnu →</button>':'')+'<button class="btnx" type="button" data-ev-spz="'+esc(v.spz)+'">Evidence tohoto vozidla →</button><a class="btnx" href="/mapa?track='+encodeURIComponent(v.spz)+'" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">🗺️ Zobrazit na mapě →</a><button class="btnx" type="button" onclick="openSeznamAutobusu(\''+esc(v.spz)+'\')">📸 Fotky vozu (Seznam-Autobusů) →</button></div>'+
-   '<div style="margin:16px 0;padding:12px 16px;border-radius:14px;background:rgba(37,99,235,0.12);border:1px solid rgba(59,130,246,0.3);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">'+
-   '  <div style="display:flex;align-items:center;gap:10px;">'+
-   '    <span style="font-size:22px;">🚌</span>'+
-   '    <div><b style="color:#eaf0ff;font-size:13px;display:block;">Fotogalerie a karta na Seznam-Autobusů.cz</b>'+
-   '    <span style="font-size:11px;color:#9fb0d6;">Reálné fotografie, nátěry, výrobní číslo a dopravce pro vůz '+esc(v.spz)+'</span></div>'+
-   '  </div>'+
-   '  <button class="btnx" type="button" onclick="openSeznamAutobusu(\''+esc(v.spz)+'\')" style="background:linear-gradient(135deg,#2563eb,#38bdf8);color:#fff;font-weight:700;border:0;padding:8px 15px;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">'+
-   '    📸 Otevřít fotky na Seznam-Autobusů →'+
-   '  </button>'+
-   '</div>'+
-   '<h3>Historie</h3>'+(ev.length?'<ul class="tl">'+ev.slice(0,40).map(e=>'<li class="'+e.c+'"><b>'+esc(e.h)+'</b><small>'+dt(e.t)+(e.s?' · '+esc(e.s):'')+'</small></li>').join('')+'</ul>':'<div class="muted">Pro toto vozidlo zatím nejsou žádné záznamy.</div>')+
-   '<div style="margin-top:16px;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.03);color:#94a3b8;font-size:11px;text-align:center;">ℹ️ Data o vjezdech, odjezdech a jízdách mají informativní charakter a nemusí být 100% přesná.</div>';
+   '<div class="dact">'+(v.depot?'<button class="btnx" type="button" data-depot-go="'+esc(v.depot)+'">Otevřít vozovnu →</button>':'')+'<button class="btnx" type="button" data-ev-spz="'+esc(v.spz)+'">Evidence tohoto vozidla →</button><a class="btnx" href="/mapa?track='+encodeURIComponent(v.spz)+'" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">🗺️ Zobrazit na mapě →</a><button class="btnx" type="button" onclick="openSeznamAutobusu(\'" + esc(v.spz) + "\')" style="background:rgba(56,214,255,.12);border:1px solid rgba(56,214,255,.3);color:var(--cyan);font-weight:600;display:inline-flex;align-items:center;gap:6px;">📷 Fotky na Seznam-autobusů</button></div>'+
+   '<h3>Historie</h3>'+(ev.length?'<ul class="tl">'+ev.slice(0,40).map(e=>'<li class="'+e.c+'"><b>'+esc(e.h)+'</b><small>'+dt(e.t)+(e.s?' · '+esc(e.s):'')+'</small></li>').join('')+'</ul>':'<div class="muted">Pro toto vozidlo zatím nejsou žádné záznamy.</div>');
   const d=$('#dlg');if(!d.open)d.showModal();$('#dbox').scrollTop=0;
 }
 
@@ -894,10 +921,52 @@ function readHash(){
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),2400)}
 
 function bind(){
-  $('#burger').addEventListener('click',()=>{const o=$('#nav').classList.toggle('open');$('#msheet').classList.toggle('on',o);$('#burger').setAttribute('aria-expanded',o)});
-  document.addEventListener('click',e=>{if(!e.target.closest('#nav,#msheet')){$('#nav').classList.remove('open');$('#msheet').classList.remove('on')}if(!e.target.closest('.search'))closeSug()});
+    const navEl = $('.ois-nav'), pill = $('.nav-pill');
+    function updateNavPill(instant){
+      if(!navEl||!pill)return;
+      const a = navEl.querySelector('a.active:not(.logo)') || navEl.querySelector('a[href="/historie"]');
+      if(!a)return;
+      if(instant) pill.classList.add('still');
+      pill.style.width = a.offsetWidth + 'px';
+      pill.style.height = a.offsetHeight + 'px';
+      pill.style.transform = 'translate3d(' + a.offsetLeft + 'px,' + a.offsetTop + 'px,0)';
+      pill.classList.add('ready');
+      if(instant) setTimeout(()=>pill.classList.remove('still'), 60);
+    }
+    function syncNavArrows(){
+      if(!navEl)return;
+      const canL = navEl.scrollLeft > 6;
+      const canR = navEl.scrollLeft < (navEl.scrollWidth - navEl.clientWidth - 6);
+      navEl.classList.toggle('can-l', canL);
+      navEl.classList.toggle('can-r', canR);
+    }
+    if(navEl){
+      navEl.addEventListener('scroll', syncNavArrows, {passive:true});
+      window.addEventListener('resize', ()=>{ updateNavPill(true); syncNavArrows(); });
+      setTimeout(()=>{ updateNavPill(true); syncNavArrows(); }, 60);
+      setTimeout(()=>{ updateNavPill(); syncNavArrows(); }, 350);
+    }
+    const burger = $('#burger');
+    const msheet = $('#msheet');
+    if(burger){
+      burger.addEventListener('click',()=>{
+        const o = burger.classList.toggle('open');
+        if(navEl) navEl.classList.toggle('open', o);
+        if(msheet) msheet.classList.toggle('open', o);
+        burger.setAttribute('aria-expanded', o);
+      });
+    }
+    document.addEventListener('click',e=>{
+      if(!e.target.closest('.ois-nav, .msheet, .nav-burger')){
+        if(navEl) navEl.classList.remove('open');
+        if(burger) burger.classList.remove('open');
+        if(msheet) msheet.classList.remove('open');
+        if(burger) burger.setAttribute('aria-expanded', 'false');
+      }
+      if(!e.target.closest('.search')) closeSug();
+    });
 
-  const q=$('#q');
+    const q=$('#q');
   q.addEventListener('input',()=>{S.q=q.value;resetShown();syncBox();renderAll();renderSug();syncHash()});
   q.addEventListener('focus',renderSug);
   q.addEventListener('keydown',e=>{
@@ -1009,10 +1078,9 @@ function syncSortSel(){const v=S.vSort.k+':'+S.vSort.d,s=$('#vSort');s.value=[..
 
 function exportCSV(){
   const a=eList();if(!a.length){toast('Není co exportovat');return}
-  // Bezpečné formátování textu pro Excel, aby NIKDY nezobrazil #####
   const cellTxt=s=>'="'+String(s==null?'':s).replace(/"/g,'""')+'"';
-  const cellVal=s=>{s=String(s==null?'':s);if(/^[=+\-@	]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'};
-  
+  const cellVal=s=>{s=String(s==null?'':s);if(/^[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'};
+
   const fD=ms=>{
     if(ms==null)return '';
     const d=new Date(ms);
@@ -1048,7 +1116,7 @@ function exportCSV(){
       cellVal(durMin)
     ];
   }));
-  
+
   const blob=new Blob(['\ufeff'+rows.map(r=>r.join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'});
   const u=URL.createObjectURL(blob),l=document.createElement('a');l.href=u;l.download='evidence-vozoven.csv';document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);
   toast('Export připraven ('+a.length+' záznamů)');
