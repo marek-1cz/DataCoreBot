@@ -321,13 +321,12 @@ footer p{max-width:640px;margin:0 auto;line-height:1.6}
   <a href="/#stats">Statistiky</a>
   <a href="/#supporters">Podporovatelé</a>
   <a href="/#provoz">Provoz IDPK</a>
-  <a href="/historie" class="active">Historie</a>
-  <a href="/mapa">Interaktivní mapa</a>
+  <a href="/mapa">Interaktivní mapa IDPK</a>
   <a href="/led-panel">LED Panel Simulátor</a>
   <a href="/podpora" target="_blank" style="color:var(--cyan);"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-3px;margin-right:4px;display:inline-block;"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l3.54 3.54M15.53 15.53l3.54 3.54M4.93 19.07l3.54-3.54M15.53 8.47l3.54-3.54"/></svg>Podpora / Hlášení</a>
   <a class="cta" href="/#demo">Demo verze</a>
   <span class="nav-arr r" aria-hidden="true"><i>›</i></span>
-  <button class="nav-burger" id="burger" type="button" aria-expanded="false" aria-label="Menu"><span id="navLabel">Historie</span><span class="nb-ico" aria-hidden="true"><i></i><i></i></span></button>
+  <button class="nav-burger" id="burger" type="button" aria-expanded="false" aria-label="Menu"><span id="navLabel">Provoz IDPK</span><span class="nb-ico" aria-hidden="true"><i></i><i></i></span></button>
 </div>
 
 <!-- Mobilní rozbalovací menu -->
@@ -339,8 +338,7 @@ footer p{max-width:640px;margin:0 auto;line-height:1.6}
     <a href="/#stats">Statistiky</a>
     <a href="/#supporters">Podporovatelé</a>
     <a href="/#provoz">Provoz IDPK</a>
-    <a href="/historie" class="active">Historie</a>
-    <a href="/mapa">Interaktivní mapa</a>
+      <a href="/mapa">Interaktivní mapa</a>
     <a href="/led-panel">LED Panel Simulátor</a>
     <a href="/podpora" target="_blank" style="color:var(--cyan);">Podpora / Hlášení</a>
     <a href="/#demo" style="background:linear-gradient(135deg,var(--blue),var(--cyan));color:#031028;text-align:center;">Demo verze</a>
@@ -924,14 +922,33 @@ function bind(){
     const navEl = $('.ois-nav'), pill = $('.nav-pill');
     function updateNavPill(instant){
       if(!navEl||!pill)return;
-      const a = navEl.querySelector('a.active:not(.logo)') || navEl.querySelector('a[href="/historie"]');
-      if(!a)return;
+      const a = navEl.querySelector('a.active:not(.logo)');
+      if(!a){
+        pill.classList.remove('ready');
+        pill.style.opacity = '0';
+        return;
+      }
       if(instant) pill.classList.add('still');
+      pill.style.opacity = '1';
       pill.style.width = a.offsetWidth + 'px';
       pill.style.height = a.offsetHeight + 'px';
       pill.style.transform = 'translate3d(' + a.offsetLeft + 'px,' + a.offsetTop + 'px,0)';
       pill.classList.add('ready');
       if(instant) setTimeout(()=>pill.classList.remove('still'), 60);
+    }
+    if(navEl && pill){
+      navEl.querySelectorAll('a:not(.logo)').forEach(link=>{
+        link.addEventListener('mouseenter',()=>{
+          pill.style.opacity = '1';
+          pill.style.width = link.offsetWidth + 'px';
+          pill.style.height = link.offsetHeight + 'px';
+          pill.style.transform = 'translate3d(' + link.offsetLeft + 'px,' + link.offsetTop + 'px,0)';
+          pill.classList.add('ready');
+        });
+      });
+      navEl.addEventListener('mouseleave',()=>{
+        updateNavPill();
+      });
     }
     function syncNavArrows(){
       if(!navEl)return;

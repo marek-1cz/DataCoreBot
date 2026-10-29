@@ -2469,16 +2469,20 @@ def is_admin_bypass_active():
 
 @app.route('/')
 def home():
-    if is_admin_bypass_active():
-        try:
-            with open("new_web.html", "r", encoding="utf-8") as f:
-                content = f.read()
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(curr_dir, "new_web.html")
+        if not os.path.exists(path):
+            path = "new_web.html"
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if is_admin_bypass_active():
             content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
-            return Response(content, mimetype="text/html; charset=utf-8")
-        except Exception as e:
-            flash(f"Chyba při načítání nového webu: {e}", "error")
-            return redirect('/old', code=302)
-    return redirect('/old', code=302)
+        return Response(content, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        print(f"[NEW WEB HOME ERROR] {e}", flush=True)
+        flash(f"Chyba při načítání nového webu: {e}", "error")
+        return redirect('/old', code=302)
 
 @app.route('/dashboard/view_new_web')
 def dashboard_view_new_web():
@@ -2506,27 +2510,24 @@ def dashboard_toggle_web_bypass():
 
 @app.route('/download')
 def redirect_download():
-    return redirect('/old/download', code=302)
+    return redirect('/#/download')
 
 @app.route('/team')
 def redirect_team():
-    return redirect('/old/team', code=302)
+    return redirect('/#/team')
 
 @app.route('/supporters')
 def redirect_supporters():
-    if is_admin_bypass_active():
-        return redirect('/#/supporters')
-    return redirect('/old/supporters', code=302)
+    return redirect('/#/supporters')
 
 @app.route('/stats', methods=['GET'])
 def redirect_stats():
-    qs = request.query_string.decode('utf-8') if request.query_string else ''
-    dest = '/old/stats' + (f'?{qs}' if qs else '')
-    return redirect(dest, code=302)
+    return redirect('/#/stats')
 
+@app.route('/provoz')
 @app.route('/provoz-idpk')
 def redirect_provoz_idpk():
-    return redirect('/old/provoz-idpk', code=302)
+    return redirect('/#/provoz')
 
 @app.route('/jizdni-rad')
 def redirect_jizdni_rad():

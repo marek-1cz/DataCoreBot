@@ -13682,57 +13682,37 @@ def api_admin_spz_meta_save():
 
 
 @mapa_bp.route('/historie')
-@mapa_bp.route('/old/historie')
 def stranka_historie_index():
-    if request.path.startswith('/old'):
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        template_path = os.path.join(curr_dir, "new_web_historie.html")
+        if not os.path.exists(template_path):
+            template_path = os.path.join(os.path.dirname(curr_dir), "new_web_historie.html")
+        with open(template_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        try:
+            from main import is_admin_bypass_active, ADMIN_BYPASS_BAR
+            if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
+                content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+        except Exception:
+            pass
+        return Response(content, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        print(f"[HISTORIE NEW WEB ERROR] {e}", flush=True)
         return _full_page("Historie", HTML_HISTORIE_INDEX)
 
-    # Nový web pro adminy (nebo admin bypass)
-    bypass_active = False
-    try:
-        from main import is_admin_bypass_active
-        bypass_active = is_admin_bypass_active()
-    except Exception:
-        bypass_active = bool(session.get('admin_web_bypass') or session.get('logged_in'))
-
-    if bypass_active or session.get('admin_web_bypass') or session.get('logged_in'):
-        try:
-            curr_dir = os.path.dirname(os.path.abspath(__file__))
-            template_path = os.path.join(curr_dir, "new_web_historie.html")
-            if not os.path.exists(template_path):
-                template_path = os.path.join(os.path.dirname(curr_dir), "new_web_historie.html")
-            with open(template_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            try:
-                from main import ADMIN_BYPASS_BAR
-                if ADMIN_BYPASS_BAR and "</body>" in content:
-                    content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
-            except Exception:
-                pass
-            return Response(content, mimetype="text/html; charset=utf-8")
-        except Exception as e:
-            print(f"[HISTORIE NEW WEB ERROR] {e}", flush=True)
-
+@mapa_bp.route('/old/historie')
+def stranka_historie_old():
     return _full_page("Historie", HTML_HISTORIE_INDEX)
 
 
 @mapa_bp.route('/historie/<spz>')
-@mapa_bp.route('/old/historie/<spz>')
 def stranka_historie_detail(spz):
-    if request.path.startswith('/old'):
-        return _full_page(f"V\u016fz {spz}", HTML_HISTORIE_DETAIL.replace('__SPZ__', spz))
+    import urllib.parse
+    return redirect(f"/historie?spz={urllib.parse.quote(spz)}#tab=vozidla", code=302)
 
-    bypass_active = False
-    try:
-        from main import is_admin_bypass_active
-        bypass_active = is_admin_bypass_active()
-    except Exception:
-        bypass_active = bool(session.get('admin_web_bypass') or session.get('logged_in'))
-
-    if bypass_active or session.get('admin_web_bypass') or session.get('logged_in'):
-        import urllib.parse
-        return redirect(f"/historie?spz={urllib.parse.quote(spz)}#tab=vozidla", code=302)
-
+@mapa_bp.route('/old/historie/<spz>')
+def stranka_historie_detail_old(spz):
     return _full_page(f"V\u016fz {spz}", HTML_HISTORIE_DETAIL.replace('__SPZ__', spz))
 
 
