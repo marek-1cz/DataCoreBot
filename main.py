@@ -528,6 +528,54 @@ def _get_fallback_users():
         print(f"[FALLBACK] Chyba cteni users_backup.json: {e}", flush=True)
     return []
 
+_VERSIONS_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "versions_backup.json")
+
+def _get_fallback_versions():
+    try:
+        if os.path.exists(_VERSIONS_BACKUP_FILE):
+            with open(_VERSIONS_BACKUP_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[FALLBACK] Chyba cteni versions_backup.json: {e}", flush=True)
+    return [
+        {
+            "id": 1,
+            "version_name": "OIS IDPK V1.6.2",
+            "db_version": "V1.6.2",
+            "file_url": "https://datacorebot.koyeb.app/download/v1.6.2",
+            "target_role": "BT",
+            "is_active": 1,
+            "eol_date": "",
+            "show_in_launcher": 1,
+            "can_download": 1,
+            "can_launch": 1
+        },
+        {
+            "id": 2,
+            "version_name": "OIS IDPK V1.6",
+            "db_version": "V1.6",
+            "file_url": "https://datacorebot.koyeb.app/download/v1.6",
+            "target_role": "User",
+            "is_active": 1,
+            "eol_date": "",
+            "show_in_launcher": 1,
+            "can_download": 1,
+            "can_launch": 1
+        },
+        {
+            "id": 3,
+            "version_name": "OIS IDPK V1.5.1 RC",
+            "db_version": "V1.5.1 RC",
+            "file_url": "https://datacorebot.koyeb.app/download/v1.5.1",
+            "target_role": "User",
+            "is_active": 1,
+            "eol_date": "",
+            "show_in_launcher": 1,
+            "can_download": 1,
+            "can_launch": 1
+        }
+    ]
+
 def _get_fallback_summary():
     try:
         if os.path.exists(_SUMMARY_BACKUP_FILE):
@@ -960,41 +1008,109 @@ import threading as _threading
 _egress_thread = _threading.Thread(target=_egress_monitor_loop, daemon=True, name="egress-monitor")
 _egress_thread.start()
 
+def normalize_role_string(role_str):
+    if not role_str: return 'User'
+    r_upper = str(role_str).upper()
+    r_lower = str(role_str).lower()
+    if any(k in r_upper for k in ['SA', 'SUPERADMIN', 'SERVER MANAGER', 'SM']): return 'SA'
+    if any(k in r_upper for k in ['DEV', 'DEVELOPER', 'VÝVOJÁŘ', 'VYVOJAR']): return 'DEV'
+    if any(k in r_upper for k in ['BT', 'PODPOROVATEL']) or any(k in r_lower for k in ['beta', 'tester', 'web-bt']): return 'BT'
+    return 'User'
+
+def resolve_member_discord_role(discord_id):
+    """Kontrola reálných rolí člena na Discord serveru v reálném čase."""
+    try:
+        if not discord_id or not str(discord_id).isdigit():
+            return None
+        if not hasattr(bot, 'is_ready') or not bot.is_ready():
+            return None
+        d_id = int(discord_id)
+        for guild in bot.guilds:
+            member = guild.get_member(d_id)
+            if member and getattr(member, 'roles', None):
+                role_names = [r.name.lower() for r in member.roles]
+                if any(any(k in r for k in ["web-sa", "superadmin", "server manager"]) or r == "sa" or r == "sm" for r in role_names):
+                    return "SA"
+                if any(any(k in r for k in ["web-dev", "developer", "vývojář", "vyvojar"]) or r == "dev" for r in role_names):
+                    return "DEV"
+                if any(any(k in r for k in ["beta", "bt", "web-bt", "podporovatel"]) for r in role_names):
+                    return "BT"
+    except Exception as e:
+        print(f"[DISCORD ROLE CHECK ERROR] {e}", flush=True)
+    return None
+
+def _sync_user_role_to_storage(discord_id, new_role):
+    def _worker():
+        try:
+            db = get_db()
+            if db:
+                if str(discord_id).startswith('email-'):
+                    db.table("users").update({"role": new_role}).eq("id", str(discord_id).split('-')[1]).execute()
+                else:
+                    db.table("users").update({"role": new_role}).eq("discord_id", str(discord_id)).execute()
+            if os.path.exists(_USERS_BACKUP_FILE):
+                with open(_USERS_BACKUP_FILE, "r", encoding="utf-8") as f:
+                    u_list = json.load(f)
+                updated = False
+                for u in u_list:
+                    if str(u.get("discord_id")) == str(discord_id) or str(u.get("id")) == str(discord_id):
+                        u["role"] = new_role
+                        updated = True
+                        break
+                if updated:
+                    with open(_USERS_BACKUP_FILE, "w", encoding="utf-8") as f:
+                        json.dump(u_list, f, ensure_ascii=False, indent=2)
+            print(f"[ROLE AUTO-SYNC] Synchronizována role '{new_role}' pro uživatele {discord_id}", flush=True)
+        except Exception as e:
+            print(f"[ROLE AUTO-SYNC ERROR] {e}", flush=True)
+    _threading.Thread(target=_worker, daemon=True).start()
+
 def get_cached_user_role(discord_id):
     now = time.time()
     if discord_id in _AUTH_CACHE:
         cache_time, role, is_banned = _AUTH_CACHE[discord_id]
-        if now - cache_time < 300: # 5 minutes cache
+        if now - cache_time < 300 and role in ('SA', 'DEV', 'BT'):
             return role, is_banned
 
     db = get_db()
     role, is_banned = 'User', False
     if db and discord_id:
         try:
-            if discord_id.startswith('email-'):
-                uid = discord_id.split('-')[1]
+            if str(discord_id).startswith('email-'):
+                uid = str(discord_id).split('-')[1]
                 resp = db.table('users').select('role, is_banned').eq('id', uid).execute()
             else:
-                resp = db.table('users').select('role, is_banned').eq('discord_id', discord_id).execute()
+                resp = db.table('users').select('role, is_banned').eq('discord_id', str(discord_id)).execute()
             if resp and resp.data:
                 role = resp.data[0].get('role', 'User')
-                is_banned = resp.data[0].get('is_banned', False)
+                is_banned = bool(resp.data[0].get('is_banned', False))
         except Exception as e:
             print('auth cache error:', e)
             
     # Bezpečný fallback na lokální users_backup.json pokud DB roli nenašla nebo selhala
-    if role == 'User' and discord_id:
+    if normalize_role_string(role) == 'User' and discord_id:
         try:
             for bu in _get_fallback_users():
                 if str(bu.get('discord_id')) == str(discord_id) or str(bu.get('id')) == str(discord_id):
                     role = bu.get('role', 'User')
-                    is_banned = bu.get('is_banned', False)
+                    is_banned = bool(bu.get('is_banned', False))
                     break
         except Exception:
             pass
 
-    _AUTH_CACHE[discord_id] = (now, role, is_banned)
-    return role, is_banned
+    # Živá synchronizace s rolemi na Discord serveru
+    disc_role = resolve_member_discord_role(discord_id)
+    if disc_role:
+        ROLE_HIERARCHY = {'User': 1, 'BT': 2, 'DEV': 3, 'SA': 4}
+        cur_lvl = ROLE_HIERARCHY.get(normalize_role_string(role), 1)
+        disc_lvl = ROLE_HIERARCHY.get(disc_role, 1)
+        if disc_lvl > cur_lvl:
+            role = disc_role
+            _sync_user_role_to_storage(discord_id, disc_role)
+
+    norm_role = normalize_role_string(role)
+    _AUTH_CACHE[discord_id] = (now, norm_role, is_banned)
+    return norm_role, is_banned
 
 def get_system_statuses():
     try:
@@ -1898,38 +2014,52 @@ def check_version_access(db, app_version_from_pc, user):
         if not app_version_from_pc:
             return {"allowed": False, "msg": "Verze aplikace nebyla poskytnuta."}
             
-        v_resp = db.table("software_versions").select("*").eq("db_version", app_version_from_pc).execute()
-        if not v_resp.data:
-            # Fallback pro názvy verze (pokud někdo poslal např. V1.6 místo V1.6)
-            v_resp = db.table("software_versions").select("*").eq("version_name", app_version_from_pc).execute()
-            
-        if not v_resp.data:
+        u_role = normalize_role_string(user.get('role', 'User'))
+        ROLE_HIERARCHY = {'User': 1, 'BT': 2, 'DEV': 3, 'SA': 4}
+        u_level = ROLE_HIERARCHY.get(u_role, 1)
+
+        # Vývojáři a Super Admini mají vždy přístup ke všem verzím
+        if u_role in ('SA', 'DEV'):
+            return {"allowed": True}
+
+        v_data = None
+        if db:
+            try:
+                v_resp = db.table("software_versions").select("*").eq("db_version", app_version_from_pc).execute()
+                if not v_resp.data:
+                    v_resp = db.table("software_versions").select("*").eq("version_name", app_version_from_pc).execute()
+                if v_resp.data:
+                    v_data = v_resp.data[0]
+            except Exception as e:
+                print(f"[check_version_access DB error] {e}", flush=True)
+
+        if not v_data:
+            for fv in _get_fallback_versions():
+                if fv.get('db_version') == app_version_from_pc or fv.get('version_name') == app_version_from_pc or str(fv.get('db_version', '')).replace('V', '') == str(app_version_from_pc).replace('V', ''):
+                    v_data = fv
+                    break
+
+        if not v_data:
+            # Pokud verze v DB není, ale uživatel je BT a jde o Beta/novou verzi, povolíme
+            if u_role == 'BT':
+                return {"allowed": True}
             return {"allowed": False, "msg": "Tato verze neexistuje v databázi. Spusťte hru přes oficiální Launcher."}
             
-        v_data = v_resp.data[0]
-        
         if not v_data.get("is_active"):
             return {"allowed": False, "msg": "Tato verze je vyřazena z provozu a již ji nelze používat."}
             
         if not v_data.get("can_launch"):
             return {"allowed": False, "msg": "Spouštění této verze je administrátorem zakázáno."}
             
-        u_role = user.get('role', 'User')
-        v_role = v_data.get('target_role', 'User')
-        
-        ROLE_HIERARCHY = {'User': 1, 'BT': 2, 'DEV': 3, 'SA': 4}
-        def get_level(r):
-            for k in ['SA', 'DEV', 'BT']:
-                if k in r: return ROLE_HIERARCHY[k]
-            return 1
+        v_role = normalize_role_string(v_data.get('target_role', 'User'))
+        v_level = ROLE_HIERARCHY.get(v_role, 1)
             
-        if get_level(u_role) < get_level(v_role):
-            return {"allowed": False, "msg": f"Nemáte dostatečná oprávnění k této verzi (Vyžaduje: {v_role})."}
+        if u_level < v_level:
+            return {"allowed": False, "msg": f"Nemáte dostatečná oprávnění k této verzi (Vyžaduje: {v_data.get('target_role', 'BT')})."}
             
         return {"allowed": True}
     except Exception as e:
         print(f"Version check error: {e}")
-        # Při chybě DB radši pustíme, abychom nezablokovali všechny při výpadku Supabase
         return {"allowed": True}
 
 class DynamicDownloadView(discord.ui.View):
@@ -3103,10 +3233,12 @@ def api_app_login():
             return _cors_jsonify({"status": "error", "message": "Toto ID neexistuje. Jestli problém přetrvává, jděte na náš Discord."})
             
         discord_id = str(user.get("discord_id"))
-        if user.get("is_banned"):
+        effective_role, is_b = get_cached_user_role(discord_id)
+        if is_b or user.get("is_banned"):
             return _cors_jsonify({"status": "banned", "message": "Tento účet má BAN."})
         if user.get("is_deleted"):
             return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."})
+        user['role'] = effective_role
         version_check = check_version_access(db, app_version, user)
         if not version_check["allowed"]:
             return _cors_jsonify({"status": "error", "message": version_check["msg"]})
@@ -3239,7 +3371,10 @@ def api_silent_check():
         user = None
         if db:
             try:
-                user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
+                if discord_id.startswith('email-'):
+                    user_resp = db.table("users").select("*").eq("id", discord_id.split('-')[1]).execute()
+                else:
+                    user_resp = db.table("users").select("*").eq("discord_id", discord_id).execute()
                 if user_resp.data:
                     user = user_resp.data[0]
             except Exception as dbe:
@@ -3247,13 +3382,15 @@ def api_silent_check():
 
         if not user:
             for u in _get_fallback_users():
-                if str(u.get("discord_id")) == discord_id:
+                if str(u.get("discord_id")) == discord_id or (discord_id.startswith('email-') and str(u.get('id')) == discord_id.split('-')[1]):
                     user = u
                     break
 
         if not user: return _cors_jsonify({"status": "error", "message": "Tento účet neexistuje."})
-        if user.get("is_banned"): return _cors_jsonify({"status": "error", "message": "Tento účet má BAN."})
+        effective_role, is_b = get_cached_user_role(discord_id)
+        if is_b or user.get("is_banned"): return _cors_jsonify({"status": "error", "message": "Tento účet má BAN."})
         if user.get("is_deleted"): return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."})
+        user['role'] = effective_role
         version_check = check_version_access(db, app_version, user)
         if not version_check["allowed"]: return _cors_jsonify({"status": "error", "message": version_check["msg"]})
         db_hwid = user.get("hwid")
@@ -6129,18 +6266,41 @@ def api_launcher_email_verify():
 @app.route('/api/launcher/user_info', methods=['POST'])
 def api_launcher_user_info():
     discord_id = request.json.get('discord_id') if request.is_json else None
-    if not discord_id: return jsonify({"status": "error"})
+    if not discord_id: return jsonify({"status": "error", "message": "Missing discord_id"})
     try:
+        role, is_banned = get_cached_user_role(discord_id)
+        avatar_url = ""
         db = get_db()
-        user = db.table("users").select("role, avatar_url").eq("discord_id", discord_id).execute().data
-        if user:
-            return jsonify({
-                "status": "success",
-                "role": user[0].get("role", "User"),
-                "avatar_url": user[0].get("avatar_url")
-            })
-    except: pass
-    return jsonify({"status": "error"})
+        if db:
+            try:
+                if str(discord_id).startswith('email-'):
+                    u_data = db.table("users").select("avatar_url").eq("id", str(discord_id).split('-')[1]).execute().data
+                else:
+                    u_data = db.table("users").select("avatar_url").eq("discord_id", str(discord_id)).execute().data
+                if u_data:
+                    avatar_url = u_data[0].get("avatar_url") or ""
+            except Exception:
+                pass
+
+        if not avatar_url and str(discord_id).isdigit() and hasattr(bot, 'is_ready') and bot.is_ready():
+            try:
+                for guild in bot.guilds:
+                    m = guild.get_member(int(discord_id))
+                    if m and getattr(m, 'display_avatar', None):
+                        avatar_url = str(m.display_avatar.url)
+                        break
+            except Exception:
+                pass
+
+        return jsonify({
+            "status": "success",
+            "role": role,
+            "avatar_url": avatar_url,
+            "is_banned": is_banned
+        })
+    except Exception as e:
+        print(f"[api_launcher_user_info error] {e}", flush=True)
+        return jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/launcher/versions')
 def api_launcher_versions():
@@ -6167,20 +6327,19 @@ def api_launcher_versions():
                 return jsonify({"status": "banned", "message": "Tento účet má BAN."})
             user_role = role
         
+        user_role = normalize_role_string(user_role)
         all_versions = db.table('software_versions').select('*').eq('is_active', True).order('id', desc=True).execute().data or []
+        if not all_versions:
+            all_versions = [v for v in _get_fallback_versions() if v.get('is_active')]
         
         ROLE_HIERARCHY = {'User': 1, 'BT': 2, 'DEV': 3, 'SA': 4}
-        def user_level(r):
-            for key in ['SA','DEV','BT']:
-                if key in r: return ROLE_HIERARCHY.get(key, 1)
-            return 1
-        
-        u_level = user_level(user_role)
+        u_level = ROLE_HIERARCHY.get(user_role, 1)
         result = []
         for v in all_versions:
             v_role = v.get('target_role', 'User')
-            v_level = ROLE_HIERARCHY.get(v_role, 1)
-            has_access = u_level >= v_level
+            v_norm = normalize_role_string(v_role)
+            v_level = ROLE_HIERARCHY.get(v_norm, 1)
+            has_access = (u_level >= v_level) or (user_role in ('SA', 'DEV'))
             show_l = v.get('show_in_launcher', 1)
             is_show = bool(show_l) and str(show_l).lower() not in ('0', 'false')
             can_dl = bool(v.get('can_download', 1)) and str(v.get('can_download', 1)).lower() not in ('0', 'false') and has_access
@@ -8269,6 +8428,28 @@ bot.remove_command("help")
 @bot.event
 async def on_member_join(member):
     await async_send_log("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum:** {get_prague_time().strftime('%d.%m.%Y %H:%M')}", 0x10b981)
+
+@bot.event
+async def on_member_update(before, after):
+    try:
+        if before.roles == after.roles:
+            return
+        d_id = str(after.id)
+        role_names = [r.name.lower() for r in after.roles]
+        
+        new_role = "User"
+        if any(any(k in r for k in ["web-sa", "superadmin", "server manager"]) or r == "sa" or r == "sm" for r in role_names):
+            new_role = "SA"
+        elif any(any(k in r for k in ["web-dev", "developer", "vývojář", "vyvojar"]) or r == "dev" for r in role_names):
+            new_role = "DEV"
+        elif any(any(k in r for k in ["beta", "bt", "web-bt", "podporovatel"]) for r in role_names):
+            new_role = "BT"
+            
+        _AUTH_CACHE[d_id] = (time.time(), new_role, False)
+        _sync_user_role_to_storage(d_id, new_role)
+        print(f"[ROLE EVENT SYNC] Role pro {after.name} ({d_id}) aktualizována na '{new_role}'", flush=True)
+    except Exception as e:
+        print(f"[on_member_update error] {e}", flush=True)
 
 @bot.event
 async def on_command_error(ctx, error):

@@ -470,7 +470,80 @@ def _resolve_local_fallback(table_name, columns="*", where_clauses=None, args=No
 
     # ── TABULKA: software_versions ──
     if table_name == "software_versions":
-        return [{"version": "1.6", "release_date": "2026-10-25", "channel": "stable"}]
+        v_file = _find_file("versions_backup.json")
+        v_list = []
+        if v_file:
+            try:
+                with open(v_file, "r", encoding="utf-8") as f:
+                    v_data = json.load(f)
+                    if isinstance(v_data, list) and v_data:
+                        v_list = v_data
+            except Exception:
+                pass
+        if not v_list:
+            v_list = [
+                {
+                    "id": 1,
+                    "version_name": "OIS IDPK V1.6.2",
+                    "db_version": "V1.6.2",
+                    "file_url": "https://datacorebot.koyeb.app/download/v1.6.2",
+                    "target_role": "BT",
+                    "is_active": 1,
+                    "eol_date": "",
+                    "show_in_launcher": 1,
+                    "can_download": 1,
+                    "can_launch": 1
+                },
+                {
+                    "id": 2,
+                    "version_name": "OIS IDPK V1.6",
+                    "db_version": "V1.6",
+                    "file_url": "https://datacorebot.koyeb.app/download/v1.6",
+                    "target_role": "User",
+                    "is_active": 1,
+                    "eol_date": "",
+                    "show_in_launcher": 1,
+                    "can_download": 1,
+                    "can_launch": 1
+                },
+                {
+                    "id": 3,
+                    "version_name": "OIS IDPK V1.5.1 RC",
+                    "db_version": "V1.5.1 RC",
+                    "file_url": "https://datacorebot.koyeb.app/download/v1.5.1",
+                    "target_role": "User",
+                    "is_active": 1,
+                    "eol_date": "",
+                    "show_in_launcher": 1,
+                    "can_download": 1,
+                    "can_launch": 1
+                }
+            ]
+
+        if not where_clauses:
+            return v_list
+
+        filtered = []
+        for v in v_list:
+            match = True
+            for w, a in zip(where_clauses, args):
+                val = a.get("value")
+                val_str = str(val) if val is not None else ""
+                if '"db_version" = ?' in w and str(v.get("db_version", "")).lower() != val_str.lower():
+                    match = False; break
+                elif '"version_name" = ?' in w and str(v.get("version_name", "")).lower() != val_str.lower():
+                    match = False; break
+                elif '"target_role" = ?' in w and str(v.get("target_role", "")).lower() != val_str.lower():
+                    match = False; break
+                elif '"is_active" = ?' in w:
+                    is_act = 1 if v.get("is_active") else 0
+                    if str(is_act) != val_str:
+                        match = False; break
+                elif '"id" = ?' in w and str(v.get("id")) != val_str:
+                    match = False; break
+            if match:
+                filtered.append(v)
+        return filtered
 
     return []
 

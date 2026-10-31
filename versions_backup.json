@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "version_name": "OIS IDPK V1.6.2",
+    "db_version": "V1.6.2",
+    "file_url": "https://datacorebot.koyeb.app/download/v1.6.2",
+    "target_role": "BT",
+    "is_active": 1,
+    "eol_date": "",
+    "show_in_launcher": 1,
+    "can_download": 1,
+    "can_launch": 1
+  },
+  {
+    "id": 2,
+    "version_name": "OIS IDPK V1.6",
+    "db_version": "V1.6",
+    "file_url": "https://datacorebot.koyeb.app/download/v1.6",
+    "target_role": "User",
+    "is_active": 1,
+    "eol_date": "",
+    "show_in_launcher": 1,
+    "can_download": 1,
+    "can_launch": 1
+  },
+  {
+    "id": 3,
+    "version_name": "OIS IDPK V1.5.1 RC",
+    "db_version": "V1.5.1 RC",
+    "file_url": "https://datacorebot.koyeb.app/download/v1.5.1",
+    "target_role": "User",
+    "is_active": 1,
+    "eol_date": "",
+    "show_in_launcher": 1,
+    "can_download": 1,
+    "can_launch": 1
+  }
+]
