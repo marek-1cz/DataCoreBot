@@ -236,6 +236,24 @@ def init_local_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS depot_history_local (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    depot_name TEXT,
+                    bus_id TEXT,
+                    spz TEXT,
+                    arrived_at TEXT,
+                    left_at TEXT
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_depot_loc_name ON depot_history_local(depot_name, arrived_at);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_depot_loc_spz ON depot_history_local(spz);")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS settings_local (
+                    setting_key TEXT PRIMARY KEY,
+                    setting_value TEXT
+                )
+            """)
             conn.commit()
             _restore_stats_backup_if_empty(conn)
             _restore_web_visits_if_empty(conn)
@@ -866,10 +884,16 @@ def _sync_web_visits_to_cloud(visits):
         # 1. Trvalý GitHub Gist (prioritní, neomezený, 100% imunní vůči resetům Koyeb)
         _save_to_gist(web_visits=visits)
 
-        # 2. Supabase (pouze pokud není zablokována Egress kvótou)
+        # 2. Supabase / Turso (pouze pokud není zablokována kvótou)
         try:
             from main import is_supabase_restricted
             if is_supabase_restricted():
+                return
+        except Exception:
+            pass
+        try:
+            from turso_db import is_turso_blocked
+            if is_turso_blocked():
                 return
         except Exception:
             pass
@@ -1256,3 +1280,78 @@ def local_get_pvvd_disappearances(limit: int = 100) -> list:
     return []
 
 
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DEPOT HISTORY & SETTINGS LOKÁLNÍ OCHRANNÉ FUNKCE
+# ═══════════════════════════════════════════════════════════════════════════════
+def local_depot_history_upsert(depot_name: str, bus_id: str, spz: str, arrived_at: str, left_at: str = None, record_id: int = None):
+    try:
+        with _get_local_conn() as conn:
+            if record_id:
+                conn.execute(
+                    "UPDATE depot_history_local SET depot_name=?, bus_id=?, spz=?, arrived_at=?, left_at=? WHERE id=?",
+                    (depot_name, str(bus_id), spz, arrived_at, left_at, record_id)
+                )
+            elif left_at and bus_id:
+                conn.execute(
+                    "UPDATE depot_history_local SET left_at=? WHERE bus_id=? AND left_at IS NULL",
+                    (left_at, str(bus_id))
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO depot_history_local (depot_name, bus_id, spz, arrived_at, left_at) VALUES (?, ?, ?, ?, ?)",
+                    (depot_name, str(bus_id), spz, arrived_at, left_at)
+                )
+            conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba zapisu depot_history_local: {e}", flush=True)
+
+def local_depot_history_get(depot_name: str = None, spz: str = None, limit: int = 1000) -> list:
+    try:
+        with _get_local_conn() as conn:
+            cur = conn.cursor()
+            query = "SELECT id, depot_name, bus_id, spz, arrived_at, left_at FROM depot_history_local WHERE spz != 'BACKUP'"
+            args = []
+            if depot_name:
+                query += " AND depot_name = ?"
+                args.append(depot_name)
+            if spz:
+                query += " AND spz = ?"
+                args.append(spz)
+            query += f" ORDER BY arrived_at DESC LIMIT {int(limit)}"
+            cur.execute(query, args)
+            rows = []
+            for r in cur.fetchall():
+                rows.append({
+                    "id": r[0],
+                    "depot_name": r[1],
+                    "bus_id": r[2],
+                    "spz": r[3],
+                    "arrived_at": r[4],
+                    "left_at": r[5]
+                })
+            return rows
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba cteni depot_history_local: {e}", flush=True)
+        return []
+
+def local_setting_set(key: str, value: str):
+    try:
+        with _get_local_conn() as conn:
+            conn.execute("INSERT OR REPLACE INTO settings_local (setting_key, setting_value) VALUES (?, ?)", (key, str(value)))
+            conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba zapisu setting_local: {e}", flush=True)
+
+def local_setting_get(key: str, default=None):
+    try:
+        with _get_local_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT setting_value FROM settings_local WHERE setting_key = ?", (key,))
+            row = cur.fetchone()
+            if row:
+                return row[0]
+    except Exception:
+        pass
+    return default

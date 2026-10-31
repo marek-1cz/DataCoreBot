@@ -556,20 +556,37 @@ _LAST_SUPABASE_RESTRICTED_CHECK = 0
 
 def is_supabase_restricted():
     global SUPABASE_RESTRICTED
+    try:
+        import turso_db
+        if turso_db.is_turso_blocked():
+            return True
+    except Exception:
+        pass
     return SUPABASE_RESTRICTED
 
 def set_supabase_restricted(val=True):
     global SUPABASE_RESTRICTED, _LAST_SUPABASE_RESTRICTED_CHECK
     SUPABASE_RESTRICTED = val
     _LAST_SUPABASE_RESTRICTED_CHECK = time.time()
+    try:
+        import turso_db
+        if turso_db.is_turso_blocked() != val:
+            turso_db.set_turso_blocked(val)
+    except Exception:
+        pass
 
 def check_supabase_error(e):
     global SUPABASE_RESTRICTED
-    err = str(e)
-    if "402" in err or "exceed_egress_quota" in err or "restricted due to" in err:
+    err = str(e).lower()
+    if any(k in err for k in ["402", "exceed_egress_quota", "restricted due to", "reads are blocked", "sql read operations are forbidden", "operation was blocked"]):
         if not SUPABASE_RESTRICTED:
             SUPABASE_RESTRICTED = True
-            print("[SUPABASE RESTRICTION] Zjištěno překročení Egress kvóty (402). Automaticky přepnuto do offline/Gist režimu.", flush=True)
+            print("[DATABASE RESTRICTION] Zjištěno překročení kvóty databáze. Automaticky přepnuto do offline/Gist/SQLite autonomního režimu.", flush=True)
+            try:
+                import turso_db
+                turso_db.set_turso_blocked(True, reason=str(e))
+            except Exception:
+                pass
         return True
     return False
 
@@ -923,10 +940,16 @@ def check_egress_quota():
     print(f"[QUOTA] Check: Egress {EGRESS_USED_GB:.2f} GB ({pct:.1f}%) | Logs {LOGS_USED_GB:.2f} GB ({logs_pct:.1f}%) – šetřící režim: {EGRESS_SAVE_MODE}", flush=True)
 
 def _egress_monitor_loop():
-    """Background thread – kontroluje Egress každou hodinu."""
+    """Background thread – kontroluje stav Egress a Turso DB každou hodinu."""
     time.sleep(30)  # počkej na start
     while True:
         try:
+            # 1. Automatický test zda Turso DB obnovila povolené čtení (např. 1. den v měsíci)
+            try:
+                import turso_db
+                turso_db.probe_turso_unblock()
+            except Exception:
+                pass
             check_egress_quota()
         except Exception as e:
             print(f"[EGRESS MONITOR] Chyba: {e}", flush=True)
@@ -958,7 +981,18 @@ def get_cached_user_role(discord_id):
                 is_banned = resp.data[0].get('is_banned', False)
         except Exception as e:
             print('auth cache error:', e)
-    
+            
+    # Bezpečný fallback na lokální users_backup.json pokud DB roli nenašla nebo selhala
+    if role == 'User' and discord_id:
+        try:
+            for bu in _get_fallback_users():
+                if str(bu.get('discord_id')) == str(discord_id) or str(bu.get('id')) == str(discord_id):
+                    role = bu.get('role', 'User')
+                    is_banned = bu.get('is_banned', False)
+                    break
+        except Exception:
+            pass
+
     _AUTH_CACHE[discord_id] = (now, role, is_banned)
     return role, is_banned
 
@@ -6829,11 +6863,12 @@ async def check_depot_queue():
                 updated = True
         if updated:
             now_t = time.time()
-            if now_t - _last_depot_discord_run >= 25.0:
+            min_depot_interval = 60.0 if (EGRESS_SAVE_MODE or is_supabase_restricted()) else 25.0
+            if now_t - _last_depot_discord_run >= min_depot_interval:
                 _last_depot_discord_run = now_t
                 await update_depot_discord_messages()
             else:
-                # Pokud ještě neuběhl limit 25s, zachovej událost ve frontě
+                # Pokud ještě neuběhl limit, zachovej událost ve frontě
                 DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
     except Exception as e:
         print(f"[DEPOT DISCORD] Chyba: {e}", flush=True)
@@ -7878,6 +7913,13 @@ async def update_depot_discord_messages():
         except Exception as e_rec:
             print(f"[DEPOT DISCORD] Chyba cteni depot_history pro {depot_name}: {e_rec}", flush=True)
             all_records = []
+
+        if not all_records:
+            try:
+                from local_db import local_depot_history_get
+                all_records = local_depot_history_get(depot_name=depot_name, limit=50)
+            except Exception:
+                all_records = []
 
         active = [r for r in all_records if not r.get("left_at")]
         recent = [r for r in all_records if r.get("left_at")][:5]

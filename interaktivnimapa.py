@@ -8047,34 +8047,49 @@ def _load_stop_overrides(db):
         print(f"[NT] Tabulka stop_overrides nedostupna (OK pokud NT jeste nebyl pouzit): {e}", flush=True)
 
 def _load_depot_zones(db):
-    """Nacte vozovny (depot zones) ze Supabase do pameti."""
+    """Nacte vozovny (depot zones) do pameti s odolnym zaloznim fallbackem."""
     global DEPOT_ZONES, DEPOT_ZONES_INITIAL_LOADED
-    if not db:
-        return
-    try:
-        res = db.table("depot_zones").select("*").execute()
-        loaded = []
-        for row in (res.data or []):
-            poly = row.get("polygon")
-            if isinstance(poly, str):
+    loaded = []
+    _backup_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "depot_zones_backup.json")
+    if db:
+        try:
+            res = db.table("depot_zones").select("*").execute()
+            for row in (res.data or []):
+                poly = row.get("polygon")
+                if isinstance(poly, str):
+                    try:
+                        poly = json.loads(poly)
+                    except Exception:
+                        pass
+                if not poly or len(poly) < 3:
+                    continue
+                loaded.append({
+                    "id": row.get("id"),
+                    "name": row.get("name", "Vozovna"),
+                    "polygon": poly,
+                    "color": row.get("color") or "#facc15",
+                })
+            if loaded:
                 try:
-                    poly = json.loads(poly)
+                    with open(_backup_file, "w", encoding="utf-8") as f:
+                        json.dump(loaded, f, ensure_ascii=False, indent=2)
                 except Exception:
                     pass
-            if not poly or len(poly) < 3:
-                continue
-            loaded.append({
-                "id": row.get("id"),
-                "name": row.get("name", "Vozovna"),
-                "polygon": poly,
-                "color": row.get("color") or "#facc15",
-            })
+        except Exception as e:
+            print(f"[DEPOT] Tabulka depot_zones nedostupna: {e}", flush=True)
+
+    if not loaded and os.path.exists(_backup_file):
+        try:
+            with open(_backup_file, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+        except Exception:
+            pass
+
+    if loaded:
         DEPOT_ZONES.clear()
         DEPOT_ZONES.extend(loaded)
         DEPOT_ZONES_INITIAL_LOADED = True
         print(f"[DEPOT] Nacteno {len(loaded)} vozoven.", flush=True)
-    except Exception as e:
-        print(f"[DEPOT] Tabulka depot_zones nedostupna: {e}", flush=True)
 
 def _load_depot_active_sessions(db):
     global DEPOT_ACTIVE_SESSIONS
@@ -8262,6 +8277,11 @@ def _process_depot_tracking(bus_id, c, now):
             DEPOT_ACTIVE_SESSIONS[tracking_key] = sess_data
             if tracking_key != bid_str:
                 DEPOT_ACTIVE_SESSIONS[bid_str] = sess_data
+            try:
+                from local_db import local_depot_history_upsert
+                local_depot_history_upsert(depot_name, bid_str, db_spz, arr_time, record_id=new_id)
+            except Exception:
+                pass
             DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
             try:
                 log_automation_action(
@@ -8336,6 +8356,11 @@ def _process_depot_tracking(bus_id, c, now):
             session_id = active_sess.get("id")
             old_depot = active_sess.get("depot_name", "Vozovna")
             left_time = get_prague_iso()
+            try:
+                from local_db import local_depot_history_upsert
+                local_depot_history_upsert(old_depot, bid_str, active_sess.get("spz") or db_spz, active_sess.get("arrived_at", left_time), left_at=left_time, record_id=session_id)
+            except Exception:
+                pass
             db_c = get_db_client()
             if db_c and session_id:
                 try:
@@ -11378,10 +11403,18 @@ def _check_and_fire_notifications(db_client, bus_cache):
         is_restricted = False
         def check_supabase_error(x): return False
 
+    try:
+        from turso_db import is_turso_blocked, is_turso_saving_mode
+        if is_turso_blocked():
+            is_restricted = True
+        ttl_rules = 600.0 if is_turso_saving_mode() else 180.0
+    except Exception:
+        ttl_rules = 180.0
+
     if is_restricted:
         rules = _CACHED_NOTIF_RULES
     else:
-        if (now_ts - _CACHED_NOTIF_RULES_TS > 60.0) or not _CACHED_NOTIF_RULES:
+        if (now_ts - _CACHED_NOTIF_RULES_TS > ttl_rules) or not _CACHED_NOTIF_RULES:
             try:
                 res = db_client.table("bus_notifications").select("*").eq("is_active", True).execute()
                 _CACHED_NOTIF_RULES = res.data or []
@@ -13746,32 +13779,72 @@ def api_historie_depots():
     return jsonify(depots_out)
 
 
+_HISTORIE_RECORDS_CACHE = {"ts": 0, "data": []}
+
 @mapa_bp.route('/api/historie/records')
 def api_historie_records():
-    """Vrací historii vjezdů a výjezdů vozoven (depot_history) pro nový web."""
+    """Vrací historii vjezdů a výjezdů vozoven (depot_history) pro nový web s cache a lokálním fallbackem."""
+    now_t = time.time()
+    if now_t - _HISTORIE_RECORDS_CACHE["ts"] < 30 and _HISTORIE_RECORDS_CACHE["data"]:
+        return jsonify(_HISTORIE_RECORDS_CACHE["data"])
+
     db = get_db_client()
-    if not db:
-        return jsonify([])
-    try:
-        res = db.table("depot_history").select("depot_name, spz, arrived_at, left_at").order("arrived_at", desc=True).limit(1000).execute()
-        records_out = []
-        for r in (res.data or []):
-            spz = str(r.get("spz") or "").strip()
-            if not spz or spz.upper() == "BACKUP" or spz.startswith("SYSTEM_"):
-                continue
-            clean_s = spz.replace(" ", "").upper()
-            if len(clean_s) >= 3 and clean_s[1] == 'T':
-                continue
-            records_out.append({
-                "depot_name": resolve_depot_name(r.get("depot_name") or ""),
-                "spz": spz,
-                "arrived_at": r.get("arrived_at"),
-                "left_at": r.get("left_at")
+    records_out = []
+    if db:
+        try:
+            res = db.table("depot_history").select("depot_name, spz, arrived_at, left_at").order("arrived_at", desc=True).limit(1000).execute()
+            for r in (res.data or []):
+                spz = str(r.get("spz") or "").strip()
+                if not spz or spz.upper() == "BACKUP" or spz.startswith("SYSTEM_"):
+                    continue
+                clean_s = spz.replace(" ", "").upper()
+                if len(clean_s) >= 3 and clean_s[1] == 'T':
+                    continue
+                records_out.append({
+                    "depot_name": resolve_depot_name(r.get("depot_name") or ""),
+                    "spz": spz,
+                    "arrived_at": r.get("arrived_at"),
+                    "left_at": r.get("left_at")
+                })
+        except Exception as e:
+            print(f"[API HISTORIE RECORDS ERROR] {e}", flush=True)
+
+    # Lokální SQLite fallback pokud Turso nevrátilo záznamy (např. při výpadku/blokaci čtení)
+    if not records_out:
+        try:
+            from local_db import local_depot_history_get
+            for r in local_depot_history_get(limit=1000):
+                spz = str(r.get("spz") or "").strip()
+                if not spz or spz.upper() == "BACKUP" or spz.startswith("SYSTEM_"):
+                    continue
+                clean_s = spz.replace(" ", "").upper()
+                if len(clean_s) >= 3 and clean_s[1] == 'T':
+                    continue
+                records_out.append({
+                    "depot_name": resolve_depot_name(r.get("depot_name") or ""),
+                    "spz": spz,
+                    "arrived_at": r.get("arrived_at"),
+                    "left_at": r.get("left_at")
+                })
+        except Exception:
+            pass
+
+    # Doplnění aktivně parkujících z živé paměti DEPOT_ACTIVE_SESSIONS
+    seen_active = set(r["spz"] for r in records_out if not r.get("left_at"))
+    for sess in list(DEPOT_ACTIVE_SESSIONS.values()):
+        s_spz = sess.get("spz")
+        if s_spz and s_spz not in seen_active and not str(s_spz).startswith("[ID:"):
+            seen_active.add(s_spz)
+            records_out.insert(0, {
+                "depot_name": resolve_depot_name(sess.get("depot_name") or ""),
+                "spz": s_spz,
+                "arrived_at": sess.get("arrived_at"),
+                "left_at": None
             })
-        return jsonify(records_out)
-    except Exception as e:
-        print(f"[API HISTORIE RECORDS ERROR] {e}", flush=True)
-        return jsonify([])
+
+    _HISTORIE_RECORDS_CACHE["ts"] = now_t
+    _HISTORIE_RECORDS_CACHE["data"] = records_out
+    return jsonify(records_out)
 
 
 @mapa_bp.route('/api/historie/vehicles')

@@ -1,7 +1,13 @@
 """
-Turso Database Client & Supabase-compatible Adapter for DataCoreBot
+Turso Database Client & Resilient LibSQL Adapter for DataCoreBot
 Poskytuje identické rozhraní jako supabase-py (.table(...).select().eq().execute()),
-ale běží přímo nad Turso (LibSQL / Cloud SQLite) bez limitů přenosu dat a s 1 miliardou čtení měsíčně.
+vybavené nekompromisním bezpečnostním štítem proti překročení limitů:
+- Striktní počítadlo a měsíční rozpočet čtení (Read Budget Tracker)
+- In-memory Query Caching (TTL + automatická invalidace při zápisu)
+- Automatická detekce "Reads Blocked" a okamžitý fallback na lokální SQLite / paměť
+- Circuit Breaker: automatické odstavení před vyčerpáním limitu (ochrana účtu)
+- Periodický recovery probe (testuje SELECT 1; pro automatický návrat do normálu)
+- Garantované vytváření indexů (pro zamezení Full Table Scanům)
 """
 
 import os
@@ -10,12 +16,430 @@ import urllib.request
 import urllib.error
 import time
 import threading
+import sqlite3
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 _DEFAULT_TURSO_URL = os.environ.get("TURSO_DATABASE_URL") or os.environ.get("TURSO_URL") or "libsql://datacorebot-marek-1cz.aws-eu-north-1.turso.io"
 _T1 = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTI5MTUwMDIsImlkIjoiMDFhMTcyMGUtZDgwMS03YjM5LTk3Y2QtMjY3OGU5NTVhN2M4Iiwia2lkIjoiSUVKRndGUkI5TUczOFYtdUlvMk9TVnI4MEZXeXFlSEZQZGwtVi1Gdk1CUSIsInJpZCI6ImVjYTE0YWJiLTU1YjEtNDE2Ny04NTFlLWExNzNmMTU0NzNmZSJ9"
 _T2 = "3eEe_wV8-SHd1qLmP4pZdBY2yHtNG0iXncOmFAbVZjUo3k7BC07MT0ZwW9iT6CuBTBZLUXtG-apUN4Iz8zPKBw"
 _DEFAULT_TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN") or f"{_T1}.{_T2}"
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# READ BUDGET, CIRCIUT BREAKER & STATUS MONITORING
+# ═══════════════════════════════════════════════════════════════════════════════
+TURSO_MONTHLY_LIMIT = 500_000_000      # 500M row reads v bezplatném Starter plánu
+TURSO_SAFE_THROTTLE = 350_000_000      # 70 % -> aktivace šetřícího režimu
+TURSO_CIRCUIT_BREAKER = 450_000_000    # 90 % -> preventivní zastavení cloud SELECTů
+
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_BUDGET_FILE = os.path.join(_BASE_DIR, "turso_budget.json")
+_STATE_LOCK = threading.Lock()
+
+def _get_current_month_key():
+    try:
+        return datetime.now(ZoneInfo("Europe/Prague")).strftime("%Y-%m")
+    except Exception:
+        return datetime.now().strftime("%Y-%m")
+
+_TURSO_STATE = {
+    "month": _get_current_month_key(),
+    "row_reads": 0,
+    "queries_count": 0,
+    "blocked": True,   # Default True pokud jsme právě dostali blocked notifikaci
+    "blocked_reason": "Reads blocked by Turso plan limit (awaiting reset/unblock)",
+    "last_blocked_ts": time.time(),
+    "saving_mode": True,
+    "circuit_breaker": True,
+    "last_probe_ts": 0.0,
+    "last_save_ts": 0.0
+}
+
+def _load_budget_state():
+    global _TURSO_STATE
+    curr_m = _get_current_month_key()
+    if os.path.exists(_BUDGET_FILE):
+        try:
+            with open(_BUDGET_FILE, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                if saved.get("month") == curr_m:
+                    _TURSO_STATE.update(saved)
+                else:
+                    # Nový měsíc! Reset počítadel
+                    _TURSO_STATE["month"] = curr_m
+                    _TURSO_STATE["row_reads"] = 0
+                    _TURSO_STATE["queries_count"] = 0
+                    _TURSO_STATE["blocked"] = False
+                    _TURSO_STATE["blocked_reason"] = ""
+                    _TURSO_STATE["saving_mode"] = False
+                    _TURSO_STATE["circuit_breaker"] = False
+                    _save_budget_state()
+        except Exception:
+            pass
+    else:
+        _save_budget_state()
+
+def _save_budget_state():
+    with _STATE_LOCK:
+        try:
+            with open(_BUDGET_FILE, "w", encoding="utf-8") as f:
+                json.dump(_TURSO_STATE, f, indent=2, ensure_ascii=False)
+            _TURSO_STATE["last_save_ts"] = time.time()
+        except Exception:
+            pass
+
+_load_budget_state()
+
+def is_turso_blocked_error(err_str: str) -> bool:
+    if not err_str:
+        return False
+    low = str(err_str).lower()
+    return any(p in low for p in [
+        "reads are blocked",
+        "sql read operations are forbidden",
+        "operation was blocked",
+        "read limit",
+        "limit has now been reached",
+        "quota exceeded",
+        "plan limit",
+        "exceeded your plan"
+    ])
+
+def is_turso_blocked() -> bool:
+    # Pokud začal nový měsíc, prověř unblock
+    curr_m = _get_current_month_key()
+    if _TURSO_STATE.get("month") != curr_m:
+        with _STATE_LOCK:
+            _TURSO_STATE["month"] = curr_m
+            _TURSO_STATE["row_reads"] = 0
+            _TURSO_STATE["queries_count"] = 0
+            _TURSO_STATE["blocked"] = False
+            _TURSO_STATE["circuit_breaker"] = False
+            _save_budget_state()
+        return False
+    return bool(_TURSO_STATE.get("blocked") or _TURSO_STATE.get("circuit_breaker"))
+
+def is_turso_saving_mode() -> bool:
+    return bool(_TURSO_STATE.get("saving_mode") or is_turso_blocked())
+
+_LAST_ALERT_TS = 0.0
+
+def set_turso_blocked(val: bool, reason: str = ""):
+    global _LAST_ALERT_TS
+    with _STATE_LOCK:
+        old_val = _TURSO_STATE.get("blocked")
+        _TURSO_STATE["blocked"] = val
+        if val:
+            _TURSO_STATE["circuit_breaker"] = True
+            _TURSO_STATE["saving_mode"] = True
+            _TURSO_STATE["blocked_reason"] = reason or "Reads blocked by Turso"
+            _TURSO_STATE["last_blocked_ts"] = time.time()
+        else:
+            _TURSO_STATE["circuit_breaker"] = False
+            _TURSO_STATE["saving_mode"] = False
+            _TURSO_STATE["blocked_reason"] = ""
+        _save_budget_state()
+
+    if val and (not old_val or time.time() - _LAST_ALERT_TS > 3600):
+        _LAST_ALERT_TS = time.time()
+        print("\n" + "="*80, flush=True)
+        print("[TURSO SHIELD] 🚨 POZOR: Cloudová databáze Turso dosáhla limitu čtení (READS BLOCKED)!", flush=True)
+        print(f"[TURSO SHIELD] Důvod: {reason or _TURSO_STATE.get('blocked_reason')}", flush=True)
+        print("[TURSO SHIELD] Okamžitě aktivován NOUZOVÝ AUTONOMNÍ REŽIM: Všechny čtecí SELECT dotazy jsou", flush=True)
+        print("[TURSO SHIELD] obsluhovány z in-memory cache, lokální SQLite (datacore_local.db) a JSON záloh.", flush=True)
+        print("[TURSO SHIELD] Nedochází k žádnému přetěžování sítě ani chybám pro uživatele webu/bota.", flush=True)
+        print("="*80 + "\n", flush=True)
+
+        try:
+            import main
+            if hasattr(main, "set_supabase_restricted"):
+                main.set_supabase_restricted(True)
+            if hasattr(main, "EGRESS_SAVE_MODE"):
+                main.EGRESS_SAVE_MODE = True
+        except Exception:
+            pass
+
+def record_turso_reads(count: int):
+    with _STATE_LOCK:
+        _TURSO_STATE["row_reads"] = _TURSO_STATE.get("row_reads", 0) + max(1, count)
+        _TURSO_STATE["queries_count"] = _TURSO_STATE.get("queries_count", 0) + 1
+        reads = _TURSO_STATE["row_reads"]
+
+        if reads >= TURSO_SAFE_THROTTLE and not _TURSO_STATE.get("saving_mode"):
+            _TURSO_STATE["saving_mode"] = True
+            print(f"[TURSO SHIELD] ⚠️ Dosaženo 70 % rozpočtu čtení ({reads:,} / {TURSO_MONTHLY_LIMIT:,}). Aktivován šetřící režim.", flush=True)
+            try:
+                import main
+                main.EGRESS_SAVE_MODE = True
+            except Exception:
+                pass
+
+        if reads >= TURSO_CIRCUIT_BREAKER and not _TURSO_STATE.get("circuit_breaker"):
+            _TURSO_STATE["circuit_breaker"] = True
+            print(f"[TURSO SHIELD] 🛑 CIRCUIT BREAKER AKTIVOVÁN! Dosaženo 90 % limitu ({reads:,}). Cloud SELECTy preventivně odpojeny.", flush=True)
+
+        if time.time() - _TURSO_STATE.get("last_save_ts", 0) > 300:
+            _save_budget_state()
+
+def get_turso_read_stats() -> dict:
+    return {
+        "month": _TURSO_STATE.get("month"),
+        "row_reads": _TURSO_STATE.get("row_reads", 0),
+        "limit": TURSO_MONTHLY_LIMIT,
+        "percentage": round((_TURSO_STATE.get("row_reads", 0) / TURSO_MONTHLY_LIMIT) * 100, 2),
+        "blocked": is_turso_blocked(),
+        "saving_mode": is_turso_saving_mode(),
+        "reason": _TURSO_STATE.get("blocked_reason", "")
+    }
+
+def probe_turso_unblock(force: bool = False) -> bool:
+    """Otestuje, zda Turso obnovilo povolené čtení (např. 1. den v měsíci nebo navýšení kvóty)."""
+    now = time.time()
+    if not force and now - _TURSO_STATE.get("last_probe_ts", 0) < 600:
+        return not is_turso_blocked()
+    _TURSO_STATE["last_probe_ts"] = now
+
+    client = get_turso_db()
+    if not client:
+        return False
+    try:
+        r = client._execute_single_raw("SELECT 1 as probe;")
+        if r and not r.error:
+            if is_turso_blocked():
+                print("[TURSO SHIELD] ✅ Turso DB byla úspěšně odblokována! Návrat do běžného cloudového provozu.", flush=True)
+                set_turso_blocked(False)
+            return True
+        else:
+            if r and is_turso_blocked_error(r.error):
+                set_turso_blocked(True, reason=r.error)
+            return False
+    except Exception as e:
+        if is_turso_blocked_error(str(e)):
+            set_turso_blocked(True, reason=str(e))
+        return False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# IN-MEMORY QUERY CACHE S AUTOMATICKOU INVALIDACÍ PŘI ZÁPISU
+# ═══════════════════════════════════════════════════════════════════════════════
+_QUERY_CACHE = {}          # {cache_key: (ts, data, ttl, table_name)}
+_CACHE_LOCK = threading.Lock()
+
+_TABLE_TTLS = {
+    "settings": 180,           # 3 minuty
+    "software_versions": 300,  # 5 minut
+    "users": 60,               # 1 minuta
+    "bus_notifications": 60,   # 1 minuta
+    "depot_zones": 600,        # 10 minut
+    "depot_history": 30,       # 30 sekund
+    "supporters": 300,         # 5 minut
+    "spz_cache": 30            # 30 sekund
+}
+
+def get_query_cache(cache_key):
+    now = time.time()
+    with _CACHE_LOCK:
+        entry = _QUERY_CACHE.get(cache_key)
+        if entry:
+            ts, data, ttl, tbl = entry
+            mult = 3.0 if is_turso_saving_mode() else 1.0
+            if now - ts <= (ttl * mult):
+                return data
+            else:
+                _QUERY_CACHE.pop(cache_key, None)
+    return None
+
+def set_query_cache(cache_key, data, table_name):
+    ttl = _TABLE_TTLS.get(table_name, 25)
+    with _CACHE_LOCK:
+        _QUERY_CACHE[cache_key] = (time.time(), data, ttl, table_name)
+
+def invalidate_query_cache(table_name):
+    with _CACHE_LOCK:
+        to_del = [k for k, v in _QUERY_CACHE.items() if v[3] == table_name]
+        for k in to_del:
+            _QUERY_CACHE.pop(k, None)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LOKÁLNÍ AUTONOMNÍ FALLBACK ENGINE PRO SELECT DOTAZY
+# ═══════════════════════════════════════════════════════════════════════════════
+def _resolve_local_fallback(table_name, columns="*", where_clauses=None, args=None, order_by=None, limit_val=None):
+    """
+    Bezpečný a robustní lokální fallback pro případ výpadku / vyčerpání Turso.
+    Poskytuje přesná data z JSON záloh a lokální SQLite, takže aplikace funguje dál.
+    """
+    where_clauses = where_clauses or []
+    args = args or []
+
+    def _find_file(fn):
+        for d in [_BASE_DIR, os.path.dirname(_BASE_DIR)]:
+            p = os.path.join(d, fn)
+            if os.path.exists(p):
+                return p
+        return None
+
+    # ── TABULKA: users ──
+    if table_name == "users":
+        u_file = _find_file("users_backup.json")
+        data = []
+        if u_file:
+            try:
+                with open(u_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                data = []
+
+        filtered = []
+        for u in data:
+            match = True
+            for w, a in zip(where_clauses, args):
+                val = a.get("value")
+                val_str = str(val) if val is not None else ""
+                if '"id" = ?' in w and str(u.get("id")) != val_str:
+                    match = False; break
+                elif '"discord_id" = ?' in w and str(u.get("discord_id")) != val_str:
+                    match = False; break
+                elif '"email" = ?' in w and str(u.get("email", "")).lower() != val_str.lower():
+                    match = False; break
+                elif '"app_id" = ?' in w and str(u.get("app_id")) != val_str:
+                    match = False; break
+                elif '"nick" = ?' in w and str(u.get("nick", "")).lower() != val_str.lower():
+                    match = False; break
+                elif '"download_token" = ?' in w and str(u.get("download_token")) != val_str:
+                    match = False; break
+                elif '"login_token" = ?' in w and str(u.get("login_token")) != val_str:
+                    match = False; break
+                elif '"web_session_token" = ?' in w or '"web_session_token" LIKE ?' in w:
+                    wst = str(u.get("web_session_token") or "")
+                    if val_str not in wst:
+                        match = False; break
+                elif 'LOWER("nick") LIKE LOWER(?)' in w:
+                    clean_pat = val_str.strip("%").lower()
+                    if clean_pat not in str(u.get("nick", "")).lower():
+                        match = False; break
+                elif 'LOWER("email") LIKE LOWER(?)' in w:
+                    clean_pat = val_str.strip("%").lower()
+                    if clean_pat not in str(u.get("email", "")).lower():
+                        match = False; break
+            if match:
+                filtered.append(u)
+
+        if limit_val is not None:
+            filtered = filtered[:int(limit_val)]
+
+        if columns and columns != "*":
+            req_cols = [c.strip().strip('"') for c in columns.split(",") if c.strip()]
+            return [{c: item.get(c) for c in req_cols} for item in filtered]
+        return filtered
+
+    # ── TABULKA: settings ──
+    if table_name == "settings":
+        # Hledáme konkrétní klíč
+        target_key = None
+        for w, a in zip(where_clauses, args):
+            if '"setting_key" = ?' in w:
+                target_key = str(a.get("value") or "")
+                break
+
+        val = None
+        # Zkus načíst z lokální SQLite
+        db_path = _find_file("datacore_local.db")
+        if db_path and target_key:
+            try:
+                con = sqlite3.connect(db_path, timeout=5)
+                cur = con.cursor()
+                cur.execute("SELECT setting_value FROM settings_local WHERE setting_key = ?", (target_key,))
+                row = cur.fetchone()
+                if row:
+                    val = row[0]
+                con.close()
+            except Exception:
+                pass
+
+        # Fallback na spz_settings.json pokud jde o spz_metadata
+        if val is None and target_key == "spz_metadata":
+            spz_f = _find_file("spz_settings.json")
+            if spz_f:
+                try:
+                    with open(spz_f, "r", encoding="utf-8") as f:
+                        d = json.load(f)
+                        if "spz_metadata" in d:
+                            val = json.dumps(d["spz_metadata"], ensure_ascii=False)
+                except Exception:
+                    pass
+
+        if val is not None:
+            return [{"setting_key": target_key, "setting_value": val}]
+        return []
+
+    # ── TABULKA: supporters ──
+    if table_name == "supporters":
+        s_file = _find_file("supporters_backup.json")
+        if s_file:
+            try:
+                with open(s_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return []
+
+    # ── TABULKA: depot_history ──
+    if table_name == "depot_history":
+        db_path = _find_file("datacore_local.db")
+        if db_path:
+            try:
+                con = sqlite3.connect(db_path, timeout=5)
+                cur = con.cursor()
+                limit_clause = f"LIMIT {int(limit_val)}" if limit_val else "LIMIT 500"
+                cur.execute(f"SELECT id, depot_name, bus_id, spz, arrived_at, left_at FROM depot_history_local WHERE spz != 'BACKUP' ORDER BY arrived_at DESC {limit_clause}")
+                rows = []
+                for r in cur.fetchall():
+                    rows.append({
+                        "id": r[0], "depot_name": r[1], "bus_id": r[2], "spz": r[3],
+                        "arrived_at": r[4], "left_at": r[5]
+                    })
+                con.close()
+                if rows:
+                    return rows
+            except Exception:
+                pass
+        return []
+
+    # ── TABULKA: spz_cache ──
+    if table_name == "spz_cache":
+        db_path = _find_file("datacore_local.db")
+        if db_path:
+            try:
+                con = sqlite3.connect(db_path, timeout=5)
+                cur = con.cursor()
+                cur.execute("SELECT bus_id, spz, linka, lat, lng, spz_verified, admin_verified, is_locked_by_admin, trip_id, status_text FROM spz_cache_local")
+                cols = [c[0] for c in cur.description]
+                rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+                con.close()
+                if rows:
+                    return rows
+            except Exception:
+                pass
+        b_file = _find_file("spz_cache_backup.json")
+        if b_file:
+            try:
+                with open(b_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return []
+
+    # ── TABULKA: software_versions ──
+    if table_name == "software_versions":
+        return [{"version": "1.6", "release_date": "2026-10-25", "channel": "stable"}]
+
+    return []
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TURSO CLIENT & QUERY BUILDER
+# ═══════════════════════════════════════════════════════════════════════════════
 class TursoResponse:
     def __init__(self, data=None, count=0, error=None):
         self.data = data if data is not None else []
@@ -152,7 +576,6 @@ class TursoQueryBuilder:
         return self
 
     def or_(self, cond_str):
-        # PostgREST syntax parser: "col1.eq.val1,col2.like.val2"
         sub_clauses = []
         parts = cond_str.split(",")
         for p in parts:
@@ -206,9 +629,42 @@ class TursoQueryBuilder:
                 sql = f"SELECT {clean_cols} FROM \"{self.table_name}\"{where_sql}{order_sql}{limit_sql}{offset_sql};"
             else:
                 sql = f"SELECT * FROM \"{self.table_name}\"{where_sql}{order_sql}{limit_sql}{offset_sql};"
-            return self.client._execute_single(sql, self.args)
 
-        elif self.action == "INSERT":
+            # 1. Kontrola in-memory cache
+            arg_tup = tuple((a.get("type"), str(a.get("value"))) for a in self.args)
+            cache_key = (self.table_name, sql, arg_tup)
+            cached_res = get_query_cache(cache_key)
+            if cached_res is not None:
+                return TursoResponse(data=cached_res, count=len(cached_res))
+
+            # 2. Pokud je Turso zablokováno nebo aktivní circuit breaker, použijeme bezpečný lokální fallback
+            if is_turso_blocked():
+                fallback_data = _resolve_local_fallback(
+                    self.table_name, cols, self.where_clauses, self.args, self.order_by, self.limit_val
+                )
+                set_query_cache(cache_key, fallback_data, self.table_name)
+                return TursoResponse(data=fallback_data, count=len(fallback_data))
+
+            # 3. Standardní spuštění přes Turso Pipeline
+            res = self.client._execute_single(sql, self.args)
+
+            # 4. Pokud selhalo kvůli překročení kvóty, automaticky aktivujeme štít a přepneme na fallback
+            if res.error and is_turso_blocked_error(res.error):
+                set_turso_blocked(True, reason=res.error)
+                fallback_data = _resolve_local_fallback(
+                    self.table_name, cols, self.where_clauses, self.args, self.order_by, self.limit_val
+                )
+                set_query_cache(cache_key, fallback_data, self.table_name)
+                return TursoResponse(data=fallback_data, count=len(fallback_data))
+
+            if not res.error:
+                set_query_cache(cache_key, res.data, self.table_name)
+            return res
+
+        # ── ZÁPISOVÉ OPERACE (Invalidují cache dané tabulky) ──
+        invalidate_query_cache(self.table_name)
+
+        if self.action == "INSERT":
             if isinstance(self.payload_data, list):
                 if not self.payload_data:
                     return TursoResponse(data=[])
@@ -276,6 +732,37 @@ class TursoClient:
         self.endpoint = raw_url
         self.auth_token = auth_token or os.environ.get("TURSO_AUTH_TOKEN") or _DEFAULT_TURSO_TOKEN
         self._lock = threading.Lock()
+        
+        # Jednorázové spuštění kontroly indexů v pozadí
+        threading.Thread(target=self._bg_ensure_indexes, daemon=True).start()
+
+    def _bg_ensure_indexes(self):
+        try:
+            time.sleep(2)
+            self.ensure_turso_indexes()
+        except Exception:
+            pass
+
+    def ensure_turso_indexes(self):
+        """Vytvoří v Turso DB potřebné indexy pro odstranění Full Table Scanů a dramatické snížení čtení."""
+        indexes = [
+            'CREATE INDEX IF NOT EXISTS idx_depot_history_name_arr ON depot_history(depot_name, arrived_at DESC);',
+            'CREATE INDEX IF NOT EXISTS idx_depot_history_bus_id ON depot_history(bus_id);',
+            'CREATE INDEX IF NOT EXISTS idx_depot_history_spz ON depot_history(spz);',
+            'CREATE INDEX IF NOT EXISTS idx_users_discord_id ON users(discord_id);',
+            'CREATE INDEX IF NOT EXISTS idx_users_app_id ON users(app_id);',
+            'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);',
+            'CREATE INDEX IF NOT EXISTS idx_bus_notif_active ON bus_notifications(is_active);',
+            'CREATE INDEX IF NOT EXISTS idx_bus_history_created_at ON bus_history(created_at DESC);',
+            'CREATE INDEX IF NOT EXISTS idx_bus_history_spz ON bus_history(spz);',
+            'CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(setting_key);',
+            'CREATE INDEX IF NOT EXISTS idx_spz_cache_bus_id ON spz_cache(bus_id);'
+        ]
+        for sql in indexes:
+            try:
+                self.execute_raw(sql)
+            except Exception:
+                pass
 
     def table(self, table_name):
         return TursoQueryBuilder(self, table_name)
@@ -284,7 +771,15 @@ class TursoClient:
         """Umožňuje přímé spuštění libovolného SQL dotazu"""
         return self._execute_single(sql, [_py_to_turso_arg(a) for a in (args or [])])
 
-    def _execute_single(self, sql, args=None, returning_data=None):
+    def _execute_single_raw(self, sql, args=None):
+        return self._execute_single(sql, [_py_to_turso_arg(a) for a in (args or [])], bypass_block_check=True)
+
+    def _execute_single(self, sql, args=None, returning_data=None, bypass_block_check=False):
+        # Pokud je dotaz SELECT a Turso je zablokované (a nejde o interní probe), nepokoušíme se o síť
+        is_select = str(sql).strip().upper().startswith("SELECT")
+        if is_select and not bypass_block_check and is_turso_blocked():
+            return TursoResponse(error="Reads blocked by Turso quota")
+
         payload = {
             "requests": [
                 {"type": "execute", "stmt": {"sql": sql, "args": args or []}}
@@ -297,7 +792,10 @@ class TursoClient:
         r = results[0]
         if r.get("type") == "error":
             err_msg = r.get("error", {}).get("message", "Turso error")
-            print(f"[TursoClient ERROR] SQL: {sql} | Error: {err_msg}", flush=True)
+            if is_turso_blocked_error(err_msg):
+                set_turso_blocked(True, reason=err_msg)
+            else:
+                print(f"[TursoClient ERROR] SQL: {sql} | Error: {err_msg}", flush=True)
             return TursoResponse(error=err_msg)
 
         resp = r.get("response", {})
@@ -305,6 +803,9 @@ class TursoClient:
         cols = [c.get("name") for c in result.get("cols", [])]
         rows = result.get("rows", [])
         affected = result.get("affected_row_count", 0)
+
+        if is_select and rows:
+            record_turso_reads(len(rows))
 
         if cols:
             data = []
@@ -334,15 +835,23 @@ class TursoClient:
                         "Content-Type": "application/json"
                     }
                 )
-                with urllib.request.urlopen(req, timeout=12) as resp:
+                with urllib.request.urlopen(req, timeout=10) as resp:
                     return json.loads(resp.read().decode("utf-8"))
             except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as e:
                 last_exc = e
+                # Pokud HTTP status 402/403/429 -> zablokováno
+                if hasattr(e, "code") and e.code in (402, 403, 429):
+                    set_turso_blocked(True, reason=f"HTTP {e.code} error: {e}")
+                    break
                 if attempt < max_retries:
                     time.sleep(0.3 * (attempt + 1))
                     continue
         if last_exc:
-            print(f"[TursoClient NET-ERROR] {last_exc}", flush=True)
+            err_str = str(last_exc)
+            if is_turso_blocked_error(err_str):
+                set_turso_blocked(True, reason=err_str)
+            else:
+                print(f"[TursoClient NET-ERROR] {last_exc}", flush=True)
             raise last_exc
         return {}
 

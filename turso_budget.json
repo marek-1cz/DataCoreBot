@@ -1,0 +1,12 @@
+{
+  "month": "2026-10",
+  "row_reads": 0,
+  "queries_count": 0,
+  "blocked": true,
+  "blocked_reason": "Reads blocked by Turso plan limit (awaiting reset/unblock)",
+  "last_blocked_ts": 1793471400.2019498,
+  "saving_mode": true,
+  "circuit_breaker": true,
+  "last_probe_ts": 0.0,
+  "last_save_ts": 0.0
+}
