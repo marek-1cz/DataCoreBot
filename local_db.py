@@ -254,11 +254,21 @@ def init_local_db():
                     setting_value TEXT
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS depot_zones_local (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    polygon TEXT NOT NULL,
+                    color TEXT NOT NULL,
+                    updated_at TEXT
+                )
+            """)
             conn.commit()
             _restore_stats_backup_if_empty(conn)
             _restore_web_visits_if_empty(conn)
             _restore_pvvd_disappearances_if_empty(conn)
             _restore_spz_metadata_if_empty(conn)
+            _restore_depot_zones_if_empty(conn)
             # Automatické pročištění neplatných admin zámků (Neznámá / Aktivní hledání nesmí mít admin zámek)
             try:
                 conn.execute("""
@@ -1355,3 +1365,102 @@ def local_setting_get(key: str, default=None):
     except Exception:
         pass
     return default
+
+
+def _restore_depot_zones_if_empty(conn):
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM depot_zones_local")
+        cnt = cur.fetchone()[0]
+        if cnt == 0:
+            dz_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "depot_zones_backup.json")
+            if os.path.exists(dz_file):
+                with open(dz_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                now_str = datetime.now().isoformat()
+                for z in data:
+                    poly_str = json.dumps(z.get("polygon", []), ensure_ascii=False) if isinstance(z.get("polygon"), list) else str(z.get("polygon", ""))
+                    conn.execute("""
+                        INSERT OR REPLACE INTO depot_zones_local (id, name, polygon, color, updated_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (z.get("id"), z.get("name", "Vozovna"), poly_str, z.get("color", "#facc15"), now_str))
+                conn.commit()
+                print(f"[LOCAL DB] Obnoveno {len(data)} vozoven do lokalni SQLite tabulky depot_zones_local", flush=True)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba obnoveni depot_zones: {e}", flush=True)
+
+def local_get_depot_zones() -> list:
+    """Nacte vsechny definovane vozovny z lokalni SQLite databaze nebo zalozniho JSONu."""
+    try:
+        with _get_local_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT id, name, polygon, color FROM depot_zones_local ORDER BY id")
+            rows = []
+            for r in cur.fetchall():
+                poly = r[2]
+                if isinstance(poly, str):
+                    try:
+                        poly = json.loads(poly)
+                    except Exception:
+                        pass
+                rows.append({
+                    "id": r[0],
+                    "name": r[1],
+                    "polygon": poly,
+                    "color": r[3]
+                })
+            if rows:
+                return rows
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba cteni depot_zones_local: {e}", flush=True)
+
+    # Fallback na depot_zones_backup.json
+    dz_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "depot_zones_backup.json")
+    if os.path.exists(dz_file):
+        try:
+            with open(dz_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+def local_save_depot_zone(zone_id, name: str, polygon, color: str = "#facc15"):
+    """Ulozi nebo aktualizuje vozovnu v lokalni SQLite databazi a zaloznim JSONu."""
+    try:
+        poly_str = json.dumps(polygon, ensure_ascii=False) if isinstance(polygon, list) else str(polygon)
+        now_iso = datetime.now().isoformat()
+        with _get_local_conn() as conn:
+            if zone_id:
+                conn.execute(
+                    "INSERT OR REPLACE INTO depot_zones_local (id, name, polygon, color, updated_at) VALUES (?, ?, ?, ?, ?)",
+                    (int(zone_id), name, poly_str, color, now_iso)
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO depot_zones_local (name, polygon, color, updated_at) VALUES (?, ?, ?, ?)",
+                    (name, poly_str, color, now_iso)
+                )
+            conn.commit()
+
+        # Zaroven aktualizujeme depot_zones_backup.json
+        dz_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "depot_zones_backup.json")
+        zones = local_get_depot_zones()
+        if zones:
+            with open(dz_file, "w", encoding="utf-8") as f:
+                json.dump(zones, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba zapisu depot_zones_local: {e}", flush=True)
+
+def local_delete_depot_zone(zone_id):
+    """Smaze vozovnu z lokalni SQLite databaze a zalozniho JSONu."""
+    try:
+        with _get_local_conn() as conn:
+            conn.execute("DELETE FROM depot_zones_local WHERE id = ?", (int(zone_id),))
+            conn.commit()
+
+        dz_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "depot_zones_backup.json")
+        zones = local_get_depot_zones()
+        with open(dz_file, "w", encoding="utf-8") as f:
+            json.dump(zones, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba mazani depot_zones_local: {e}", flush=True)

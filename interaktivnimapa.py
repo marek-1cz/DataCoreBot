@@ -8085,6 +8085,13 @@ def _load_depot_zones(db):
         except Exception:
             pass
 
+    if not loaded:
+        try:
+            from local_db import local_get_depot_zones
+            loaded = local_get_depot_zones()
+        except Exception:
+            pass
+
     if loaded:
         DEPOT_ZONES.clear()
         DEPOT_ZONES.extend(loaded)
@@ -15303,6 +15310,12 @@ def api_admin_save_depot_zone():
         else:
             DEPOT_ZONES.append({"id": zone_id, "name": name, "polygon": polygon, "color": color})
 
+        try:
+            from local_db import local_save_depot_zone
+            local_save_depot_zone(zone_id, name, polygon, color)
+        except Exception as e_ls:
+            print(f"[DEPOT LOCAL SAVE ERR] {e_ls}", flush=True)
+
         print(f"[DEPOT] Ulozena vozovna '{name}' ({len(polygon)} bodu)", flush=True)
         return jsonify({"status": "success"})
     except Exception as e:
@@ -15326,6 +15339,11 @@ def api_admin_delete_depot_zone():
             return jsonify({"status": "error", "message": str(e)}), 500
     global DEPOT_ZONES
     DEPOT_ZONES[:] = [z for z in DEPOT_ZONES if str(z["id"]) != str(zone_id)]
+    try:
+        from local_db import local_delete_depot_zone
+        local_delete_depot_zone(zone_id)
+    except Exception as e_ld:
+        print(f"[DEPOT LOCAL DEL ERR] {e_ld}", flush=True)
     print(f"[DEPOT] Smazana vozovna id={zone_id}", flush=True)
     return jsonify({"status": "success"})
 

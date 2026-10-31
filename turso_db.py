@@ -384,6 +384,24 @@ def _resolve_local_fallback(table_name, columns="*", where_clauses=None, args=No
                 pass
         return []
 
+    # ── TABULKA: depot_zones ──
+    if table_name == "depot_zones":
+        dz_file = _find_file("depot_zones_backup.json")
+        data = []
+        if dz_file and os.path.exists(dz_file):
+            try:
+                with open(dz_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                data = []
+        if not data:
+            try:
+                from local_db import local_get_depot_zones
+                data = local_get_depot_zones()
+            except Exception:
+                data = []
+        return data
+
     # ── TABULKA: depot_history ──
     if table_name == "depot_history":
         db_path = _find_file("datacore_local.db")
