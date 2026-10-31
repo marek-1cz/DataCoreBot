@@ -542,7 +542,7 @@ def _get_fallback_versions():
             "id": 1,
             "version_name": "OIS IDPK V1.6.2",
             "db_version": "V1.6.2",
-            "file_url": "https://datacorebot.koyeb.app/download/v1.6.2",
+            "file_url": "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/V1.6.2I/OIS-IDPK-V1.6.2.zip",
             "target_role": "BT",
             "is_active": 1,
             "eol_date": "",
@@ -552,21 +552,9 @@ def _get_fallback_versions():
         },
         {
             "id": 2,
-            "version_name": "OIS IDPK V1.6",
-            "db_version": "V1.6",
-            "file_url": "https://datacorebot.koyeb.app/download/v1.6",
-            "target_role": "User",
-            "is_active": 1,
-            "eol_date": "",
-            "show_in_launcher": 1,
-            "can_download": 1,
-            "can_launch": 1
-        },
-        {
-            "id": 3,
-            "version_name": "OIS IDPK V1.5.1 RC",
-            "db_version": "V1.5.1 RC",
-            "file_url": "https://datacorebot.koyeb.app/download/v1.5.1",
+            "version_name": "OIS IDPK V1.6.1",
+            "db_version": "v1.6.1",
+            "file_url": "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/v1.6.1/OIS_IDPK_V1.6.1.zip",
             "target_role": "User",
             "is_active": 1,
             "eol_date": "",
@@ -575,6 +563,62 @@ def _get_fallback_versions():
             "can_launch": 1
         }
     ]
+
+def normalize_version_item(v):
+    def to_int_bool(val, default=1):
+        if val is None: return default
+        if str(val).lower() in ('0', 'false', 'no'): return 0
+        if str(val).lower() in ('1', 'true', 'yes'): return 1
+        return default
+    return {
+        "id": v.get("id"),
+        "version_name": v.get("version_name", ""),
+        "db_version": v.get("db_version", ""),
+        "file_url": v.get("file_url", ""),
+        "target_role": v.get("target_role", "User"),
+        "is_active": to_int_bool(v.get("is_active"), 1),
+        "eol_date": v.get("eol_date", ""),
+        "show_in_launcher": to_int_bool(v.get("show_in_launcher"), 1),
+        "can_download": to_int_bool(v.get("can_download"), 1),
+        "can_launch": to_int_bool(v.get("can_launch"), 1),
+    }
+
+def sync_version_to_backup(action, row, vid=None):
+    try:
+        versions = []
+        if os.path.exists(_VERSIONS_BACKUP_FILE):
+            with open(_VERSIONS_BACKUP_FILE, "r", encoding="utf-8") as f:
+                versions = json.load(f)
+        
+        if action == "edit" and vid is not None:
+            updated = False
+            for v in versions:
+                if str(v.get("id")) == str(vid):
+                    v.update(row)
+                    updated = True
+                    break
+            if not updated:
+                row_copy = dict(row)
+                row_copy["id"] = int(vid) if str(vid).isdigit() else vid
+                versions.append(row_copy)
+        elif action == "add":
+            new_id = max([int(v.get("id", 0)) for v in versions if str(v.get("id", "")).isdigit()] or [0]) + 1
+            row_copy = dict(row)
+            row_copy["id"] = new_id
+            versions.insert(0, row_copy)
+        elif action == "delete" and vid is not None:
+            versions = [v for v in versions if str(v.get("id")) != str(vid)]
+            
+        with open(_VERSIONS_BACKUP_FILE, "w", encoding="utf-8") as f:
+            json.dump(versions, f, indent=2, ensure_ascii=False)
+            
+        try:
+            from turso_db import invalidate_query_cache
+            invalidate_query_cache("software_versions")
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"[sync_version_to_backup ERROR] {e}", flush=True)
 
 def _get_fallback_summary():
     try:
@@ -3872,10 +3916,8 @@ def check_auth(discord_id):
     target_id = str(discord_id)
     mem_status = _AUTH_TOKEN_STATUS.get(target_id)
     if mem_status == "approved":
-        _AUTH_TOKEN_STATUS.pop(target_id, None)
         return {"status": "approved"}
     elif mem_status == "rejected":
-        _AUTH_TOKEN_STATUS.pop(target_id, None)
         return {"status": "rejected"}
     try:
         db = get_db()
@@ -3958,13 +4000,41 @@ def login_finalize():
     if db and discord_id:
         import time as _t
         user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
+        if not user:
+            from turso_db import _find_file
+            u_file = _find_file("users_backup.json")
+            if u_file and os.path.exists(u_file):
+                try:
+                    with open(u_file, "r", encoding="utf-8") as f:
+                        all_u = json.load(f)
+                        user = [x for x in all_u if str(x.get("discord_id")) == str(discord_id)]
+                except Exception:
+                    pass
+
         if user:
             u = user[0]
             # Ověřit: token, expiry a dashboard_access
             token_exp = int(u.get('login_token_expires_at') or 0)
             token_val = u.get("login_token")
-            has_acc = u.get("dashboard_access")
+            has_acc = bool(u.get("dashboard_access"))
             
+            # 1. Okamžitá kontrola in-memory schválení z Discordu
+            mem_approved = (_AUTH_TOKEN_STATUS.get(str(discord_id)) == "approved")
+            if mem_approved:
+                token_val = "approved"
+                token_exp = 0
+                _AUTH_TOKEN_STATUS.pop(str(discord_id), None)
+
+            # 2. Ignorovat zastaralou expiraci ze starých JSON záloh (starší než 1 hodina)
+            if token_exp > 0 and token_exp < (_t.time() - 3600):
+                token_exp = 0
+
+            # 3. Záchranný přístup pro Superadmina
+            is_sa = (u.get("role") in ["SA", "Superadmin"] or u.get("dashboard_level") == "superadmin")
+            if is_sa and token_val == "approved":
+                token_exp = 0
+                has_acc = True
+
             if (token_val in ["approved", "used"]
                     and has_acc
                     and (token_exp == 0 or _t.time() <= token_exp)):
@@ -6157,8 +6227,13 @@ def dashboard_downloads():
             ver_resp = db.table("settings").select("setting_value").eq("setting_key", "launcher_version").execute().data or []
             if ver_resp: launcher_version = ver_resp[0].get("setting_value", "1.0.0")
             
-            versions = db.table("software_versions").select("*").order("id", desc=True).execute().data or []
-    except Exception as e: flash(f"Chyba DB: {e}", "error")
+            raw_versions = db.table("software_versions").select("*").order("id", desc=True).execute().data or []
+            if not raw_versions:
+                raw_versions = _get_fallback_versions()
+            versions = [normalize_version_item(v) for v in raw_versions]
+    except Exception as e:
+        flash(f"Chyba DB: {e}", "error")
+        versions = [normalize_version_item(v) for v in _get_fallback_versions()]
     return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled, deploy_time=DEPLOY_TIME, launcher_url=launcher_url, launcher_version=launcher_version)
 
 @app.route('/dashboard/update_launcher_url', methods=['POST'])
@@ -6193,17 +6268,20 @@ def add_version():
     try:
         db = get_db()
         row = {
-            "version_name": request.form.get("version_name"),
-            "db_version": request.form.get("db_version"),
-            "file_url": request.form.get("file_url"),
-            "target_role": request.form.get("target_role"),
+            "version_name": request.form.get("version_name", "").strip(),
+            "db_version": request.form.get("db_version", "").strip(),
+            "file_url": request.form.get("file_url", "").strip(),
+            "target_role": request.form.get("target_role", "User").strip(),
             "is_active": 1 if request.form.get("is_active") else 0,
             "eol_date": "",
             "show_in_launcher": 1 if request.form.get("show_in_launcher") else 0,
             "can_download": 1 if request.form.get("can_download") else 0,
             "can_launch": 1 if request.form.get("can_launch") else 0,
         }
-        db.table("software_versions").insert(row).execute()
+        if db:
+            try: db.table("software_versions").insert(row).execute()
+            except Exception as e: print(f"[add_version DB err] {e}", flush=True)
+        sync_version_to_backup("add", row)
         flash('Nová verze vydána!', 'success')
         adm = get_current_admin_name()
         send_log("🚀 Vydána nová verze", f"**Uživatel:** {adm}\n**Název:** {row['version_name']}\n**Role:** {row['target_role']}", 0x10b981)
@@ -6216,21 +6294,25 @@ def add_version():
 def edit_version():
     try:
         db = get_db()
+        vid = request.form.get("version_id")
         row = {
-            "version_name": request.form.get("version_name"),
-            "db_version": request.form.get("db_version"),
-            "file_url": request.form.get("file_url"),
-            "target_role": request.form.get("target_role"),
+            "version_name": request.form.get("version_name", "").strip(),
+            "db_version": request.form.get("db_version", "").strip(),
+            "file_url": request.form.get("file_url", "").strip(),
+            "target_role": request.form.get("target_role", "User").strip(),
             "is_active": 1 if request.form.get("is_active") else 0,
-            "eol_date": request.form.get("eol_date", ""),
+            "eol_date": request.form.get("eol_date", "").strip(),
             "show_in_launcher": 1 if request.form.get("show_in_launcher") else 0,
             "can_download": 1 if request.form.get("can_download") else 0,
             "can_launch": 1 if request.form.get("can_launch") else 0,
         }
-        db.table("software_versions").update(row).eq("id", request.form.get("version_id")).execute()
+        if db:
+            try: db.table("software_versions").update(row).eq("id", int(vid) if str(vid).isdigit() else vid).execute()
+            except Exception as e: print(f"[edit_version DB err] {e}", flush=True)
+        sync_version_to_backup("edit", row, vid)
         flash('Verze upravena.', 'success')
         adm = get_current_admin_name()
-        send_log("✏️ Úprava verze", f"**Uživatel:** {adm}\n**Název:** {row['version_name']}\n**Aktivní:** {'Ano' if row['is_active'] else 'Ne'}", 0xf59e0b)
+        send_log("✏️ Úprava verze", f"**Uživatel:** {adm}\n**Název:** {row['version_name']}\n**Stahovat:** {'Ano' if row['can_download'] else 'Ne'}\n**Spustit:** {'Ano' if row['can_launch'] else 'Ne'}", 0xf59e0b)
         trigger_setup_messages_update()
     except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
@@ -6436,7 +6518,11 @@ def api_launcher_check_update():
 def delete_version():
     try:
         vid = request.form.get("version_id")
-        get_db().table("software_versions").delete().eq("id", vid).execute()
+        db = get_db()
+        if db:
+            try: db.table("software_versions").delete().eq("id", int(vid) if str(vid).isdigit() else vid).execute()
+            except Exception as e: print(f"[delete_version DB err] {e}", flush=True)
+        sync_version_to_backup("delete", {}, vid)
         flash('Verze smazána.', 'success')
         adm = get_current_admin_name()
         send_log("🗑️ Smazána verze aplikace", f"**Uživatel:** {adm}\n**ID verze:** {vid}", 0xef4444)

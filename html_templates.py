@@ -2689,9 +2689,9 @@ HTML_DOWNLOADS_MGMT = """
           data-furl="{{ v.get('file_url','') | e }}"
           data-role="{{ v.get('target_role','User') | e }}"
           data-active="{{ '1' if v.get('is_active') else '0' }}"
-          data-show="{{ '1' if v.get('show_in_launcher', True) else '0' }}"
-          data-dl="{{ '1' if v.get('can_download', True) else '0' }}"
-          data-launch="{{ '1' if v.get('can_launch', True) else '0' }}">
+          data-show="{{ '1' if v.get('show_in_launcher') else '0' }}"
+          data-dl="{{ '1' if v.get('can_download') else '0' }}"
+          data-launch="{{ '1' if v.get('can_launch') else '0' }}">
         <td style="padding:14px 16px;">
           <div style="font-weight:600;color:var(--text-main);">{{ v.get('version_name','—') }}</div>
         </td>
@@ -2711,21 +2711,21 @@ HTML_DOWNLOADS_MGMT = """
           {% endif %}
         </td>
         <td style="padding:14px 8px;text-align:center;">
-          {% if v.get('show_in_launcher', True) %}
+          {% if v.get('show_in_launcher') %}
             <span style="color:#10b981;" title="Viditelné v Launcheru"><i class="fas fa-eye"></i></span>
           {% else %}
             <span style="color:#6b7280;" title="Skryté – zobrazí se jako Nedostupné"><i class="fas fa-eye-slash"></i></span>
           {% endif %}
         </td>
         <td style="padding:14px 8px;text-align:center;">
-          {% if v.get('can_download', True) %}
+          {% if v.get('can_download') %}
             <span style="color:#10b981;" title="Stahování povoleno"><i class="fas fa-download"></i></span>
           {% else %}
             <span style="color:#ef4444;" title="Stahování zakázáno"><i class="fas fa-ban"></i></span>
           {% endif %}
         </td>
         <td style="padding:14px 8px;text-align:center;">
-          {% if v.get('can_launch', True) %}
+          {% if v.get('can_launch') %}
             <span style="color:#10b981;" title="Spuštění povoleno"><i class="fas fa-play-circle"></i></span>
           {% else %}
             <span style="color:#ef4444;" title="Spuštění zakázáno"><i class="fas fa-stop-circle"></i></span>

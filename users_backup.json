@@ -273,7 +273,7 @@
     "deleted_at": null,
     "download_token": "",
     "dashboard_access": false,
-    "login_token": "approved",
+    "login_token": "",
     "registered_at": "28.03.2026 18:24",
     "last_active": "21.06.2026 23:00:30",
     "is_online": false,
@@ -563,7 +563,7 @@
     "deleted_at": "",
     "download_token": "24cd8290-5f86-414a-b6a9-e34d43f98670",
     "dashboard_access": false,
-    "login_token": "approved",
+    "login_token": "",
     "registered_at": "26.05.2026 16:01",
     "last_active": null,
     "is_online": false,
@@ -853,7 +853,7 @@
     "deleted_at": "14.10.2026 21:22",
     "download_token": null,
     "dashboard_access": false,
-    "login_token": "W1SKE",
+    "login_token": "",
     "registered_at": "29.08.2026 18:26",
     "last_active": "29.09.2026 19:27:33",
     "is_online": false,
@@ -867,7 +867,7 @@
     "web_login_at": null,
     "notify": null,
     "dashboard_level": "",
-    "login_token_expires_at": 1788021715
+    "login_token_expires_at": 0
   },
   {
     "id": 22,
@@ -1070,7 +1070,7 @@
     "web_login_at": null,
     "notify": null,
     "dashboard_level": "",
-    "login_token_expires_at": 1790699484
+    "login_token_expires_at": 0
   },
   {
     "id": 45,
@@ -1114,7 +1114,7 @@
     "deleted_at": "",
     "download_token": null,
     "dashboard_access": true,
-    "login_token": "rejected",
+    "login_token": "",
     "registered_at": "07.03.2026 18:31",
     "last_active": null,
     "is_online": false,
@@ -1128,7 +1128,7 @@
     "web_login_at": "03.09.2026 11:18",
     "notify": null,
     "dashboard_level": "superadmin",
-    "login_token_expires_at": 1792390889
+    "login_token_expires_at": 0
   },
   {
     "id": 74,
@@ -1157,7 +1157,7 @@
     "web_login_at": null,
     "notify": null,
     "dashboard_level": "",
-    "login_token_expires_at": 1790700579
+    "login_token_expires_at": 0
   },
   {
     "id": 76,
@@ -1172,7 +1172,7 @@
     "deleted_at": "14.10.2026 21:22",
     "download_token": null,
     "dashboard_access": false,
-    "login_token": "2GUPZ",
+    "login_token": "",
     "registered_at": "07.10.2026 19:37",
     "last_active": null,
     "is_online": false,
@@ -1186,7 +1186,7 @@
     "web_login_at": null,
     "notify": null,
     "dashboard_level": "",
-    "login_token_expires_at": 1791395251
+    "login_token_expires_at": 0
   },
   {
     "id": 78,
@@ -1215,7 +1215,7 @@
     "web_login_at": "19.10.2026 16:06",
     "notify": null,
     "dashboard_level": "",
-    "login_token_expires_at": 1792419321
+    "login_token_expires_at": 0
   },
   {
     "id": 77,
@@ -1273,6 +1273,6 @@
     "web_login_at": "24.10.2026 13:47",
     "notify": null,
     "dashboard_level": "superadmin",
-    "login_token_expires_at": 1792843028
+    "login_token_expires_at": 0
   }
 ]
