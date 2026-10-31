@@ -6144,7 +6144,7 @@ def delete_app_message():
 @app.route('/dashboard/downloads', methods=['GET'], strict_slashes=False)
 def dashboard_downloads():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
-    versions = []; enabled = True; launcher_url = ""
+    versions = []; enabled = True; launcher_url = ""; launcher_version = "1.0.0"
     try:
         db = get_db()
         if db:
@@ -6154,9 +6154,12 @@ def dashboard_downloads():
             url_resp = db.table("settings").select("setting_value").eq("setting_key", "launcher_download_url").execute().data or []
             if url_resp: launcher_url = url_resp[0].get("setting_value", "")
             
+            ver_resp = db.table("settings").select("setting_value").eq("setting_key", "launcher_version").execute().data or []
+            if ver_resp: launcher_version = ver_resp[0].get("setting_value", "1.0.0")
+            
             versions = db.table("software_versions").select("*").order("id", desc=True).execute().data or []
     except Exception as e: flash(f"Chyba DB: {e}", "error")
-    return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled, deploy_time=DEPLOY_TIME, launcher_url=launcher_url)
+    return render_dashboard(HTML_DOWNLOADS_MGMT, versions=versions, enabled=enabled, deploy_time=DEPLOY_TIME, launcher_url=launcher_url, launcher_version=launcher_version)
 
 @app.route('/dashboard/update_launcher_url', methods=['POST'])
 @require_dash_level('superadmin')
@@ -6164,6 +6167,7 @@ def dashboard_update_launcher_url():
     if not session.get('logged_in'): return redirect(url_for('dashboard_main'))
         
     new_url = request.form.get('launcher_url', '').strip()
+    new_ver = request.form.get('launcher_version', '').strip() or '1.0.0'
     db = get_db()
     if db:
         check = db.table("settings").select("id").eq("setting_key", "launcher_download_url").execute().data
@@ -6171,9 +6175,16 @@ def dashboard_update_launcher_url():
             db.table("settings").update({"setting_value": new_url}).eq("setting_key", "launcher_download_url").execute()
         else:
             db.table("settings").insert({"setting_key": "launcher_download_url", "setting_value": new_url}).execute()
-        flash('Odkaz na Launcher byl úspěšně aktualizován.', 'success')
+
+        check_v = db.table("settings").select("id").eq("setting_key", "launcher_version").execute().data
+        if check_v:
+            db.table("settings").update({"setting_value": new_ver}).eq("setting_key", "launcher_version").execute()
+        else:
+            db.table("settings").insert({"setting_key": "launcher_version", "setting_value": new_ver}).execute()
+
+        flash('Odkaz a verze Launcheru byly úspěšně aktualizovány.', 'success')
         adm = get_current_admin_name()
-        send_log("🔗 Změna odkazu Launcheru", f"**Uživatel:** {adm}\n**Nový odkaz:** {new_url}", 0x3b82f6)
+        send_log("🔗 Změna odkazu a verze Launcheru", f"**Uživatel:** {adm}\n**Nová verze:** {new_ver}\n**Nový odkaz:** {new_url}", 0x3b82f6)
     return redirect(url_for('dashboard_downloads'))
 
 @app.route('/dashboard/add_version', methods=['POST'])
@@ -6356,9 +6367,69 @@ def api_launcher_versions():
                 'has_access': has_access,
                 'eol_date': v.get('eol_date', ''),
             })
-        return jsonify({'status': 'ok', 'versions': result, 'user_role': user_role})
+        # Informace o nejnovejsi verzi Launcheru
+        launcher_version = "1.0.0"
+        launcher_url = "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/V1.6.2B/IDPK.Launcher.Setup.1.6.2.exe"
+        try:
+            ver_s = db.table("settings").select("setting_value").eq("setting_key", "launcher_version").execute().data
+            if ver_s and ver_s[0].get('setting_value'):
+                launcher_version = str(ver_s[0]['setting_value']).strip()
+            url_s = db.table("settings").select("setting_value").eq("setting_key", "launcher_download_url").execute().data
+            if url_s and url_s[0].get('setting_value'):
+                launcher_url = str(url_s[0]['setting_value']).strip()
+        except:
+            pass
+
+        return jsonify({
+            'status': 'ok',
+            'versions': result,
+            'user_role': user_role,
+            'launcher_version': launcher_version,
+            'launcher_download_url': launcher_url
+        })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/launcher/check_update', methods=['GET', 'POST'])
+def api_launcher_check_update():
+    """
+    Endpoint pro kontrolu aktualizace Launcheru.
+    Parametry: current_version (query param nebo JSON body)
+    """
+    current_ver = request.args.get('current_version') or (request.get_json(silent=True) or {}).get('current_version', '')
+    current_ver = str(current_ver).strip()
+    
+    launcher_ver = "1.0.0"
+    launcher_url = "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/V1.6.2B/IDPK.Launcher.Setup.1.6.2.exe"
+    try:
+        db = get_db()
+        if db:
+            ver_s = db.table("settings").select("setting_value").eq("setting_key", "launcher_version").execute().data
+            if ver_s and ver_s[0].get('setting_value'):
+                launcher_ver = str(ver_s[0]['setting_value']).strip()
+            url_s = db.table("settings").select("setting_value").eq("setting_key", "launcher_download_url").execute().data
+            if url_s and url_s[0].get('setting_value'):
+                launcher_url = str(url_s[0]['setting_value']).strip()
+    except Exception:
+        pass
+        
+    has_update = False
+    if current_ver and launcher_ver:
+        import re
+        def parse_v_tuple(v):
+            return [int(x) for x in re.findall(r'\d+', str(v))]
+        try:
+            has_update = parse_v_tuple(launcher_ver) > parse_v_tuple(current_ver)
+        except Exception:
+            has_update = (launcher_ver != current_ver)
+
+    return jsonify({
+        "status": "ok",
+        "has_update": has_update,
+        "latest_version": launcher_ver,
+        "current_version": current_ver,
+        "download_url": launcher_url
+    })
 
 @app.route('/dashboard/delete_version', methods=['POST'])
 @require_dash_level('superadmin')

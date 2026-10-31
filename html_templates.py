@@ -2646,13 +2646,22 @@ HTML_DOWNLOADS_MGMT = """
     </div>
   {% endfor %}
 {% endwith %}
-<!-- Global Launcher URL -->
+<!-- Global Launcher URL & Version -->
 <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:20px;">
-  <h3 style="margin-top:0;color:var(--text-main);font-size:16px;"><i class="fas fa-link" style="color:#10b981;margin-right:8px;"></i>Globální odkaz na stažení Launcheru (.exe)</h3>
-  <p style="color:var(--text-muted);font-size:13px;margin-bottom:15px;">Tento odkaz se použije pro stahování instalačního souboru z webové stránky při autorizaci Discordem.</p>
-  <form action="/dashboard/update_launcher_url" method="POST" style="display:flex;gap:10px;">
-    <input type="text" name="launcher_url" value="{{ launcher_url | e }}" style="flex:1;padding:10px;background:rgba(0,0,0,0.2);border:1px solid #334155;color:#fff;border-radius:6px;" placeholder="https://github.com/...">
-    <button type="submit" style="background:var(--blue-main);color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;">Uložit odkaz</button>
+  <h3 style="margin-top:0;color:var(--text-main);font-size:16px;"><i class="fas fa-link" style="color:#10b981;margin-right:8px;"></i>Globální odkaz a verze Launcheru (.exe)</h3>
+  <p style="color:var(--text-muted);font-size:13px;margin-bottom:15px;">Tento odkaz a verze se použijí pro stahování nového instalačního souboru a pro automatické aktualizace Launcheru.</p>
+  <form action="/dashboard/update_launcher_url" method="POST" style="display:flex;gap:15px;flex-wrap:wrap;align-items:flex-end;">
+    <div style="flex:3;min-width:280px;">
+      <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">Přímý odkaz na .exe instalátor:</label>
+      <input type="text" name="launcher_url" value="{{ launcher_url | e }}" style="width:100%;box-sizing:border-box;padding:10px;background:rgba(0,0,0,0.2);border:1px solid #334155;color:#fff;border-radius:6px;" placeholder="https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/.../IDPK.Launcher.Setup.exe">
+    </div>
+    <div style="flex:1;min-width:140px;">
+      <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">Nejnovější verze Launcheru:</label>
+      <input type="text" name="launcher_version" value="{{ launcher_version | e }}" style="width:100%;box-sizing:border-box;padding:10px;background:rgba(0,0,0,0.2);border:1px solid #334155;color:#fff;border-radius:6px;" placeholder="1.0.0">
+    </div>
+    <div>
+      <button type="submit" style="background:var(--blue-main);color:#fff;border:none;padding:10px 22px;border-radius:6px;cursor:pointer;font-weight:bold;height:40px;">Uložit nastavení</button>
+    </div>
   </form>
 </div>
 

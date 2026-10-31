@@ -369,6 +369,11 @@ def _resolve_local_fallback(table_name, columns="*", where_clauses=None, args=No
                 except Exception:
                     pass
 
+        if val is None and target_key == "launcher_version":
+            val = "1.0.0"
+        elif val is None and target_key == "launcher_download_url":
+            val = "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/V1.6.2B/IDPK.Launcher.Setup.1.6.2.exe"
+
         if val is not None:
             return [{"setting_key": target_key, "setting_value": val}]
         return []
