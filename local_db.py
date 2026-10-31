@@ -269,6 +269,7 @@ def init_local_db():
             _restore_pvvd_disappearances_if_empty(conn)
             _restore_spz_metadata_if_empty(conn)
             _restore_depot_zones_if_empty(conn)
+            _restore_depot_history_if_empty(conn)
             # Automatické pročištění neplatných admin zámků (Neznámá / Aktivní hledání nesmí mít admin zámek)
             try:
                 conn.execute("""
@@ -1298,18 +1299,45 @@ def local_get_pvvd_disappearances(limit: int = 100) -> list:
 def local_depot_history_upsert(depot_name: str, bus_id: str, spz: str, arrived_at: str, left_at: str = None, record_id: int = None):
     try:
         with _get_local_conn() as conn:
+            cur = conn.cursor()
             if record_id:
-                conn.execute(
+                cur.execute(
                     "UPDATE depot_history_local SET depot_name=?, bus_id=?, spz=?, arrived_at=?, left_at=? WHERE id=?",
                     (depot_name, str(bus_id), spz, arrived_at, left_at, record_id)
                 )
-            elif left_at and bus_id:
-                conn.execute(
-                    "UPDATE depot_history_local SET left_at=? WHERE bus_id=? AND left_at IS NULL",
-                    (left_at, str(bus_id))
-                )
+            elif left_at:
+                # Odjezd vozu z vozovny
+                # Pravidlo pro stejnou SPZ: najdeme a aktualizujeme otevřený záznam pro tuto SPZ
+                updated = False
+                if spz and spz not in ("Neznámá", "Neznama", "?", "", "None"):
+                    cur.execute(
+                        "UPDATE depot_history_local SET left_at=? WHERE spz=? AND left_at IS NULL",
+                        (left_at, spz)
+                    )
+                    if cur.rowcount > 0:
+                        updated = True
+                    else:
+                        # Pokud otevřený záznam chyběl, aktualizujeme poslední záznam dané SPZ
+                        cur.execute(
+                            "UPDATE depot_history_local SET left_at=? WHERE id = (SELECT id FROM depot_history_local WHERE spz=? ORDER BY arrived_at DESC LIMIT 1)",
+                            (left_at, spz)
+                        )
+                        if cur.rowcount > 0:
+                            updated = True
+                if not updated and bus_id:
+                    cur.execute(
+                        "UPDATE depot_history_local SET left_at=? WHERE bus_id=? AND left_at IS NULL",
+                        (left_at, str(bus_id))
+                    )
             else:
-                conn.execute(
+                # Příjezd vozu do vozovny
+                # Pravidlo pro stejnou SPZ: pokud již existuje neuzavřený záznam pro tuto SPZ, nejprve jej uzavřeme
+                if spz and spz not in ("Neznámá", "Neznama", "?", "", "None"):
+                    cur.execute(
+                        "UPDATE depot_history_local SET left_at=? WHERE spz=? AND left_at IS NULL",
+                        (arrived_at, spz)
+                    )
+                cur.execute(
                     "INSERT INTO depot_history_local (depot_name, bus_id, spz, arrived_at, left_at) VALUES (?, ?, ?, ?, ?)",
                     (depot_name, str(bus_id), spz, arrived_at, left_at)
                 )
@@ -1317,7 +1345,7 @@ def local_depot_history_upsert(depot_name: str, bus_id: str, spz: str, arrived_a
     except Exception as e:
         print(f"[LOCAL DB] Chyba zapisu depot_history_local: {e}", flush=True)
 
-def local_depot_history_get(depot_name: str = None, spz: str = None, limit: int = 1000) -> list:
+def local_depot_history_get(depot_name: str = None, spz: str = None, limit: int = 1000, sort_desc: bool = True) -> list:
     try:
         with _get_local_conn() as conn:
             cur = conn.cursor()
@@ -1327,9 +1355,10 @@ def local_depot_history_get(depot_name: str = None, spz: str = None, limit: int 
                 query += " AND depot_name = ?"
                 args.append(depot_name)
             if spz:
-                query += " AND spz = ?"
-                args.append(spz)
-            query += f" ORDER BY arrived_at DESC LIMIT {int(limit)}"
+                query += " AND spz LIKE ?"
+                args.append(f"%{spz}%")
+            order_dir = "DESC" if sort_desc else "ASC"
+            query += f" ORDER BY arrived_at {order_dir} LIMIT {int(limit)}"
             cur.execute(query, args)
             rows = []
             for r in cur.fetchall():
@@ -1365,6 +1394,38 @@ def local_setting_get(key: str, default=None):
     except Exception:
         pass
     return default
+
+
+def _restore_depot_history_if_empty(conn):
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM depot_history_local")
+        cnt = cur.fetchone()[0]
+        if cnt == 0:
+            dh_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "depot_history_backup.json")
+            records = []
+            if os.path.exists(dh_file):
+                try:
+                    with open(dh_file, "r", encoding="utf-8") as f:
+                        records = json.load(f)
+                except Exception:
+                    records = []
+            if records:
+                for r in records:
+                    conn.execute("""
+                        INSERT INTO depot_history_local (depot_name, bus_id, spz, arrived_at, left_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (
+                        r.get("depot_name"),
+                        str(r.get("bus_id") or ""),
+                        r.get("spz"),
+                        r.get("arrived_at"),
+                        r.get("left_at")
+                    ))
+                conn.commit()
+                print(f"[LOCAL DB] Obnoveno {len(records)} zaznamu depot_history do lokalni SQLite tabulky depot_history_local", flush=True)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba obnoveni depot_history: {e}", flush=True)
 
 
 def _restore_depot_zones_if_empty(conn):

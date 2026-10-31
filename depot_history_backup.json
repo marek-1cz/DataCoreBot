@@ -1,0 +1,1866 @@
+[
+  {
+    "id": "TURSO-208",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "3AX7863",
+    "bus_id": "2",
+    "arrived_at": "2026-10-26T17:13:22",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-207",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29657",
+    "bus_id": "112",
+    "arrived_at": "2026-10-26T17:07:25",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-206",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29525",
+    "bus_id": "51",
+    "arrived_at": "2026-10-26T17:06:55",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-203",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29535",
+    "bus_id": "38",
+    "arrived_at": "2026-10-26T17:06:27",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-202",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29525",
+    "bus_id": "325",
+    "arrived_at": "2026-10-26T17:05:38",
+    "left_at": "2026-10-26T17:08:09"
+  },
+  {
+    "id": "TURSO-201",
+    "depot_name": "JZD Černošín",
+    "spz": "8P29652",
+    "bus_id": "319",
+    "arrived_at": "2026-10-26T16:56:38",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-200",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29667",
+    "bus_id": "60",
+    "arrived_at": "2026-10-26T16:56:06",
+    "left_at": "2026-10-26T17:04:56"
+  },
+  {
+    "id": "TURSO-199",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29572",
+    "bus_id": "278",
+    "arrived_at": "2026-10-26T16:54:15",
+    "left_at": "2026-10-26T16:54:28"
+  },
+  {
+    "id": "TURSO-198",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29547",
+    "bus_id": "152",
+    "arrived_at": "2026-10-26T16:52:17",
+    "left_at": "2026-10-26T17:05:30"
+  },
+  {
+    "id": "TURSO-197",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29722",
+    "bus_id": "207",
+    "arrived_at": "2026-10-26T16:52:17",
+    "left_at": "2026-10-26T17:00:38"
+  },
+  {
+    "id": "TURSO-196",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29558",
+    "bus_id": "12",
+    "arrived_at": "2026-10-26T16:51:37",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-195",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29576",
+    "bus_id": "275",
+    "arrived_at": "2026-10-26T16:50:08",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-194",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29630",
+    "bus_id": "10403",
+    "arrived_at": "2026-10-26T16:50:04",
+    "left_at": "2026-10-26T17:05:50"
+  },
+  {
+    "id": "TURSO-193",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29640",
+    "bus_id": "312",
+    "arrived_at": "2026-10-26T16:47:51",
+    "left_at": "2026-10-26T16:55:14"
+  },
+  {
+    "id": "TURSO-192",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29654",
+    "bus_id": "106",
+    "arrived_at": "2026-10-26T16:37:16",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-191",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29561",
+    "bus_id": "151",
+    "arrived_at": "2026-10-26T16:37:05",
+    "left_at": "2026-10-26T16:37:39"
+  },
+  {
+    "id": "TURSO-190",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "3AX7863",
+    "bus_id": "2",
+    "arrived_at": "2026-10-26T16:37:03",
+    "left_at": "2026-10-26T16:44:49"
+  },
+  {
+    "id": "TURSO-189",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29659",
+    "bus_id": "97",
+    "arrived_at": "2026-10-26T16:35:36",
+    "left_at": "2026-10-26T16:35:42"
+  },
+  {
+    "id": "TURSO-188",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29596",
+    "bus_id": "39",
+    "arrived_at": "2026-10-26T16:33:12",
+    "left_at": "2026-10-26T16:38:36"
+  },
+  {
+    "id": "TURSO-187",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29527",
+    "bus_id": "43",
+    "arrived_at": "2026-10-26T16:31:50",
+    "left_at": "2026-10-26T16:34:47"
+  },
+  {
+    "id": "TURSO-186",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29580",
+    "bus_id": "274",
+    "arrived_at": "2026-10-26T16:29:59",
+    "left_at": "2026-10-26T16:46:05"
+  },
+  {
+    "id": "TURSO-185",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29548",
+    "bus_id": "154",
+    "arrived_at": "2026-10-26T16:26:23",
+    "left_at": "2026-10-26T16:35:25"
+  },
+  {
+    "id": "TURSO-184",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29520",
+    "bus_id": "31",
+    "arrived_at": "2026-10-26T16:26:14",
+    "left_at": "2026-10-26T16:40:20"
+  },
+  {
+    "id": "TURSO-183",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29512",
+    "bus_id": "27",
+    "arrived_at": "2026-10-26T16:23:27",
+    "left_at": "2026-10-26T17:04:32"
+  },
+  {
+    "id": "TURSO-182",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29515",
+    "bus_id": "26",
+    "arrived_at": "2026-10-26T16:22:15",
+    "left_at": "2026-10-26T16:30:51"
+  },
+  {
+    "id": "TURSO-181",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29517",
+    "bus_id": "66",
+    "arrived_at": "2026-10-26T16:21:45",
+    "left_at": "2026-10-26T16:31:10"
+  },
+  {
+    "id": "TURSO-180",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29608",
+    "bus_id": "11",
+    "arrived_at": "2026-10-26T16:21:32",
+    "left_at": "2026-10-26T17:07:10"
+  },
+  {
+    "id": "TURSO-179",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29502",
+    "bus_id": "29",
+    "arrived_at": "2026-10-26T16:20:35",
+    "left_at": "2026-10-26T16:40:01"
+  },
+  {
+    "id": "TURSO-178",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29484",
+    "bus_id": "57",
+    "arrived_at": "2026-10-26T16:19:31",
+    "left_at": "2026-10-26T16:20:15"
+  },
+  {
+    "id": "TURSO-177",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "3AX7863",
+    "bus_id": "10413",
+    "arrived_at": "2026-10-26T16:18:41",
+    "left_at": "2026-10-26T17:05:07"
+  },
+  {
+    "id": "TURSO-176",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29739",
+    "bus_id": "73",
+    "arrived_at": "2026-10-26T16:17:43",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-175",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29558",
+    "bus_id": "5",
+    "arrived_at": "2026-10-26T16:16:30",
+    "left_at": "2026-10-26T16:57:28"
+  },
+  {
+    "id": "TURSO-174",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29509",
+    "bus_id": "9",
+    "arrived_at": "2026-10-26T16:15:51",
+    "left_at": "2026-10-26T16:18:25"
+  },
+  {
+    "id": "TURSO-173",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29660",
+    "bus_id": "111",
+    "arrived_at": "2026-10-26T16:15:43",
+    "left_at": "2026-10-26T16:26:15"
+  },
+  {
+    "id": "TURSO-172",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "1PB2825",
+    "bus_id": "162",
+    "arrived_at": "2026-10-26T16:15:12",
+    "left_at": "2026-10-26T16:15:20"
+  },
+  {
+    "id": "TURSO-171",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "3AX7863",
+    "bus_id": "10413",
+    "arrived_at": "2026-10-26T16:05:42",
+    "left_at": "2026-10-26T16:18:41"
+  },
+  {
+    "id": "TURSO-170",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29523",
+    "bus_id": "10399",
+    "arrived_at": "2026-10-26T16:03:52",
+    "left_at": "2026-10-26T16:55:24"
+  },
+  {
+    "id": "TURSO-169",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29656",
+    "bus_id": "107",
+    "arrived_at": "2026-10-26T16:01:45",
+    "left_at": "2026-10-26T16:05:05"
+  },
+  {
+    "id": "TURSO-168",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29531",
+    "bus_id": "22",
+    "arrived_at": "2026-10-26T16:00:13",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-167",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29497",
+    "bus_id": "13",
+    "arrived_at": "2026-10-26T15:58:03",
+    "left_at": "2026-10-26T15:58:12"
+  },
+  {
+    "id": "TURSO-166",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29515",
+    "bus_id": "26",
+    "arrived_at": "2026-10-26T15:57:34",
+    "left_at": "2026-10-26T16:17:59"
+  },
+  {
+    "id": "TURSO-165",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29559",
+    "bus_id": "10",
+    "arrived_at": "2026-10-26T15:57:34",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-164",
+    "depot_name": "Servis MAN",
+    "spz": "8P29584",
+    "bus_id": "273",
+    "arrived_at": "2026-10-26T15:57:34",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-163",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29798",
+    "bus_id": "116",
+    "arrived_at": "2026-10-26T15:57:34",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-162",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29651",
+    "bus_id": "10407",
+    "arrived_at": "2026-10-26T15:57:34",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-161",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29658",
+    "bus_id": "102",
+    "arrived_at": "2026-10-26T15:57:34",
+    "left_at": "2026-10-26T16:04:54"
+  },
+  {
+    "id": "TURSO-160",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29583",
+    "bus_id": "239",
+    "arrived_at": "2026-10-26T15:57:33",
+    "left_at": "2026-10-26T16:00:54"
+  },
+  {
+    "id": "TURSO-159",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29632",
+    "bus_id": "314",
+    "arrived_at": "2026-10-26T15:57:32",
+    "left_at": null
+  },
+  {
+    "id": "TURSO-158",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29737",
+    "bus_id": "75",
+    "arrived_at": "2026-10-26T15:57:31",
+    "left_at": "2026-10-26T16:07:26"
+  },
+  {
+    "id": "TURSO-157",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29697",
+    "bus_id": "25",
+    "arrived_at": "2026-10-26T15:57:31",
+    "left_at": "2026-10-26T16:03:45"
+  },
+  {
+    "id": "TURSO-156",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29644",
+    "bus_id": "270",
+    "arrived_at": "2026-10-26T15:57:31",
+    "left_at": "2026-10-26T16:00:28"
+  },
+  {
+    "id": "TURSO-155",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29540",
+    "bus_id": "23",
+    "arrived_at": "2026-10-26T15:57:30",
+    "left_at": "2026-10-26T16:00:11"
+  },
+  {
+    "id": "TURSO-154",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29513",
+    "bus_id": "318",
+    "arrived_at": "2026-10-26T15:57:30",
+    "left_at": "2026-10-26T16:18:00"
+  },
+  {
+    "id": "TURSO-153",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "TESTOVACÍ",
+    "bus_id": "37",
+    "arrived_at": "2026-10-26T15:57:29",
+    "left_at": "2026-10-26T15:59:52"
+  },
+  {
+    "id": "TURSO-152",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29519",
+    "bus_id": "29",
+    "arrived_at": "2026-10-26T15:57:29",
+    "left_at": "2026-10-26T16:20:35"
+  },
+  {
+    "id": "HIST-LOG-015",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29558",
+    "bus_id": "5",
+    "arrived_at": "2026-10-25T19:56:49",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-013",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29522",
+    "bus_id": "32",
+    "arrived_at": "2026-10-25T19:56:39",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-014",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29623",
+    "bus_id": "295",
+    "arrived_at": "2026-10-25T19:56:39",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-017",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29673",
+    "bus_id": "174",
+    "arrived_at": "2026-10-25T19:56:05",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-001",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29608",
+    "bus_id": "300",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-002",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29542",
+    "bus_id": "238",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-003",
+    "depot_name": "DOREZA",
+    "spz": "8P29503",
+    "bus_id": "4",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-004",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29513",
+    "bus_id": "318",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-005",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29607",
+    "bus_id": "297",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-006",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29572",
+    "bus_id": "278",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-007",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29739",
+    "bus_id": "73",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-008",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29574",
+    "bus_id": "251",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-009",
+    "depot_name": "Garáže Bor",
+    "spz": "8P29735",
+    "bus_id": "76",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-010",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29651",
+    "bus_id": "10407",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-011",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29542",
+    "bus_id": "20",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-012",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29559",
+    "bus_id": "10",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-016",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29558",
+    "bus_id": "5",
+    "arrived_at": "2026-10-25T19:47:34",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-111",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29558",
+    "bus_id": "5",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-112",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29608",
+    "bus_id": "300",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-113",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29542",
+    "bus_id": "238",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-114",
+    "depot_name": "DOREZA",
+    "spz": "8P29503",
+    "bus_id": "4",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-115",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29513",
+    "bus_id": "318",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-116",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29607",
+    "bus_id": "297",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-117",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29572",
+    "bus_id": "278",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-118",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29739",
+    "bus_id": "73",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-119",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29574",
+    "bus_id": "251",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-120",
+    "depot_name": "Garáže Bor",
+    "spz": "8P29735",
+    "bus_id": "76",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-121",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29651",
+    "bus_id": "10407",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-122",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29542",
+    "bus_id": "20",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-123",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29559",
+    "bus_id": "10",
+    "arrived_at": "2026-10-14T19:42:27",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-124",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29659",
+    "bus_id": "97",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-125",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29558",
+    "bus_id": "5",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-126",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29608",
+    "bus_id": "300",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-127",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29542",
+    "bus_id": "238",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-128",
+    "depot_name": "DOREZA",
+    "spz": "8P29503",
+    "bus_id": "4",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-129",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29607",
+    "bus_id": "297",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-130",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29513",
+    "bus_id": "318",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-131",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29572",
+    "bus_id": "278",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-132",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29739",
+    "bus_id": "73",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-133",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29574",
+    "bus_id": "251",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-134",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29651",
+    "bus_id": "10407",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-135",
+    "depot_name": "Garáže Bor",
+    "spz": "8P29735",
+    "bus_id": "76",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-136",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29542",
+    "bus_id": "20",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-137",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29559",
+    "bus_id": "10",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-138",
+    "depot_name": "JZD Černošín",
+    "spz": "8P29509",
+    "bus_id": "9",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-139",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29623",
+    "bus_id": "295",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-140",
+    "depot_name": "JZD Černošín",
+    "spz": "8P29590",
+    "bus_id": "263",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-141",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "TESTOVAC�",
+    "bus_id": "37",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-142",
+    "depot_name": "JZD Černošín",
+    "spz": "8P29652",
+    "bus_id": "319",
+    "arrived_at": "2026-10-14T19:40:00",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-092",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29659",
+    "bus_id": "97",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-093",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29558",
+    "bus_id": "5",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-094",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29608",
+    "bus_id": "300",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-095",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29542",
+    "bus_id": "238",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-096",
+    "depot_name": "DOREZA",
+    "spz": "8P29503",
+    "bus_id": "4",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-097",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29607",
+    "bus_id": "297",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-098",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29513",
+    "bus_id": "318",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-099",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29572",
+    "bus_id": "278",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-100",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29739",
+    "bus_id": "73",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-101",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29574",
+    "bus_id": "251",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-102",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29651",
+    "bus_id": "10407",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-103",
+    "depot_name": "Garáže Bor",
+    "spz": "8P29735",
+    "bus_id": "76",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-104",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29542",
+    "bus_id": "20",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-105",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29559",
+    "bus_id": "10",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-106",
+    "depot_name": "JZD Černošín",
+    "spz": "8P29509",
+    "bus_id": "9",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-107",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29623",
+    "bus_id": "295",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-108",
+    "depot_name": "JZD Černošín",
+    "spz": "8P29590",
+    "bus_id": "263",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-109",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "TESTOVAC�",
+    "bus_id": "37",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-110",
+    "depot_name": "JZD Černošín",
+    "spz": "8P29652",
+    "bus_id": "319",
+    "arrived_at": "2026-10-14T19:30:38",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-035",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29519",
+    "bus_id": "29",
+    "arrived_at": "2026-09-22T15:42:20",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-036",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29673",
+    "bus_id": "174",
+    "arrived_at": "2026-09-22T15:42:20",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-034",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29561",
+    "bus_id": "238",
+    "arrived_at": "2026-09-21T19:32:39",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-088",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29519",
+    "bus_id": "29",
+    "arrived_at": "2026-09-21T19:32:39",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-089",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29673",
+    "bus_id": "174",
+    "arrived_at": "2026-09-21T19:32:39",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-031",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29519",
+    "bus_id": "29",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-032",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29673",
+    "bus_id": "174",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-033",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29647",
+    "bus_id": "51",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-060",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29512",
+    "bus_id": "266",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-061",
+    "depot_name": "Garáže Bor",
+    "spz": "8P29495",
+    "bus_id": "153",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-062",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29558",
+    "bus_id": "5",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-063",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29554",
+    "bus_id": "12",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-064",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29516",
+    "bus_id": "10421",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-065",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29540",
+    "bus_id": "23",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-066",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29661",
+    "bus_id": "108",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-067",
+    "depot_name": "JZD Černošín",
+    "spz": "8P29509",
+    "bus_id": "9",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-068",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29632",
+    "bus_id": "270",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-069",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29739",
+    "bus_id": "73",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-070",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29511",
+    "bus_id": "42",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-071",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8T57295",
+    "bus_id": "260",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-072",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29665",
+    "bus_id": "100",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-073",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29542",
+    "bus_id": "20",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-074",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29723",
+    "bus_id": "151",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-075",
+    "depot_name": "JZD Černošín",
+    "spz": "8P29652",
+    "bus_id": "319",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-076",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29522",
+    "bus_id": "32",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-077",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29623",
+    "bus_id": "295",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-078",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29755",
+    "bus_id": "162",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-079",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29608",
+    "bus_id": "300",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-080",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29607",
+    "bus_id": "297",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-081",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29610",
+    "bus_id": "10404",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-082",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29572",
+    "bus_id": "278",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-083",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29513",
+    "bus_id": "318",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-084",
+    "depot_name": "Garáže Tachov",
+    "spz": "3AZ3742",
+    "bus_id": "10411",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-085",
+    "depot_name": "Servis MAN",
+    "spz": "8P29571",
+    "bus_id": "343",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-086",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "3AX7862",
+    "bus_id": "10388",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-087",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29561",
+    "bus_id": "238",
+    "arrived_at": "2026-09-21T19:30:40",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-029",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29561",
+    "bus_id": "238",
+    "arrived_at": "2026-09-21T19:20:57",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-030",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29673",
+    "bus_id": "174",
+    "arrived_at": "2026-09-21T19:20:11",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-059",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29511",
+    "bus_id": "10402",
+    "arrived_at": "2026-09-21T19:20:11",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-048",
+    "depot_name": "JZD Černošín",
+    "spz": "8P29652",
+    "bus_id": "319",
+    "arrived_at": "2026-09-21T18:22:24",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-049",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29623",
+    "bus_id": "295",
+    "arrived_at": "2026-09-21T18:22:24",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-050",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29522",
+    "bus_id": "32",
+    "arrived_at": "2026-09-21T18:22:24",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-051",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29607",
+    "bus_id": "297",
+    "arrived_at": "2026-09-21T18:22:24",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-052",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29610",
+    "bus_id": "10404",
+    "arrived_at": "2026-09-21T18:22:24",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-053",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "3AX7862",
+    "bus_id": "10388",
+    "arrived_at": "2026-09-21T18:22:24",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-054",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29741",
+    "bus_id": "173",
+    "arrived_at": "2026-09-21T18:22:24",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-055",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29572",
+    "bus_id": "278",
+    "arrived_at": "2026-09-21T18:22:24",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-056",
+    "depot_name": "Servis MAN",
+    "spz": "8P29571",
+    "bus_id": "343",
+    "arrived_at": "2026-09-21T18:22:24",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-057",
+    "depot_name": "Garáže Tachov",
+    "spz": "3AZ3742",
+    "bus_id": "10411",
+    "arrived_at": "2026-09-21T18:22:24",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-058",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29642",
+    "bus_id": "306",
+    "arrived_at": "2026-09-21T18:22:24",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-037",
+    "depot_name": "JZD Černošín",
+    "spz": "8P29652",
+    "bus_id": "319",
+    "arrived_at": "2026-09-21T18:16:18",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-038",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29623",
+    "bus_id": "295",
+    "arrived_at": "2026-09-21T18:16:18",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-039",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29522",
+    "bus_id": "32",
+    "arrived_at": "2026-09-21T18:16:18",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-040",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29607",
+    "bus_id": "297",
+    "arrived_at": "2026-09-21T18:16:18",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-041",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29610",
+    "bus_id": "10404",
+    "arrived_at": "2026-09-21T18:16:18",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-042",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "3AX7862",
+    "bus_id": "10388",
+    "arrived_at": "2026-09-21T18:16:18",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-043",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29741",
+    "bus_id": "173",
+    "arrived_at": "2026-09-21T18:16:18",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-044",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29572",
+    "bus_id": "278",
+    "arrived_at": "2026-09-21T18:16:18",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-045",
+    "depot_name": "Servis MAN",
+    "spz": "8P29571",
+    "bus_id": "343",
+    "arrived_at": "2026-09-21T18:16:18",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-046",
+    "depot_name": "Garáže Tachov",
+    "spz": "3AZ3742",
+    "bus_id": "10411",
+    "arrived_at": "2026-09-21T18:16:18",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-047",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29642",
+    "bus_id": "306",
+    "arrived_at": "2026-09-21T18:16:18",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-018",
+    "depot_name": "JZD Černošín",
+    "spz": "8P29652",
+    "bus_id": "319",
+    "arrived_at": "2026-09-21T18:06:45",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-019",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29623",
+    "bus_id": "295",
+    "arrived_at": "2026-09-21T18:06:45",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-020",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "8P29522",
+    "bus_id": "32",
+    "arrived_at": "2026-09-21T18:06:45",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-021",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29607",
+    "bus_id": "297",
+    "arrived_at": "2026-09-21T18:06:45",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-022",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29610",
+    "bus_id": "10404",
+    "arrived_at": "2026-09-21T18:06:45",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-023",
+    "depot_name": "PLZEŇ CAN",
+    "spz": "3AX7862",
+    "bus_id": "10388",
+    "arrived_at": "2026-09-21T18:06:45",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-024",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29741",
+    "bus_id": "173",
+    "arrived_at": "2026-09-21T18:06:45",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-025",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29572",
+    "bus_id": "278",
+    "arrived_at": "2026-09-21T18:06:45",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-026",
+    "depot_name": "Servis MAN",
+    "spz": "8P29571",
+    "bus_id": "343",
+    "arrived_at": "2026-09-21T18:06:45",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-027",
+    "depot_name": "Garáže Tachov",
+    "spz": "3AZ3742",
+    "bus_id": "10411",
+    "arrived_at": "2026-09-21T18:06:45",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-028",
+    "depot_name": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
+    "spz": "8P29642",
+    "bus_id": "306",
+    "arrived_at": "2026-09-21T18:06:45",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-090",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29559",
+    "bus_id": "10",
+    "arrived_at": "2026-08-29T17:15:25",
+    "left_at": null
+  },
+  {
+    "id": "HIST-LOG-091",
+    "depot_name": "Odstavná plocha Planá Sadová",
+    "spz": "8P29755",
+    "bus_id": "162",
+    "arrived_at": "2026-08-29T17:15:25",
+    "left_at": null
+  },
+  {
+    "id": "80863562-0a51-40c3-8f67-e8a1b1a91821",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29753",
+    "bus_id": "168",
+    "arrived_at": "2026-08-19T08:33:21",
+    "left_at": null
+  },
+  {
+    "id": "22bd2162-76c8-4aee-affa-bbcc62a40efc",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29665",
+    "bus_id": "318",
+    "arrived_at": "2026-08-19T08:28:17",
+    "left_at": null
+  },
+  {
+    "id": "c806b02c-cd20-4d79-83e5-619db00f17f6",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29503",
+    "bus_id": "4",
+    "arrived_at": "2026-08-19T08:28:09",
+    "left_at": null
+  },
+  {
+    "id": "57111938-f27f-425f-b81e-23897ef0384c",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29516",
+    "bus_id": "47",
+    "arrived_at": "2026-08-19T08:21:39",
+    "left_at": null
+  },
+  {
+    "id": "b6268b49-dc3f-4e7e-9a93-51a73953f014",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29623",
+    "bus_id": "260",
+    "arrived_at": "2026-08-19T08:07:03",
+    "left_at": null
+  },
+  {
+    "id": "9265e3be-69a3-4eb5-8534-67be992c767c",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29742",
+    "bus_id": "207",
+    "arrived_at": "2026-08-19T08:07:03",
+    "left_at": null
+  },
+  {
+    "id": "2a3b0e4e-7bb9-438e-9ffc-7d12eab53c43",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29512",
+    "bus_id": "108",
+    "arrived_at": "2026-08-19T08:07:02",
+    "left_at": null
+  },
+  {
+    "id": "2f5ed045-78bb-4e77-961d-32a80fcb9926",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29721",
+    "bus_id": "5",
+    "arrived_at": "2026-08-19T08:07:01",
+    "left_at": null
+  },
+  {
+    "id": "e352c5dd-58e6-498f-8b15-b719a1f67c19",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "4AA7025",
+    "bus_id": "10408",
+    "arrived_at": "2026-08-19T08:06:50",
+    "left_at": null
+  },
+  {
+    "id": "43b9da3f-e714-4578-9e2c-abd974bd4a4b",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29665",
+    "bus_id": "297",
+    "arrived_at": "2026-08-19T08:06:50",
+    "left_at": null
+  },
+  {
+    "id": "538d5dbd-f6c1-485a-987e-9329332708c1",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29623",
+    "bus_id": "295",
+    "arrived_at": "2026-08-19T08:06:50",
+    "left_at": null
+  },
+  {
+    "id": "1c96386f-4dc3-4af3-8a8e-351955607511",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "3AX0334",
+    "bus_id": "289",
+    "arrived_at": "2026-08-19T08:06:50",
+    "left_at": null
+  },
+  {
+    "id": "7334c569-2b99-43ef-8707-df25737837f7",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29665",
+    "bus_id": "278",
+    "arrived_at": "2026-08-19T08:06:50",
+    "left_at": null
+  },
+  {
+    "id": "65889c99-ca9a-48b1-9873-faa493b2e478",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "4AA7025",
+    "bus_id": "148",
+    "arrived_at": "2026-08-19T08:06:50",
+    "left_at": null
+  },
+  {
+    "id": "654a7195-3e16-4869-815f-48e812d0c070",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29539",
+    "bus_id": "46",
+    "arrived_at": "2026-08-19T08:06:49",
+    "left_at": null
+  },
+  {
+    "id": "197075d3-94d8-4f06-92e0-19e00ad8f755",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29725",
+    "bus_id": "163",
+    "arrived_at": "2026-08-19T08:06:48",
+    "left_at": null
+  },
+  {
+    "id": "c2acb73a-22c2-45ed-92d5-40eac9b4a005",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29518",
+    "bus_id": "28",
+    "arrived_at": "2026-08-19T08:06:48",
+    "left_at": null
+  },
+  {
+    "id": "cccde7b6-a0d2-46ff-8862-ab5c5a500e2b",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29723",
+    "bus_id": "151",
+    "arrived_at": "2026-08-19T08:06:47",
+    "left_at": null
+  },
+  {
+    "id": "c0107639-4129-44d2-b7bd-487d42f72810",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29738",
+    "bus_id": "93",
+    "arrived_at": "2026-08-19T08:06:47",
+    "left_at": null
+  },
+  {
+    "id": "213bfd9d-059f-4d14-9f10-f251e48d9301",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29535",
+    "bus_id": "38",
+    "arrived_at": "2026-08-19T08:06:46",
+    "left_at": null
+  },
+  {
+    "id": "ea7ddb72-0036-4227-b082-5669b8862e3e",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29748",
+    "bus_id": "188",
+    "arrived_at": "2026-08-19T08:06:46",
+    "left_at": null
+  },
+  {
+    "id": "632859b0-76a3-42c3-bd78-f01fbbaaf397",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29644",
+    "bus_id": "181",
+    "arrived_at": "2026-08-19T08:06:46",
+    "left_at": null
+  },
+  {
+    "id": "4b098b8c-998e-4a07-8a0f-d8694ddd64b6",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29797",
+    "bus_id": "170",
+    "arrived_at": "2026-08-19T08:06:46",
+    "left_at": null
+  },
+  {
+    "id": "ed2c65be-9972-46e7-ab99-0a8c2254b627",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29721",
+    "bus_id": "143",
+    "arrived_at": "2026-08-19T08:06:46",
+    "left_at": null
+  },
+  {
+    "id": "b4dc34ce-0f91-4d77-ab8b-9bd424df973b",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29792",
+    "bus_id": "112",
+    "arrived_at": "2026-08-19T08:06:45",
+    "left_at": null
+  },
+  {
+    "id": "ec12fb09-dec6-4d78-82fc-8bfce622e40e",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29792",
+    "bus_id": "32",
+    "arrived_at": "2026-08-19T08:06:45",
+    "left_at": null
+  },
+  {
+    "id": "2d002383-62bf-4db3-95ac-0d362219bee3",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29580",
+    "bus_id": "29",
+    "arrived_at": "2026-08-19T08:06:45",
+    "left_at": null
+  },
+  {
+    "id": "fa708760-72c7-4f0b-b62e-570cacda8c52",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29792",
+    "bus_id": "229",
+    "arrived_at": "2026-08-19T08:06:45",
+    "left_at": null
+  },
+  {
+    "id": "0774a8ab-09f0-4219-8151-e8de12e98bd9",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29792",
+    "bus_id": "33",
+    "arrived_at": "2026-08-19T08:06:45",
+    "left_at": null
+  },
+  {
+    "id": "14226115-a098-46f2-83e0-d0bcfcc5a00c",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29665",
+    "bus_id": "153",
+    "arrived_at": "2026-08-19T08:06:44",
+    "left_at": null
+  },
+  {
+    "id": "af06926a-70fc-42f8-9560-2955bcbb4c7f",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29790",
+    "bus_id": "75",
+    "arrived_at": "2026-08-19T08:06:44",
+    "left_at": null
+  },
+  {
+    "id": "02d998ab-cd45-4d63-b915-d60a1a63462d",
+    "depot_name": "Garáže Tachov",
+    "spz": "8P29761",
+    "bus_id": "7",
+    "arrived_at": "2026-08-19T08:06:44",
+    "left_at": null
+  },
+  {
+    "id": "1efe6df4-3ee5-4d33-a76b-6588df0d8740",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29792",
+    "bus_id": "23",
+    "arrived_at": "2026-08-19T08:06:43",
+    "left_at": null
+  },
+  {
+    "id": "fdf043a7-5a5b-4a4c-b5c5-405c1d4f4436",
+    "depot_name": "Garáže Stříbro",
+    "spz": "8P29741",
+    "bus_id": "173",
+    "arrived_at": "2026-08-19T08:06:43",
+    "left_at": null
+  },
+  {
+    "id": "7b9a6449-3f70-4f0c-9463-da0b708d6889",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29658",
+    "bus_id": "102",
+    "arrived_at": "2026-08-19T08:06:43",
+    "left_at": null
+  },
+  {
+    "id": "70bd0e8a-5eec-4b21-9ccc-f38400c83e61",
+    "depot_name": "Bývalý areál garáže Plzeň",
+    "spz": "8P29532",
+    "bus_id": "39",
+    "arrived_at": "2026-08-19T08:06:42",
+    "left_at": null
+  }
+]

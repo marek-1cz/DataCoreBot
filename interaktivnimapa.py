@@ -6154,6 +6154,37 @@ window.updateActiveDepotPopup = function() {
     
     let z = depotZones.find(dz => dz.name === zName);
     if(!z) return;
+
+    let getRelTime = (iso) => {
+        if(!iso) return '';
+        let dt = new Date(iso);
+        if(isNaN(dt.getTime())) return '';
+        let diffMs = Date.now() - dt.getTime();
+        if(diffMs < 0) return 'právě teď';
+        let diffMin = Math.floor(diffMs / 60000);
+        if(diffMin < 1) return 'před chvílí';
+        if(diffMin < 60) return `před ${diffMin} min`;
+        let diffHr = Math.floor(diffMin / 60);
+        let remMin = diffMin % 60;
+        if(diffHr < 24) return `před ${diffHr} h ${remMin} m`;
+        let diffDays = Math.floor(diffHr / 24);
+        return `před ${diffDays} d`;
+    };
+    let getStandingTime = (iso) => {
+        if(!iso) return '';
+        let dt = new Date(iso);
+        if(isNaN(dt.getTime())) return '';
+        let diffMs = Date.now() - dt.getTime();
+        if(diffMs < 0) return 'právě přijel';
+        let diffMin = Math.floor(diffMs / 60000);
+        if(diffMin < 1) return 'stojí < 1m';
+        if(diffMin < 60) return `stojí ${diffMin} min`;
+        let diffHr = Math.floor(diffMin / 60);
+        let remMin = diffMin % 60;
+        if(diffHr < 24) return `stojí ${diffHr} h ${remMin} m`;
+        let diffDays = Math.floor(diffHr / 24);
+        return `stojí ${diffDays} d`;
+    };
     
     let activeDiv = document.getElementById(popId+'_active');
     if(activeDiv) {
@@ -6167,9 +6198,11 @@ window.updateActiveDepotPopup = function() {
             let zColor = z.color || '#facc15';
             activeDiv.innerHTML = uniqueBuses.map(b=>{
                 let adminDel = IS_ADMIN && b.session_id ? `<button onclick="deleteDepotRecord('${b.session_id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:0 2px;margin-left:4px;" title="Smazat">❌</button>` : '';
-                return `<span style="background:rgba(255,255,255,0.05);border:1px solid #334155;color:${zColor};padding:4px 8px;border-radius:6px;font-weight:bold;font-size:13px;display:inline-flex;align-items:center;gap:4px;">
+                let standingTxt = b.arrived_at ? getStandingTime(b.arrived_at) : 'stojí v areálu';
+                return `<span style="background:rgba(255,255,255,0.05);border:1px solid #334155;color:${zColor};padding:4px 8px;border-radius:6px;font-weight:bold;font-size:12px;display:inline-flex;align-items:center;gap:4px;">
                     ${b.spz||'?'}
                     <span style="color:#64748b;font-size:10px;font-weight:normal;">L${b.line||'?'}</span>
+                    <span style="color:#38bdf8;font-size:10px;font-weight:normal;background:rgba(56,189,248,0.1);padding:1px 4px;border-radius:3px;">${standingTxt}</span>
                     ${b.spz_verified?'<i class="fas fa-check" style="color:#10b981;font-size:10px;"></i>':''}
                     ${adminDel}
                 </span>`;
@@ -6210,7 +6243,11 @@ window.updateActiveDepotPopup = function() {
                             // Krátký formát, např. "19. 8. 08:06"
                             return dt.toLocaleString('cs-CZ', {day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit'});
                         };
-                        let lTime = h.left_at ? fmtT(h.left_at) : '<span style="color:#10b981;font-weight:bold;">Nyní parkuje</span>';
+                        let relLeft = h.left_at ? getRelTime(h.left_at) : '';
+                        let relArr = h.arrived_at ? getStandingTime(h.arrived_at) : '';
+                        let lTime = h.left_at 
+                            ? `${fmtT(h.left_at)} <span style="color:#94a3b8;font-size:10px;">(${relLeft})</span>` 
+                            : `<span style="color:#10b981;font-weight:bold;">Nyní parkuje</span> <span style="color:#38bdf8;font-size:10px;">(${relArr})</span>`;
                         let aTime = h.arrived_at ? fmtT(h.arrived_at) : 'Neznámý';
                         let impr = h.is_imprecise ? ' <span title="Nepřesný čas (Reset mapy)" style="color:#facc15;font-size:10px;">⚠️</span>' : '';
                         let adminDel = IS_ADMIN ? `<button onclick="deleteDepotRecord('${h.id}','${z.name}')" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:10px;padding:2px 4px;" title="Smazat ze záznamu">❌</button>` : '';
@@ -8258,6 +8295,15 @@ def _process_depot_tracking(bus_id, c, now):
             is_imprecise = (now - SCRIPT_START_TIME).total_seconds() < 120 if SCRIPT_START_TIME else False
             arr_time = get_prague_iso()
             db_c = get_db_client()
+
+            # Pravidlo pro stejnou SPZ: Pokud tato SPZ už má v DB otevřený záznam (left_at IS NULL),
+            # uzavřeme jej, aby nevznikaly vícenásobné otevřené relace
+            if eff_spz and db_c:
+                try:
+                    db_c.table("depot_history").update({"left_at": arr_time}).eq("spz", eff_spz).is_("left_at", "null").execute()
+                except Exception:
+                    pass
+
             new_id = None
             if db_c:
                 try:
@@ -8363,21 +8409,31 @@ def _process_depot_tracking(bus_id, c, now):
             session_id = active_sess.get("id")
             old_depot = active_sess.get("depot_name", "Vozovna")
             left_time = get_prague_iso()
+            sess_spz = active_sess.get("spz") or db_spz
             try:
                 from local_db import local_depot_history_upsert
-                local_depot_history_upsert(old_depot, bid_str, active_sess.get("spz") or db_spz, active_sess.get("arrived_at", left_time), left_at=left_time, record_id=session_id)
+                local_depot_history_upsert(old_depot, bid_str, sess_spz, active_sess.get("arrived_at", left_time), left_at=left_time, record_id=session_id)
             except Exception:
                 pass
             db_c = get_db_client()
-            if db_c and session_id:
-                try:
-                    db_c.table("depot_history").update({"left_at": left_time}).eq("id", session_id).execute()
-                except Exception as e_left:
-                    print(f"[DEPOT] Chyba zapisu DB odjezdu pro {tracking_key}: {e_left}", flush=True)
+            if db_c:
+                if session_id:
+                    try:
+                        db_c.table("depot_history").update({"left_at": left_time}).eq("id", session_id).execute()
+                    except Exception as e_left:
+                        print(f"[DEPOT] Chyba zapisu DB odjezdu pro {tracking_key}: {e_left}", flush=True)
+                # Pravidlo pro stejnou SPZ: Uzavřít/přepsat poslední záznam pro tuto SPZ, že odjel
+                if eff_spz:
+                    try:
+                        db_c.table("depot_history").update({"left_at": left_time}).eq("spz", eff_spz).is_("left_at", "null").execute()
+                    except Exception:
+                        pass
             
             # Smažeme z aktivních session
             DEPOT_ACTIVE_SESSIONS.pop(tracking_key, None)
             DEPOT_ACTIVE_SESSIONS.pop(bid_str, None)
+            if eff_spz:
+                DEPOT_ACTIVE_SESSIONS.pop(normalize_spz_key(eff_spz), None)
             if active_key:
                 DEPOT_ACTIVE_SESSIONS.pop(active_key, None)
             DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
@@ -15174,20 +15230,40 @@ def api_depot_zones():
     for zone in DEPOT_ZONES:
         # Spocitej busy v teto vozovne
         buses_in_dict = {}
+        poly = zone.get("polygon", [])
         for bid, bc in safe_bus_cache_items():
+            if bc.get("color_class") == "bg-bug" or bc.get("is_train") or bc.get("is_withdrawn"):
+                continue
+            is_here = False
             if bc.get("_in_depot") and bc.get("_depot_name") == zone["name"]:
+                is_here = True
+            elif bc.get("lat") and bc.get("lng") and len(poly) >= 3:
+                if point_in_polygon(bc["lat"], bc["lng"], poly):
+                    is_here = True
+                    bc["_in_depot"] = True
+                    bc["_depot_name"] = zone["name"]
+                    bc["in_depot"] = True
+                    bc["depot_name"] = zone["name"]
+            if is_here:
                 spz = bc.get("spz") or "Neznámá"
-                if bc.get("color_class") == "bg-bug":
-                    continue
                 dict_key = bid if spz in ("Nezn\u00e1m\u00e1", "Neznámá") else spz
                 if dict_key not in buses_in_dict:
                     arrived_at = None
                     is_imprecise = False
                     session_id = None
                     if bid in DEPOT_ACTIVE_SESSIONS:
-                        arrived_at = DEPOT_ACTIVE_SESSIONS[bid]["arrived_at"]
-                        is_imprecise = DEPOT_ACTIVE_SESSIONS[bid]["is_imprecise"]
-                        session_id = DEPOT_ACTIVE_SESSIONS[bid]["id"]
+                        arrived_at = DEPOT_ACTIVE_SESSIONS[bid].get("arrived_at")
+                        is_imprecise = DEPOT_ACTIVE_SESSIONS[bid].get("is_imprecise", False)
+                        session_id = DEPOT_ACTIVE_SESSIONS[bid].get("id")
+                    elif spz in DEPOT_ACTIVE_SESSIONS:
+                        arrived_at = DEPOT_ACTIVE_SESSIONS[spz].get("arrived_at")
+                        is_imprecise = DEPOT_ACTIVE_SESSIONS[spz].get("is_imprecise", False)
+                        session_id = DEPOT_ACTIVE_SESSIONS[spz].get("id")
+                    elif bc.get("parked_since"):
+                        try:
+                            arrived_at = datetime.fromtimestamp(bc["parked_since"]).isoformat()
+                        except Exception:
+                            pass
                         
                     buses_in_dict[dict_key] = {
                         "id": bid,
@@ -15199,6 +15275,21 @@ def api_depot_zones():
                         "is_imprecise": is_imprecise
                     }
         
+        # Zkontrolujeme také aktivní relace v DEPOT_ACTIVE_SESSIONS
+        for s_key, s_data in list(DEPOT_ACTIVE_SESSIONS.items()):
+            if s_data.get("depot_name") == zone["name"]:
+                s_spz = s_data.get("spz") or s_key
+                if s_spz and s_spz not in buses_in_dict:
+                    buses_in_dict[s_spz] = {
+                        "id": s_data.get("bus_id") or "",
+                        "session_id": s_data.get("id"),
+                        "spz": s_spz,
+                        "line": "",
+                        "spz_verified": True,
+                        "arrived_at": s_data.get("arrived_at"),
+                        "is_imprecise": s_data.get("is_imprecise", False)
+                    }
+
         buses_in = list(buses_in_dict.values())
         zones_out.append({
             "id": zone["id"],
@@ -15216,18 +15307,29 @@ def api_depot_history():
     depot_name = request.args.get('depot_name')
     search_q = request.args.get('q', '').strip().lower()
     sort_dir = request.args.get('sort', 'desc').strip()
-    
-    db = get_db_client()
-    if not db:
-        return jsonify({"status": "error", "message": "DB nedostupna"})
-        
-    query = db.table("depot_history").select("*").eq("depot_name", depot_name)
-    if search_q:
-        query = query.ilike("spz", f"%{search_q}%")
-        
     is_desc = sort_dir == 'desc'
-    res = query.order("arrived_at", desc=is_desc).limit(500).execute()
-    return jsonify({"status": "success", "data": res.data or []})
+    
+    data = []
+    db = get_db_client()
+    if db:
+        try:
+            query = db.table("depot_history").select("*").eq("depot_name", depot_name)
+            if search_q:
+                query = query.ilike("spz", f"%{search_q}%")
+            res = query.order("arrived_at", desc=is_desc).limit(500).execute()
+            data = res.data or []
+        except Exception:
+            data = []
+
+    # Fallback na lokální SQLite tabulku, pokud DB selže nebo je prázdná
+    if not data:
+        try:
+            from local_db import local_depot_history_get
+            data = local_depot_history_get(depot_name=depot_name, spz=search_q if search_q else None, limit=500, sort_desc=is_desc)
+        except Exception:
+            pass
+
+    return jsonify({"status": "success", "data": data})
 
 @mapa_bp.route('/api/admin/delete_depot_history', methods=['POST'])
 def api_admin_delete_depot_history():

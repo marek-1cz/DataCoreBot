@@ -410,7 +410,27 @@ def _resolve_local_fallback(table_name, columns="*", where_clauses=None, args=No
                 con = sqlite3.connect(db_path, timeout=5)
                 cur = con.cursor()
                 limit_clause = f"LIMIT {int(limit_val)}" if limit_val else "LIMIT 500"
-                cur.execute(f"SELECT id, depot_name, bus_id, spz, arrived_at, left_at FROM depot_history_local WHERE spz != 'BACKUP' ORDER BY arrived_at DESC {limit_clause}")
+                where_sql = ["spz != 'BACKUP'"]
+                query_args = []
+                for w, a in zip(where_clauses, args):
+                    val = a.get("value") if isinstance(a, dict) else a
+                    if '"depot_name" = ?' in w:
+                        where_sql.append("depot_name = ?")
+                        query_args.append(str(val))
+                    elif '"spz" = ?' in w:
+                        where_sql.append("spz = ?")
+                        query_args.append(str(val))
+                    elif '"bus_id" = ?' in w:
+                        where_sql.append("bus_id = ?")
+                        query_args.append(str(val))
+                    elif '"left_at" IS NULL' in w or 'is null' in w.lower():
+                        where_sql.append("left_at IS NULL")
+                    elif '"spz" LIKE ?' in w:
+                        where_sql.append("spz LIKE ?")
+                        query_args.append(str(val))
+                where_str = " WHERE " + " AND ".join(where_sql)
+                order_clause = f"ORDER BY {order_by}" if order_by else "ORDER BY arrived_at DESC"
+                cur.execute(f"SELECT id, depot_name, bus_id, spz, arrived_at, left_at FROM depot_history_local {where_str} {order_clause} {limit_clause}", query_args)
                 rows = []
                 for r in cur.fetchall():
                     rows.append({

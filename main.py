@@ -7854,6 +7854,42 @@ def format_prague_time(iso_str):
         if len(p) > 1: return p[1][:5]
         return iso_str
 
+def format_relative_time_cz(iso_str, mode="left"):
+    if not iso_str: return ""
+    try:
+        s = str(iso_str).strip().replace("Z", "")
+        m = re.match(r'(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?', s)
+        if m:
+            day, mon, yr, hr, mn, sc = m.groups()
+            dt = datetime(int(yr), int(mon), int(day), int(hr), int(mn), int(sc or 0))
+        else:
+            dt = datetime.fromisoformat(s)
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(ZoneInfo('Europe/Prague')).replace(tzinfo=None)
+        if not dt: return ""
+        now = datetime.now(ZoneInfo('Europe/Prague')).replace(tzinfo=None)
+        diff_sec = (now - dt).total_seconds()
+        if diff_sec < 0:
+            return "právě teď" if mode != "standing" else "právě přijel"
+        diff_min = int(diff_sec // 60)
+        if diff_min < 1:
+            return "před chvílí" if mode != "standing" else "právě přijel"
+        if diff_min < 60:
+            prefix = "stojí " if mode == "standing" else "před "
+            return f"{prefix}{diff_min} min"
+        diff_hr = diff_min // 60
+        rem_min = diff_min % 60
+        if diff_hr < 24:
+            prefix = "stojí " if mode == "standing" else "před "
+            if rem_min > 0:
+                return f"{prefix}{diff_hr} hod {rem_min} min"
+            return f"{prefix}{diff_hr} hod"
+        diff_days = diff_hr // 24
+        prefix = "stojí " if mode == "standing" else "před "
+        return f"{prefix}{diff_days} d"
+    except Exception:
+        return ""
+
 async def update_depot_discord_messages():
     channel = None
     for guild in bot.guilds:
@@ -7921,8 +7957,40 @@ async def update_depot_discord_messages():
             except Exception:
                 all_records = []
 
-        active = [r for r in all_records if not r.get("left_at")]
-        recent = [r for r in all_records if r.get("left_at")][:5]
+        # Deduplikace podle SPZ: zachováme nejnovější záznam pro každou SPZ
+        dedup_records = []
+        seen_spz = set()
+        for r in all_records:
+            s = r.get("spz")
+            if s and s not in seen_spz:
+                seen_spz.add(s)
+                dedup_records.append(r)
+            elif not s:
+                dedup_records.append(r)
+
+        # Zkontrolujeme také DEPOT_ACTIVE_SESSIONS
+        active_spz_map = {}
+        for r in dedup_records:
+            if not r.get("left_at"):
+                active_spz_map[r.get("spz") or str(r.get("bus_id"))] = r
+
+        try:
+            from interaktivnimapa import DEPOT_ACTIVE_SESSIONS
+            for sk, sv in list(DEPOT_ACTIVE_SESSIONS.items()):
+                if sv.get("depot_name") == depot_name:
+                    s_spz = sv.get("spz") or sk
+                    if s_spz not in active_spz_map:
+                        active_spz_map[s_spz] = {
+                            "spz": s_spz,
+                            "arrived_at": sv.get("arrived_at"),
+                            "left_at": None,
+                            "bus_id": sv.get("bus_id")
+                        }
+        except Exception:
+            pass
+
+        active = list(active_spz_map.values())
+        recent = [r for r in dedup_records if r.get("left_at")][:5]
         
         embed = discord.Embed(title=f"🅿️ Vozovna: {depot_name}", color=color_val)
         
@@ -7930,10 +7998,11 @@ async def update_depot_discord_messages():
         if active:
             for a in active:
                 spz = a.get("spz", "Neznámá")
-                arr = a.get("arrived_at", "")
-                if arr: 
-                    arr = format_prague_time(arr)
-                active_str += f"**{spz}** - Přijel: `{arr}`\n"
+                arr_raw = a.get("arrived_at", "")
+                arr = format_prague_time(arr_raw) if arr_raw else ""
+                rel = format_relative_time_cz(arr_raw, mode="standing")
+                rel_str = f" *({rel})*" if rel else ""
+                active_str += f"**{spz}** - Přijel: `{arr}`{rel_str}\n"
         else:
             active_str = "*Prázdno*"
             
@@ -7943,10 +8012,11 @@ async def update_depot_discord_messages():
         if recent:
             for r in recent:
                 spz = r.get("spz", "Neznámá")
-                left = r.get("left_at", "")
-                if left: 
-                    left = format_prague_time(left)
-                recent_str += f"**{spz}** - Odjel: `{left}`\n"
+                left_raw = r.get("left_at", "")
+                left = format_prague_time(left_raw) if left_raw else ""
+                rel = format_relative_time_cz(left_raw, mode="left")
+                rel_str = f" *({rel})*" if rel else ""
+                recent_str += f"**{spz}** - Odjel: `{left}`{rel_str}\n"
         else:
             recent_str = "*Žádné nedávné odjezdy*"
             
