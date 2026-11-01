@@ -10100,7 +10100,7 @@ def check_and_download_latest_gtfs():
 if __name__ == "__main__":
     token = os.environ.get("DISCORD_TOKEN")
     start_map_background_task()
-    check_and_download_latest_gtfs()
+    Thread(target=check_and_download_latest_gtfs, daemon=True).start()
     if token:
         Thread(target=run_discord_bot, args=(token,), daemon=True).start()
     else:

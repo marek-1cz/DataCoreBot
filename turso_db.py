@@ -34,7 +34,7 @@ TURSO_CIRCUIT_BREAKER = 450_000_000    # 90 % -> preventivní zastavení cloud S
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _BUDGET_FILE = os.path.join(_BASE_DIR, "turso_budget.json")
-_STATE_LOCK = threading.Lock()
+_STATE_LOCK = threading.RLock()
 
 def _get_current_month_key():
     try:
@@ -223,7 +223,7 @@ def probe_turso_unblock(force: bool = False) -> bool:
 # IN-MEMORY QUERY CACHE S AUTOMATICKOU INVALIDACÍ PŘI ZÁPISU
 # ═══════════════════════════════════════════════════════════════════════════════
 _QUERY_CACHE = {}          # {cache_key: (ts, data, ttl, table_name)}
-_CACHE_LOCK = threading.Lock()
+_CACHE_LOCK = threading.RLock()
 
 _TABLE_TTLS = {
     "settings": 180,           # 3 minuty
@@ -960,7 +960,7 @@ class TursoClient:
         return {}
 
 _GLOBAL_TURSO_CLIENT = None
-_CLIENT_LOCK = threading.Lock()
+_CLIENT_LOCK = threading.RLock()
 
 def get_turso_db():
     global _GLOBAL_TURSO_CLIENT
