@@ -29,3 +29,6 @@ idpk_vehicles_state.json
 vehicle_state.json
 automation_activity_log.json
 daily_reports_history.json
+scratch/
+*.xlsx
+*.pdf

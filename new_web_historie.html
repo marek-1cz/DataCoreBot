@@ -46,55 +46,8 @@ h1,h2,h3{line-height:1.1;letter-spacing:-.02em}
 @keyframes drift{to{transform:translate(6vw,4vh)}}
 html.lite .aurora span{animation:none;filter:blur(70px)}
 
-/* ============ HORNÍ SKLENĚNÝ PANEL (PŘESNĚ JAKO NA HOME) ============ */
-.ois-nav{
-  position:fixed;top:16px;left:0;right:0;margin-left:auto;margin-right:auto;width:fit-content;width:-moz-fit-content;transform:none;z-index:100;box-sizing:border-box;
-  display:flex;gap:4px;align-items:center;padding:7px;border-radius:999px;
-  background:rgba(255,255,255,.07);border:1px solid var(--glass-border);
-  -webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);
-  box-shadow:0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12);
-  max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none;
-}
-.ois-nav::-webkit-scrollbar{display:none}
-.ois-nav a{position:relative;z-index:1;padding:10px 17px;border-radius:999px;white-space:nowrap;font-size:.9rem;font-weight:600;transition:background .3s, color .3s}
-.ois-nav a:not(.active):not(.cta):hover{background:rgba(255,255,255,.1)}
-.ois-nav a.active{background:transparent}
-.ois-nav{transition:background .5s, box-shadow .5s}
-.ois-nav.moving{background:rgba(255,255,255,.1);box-shadow:0 14px 50px rgba(47,107,255,.28), inset 0 1px 0 rgba(255,255,255,.2)}
-.nav-pill{position:absolute;left:0;top:0;z-index:0;border-radius:999px;pointer-events:none;opacity:0;background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,.1));border:1px solid rgba(255,255,255,.3);box-shadow:0 4px 18px rgba(47,107,255,.3), inset 0 1px 0 rgba(255,255,255,.35);transition:transform .6s cubic-bezier(.3,1.25,.4,1), width .6s cubic-bezier(.3,1.25,.4,1), height .6s cubic-bezier(.3,1.25,.4,1), opacity .4s}
-.nav-pill.ready{opacity:1}
-.nav-pill.still{transition:none}
-.ois-nav a.logo{display:inline-flex;align-items:center;gap:10px;padding:6px 16px 6px 8px;font-weight:800;letter-spacing:-.01em}
-.ois-nav a.logo img{width:32px;height:32px;object-fit:contain;border-radius:0;filter:drop-shadow(0 0 10px rgba(56,214,255,.45));transition:transform .3s var(--ease)}
-.ois-nav a.logo:hover img{transform:scale(1.08)}
-.ois-nav a.cta{background:rgba(255,255,255,.08);color:#94a3b8;border:1px solid rgba(255,255,255,.14);box-shadow:none;transition:background .3s,color .3s,border-color .3s}
-.ois-nav a.cta:hover{background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.24)}
-.nav-arr{position:sticky;flex:none;width:0;z-index:5;pointer-events:none;align-self:stretch}
-.nav-arr i{position:absolute;top:-7px;bottom:-7px;width:34px;display:flex;align-items:center;font-style:normal;font-size:1.5rem;font-weight:700;color:var(--cyan);opacity:0;transition:opacity .35s var(--ease)}
-.nav-arr.l{left:0}.nav-arr.l i{left:-7px;padding-left:10px;border-radius:999px 0 0 999px;background:linear-gradient(90deg,#0a1230 30%,transparent)}
-.nav-arr.r{right:0}.nav-arr.r i{right:-7px;justify-content:flex-end;padding-right:10px;border-radius:0 999px 999px 0;background:linear-gradient(270deg,#0a1230 30%,transparent);animation:nudge 1.8s ease-in-out infinite}
-.ois-nav.can-l .nav-arr.l i,.ois-nav.can-r .nav-arr.r i{opacity:1}
-.nav-burger{display:none}
-.msheet{display:none}
-@media(max-width:1240px){
-  .ois-nav{left:12px;right:12px;margin-left:0;margin-right:0;transform:none;max-width:none;width:auto;justify-content:space-between;overflow:visible;padding:6px}
-  .ois-nav a:not(.logo),.nav-arr,.nav-pill{display:none!important}
-  .nav-burger{display:flex;align-items:center;gap:12px;margin-left:auto;padding:9px 12px 9px 18px;border-radius:999px;border:1px solid var(--glass-border);background:rgba(255,255,255,.09);color:var(--text);font:inherit;font-weight:700;font-size:.95rem;cursor:pointer}
-  .nb-ico{display:flex;flex-direction:column;gap:4px;width:18px}
-  .nb-ico i{display:block;height:2px;border-radius:2px;background:var(--cyan);transition:transform .35s var(--ease),opacity .25s}
-  .ois-nav.open .nb-ico i:nth-child(1){transform:translateY(3px) rotate(45deg)}
-  .ois-nav.open .nb-ico i:nth-child(2){transform:translateY(-3px) rotate(-45deg)}
-  .msheet{display:flex;flex-direction:column;position:fixed;inset:0;z-index:99;padding:92px 16px 24px;overflow-y:auto;
-    background:rgba(5,7,15,.88);-webkit-backdrop-filter:blur(26px) saturate(160%);backdrop-filter:blur(26px) saturate(160%);
-    opacity:0;visibility:hidden;transition:opacity .35s var(--ease),visibility 0s .35s}
-  .msheet.open{opacity:1;visibility:visible;transition:opacity .35s var(--ease)}
-  .msheet a{padding:14px 20px;border-radius:16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);font-weight:700;display:block;margin-bottom:8px}
-  .msheet a.active{background:rgba(47,107,255,.2);border-color:rgba(56,214,255,.4);color:var(--cyan)}
-}
-@media(max-width:860px){.ois-nav a{padding:10px 13px}.ois-nav{gap:2px}}
-
 /* ============ HLAVIČKA STRÁNKY ============ */
-.hero{padding:150px 0 30px;text-align:center}
+.hero{padding:var(--nav-offset,110px) 0 30px;text-align:center}
 .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:var(--glass);border:1px solid var(--glass-border);font-size:.82rem;color:var(--muted);margin-bottom:16px}
 .eyebrow i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
 .eyebrow i.y{background:var(--yellow);box-shadow:0 0 10px var(--yellow)}
@@ -277,7 +230,6 @@ footer p{max-width:640px;margin:0 auto;line-height:1.6}
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);transform:translate(-50%,30px);opacity:0;pointer-events:none;z-index:200;padding:12px 22px;border-radius:999px;background:rgba(10,18,48,.96);border:1px solid var(--glass-border);box-shadow:0 14px 40px rgba(0,0,0,.5);font-weight:600;font-size:.9rem;transition:all .4s var(--ease)}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.ois-nav{background:rgba(10,18,48,.94)}}
 
 /* ============ PROPOJENÍ SEKCÍ ============ */
 .tile{display:block;width:100%;font:inherit;color:inherit;cursor:pointer}
@@ -306,44 +258,158 @@ footer p{max-width:640px;margin:0 auto;line-height:1.6}
 .vzorbar[hidden]{display:none}
 .vzorbar b{color:var(--yellow);letter-spacing:.1em}
 .vzorbar .vzor{margin:0;flex:none}
+
+/* ===== ANIMACE (v2): jen vzhled, nic nemění ve fungování ===== */
+@keyframes anUp{from{opacity:0;transform:translateY(26px)}}
+@keyframes anRing{50%{box-shadow:0 0 0 10px rgba(56,214,255,.14),0 10px 40px rgba(47,107,255,.5)}}
+@keyframes anShine{0%,60%{left:-60%}100%{left:140%}}
+.dcard,.tile{animation:anUp .6s var(--ease) both}
+.dcard:nth-child(2),.tile:nth-child(2){animation-delay:.07s}.dcard:nth-child(3),.tile:nth-child(3){animation-delay:.14s}.dcard:nth-child(4),.tile:nth-child(4){animation-delay:.21s}.dcard:nth-child(n+5),.tile:nth-child(n+5){animation-delay:.28s}
+.dcard{transition:transform .35s var(--ease),box-shadow .3s}
+.dcard:hover{transform:translateY(-4px);box-shadow:0 18px 44px rgba(47,107,255,.25)}
+.btn-main{position:relative;overflow:hidden}
+.btn-main::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg);animation:anShine 5s 2s infinite;pointer-events:none}
+.btn-main[disabled]::after{display:none}
+html.lite .btn-main::after{display:none}
+html.lite .acard,html.lite .dcard,html.lite .tile,html.lite .rows>*,html.lite .avatar{animation:none!important}
+
+/* ============ HORNÍ SKLENĚNÝ PANEL (JAKO NA HOME) ============ */
+.ois-nav{
+  position:fixed;top:16px;left:0;right:0;margin-left:auto;margin-right:auto;width:fit-content;width:-moz-fit-content;transform:none;z-index:100;box-sizing:border-box;
+  display:flex;gap:4px;align-items:center;padding:7px;border-radius:999px;
+  background:rgba(255,255,255,.07);border:1px solid var(--glass-border, rgba(255,255,255,.14));
+  -webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);
+  box-shadow:0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12);
+  max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none;
+  transition:background .5s, box-shadow .5s;
+}
+.ois-nav::-webkit-scrollbar{display:none}
+.ois-nav a{position:relative;z-index:1;padding:10px 17px;border-radius:999px;white-space:nowrap;font-size:.9rem;font-weight:600;transition:background .3s, color .3s;color:var(--text, #eaf0ff);text-decoration:none}
+.ois-nav a:not(.active):not(.cta):hover{background:rgba(255,255,255,.1)}
+.ois-nav a.active{background:transparent}
+.ois-nav.moving{background:rgba(255,255,255,.1);box-shadow:0 14px 50px rgba(47,107,255,.28), inset 0 1px 0 rgba(255,255,255,.2)}
+.nav-pill{position:absolute;left:0;top:0;z-index:0;border-radius:999px;pointer-events:none;opacity:0;background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,.1));border:1px solid rgba(255,255,255,.3);box-shadow:0 4px 18px rgba(47,107,255,.3), inset 0 1px 0 rgba(255,255,255,.35);transition:transform .6s cubic-bezier(.3,1.25,.4,1), width .6s cubic-bezier(.3,1.25,.4,1), height .6s cubic-bezier(.3,1.25,.4,1), opacity .4s}
+.nav-pill.ready{opacity:1}
+.nav-pill.still{transition:none}
+.ois-nav a.logo{display:inline-flex;align-items:center;gap:10px;padding:6px 16px 6px 8px;font-weight:800;letter-spacing:-.01em}
+.ois-nav a.logo img{width:32px;height:32px;object-fit:contain;border-radius:0;filter:drop-shadow(0 0 10px rgba(56,214,255,.45));transition:transform .3s cubic-bezier(.2,.7,.2,1)}
+.ois-nav a.logo:hover img{transform:scale(1.08)}
+.ois-nav a.cta{background:rgba(255,255,255,.08);color:#94a3b8;border:1px solid rgba(255,255,255,.14);box-shadow:none;transition:background .3s,color .3s,border-color .3s}
+.ois-nav a.cta:hover{background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.24)}
+.nav-arr{position:sticky;flex:none;width:0;z-index:5;pointer-events:none;align-self:stretch}
+.nav-arr i{position:absolute;top:-7px;bottom:-7px;width:34px;display:flex;align-items:center;font-style:normal;font-size:1.5rem;font-weight:700;color:var(--cyan, #38d6ff);opacity:0;transition:opacity .35s cubic-bezier(.2,.7,.2,1)}
+.nav-arr.l{left:0}.nav-arr.l i{left:-7px;padding-left:10px;border-radius:999px 0 0 999px;background:linear-gradient(90deg,#0a1230 30%,transparent)}
+.nav-arr.r{right:0}.nav-arr.r i{right:-7px;justify-content:flex-end;padding-right:10px;border-radius:0 999px 999px 0;background:linear-gradient(270deg,#0a1230 30%,transparent);animation:nudge 1.8s ease-in-out infinite}
+.ois-nav.can-l .nav-arr.l i,.ois-nav.can-r .nav-arr.r i{opacity:1}
+.gearbtn{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:var(--text, #eaf0ff);cursor:pointer;transition:transform .3s cubic-bezier(.2,.7,.2,1),background .3s;margin-left:4px}
+.gearbtn:hover{background:rgba(255,255,255,.15);transform:rotate(45deg)}
+.gearbtn svg{width:18px;height:18px}
+.acct{order:98;display:flex;align-items:center;gap:9px;margin-left:4px;padding:3px;border-radius:999px;border:0;background:transparent;color:var(--text, #eaf0ff);font:inherit;font-weight:700;font-size:.88rem;cursor:pointer;z-index:2;transition:transform .3s cubic-bezier(.2,.7,.2,1)}
+.acct:active{transform:scale(.92)}
+.acct .av{display:flex;align-items:center;justify-content:center;flex:none;width:34px;height:34px;border-radius:50%;overflow:hidden;background:#3a4252;color:#8e97a8;font-weight:800;transition:box-shadow .4s cubic-bezier(.2,.7,.2,1)}
+.acct .av svg{width:100%;height:100%;margin-top:4px}
+.acct .av img{width:100%;height:100%;object-fit:cover;display:block}
+.acct .av.big{width:44px;height:44px}
+.acct.in{background:rgba(8,12,28,.92);border:1px solid rgba(255,255,255,.1);padding:4px 18px 4px 4px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+.acct.in .av{background:linear-gradient(135deg,#1c2a55,#0b1229);color:#fff;animation:ringc 6s linear infinite}
+.acct .an{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:.95rem;color:#fff}
+@keyframes ringc{0%,100%{box-shadow:0 0 0 3px #7fdcff,0 0 18px rgba(127,220,255,.65)}25%{box-shadow:0 0 0 3px #2f6bff,0 0 18px rgba(47,107,255,.7)}50%{box-shadow:0 0 0 3px #17358f,0 0 16px rgba(23,53,143,.85)}75%{box-shadow:0 0 0 3px #2f6bff,0 0 18px rgba(47,107,255,.7)}}
+.acct-menu{position:fixed;z-index:120;top:calc(env(safe-area-inset-top,0px) + 78px);right:max(12px,calc(50% - 600px));width:270px;padding:14px;border-radius:22px;background:rgba(10,18,48,.82);-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);border:1px solid var(--glass-border, rgba(255,255,255,.14));box-shadow:0 20px 60px rgba(0,0,0,.5);opacity:0;transform:translateY(-8px) scale(.98);transition:opacity .3s cubic-bezier(.2,.7,.2,1),transform .3s cubic-bezier(.2,.7,.2,1);pointer-events:none}
+.acct-menu.on{opacity:1;transform:none;pointer-events:auto}
+.am-head{display:flex;align-items:center;gap:12px;padding:6px 6px 14px;border-bottom:1px solid var(--glass-border, rgba(255,255,255,.14));margin-bottom:8px}
+.am-head b{display:block;color:#fff}.am-head small{color:var(--muted, #9fb0d6);font-size:.78rem}
+.acct-menu a,.acct-menu button{display:block;width:100%;padding:11px 12px;border-radius:12px;border:0;background:none;color:var(--text, #eaf0ff);font:inherit;text-align:left;text-decoration:none;cursor:pointer}
+.acct-menu a:hover,.acct-menu button:hover{background:rgba(255,255,255,.08)}
+.acct-menu #acctOut{color:#ff8d9b}
+.nav-burger{display:none}
+.msheet{display:none}
+@media(max-width:1240px){
+  .ois-nav{left:12px;right:12px;margin-left:0;margin-right:0;transform:none;max-width:none;width:auto;justify-content:space-between;overflow:visible;padding:6px}
+  .ois-nav a:not(.logo),.nav-arr,.nav-pill{display:none!important}
+  .nav-burger{display:flex;align-items:center;gap:12px;order:5;margin-left:auto;padding:9px 12px 9px 18px;border-radius:999px;border:1px solid var(--glass-border, rgba(255,255,255,.14));background:rgba(255,255,255,.09);color:var(--text, #eaf0ff);font:inherit;font-weight:700;font-size:.95rem;cursor:pointer}
+  .acct{order:7;margin-left:8px}
+  .acct-menu{right:12px}
+  .nb-ico{display:flex;flex-direction:column;gap:4px;width:18px}
+  .nb-ico i{display:block;height:2px;border-radius:2px;background:var(--cyan, #38d6ff);transition:transform .35s cubic-bezier(.2,.7,.2,1),opacity .25s}
+  .ois-nav.open .nb-ico i:nth-child(1){transform:translateY(3px) rotate(45deg)}
+  .ois-nav.open .nb-ico i:nth-child(2){transform:translateY(-3px) rotate(-45deg)}
+  .msheet{display:flex;flex-direction:column;position:fixed;inset:0;z-index:99;padding:92px 16px 24px;overflow-y:auto;background:rgba(5,7,15,.88);-webkit-backdrop-filter:blur(26px) saturate(160%);backdrop-filter:blur(26px) saturate(160%);opacity:0;visibility:hidden;transition:opacity .35s cubic-bezier(.2,.7,.2,1),visibility 0s .35s}
+  .msheet.open{opacity:1;visibility:visible;transition:opacity .35s cubic-bezier(.2,.7,.2,1)}
+  .msheet a{padding:14px 20px;border-radius:16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);font-weight:700;display:block;margin-bottom:8px;color:var(--text, #eaf0ff);text-decoration:none}
+}
+@media(max-width:520px){
+  .acct .an{display:none}
+  .acct.in{padding:3px;background:none}
+  .ois-nav a.logo{font-size:0;gap:0;padding:4px}
+}
+/* Oznámení CSS */
+#ois-notices{position:fixed;left:0;right:0;top:var(--notify-top,76px);z-index:90;display:flex;flex-direction:column;align-items:center;gap:10px;padding:0 12px;pointer-events:none}
+.nt{--nc:#38d6ff;position:relative;display:flex;align-items:center;gap:14px;width:100%;max-width:940px;padding:14px 16px 14px 14px;border-radius:22px;overflow:hidden;pointer-events:auto;background:linear-gradient(135deg,color-mix(in srgb,var(--nc) 20%,rgba(8,13,34,.96)),rgba(8,13,34,.96) 62%);border:1px solid color-mix(in srgb,var(--nc) 55%,transparent);box-shadow:0 18px 50px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04) inset,0 0 34px color-mix(in srgb,var(--nc) 22%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);animation:ntIn .7s cubic-bezier(.2,.7,.2,1) both}
+.nt.out{animation:ntOut .45s cubic-bezier(.2,.7,.2,1) forwards}
+@keyframes ntIn{0%{opacity:0;transform:translateY(-36px) scale(.94)}60%{transform:translateY(5px) scale(1.01)}100%{opacity:1;transform:none}}
+@keyframes ntOut{to{opacity:0;transform:translateY(-22px) scale(.96);max-height:0;padding-top:0;padding-bottom:0;margin-top:-10px}}
+.nt.info{--nc:#38d6ff}.nt.success{--nc:#35d07f}.nt.warning{--nc:#ffc933}.nt.danger{--nc:#ff6b6b}.nt.maintenance{--nc:#ffc933}.nt.rebuild{--nc:#2f6bff}.nt.build{--nc:#38d6ff}
+.nt-ic{flex:none;position:relative;width:46px;height:46px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--nc) 22%,transparent);color:var(--nc)}
+.nt-ic svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nt-b{flex:1;min-width:0}
+.nt-t{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+.nt-t b{font-size:1rem;letter-spacing:-.01em}
+.nt-tag{padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--nc) 24%,transparent);color:var(--nc);font-size:.66rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.nt-p{color:#c9d5f2;font-size:.9rem;line-height:1.45;overflow-wrap:anywhere}
+.nt-go{flex:none;padding:9px 18px;border-radius:999px;background:var(--nc);color:#05070f;font-weight:800;font-size:.84rem;white-space:nowrap;transition:transform .25s ease,box-shadow .25s}
+.nt-go:hover{transform:translateY(-2px);box-shadow:0 8px 22px color-mix(in srgb,var(--nc) 45%,transparent)}
+.nt-x{flex:none;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.08);color:#c9d5f2;font-size:1.2rem;line-height:1;border:0;cursor:pointer;transition:transform .3s ease,background .25s}
+.nt-x:hover{background:rgba(255,255,255,.18);transform:rotate(90deg)}
+
 </style>
 </head>
-<body>
+<body data-page="provoz">
 
 <div class="aurora" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span><span class="e"></span></div>
 
-<!-- ================= HORNÍ SKLENĚNÝ PANEL (JAKO NA HOME) ================= -->
+<!-- ================= HORNÍ SKLENĚNÝ PANEL ================= -->
 <div class="ois-nav" role="navigation" aria-label="Hlavní navigace"><span class="nav-pill" aria-hidden="true"></span><span class="nav-arr l" aria-hidden="true"><i>‹</i></span>
   <a class="logo" href="/"><img src="/static/img/datacorebot_pf-lepsi.png" alt="">OIS IDPK</a>
-  <a href="/">Domů</a>
-  <a href="/#download">Download</a>
-  <a href="/#team">Náš tým</a>
-  <a href="/#stats">Statistiky</a>
-  <a href="/#supporters">Podporovatelé</a>
-  <a href="/#provoz">Provoz IDPK</a>
+  <a href="/" data-r="home">Domů</a>
+  <a href="/#/download" data-r="download">Download</a>
+  <a href="/#/team" data-r="team">Náš tým</a>
+  <a href="/#/stats" data-r="stats">Statistiky</a>
+  <a href="/#/supporters" data-r="supporters">Podporovatelé</a>
+  <a href="/#/provoz" data-r="provoz">Provoz IDPK</a>
   <a href="/mapa">Interaktivní mapa IDPK</a>
   <a href="/led-panel">LED Panel Simulátor</a>
-  <a href="/podpora" target="_blank" style="color:var(--cyan);"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-3px;margin-right:4px;display:inline-block;"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l3.54 3.54M15.53 15.53l3.54 3.54M4.93 19.07l3.54-3.54M15.53 8.47l3.54-3.54"/></svg>Podpora / Hlášení</a>
-  <a class="cta" href="/#demo">Demo verze</a>
+  <a href="/podpora" data-r="podpora" style="color:var(--cyan);"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-3px;margin-right:4px;display:inline-block;"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l3.54 3.54M15.53 15.53l3.54 3.54M4.93 19.07l3.54-3.54M15.53 8.47l3.54-3.54"/></svg>Podpora / Hlášení</a>
+  <a class="cta" href="/#/demo" data-r="demo">Demo verze</a>
   <span class="nav-arr r" aria-hidden="true"><i>›</i></span>
-  <button class="nav-burger" id="burger" type="button" aria-expanded="false" aria-label="Menu"><span id="navLabel">Provoz IDPK</span><span class="nb-ico" aria-hidden="true"><i></i><i></i></span></button>
+  <button class="gearbtn" id="setBtn" type="button" aria-label="Nastavení" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M10.39 4.78 L10.68 1.89 L13.32 1.89 L13.61 4.78 L15.96 5.75 L18.22 3.91 L20.09 5.78 L18.25 8.04 L19.22 10.39 L22.11 10.68 L22.11 13.32 L19.22 13.61 L18.25 15.96 L20.09 18.22 L18.22 20.09 L15.96 18.25 L13.61 19.22 L13.32 22.11 L10.68 22.11 L10.39 19.22 L8.04 18.25 L5.78 20.09 L3.91 18.22 L5.75 15.96 L4.78 13.61 L1.89 13.32 L1.89 10.68 L4.78 10.39 L5.75 8.04 L3.91 5.78 L5.78 3.91 L8.04 5.75Z"/><circle cx="12" cy="12" r="3.1"/></svg></button>
+  <button class="acct" id="acctBtn" type="button" aria-label="Účet" aria-haspopup="true" aria-expanded="false"><span class="av" id="acctAv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span class="an" id="acctName" hidden></span></button>
+  <button class="nav-burger" id="navBurger" type="button" aria-expanded="false" aria-controls="menuSheet"><span id="navLabel">Domů</span><span class="nb-ico" aria-hidden="true"><i></i><i></i></span></button>
 </div>
 
-<!-- Mobilní rozbalovací menu -->
-<div class="msheet" id="msheet" aria-hidden="true">
+<div class="acct-menu" id="acctMenu" hidden role="menu">
+  <div class="am-head"><span class="av big" id="acctAv2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><div><b id="acctName2">Nepřihlášen</b><small>Přihlášen přes DataCoreBot</small></div></div>
+  <a href="/#/download" role="menuitem">Download</a>
+  <a href="/ucet" id="acctLink" role="menuitem">Můj účet</a>
+  <button type="button" id="acctOut" role="menuitem">Odhlásit se</button>
+</div>
+
+<div class="msheet" id="menuSheet" aria-hidden="true">
   <div style="display:flex;flex-direction:column;gap:10px;max-width:400px;margin:0 auto;width:100%;">
     <a href="/">Domů</a>
-    <a href="/#download">Download</a>
-    <a href="/#team">Náš tým</a>
-    <a href="/#stats">Statistiky</a>
-    <a href="/#supporters">Podporovatelé</a>
-    <a href="/#provoz">Provoz IDPK</a>
-      <a href="/mapa">Interaktivní mapa</a>
+    <a href="/#/download">Download</a>
+    <a href="/#/team">Náš tým</a>
+    <a href="/#/stats">Statistiky</a>
+    <a href="/#/supporters">Podporovatelé</a>
+    <a href="/#/provoz">Provoz IDPK</a>
+    <a href="/mapa">Interaktivní mapa</a>
     <a href="/led-panel">LED Panel Simulátor</a>
-    <a href="/podpora" target="_blank" style="color:var(--cyan);">Podpora / Hlášení</a>
-    <a href="/#demo" style="background:linear-gradient(135deg,var(--blue),var(--cyan));color:#031028;text-align:center;">Demo verze</a>
+    <a href="/podpora" style="color:var(--cyan);">Podpora / Hlášení</a>
+    <a href="/#/demo" style="background:linear-gradient(135deg,var(--blue),var(--cyan));color:#031028;text-align:center;">Demo verze</a>
   </div>
 </div>
+
+<div id="ois-notices"></div>
+
 
 <main>
 <!-- ================= HLAVIČKA ================= -->
@@ -352,10 +418,6 @@ footer p{max-width:640px;margin:0 auto;line-height:1.6}
   <div class="kicker">Historie provozu</div>
   <h1>Databáze vozidel a <span class="grad">vozovny</span></h1>
   <p class="lead">Dvě propojené sekce: databáze všech vozidel a přehled vozoven s evidencí. Z vozidla se dostanete do jeho vozovny a z vozovny zpět na vozidla.</p>
-  <div style="margin:16px auto 0;display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:12px;background:rgba(255,201,51,.1);border:1px solid rgba(255,201,51,.25);color:var(--yellow);font-size:.85rem;max-width:750px;text-align:left;">
-    <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span><b>Upozornění:</b> Telemetrická a provozní data z map a GPS modulů mají informativní charakter a nemusí být 100% přesná.</span>
-  </div>
 
   <div class="tiles" aria-live="polite">
     <button class="tile" type="button" data-go="vozidla"><span class="num" id="tV" data-to="0">0</span><small>Vozidel v databázi</small></button>
@@ -607,38 +669,11 @@ async function fetchAll(){
   return{vehicles:arr(veh),depots:arr(dep),records:arr(rec)};
 }
 
-
-const KNOWN_DEPOTS = {
-  "#00ff2a": "Garáže Stříbro",
-  "#00c721": "Garáže Stříbro",
-  "#facc15": "Garáže Tachov",
-  "#ae00ff": "Odstavná plocha Planá Sadová",
-  "#ff0000": "DOREZA",
-  "#fb8313": "Zakázaná pozemní komunikace pro autobusy v obci Ctiboř",
-  "#00fbff": "Čerpací stanice Orlen STŘÍBRO",
-  "#1100ff": "Bývalý areál garáže Plzeň",
-  "#1d6b00": "Odstavná plocha PLZEŇ TERMINÁL HL. N.",
-  "#ff80e8": "PLZEŇ CAN",
-  "#bdfb13": "Servis MAN",
-  "#1d0462": "JZD Černošín",
-  "#520000": "Garáže Bor"
-};
-function resolveDepotName(val) {
-  if (!val) return "–";
-  let s = String(val).trim();
-  if (s.startsWith("#")) {
-    let low = s.toLowerCase();
-    if (KNOWN_DEPOTS[low]) return KNOWN_DEPOTS[low];
-    return "Vozovna";
-  }
-  return s;
-}
-
 function build(raw){
   const now=Date.now();
   const recs=(raw.records||[]).filter(x=>x&&x.spz&&String(x.spz).toUpperCase()!=='BACKUP').map(x=>{
     const arr=parseT(x.arrived_at),left=parseT(x.left_at);
-    return{spz:String(x.spz).trim(),depot:resolveDepotName(x.depot_name||x.depot||'–'),arr,left,active:!left,dur:arr==null?null:(left||now)-arr,vzor:!!x.vzor};
+    return{spz:String(x.spz).trim(),depot:x.depot_name||x.depot||'–',arr,left,active:!left,dur:arr==null?null:(left||now)-arr,vzor:!!x.vzor};
   }).filter(x=>x.arr!=null);
   const act=new Map();recs.forEach(x=>{if(x.active&&(!act.has(x.spz)||act.get(x.spz).arr<x.arr))act.set(x.spz,x)});
   const map=new Map();
@@ -657,7 +692,7 @@ function build(raw){
     }
   });
   recs.forEach(x=>{x.v=map.get(x.spz)});
-  const depots=(raw.depots||[]).filter(d=>d&&d.name).map(d=>({name:resolveDepotName(d.name),color:safeColor(d.color),cap:+d.capacity||0,vzor:!!d.vzor}));
+  const depots=(raw.depots||[]).filter(d=>d&&d.name).map(d=>({name:d.name,color:safeColor(d.color),cap:+d.capacity||0,vzor:!!d.vzor}));
   recs.forEach(x=>{if(!depots.some(d=>d.name===x.depot))depots.push({name:x.depot,color:'#2f6bff',cap:0})});
   S.vehicles=[...map.values()];S.records=recs;S.depots=depots;S.bySpz=map;
   S.vehicles.forEach(v=>{v.hay=[v.spz,v.type,v.op,v.line,v.dest,v.depot].map(norm).join('|')});
@@ -845,23 +880,6 @@ function resetShown(){S.vShown=S.eShown=CONFIG.pageSize}
 /* =====================================================================
    DETAIL VOZIDLA
    ===================================================================== */
-
-window.openSeznamAutobusu = function(rawSpz) {
-  let s = (rawSpz || '').replace(/[^a-zA-Z0-9]/g, '');
-  let formattedSpz = rawSpz;
-  if (s.length > 4) {
-    formattedSpz = s.substring(0, s.length - 4) + ' ' + s.substring(s.length - 4);
-  }
-  let newTab = window.open('about:blank', '_blank');
-  if (!newTab) {
-    window.open('https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz), '_blank');
-    return;
-  }
-  newTab.document.write('<!DOCTYPE html><html><head><title>Načítám seznam autobusů...</title><meta charset="utf-8"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"></head><body style="background:#0f172a;color:white;font-family:sans-serif;display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;margin:0;"><i class="fas fa-circle-notch fa-spin" style="font-size:3rem;color:#38bdf8;margin-bottom:20px;"></i><h2 style="margin:0;">Otevírám databázi vozidel...</h2><p style="color:#94a3b8;margin-top:15px;text-align:center;max-width:400px;line-height:1.5;">Vyhledávám vůz <b>' + esc(formattedSpz) + '</b> na stránce https://seznam-autobusu.cz/<br>Prosím o strpení, navazuji spojení s cílovým serverem (cca 5 sekund)...</p></body></html>');
-  newTab.document.close();
-  newTab.location.href = 'https://seznam-autobusu.cz/seznam?evcspz=' + encodeURIComponent(formattedSpz);
-};
-
 function openDetail(spz){
   const v=S.bySpz.get(spz);if(!v)return;
   const rs=S.records.filter(x=>x.spz===spz).sort((a,b)=>b.arr-a.arr);
@@ -882,7 +900,7 @@ function openDetail(spz){
    '<div><small>Příjezdů za 30 dní</small><b>'+r30.length+'</b></div>'+
    '<div><small>Průměrné stání</small><b>'+dur(avg)+'</b></div>'+
    '<div><small>Nejčastěji</small><b>'+(fav?'<button class="xl" type="button" data-depot-go="'+esc(fav[0])+'">'+esc(fav[0])+'</button>':'–')+'</b></div></div>'+
-   '<div class="dact">'+(v.depot?'<button class="btnx" type="button" data-depot-go="'+esc(v.depot)+'">Otevřít vozovnu →</button>':'')+'<button class="btnx" type="button" data-ev-spz="'+esc(v.spz)+'">Evidence tohoto vozidla →</button><a class="btnx" href="/mapa?track='+encodeURIComponent(v.spz)+'" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">🗺️ Zobrazit na mapě →</a><button class="btnx" type="button" onclick="openSeznamAutobusu(\'" + esc(v.spz) + "\')" style="background:rgba(56,214,255,.12);border:1px solid rgba(56,214,255,.3);color:var(--cyan);font-weight:600;display:inline-flex;align-items:center;gap:6px;">📷 Fotky na Seznam-autobusů</button></div>'+
+   '<div class="dact">'+(v.depot?'<button class="btnx" type="button" data-depot-go="'+esc(v.depot)+'">Otevřít vozovnu →</button>':'')+'<button class="btnx" type="button" data-ev-spz="'+esc(v.spz)+'">Evidence tohoto vozidla →</button></div>'+
    '<h3>Historie</h3>'+(ev.length?'<ul class="tl">'+ev.slice(0,40).map(e=>'<li class="'+e.c+'"><b>'+esc(e.h)+'</b><small>'+dt(e.t)+(e.s?' · '+esc(e.s):'')+'</small></li>').join('')+'</ul>':'<div class="muted">Pro toto vozidlo zatím nejsou žádné záznamy.</div>');
   const d=$('#dlg');if(!d.open)d.showModal();$('#dbox').scrollTop=0;
 }
@@ -907,83 +925,12 @@ function readHash(){
   S.eDepot=p.get('d')||'';
   S.q=p.get('q')||'';$('#q').value=S.q;
   S.chips=p.getAll('f').map(x=>{const i=x.indexOf(':');return{k:x.slice(0,i),v:x.slice(i+1)}}).filter(c=>KIND[c.k]&&c.v);
-  const urlP=new URLSearchParams(window.location.search);
-  const qSpz=(urlP.get('spz')||urlP.get('bus')||'').trim();
-  if(qSpz){
-    S.q=qSpz;$('#q').value=qSpz;
-    if(!S.chips.some(c=>c.k==='spz'&&c.v.toLowerCase()===qSpz.toLowerCase())){
-      S.chips.push({k:'spz',v:qSpz});
-    }
-  }
 }
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),2400)}
 
 function bind(){
-    const navEl = $('.ois-nav'), pill = $('.nav-pill');
-    function updateNavPill(instant){
-      if(!navEl||!pill)return;
-      const a = navEl.querySelector('a.active:not(.logo)');
-      if(!a){
-        pill.classList.remove('ready');
-        pill.style.opacity = '0';
-        return;
-      }
-      if(instant) pill.classList.add('still');
-      pill.style.opacity = '1';
-      pill.style.width = a.offsetWidth + 'px';
-      pill.style.height = a.offsetHeight + 'px';
-      pill.style.transform = 'translate3d(' + a.offsetLeft + 'px,' + a.offsetTop + 'px,0)';
-      pill.classList.add('ready');
-      if(instant) setTimeout(()=>pill.classList.remove('still'), 60);
-    }
-    if(navEl && pill){
-      navEl.querySelectorAll('a:not(.logo)').forEach(link=>{
-        link.addEventListener('mouseenter',()=>{
-          pill.style.opacity = '1';
-          pill.style.width = link.offsetWidth + 'px';
-          pill.style.height = link.offsetHeight + 'px';
-          pill.style.transform = 'translate3d(' + link.offsetLeft + 'px,' + link.offsetTop + 'px,0)';
-          pill.classList.add('ready');
-        });
-      });
-      navEl.addEventListener('mouseleave',()=>{
-        updateNavPill();
-      });
-    }
-    function syncNavArrows(){
-      if(!navEl)return;
-      const canL = navEl.scrollLeft > 6;
-      const canR = navEl.scrollLeft < (navEl.scrollWidth - navEl.clientWidth - 6);
-      navEl.classList.toggle('can-l', canL);
-      navEl.classList.toggle('can-r', canR);
-    }
-    if(navEl){
-      navEl.addEventListener('scroll', syncNavArrows, {passive:true});
-      window.addEventListener('resize', ()=>{ updateNavPill(true); syncNavArrows(); });
-      setTimeout(()=>{ updateNavPill(true); syncNavArrows(); }, 60);
-      setTimeout(()=>{ updateNavPill(); syncNavArrows(); }, 350);
-    }
-    const burger = $('#burger');
-    const msheet = $('#msheet');
-    if(burger){
-      burger.addEventListener('click',()=>{
-        const o = burger.classList.toggle('open');
-        if(navEl) navEl.classList.toggle('open', o);
-        if(msheet) msheet.classList.toggle('open', o);
-        burger.setAttribute('aria-expanded', o);
-      });
-    }
-    document.addEventListener('click',e=>{
-      if(!e.target.closest('.ois-nav, .msheet, .nav-burger')){
-        if(navEl) navEl.classList.remove('open');
-        if(burger) burger.classList.remove('open');
-        if(msheet) msheet.classList.remove('open');
-        if(burger) burger.setAttribute('aria-expanded', 'false');
-      }
-      if(!e.target.closest('.search')) closeSug();
-    });
 
-    const q=$('#q');
+  const q=$('#q');
   q.addEventListener('input',()=>{S.q=q.value;resetShown();syncBox();renderAll();renderSug();syncHash()});
   q.addEventListener('focus',renderSug);
   q.addEventListener('keydown',e=>{
@@ -1095,46 +1042,10 @@ function syncSortSel(){const v=S.vSort.k+':'+S.vSort.d,s=$('#vSort');s.value=[..
 
 function exportCSV(){
   const a=eList();if(!a.length){toast('Není co exportovat');return}
-  const cellTxt=s=>'="'+String(s==null?'':s).replace(/"/g,'""')+'"';
-  const cellVal=s=>{s=String(s==null?'':s);if(/^[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'};
-
-  const fD=ms=>{
-    if(ms==null)return '';
-    const d=new Date(ms);
-    const day=String(d.getDate()).padStart(2,'0');
-    const mo=String(d.getMonth()+1).padStart(2,'0');
-    return `${day}.${mo}.${d.getFullYear()}`;
-  };
-  const fT=ms=>{
-    if(ms==null)return '';
-    const d=new Date(ms);
-    const h=String(d.getHours()).padStart(2,'0');
-    const mi=String(d.getMinutes()).padStart(2,'0');
-    const se=String(d.getSeconds()).padStart(2,'0');
-    return `${h}:${mi}:${se}`;
-  };
-
-  const rows=[
-    ['SPZ','Vozovna','Datum příjezdu','Čas příjezdu','Datum odjezdu','Čas odjezdu','Stav','Doba stání (min)']
-  ].concat(a.map(x=>{
-    const arrD = fD(x.arr), arrT = fT(x.arr);
-    const leftD = x.active ? '' : fD(x.left);
-    const leftT = x.active ? '' : fT(x.left);
-    const durMin = x.dur == null ? '' : Math.max(0, Math.round(x.dur/6e4));
-    const stav = x.active ? 'Stále ve vozovně (parkuje)' : 'Odjezd dokončen';
-    return [
-      cellTxt(x.spz),
-      cellVal(x.depot),
-      cellTxt(arrD),
-      cellTxt(arrT),
-      cellTxt(leftD),
-      cellTxt(leftT),
-      cellVal(stav),
-      cellVal(durMin)
-    ];
-  }));
-
-  const blob=new Blob(['\ufeff'+rows.map(r=>r.join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const cell=s=>{s=String(s==null?'':s);if(/^[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'};
+  const f=ms=>ms==null?'':new Intl.DateTimeFormat('cs-CZ',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(ms);
+  const rows=[['SPZ','Vozovna','Přijel','Odjel','Doba stání (min)']].concat(a.map(x=>[x.spz,x.depot,f(x.arr),x.active?'parkuje':f(x.left),x.dur==null?'':Math.round(x.dur/6e4)]));
+  const blob=new Blob(['﻿'+rows.map(r=>r.map(cell).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'});
   const u=URL.createObjectURL(blob),l=document.createElement('a');l.href=u;l.download='evidence-vozoven.csv';document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);
   toast('Export připraven ('+a.length+' záznamů)');
 }
@@ -1148,21 +1059,7 @@ async function load(silent){
   try{
     build(await fetchAll());S.loading=false;fillSelects();renderAll();
     $('#liveDot').className=CONFIG.DEMO?'y':'';$('#liveTxt').textContent=CONFIG.DEMO?'Vzorová data':'Živá data · aktualizováno '+fT.format(Date.now());
-    if(first){
-      first=false;
-      const sp=S.bySpz;
-      if(S.chips.length||S.q)renderAll();
-      const urlP=new URLSearchParams(window.location.search);
-      const qSpz=(urlP.get('spz')||urlP.get('bus')||'').trim();
-      if(qSpz){
-        for(let [k,v] of S.bySpz.entries()){
-          if(k.toLowerCase()===qSpz.toLowerCase()){
-            openDetail(k);
-            break;
-          }
-        }
-      }
-    }
+    if(first){first=false;const sp=S.bySpz;if(S.chips.length||S.q)renderAll()}
   }catch(err){
     console.warn(err);
     if(!silent){S.loading=false;S.vehicles=[];S.records=[];S.depots=[];renderAll();
@@ -1177,5 +1074,188 @@ renderAll();load();
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!CONFIG.DEMO&&!S.loading)load(true)});
 })();
 </script>
+
+<!-- ================= SPOLEČNÁ LOGIKA NAVIGACE A OZNÁMENÍ ================= -->
+<script>
+(function(){
+  'use strict';
+  const navEl = document.querySelector('.ois-nav');
+  const pill = document.querySelector('.nav-pill');
+  
+  function movePill(key, instant){
+    if(!navEl || !pill) return;
+    const a = navEl.querySelector('a[data-r="'+key+'"]:not(.logo)') || (key === 'podpora' ? navEl.querySelector('a[href="/podpora"]') : null);
+    if(!a) return;
+    document.querySelectorAll('.ois-nav a').forEach(x => x.classList.toggle('active', x === a));
+    const lb = document.getElementById('navLabel'); if(lb) lb.textContent = a.textContent.trim();
+    if(instant) pill.classList.add('still');
+    pill.style.width = a.offsetWidth + 'px';
+    pill.style.height = a.offsetHeight + 'px';
+    pill.style.transform = 'translate(' + a.offsetLeft + 'px,' + a.offsetTop + 'px)';
+    pill.classList.add('ready');
+    if(instant){ void pill.offsetWidth; pill.classList.remove('still'); }
+  }
+  
+  const currentKey = document.body.dataset.page || (location.pathname === '/podpora' ? 'podpora' : '');
+  window.addEventListener('resize', () => movePill(currentKey, true));
+  window.addEventListener('load', () => movePill(currentKey, true));
+  setTimeout(() => movePill(currentKey, true), 80);
+
+  const burger = document.getElementById('navBurger');
+  const msheet = document.getElementById('menuSheet');
+  if(burger && msheet){
+    burger.addEventListener('click', () => {
+      const open = msheet.classList.toggle('open');
+      burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+      navEl.classList.toggle('open', open);
+    });
+    msheet.addEventListener('click', e => {
+      if(e.target.closest('a')){
+        msheet.classList.remove('open');
+        burger.setAttribute('aria-expanded', 'false');
+        navEl.classList.remove('open');
+      }
+    });
+  }
+
+  const btn = document.getElementById('acctBtn');
+  const av = document.getElementById('acctAv');
+  const nm = document.getElementById('acctName');
+  const menu = document.getElementById('acctMenu');
+  const av2 = document.getElementById('acctAv2');
+  const nm2 = document.getElementById('acctName2');
+  const ghost = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  let user = null;
+
+  function paint(el, u){
+    if(!el) return;
+    el.innerHTML = '';
+    if(u && u.avatar){
+      const im = new Image();
+      im.alt = '';
+      im.referrerPolicy = 'no-referrer';
+      im.src = u.avatar;
+      im.onerror = () => { el.textContent = (u.name||'?').trim().charAt(0).toUpperCase(); };
+      el.appendChild(im);
+    } else if(u){
+      el.textContent = (u.name||'?').trim().charAt(0).toUpperCase();
+    } else {
+      el.innerHTML = ghost;
+    }
+  }
+
+  function render(u){
+    user = u && u.name ? u : null;
+    if(btn) btn.classList.toggle('in', !!user);
+    paint(av, user);
+    paint(av2, user);
+    if(nm){ nm.hidden = !user; nm.textContent = user ? user.name : ''; }
+    if(nm2){ nm2.textContent = user ? user.name : 'Nepřihlášen'; }
+    if(btn) btn.setAttribute('aria-label', user ? 'Účet: ' + user.name : 'Přihlásit se');
+    if(!user && menu) closeMenu();
+  }
+
+  function openMenu(){ if(!menu) return; menu.hidden = false; requestAnimationFrame(() => menu.classList.add('on')); btn && btn.setAttribute('aria-expanded', 'true'); }
+  function closeMenu(){ if(!menu) return; menu.classList.remove('on'); btn && btn.setAttribute('aria-expanded', 'false'); setTimeout(() => { if(!menu.classList.contains('on')) menu.hidden = true; }, 300); }
+
+  if(btn){
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if(!user){ window.location.href = '/login'; return; }
+      menu && (menu.classList.contains('on') ? closeMenu() : openMenu());
+    });
+  }
+  document.addEventListener('click', e => { if(menu && menu.classList.contains('on') && !menu.contains(e.target)) closeMenu(); });
+  
+  const setBtn = document.getElementById('setBtn');
+  if(setBtn){
+    setBtn.addEventListener('click', () => { window.location.href = '/'; });
+  }
+
+  const outBtn = document.getElementById('acctOut');
+  if(outBtn){
+    outBtn.addEventListener('click', () => {
+      fetch('/api/auth/logout', {method: 'POST'}).then(() => {
+        try{ localStorage.removeItem('ois-session'); }catch(_){}
+        window.location.reload();
+      });
+    });
+  }
+
+  try {
+    const cached = localStorage.getItem('ois-session');
+    if(cached) {
+      const p = JSON.parse(cached);
+      if(p && p.name && (Date.now() - (p.ts || 0) < 86400000)) render(p);
+    }
+  } catch(_) {}
+
+  fetch('/api/auth/me').then(r => r.json()).then(res => {
+    if(res && res.status === 'success' && res.name){
+      const u = { name: res.name, avatar: res.avatar || null };
+      try{ localStorage.setItem('ois-session', JSON.stringify({ name: u.name, avatar: u.avatar, ts: Date.now() })); }catch(_){}
+      render(u);
+    } else {
+      try{ localStorage.removeItem('ois-session'); }catch(_){}
+      render(null);
+    }
+  }).catch(() => {});
+
+  // Oznámení
+  const noticesHost = document.getElementById('ois-notices');
+  if(noticesHost){
+    const KEY = 'ois-notice-dismissed';
+    let dismissed = {};
+    try { dismissed = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(_) {}
+    const ICON = {
+      info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+      success:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/>',
+      warning:'<path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v5M12 17.6h.01"/>',
+      danger:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>',
+      maintenance:'<path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
+      build:'<path d="M7 18a4 4 0 01-.5-7.97A6 6 0 0118 9.5a4.25 4.25 0 01-.5 8.5"/><path d="M12 11v7M9 15l3 3 3-3"/>'
+    };
+    const TAGS = {warning:'Upozornění',danger:'Výpadek',rebuild:'Průběh',maintenance:'Údržba',info:'Novinka',success:'Funkční',build:'Automatická zpráva'};
+
+    function renderNotices(list){
+      noticesHost.innerHTML = '';
+      (list || []).forEach(n => {
+        if(!n || !n.id) return;
+        if(dismissed[n.id] && dismissed[n.id] >= (n.version || 1)) return;
+        const type = n.type || 'info';
+        const el = document.createElement('div');
+        el.className = 'nt ' + type;
+        el.innerHTML = `
+          <div class="nt-ic"><svg viewBox="0 0 24 24">${ICON[type] || ICON.info}</svg></div>
+          <div class="nt-b">
+            <div class="nt-t">
+              <b>${n.title || ''}</b>
+              <span class="nt-tag">${n.tag || TAGS[type] || type}</span>
+            </div>
+            <div class="nt-p">${n.text || ''}</div>
+          </div>
+          ${n.link ? `<a class="nt-go" href="${n.link.url}">${n.link.label || 'Otevřít'}</a>` : ''}
+          ${n.dismissible !== false ? `<button class="nt-x" type="button" aria-label="Zavřít">×</button>` : ''}
+        `;
+        const closeBtn = el.querySelector('.nt-x');
+        if(closeBtn){
+          closeBtn.addEventListener('click', () => {
+            el.classList.add('out');
+            dismissed[n.id] = (n.version || 1);
+            try { localStorage.setItem(KEY, JSON.stringify(dismissed)); } catch(_) {}
+            setTimeout(() => el.remove(), 450);
+          });
+        }
+        noticesHost.appendChild(el);
+      });
+    }
+
+    fetch('/api/notices').then(r => r.json()).then(res => {
+      if(res && res.notices) renderNotices(res.notices);
+    }).catch(() => {});
+  }
+})();
+</script>
+
 </body>
 </html>

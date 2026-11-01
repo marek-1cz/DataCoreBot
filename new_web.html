@@ -1392,6 +1392,26 @@ body.night .aurora{opacity:.4}
 .fadmin button:hover{border-color:#6aa0ff!important;background:rgba(47,107,255,.2)!important}
 .setcode button.go{padding:10px 18px;border-radius:999px;border:0;background:linear-gradient(90deg,#2f6bff,#38d6ff);color:#04112e;font:inherit;font-weight:700;cursor:pointer;touch-action:manipulation}
 .setpanel.kb{top:calc(env(safe-area-inset-top,0px) + 10px);bottom:auto;max-height:55vh;max-height:55dvh}
+
+/* Oznámení CSS */
+#ois-notices{position:fixed;left:0;right:0;top:var(--notify-top,76px);z-index:90;display:flex;flex-direction:column;align-items:center;gap:10px;padding:0 12px;pointer-events:none}
+.nt{--nc:#38d6ff;position:relative;display:flex;align-items:center;gap:14px;width:100%;max-width:940px;padding:14px 16px 14px 14px;border-radius:22px;overflow:hidden;pointer-events:auto;background:linear-gradient(135deg,color-mix(in srgb,var(--nc) 20%,rgba(8,13,34,.96)),rgba(8,13,34,.96) 62%);border:1px solid color-mix(in srgb,var(--nc) 55%,transparent);box-shadow:0 18px 50px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04) inset,0 0 34px color-mix(in srgb,var(--nc) 22%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);animation:ntIn .7s cubic-bezier(.2,.7,.2,1) both}
+.nt.out{animation:ntOut .45s cubic-bezier(.2,.7,.2,1) forwards}
+@keyframes ntIn{0%{opacity:0;transform:translateY(-36px) scale(.94)}60%{transform:translateY(5px) scale(1.01)}100%{opacity:1;transform:none}}
+@keyframes ntOut{to{opacity:0;transform:translateY(-22px) scale(.96);max-height:0;padding-top:0;padding-bottom:0;margin-top:-10px}}
+.nt.info{--nc:#38d6ff}.nt.success{--nc:#35d07f}.nt.warning{--nc:#ffc933}.nt.danger{--nc:#ff6b6b}.nt.maintenance{--nc:#ffc933}.nt.rebuild{--nc:#2f6bff}.nt.build{--nc:#38d6ff}
+.nt-ic{flex:none;position:relative;width:46px;height:46px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--nc) 22%,transparent);color:var(--nc)}
+.nt-ic svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nt-b{flex:1;min-width:0}
+.nt-t{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+.nt-t b{font-size:1rem;letter-spacing:-.01em}
+.nt-tag{padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--nc) 24%,transparent);color:var(--nc);font-size:.66rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.nt-p{color:#c9d5f2;font-size:.9rem;line-height:1.45;overflow-wrap:anywhere}
+.nt-go{flex:none;padding:9px 18px;border-radius:999px;background:var(--nc);color:#05070f;font-weight:800;font-size:.84rem;white-space:nowrap;transition:transform .25s ease,box-shadow .25s}
+.nt-go:hover{transform:translateY(-2px);box-shadow:0 8px 22px color-mix(in srgb,var(--nc) 45%,transparent)}
+.nt-x{flex:none;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.08);color:#c9d5f2;font-size:1.2rem;line-height:1;border:0;cursor:pointer;transition:transform .3s ease,background .25s}
+.nt-x:hover{background:rgba(255,255,255,.18);transform:rotate(90deg)}
+
 </style>
 </head>
 <body>
@@ -1446,6 +1466,7 @@ body.night .aurora{opacity:.4}
   <button class="acct" id="acctBtn" type="button" aria-label="Účet" aria-haspopup="true" aria-expanded="false"><span class="av" id="acctAv"><svg viewBox="0 0 48 48"><use href="#ic-user" width="48" height="48"/></svg></span><span class="an" id="acctName" hidden></span></button>
   <button class="nav-burger" id="navBurger" type="button" aria-expanded="false" aria-controls="menuSheet"><span id="navLabel">Domů</span><span class="nb-ico" aria-hidden="true"><i></i><i></i></span></button>
 </div>
+<div id="ois-notices"></div>
 
 <!-- ############################################################
      STRÁNKA: DOMŮ
@@ -2258,7 +2279,7 @@ const API_HOST = (window.location.protocol === 'file:' || !window.location.host)
 const CONFIG = {
   DEMO: false,
   accountUrl: '/ucet',
-  loginUrl: '',
+  loginUrl: '/login',
   dlInfo: { version: '1.6.2', size: '~45 MB' },
   stats: API_HOST + '/api/stats/summary',
   adminLoginUrl: '/dashboard',
@@ -3948,5 +3969,62 @@ if (dlLog) {
   });
 }
 </script>
+
+<script>
+(function(){
+  const noticesHost = document.getElementById('ois-notices');
+  if(!noticesHost) return;
+  const KEY = 'ois-notice-dismissed';
+  let dismissed = {};
+  try { dismissed = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(_) {}
+  const ICON = {
+    info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+    success:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/>',
+    warning:'<path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v5M12 17.6h.01"/>',
+    danger:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>',
+    maintenance:'<path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
+    build:'<path d="M7 18a4 4 0 01-.5-7.97A6 6 0 0118 9.5a4.25 4.25 0 01-.5 8.5"/><path d="M12 11v7M9 15l3 3 3-3"/>'
+  };
+  const TAGS = {warning:'Upozornění',danger:'Výpadek',rebuild:'Průběh',maintenance:'Údržba',info:'Novinka',success:'Funkční',build:'Automatická zpráva'};
+
+  function renderNotices(list){
+    noticesHost.innerHTML = '';
+    (list || []).forEach(n => {
+      if(!n || !n.id) return;
+      if(dismissed[n.id] && dismissed[n.id] >= (n.version || 1)) return;
+      const type = n.type || 'info';
+      const el = document.createElement('div');
+      el.className = 'nt ' + type;
+      el.innerHTML = `
+        <div class="nt-ic"><svg viewBox="0 0 24 24">${ICON[type] || ICON.info}</svg></div>
+        <div class="nt-b">
+          <div class="nt-t">
+            <b>${n.title || ''}</b>
+            <span class="nt-tag">${n.tag || TAGS[type] || type}</span>
+          </div>
+          <div class="nt-p">${n.text || ''}</div>
+        </div>
+        ${n.link ? `<a class="nt-go" href="${n.link.url}">${n.link.label || 'Otevřít'}</a>` : ''}
+        ${n.dismissible !== false ? `<button class="nt-x" type="button" aria-label="Zavřít">×</button>` : ''}
+      `;
+      const closeBtn = el.querySelector('.nt-x');
+      if(closeBtn){
+        closeBtn.addEventListener('click', () => {
+          el.classList.add('out');
+          dismissed[n.id] = (n.version || 1);
+          try { localStorage.setItem(KEY, JSON.stringify(dismissed)); } catch(_) {}
+          setTimeout(() => el.remove(), 450);
+        });
+      }
+      noticesHost.appendChild(el);
+    });
+  }
+
+  fetch('/api/notices').then(r => r.json()).then(res => {
+    if(res && res.notices) renderNotices(res.notices);
+  }).catch(() => {});
+})();
+</script>
+
 </body>
 </html>

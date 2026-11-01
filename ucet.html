@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#05070f">
+<meta name="color-scheme" content="dark">
+<title>Nastavení účtu | OIS IDPK</title>
+<meta name="description" content="Nastavení účtu OIS IDPK: profil, propojené metody přihlášení, přihlášená zařízení, aktivita v aplikaci a upozornění na spoje.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='88'%3E%F0%9F%91%A4%3C/text%3E%3C/svg%3E">
+<script>
+/* Lehký režim: respektuje výkonnostní profil z hlavního webu (stejný localStorage) a „omezit pohyb“ v systému */
+(function(){var d=document.documentElement,m=null;try{m=localStorage.getItem('ois-perf-mode')}catch(e){}
+if(m==='low'||m==='min'||matchMedia('(prefers-reduced-motion: reduce)').matches)d.classList.add('lite');})();
+</script>
+<style>
+/* =========================================================
+   BARVY – stejné jako na hlavním webu
+   ========================================================= */
+:root{
+  --nav-offset:110px;   /* odsazení shora pod tvým horním panelem – uprav podle něj */
+  --bg:#05070f; --navy:#0a1230; --blue:#2f6bff; --cyan:#38d6ff; --yellow:#ffc933; --green:#35d07f; --red:#ff6b6b;
+  --text:#eaf0ff; --muted:#9fb0d6;
+  --glass:rgba(255,255,255,.06); --glass-border:rgba(255,255,255,.14);
+  --ease:cubic-bezier(.2,.7,.2,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.55;overflow-x:hidden;min-height:100vh}
+a{color:inherit;text-decoration:none}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+h1,h2,h3{line-height:1.1;letter-spacing:-.02em}
+.wrap{max-width:1180px;margin:0 auto;padding:0 5vw}
+.grad{background:linear-gradient(90deg,var(--blue),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+
+/* ============ POZADÍ ============ */
+.aurora{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.aurora span{position:absolute;border-radius:50%;filter:blur(120px)}
+.aurora .a{width:60vw;height:60vw;left:-15vw;top:-15vw;background:rgba(47,107,255,.30);animation:drift 40s ease-in-out infinite alternate}
+.aurora .b{width:55vw;height:55vw;right:-20vw;top:25vh;background:rgba(14,36,140,.45);animation:drift 50s ease-in-out infinite alternate-reverse}
+.aurora .c{width:45vw;height:45vw;left:20vw;bottom:-25vw;background:rgba(47,107,255,.18)}
+.aurora .d{width:30vw;height:30vw;right:5vw;bottom:-10vw;background:rgba(53,208,127,.07)}
+.aurora .e{width:28vw;height:28vw;left:2vw;top:55vh;background:rgba(255,201,51,.05)}
+@keyframes drift{to{transform:translate(6vw,4vh)}}
+html.lite .aurora span{animation:none;filter:blur(70px)}
+
+/* ============ HLAVIČKA STRÁNKY ============ */
+.hero{padding:var(--nav-offset,110px) 0 30px;text-align:center}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:var(--glass);border:1px solid var(--glass-border);font-size:.82rem;color:var(--muted);margin-bottom:16px}
+.eyebrow i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+.eyebrow i.y{background:var(--yellow);box-shadow:0 0 10px var(--yellow)}
+.kicker{display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:16px;font-size:.76rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan)}
+.kicker::before,.kicker::after{content:"";width:28px;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--blue),var(--cyan))}
+.kicker::after{background:linear-gradient(270deg,var(--blue),var(--cyan))}
+.hero h1{font-size:clamp(2.2rem,6vw,4rem);margin-bottom:16px}
+.hero .lead{color:var(--muted);max-width:660px;margin:0 auto;font-size:1.06rem}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:38px auto 0;max-width:980px}
+.tile{padding:20px 18px;border-radius:24px;background:var(--glass);border:1px solid var(--glass-border);text-align:center;transition:transform .5s var(--ease),border-color .4s}
+.tile:hover{transform:translateY(-3px);border-color:rgba(56,214,255,.4)}
+.tile .num{display:block;font-size:clamp(1.8rem,3.6vw,2.5rem);font-weight:800;letter-spacing:-.03em;line-height:1.1}
+.tile .num.y{color:var(--yellow)} .tile .num.g{color:var(--green)} .tile .num.c{color:var(--cyan)}
+.tile small{display:block;margin-top:6px;color:var(--muted);font-size:.84rem}
+@media(max-width:760px){.tiles{grid-template-columns:1fr 1fr}.hero{padding-top:128px}}
+
+
+/* ovládací prvky */
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.pillb{padding:8px 16px;border-radius:999px;background:var(--glass);border:1px solid var(--glass-border);font-size:.86rem;font-weight:600;color:var(--muted);transition:background .25s,color .25s,border-color .25s}
+.pillb:hover{background:rgba(255,255,255,.12);color:var(--text)}
+.pillb[aria-pressed=true]{background:rgba(47,107,255,.28);border-color:rgba(56,214,255,.55);color:#fff}
+.btnx{padding:9px 18px;border-radius:999px;background:var(--glass);border:1px solid var(--glass-border);font-size:.86rem;font-weight:700;transition:background .25s}
+.btnx:hover{background:rgba(255,255,255,.14)}
+.btn-main{padding:14px 30px;border-radius:999px;font-weight:800;background:linear-gradient(135deg,var(--blue),var(--cyan));color:#031028;box-shadow:0 10px 36px rgba(47,107,255,.4);transition:transform .3s var(--ease)}
+.btn-main:hover{transform:translateY(-2px)}.btn-main:active{transform:scale(.97)}
+/* ============ PATIČKA ============ */
+footer{margin-top:90px;padding:0 6vw 40px;color:var(--muted);font-size:.88rem;text-align:center}
+.ft-route{display:block;width:100%;max-width:1180px;height:70px;margin:0 auto 22px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
+.ft-links{display:flex;gap:8px 24px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+.ft-links a:hover{color:var(--text)}
+footer p{max-width:640px;margin:0 auto;line-height:1.6}
+
+/* ============ TOAST ============ */
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);transform:translate(-50%,30px);opacity:0;pointer-events:none;z-index:200;padding:12px 22px;border-radius:999px;background:rgba(10,18,48,.96);border:1px solid var(--glass-border);box-shadow:0 14px 40px rgba(0,0,0,.5);font-weight:600;font-size:.9rem;transition:all .4s var(--ease)}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+
+/* ============ OZNAČENÍ VZORŮ ============ */
+.vzor{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:rgba(255,201,51,.14);color:var(--yellow);border:1px dashed rgba(255,201,51,.65);font:800 .64rem/1.4 system-ui,sans-serif;letter-spacing:.14em;vertical-align:middle;text-shadow:none}
+.rw.is-vzor{box-shadow:inset 3px 0 0 var(--yellow)}
+.dcard.is-vzor{border-style:dashed;border-color:rgba(255,201,51,.5)}
+.vzorbar{display:flex;gap:14px;align-items:flex-start;margin:0 auto 6px;max-width:880px;padding:14px 18px;border-radius:18px;background:rgba(255,201,51,.08);border:1px dashed rgba(255,201,51,.6);color:var(--text);font-size:.9rem;line-height:1.5}
+.vzorbar[hidden]{display:none}
+.vzorbar b{color:var(--yellow);letter-spacing:.1em}
+.vzorbar .vzor{margin:0;flex:none}
+
+[hidden]{display:none!important}
+/* =====================================================================
+   STRÁNKA ÚČET
+   ===================================================================== */
+.ic{width:1.15em;height:1.15em;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.2em}
+.hero{padding:var(--nav-offset,110px) 0 18px}
+.hero h1{font-size:clamp(2.1rem,5.4vw,3.4rem);margin-bottom:12px}
+.jump{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:26px auto 0;max-width:760px}
+.jump a{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;background:var(--glass);border:1px solid var(--glass-border);font-size:.86rem;font-weight:700;color:var(--muted);transition:background .25s,color .25s,border-color .25s}
+.jump a:hover{background:rgba(255,255,255,.12);color:var(--text);border-color:rgba(56,214,255,.4)}
+
+.acc{display:grid;grid-template-columns:330px minmax(0,1fr);gap:22px;align-items:start;margin-top:30px}
+.col{min-width:0}
+.acc .side{position:sticky;top:96px}
+@media(max-width:940px){.acc{grid-template-columns:1fr}.acc .side{position:static;top:auto}}
+
+.acard{padding:26px;border-radius:28px;background:var(--glass);border:1px solid var(--glass-border);margin-bottom:18px;position:relative;scroll-margin-top:92px}
+.ahead{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin-bottom:18px}
+.ahead h2{display:flex;align-items:center;gap:10px;font-size:1.2rem;letter-spacing:-.01em}
+.ahead h2 .ic{color:var(--cyan);font-size:1.25rem}
+.ahead .tools2{display:flex;flex-wrap:wrap;gap:8px}
+.asub{color:var(--muted);font-size:.9rem;margin:-8px 0 18px}
+.btnx.sm{padding:7px 14px;font-size:.8rem}
+.btnx.danger{color:#ff9b9b;border-color:rgba(255,107,107,.4);background:rgba(255,107,107,.08)}
+.btnx.danger:hover{background:rgba(255,107,107,.2)}
+.btnx.ok{color:#031028;background:linear-gradient(135deg,var(--blue),var(--cyan));border-color:transparent}
+.btnx[disabled],.btn-main[disabled]{opacity:.45;cursor:not-allowed;transform:none!important}
+.btnx .ic{margin-right:6px}
+
+/* ---------- profilová karta ---------- */
+.side{text-align:center;padding:30px 24px 26px}
+.avwrap{position:relative;width:132px;height:132px;margin:0 auto 18px}
+.avatar{width:100%;height:100%;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(47,107,255,.35),rgba(56,214,255,.18));border:3px solid rgba(56,214,255,.55);box-shadow:0 0 0 7px rgba(47,107,255,.14),0 18px 50px rgba(47,107,255,.3);color:rgba(255,255,255,.75)}
+.avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.avatar .ic{width:56%;height:56%;stroke-width:1.5}
+.avedit{position:absolute;right:2px;bottom:4px;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--blue),var(--cyan));color:#031028;border:3px solid #0a1230;box-shadow:0 8px 22px rgba(47,107,255,.5);transition:transform .25s var(--ease)}
+.avedit:hover{transform:scale(1.1)}
+.nickbig{font-size:1.5rem;word-break:break-word;margin-bottom:12px}
+.chips2{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:6px}
+.idchip{display:inline-flex;align-items:center;gap:8px;padding:6px 8px 6px 14px;border-radius:999px;background:rgba(56,214,255,.1);border:1px solid rgba(56,214,255,.4);font-size:.82rem;color:var(--muted)}
+.idchip b{color:var(--cyan);font-size:.95rem;letter-spacing:.02em}
+.idchip button{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:.8rem}
+.idchip button:hover{background:rgba(255,255,255,.2)}
+.rolechip{display:inline-flex;align-items:center;padding:6px 14px;border-radius:999px;background:rgba(255,107,107,.18);border:1px solid rgba(255,107,107,.5);color:#ff9b9b;font-size:.74rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.mini{display:grid;grid-template-columns:1fr;gap:10px;margin:22px 0 20px;text-align:left}
+.mini div{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;border-radius:16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}
+.mini small{color:var(--muted);font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.mini b{font-size:1rem;text-align:right}
+.side .btnx{width:100%}
+
+/* ---------- formulář profilu ---------- */
+.fld{margin-bottom:20px}
+.fld label,.fld .lbl{display:block;margin-bottom:8px;font-size:.78rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.inp{width:100%;padding:14px 18px;border-radius:16px;background:rgba(5,7,15,.6);border:1px solid var(--glass-border);color:var(--text);font-size:1rem;transition:border-color .25s,box-shadow .25s}
+.inp::placeholder{color:rgba(159,176,214,.6)}
+.inp:focus{outline:none;border-color:rgba(56,214,255,.7);box-shadow:0 0 0 4px rgba(56,214,255,.14)}
+.inp.bad{border-color:rgba(255,107,107,.7);box-shadow:0 0 0 4px rgba(255,107,107,.12)}
+.fhint{display:flex;justify-content:space-between;gap:12px;margin-top:7px;color:var(--muted);font-size:.8rem}
+.avrow{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.avmini{width:56px;height:56px;border-radius:50%;overflow:hidden;flex:none;display:flex;align-items:center;justify-content:center;background:rgba(47,107,255,.2);border:2px solid rgba(56,214,255,.45);color:rgba(255,255,255,.7)}
+.avmini img{width:100%;height:100%;object-fit:cover}
+.avmini .ic{width:60%;height:60%}
+.fileb{position:relative;overflow:hidden}
+.fileb input{position:absolute;inset:0;opacity:0;cursor:pointer;font-size:0}
+.fname{color:var(--muted);font-size:.85rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.saverow{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:6px}
+.saverow .btn-main{display:inline-flex;align-items:center;gap:8px}
+.dirty{display:none;align-items:center;gap:8px;color:var(--yellow);font-size:.84rem;font-weight:600}
+.dirty.on{display:inline-flex}
+.dirty i{width:8px;height:8px;border-radius:50%;background:var(--yellow);box-shadow:0 0 10px var(--yellow)}
+
+/* ---------- řádky seznamů ---------- */
+.rows{display:flex;flex-direction:column;gap:10px}
+.arow{display:flex;gap:14px;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:20px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);transition:border-color .25s,background .25s}
+.arow:hover{border-color:rgba(56,214,255,.3);background:rgba(255,255,255,.06)}
+.arow.is-vzor{box-shadow:inset 3px 0 0 var(--yellow)}
+.arow .l{display:flex;gap:14px;align-items:center;min-width:0}
+.arow .r{display:flex;gap:8px;align-items:center;flex:none}
+.bico{width:46px;height:46px;border-radius:14px;flex:none;display:flex;align-items:center;justify-content:center;font-size:1.3rem;background:rgba(56,214,255,.1);border:1px solid rgba(56,214,255,.32);color:var(--cyan)}
+.bico.dc{background:rgba(88,101,242,.18);border-color:rgba(88,101,242,.55);color:#aab3ff}
+.bico.ml{background:rgba(255,201,51,.1);border-color:rgba(255,201,51,.4);color:var(--yellow)}
+.bico.vi{background:rgba(167,139,250,.14);border-color:rgba(167,139,250,.5);color:#c4b5fd}
+.ttl{font-weight:700;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sml{display:block;color:var(--muted);font-size:.84rem;line-height:1.45}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 11px;border-radius:999px;font-size:.72rem;font-weight:800;letter-spacing:.04em;white-space:nowrap;border:1px solid transparent}
+.pill i{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+.pill.ok{color:var(--green);background:rgba(53,208,127,.14);border-color:rgba(53,208,127,.45)}
+.pill.no{color:#ff9b9b;background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.4)}
+.pill.cur{color:var(--cyan);background:rgba(56,214,255,.12);border-color:rgba(56,214,255,.45)}
+.pill.run{color:var(--green);background:rgba(53,208,127,.14);border-color:rgba(53,208,127,.45)}
+.pill.run i{animation:blink 1.6s ease-in-out infinite}
+.pill.one{color:#c4b5fd;background:rgba(124,58,237,.2);border-color:rgba(167,139,250,.5)}
+.pill.rep{color:var(--cyan);background:rgba(47,107,255,.2);border-color:rgba(56,214,255,.45)}
+.pill.sent{color:var(--green);background:rgba(53,208,127,.14);border-color:rgba(53,208,127,.4)}
+@keyframes blink{50%{opacity:.25}}
+.empty2{padding:26px 18px;text-align:center;color:var(--muted);border-radius:20px;background:rgba(255,255,255,.03);border:1px dashed var(--glass-border);font-size:.92rem}
+.empty2 a{color:var(--cyan);font-weight:700;display:inline-block;margin-top:8px}
+.empty2 a:hover{text-decoration:underline}
+.skel2{height:72px;border-radius:20px;background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.1),rgba(255,255,255,.04));background-size:200% 100%;animation:sk 1.4s linear infinite}
+@keyframes sk{to{background-position:-200% 0}}
+html.lite .skel2{animation:none}
+.inerr{display:none;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-radius:16px;background:rgba(255,107,107,.1);border:1px solid rgba(255,107,107,.4);color:#ffb0b0;font-size:.88rem}
+.inerr.on{display:flex}
+
+/* ---------- zařízení ---------- */
+.confirm{display:inline-flex;align-items:center;gap:8px}
+
+/* ---------- aplikace: souhrn + log ---------- */
+.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+.sum div{padding:16px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);text-align:center}
+.sum b{display:block;font-size:1.35rem;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.sum small{display:block;margin-top:4px;color:var(--muted);font-size:.78rem}
+.sum div:nth-child(1) b{color:var(--cyan)}.sum div:nth-child(2) b{color:var(--green)}.sum div:nth-child(3) b{color:var(--yellow)}
+.logrow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.8fr) minmax(0,1fr) minmax(0,.8fr);gap:12px;align-items:center;padding:14px 18px;border-radius:20px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08)}
+.logrow.is-vzor{box-shadow:inset 3px 0 0 var(--yellow)}
+.logrow .t{font-weight:700;display:block}
+.logrow .lab{display:none;color:var(--muted);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;font-weight:800}
+.logrow .end{text-align:right}
+.logh{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.8fr) minmax(0,1fr) minmax(0,.8fr);gap:12px;padding:0 18px 8px;color:var(--muted);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;font-weight:800}
+.logh span:last-child{text-align:right}
+.more3{display:flex;justify-content:center;margin-top:14px}
+
+/* ---------- upozornění ---------- */
+.chan{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}
+.chan .c{display:inline-flex;align-items:center;gap:10px;padding:9px 14px;border-radius:16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);font-size:.88rem;font-weight:700}
+.chan .c small{color:var(--muted);font-weight:600}
+.chan .c.on{border-color:rgba(53,208,127,.45)}
+.chan .c.on .ic{color:var(--green)}
+.chan .c.off{border-style:dashed}
+.chan .c button{color:var(--cyan);font-weight:800}
+.chan .c button:hover{text-decoration:underline}
+.seg2{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.seg2 .pillb b{margin-left:6px;padding:1px 8px;border-radius:999px;background:rgba(255,255,255,.12);font-size:.74rem}
+.evs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 6px}
+.ev{padding:3px 10px;border-radius:8px;background:rgba(56,214,255,.1);border:1px solid rgba(56,214,255,.3);color:#bfeeff;font-size:.78rem;font-weight:600}
+.hint2{color:var(--muted);font-size:.86rem;margin:0 0 14px}
+.npanel{display:none}.npanel.on{display:block;animation:pagein .4s var(--ease)}
+@keyframes pagein{from{opacity:0;transform:translateY(8px)}}
+.hlist{max-height:380px;overflow:auto;padding-right:4px}
+
+/* ---------- výzva k propojení ---------- */
+.nudge{position:fixed;right:22px;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);z-index:150;width:min(400px,calc(100vw - 24px));padding:24px 24px 22px;border-radius:28px;background:linear-gradient(180deg,rgba(16,28,72,.97),rgba(8,16,41,.98));border:1px solid rgba(56,214,255,.4);box-shadow:0 30px 80px rgba(0,0,0,.65),0 0 0 1px rgba(47,107,255,.25),0 0 60px rgba(47,107,255,.2);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);transform:translateY(30px) scale(.97);opacity:0;pointer-events:none;transition:transform .5s var(--ease),opacity .4s}
+.nudge.on{transform:none;opacity:1;pointer-events:auto}
+html.lite .nudge{-webkit-backdrop-filter:none;backdrop-filter:none;transition:opacity .2s}
+.nudge[hidden]{display:none}
+.ndx{position:absolute;right:14px;top:14px;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.1);font-size:1.15rem;line-height:1}
+.ndx:hover{background:rgba(255,255,255,.2)}
+.nudge .ndi{width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:14px}
+.nudge .ndi.ml{background:rgba(255,201,51,.12);border:1px solid rgba(255,201,51,.45);color:var(--yellow)}
+.nudge .ndi.dc{background:rgba(88,101,242,.2);border:1px solid rgba(88,101,242,.6);color:#aab3ff}
+.nudge h3{font-size:1.25rem;margin-bottom:8px;padding-right:34px}
+.nudge p{color:var(--muted);font-size:.92rem;line-height:1.55;margin-bottom:16px}
+.nudge .inp{margin-bottom:6px}
+.nderr{min-height:20px;color:#ff9b9b;font-size:.84rem;margin-bottom:8px}
+.ndb{display:flex;gap:10px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.ndb .btn-main{padding:12px 24px}
+.ndb .btnx{padding:11px 18px}
+.ndlink{display:inline-block;margin-top:2px;color:var(--cyan);font-size:.82rem;font-weight:700}
+.ndlink:hover{text-decoration:underline}
+.spin{width:44px;height:44px;border-radius:50%;border:4px solid rgba(56,214,255,.18);border-top-color:var(--cyan);animation:spin .9s linear infinite;margin:6px auto 14px}
+html.lite .spin{animation-duration:2s}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ndmid{text-align:center;padding:6px 0 4px}
+.okmark2{width:60px;height:60px;margin:6px auto 14px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.8rem;color:var(--green);background:rgba(53,208,127,.16);box-shadow:0 0 0 8px rgba(53,208,127,.08)}
+.ndmid h3{padding-right:0}
+.ndmid p{margin-bottom:10px}
+.code{letter-spacing:.6em;text-align:center;font-size:1.5rem;font-weight:800;font-family:ui-monospace,Consolas,monospace;padding-left:calc(18px + .6em)}
+
+/* ---------- VZORY ---------- */
+.vzorbar{flex-direction:column;align-items:stretch}
+.vzorbar .top{display:flex;gap:14px;align-items:flex-start}
+.scn{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;padding-top:12px;border-top:1px dashed rgba(255,201,51,.35)}
+.scn span{color:var(--muted);font-size:.82rem;align-self:center;margin-right:2px}
+
+@media(max-width:700px){
+  .acard{padding:20px 16px;border-radius:24px}
+  .logh{display:none}
+  .logrow{grid-template-columns:1fr 1fr;gap:10px 14px}
+  .logrow .lab{display:block}
+  .logrow .end{text-align:left}
+  .sum{grid-template-columns:1fr}
+  .arow{flex-wrap:wrap}
+  .arow .r{width:100%;justify-content:flex-end}
+  .nudge{right:12px;left:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);width:auto;border-radius:26px}
+}
+
+
+/* ===== ANIMACE (v2): jen vzhled, nic nemění ve fungování ===== */
+@keyframes anUp{from{opacity:0;transform:translateY(26px)}}
+@keyframes anRing{50%{box-shadow:0 0 0 10px rgba(56,214,255,.14),0 10px 40px rgba(47,107,255,.5)}}
+@keyframes anShine{0%,60%{left:-60%}100%{left:140%}}
+.col>.acard{animation:anUp .7s var(--ease) both}
+.side{animation:anUp .7s var(--ease) both}
+.col>.acard:nth-child(1){animation-delay:.08s}.col>.acard:nth-child(2){animation-delay:.16s}.col>.acard:nth-child(3){animation-delay:.24s}.col>.acard:nth-child(4){animation-delay:.32s}.col>.acard:nth-child(5){animation-delay:.4s}
+.rows>*{animation:anUp .5s var(--ease) both}
+.rows>:nth-child(2){animation-delay:.07s}.rows>:nth-child(3){animation-delay:.14s}.rows>:nth-child(4){animation-delay:.21s}.rows>:nth-child(n+5){animation-delay:.28s}
+.avwrap .avatar{animation:anRing 3.8s ease-in-out infinite}
+.btn-main{position:relative;overflow:hidden}
+.btn-main::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg);animation:anShine 5s 2s infinite;pointer-events:none}
+.btn-main[disabled]::after{display:none}
+html.lite .btn-main::after{display:none}
+html.lite .acard,html.lite .dcard,html.lite .tile,html.lite .rows>*,html.lite .avatar{animation:none!important}
+
+/* ============ HORNÍ SKLENĚNÝ PANEL (JAKO NA HOME) ============ */
+.ois-nav{
+  position:fixed;top:16px;left:0;right:0;margin-left:auto;margin-right:auto;width:fit-content;width:-moz-fit-content;transform:none;z-index:100;box-sizing:border-box;
+  display:flex;gap:4px;align-items:center;padding:7px;border-radius:999px;
+  background:rgba(255,255,255,.07);border:1px solid var(--glass-border, rgba(255,255,255,.14));
+  -webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);
+  box-shadow:0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12);
+  max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none;
+  transition:background .5s, box-shadow .5s;
+}
+.ois-nav::-webkit-scrollbar{display:none}
+.ois-nav a{position:relative;z-index:1;padding:10px 17px;border-radius:999px;white-space:nowrap;font-size:.9rem;font-weight:600;transition:background .3s, color .3s;color:var(--text, #eaf0ff);text-decoration:none}
+.ois-nav a:not(.active):not(.cta):hover{background:rgba(255,255,255,.1)}
+.ois-nav a.active{background:transparent}
+.ois-nav.moving{background:rgba(255,255,255,.1);box-shadow:0 14px 50px rgba(47,107,255,.28), inset 0 1px 0 rgba(255,255,255,.2)}
+.nav-pill{position:absolute;left:0;top:0;z-index:0;border-radius:999px;pointer-events:none;opacity:0;background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,.1));border:1px solid rgba(255,255,255,.3);box-shadow:0 4px 18px rgba(47,107,255,.3), inset 0 1px 0 rgba(255,255,255,.35);transition:transform .6s cubic-bezier(.3,1.25,.4,1), width .6s cubic-bezier(.3,1.25,.4,1), height .6s cubic-bezier(.3,1.25,.4,1), opacity .4s}
+.nav-pill.ready{opacity:1}
+.nav-pill.still{transition:none}
+.ois-nav a.logo{display:inline-flex;align-items:center;gap:10px;padding:6px 16px 6px 8px;font-weight:800;letter-spacing:-.01em}
+.ois-nav a.logo img{width:32px;height:32px;object-fit:contain;border-radius:0;filter:drop-shadow(0 0 10px rgba(56,214,255,.45));transition:transform .3s cubic-bezier(.2,.7,.2,1)}
+.ois-nav a.logo:hover img{transform:scale(1.08)}
+.ois-nav a.cta{background:rgba(255,255,255,.08);color:#94a3b8;border:1px solid rgba(255,255,255,.14);box-shadow:none;transition:background .3s,color .3s,border-color .3s}
+.ois-nav a.cta:hover{background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.24)}
+.nav-arr{position:sticky;flex:none;width:0;z-index:5;pointer-events:none;align-self:stretch}
+.nav-arr i{position:absolute;top:-7px;bottom:-7px;width:34px;display:flex;align-items:center;font-style:normal;font-size:1.5rem;font-weight:700;color:var(--cyan, #38d6ff);opacity:0;transition:opacity .35s cubic-bezier(.2,.7,.2,1)}
+.nav-arr.l{left:0}.nav-arr.l i{left:-7px;padding-left:10px;border-radius:999px 0 0 999px;background:linear-gradient(90deg,#0a1230 30%,transparent)}
+.nav-arr.r{right:0}.nav-arr.r i{right:-7px;justify-content:flex-end;padding-right:10px;border-radius:0 999px 999px 0;background:linear-gradient(270deg,#0a1230 30%,transparent);animation:nudge 1.8s ease-in-out infinite}
+.ois-nav.can-l .nav-arr.l i,.ois-nav.can-r .nav-arr.r i{opacity:1}
+.gearbtn{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:var(--text, #eaf0ff);cursor:pointer;transition:transform .3s cubic-bezier(.2,.7,.2,1),background .3s;margin-left:4px}
+.gearbtn:hover{background:rgba(255,255,255,.15);transform:rotate(45deg)}
+.gearbtn svg{width:18px;height:18px}
+.acct{order:98;display:flex;align-items:center;gap:9px;margin-left:4px;padding:3px;border-radius:999px;border:0;background:transparent;color:var(--text, #eaf0ff);font:inherit;font-weight:700;font-size:.88rem;cursor:pointer;z-index:2;transition:transform .3s cubic-bezier(.2,.7,.2,1)}
+.acct:active{transform:scale(.92)}
+.acct .av{display:flex;align-items:center;justify-content:center;flex:none;width:34px;height:34px;border-radius:50%;overflow:hidden;background:#3a4252;color:#8e97a8;font-weight:800;transition:box-shadow .4s cubic-bezier(.2,.7,.2,1)}
+.acct .av svg{width:100%;height:100%;margin-top:4px}
+.acct .av img{width:100%;height:100%;object-fit:cover;display:block}
+.acct .av.big{width:44px;height:44px}
+.acct.in{background:rgba(8,12,28,.92);border:1px solid rgba(255,255,255,.1);padding:4px 18px 4px 4px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+.acct.in .av{background:linear-gradient(135deg,#1c2a55,#0b1229);color:#fff;animation:ringc 6s linear infinite}
+.acct .an{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:.95rem;color:#fff}
+@keyframes ringc{0%,100%{box-shadow:0 0 0 3px #7fdcff,0 0 18px rgba(127,220,255,.65)}25%{box-shadow:0 0 0 3px #2f6bff,0 0 18px rgba(47,107,255,.7)}50%{box-shadow:0 0 0 3px #17358f,0 0 16px rgba(23,53,143,.85)}75%{box-shadow:0 0 0 3px #2f6bff,0 0 18px rgba(47,107,255,.7)}}
+.acct-menu{position:fixed;z-index:120;top:calc(env(safe-area-inset-top,0px) + 78px);right:max(12px,calc(50% - 600px));width:270px;padding:14px;border-radius:22px;background:rgba(10,18,48,.82);-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);border:1px solid var(--glass-border, rgba(255,255,255,.14));box-shadow:0 20px 60px rgba(0,0,0,.5);opacity:0;transform:translateY(-8px) scale(.98);transition:opacity .3s cubic-bezier(.2,.7,.2,1),transform .3s cubic-bezier(.2,.7,.2,1);pointer-events:none}
+.acct-menu.on{opacity:1;transform:none;pointer-events:auto}
+.am-head{display:flex;align-items:center;gap:12px;padding:6px 6px 14px;border-bottom:1px solid var(--glass-border, rgba(255,255,255,.14));margin-bottom:8px}
+.am-head b{display:block;color:#fff}.am-head small{color:var(--muted, #9fb0d6);font-size:.78rem}
+.acct-menu a,.acct-menu button{display:block;width:100%;padding:11px 12px;border-radius:12px;border:0;background:none;color:var(--text, #eaf0ff);font:inherit;text-align:left;text-decoration:none;cursor:pointer}
+.acct-menu a:hover,.acct-menu button:hover{background:rgba(255,255,255,.08)}
+.acct-menu #acctOut{color:#ff8d9b}
+.nav-burger{display:none}
+.msheet{display:none}
+@media(max-width:1240px){
+  .ois-nav{left:12px;right:12px;margin-left:0;margin-right:0;transform:none;max-width:none;width:auto;justify-content:space-between;overflow:visible;padding:6px}
+  .ois-nav a:not(.logo),.nav-arr,.nav-pill{display:none!important}
+  .nav-burger{display:flex;align-items:center;gap:12px;order:5;margin-left:auto;padding:9px 12px 9px 18px;border-radius:999px;border:1px solid var(--glass-border, rgba(255,255,255,.14));background:rgba(255,255,255,.09);color:var(--text, #eaf0ff);font:inherit;font-weight:700;font-size:.95rem;cursor:pointer}
+  .acct{order:7;margin-left:8px}
+  .acct-menu{right:12px}
+  .nb-ico{display:flex;flex-direction:column;gap:4px;width:18px}
+  .nb-ico i{display:block;height:2px;border-radius:2px;background:var(--cyan, #38d6ff);transition:transform .35s cubic-bezier(.2,.7,.2,1),opacity .25s}
+  .ois-nav.open .nb-ico i:nth-child(1){transform:translateY(3px) rotate(45deg)}
+  .ois-nav.open .nb-ico i:nth-child(2){transform:translateY(-3px) rotate(-45deg)}
+  .msheet{display:flex;flex-direction:column;position:fixed;inset:0;z-index:99;padding:92px 16px 24px;overflow-y:auto;background:rgba(5,7,15,.88);-webkit-backdrop-filter:blur(26px) saturate(160%);backdrop-filter:blur(26px) saturate(160%);opacity:0;visibility:hidden;transition:opacity .35s cubic-bezier(.2,.7,.2,1),visibility 0s .35s}
+  .msheet.open{opacity:1;visibility:visible;transition:opacity .35s cubic-bezier(.2,.7,.2,1)}
+  .msheet a{padding:14px 20px;border-radius:16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);font-weight:700;display:block;margin-bottom:8px;color:var(--text, #eaf0ff);text-decoration:none}
+}
+@media(max-width:520px){
+  .acct .an{display:none}
+  .acct.in{padding:3px;background:none}
+  .ois-nav a.logo{font-size:0;gap:0;padding:4px}
+}
+/* Oznámení CSS */
+#ois-notices{position:fixed;left:0;right:0;top:var(--notify-top,76px);z-index:90;display:flex;flex-direction:column;align-items:center;gap:10px;padding:0 12px;pointer-events:none}
+.nt{--nc:#38d6ff;position:relative;display:flex;align-items:center;gap:14px;width:100%;max-width:940px;padding:14px 16px 14px 14px;border-radius:22px;overflow:hidden;pointer-events:auto;background:linear-gradient(135deg,color-mix(in srgb,var(--nc) 20%,rgba(8,13,34,.96)),rgba(8,13,34,.96) 62%);border:1px solid color-mix(in srgb,var(--nc) 55%,transparent);box-shadow:0 18px 50px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04) inset,0 0 34px color-mix(in srgb,var(--nc) 22%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);animation:ntIn .7s cubic-bezier(.2,.7,.2,1) both}
+.nt.out{animation:ntOut .45s cubic-bezier(.2,.7,.2,1) forwards}
+@keyframes ntIn{0%{opacity:0;transform:translateY(-36px) scale(.94)}60%{transform:translateY(5px) scale(1.01)}100%{opacity:1;transform:none}}
+@keyframes ntOut{to{opacity:0;transform:translateY(-22px) scale(.96);max-height:0;padding-top:0;padding-bottom:0;margin-top:-10px}}
+.nt.info{--nc:#38d6ff}.nt.success{--nc:#35d07f}.nt.warning{--nc:#ffc933}.nt.danger{--nc:#ff6b6b}.nt.maintenance{--nc:#ffc933}.nt.rebuild{--nc:#2f6bff}.nt.build{--nc:#38d6ff}
+.nt-ic{flex:none;position:relative;width:46px;height:46px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--nc) 22%,transparent);color:var(--nc)}
+.nt-ic svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nt-b{flex:1;min-width:0}
+.nt-t{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+.nt-t b{font-size:1rem;letter-spacing:-.01em}
+.nt-tag{padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--nc) 24%,transparent);color:var(--nc);font-size:.66rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.nt-p{color:#c9d5f2;font-size:.9rem;line-height:1.45;overflow-wrap:anywhere}
+.nt-go{flex:none;padding:9px 18px;border-radius:999px;background:var(--nc);color:#05070f;font-weight:800;font-size:.84rem;white-space:nowrap;transition:transform .25s ease,box-shadow .25s}
+.nt-go:hover{transform:translateY(-2px);box-shadow:0 8px 22px color-mix(in srgb,var(--nc) 45%,transparent)}
+.nt-x{flex:none;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.08);color:#c9d5f2;font-size:1.2rem;line-height:1;border:0;cursor:pointer;transition:transform .3s ease,background .25s}
+.nt-x:hover{background:rgba(255,255,255,.18);transform:rotate(90deg)}
+
+</style>
+</head>
+<body data-page="ucet">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></symbol><symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol><symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol><symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol><symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></symbol><symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol><symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/></symbol><symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol><symbol id="i-discord" viewBox="0 0 24 24"><path d="M5 6c2-1.2 4-1.8 7-1.8S17 4.8 19 6c1.8 3 2.6 6 2.4 10-1.6 1.2-3.2 2-5 2.4l-1-2c-1.2.4-2.6.4-4.8 0l-1 2c-1.8-.4-3.4-1.2-5-2.4C2.4 12 3.2 9 5 6z"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></symbol><symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"/><path d="M16 8l4 4-4 4M20 12H9"/></symbol><symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol><symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14-4L4 9"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14 4l2-2"/><path d="M20 20v-5h-5"/></symbol><symbol id="i-save" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></symbol><symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></symbol><symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 3l3 3-3 3"/><path d="M4 11V9a3 3 0 0 1 3-3h13"/><path d="M7 21l-3-3 3-3"/><path d="M20 13v2a3 3 0 0 1-3 3H4"/></symbol></defs></svg>
+<div class="aurora" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span><span class="e"></span></div>
+
+<!-- ================= HORNÍ SKLENĚNÝ PANEL ================= -->
+<div class="ois-nav" role="navigation" aria-label="Hlavní navigace"><span class="nav-pill" aria-hidden="true"></span><span class="nav-arr l" aria-hidden="true"><i>‹</i></span>
+  <a class="logo" href="/"><img src="/static/img/datacorebot_pf-lepsi.png" alt="">OIS IDPK</a>
+  <a href="/" data-r="home">Domů</a>
+  <a href="/#/download" data-r="download">Download</a>
+  <a href="/#/team" data-r="team">Náš tým</a>
+  <a href="/#/stats" data-r="stats">Statistiky</a>
+  <a href="/#/supporters" data-r="supporters">Podporovatelé</a>
+  <a href="/#/provoz" data-r="provoz">Provoz IDPK</a>
+  <a href="/mapa">Interaktivní mapa IDPK</a>
+  <a href="/led-panel">LED Panel Simulátor</a>
+  <a href="/podpora" data-r="podpora" style="color:var(--cyan);"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-3px;margin-right:4px;display:inline-block;"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l3.54 3.54M15.53 15.53l3.54 3.54M4.93 19.07l3.54-3.54M15.53 8.47l3.54-3.54"/></svg>Podpora / Hlášení</a>
+  <a class="cta" href="/#/demo" data-r="demo">Demo verze</a>
+  <span class="nav-arr r" aria-hidden="true"><i>›</i></span>
+  <button class="gearbtn" id="setBtn" type="button" aria-label="Nastavení" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M10.39 4.78 L10.68 1.89 L13.32 1.89 L13.61 4.78 L15.96 5.75 L18.22 3.91 L20.09 5.78 L18.25 8.04 L19.22 10.39 L22.11 10.68 L22.11 13.32 L19.22 13.61 L18.25 15.96 L20.09 18.22 L18.22 20.09 L15.96 18.25 L13.61 19.22 L13.32 22.11 L10.68 22.11 L10.39 19.22 L8.04 18.25 L5.78 20.09 L3.91 18.22 L5.75 15.96 L4.78 13.61 L1.89 13.32 L1.89 10.68 L4.78 10.39 L5.75 8.04 L3.91 5.78 L5.78 3.91 L8.04 5.75Z"/><circle cx="12" cy="12" r="3.1"/></svg></button>
+  <button class="acct" id="acctBtn" type="button" aria-label="Účet" aria-haspopup="true" aria-expanded="false"><span class="av" id="acctAv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span class="an" id="acctName" hidden></span></button>
+  <button class="nav-burger" id="navBurger" type="button" aria-expanded="false" aria-controls="menuSheet"><span id="navLabel">Domů</span><span class="nb-ico" aria-hidden="true"><i></i><i></i></span></button>
+</div>
+
+<div class="acct-menu" id="acctMenu" hidden role="menu">
+  <div class="am-head"><span class="av big" id="acctAv2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><div><b id="acctName2">Nepřihlášen</b><small>Přihlášen přes DataCoreBot</small></div></div>
+  <a href="/#/download" role="menuitem">Download</a>
+  <a href="/ucet" id="acctLink" role="menuitem">Můj účet</a>
+  <button type="button" id="acctOut" role="menuitem">Odhlásit se</button>
+</div>
+
+<div class="msheet" id="menuSheet" aria-hidden="true">
+  <div style="display:flex;flex-direction:column;gap:10px;max-width:400px;margin:0 auto;width:100%;">
+    <a href="/">Domů</a>
+    <a href="/#/download">Download</a>
+    <a href="/#/team">Náš tým</a>
+    <a href="/#/stats">Statistiky</a>
+    <a href="/#/supporters">Podporovatelé</a>
+    <a href="/#/provoz">Provoz IDPK</a>
+    <a href="/mapa">Interaktivní mapa</a>
+    <a href="/led-panel">LED Panel Simulátor</a>
+    <a href="/podpora" style="color:var(--cyan);">Podpora / Hlášení</a>
+    <a href="/#/demo" style="background:linear-gradient(135deg,var(--blue),var(--cyan));color:#031028;text-align:center;">Demo verze</a>
+  </div>
+</div>
+
+<div id="ois-notices"></div>
+
+
+<main>
+<!-- ================= HLAVIČKA ================= -->
+<header class="hero wrap">
+  <div class="eyebrow"><i class="y" id="liveDot"></i><span id="liveTxt">Vzorová data</span></div>
+  <div class="kicker">Můj účet</div>
+  <h1>Nastavení <span class="grad">účtu</span></h1>
+  <p class="lead">Spravujte svůj profil, způsoby přihlášení, přihlášená zařízení, aktivitu v aplikaci a upozornění na spoje.</p>
+  <nav class="jump" aria-label="Rychlý přechod na sekci">
+    <a href="#sec-profil"><svg class="ic"><use href="#i-user"/></svg>Profil</a>
+    <a href="#sec-metody"><svg class="ic"><use href="#i-link"/></svg>Přihlášení</a>
+    <a href="#sec-zarizeni"><svg class="ic"><use href="#i-monitor"/></svg>Zařízení</a>
+    <a href="#sec-aplikace"><svg class="ic"><use href="#i-activity"/></svg>Aplikace</a>
+    <a href="#sec-upozorneni"><svg class="ic"><use href="#i-bell"/></svg>Upozornění</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <!-- vzorový pruh: jen v demo režimu -->
+  <div class="vzorbar" id="vzorbar" role="note" hidden>
+    <div class="top"><span class="vzor">VZOR</span><div><b>VZOROVÝ ÚČET.</b> Vše na stránce jsou ukázkové řádky, nejde o skutečná data. Po přepnutí <code>CONFIG.DEMO</code> na <code>false</code> se nahradí daty z databáze.</div></div>
+    <div class="scn" id="scn" role="group" aria-label="Vzorový scénář propojení">
+      <span>Co vyzkoušet:</span>
+      <button class="pillb" type="button" data-s="email" aria-pressed="true">Chybí e-mail</button>
+      <button class="pillb" type="button" data-s="discord" aria-pressed="false">Chybí Discord</button>
+      <button class="pillb" type="button" data-s="none" aria-pressed="false">Chybí obojí</button>
+      <button class="pillb" type="button" data-s="both" aria-pressed="false">Vše propojeno</button>
+    </div>
+  </div>
+
+  <div class="acc">
+    <!-- ============ LEVÝ SLOUPEC: PROFILOVÁ KARTA ============ -->
+    <aside class="acard side" id="sec-profil" aria-label="Přehled účtu">
+      <div class="avwrap">
+        <div class="avatar" id="avBig"></div>
+        <button class="avedit" id="avPick" type="button" aria-label="Změnit profilový obrázek"><svg class="ic"><use href="#i-camera"/></svg></button>
+      </div>
+      <h2 class="nickbig" id="nickBig">–</h2>
+      <div class="chips2">
+        <span class="idchip">Číslo účtu <b id="appId">–</b><button id="copyId" type="button" aria-label="Zkopírovat číslo účtu" title="Zkopírovat"><svg class="ic"><use href="#i-copy"/></svg></button></span>
+        <span class="rolechip" id="role" hidden></span>
+      </div>
+      <div class="mini">
+        <div><small>Naposledy hráno</small><b id="mLast">–</b></div>
+        <div><small>Odehráno celkem</small><b id="mHours">–</b></div>
+        <div><small>Spuštění aplikace</small><b id="mLaunch">–</b></div>
+      </div>
+      <button class="btnx danger" id="logout" type="button"><svg class="ic"><use href="#i-logout"/></svg>Odhlásit se</button>
+    </aside>
+
+    <!-- ============ PRAVÝ SLOUPEC ============ -->
+    <div class="col">
+
+      <!-- PROFIL -->
+      <section class="acard" aria-labelledby="h-profil">
+        <div class="ahead"><h2 id="h-profil"><svg class="ic"><use href="#i-user"/></svg>Profil</h2></div>
+        <form id="pf" novalidate>
+          <div class="fld">
+            <label for="nick">Přezdívka (nickname)</label>
+            <input class="inp" id="nick" type="text" maxlength="32" autocomplete="nickname" spellcheck="false" placeholder="Vaše přezdívka">
+            <div class="fhint"><span id="nickErr" role="alert"></span><span id="nickCnt">0 / 32</span></div>
+          </div>
+          <div class="fld">
+            <span class="lbl">Profilový obrázek</span>
+            <div class="avrow">
+              <div class="avmini" id="avMini"></div>
+              <span class="btnx fileb"><svg class="ic"><use href="#i-camera"/></svg>Vybrat obrázek<input id="avFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" aria-label="Vybrat profilový obrázek"></span>
+              <button class="btnx danger" id="avDel" type="button"><svg class="ic"><use href="#i-trash"/></svg>Smazat</button>
+              <span class="fname" id="avName">Soubor nevybrán</span>
+            </div>
+            <div class="fhint"><span>PNG, JPG nebo WebP. Obrázek se automaticky zmenší na 256 × 256 px.</span></div>
+          </div>
+          <div class="saverow">
+            <button class="btn-main" id="save" type="submit" disabled><svg class="ic"><use href="#i-save"/></svg>Uložit profil</button>
+            <button class="btnx" id="revert" type="button" hidden>Zahodit změny</button>
+            <span class="dirty" id="dirty"><i></i>Neuložené změny</span>
+          </div>
+        </form>
+      </section>
+
+      <!-- PROPOJENÉ METODY -->
+      <section class="acard" id="sec-metody" aria-labelledby="h-metody">
+        <div class="ahead"><h2 id="h-metody"><svg class="ic"><use href="#i-link"/></svg>Propojené metody přihlášení</h2></div>
+        <p class="asub">Čím více způsobů propojíte, tím snáze se přihlásíte a tím lépe vám mohou chodit upozornění.</p>
+        <div class="rows" id="methods"></div>
+      </section>
+
+      <!-- ZAŘÍZENÍ -->
+      <section class="acard" id="sec-zarizeni" aria-labelledby="h-zar">
+        <div class="ahead">
+          <h2 id="h-zar"><svg class="ic"><use href="#i-monitor"/></svg>Přihlášená zařízení <span class="pill cur" id="devCnt">0</span></h2>
+          <div class="tools2">
+            <button class="btnx sm" id="devRefresh" type="button"><svg class="ic"><use href="#i-refresh"/></svg>Obnovit</button>
+            <button class="btnx sm danger" id="devOthers" type="button" hidden>Odhlásit ostatní</button>
+          </div>
+        </div>
+        <div class="inerr" id="devErr" role="alert"><span>Zařízení se nepodařilo načíst.</span><button class="btnx sm" id="devRetry" type="button">Zkusit znovu</button></div>
+        <div class="rows" id="devices"></div>
+      </section>
+
+      <!-- AKTIVITA V APLIKACI (NOVÉ) -->
+      <section class="acard" id="sec-aplikace" aria-labelledby="h-app">
+        <div class="ahead">
+          <h2 id="h-app"><svg class="ic"><use href="#i-activity"/></svg>Aktivita v aplikaci <span class="pill rep">NOVÉ</span></h2>
+          <div class="seg" id="playPer" role="group" aria-label="Období">
+            <button class="pillb" type="button" data-d="7" aria-pressed="false">7 dní</button>
+            <button class="pillb" type="button" data-d="30" aria-pressed="true">30 dní</button>
+            <button class="pillb" type="button" data-d="0" aria-pressed="false">Vše</button>
+          </div>
+        </div>
+        <p class="asub">Záznam toho, kdy jste naposledy hráli, jak dlouho a v jaké verzi aplikace.</p>
+        <div class="sum" id="playSum"></div>
+        <div class="inerr" id="playErr" role="alert"><span>Aktivitu se nepodařilo načíst.</span><button class="btnx sm" id="playRetry" type="button">Zkusit znovu</button></div>
+        <div class="logh" id="playHead" aria-hidden="true"><span>Začátek</span><span>Délka hraní</span><span>Zařízení</span><span>Verze</span></div>
+        <div class="rows" id="plays"></div>
+        <div class="more3"><button class="btnx" id="playMore" type="button" hidden>Zobrazit další</button></div>
+      </section>
+
+      <!-- UPOZORNĚNÍ -->
+      <section class="acard" id="sec-upozorneni" aria-labelledby="h-notif">
+        <div class="ahead"><h2 id="h-notif"><svg class="ic"><use href="#i-bell"/></svg>Moje upozornění na spoje</h2>
+          <a class="btnx sm" data-h="/mapa">Nastavit na mapě →</a></div>
+        <div class="chan" id="chan" aria-label="Kam upozornění chodí"></div>
+        <div class="seg2" id="nTabs" role="group" aria-label="Typ upozornění">
+          <button class="pillb" type="button" data-n="rules" aria-pressed="true">Pravidla <b id="cR">0</b></button>
+          <button class="pillb" type="button" data-n="once" aria-pressed="false">Jednorázová čekající <b id="cO">0</b></button>
+          <button class="pillb" type="button" data-n="hist" aria-pressed="false">Historie <b id="cH">0</b></button>
+        </div>
+        <div class="inerr" id="nErr" role="alert"><span>Upozornění se nepodařilo načíst.</span><button class="btnx sm" id="nRetry" type="button">Zkusit znovu</button></div>
+        <div class="npanel on" id="n-rules"><p class="hint2">Pravidla se opakují: upozornění přijde pokaždé, když nastane vybraná událost.</p><div class="rows" id="rulesL"></div></div>
+        <div class="npanel" id="n-once"><p class="hint2">Čekají na svou událost. Jakmile nastane, upozornění se odešle jednou a pravidlo zmizí.</p><div class="rows" id="onceL"></div></div>
+        <div class="npanel" id="n-hist"><p class="hint2">Posledních 25 odeslaných upozornění.</p><div class="rows hlist" id="histL"></div></div>
+      </section>
+    </div>
+  </div>
+</div>
+</main>
+
+<!-- ================= VYSKAKOVACÍ VÝZVA K PROPOJENÍ ================= -->
+<div class="nudge" id="nudge" role="dialog" aria-modal="false" aria-labelledby="ndT" hidden>
+  <button class="ndx" id="ndX" type="button" aria-label="Zavřít">×</button>
+  <div id="ndEnter">
+    <div class="ndi" id="ndIcon"></div>
+    <h3 id="ndT"></h3>
+    <p id="ndP"></p>
+    <form id="ndF" novalidate>
+      <label class="sr" for="ndIn" id="ndLbl">Hodnota</label>
+      <input class="inp" id="ndIn" type="text" autocomplete="off" spellcheck="false">
+      <div class="nderr" id="ndErr" role="alert"></div>
+      <a class="ndlink" id="ndHelp" href="#" hidden>Kde najdu své Discord ID?</a>
+      <div class="ndb">
+        <button class="btnx" id="ndLater" type="button">Teď ne</button>
+        <button class="btn-main" id="ndGo" type="submit">Propojit</button>
+      </div>
+    </form>
+  </div>
+  <div class="ndmid" id="ndWait" hidden>
+    <div class="spin" aria-hidden="true"></div>
+    <h3>Čekáme na potvrzení</h3>
+    <p id="ndWaitP">Otevřete Discord a potvrďte zprávu od bota. Okno se po potvrzení samo zavře.</p>
+    <button class="btnx" id="ndCancel" type="button">Zrušit</button>
+  </div>
+  <div class="ndmid" id="ndDone" hidden>
+    <div class="okmark2" aria-hidden="true">✓</div>
+    <h3 id="ndDoneT">Hotovo</h3>
+    <p id="ndDoneP"></p>
+  </div>
+</div>
+
+<footer>
+  <svg class="ft-route" viewBox="0 0 1200 80" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="3">
+      <path d="M0 72 H228 L284 36 H646 L702 72 H1200" stroke="#35d07f" opacity=".6"/>
+      <path d="M0 65 H234 L287 29 H643 L696 65 H1200" stroke="#ffc933" opacity=".7"/>
+      <path d="M0 58 H240 L290 22 H640 L690 58 H1200" stroke="#2f6bff"/>
+    </g>
+    <g fill="#05070f" stroke="#38d6ff" stroke-width="2.5"><circle cx="290" cy="22" r="6"/><circle cx="640" cy="22" r="6"/><circle cx="120" cy="58" r="5"/><circle cx="1010" cy="58" r="5"/></g>
+  </svg>
+  <div class="ft-links"><a data-h="/#/">Domů</a><a data-h="/#/stats">Statistiky</a><a data-h="/#/provoz">Provoz IDPK</a><a data-h="/mapa">Interaktivní mapa</a><a href="https://discord.gg/vmTagbC9mF" target="_blank" rel="noopener">Discord</a></div>
+  <p>OIS IDPK je nezávislý komunitní projekt. Není oficiálním produktem ani službou dopravců či organizací veřejné dopravy.</p>
+</footer>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* =====================================================================
+   NASTAVENÍ – tady napojíš databázi
+   ---------------------------------------------------------------------
+   DEMO:false  = jen jasně označené VZORY (vzor:true), nic se nevolá na server
+   DEMO:false = stránka volá adresy níže (JSON, cookies se posílají)
+
+   HOTOVÉ ENDPOINTY (už je máš v main.py, stránka na ně sedí):
+     api.me            GET  /api/auth/me
+                        → { status:"success", name, avatar, user:{ nick, avatar_url, discord_id, email } }
+                        DOPLŇ do "user" (stránka je zobrazí): app_id, role ("Super admin"…, volitelné)
+     api.update        POST /api/ucet/update           { nick, avatar_url }   → { status:"success" }
+                        avatar_url = "data:image/jpeg;base64,…" (stránka ho zmenší na 256×256) nebo "" = smazat
+     api.sessions      GET  /api/ucet/sessions
+                        → { status, sessions:[{ id, device, icon, ip, created_at, last_active, is_current }], count }
+     api.sessionDelete POST /api/ucet/sessions/delete  { session_id }
+     api.sessionsRevokeOthers POST /api/ucet/sessions/revoke_others
+     api.logout        POST /api/auth/logout
+
+   NOVÉ ENDPOINTY (doplň; prázdný řetězec = zatím nenapojeno, sekce ukáže prázdný stav):
+     api.playlog   GET → { summary:{ last_played, total_hours, launches },
+                           sessions:[{ started_at, ended_at, minutes, device, version }] }
+                      ended_at:null = právě hraje.  Čas: ISO 8601 (nejlépe s „Z“) nebo „27.10.2026 22:24“.
+     api.rules     GET → řádky tabulky bus_notifications (id, label, identifier, is_one_time,
+                         triggers{terminal,new_line,depot_in,depot_out,trip_change,started_moving,
+                         stop_near,delay_threshold,delay_change}, fired_count)
+     api.history   GET → [{ id, message, fired_at, channel }]   (posledních 25)
+     api.ruleDelete POST { id }
+
+   PROPOJENÍ (vyskakovací výzvy i tlačítka „Propojit“) – podle toho, co už máš:
+     api.linkEmailStart      POST { email, intent:"link" }          → { status:"success" }
+     api.linkEmailVerify     POST { email, code, intent:"link" }    → { status:"success" }   (DOPSAT: dnes jde přes GET /api/auth/finalize)
+     api.linkDiscordStart    POST { discord_id }                    → { status:"success" }
+     api.linkDiscordStatus   GET  ?discord_id=…  → { status:"approved", linked:true } | { status:"rejected" } | čeká
+   ===================================================================== */
+const CONFIG={
+  DEMO:false,
+  site:'',                         // předpona odkazů na hlavní web (na produkci nech prázdné)
+  loginUrl:'/login',               // kam poslat nepřihlášeného
+  nudgeSnoozeDays:7,               // po kliknutí „Teď ne“ se výzva téhož typu 7 dní neukáže
+  nudgeDelayMs:1400,               // za jak dlouho po načtení vyskočí první výzva
+  logPageSize:8,                   // kolik záznamů aktivity se ukáže najednou
+  api:{
+    me:'/api/auth/me', update:'/api/ucet/update', logout:'/api/auth/logout',
+    sessions:'/api/ucet/sessions', sessionDelete:'/api/ucet/sessions/delete', sessionsRevokeOthers:'/api/ucet/sessions/revoke_others',
+    playlog:'', rules:'', history:'', ruleDelete:'',
+    linkEmailStart:'/api/auth/email/request', linkEmailVerify:'',
+    linkDiscordStart:'/api/auth/discord/request', linkDiscordStatus:'/api/auth/status'
+  }
+};
+
+(function(){
+'use strict';
+const TZ='Europe/Prague';
+const $=(s,r)=>(r||document).querySelector(s), $$=(s,r)=>Array.from((r||document).querySelectorAll(s));
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const lite=()=>document.documentElement.classList.contains('lite');
+const ico=n=>'<svg class="ic" aria-hidden="true"><use href="#i-'+n+'"/></svg>';
+const DEMO=()=>CONFIG.DEMO;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+$$('[data-h]').forEach(a=>a.setAttribute('href',CONFIG.site+a.getAttribute('data-h')));
+
+/* ---------- čas ---------- */
+const fmtParts=new Intl.DateTimeFormat('en-US',{timeZone:TZ,hourCycle:'h23',year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric',second:'numeric'});
+function tzOffset(utc){const p={};fmtParts.formatToParts(utc).forEach(x=>p[x.type]=+x.value);return Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second)-Math.floor(utc/1000)*1000}
+function parseT(v){
+  if(v==null||v==='')return null;
+  if(typeof v==='number')return v;
+  if(v instanceof Date)return +v;
+  const s=String(v).trim();
+  if(/[zZ]$|[+-]\d\d:?\d\d$/.test(s)){const t=Date.parse(s);return isNaN(t)?null:t}
+  let m=s.match(/^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d)(?::(\d\d))?/),y,mo,d,h,mi,se;
+  if(m){y=+m[1];mo=+m[2];d=+m[3];h=+m[4];mi=+m[5];se=+(m[6]||0)}
+  else{m=s.match(/^(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4})[ ,T]+(\d{1,2}):(\d\d)(?::(\d\d))?/);if(!m){const t=Date.parse(s);return isNaN(t)?null:t}
+       d=+m[1];mo=+m[2];y=+m[3];h=+m[4];mi=+m[5];se=+(m[6]||0)}
+  const guess=Date.UTC(y,mo-1,d,h,mi,se);           /* pražský čas → UTC */
+  let t=guess-tzOffset(guess);t=guess-tzOffset(t);return t;
+}
+const fDT=new Intl.DateTimeFormat('cs-CZ',{timeZone:TZ,day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
+const fDTY=new Intl.DateTimeFormat('cs-CZ',{timeZone:TZ,day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const fT=new Intl.DateTimeFormat('cs-CZ',{timeZone:TZ,hour:'2-digit',minute:'2-digit'});
+const dayKey=ms=>new Date(ms).toLocaleDateString('sv-SE',{timeZone:TZ});
+function dt(ms){if(ms==null)return '–';return (dayKey(ms).slice(0,4)===dayKey(Date.now()).slice(0,4)?fDT:fDTY).format(ms)}
+function dur(ms){
+  if(ms==null||ms<0)return '–';const m=Math.round(ms/6e4);
+  if(m<1)return '< 1 min';if(m<60)return m+' min';
+  const h=Math.floor(m/60),r=m%60;if(h<48)return h+' h'+(r?' '+r+' min':'');
+  const d=Math.floor(h/24);return d+' d '+(h%24)+' h';
+}
+function ago(ms){
+  if(ms==null)return '–';const m=Math.round((Date.now()-ms)/6e4);
+  if(m<1)return 'právě teď';if(m<60)return 'před '+m+' min';
+  const h=Math.floor(m/60);if(h<24)return 'před '+h+' h';
+  const d=Math.floor(h/24);return d===1?'včera':'před '+d+' dny';
+}
+
+
+
+const fmt=v=>{const t=parseT(v);return t==null?(v?String(v):'–'):dt(t)};
+const agoV=v=>{const t=parseT(v);return t==null?'–':ago(t)};
+const fmtH=h=>{if(h==null||isNaN(h))return '–';const m=Math.round(h*60);return m<60?m+' min':Math.floor(m/60)+' h'+(m%60?' '+(m%60)+' min':'')};
+const maskMail=e=>{const i=String(e).indexOf('@');return i<1?String(e):e[0]+'•••'+e.slice(i)};
+const maskId=d=>'ID …'+String(d).slice(-4);
+
+/* =====================================================================
+   STAV
+   ===================================================================== */
+const S={
+  scn:'email',user:null,nick:'',avatarNew:null,
+  sessions:[],confirmSid:null,
+  plays:{summary:{},items:[]},playDays:30,playShown:CONFIG.logPageSize,
+  rules:[],history:[],nTab:'rules',confirmRid:null,
+  ok:{sessions:true,plays:true,notifs:true}
+};
+
+/* =====================================================================
+   API
+   ===================================================================== */
+async function call(url,opt){
+  const r=await fetch(url,Object.assign({credentials:'include',headers:{'Accept':'application/json','Content-Type':'application/json'}},opt||{}));
+  let j=null;try{j=await r.json()}catch(e){}
+  if(r.status===401){const e=new Error('Nepřihlášen');e.status=401;throw e}
+  if(!r.ok||(j&&j.status==='error')){throw new Error((j&&j.message)||('Chyba '+r.status))}
+  return j;
+}
+const post=(url,body)=>call(url,{method:'POST',body:JSON.stringify(body||{})});
+
+/* =====================================================================
+   VZOROVÁ DATA (vše označené vzor)
+   ===================================================================== */
+function demoUser(sc){
+  const dc=sc==='both'||sc==='email',ml=sc==='both'||sc==='discord';
+  return{nick:'Vzorový uživatel',avatar_url:'',app_id:'0000',role:'',discord_id:dc?'000000000000000000':'',email:ml?'vzor@example.com':''};
+}
+function demoSessions(){
+  const n=Date.now(),M=6e4,D=864e5,iso=t=>new Date(t).toISOString();
+  return[
+    {id:'v1',device:'Počítač (vzor)',icon:'fa-desktop',ip:'0.0.0.0',created_at:iso(n-3*D),last_active:iso(n-2*M),is_current:true},
+    {id:'v2',device:'Telefon (vzor)',icon:'fa-mobile',ip:'0.0.0.0',created_at:iso(n-9*D),last_active:iso(n-26*36e5),is_current:false}
+  ];
+}
+function demoPlays(){
+  const n=Date.now(),M=6e4,H=36e5,D=864e5,iso=t=>new Date(t).toISOString();
+  const row=(s,min,dev)=>({started_at:iso(s),ended_at:min==null?null:iso(s+min*M),minutes:min,device:dev,version:'0.0.0 (vzor)'});
+  return{summary:{},sessions:[row(n-26*M,null,'Počítač (vzor)'),row(n-2*D-3*H,95,'Počítač (vzor)'),row(n-3*D-5*H,48,'Počítač (vzor)'),row(n-6*D-2*H,130,'Telefon (vzor)'),row(n-12*D,62,'Počítač (vzor)'),row(n-21*D,210,'Počítač (vzor)')]};
+}
+function demoNotifs(){
+  const n=Date.now(),M=6e4,iso=t=>new Date(t).toISOString();
+  return{
+    rules:[
+      {id:'v1',label:'Autobus 0000 (vzor)',is_one_time:false,triggers:{terminal:true,depot_in:'all',delay_threshold:10},fired_count:0},
+      {id:'v2',label:'Linka 000 (vzor)',is_one_time:true,triggers:{stop_near:'Zastávka (vzor)'},fired_count:0}
+    ],
+    history:[
+      {id:'h1',message:'Vzorové upozornění: vozidlo dorazilo na konečnou',fired_at:iso(n-40*M),channel:'DM'},
+      {id:'h2',message:'Vzorové upozornění: vozidlo vjelo do vozovny',fired_at:iso(n-5*36e5),channel:'E-mail'},
+      {id:'h3',message:'Vzorové upozornění: zpoždění přes 10 min',fired_at:iso(n-30*36e5),channel:'DM'}
+    ]
+  };
+}
+
+/* =====================================================================
+   VYKRESLENÍ
+   ===================================================================== */
+const VZ='<span class="vzor">VZOR</span>';
+const rowCls=()=>DEMO()?' is-vzor':'';
+function avatarHTML(url){return url?'<img src="'+esc(url)+'" alt="">':ico('user')}
+function curAvatar(){return S.avatarNew===null?(S.user.avatar_url||''):S.avatarNew}
+function hasDiscord(){const d=S.user.discord_id;return !!d&&d!=='čeká na odpověd'}
+function hasEmail(){return !!S.user.email}
+
+function renderProfile(){
+  const u=S.user;
+  $('#nickBig').textContent=(S.nick||u.nick||'–');
+  $('#avBig').innerHTML=avatarHTML(curAvatar());$('#avMini').innerHTML=avatarHTML(curAvatar());
+  $('#appId').textContent=u.app_id!=null&&u.app_id!==''?'#'+u.app_id:'–';
+  const r=$('#role');r.hidden=!u.role;r.textContent=u.role||'';
+  const sm=S.plays.summary||{};
+  $('#mLast').textContent=sm.last_played?agoV(sm.last_played):'–';
+  $('#mHours').textContent=fmtH(sm.total_hours);
+  $('#mLaunch').textContent=sm.launches!=null?sm.launches:'–';
+}
+function renderForm(){
+  const u=S.user,n=$('#nick');
+  if(document.activeElement!==n)n.value=S.nick;
+  $('#nickCnt').textContent=n.value.length+' / 32';
+  const dirty=(n.value.trim()!==(u.nick||''))||(curAvatar()!==(u.avatar_url||''));
+  $('#save').disabled=!dirty;$('#revert').hidden=!dirty;$('#dirty').classList.toggle('on',dirty);
+  $('#avDel').disabled=!curAvatar();
+}
+function methodRow(kind){
+  const em=kind==='email',has=em?hasEmail():hasDiscord();
+  const val=has?(em?maskMail(S.user.email):maskId(S.user.discord_id)):'Zatím nepropojeno';
+  return '<div class="arow'+rowCls()+'"><div class="l"><span class="bico '+(em?'ml':'dc')+'">'+ico(em?'mail':'discord')+'</span><div>'+
+    '<div class="ttl">'+(em?'E-mail':'Discord')+(has?'<span class="pill ok"><i></i>Připojeno</span>':'<span class="pill no"><i></i>Nepřipojeno</span>')+'</div>'+
+    '<span class="sml">'+esc(val)+'</span></div></div><div class="r">'+(has?'':'<button class="btnx ok sm" type="button" data-link="'+kind+'">Propojit</button>')+'</div></div>';
+}
+function renderMethods(){
+  $('#methods').innerHTML=methodRow('discord')+methodRow('email');
+  renderChannels();
+}
+
+function devIcon(s){return /mobile|phone|tablet|android|iphone/i.test(s.icon+' '+s.device)?'phone':'monitor'}
+function renderSessions(){
+  const box=$('#devices');$('#devErr').classList.toggle('on',!S.ok.sessions);
+  $('#devCnt').textContent=S.sessions.length;
+  $('#devOthers').hidden=S.sessions.length<2;
+  if(!S.ok.sessions){box.innerHTML='';return}
+  if(!S.sessions.length){box.innerHTML='<div class="empty2">Žádná přihlášená zařízení.</div>';return}
+  box.innerHTML=S.sessions.map(s=>{
+    const ask=S.confirmSid===s.id;
+    return '<div class="arow'+rowCls()+'"><div class="l"><span class="bico">'+ico(devIcon(s))+'</span><div>'+
+      '<div class="ttl">'+esc(s.device||'Neznámé zařízení')+(s.is_current?'<span class="pill cur">TOTO ZAŘÍZENÍ</span>':'')+'</div>'+
+      '<span class="sml">Naposledy aktivní: <b>'+esc(fmt(s.last_active))+'</b></span>'+
+      '<span class="sml">Přihlášeno: '+esc(fmt(s.created_at))+' · IP: '+esc(s.ip||'Neznámá')+'</span></div></div>'+
+      '<div class="r">'+(ask?'<span class="confirm"><button class="btnx sm danger" type="button" data-sdel-ok="'+esc(s.id)+'">'+(s.is_current?'Odhlásit se':'Odhlásit')+'</button><button class="btnx sm" type="button" data-sdel-no>Zrušit</button></span>'
+        :'<button class="btnx sm danger" type="button" data-sdel="'+esc(s.id)+'">'+ico('trash')+'Smazat</button>')+'</div></div>';
+  }).join('');
+}
+
+function playList(){
+  const lim=S.playDays?Date.now()-S.playDays*864e5:0;
+  return S.plays.items.filter(p=>{const t=parseT(p.started_at);return !lim||t==null||t>=lim}).sort((a,b)=>(parseT(b.started_at)||0)-(parseT(a.started_at)||0));
+}
+function renderPlays(){
+  const sm=S.plays.summary||{},box=$('#plays');
+  $('#playErr').classList.toggle('on',!S.ok.plays);
+  $('#playSum').innerHTML=
+    '<div><b>'+(sm.last_played?esc(agoV(sm.last_played)):'–')+'</b><small>Naposledy hráno</small></div>'+
+    '<div><b>'+esc(fmtH(sm.total_hours))+'</b><small>Odehráno celkem</small></div>'+
+    '<div><b>'+(sm.launches!=null?esc(sm.launches):'–')+'</b><small>Spuštění aplikace</small></div>';
+  if(!S.ok.plays){box.innerHTML='';$('#playHead').hidden=true;$('#playMore').hidden=true;return}
+  const a=playList(),shown=a.slice(0,S.playShown);
+  $('#playHead').hidden=!a.length;
+  if(!a.length){box.innerHTML='<div class="empty2">V tomto období zatím nemáte žádný záznam o hraní.</div>';$('#playMore').hidden=true;return}
+  box.innerHTML=shown.map(p=>{
+    const st=parseT(p.started_at),run=!p.ended_at&&p.minutes==null;
+    const len=run?'<span class="pill run"><i></i>Právě hraje</span>':'<span class="t">'+esc(dur((p.minutes!=null?p.minutes*6e4:(parseT(p.ended_at)-st))))+'</span>';
+    return '<div class="logrow'+rowCls()+'">'+
+      '<div><span class="lab">Začátek</span><span class="t">'+esc(st==null?'–':dt(st))+'</span><span class="sml">'+esc(st==null?'':ago(st))+'</span></div>'+
+      '<div><span class="lab">Délka hraní</span>'+len+'</div>'+
+      '<div><span class="lab">Zařízení</span><span class="t">'+esc(p.device||'–')+'</span></div>'+
+      '<div class="end"><span class="lab">Verze</span><span class="t">'+esc(p.version||'–')+'</span></div></div>';
+  }).join('');
+  $('#playMore').hidden=a.length<=shown.length;
+  $('#playMore').textContent='Zobrazit dalších '+Math.min(CONFIG.logPageSize,a.length-shown.length)+' z '+(a.length-shown.length);
+}
+
+function trigList(t){
+  if(typeof t==='string'){try{t=JSON.parse(t)}catch(e){t={}}}
+  if(!t||typeof t!=='object')t={};
+  const o=[];
+  if(t.terminal)o.push('Konečná');
+  if(t.new_line)o.push('Změna linky');
+  if(t.depot_in)o.push('Do vozovny ('+(t.depot_in==='all'?'všechny':t.depot_in)+')');
+  if(t.depot_out)o.push('Z vozovny');
+  if(t.trip_change)o.push('Přepnutí spoje');
+  if(t.started_moving)o.push('Rozjetí');
+  if(t.stop_near)o.push('Zastávka: '+t.stop_near);
+  if(t.delay_threshold)o.push('Zpoždění > '+t.delay_threshold+' min');
+  if(t.delay_change)o.push('Skok zpoždění');
+  return o.length?o:['Událost'];
+}
+function ruleRow(r,once){
+  const ask=S.confirmRid===String(r.id),cnt=r.fired_count||r.fire_count||0;
+  return '<div class="arow'+rowCls()+'"><div class="l"><span class="bico '+(once?'vi':'')+'">'+ico(once?'bolt':'repeat')+'</span><div>'+
+    '<div class="ttl">'+esc(r.label||('Autobus '+(r.identifier||'')))+'<span class="pill '+(once?'one':'rep')+'">'+(once?'JEDNORÁZOVÉ':'OPAKUJE SE')+'</span></div>'+
+    '<div class="evs">'+trigList(r.triggers).map(x=>'<span class="ev">'+esc(x)+'</span>').join('')+'</div>'+
+    '<span class="sml">Odesláno: '+esc(cnt)+'×</span></div></div><div class="r">'+
+    (ask?'<span class="confirm"><button class="btnx sm danger" type="button" data-rdel-ok="'+esc(r.id)+'">Smazat</button><button class="btnx sm" type="button" data-rdel-no>Zrušit</button></span>'
+        :'<button class="btnx sm danger" type="button" data-rdel="'+esc(r.id)+'">'+ico('trash')+'Smazat</button>')+'</div></div>';
+}
+function renderChannels(){
+  const dc=hasDiscord(),ml=hasEmail();
+  const c=(on,ic,name,kind)=>'<span class="c '+(on?'on':'off')+'">'+ico(ic)+name+(on?' <small>aktivní</small>':' <small>nepropojeno</small> <button type="button" data-link="'+kind+'">Propojit</button>')+'</span>';
+  $('#chan').innerHTML=c(dc,'discord','Discord zpráva','discord')+c(ml,'mail','E-mail','email');
+}
+function renderNotifs(){
+  $('#nErr').classList.toggle('on',!S.ok.notifs);
+  const rep=S.rules.filter(r=>!r.is_one_time),once=S.rules.filter(r=>r.is_one_time);
+  $('#cR').textContent=rep.length;$('#cO').textContent=once.length;$('#cH').textContent=S.history.length;
+  const empty=(t)=>'<div class="empty2">'+t+'<br><a data-h="/mapa" href="'+esc(CONFIG.site)+'/mapa">Otevřít mapu a nastavit upozornění →</a></div>';
+  $('#rulesL').innerHTML=!S.ok.notifs?'':rep.length?rep.map(r=>ruleRow(r,false)).join(''):empty('Zatím nemáte žádná aktivní opakující se pravidla.');
+  $('#onceL').innerHTML=!S.ok.notifs?'':once.length?once.map(r=>ruleRow(r,true)).join(''):empty('Žádné jednorázové upozornění nečeká na svou událost.');
+  const h=S.history.slice().sort((a,b)=>(parseT(b.fired_at)||0)-(parseT(a.fired_at)||0)).slice(0,25);
+  $('#histL').innerHTML=!S.ok.notifs?'':h.length?h.map(x=>'<div class="arow'+rowCls()+'"><div class="l"><span class="bico ml">'+ico('bell')+'</span><div><div class="ttl">'+esc(x.message||x.trigger||'Upozornění')+'</div><span class="sml">'+esc(fmt(x.fired_at))+' · Kanál: '+esc(x.channel||'DM')+'</span></div></div><div class="r"><span class="pill sent">Odesláno</span></div></div>').join(''):'<div class="empty2">Zatím žádná proběhlá upozornění.</div>';
+  $$('#nTabs .pillb').forEach(b=>b.setAttribute('aria-pressed',b.dataset.n===S.nTab));
+  $$('.npanel').forEach(p=>p.classList.toggle('on',p.id==='n-'+S.nTab));
+}
+function renderAll(){renderProfile();renderForm();renderMethods();renderSessions();renderPlays();renderNotifs()}
+function skeletons(){['#devices','#plays','#rulesL'].forEach(s=>{$(s).innerHTML='<div class="skel2"></div><div class="skel2"></div>'})}
+
+/* =====================================================================
+   NAČÍTÁNÍ
+   ===================================================================== */
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),2600)}
+function unauth(){location.href=CONFIG.site+CONFIG.loginUrl}
+
+async function loadUser(){
+  if(DEMO()){S.user=demoUser(S.scn);S.nick=S.user.nick;return}
+  const j=await call(CONFIG.api.me),u=j.user||{};
+  S.user={nick:u.nick||j.name||'',avatar_url:u.avatar_url||j.avatar||'',app_id:u.app_id,role:u.role||'',discord_id:u.discord_id||'',email:u.email||''};
+  S.nick=S.user.nick;
+}
+async function loadSessions(){
+  try{
+    if(DEMO()){await sleep(250);S.sessions=demoSessions()}
+    else{const j=await call(CONFIG.api.sessions);S.sessions=j.sessions||[]}
+    S.ok.sessions=true;
+  }catch(e){if(e.status===401)return unauth();console.warn(e);S.ok.sessions=false}
+  S.confirmSid=null;renderSessions();
+}
+async function loadPlays(){
+  try{
+    if(DEMO()){await sleep(300);const d=demoPlays();S.plays={summary:d.summary,items:d.sessions}}
+    else if(CONFIG.api.playlog){const j=await call(CONFIG.api.playlog);S.plays={summary:j.summary||{},items:j.sessions||[]}}
+    else S.plays={summary:{},items:[]};
+    S.ok.plays=true;
+  }catch(e){if(e.status===401)return unauth();console.warn(e);S.ok.plays=false}
+  renderPlays();renderProfile();
+}
+async function loadNotifs(){
+  try{
+    if(DEMO()){await sleep(300);const d=demoNotifs();S.rules=d.rules;S.history=d.history}
+    else{
+      const [r,h]=await Promise.all([CONFIG.api.rules?call(CONFIG.api.rules):[],CONFIG.api.history?call(CONFIG.api.history):[]]);
+      const arr=x=>Array.isArray(x)?x:(x&&(x.data||x.items||x.rules||x.history))||[];
+      S.rules=arr(r);S.history=arr(h);
+    }
+    S.ok.notifs=true;
+  }catch(e){if(e.status===401)return unauth();console.warn(e);S.ok.notifs=false}
+  S.confirmRid=null;renderNotifs();
+}
+async function loadAll(){
+  try{await loadUser()}catch(e){if(e.status===401)return unauth();console.warn(e);toast('Účet se nepodařilo načíst.');return}
+  $('#liveDot').className=DEMO()?'y':'';
+  $('#liveTxt').textContent=DEMO()?'Vzorová data':'Přihlášen · aktualizováno '+fT.format(Date.now());
+  renderAll();skeletons();
+  await Promise.all([loadSessions(),loadPlays(),loadNotifs()]);
+  scheduleNudge(CONFIG.nudgeDelayMs);
+}
+
+/* =====================================================================
+   PROFIL: avatar, přezdívka, uložení
+   ===================================================================== */
+function readAvatar(file){
+  return new Promise((res,rej)=>{
+    if(!/^image\//.test(file.type))return rej(new Error('Vyberte prosím obrázek.'));
+    if(file.size>8*1024*1024)return rej(new Error('Obrázek je příliš velký (max 8 MB).'));
+    const fr=new FileReader();
+    fr.onerror=()=>rej(new Error('Soubor se nepodařilo přečíst.'));
+    fr.onload=()=>{const im=new Image();
+      im.onerror=()=>rej(new Error('Soubor není platný obrázek.'));
+      im.onload=()=>{const s=256,c=document.createElement('canvas');c.width=c.height=s;const x=c.getContext('2d'),m=Math.min(im.width,im.height);
+        x.fillStyle='#0a1230';x.fillRect(0,0,s,s);x.drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,s,s);res(c.toDataURL('image/jpeg',.86))};
+      im.src=fr.result};
+    fr.readAsDataURL(file);
+  });
+}
+function nickCheck(){
+  const v=$('#nick').value.trim(),e=$('#nickErr');
+  const bad=v.length<2?'Přezdívka musí mít alespoň 2 znaky.':v.length>32?'Přezdívka může mít nejvýše 32 znaků.':'';
+  e.textContent=bad;e.style.color=bad?'#ff9b9b':'';$('#nick').classList.toggle('bad',!!bad);
+  return !bad;
+}
+async function saveProfile(ev){
+  ev.preventDefault();
+  if(!nickCheck()){$('#nick').focus();return}
+  const nick=$('#nick').value.trim(),av=curAvatar(),b=$('#save');
+  b.disabled=true;b.lastChild.textContent='Ukládám…';
+  try{
+    if(DEMO())await sleep(500);else await post(CONFIG.api.update,{nick,avatar_url:av});
+    S.user.nick=nick;S.user.avatar_url=av;S.nick=nick;S.avatarNew=null;$('#avName').textContent='Soubor nevybrán';
+    toast(DEMO()?'Vzor: změny se v ukázce jen zobrazí, neukládají se.':'Profil byl uložen.');
+  }catch(e){if(e.status===401)return unauth();toast(e.message||'Profil se nepodařilo uložit.')}
+  b.lastChild.textContent='Uložit profil';renderProfile();renderForm();
+}
+
+/* =====================================================================
+   VÝZVA K PROPOJENÍ (vyskakovací okno)
+   ===================================================================== */
+const ND={kind:null,step:'enter',manual:false,email:'',poll:null,open:false,shown:new Set(),busy:false,t:null,dt:null};
+const snoozeKey=k=>'ois-nudge-'+k;
+function snoozed(k){try{return Date.now()-(+localStorage.getItem(snoozeKey(k))||0)<CONFIG.nudgeSnoozeDays*864e5}catch(e){return false}}
+function snooze(k){try{localStorage.setItem(snoozeKey(k),String(Date.now()))}catch(e){}}
+function unsnooze(){try{localStorage.removeItem(snoozeKey('email'));localStorage.removeItem(snoozeKey('discord'))}catch(e){}}
+function missing(){return[!hasEmail()&&'email',!hasDiscord()&&'discord'].filter(Boolean)}
+function scheduleNudge(ms){
+  clearTimeout(ND.t);
+  ND.t=setTimeout(()=>{if(ND.open)return;const k=missing().find(x=>!snoozed(x)&&!ND.shown.has(x));if(k)openNudge(k,false)},ms);
+}
+function ndShow(which){
+  ['ndEnter','ndWait','ndDone'].forEach(id=>{$('#'+id).hidden=id!==which});
+  $('#ndX').hidden=which==='ndDone';
+}
+function ndErr(m){$('#ndErr').textContent=m||'';$('#ndIn').classList.toggle('bad',!!m)}
+function ndBusy(b){ND.busy=b;$('#ndGo').disabled=b;$('#ndLater').disabled=b;$('#ndIn').disabled=b}
+function ndStep(step){
+  ND.step=step;ndShow('ndEnter');ndErr('');ndBusy(false);
+  const k=ND.kind,em=k==='email',inp=$('#ndIn'),help=$('#ndHelp');
+  $('#ndIcon').className='ndi '+(em?'ml':'dc');$('#ndIcon').innerHTML=ico(em?'mail':'discord');
+  inp.value='';inp.classList.remove('code');inp.maxLength=64;
+  if(step==='enter'){
+    if(em){
+      $('#ndT').textContent='Připojte e-mail';
+      $('#ndP').textContent='Pro lepší fungování aplikace připojte e-mail. Pošleme na něj kód pro potvrzení.';
+      inp.type='email';inp.inputMode='email';inp.placeholder='vas@email.cz';$('#ndLbl').textContent='E-mail';
+      $('#ndGo').textContent='Odeslat kód';help.hidden=true;
+    }else{
+      $('#ndT').textContent='Připojte Discord';
+      $('#ndP').textContent='Pro lepší fungování aplikace připojte Discord. Zadejte své Discord ID a potvrďte zprávu od bota.';
+      inp.type='text';inp.inputMode='numeric';inp.placeholder='Discord ID, např. 123456789012345678';$('#ndLbl').textContent='Discord ID';
+      $('#ndGo').textContent='Propojit';help.textContent='Kde najdu své Discord ID?';help.hidden=false;
+    }
+    $('#ndLater').textContent=ND.manual?'Zrušit':'Teď ne';
+  }else if(step==='code'){
+    $('#ndT').textContent='Zadejte kód z e-mailu';
+    $('#ndP').innerHTML='Poslali jsme 5místný kód na <b>'+esc(ND.email)+'</b>.';
+    inp.type='text';inp.inputMode='numeric';inp.maxLength=5;inp.placeholder='•••••';inp.classList.add('code');$('#ndLbl').textContent='Kód z e-mailu';
+    $('#ndGo').textContent='Potvrdit';help.textContent='Změnit e-mail';help.hidden=false;$('#ndLater').textContent='Zrušit';
+  }
+  setTimeout(()=>{try{inp.focus({preventScroll:true})}catch(e){}},ND.open?60:420);
+}
+function openNudge(kind,manual){
+  clearInterval(ND.poll);clearTimeout(ND.dt);
+  ND.kind=kind;ND.manual=!!manual;ND.open=true;ND.shown.add(kind);
+  const n=$('#nudge');n.hidden=false;ndStep('enter');
+  requestAnimationFrame(()=>n.classList.add('on'));
+}
+function closeNudge(){
+  clearInterval(ND.poll);clearTimeout(ND.dt);ND.open=false;
+  const n=$('#nudge');n.classList.remove('on');setTimeout(()=>{if(!ND.open)n.hidden=true},lite()?60:450);
+}
+function dismissNudge(){
+  if(ND.busy&&ND.step!=='wait')return;
+  const k=ND.kind,auto=!ND.manual&&ND.step==='enter';
+  if(auto)snooze(k);
+  closeNudge();
+  if(!ND.manual)scheduleNudge(900);
+}
+async function ndSubmit(ev){
+  ev.preventDefault();if(ND.busy)return;
+  const v=$('#ndIn').value.trim();
+  try{
+    if(ND.kind==='email'&&ND.step==='enter'){
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v))return ndErr('Zadejte platný e-mail.');
+      ndBusy(true);
+      if(DEMO())await sleep(700);else await post(CONFIG.api.linkEmailStart,{email:v,intent:'link'});
+      ND.email=v;ndStep('code');
+    }else if(ND.kind==='email'&&ND.step==='code'){
+      if(!/^\d{5}$/.test(v))return ndErr('Kód má 5 číslic.');
+      ndBusy(true);
+      if(DEMO()){await sleep(700);if(v==='00000')throw new Error('Kód nesouhlasí. Zkuste to znovu.')}
+      else await post(CONFIG.api.linkEmailVerify,{email:ND.email,code:v,intent:'link'});
+      S.user.email=ND.email;ndDone('E-mail připojen','Děkujeme. Upozornění vám teď mohou chodit i na e-mail.');
+    }else if(ND.kind==='discord'){
+      if(!/^\d{15,20}$/.test(v))return ndErr('Discord ID je číslo o 17 až 19 číslicích.');
+      ndBusy(true);
+      if(DEMO())await sleep(600);else await post(CONFIG.api.linkDiscordStart,{discord_id:v});
+      ndWaitDiscord(v);
+    }
+  }catch(e){ndBusy(false);ndErr(e.message||'Něco se nepovedlo. Zkuste to prosím znovu.')}
+}
+function ndWaitDiscord(id){
+  ndShow('ndWait');ND.step='wait';
+  let n=0;clearInterval(ND.poll);
+  ND.poll=setInterval(async()=>{
+    n++;
+    try{
+      let st;
+      if(DEMO()){st=n>=2?'approved':'wait'}
+      else{const j=await call(CONFIG.api.linkDiscordStatus+'?discord_id='+encodeURIComponent(id));st=(j.status==='approved'&&j.linked)?'approved':j.status==='rejected'?'rejected':'wait'}
+      if(st==='approved'){clearInterval(ND.poll);S.user.discord_id=id;ndDone('Discord připojen','Děkujeme. Upozornění vám teď mohou chodit i na Discord.')}
+      else if(st==='rejected'){clearInterval(ND.poll);ndStep('enter');ndErr('Propojení bylo v Discordu zamítnuto.')}
+      else if(n>90){clearInterval(ND.poll);ndStep('enter');ndErr('Potvrzení nedorazilo. Zkuste to prosím znovu.')}
+    }catch(e){/* další pokus při příštím tiku */}
+  },2000);
+}
+function ndDone(t,p){
+  ndShow('ndDone');ND.step='done';$('#ndDoneT').textContent=t;$('#ndDoneP').textContent=p;
+  renderMethods();renderProfile();
+  clearTimeout(ND.dt);ND.dt=setTimeout(()=>{closeNudge();scheduleNudge(900)},2200);
+}
+
+/* =====================================================================
+   OVLÁDÁNÍ
+   ===================================================================== */
+function bind(){
+
+  /* profil */
+  $('#nick').addEventListener('input',()=>{S.nick=$('#nick').value;nickCheck();renderForm();$('#nickBig').textContent=S.nick.trim()||S.user.nick||'–'});
+  $('#avPick').addEventListener('click',()=>$('#avFile').click());
+  $('#avFile').addEventListener('change',async e=>{
+    const f=e.target.files[0];if(!f)return;
+    try{S.avatarNew=await readAvatar(f);$('#avName').textContent=f.name}catch(err){toast(err.message)}
+    e.target.value='';renderProfile();renderForm();
+  });
+  $('#avDel').addEventListener('click',()=>{S.avatarNew='';$('#avName').textContent='Obrázek bude smazán';renderProfile();renderForm()});
+  $('#revert').addEventListener('click',()=>{S.avatarNew=null;S.nick=S.user.nick||'';$('#nick').value=S.nick;$('#avName').textContent='Soubor nevybrán';nickCheck();renderProfile();renderForm()});
+  $('#pf').addEventListener('submit',saveProfile);
+  $('#copyId').addEventListener('click',async()=>{
+    const t=$('#appId').textContent.replace('#','');if(!t||t==='–')return;
+    try{await navigator.clipboard.writeText(t);toast('Číslo účtu zkopírováno')}catch(e){toast('Kopírování se nepodařilo.')}
+  });
+  $('#logout').addEventListener('click',async()=>{
+    if(DEMO()){toast('Vzor: odhlášení se v ukázce neprovádí.');return}
+    try{await post(CONFIG.api.logout)}catch(e){}
+    location.href=CONFIG.site+'/';
+  });
+
+  /* propojení */
+  document.addEventListener('click',e=>{const b=e.target.closest('[data-link]');if(b)openNudge(b.dataset.link,true)});
+  $('#ndF').addEventListener('submit',ndSubmit);
+  $('#ndX').addEventListener('click',dismissNudge);
+  $('#ndLater').addEventListener('click',dismissNudge);
+  $('#ndCancel').addEventListener('click',()=>{clearInterval(ND.poll);ndStep('enter')});
+  $('#ndIn').addEventListener('input',()=>{ndErr('');if(ND.step==='code')$('#ndIn').value=$('#ndIn').value.replace(/\D/g,'')});
+  $('#ndHelp').addEventListener('click',e=>{
+    e.preventDefault();
+    if(ND.step==='code'){ND.kind='email';ndStep('enter');return}
+    $('#ndP').textContent='V Discordu zapněte Nastavení › Pokročilé › Vývojářský režim. Pak klikněte pravým tlačítkem na svůj profil a zvolte Kopírovat ID uživatele.';
+  });
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ND.open&&ND.step!=='done')dismissNudge()});
+
+  /* zařízení */
+  $('#devRefresh').addEventListener('click',loadSessions);$('#devRetry').addEventListener('click',loadSessions);
+  $('#devOthers').addEventListener('click',async()=>{
+    if(!confirm('Odhlásit všechna ostatní zařízení?'))return;
+    try{
+      if(DEMO()){await sleep(300);S.sessions=S.sessions.filter(s=>s.is_current);toast('Vzor: ostatní zařízení odhlášena.')}
+      else{await post(CONFIG.api.sessionsRevokeOthers);toast('Ostatní zařízení byla odhlášena.');await loadSessions()}
+    }catch(err){toast(err.message||'Nepodařilo se odhlásit ostatní zařízení.')}
+    renderSessions();
+  });
+  $('#devices').addEventListener('click',async e=>{
+    const d=e.target.closest('[data-sdel]');if(d){S.confirmSid=d.dataset.sdel;renderSessions();return}
+    if(e.target.closest('[data-sdel-no]')){S.confirmSid=null;renderSessions();return}
+    const ok=e.target.closest('[data-sdel-ok]');if(!ok)return;
+    const id=ok.dataset.sdelOk,cur=(S.sessions.find(s=>s.id===id)||{}).is_current;
+    ok.disabled=true;
+    try{
+      if(DEMO()){await sleep(300);S.sessions=S.sessions.filter(s=>s.id!==id);toast('Vzor: zařízení odhlášeno.')}
+      else{await post(CONFIG.api.sessionDelete,{session_id:id});if(cur){location.href=CONFIG.site+'/';return}S.sessions=S.sessions.filter(s=>s.id!==id);toast('Zařízení bylo odhlášeno.')}
+    }catch(err){toast(err.message||'Zařízení se nepodařilo odhlásit.')}
+    S.confirmSid=null;renderSessions();
+  });
+
+  /* aktivita */
+  $('#playPer').addEventListener('click',e=>{const b=e.target.closest('[data-d]');if(!b)return;S.playDays=+b.dataset.d;S.playShown=CONFIG.logPageSize;$$('#playPer .pillb').forEach(x=>x.setAttribute('aria-pressed',x===b));renderPlays()});
+  $('#playMore').addEventListener('click',()=>{S.playShown+=CONFIG.logPageSize;renderPlays()});
+  $('#playRetry').addEventListener('click',loadPlays);
+
+  /* upozornění */
+  $('#nTabs').addEventListener('click',e=>{const b=e.target.closest('[data-n]');if(!b)return;S.nTab=b.dataset.n;renderNotifs()});
+  $('#nRetry').addEventListener('click',loadNotifs);
+  $('#sec-upozorneni').addEventListener('click',async e=>{
+    const d=e.target.closest('[data-rdel]');if(d){S.confirmRid=d.dataset.rdel;renderNotifs();return}
+    if(e.target.closest('[data-rdel-no]')){S.confirmRid=null;renderNotifs();return}
+    const ok=e.target.closest('[data-rdel-ok]');if(!ok)return;
+    const id=ok.dataset.rdelOk;ok.disabled=true;
+    try{
+      if(DEMO()){await sleep(250);S.rules=S.rules.filter(r=>String(r.id)!==id);toast('Vzor: pravidlo smazáno.')}
+      else if(!CONFIG.api.ruleDelete){toast('Mazání pravidel zatím není napojeno.')}
+      else{await post(CONFIG.api.ruleDelete,{id});S.rules=S.rules.filter(r=>String(r.id)!==id);toast('Pravidlo bylo smazáno.')}
+    }catch(err){toast(err.message||'Pravidlo se nepodařilo smazat.')}
+    S.confirmRid=null;renderNotifs();
+  });
+
+  /* vzorový scénář */
+  $('#scn').addEventListener('click',e=>{
+    const b=e.target.closest('[data-s]');if(!b)return;
+    S.scn=b.dataset.s;$$('#scn .pillb').forEach(x=>x.setAttribute('aria-pressed',x===b));
+    unsnooze();ND.shown.clear();closeNudge();
+    S.user=demoUser(S.scn);S.nick=S.user.nick;S.avatarNew=null;renderAll();scheduleNudge(500);
+  });
+}
+
+$('#vzorbar').hidden=!DEMO();
+if(DEMO()){
+  $$('.ahead h2').forEach(h=>h.insertAdjacentHTML('beforeend',VZ));
+}
+bind();loadAll();
+})();
+
+</script>
+
+<!-- ================= SPOLEČNÁ LOGIKA NAVIGACE A OZNÁMENÍ ================= -->
+<script>
+(function(){
+  'use strict';
+  const navEl = document.querySelector('.ois-nav');
+  const pill = document.querySelector('.nav-pill');
+  
+  function movePill(key, instant){
+    if(!navEl || !pill) return;
+    const a = navEl.querySelector('a[data-r="'+key+'"]:not(.logo)') || (key === 'podpora' ? navEl.querySelector('a[href="/podpora"]') : null);
+    if(!a) return;
+    document.querySelectorAll('.ois-nav a').forEach(x => x.classList.toggle('active', x === a));
+    const lb = document.getElementById('navLabel'); if(lb) lb.textContent = a.textContent.trim();
+    if(instant) pill.classList.add('still');
+    pill.style.width = a.offsetWidth + 'px';
+    pill.style.height = a.offsetHeight + 'px';
+    pill.style.transform = 'translate(' + a.offsetLeft + 'px,' + a.offsetTop + 'px)';
+    pill.classList.add('ready');
+    if(instant){ void pill.offsetWidth; pill.classList.remove('still'); }
+  }
+  
+  const currentKey = document.body.dataset.page || (location.pathname === '/podpora' ? 'podpora' : '');
+  window.addEventListener('resize', () => movePill(currentKey, true));
+  window.addEventListener('load', () => movePill(currentKey, true));
+  setTimeout(() => movePill(currentKey, true), 80);
+
+  const burger = document.getElementById('navBurger');
+  const msheet = document.getElementById('menuSheet');
+  if(burger && msheet){
+    burger.addEventListener('click', () => {
+      const open = msheet.classList.toggle('open');
+      burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+      navEl.classList.toggle('open', open);
+    });
+    msheet.addEventListener('click', e => {
+      if(e.target.closest('a')){
+        msheet.classList.remove('open');
+        burger.setAttribute('aria-expanded', 'false');
+        navEl.classList.remove('open');
+      }
+    });
+  }
+
+  const btn = document.getElementById('acctBtn');
+  const av = document.getElementById('acctAv');
+  const nm = document.getElementById('acctName');
+  const menu = document.getElementById('acctMenu');
+  const av2 = document.getElementById('acctAv2');
+  const nm2 = document.getElementById('acctName2');
+  const ghost = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  let user = null;
+
+  function paint(el, u){
+    if(!el) return;
+    el.innerHTML = '';
+    if(u && u.avatar){
+      const im = new Image();
+      im.alt = '';
+      im.referrerPolicy = 'no-referrer';
+      im.src = u.avatar;
+      im.onerror = () => { el.textContent = (u.name||'?').trim().charAt(0).toUpperCase(); };
+      el.appendChild(im);
+    } else if(u){
+      el.textContent = (u.name||'?').trim().charAt(0).toUpperCase();
+    } else {
+      el.innerHTML = ghost;
+    }
+  }
+
+  function render(u){
+    user = u && u.name ? u : null;
+    if(btn) btn.classList.toggle('in', !!user);
+    paint(av, user);
+    paint(av2, user);
+    if(nm){ nm.hidden = !user; nm.textContent = user ? user.name : ''; }
+    if(nm2){ nm2.textContent = user ? user.name : 'Nepřihlášen'; }
+    if(btn) btn.setAttribute('aria-label', user ? 'Účet: ' + user.name : 'Přihlásit se');
+    if(!user && menu) closeMenu();
+  }
+
+  function openMenu(){ if(!menu) return; menu.hidden = false; requestAnimationFrame(() => menu.classList.add('on')); btn && btn.setAttribute('aria-expanded', 'true'); }
+  function closeMenu(){ if(!menu) return; menu.classList.remove('on'); btn && btn.setAttribute('aria-expanded', 'false'); setTimeout(() => { if(!menu.classList.contains('on')) menu.hidden = true; }, 300); }
+
+  if(btn){
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if(!user){ window.location.href = '/login'; return; }
+      menu && (menu.classList.contains('on') ? closeMenu() : openMenu());
+    });
+  }
+  document.addEventListener('click', e => { if(menu && menu.classList.contains('on') && !menu.contains(e.target)) closeMenu(); });
+  
+  const setBtn = document.getElementById('setBtn');
+  if(setBtn){
+    setBtn.addEventListener('click', () => { window.location.href = '/'; });
+  }
+
+  const outBtn = document.getElementById('acctOut');
+  if(outBtn){
+    outBtn.addEventListener('click', () => {
+      fetch('/api/auth/logout', {method: 'POST'}).then(() => {
+        try{ localStorage.removeItem('ois-session'); }catch(_){}
+        window.location.reload();
+      });
+    });
+  }
+
+  try {
+    const cached = localStorage.getItem('ois-session');
+    if(cached) {
+      const p = JSON.parse(cached);
+      if(p && p.name && (Date.now() - (p.ts || 0) < 86400000)) render(p);
+    }
+  } catch(_) {}
+
+  fetch('/api/auth/me').then(r => r.json()).then(res => {
+    if(res && res.status === 'success' && res.name){
+      const u = { name: res.name, avatar: res.avatar || null };
+      try{ localStorage.setItem('ois-session', JSON.stringify({ name: u.name, avatar: u.avatar, ts: Date.now() })); }catch(_){}
+      render(u);
+    } else {
+      try{ localStorage.removeItem('ois-session'); }catch(_){}
+      render(null);
+    }
+  }).catch(() => {});
+
+  // Oznámení
+  const noticesHost = document.getElementById('ois-notices');
+  if(noticesHost){
+    const KEY = 'ois-notice-dismissed';
+    let dismissed = {};
+    try { dismissed = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(_) {}
+    const ICON = {
+      info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+      success:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/>',
+      warning:'<path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v5M12 17.6h.01"/>',
+      danger:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>',
+      maintenance:'<path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
+      build:'<path d="M7 18a4 4 0 01-.5-7.97A6 6 0 0118 9.5a4.25 4.25 0 01-.5 8.5"/><path d="M12 11v7M9 15l3 3 3-3"/>'
+    };
+    const TAGS = {warning:'Upozornění',danger:'Výpadek',rebuild:'Průběh',maintenance:'Údržba',info:'Novinka',success:'Funkční',build:'Automatická zpráva'};
+
+    function renderNotices(list){
+      noticesHost.innerHTML = '';
+      (list || []).forEach(n => {
+        if(!n || !n.id) return;
+        if(dismissed[n.id] && dismissed[n.id] >= (n.version || 1)) return;
+        const type = n.type || 'info';
+        const el = document.createElement('div');
+        el.className = 'nt ' + type;
+        el.innerHTML = `
+          <div class="nt-ic"><svg viewBox="0 0 24 24">${ICON[type] || ICON.info}</svg></div>
+          <div class="nt-b">
+            <div class="nt-t">
+              <b>${n.title || ''}</b>
+              <span class="nt-tag">${n.tag || TAGS[type] || type}</span>
+            </div>
+            <div class="nt-p">${n.text || ''}</div>
+          </div>
+          ${n.link ? `<a class="nt-go" href="${n.link.url}">${n.link.label || 'Otevřít'}</a>` : ''}
+          ${n.dismissible !== false ? `<button class="nt-x" type="button" aria-label="Zavřít">×</button>` : ''}
+        `;
+        const closeBtn = el.querySelector('.nt-x');
+        if(closeBtn){
+          closeBtn.addEventListener('click', () => {
+            el.classList.add('out');
+            dismissed[n.id] = (n.version || 1);
+            try { localStorage.setItem(KEY, JSON.stringify(dismissed)); } catch(_) {}
+            setTimeout(() => el.remove(), 450);
+          });
+        }
+        noticesHost.appendChild(el);
+      });
+    }
+
+    fetch('/api/notices').then(r => r.json()).then(res => {
+      if(res && res.notices) renderNotices(res.notices);
+    }).catch(() => {});
+  }
+})();
+</script>
+
+</body>
+</html>

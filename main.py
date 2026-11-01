@@ -20,7 +20,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 from functools import wraps
 from threading import Thread
 from supabase import create_client
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import asyncio
 import uuid
@@ -273,6 +273,7 @@ def get_prague_time():
     return datetime.now(ZoneInfo('Europe/Prague')).replace(tzinfo=None)
 
 DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
+SERVER_START_ISO = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 def render_error_page(code: int, title: str, summary: str, icon: str = "fa-triangle-exclamation"):
     """Vykreslí moderní chybovou stránku v designu nového webu s hardware-aware animacemi."""
@@ -1200,47 +1201,17 @@ def send_magic_link_email(to_email, token, intent='login'):
         except Exception as e_l:
             print(f"[AUTH LOGO ERR] {e_l}", flush=True)
 
-        base_url = request.url_root.rstrip('/')
-        login_url = f"{base_url}/api/auth/finalize?token={token}&type=email&intent={intent}"
-        
-        logo_tag = '<img src="cid:datacore_logo" alt="DataCoreBot Logo" style="max-height:48px;width:auto;vertical-align:middle;border:0;display:inline-block;" />' if logo_cid_available else '<img src="https://datacorebot.koyeb.app/static/img/datacorebot_n.png" alt="DataCoreBot Logo" style="max-height:48px;width:auto;vertical-align:middle;border:0;display:inline-block;" />'
-
-        html = f"""
-        <!DOCTYPE html>
-        <html>
-          <head><meta charset="utf-8"></head>
-          <body style="margin: 0; padding: 20px 10px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-            <div style="max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
-              <div style="background: linear-gradient(135deg, #0b0f19 0%, #1e1b4b 100%); padding: 26px 20px; text-align: center; border-bottom: 2px solid #7c3aed;">
-                {logo_tag}
-                <div style="color: #94a3b8; font-size: 11px; margin-top: 8px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 700;">Projekt OIS IDPK • Ověření přístupu</div>
-              </div>
-              <div style="padding: 30px 24px; text-align: center;">
-                <h2 style="color: #0f172a; margin-top: 0; margin-bottom: 14px; font-size: 20px; font-weight: 700;">Přihlášení do aplikace</h2>
-                <p style="color: #475569; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
-                  Dobrý den,<br>posíláme jednorázový odkaz pro bezpečné přihlášení do aplikace OIS IDPK.
-                </p>
-                <div style="margin: 26px 0;">
-                  <a href="{login_url}" style="display: inline-block; background: linear-gradient(135deg, #38bdf8, #0284c7); color: #ffffff; padding: 13px 28px; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 15px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);">
-                    🚀 Potvrdit a přihlásit se
-                  </a>
-                </div>
-                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin: 20px 0; font-size: 14px; color: #334155;">
-                  Nebo zadejte tento 5místný ověřovací kód: <strong style="font-size: 18px; color: #7c3aed; letter-spacing: 3px; font-family: monospace;">{token}</strong>
-                </div>
-                <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin-top: 24px; margin-bottom: 0;">
-                  Pokud jste se k přihlášení nepřihlásili vy, můžete tento e-mail v klidu ignorovat. Váš účet zůstává chráněn.
-                </p>
-              </div>
-              <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b;">
-                <div>Hezký den přeje <strong>Tým DataCore Bot & Projekt OIS IDPK</strong></div>
-              </div>
-            </div>
-          </body>
-        </html>
-        """
-        plain = f"Dobrý den,\n\nOdkaz pro přihlášení do aplikace OIS IDPK:\n{login_url}\n\nOvěřovací kód: {token}\n\nHezký den přeje Tým Projekt OIS IDPK"
-        msg_alt.attach(MIMEText(plain, "plain", "utf-8"))
+        base_url = "https://datacorebot.koyeb.app"
+        try:
+            if request:
+                base_url = request.url_root.rstrip('/')
+        except Exception:
+            pass
+        login_url = f"{base_url}/overeni?token={token}"
+        from ois_email import build_magic_link_email
+        subject, html, text = build_magic_link_email(login_url, token)
+        msg["Subject"] = subject
+        msg_alt.attach(MIMEText(text, "plain", "utf-8"))
         msg_alt.attach(MIMEText(html, "html", "utf-8"))
         
         server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15)
@@ -2738,8 +2709,86 @@ def redirect_provoz_idpk():
     return redirect('/#/provoz')
 
 @app.route('/jizdni-rad')
-def redirect_jizdni_rad():
-    return redirect('/old/jizdni-rad', code=302)
+def stranka_jizdni_rad():
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(curr_dir, "jizdni-rad.html")
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
+            content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+        return Response(content, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        print(f"[JIZDNI RAD ERROR] {e}", flush=True)
+        return redirect('/old/jizdni-rad', code=302)
+
+@app.route('/pomoc')
+def stranka_pomoc():
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(curr_dir, "pomoc.html")
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
+            content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+        return Response(content, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        return render_error_page(500, "Chyba", str(e)), 500
+
+@app.route('/overeni')
+def stranka_overeni():
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(curr_dir, "overeni.html")
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
+            content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+        return Response(content, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        return render_error_page(500, "Chyba ověření", str(e)), 500
+
+@app.route('/api/jr/featured', methods=['GET'])
+def api_jr_featured():
+    import jr_api
+    count = int(request.args.get('count', 6))
+    return jsonify(jr_api.get_featured(count))
+
+@app.route('/api/jr/search', methods=['GET'])
+def api_jr_search():
+    import jr_api
+    q = request.args.get('q', '').strip()
+    return jsonify(jr_api.search(q))
+
+@app.route('/api/jr/line', methods=['GET'])
+def api_jr_line():
+    import jr_api
+    line_id = request.args.get('id', '').strip()
+    res = jr_api.get_line(line_id)
+    if not res:
+        return jsonify({"error": "Linka nenalezena"}), 404
+    return jsonify(res)
+
+@app.route('/api/jr/trips', methods=['GET'])
+def api_jr_trips():
+    import jr_api
+    line_id = request.args.get('line', '').strip()
+    dir_idx = int(request.args.get('dir', 0))
+    day = request.args.get('day', 'weekday').strip()
+    return jsonify(jr_api.get_trips(line_id, dir_idx, day))
+
+@app.route('/api/notices')
+def api_notices():
+    notices = []
+    if 'SERVER_START_ISO' in globals() and SERVER_START_ISO:
+        notices.append({
+            "id": f"build-{int(time.time() - (time.time() % 3600))}",
+            "type": "build",
+            "startedAt": SERVER_START_ISO,
+            "priority": 100,
+            "dismissible": False
+        })
+    return jsonify({"notices": notices})
 
 @app.route('/led-panel')
 def redirect_led_panel():
@@ -3648,21 +3697,33 @@ def api_submit_feedback():
     if not _rate_limit_check(f'feedback:{client_ip}', 6, 3600):
         return _cors_jsonify({"status": "error", "message": "Příliš mnoho odeslaných zpráv. Zkuste to prosím za chvíli."}), 429
 
-    data = request.get_json(silent=True) or {}
+    if request.files or request.form:
+        data = request.form.to_dict()
+    else:
+        data = request.get_json(silent=True) or {}
     db = get_db()
     if not db: return _cors_jsonify({"status": "error", "message": "Databáze je dočasně nedostupná."}), 500
     try:
-        reply_pref = str(data.get("reply_pref", "discord")).lower().strip()
+        reply_pref = str(data.get("reply_via") or data.get("reply_pref", "discord")).lower().strip()
         if reply_pref not in ("discord", "email"):
             reply_pref = "discord"
 
-        contact_discord = str(data.get("contact_discord", "")).strip()[:120]
-        contact_email = str(data.get("contact_email", "")).strip()[:120]
+        contact_discord = str(data.get("contact_discord") or data.get("discord_id") or "").strip()[:120]
+        contact_email = str(data.get("email") or data.get("contact_email") or "").strip()[:120]
+        backup_email = str(data.get("backup_email") or "").strip()[:120]
         contact = str(data.get("contact", "")).strip()[:120]
         nick = str(data.get("nick", "")).strip()[:60]
-        raw_img = str(data.get("image_url", "")).strip()
+        raw_img = str(data.get("image_url") or data.get("screenshot_url") or "").strip()
         image_url = ""
-        if raw_img.startswith("data:image/") and len(raw_img) < 8000000:
+        if 'screenshot' in request.files:
+            sc_file = request.files['screenshot']
+            if sc_file and sc_file.filename:
+                sc_bytes = sc_file.read()
+                if len(sc_bytes) <= 5 * 1024 * 1024:
+                    import base64
+                    mt = sc_file.mimetype or "image/png"
+                    image_url = f"data:{mt};base64,{base64.b64encode(sc_bytes).decode('ascii')}"
+        elif raw_img.startswith("data:image/") and len(raw_img) < 8000000:
             image_url = raw_img
         elif (raw_img.startswith("http://") or raw_img.startswith("https://")) and len(raw_img) < 1000:
             image_url = raw_img
@@ -3670,8 +3731,8 @@ def api_submit_feedback():
         # Povolit pouze bezpečné typy podnětů
         raw_type = str(data.get("type", "GENERAL")).strip().upper()
         allowed_types = (
-            "BUG", "BUG_GENERAL", "MAP_NOTIF", "MAP_BUG", "MAP_DATA", "GTFS",
-            "FEEDBACK", "WEB_ERROR", "GENERAL", "OTHER", "NOTIF", "QUESTION"
+            "BUG", "BUG_GENERAL", "MAP_NOTIF", "MAP_BUG", "MAP_MISSING", "MAP_DATA", "GTFS",
+            "FEEDBACK", "WEB_ERROR", "SITE_BUG", "GENERAL", "OTHER", "NOTIF", "QUESTION"
         )
         type_str = raw_type if raw_type in allowed_types else "GENERAL"
 
@@ -4130,13 +4191,21 @@ class WebAuthView(discord.ui.View):
 @app.route('/register')
 @app.route('/login')
 def auth_pages():
-    # If user is already logged in with a cookie, redirect to home
     cookie_token = request.cookies.get('web_session_token')
     if cookie_token:
         user = get_cached_session_user(cookie_token)
         if user:
-            return redirect(url_for('home'))
-    return render_public(HTML_REGISTER) # HTML_REGISTER used for both login and register since it's passwordless
+            return redirect('/ucet')
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(curr_dir, "login.html")
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
+            content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+        return Response(content, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        return render_error_page(500, "Chyba přihlášení", str(e)), 500
 
 BOT_ASYNC_LOOP = None
 
@@ -4443,17 +4512,24 @@ def web_auth_logout():
 
 @app.route('/api/auth/me')
 def web_auth_me():
-    cookie_token = request.cookies.get('web_session_token')
+    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
     if cookie_token:
         user = get_cached_session_user(cookie_token)
         if user:
             name = user.get("nick") or user.get("email") or "Uživatel"
             avatar = user.get("avatar_url") or ""
+            app_id = user.get("app_id") or user.get("id")
+            role = user.get("role") or "User"
             return jsonify({
                 "status": "success",
                 "name": name,
                 "avatar": avatar,
+                "app_id": app_id,
+                "role": role,
                 "user": {
+                    "id": user.get("id"),
+                    "app_id": app_id,
+                    "role": role,
                     "discord_id": user.get("discord_id"),
                     "email": user.get("email"),
                     "nick": user.get("nick"),
@@ -4461,6 +4537,54 @@ def web_auth_me():
                 }
             })
     return jsonify({"status": "unauthorized"}), 401
+
+@app.route('/api/auth/email/magic', methods=['POST'])
+def api_auth_email_magic():
+    data = request.get_json(silent=True) or {}
+    token = str(data.get('token') or request.args.get('token') or '').strip().upper()
+    if not token:
+        return jsonify({"ok": False, "status": "error", "message": "Chybí ověřovací kód."}), 400
+    db = get_db()
+    if not db:
+        return jsonify({"ok": False, "status": "error", "message": "Databáze je nedostupná."}), 500
+    try:
+        user = db.table("users").select("*").eq("login_token", token).execute().data
+        if not user:
+            return jsonify({"ok": False, "status": "error", "message": "Odkaz nebo kód vypršel nebo je neplatný."}), 404
+        u = user[0]
+        import time as _t
+        exp = int(u.get('login_token_expires_at') or 0)
+        if exp > 0 and _t.time() > exp:
+            db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+            return jsonify({"ok": False, "status": "error", "message": "Platnost ověření vypršela."}), 410
+
+        db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+        perm_token = str(uuid.uuid4())
+        from session_manager import add_user_session
+        add_user_session(db, u, perm_token, request)
+        _invalidate_session_cache(user_id=u.get("id"))
+        _SESSION_CACHE[perm_token] = (time.time(), u)
+
+        name = u.get("nick") or u.get("email") or "Uživatel"
+        resp = jsonify({
+            "ok": True,
+            "status": "success",
+            "name": name,
+            "email": u.get("email")
+        })
+        resp.set_cookie('web_session_token', perm_token, max_age=30*86400, httponly=True, samesite='Lax')
+        if u.get('dashboard_access') == True or u.get('role') in ['Superadmin', 'Admin', 'DEV', 'SA']:
+            resp.set_cookie('admin_session_token', perm_token, max_age=30*86400, httponly=True, samesite='Lax')
+            session.permanent = True
+            session['logged_in'] = True
+            session['discord_id'] = str(u.get('discord_id'))
+            session['discord_nick'] = u.get('nick') or str(u.get('discord_id'))
+            session['nick'] = u.get('nick')
+            session['role'] = u.get('role')
+            session['dashboard_level'] = u.get('dashboard_level') or 'admin'
+        return resp
+    except Exception as e:
+        return jsonify({"ok": False, "status": "error", "message": str(e)}), 500
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # NOVÝ WEB: AUTH & STATS COMPATIBILITY ENDPOINTS
@@ -4976,6 +5100,19 @@ def logout():
 
 @app.route('/ucet')
 def stranka_ucet():
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(curr_dir, "ucet.html")
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
+            content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+        return Response(content, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        print(f"[UCET ERROR] {e}", flush=True)
+        return render_error_page(500, "Chyba účtu", str(e)), 500
+
+def _legacy_stranka_ucet():
     try:
         db = get_db()
         cookie_token = request.cookies.get('web_session_token')
@@ -7210,35 +7347,16 @@ async def check_notification_queue():
                     user = await bot.fetch_user(d_id)
                     sent_ok = False
 
-                    # Sestavení tlačítek (View) pro Discord DM
-                    view = None
+                    # Sestavení tlačítek (View) a embedu pro Discord DM
+                    from discord_embed import build_embed, build_view
                     try:
-                        view = discord.ui.View()
-                        if rule_id and str(rule_id).startswith("admin_direct"):
-                            view.add_item(discord.ui.Button(label="ℹ️ Proč mi přišla zpráva?", url="https://datacorebot.koyeb.app/proc-notifikace?typ=admin", style=discord.ButtonStyle.link))
-                            view.add_item(discord.ui.Button(label="💬 Podpora a odpověď", url="https://datacorebot.koyeb.app/podpora", style=discord.ButtonStyle.link))
-                        else:
-                            if not is_one_time and rule_id:
-                                unsub_href = f"https://datacorebot.koyeb.app/api/notifications/unsubscribe?id={rule_id}"
-                                view.add_item(discord.ui.Button(label="🔕 Vypnout notifikace", url=unsub_href, style=discord.ButtonStyle.link))
-                            view.add_item(discord.ui.Button(label="ℹ️ Proč mi chodí upozornění?", url="https://datacorebot.koyeb.app/proc-notifikace", style=discord.ButtonStyle.link))
+                        view = build_view(rule_id, is_one_time)
                     except Exception as e_v:
                         view = None
 
                     if embed_data:
                         try:
-                            title_txt = str(embed_data.get("title", "🔔 Upozornění")).replace("\r", "").replace("\n", " ")[:250]
-                            desc_txt = str(embed_data.get("description", ""))[:2000]
-                            em = discord.Embed(
-                                title=title_txt,
-                                description=desc_txt,
-                                color=embed_data.get("color", 0x38bdf8)
-                            )
-                            for field in embed_data.get("fields", []):
-                                f_name = str(field.get("name") or "Info")[:256].strip() or "Info"
-                                f_val = str(field.get("value") or "-")[:1024].strip() or "-"
-                                em.add_field(name=f_name, value=f_val, inline=field.get("inline", False))
-                            em.set_footer(text=str(embed_data.get("footer", {}).get("text", "OIS IDPK"))[:2000])
+                            em = build_embed(embed_data, rule_id, is_one_time)
                             
                             img_dict = embed_data.get("image")
                             img_url = (img_dict.get("url") if isinstance(img_dict, dict) else img_dict) if img_dict else None
@@ -7459,134 +7577,10 @@ def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is
             except Exception as e_att:
                 print(f"[EMAIL ATTACH IMAGE ERR] {e_att}", flush=True)
 
-        # Tlačítka pro odhlášení a vysvětlení
-        action_buttons_html = ""
-        btn_items = []
-        is_admin_direct = bool(rule_id and str(rule_id).startswith("admin_direct"))
-        if not is_one_time and rule_id and not is_admin_direct:
-            unsub_href = f"https://datacorebot.koyeb.app/api/notifications/unsubscribe?id={rule_id}"
-            btn_items.append(f'<a href="{unsub_href}" target="_blank" style="display:inline-block;padding:9px 18px;background-color:#ef4444;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:13px;margin-right:10px;margin-bottom:8px;">🔕 Vypnout pravidelné notifikace</a>')
-
-        if is_admin_direct:
-            why_href = "https://datacorebot.koyeb.app/proc-notifikace?typ=admin"
-            btn_items.append(f'<a href="{why_href}" target="_blank" style="display:inline-block;padding:9px 16px;background-color:#7c3aed;color:#ffffff;text-decoration:none;border-radius:6px;font-size:12px;font-weight:600;margin-right:10px;margin-bottom:8px;">ℹ️ Proč mi přišla tato zpráva od administrátora?</a>')
-            support_href = "https://datacorebot.koyeb.app/podpora"
-            btn_items.append(f'<a href="{support_href}" target="_blank" style="display:inline-block;padding:9px 16px;background-color:#f1f5f9;color:#475569;text-decoration:none;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-bottom:8px;">💬 Napsat na podporu / Odpovědět</a>')
-        else:
-            why_href = "https://datacorebot.koyeb.app/proc-notifikace"
-            btn_items.append(f'<a href="{why_href}" target="_blank" style="display:inline-block;padding:8px 14px;background-color:#f1f5f9;color:#475569;text-decoration:none;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-bottom:8px;">ℹ️ Proč mi chodí upozornění?</a>')
-
-        if btn_items:
-            action_buttons_html = f"""
-            <div style="margin-top:24px;padding-top:18px;border-top:1px solid #e2e8f0;text-align:center;">
-              {' '.join(btn_items)}
-            </div>
-            """
-
-        # Header s logem DataCoreBot
-        logo_tag = '<img src="cid:datacore_logo" alt="DataCoreBot Logo" style="max-height:48px;width:auto;vertical-align:middle;border:0;display:inline-block;" />' if logo_cid_available else '<img src="https://datacorebot.koyeb.app/static/img/datacorebot_n.png" alt="DataCoreBot Logo" style="max-height:48px;width:auto;vertical-align:middle;border:0;display:inline-block;" />'
-        
-        email_header = f"""
-        <div style="background: linear-gradient(135deg, #0b0f19 0%, #1e1b4b 100%); padding: 26px 20px; border-radius: 12px 12px 0 0; text-align: center; border-bottom: 2px solid #7c3aed;">
-          {logo_tag}
-          <div style="color: #94a3b8; font-size: 11px; margin-top: 8px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 700;">Projekt OIS IDPK • Centrální Systém</div>
-        </div>
-        """
-
-        # Sekce s přiloženým obrázkem
-        image_block_html = ""
-        if attached_cid_available:
-            image_block_html = """
-            <div style="margin: 22px 0; background: #0f172a; padding: 14px; border-radius: 10px; border: 1px solid #334155; text-align: center;">
-              <img src="cid:attached_image" alt="Přiložený obrázek" style="max-width: 100%; max-height: 480px; border-radius: 8px; display: block; margin: 0 auto; box-shadow: 0 4px 14px rgba(0,0,0,0.4);" />
-              <div style="color: #94a3b8; font-size: 11px; margin-top: 8px;">📷 Přiložený obrázek / screenshot</div>
-            </div>
-            """
-        elif img_url and (str(img_url).startswith("http://") or str(img_url).startswith("https://")):
-            image_block_html = f"""
-            <div style="margin: 22px 0; background: #0f172a; padding: 14px; border-radius: 10px; border: 1px solid #334155; text-align: center;">
-              <a href="{img_url}" target="_blank">
-                <img src="{img_url}" alt="Přiložený obrázek" style="max-width: 100%; max-height: 480px; border-radius: 8px; display: block; margin: 0 auto; box-shadow: 0 4px 14px rgba(0,0,0,0.4);" />
-              </a>
-              <div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">Kliknutím otevřete obrázek v plné velikosti</div>
-            </div>
-            """
-
-        # Sestavení těla HTML
-        if embed_data:
-            fields_html = ""
-            for f in embed_data.get("fields", []):
-                val = str(f.get("value", ""))
-                val = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" style="color: #38bdf8; text-decoration: none;">\1</a>', val)
-                fields_html += f"""
-                <tr style="border-bottom: 1px solid #f1f5f9;">
-                  <td style="padding: 8px 12px; font-weight: 700; color: #475569; font-size: 13px; width: 35%;">{f.get('name', '')}:</td>
-                  <td style="padding: 8px 12px; color: #0f172a; font-size: 13px;">{val}</td>
-                </tr>
-                """
-            
-            fields_table = ""
-            if fields_html:
-                fields_table = f"""
-                <table style="width: 100%; border-collapse: collapse; background: #f8fafc; border-radius: 8px; overflow: hidden; margin: 16px 0; border: 1px solid #e2e8f0;">
-                  <tbody>
-                    {fields_html}
-                  </tbody>
-                </table>
-                """
-
-            title_val = str(embed_data.get("title", "Upozornění")).strip()
-            desc_val = str(embed_data.get("description", "")).replace("\n", "<br>")
-
-            html = f"""
-            <!DOCTYPE html>
-            <html>
-              <head><meta charset="utf-8"></head>
-              <body style="margin: 0; padding: 20px 10px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-                <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
-                  {email_header}
-                  <div style="padding: 28px 24px;">
-                    <h2 style="color: #0f172a; margin-top: 0; margin-bottom: 14px; font-size: 20px; font-weight: 700;">{title_val}</h2>
-                    <div style="font-size: 15px; color: #334155; line-height: 1.65; margin-bottom: 18px;">{desc_val}</div>
-                    {fields_table}
-                    {image_block_html}
-                    {action_buttons_html}
-                  </div>
-                  <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b;">
-                    <div>Hezký den přeje <strong>Tým DataCore Bot & Projekt OIS IDPK</strong></div>
-                    <div style="margin-top: 4px; font-size: 11px; color: #94a3b8;">Tato zpráva byla automaticky vygenerována systémem DataCore OIS IDPK.</div>
-                  </div>
-                </div>
-              </body>
-            </html>
-            """
-        else:
-            html_text = dm_text.replace("\n", "<br>")
-            html_text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" style="color: #38bdf8;">\1</a>', html_text)
-            
-            html = f"""
-            <!DOCTYPE html>
-            <html>
-              <head><meta charset="utf-8"></head>
-              <body style="margin: 0; padding: 20px 10px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-                <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
-                  {email_header}
-                  <div style="padding: 28px 24px;">
-                    <div style="font-size: 15px; color: #334155; line-height: 1.65;">{html_text}</div>
-                    {image_block_html}
-                    {action_buttons_html}
-                  </div>
-                  <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b;">
-                    <div>Hezký den přeje <strong>Tým DataCore Bot & Projekt OIS IDPK</strong></div>
-                    <div style="margin-top: 4px; font-size: 11px; color: #94a3b8;">Tato zpráva byla automaticky vygenerována systémem DataCore OIS IDPK.</div>
-                  </div>
-                </div>
-              </body>
-            </html>
-            """
-
-        clean_plain_text = re.sub(r'data:image\/[^;]+;base64,[A-Za-z0-9+/=]+', '[Přiložený obrázek]', dm_text)
-        msg_alt.attach(MIMEText(clean_plain_text, "plain", "utf-8"))
+        from ois_email import build_notification_email
+        subject, html, text = build_notification_email(embed_data, dm_text, rule_id=rule_id, is_one_time=is_one_time)
+        msg["Subject"] = subject
+        msg_alt.attach(MIMEText(text, "plain", "utf-8"))
         msg_alt.attach(MIMEText(html, "html", "utf-8"))
         
         server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15)
@@ -7726,6 +7720,31 @@ def stranka_proc_notifikace():
 @app.route('/hlaseni-chyb')
 @app.route('/dotazy')
 def stranka_podpora():
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(curr_dir, "podpora.html")
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        user_nick = ""
+        user_contact = ""
+        cookie_tok = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
+        if cookie_tok:
+            u = get_cached_session_user(cookie_tok)
+            if u:
+                user_nick = str(u.get("nick") or "")
+                user_contact = str(u.get("discord_id") or u.get("email") or "")
+        import json
+        prefill_script = f"<script>window.OIS_PREFILL = {json.dumps({'nick': user_nick, 'contact': user_contact})};</script>"
+        if "</head>" in content:
+            content = content.replace("</head>", prefill_script + "\n</head>", 1)
+        if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
+            content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+        return Response(content, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        print(f"[PODPORA ERROR] {e}", flush=True)
+        return render_error_page(500, "Chyba podpory", str(e)), 500
+
+def _legacy_stranka_podpora():
     # Zkusit předvyplnit uživatele, pokud je přihlášen
     user_nick = ""
     user_discord = ""
