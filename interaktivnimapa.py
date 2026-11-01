@@ -15074,7 +15074,7 @@ def api_lines_map():
     line_stops = {l: s for l, s in line_stops.items() if len(s) >= 3}
     if len(line_stops) > 200:
         return jsonify({'status': 'error',
-                        'message': f'Nalezeno {len(line_stops)} linek — zadej přesnější číslo (např. 490)'}), 400
+                        'message': f'Nalezeno {len(line_stops)} linek — zadej přesnější číslo (např. 424, 722)'}), 400
 
     result = {}
     for l, stops in line_stops.items():

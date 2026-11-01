@@ -1621,7 +1621,7 @@ body.night .aurora{opacity:.4}
         <h2>Je mezi nimi <span class="grad">vaše linka?</span></h2>
         <p class="lead">Aplikace obsahuje <b id="lineCount">251</b> linek z GTFS IDPK (<b id="soundLineCount">23</b> se zvukovým hlášením 🔊). Zadejte číslo linky nebo město na trase a ihned zjistíte, zda je v seznamu a zda má nahraný zvuk.</p>
         <div class="search">
-          <input class="inp big" id="lineSearch" type="search" inputmode="numeric" placeholder="Zadejte číslo linky, např. 490" autocomplete="off" aria-label="Hledat linku">
+          <input class="inp big" id="lineSearch" type="search" placeholder="Zadejte název města, zastávky a nebo číslo linky" autocomplete="off" aria-label="Hledat linku">
         </div>
         <div class="lres" id="lineRes" aria-live="polite"></div>
         <button class="btn ghost" id="lineRandom" type="button" style="margin:10px 0 0">Náhodná linka</button>
@@ -2061,7 +2061,7 @@ body.night .aurora{opacity:.4}
       <a class="card pcard reveal d1" href="/historie">
         <div class="gfx"><div class="plate"><b>CZ</b><span>ABC 1234</span></div></div>
         <h3>Databáze autobusů</h3>
-        <p>SPZ záznamy a historie odjetých spojů linek 490 / 496.</p>
+        <p>SPZ záznamy a historie odjetých spojů všech linek IDPK.</p>
         <span class="go">Otevřít databázi →</span>
       </a>
       <a class="card pcard reveal d2" href="/jizdni-rad">
@@ -2935,7 +2935,7 @@ const LINES = GTFS_LINES.map(r => r[0]);
       e.classList.toggle('hit',!!q&&e.dataset.n.includes(q));
       e.classList.toggle('exact',!!q&&e.dataset.n===q);
     });
-    if(!q){res.innerHTML='<p class="lstat info">Zadejte číslo linky (např. 722, 424, 336) nebo město na trase.</p>';return}
+    if(!q){res.innerHTML='<p class="lstat info">Zadejte název města, zastávky a nebo číslo linky (např. 722, 424, 336).</p>';return}
     
     const matches=GTFS_LINES.filter(r=>{
       const num=norm(r[0]);
