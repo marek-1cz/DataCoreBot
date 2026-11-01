@@ -7335,7 +7335,7 @@ class BusFusionEngine:
         except Exception:
             pass
 
-        if force_db or (now_ts - getattr(self, "last_db_save", 0)) >= 300.0:
+        if force_db or (now_ts - getattr(self, "last_db_save", 0)) >= 30.0:
             db_c = db_client or get_db_client()
             if db_c:
                 def _do_db_save(p_load, cur_ts):
@@ -7629,6 +7629,10 @@ class BusFusionEngine:
                         continue
 
                     rec["status"] = "PARKED"
+                    curr_l = rec.get("line") or rec.get("current_line") or rec.get("last_valid_line")
+                    if curr_l:
+                        rec["last_valid_line"] = curr_l
+                        rec["line"] = curr_l
                     rec["current_line"] = None
                     rec["is_arriva_fallback"] = False
                     rec["position_source"] = "pvvd"
@@ -7636,9 +7640,14 @@ class BusFusionEngine:
                         rec["parked_since"] = rec.get("last_seen") or now
                     if not rec.get("offline_since_time") and rec.get("parked_since"):
                         try:
-                            rec["offline_since_time"] = datetime.fromtimestamp(rec["parked_since"]).strftime('%H:%M')
+                            rec["offline_since_time"] = datetime.fromtimestamp(rec["parked_since"]).strftime('%H:%M:%S')
                         except Exception:
                             rec["offline_since_time"] = None
+                    if not rec.get("offline_since_datetime") and rec.get("parked_since"):
+                        try:
+                            rec["offline_since_datetime"] = datetime.fromtimestamp(rec["parked_since"]).strftime('%d.%m.%Y %H:%M:%S')
+                        except Exception:
+                            pass
 
                     # Zabezpečení vehicle_type pro zaparkovaný vůz (uchovat přes restarty)
                     if not rec.get("vehicle_type"):
@@ -10079,26 +10088,49 @@ def background_map_worker():
                     if not (lat_p and lng_p):
                         continue
                     spz_p = rec.get("spz") or "Aktivní hledání"
-                    line_p = rec.get("last_valid_line") or rec.get("current_line") or ""
+                    line_p = rec.get("last_valid_line") or rec.get("line") or rec.get("current_line") or ""
                     v_type_p = sanitize_vehicle_type(rec.get("vehicle_type"))
-                    p_since_p = rec.get("parked_since") or rec.get("last_seen") or int(time.time())
+                    dest_p = rec.get("destination") or rec.get("final_stop") or ""
+                    p_since_p = rec.get("parked_since") or rec.get("last_seen_epoch") or rec.get("last_seen") or int(time.time())
+                    if isinstance(p_since_p, str):
+                        try:
+                            p_since_p = int(datetime.strptime(p_since_p, "%d.%m.%Y %H:%M:%S").timestamp())
+                        except Exception:
+                            p_since_p = int(time.time())
+
                     off_time_p = rec.get("offline_since_time")
                     if not off_time_p and p_since_p:
                         try:
-                            off_time_p = datetime.fromtimestamp(p_since_p).strftime('%H:%M')
+                            off_time_p = datetime.fromtimestamp(p_since_p).strftime('%H:%M:%S')
                         except Exception:
-                            off_time_p = _now_restore.strftime('%H:%M')
+                            off_time_p = _now_restore.strftime('%H:%M:%S')
+
+                    off_dt_p = rec.get("offline_since_datetime")
+                    if not off_dt_p and p_since_p:
+                        try:
+                            off_dt_p = datetime.fromtimestamp(p_since_p).strftime('%d.%m.%Y %H:%M:%S')
+                        except Exception:
+                            off_dt_p = _now_restore.strftime('%d.%m.%Y %H:%M:%S')
 
                     ghost_p = new_cache_entry(
-                        p_id_str, f"PARKED-{p_id_str}", lat_p, lng_p, line_p, rec.get("final_stop", ""), False, 0, _now_restore,
+                        p_id_str, f"PARKED-{p_id_str}", lat_p, lng_p, line_p, dest_p, False, 0, _now_restore,
                         ghost_spz=spz_p, ghost_verified=bool(rec.get("spz_verified")),
                         admin_verified=bool(rec.get("admin_spz_verified")),
                         ghost_vehicle_type=v_type_p
                     )
+                    ghost_p["line"] = line_p
+                    ghost_p["last_valid_line"] = line_p
+                    ghost_p["destination"] = dest_p
                     ghost_p["is_offline"] = True
                     ghost_p["is_withdrawn"] = True
                     ghost_p["parked_since"] = p_since_p
+                    ghost_p["last_seen_epoch"] = p_since_p
+                    ghost_p["last_moved_epoch"] = p_since_p
+                    ghost_p["last_updated"] = off_time_p
+                    ghost_p["last_seen"] = off_time_p
+                    ghost_p["last_moved"] = off_time_p
                     ghost_p["offline_since_time"] = off_time_p
+                    ghost_p["offline_since_datetime"] = off_dt_p
                     ghost_p["vehicle_type"] = v_type_p
 
                     elapsed_min = max(0.0, (_now_restore.timestamp() - p_since_p) / 60.0)
@@ -12451,10 +12483,14 @@ MAPA_NOTICES_CODE = '''
   }
   function visible(){
     const now=Date.now(),d=dismissed();
+    const H=host();
     return LIST.filter(n=>{
       if(n.type==='build'){if(!n.startedAt||buildEnd(n)<now)return false;return true}
       if(n.endsAt&&Date.parse(n.endsAt)<now)return false;
       if(n.type!=='maintenance'&&n.startsAt&&Date.parse(n.startsAt)>now)return false;
+
+      // Pokud uz je karta na strance zobrazena, nechat ji zobrazenou (nemazat po 1s)!
+      if(H && H.querySelector('.nt[data-id="'+CSS.escape(n.id)+'"]')) return true;
 
       const freq=n.frequency||'always';
       if(freq==='once'){
@@ -12477,7 +12513,7 @@ MAPA_NOTICES_CODE = '''
     el.classList.add('tochip');
     setTimeout(()=>{
       if(!el.isConnected)return;el.style.display='none';
-      const c=document.createElement('button');c.type='button';c.className='nt-chip';c.setAttribute('aria-label','Zobrazit automatickou zprávu');
+      const c=document.createElement('button');c.type='button';c.className='nt-chip';c.setAttribute('aria-label','Zobrazit automatickou zpr\u00e1vu');
       c.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+ICON.build+'</svg><span class="chip-t">'+esc(mmss(buildEnd(el._n)-Date.now()))+'</span>';
       c.addEventListener('click',()=>{c.remove();el._chip=null;el.classList.remove('tochip');el.style.display='';el.style.animation='none';void el.offsetWidth;el.style.animation='';scheduleCollapse(el)});
       el.after(c);el._chip=c},560);
@@ -12487,10 +12523,21 @@ MAPA_NOTICES_CODE = '''
     el.className='nt '+t;el.dataset.id=n.id;el.setAttribute('role',t==='danger'?'alert':'status');
     if(t==='build'){const b=BUILD_TEXT[isMapPage()?'map':'other'];n=Object.assign({},n,{title:n.title||b.title,text:n.text||b.text,dismissible:false})}
 
-    const freq=n.frequency||'always';
-    if(freq==='once'){try{localStorage.setItem('ois-notice-seen-'+n.id,n.version||1)}catch(_){}}
-    else if(freq==='session'){try{sessionStorage.setItem('ois-notice-session-'+n.id,'1')}catch(_){}}
-    else if(freq==='daily'){try{localStorage.setItem('ois-notice-daily-'+n.id,Date.now())}catch(_){}}
+    function markDismissed(){
+      saveDismiss(n.id, n.version||1);
+      const freq=n.frequency||'always';
+      if(freq==='once'){try{localStorage.setItem('ois-notice-seen-'+n.id,n.version||1)}catch(_){}}
+      else if(freq==='session'){try{sessionStorage.setItem('ois-notice-session-'+n.id,'1')}catch(_){}}
+      else if(freq==='daily'){try{localStorage.setItem('ois-notice-daily-'+n.id,Date.now())}catch(_){}}
+    }
+
+    // Po 5 sekundách aktivního prohlížení zaznamenat zobrazení pro freq once/session/daily (nemaze kartu na teto strance)
+    setTimeout(()=>{
+      const freq=n.frequency||'always';
+      if(freq==='once'){try{localStorage.setItem('ois-notice-seen-'+n.id,n.version||1)}catch(_){}}
+      else if(freq==='session'){try{sessionStorage.setItem('ois-notice-session-'+n.id,'1')}catch(_){}}
+      else if(freq==='daily'){try{localStorage.setItem('ois-notice-daily-'+n.id,Date.now())}catch(_){}}
+    }, 5000);
 
     const beh=n.dismiss_behavior||(n.dismissible===false?'permanent':'close_btn');
     const showClose=(beh==='close_btn'||beh==='both'||(n.dismissible!==false&&beh!=='auto_10s'&&beh!=='permanent'));
@@ -12505,13 +12552,14 @@ MAPA_NOTICES_CODE = '''
      (showClose?'<button class="nt-x" type="button" aria-label="Zavřít">×</button>':'')+bar;
     el._n=n;
     const xb=el.querySelector('.nt-x');
-    if(xb)xb.addEventListener('click',()=>{saveDismiss(n.id,n.version||1);el.classList.add('out');setTimeout(()=>sync(),450)});
+    if(xb)xb.addEventListener('click',()=>{markDismissed();el.classList.add('out');setTimeout(()=>sync(),450)});
 
     if(autoHide){
       setTimeout(()=>{
         if(el.isConnected){
+          markDismissed();
           el.classList.add('out');
-          setTimeout(()=>sync(),450);
+          setTimeout(()=>{el.remove();sync();},450);
         }
       }, autoHideSec*1000);
     }
@@ -13973,7 +14021,8 @@ def api_admin_spz_meta_save():
 
 
 @mapa_bp.route('/historie')
-def stranka_historie_index():
+@mapa_bp.route('/historie/<spz>')
+def stranka_historie_index(spz=None):
     try:
         curr_dir = os.path.dirname(os.path.abspath(__file__))
         template_path = os.path.join(curr_dir, "new_web_historie.html")
@@ -13997,10 +14046,7 @@ def stranka_historie_old():
     return _full_page("Historie", HTML_HISTORIE_INDEX)
 
 
-@mapa_bp.route('/historie/<spz>')
-def stranka_historie_detail(spz):
-    import urllib.parse
-    return redirect(f"/historie?spz={urllib.parse.quote(spz)}#tab=vozidla", code=302)
+# @mapa_bp.route("/historie/<spz>") handled by stranka_historie_index
 
 @mapa_bp.route('/old/historie/<spz>')
 def stranka_historie_detail_old(spz):
