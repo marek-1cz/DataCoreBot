@@ -2780,14 +2780,78 @@ def api_jr_trips():
 @app.route('/api/notices')
 def api_notices():
     notices = []
-    if 'SERVER_START_ISO' in globals() and SERVER_START_ISO:
-        notices.append({
-            "id": f"build-{int(time.time() - (time.time() % 3600))}",
-            "type": "build",
-            "startedAt": SERVER_START_ISO,
-            "priority": 100,
-            "dismissible": False
-        })
+    # 1. GitHub Build notice (active for 10 minutes after deployment)
+    if 'SERVER_START_TIME' in globals() and SERVER_START_TIME:
+        elapsed = time.time() - SERVER_START_TIME
+        if elapsed < 600:
+            notices.append({
+                "id": f"build-{int(SERVER_START_TIME)}",
+                "type": "build",
+                "title": "Probíhá aktualizace",
+                "text": "Po nasazení nové verze se ještě načítají některá data. Za okamžik se zobrazení ustálí.",
+                "startedAt": SERVER_START_ISO,
+                "priority": 100,
+                "dismissible": False
+            })
+
+    # 2. Web announcements from DB settings table
+    try:
+        db = get_db()
+        if db:
+            s_data = db.table('settings').select('setting_value').eq('setting_key', 'announcement_data').execute().data
+            if s_data and s_data[0].get('setting_value'):
+                raw = s_data[0]['setting_value']
+                ann = json.loads(raw) if isinstance(raw, str) else raw
+                if isinstance(ann, list):
+                    now_dt = datetime.now()
+                    for it in ann:
+                        if not it.get("active", True):
+                            continue
+                        end_t = it.get("endsAt") or it.get("end_time")
+                        if end_t:
+                            try:
+                                if "T" in str(end_t):
+                                    dt = datetime.fromisoformat(str(end_t))
+                                else:
+                                    dt = datetime.strptime(str(end_t).strip(), "%d.%m.%Y %H:%M")
+                                if now_dt > dt:
+                                    continue
+                            except Exception:
+                                pass
+
+                        t = it.get("type")
+                        if not t:
+                            title_lower = (it.get("title") or "").lower()
+                            if "předěláv" in title_lower or "rebuild" in title_lower:
+                                t = "rebuild"
+                            elif "oprava" in title_lower or "výpadek" in title_lower or "chyb" in title_lower:
+                                t = "warning"
+                            elif "údržb" in title_lower:
+                                t = "maintenance"
+                            else:
+                                t = "info"
+
+                        link_obj = it.get("link")
+                        if not isinstance(link_obj, dict) and it.get("link_url"):
+                            link_obj = {"url": it.get("link_url"), "label": it.get("link_label", "Zjistit více")}
+
+                        notices.append({
+                            "id": str(it.get("id")),
+                            "type": t,
+                            "title": it.get("title", ""),
+                            "text": it.get("text", ""),
+                            "tag": it.get("tag", ""),
+                            "link": link_obj,
+                            "priority": int(it.get("priority", 10)),
+                            "dismissible": bool(it.get("dismissible", True)),
+                            "version": int(it.get("version", 1)),
+                            "progress": it.get("progress"),
+                            "startsAt": it.get("startsAt") or it.get("start_time") or None,
+                            "endsAt": it.get("endsAt") or it.get("end_time") or None
+                        })
+    except Exception as e:
+        print(f"[API NOTICES ERROR] {e}", flush=True)
+
     return jsonify({"notices": notices})
 
 @app.route('/led-panel')
@@ -4510,32 +4574,72 @@ def web_auth_logout():
     resp.set_cookie('web_session_token', '', expires=0, secure=True, httponly=True, samesite='Strict')
     return resp
 
+def get_current_authenticated_user(db=None):
+    if db is None:
+        db = get_db()
+    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
+    u = None
+    if cookie_token:
+        u = get_cached_session_user(cookie_token)
+        if not u and db:
+            try:
+                from session_manager import find_user_by_session_token
+                u = find_user_by_session_token(db, cookie_token)
+            except Exception:
+                pass
+            if not u:
+                try:
+                    u_data = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
+                    if u_data:
+                        u = u_data[0]
+                except Exception:
+                    pass
+        if u and cookie_token:
+            _SESSION_CACHE[cookie_token] = (time.time(), u)
+
+    if not u and session.get('discord_id') and db:
+        try:
+            u_data = db.table("users").select("*").eq("discord_id", str(session.get('discord_id'))).execute().data
+            if u_data:
+                u = u_data[0]
+        except Exception:
+            pass
+
+    if not u and session.get('offline_mode'):
+        u = {
+            "id": 999999,
+            "nick": session.get('discord_nick', 'Admin'),
+            "email": "admin@datacore.cz",
+            "role": session.get('role', 'DEV'),
+            "discord_id": str(session.get('discord_id', '100000000000000000')),
+            "app_id": "OFFLINE_ADMIN"
+        }
+    return u
+
 @app.route('/api/auth/me')
 def web_auth_me():
-    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
-    if cookie_token:
-        user = get_cached_session_user(cookie_token)
-        if user:
-            name = user.get("nick") or user.get("email") or "Uživatel"
-            avatar = user.get("avatar_url") or ""
-            app_id = user.get("app_id") or user.get("id")
-            role = user.get("role") or "User"
-            return jsonify({
-                "status": "success",
-                "name": name,
-                "avatar": avatar,
+    user = get_current_authenticated_user()
+    if user:
+        name = user.get("nick") or user.get("email") or "Uživatel"
+        avatar = user.get("avatar_url") or ""
+        app_id = user.get("app_id") or user.get("id")
+        role = user.get("role") or "User"
+        return jsonify({
+            "status": "success",
+            "name": name,
+            "avatar": avatar,
+            "app_id": app_id,
+            "role": role,
+            "user": {
+                "id": user.get("id"),
                 "app_id": app_id,
                 "role": role,
-                "user": {
-                    "id": user.get("id"),
-                    "app_id": app_id,
-                    "role": role,
-                    "discord_id": user.get("discord_id"),
-                    "email": user.get("email"),
-                    "nick": user.get("nick"),
-                    "avatar_url": avatar
-                }
-            })
+                "discord_id": user.get("discord_id"),
+                "email": user.get("email"),
+                "nick": user.get("nick"),
+                "avatar_url": avatar
+            }
+        })
     return jsonify({"status": "unauthorized"}), 401
 
 @app.route('/api/auth/email/magic', methods=['POST'])
@@ -5487,28 +5591,37 @@ def _legacy_stranka_ucet():
 def api_ucet_sessions_get():
     cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
     db = get_db()
-    if not cookie_token or not db:
+    u = get_current_authenticated_user(db)
+    if not u:
         return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
-    from session_manager import find_user_by_session_token, get_user_sessions
-    u = find_user_by_session_token(db, cookie_token)
-    if not u:
-        u = get_cached_session_user(cookie_token)
-    if not u:
-        return jsonify({"status": "error", "message": "Uživatel nenalezen"}), 401
     
-    _SESSION_CACHE[cookie_token] = (time.time(), u)
-    user_sessions = get_user_sessions(u)
     result = []
-    for s in user_sessions:
-        s_token = s.get("token", "")
+    try:
+        from session_manager import get_user_sessions
+        user_sessions = get_user_sessions(u)
+        for s in user_sessions:
+            s_token = s.get("token", "")
+            result.append({
+                "id": s.get("id", ""),
+                "device": s.get("device", "Neznámé zařízení"),
+                "icon": s.get("icon", "fa-desktop"),
+                "ip": s.get("ip", "Neznámá"),
+                "created_at": s.get("created_at", "Neznámé"),
+                "last_active": s.get("last_active", "Neznámé"),
+                "is_current": bool(cookie_token and s_token == cookie_token)
+            })
+    except Exception as e:
+        print(f"[SESSIONS GET ERROR] {e}", flush=True)
+
+    if not result:
         result.append({
-            "id": s.get("id", ""),
-            "device": s.get("device", "Neznámé zařízení"),
-            "icon": s.get("icon", "fa-desktop"),
-            "ip": s.get("ip", "Neznámá"),
-            "created_at": s.get("created_at", "Neznámé"),
-            "last_active": s.get("last_active", "Neznámé"),
-            "is_current": bool(s_token == cookie_token)
+            "id": "current",
+            "device": "Tento prohlížeč",
+            "icon": "fa-desktop",
+            "ip": request.headers.get('X-Forwarded-For', request.remote_addr or 'Neznámá'),
+            "created_at": "Nyní",
+            "last_active": "Právě teď",
+            "is_current": True
         })
     return jsonify({"status": "success", "sessions": result, "count": len(result)})
 
@@ -5592,6 +5705,147 @@ def api_ucet_update():
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
+
+@app.route('/api/ucet/playlog', methods=['GET'])
+def api_ucet_playlog():
+    db = get_db()
+    u = get_current_authenticated_user(db)
+    if not u:
+        return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
+
+    discord_id = str(u.get("discord_id") or "")
+    sessions_out = []
+    total_minutes = 0
+    if db:
+        try:
+            q = db.table("app_sessions").select("*")
+            if discord_id:
+                q = q.eq("discord_id", discord_id)
+            rows = q.order("id", desc=True).limit(50).execute().data or []
+            for r in rows:
+                st = r.get("start_time")
+                et = r.get("end_time")
+                mins = 0
+                if st and et:
+                    try:
+                        d1 = datetime.strptime(st, "%d.%m.%Y %H:%M:%S")
+                        d2 = datetime.strptime(et, "%d.%m.%Y %H:%M:%S")
+                        mins = max(1, int((d2 - d1).total_seconds() // 60))
+                    except Exception:
+                        mins = 5
+                elif st and not et:
+                    mins = 1
+                total_minutes += mins
+                sessions_out.append({
+                    "id": r.get("session_id") or str(r.get("id")),
+                    "started_at": st,
+                    "ended_at": et,
+                    "minutes": mins,
+                    "device": "PC (Windows)",
+                    "version": r.get("version") or "1.0.0"
+                })
+        except Exception as e:
+            print(f"[PLAYLOG ERROR] {e}", flush=True)
+
+    summary = {
+        "last_played": sessions_out[0]["started_at"] if sessions_out else None,
+        "total_hours": round(total_minutes / 60, 1),
+        "launches": len(sessions_out)
+    }
+    return jsonify({
+        "status": "success",
+        "summary": summary,
+        "total_minutes": total_minutes,
+        "total_sessions": len(sessions_out),
+        "sessions": sessions_out
+    })
+
+@app.route('/api/ucet/rules', methods=['GET'])
+def api_ucet_rules():
+    db = get_db()
+    u = get_current_authenticated_user(db)
+    if not u:
+        return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
+
+    uid = str(u.get("id") or "")
+    discord_id = str(u.get("discord_id") or "")
+    app_id = str(u.get("app_id") or "")
+
+    rules_out = []
+    if db:
+        try:
+            rows = db.table("bus_notifications").select("*").execute().data or []
+            user_rows = [
+                r for r in rows 
+                if str(r.get("user_session") or "") in (uid, discord_id, app_id)
+            ]
+            for r in user_rows:
+                trig_raw = r.get("triggers") or "{}"
+                trig = json.loads(trig_raw) if isinstance(trig_raw, str) else trig_raw
+                rules_out.append({
+                    "id": r["id"],
+                    "label": r.get("label") or f"Autobus {r.get('identifier', '')}",
+                    "identifier": str(r.get("identifier", "")),
+                    "is_one_time": bool(r.get("is_one_time", False)),
+                    "triggers": trig,
+                    "fired_count": r.get("fired_count") or 0
+                })
+        except Exception as e:
+            print(f"[RULES ERROR] {e}", flush=True)
+
+    return jsonify({"status": "success", "rules": rules_out})
+
+@app.route('/api/ucet/rules/delete', methods=['POST'])
+def api_ucet_rule_delete():
+    db = get_db()
+    u = get_current_authenticated_user(db)
+    if not u:
+        return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
+
+    data = request.get_json(silent=True) or {}
+    rule_id = data.get("id")
+    if not rule_id:
+        return jsonify({"status": "error", "message": "Chybí ID pravidla"}), 400
+
+    if db:
+        try:
+            db.table("bus_notifications").delete().eq("id", rule_id).execute()
+            return jsonify({"status": "success"})
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+    return jsonify({"status": "error", "message": "Databáze je nedostupná"}), 503
+
+@app.route('/api/ucet/history', methods=['GET'])
+def api_ucet_history():
+    db = get_db()
+    u = get_current_authenticated_user(db)
+    if not u:
+        return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
+
+    uid = str(u.get("id") or "")
+    discord_id = str(u.get("discord_id") or "")
+    app_id = str(u.get("app_id") or "")
+    history_out = []
+    if db:
+        try:
+            rows = db.table("bus_notifications").select("*").execute().data or []
+            for r in rows:
+                if str(r.get("user_session") or "") in (uid, discord_id, app_id):
+                    last_f = r.get("last_fired_at")
+                    if last_f:
+                        history_out.append({
+                            "id": r["id"],
+                            "fired_at": last_f,
+                            "line_short": str(r.get("identifier", "")),
+                            "line_name": r.get("label", ""),
+                            "message": f"Upozornění: {r.get('label') or r.get('identifier')}",
+                            "trigger": "změna stavu",
+                            "channel": "Discord DM"
+                        })
+        except Exception as e:
+            print(f"[HISTORY ERROR] {e}", flush=True)
+
+    return jsonify({"status": "success", "history": history_out})
 
 @app.route('/dashboard/stats/clear_web', methods=['POST'])
 def dashboard_stats_clear_web():

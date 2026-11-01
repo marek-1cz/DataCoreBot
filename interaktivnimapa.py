@@ -12353,7 +12353,168 @@ def start_map_background_task():
 
 # === FLASK ROUTES ===
 
+MAPA_NOTICES_CODE = '''
+<style>
+#ois-notices{position:fixed;left:0;right:0;top:var(--notify-top,76px);z-index:9999;display:flex;flex-direction:column;align-items:center;gap:10px;padding:0 12px;pointer-events:none}
+.nt{--nc:#38d6ff;position:relative;display:flex;align-items:center;gap:14px;width:100%;max-width:940px;padding:14px 16px 14px 14px;border-radius:22px;overflow:hidden;pointer-events:auto;background:linear-gradient(135deg,color-mix(in srgb,var(--nc) 20%,rgba(8,13,34,.96)),rgba(8,13,34,.96) 62%);border:1px solid color-mix(in srgb,var(--nc) 55%,transparent);box-shadow:0 18px 50px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04) inset,0 0 34px color-mix(in srgb,var(--nc) 22%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);animation:ntIn .7s cubic-bezier(.2,.7,.2,1) both}
+.nt.out{animation:ntOut .45s cubic-bezier(.2,.7,.2,1) forwards}
+@keyframes ntIn{0%{opacity:0;transform:translateY(-36px) scale(.94)}60%{transform:translateY(5px) scale(1.01)}100%{opacity:1;transform:none}}
+@keyframes ntOut{to{opacity:0;transform:translateY(-22px) scale(.96);max-height:0;padding-top:0;padding-bottom:0;margin-top:-10px}}
+.nt.info{--nc:#38d6ff}.nt.success{--nc:#35d07f}.nt.warning{--nc:#ffc933}.nt.danger{--nc:#ff6b6b}.nt.maintenance{--nc:#ffc933}.nt.rebuild{--nc:#2f6bff}.nt.build{--nc:#a98bff}
+.nt-ic{flex:none;position:relative;width:46px;height:46px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--nc) 22%,transparent);color:var(--nc)}
+.nt-ic::after{content:"";position:absolute;inset:-4px;border-radius:19px;border:2px solid var(--nc);opacity:0;animation:ntRing 2.6s ease-out infinite}
+@keyframes ntRing{0%{opacity:.6;transform:scale(.9)}100%{opacity:0;transform:scale(1.25)}}
+.nt-ic svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nt.build .nt-ic svg{animation:ntDown 1.6s ease-in-out infinite}
+@keyframes ntDown{50%{transform:translateY(3px)}}
+.nt.rebuild .nt-ic svg{animation:ntSpin 3.4s linear infinite}
+.nt.maintenance .nt-ic svg{animation:ntWrench 2.2s ease-in-out infinite;transform-origin:50% 50%}
+.nt.warning .nt-ic svg,.nt.danger .nt-ic svg{animation:ntShake 3.2s ease-in-out infinite}
+.nt.success .nt-ic svg path{stroke-dasharray:30;stroke-dashoffset:30;animation:ntDraw .7s .3s ease forwards}
+@keyframes ntSpin{to{transform:rotate(360deg)}}
+@keyframes ntWrench{50%{transform:rotate(-18deg)}}
+@keyframes ntShake{0%,86%,100%{transform:none}90%{transform:rotate(-9deg)}94%{transform:rotate(9deg)}97%{transform:rotate(-5deg)}}
+@keyframes ntDraw{to{stroke-dashoffset:0}}
+.nt-b{flex:1;min-width:0}
+.nt-t{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+.nt-t b{font-size:1rem;letter-spacing:-.01em}
+.nt-tag{padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--nc) 24%,transparent);color:var(--nc);font-size:.66rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.nt-p{color:#c9d5f2;font-size:.9rem;line-height:1.45;overflow-wrap:anywhere}
+.nt-cd{display:inline-flex;align-items:center;gap:6px;margin-top:7px;padding:4px 11px;border-radius:999px;background:rgba(255,255,255,.08);font-size:.8rem;font-weight:700;font-variant-numeric:tabular-nums}
+.nt-cd i{width:7px;height:7px;border-radius:50%;background:var(--nc);box-shadow:0 0 8px var(--nc);animation:ntBlink 1.4s infinite}
+@keyframes ntBlink{50%{opacity:.3}}
+.nt-go{flex:none;padding:9px 18px;border-radius:999px;background:var(--nc);color:#05070f;font-weight:800;font-size:.84rem;white-space:nowrap;transition:transform .25s ease,box-shadow .25s}
+.nt-go:hover{transform:translateY(-2px);box-shadow:0 8px 22px color-mix(in srgb,var(--nc) 45%,transparent)}
+.nt.rebuild .nt-go{color:#fff}
+.nt-x{flex:none;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.08);color:#c9d5f2;font-size:1.2rem;line-height:1;border:0;cursor:pointer;transition:transform .3s ease,background .25s}
+.nt-x:hover{background:rgba(255,255,255,.18);transform:rotate(90deg)}
+.nt-bar{position:absolute;left:0;right:0;bottom:0;height:5px;background:rgba(255,255,255,.06)}
+.nt.build .nt-bar{background:linear-gradient(90deg,transparent,var(--nc),transparent);background-size:50% 100%;background-repeat:no-repeat;animation:ntSweep 1.6s linear infinite}
+@keyframes ntSweep{from{background-position:-60% 0}to{background-position:160% 0}}
+.nt.maintenance .nt-bar{background:repeating-linear-gradient(135deg,#ffc933 0 12px,#1a1300 12px 24px);background-size:34px 34px;animation:ntStripes 1.1s linear infinite;opacity:.9}
+@keyframes ntStripes{to{background-position:34px 0}}
+.nt.rebuild .nt-bar i{display:block;height:100%;width:var(--p,38%);border-radius:0 5px 5px 0;background:linear-gradient(90deg,#2f6bff,#38d6ff);position:relative;overflow:hidden;transition:width .8s ease}
+.nt.rebuild .nt-bar i::after{content:"";position:absolute;top:0;bottom:0;left:-40%;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);animation:ntShine 1.8s infinite}
+.nt.rebuild .nt-bar.ind i{width:35%;animation:ntInd 2.2s ease-in-out infinite alternate}
+@keyframes ntShine{to{left:140%}}@keyframes ntInd{to{margin-left:65%}}
+.nt.tochip{animation:ntToChip .55s ease forwards;transform-origin:100% 0}
+@keyframes ntToChip{to{opacity:0;transform:translateX(35vw) scale(.12)}}
+.nt-chip{pointer-events:auto;align-self:flex-end;display:inline-flex;align-items:center;gap:8px;margin-right:2px;padding:8px 14px 8px 10px;border-radius:999px;background:rgba(8,13,34,.95);border:1px solid color-mix(in srgb,#a98bff 60%,transparent);color:#d8caff;font-weight:800;font-size:.8rem;font-variant-numeric:tabular-nums;box-shadow:0 10px 30px rgba(0,0,0,.5),0 0 22px rgba(169,139,255,.3);animation:ntChip .6s ease both;transition:transform .25s ease}
+.nt-chip:hover{transform:scale(1.06)}
+.nt-chip svg{width:22px;height:22px;fill:none;stroke:#a98bff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;animation:ntDown 1.6s ease-in-out infinite}
+@keyframes ntChip{from{opacity:0;transform:translateX(60px) scale(.4)}}
+@media(max-width:620px){
+  #ois-notices{padding:0 8px}
+  .nt{flex-wrap:wrap;gap:10px 12px;padding:12px;border-radius:20px}
+  .nt-b{flex-basis:calc(100% - 118px)}
+  .nt-go{order:5;flex:1 1 100%;text-align:center}
+}
+</style>
+<div id="ois-notices" aria-live="polite" role="region" aria-label="Oznámení"></div>
+<script>
+(function(){
+  const KEY='ois-notice-dismissed',ORDER={build:6,danger:5,maintenance:4,rebuild:3,warning:2,info:1,success:0};
+  const TAGS={warning:'Upozornění',danger:'Výpadek',rebuild:'Průběh',maintenance:'Údržba',info:'Novinka',success:'Funkční',build:'Automatická zpráva'};
+  const BUILD_TEXT={
+    map:{title:'Probíhá aktualizace mapy',text:'Po nasazení nové verze se mapa načítá. Několik minut mohou být zobrazená data neúplná nebo nepřesná.'},
+    other:{title:'Probíhá aktualizace',text:'Po nasazení nové verze se ještě načítají některá data. Za okamžik se zobrazení ustálí.'}};
+  const BUILD_MAP_MS=10*60*1000,BUILD_OTHER_MS=30*1000,BUILD_COLLAPSE_MS=10*1000;
+  const isMapPage=()=>/^\\/mapa(_admin)?(\\/|$)/.test(location.pathname);
+  const buildEnd=n=>Date.parse(n.startedAt)+(isMapPage()?BUILD_MAP_MS:BUILD_OTHER_MS);
+  const ICON={
+    info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+    success:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/>',
+    warning:'<path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v5M12 17.6h.01"/>',
+    danger:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>',
+    maintenance:'<path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
+    build:'<path d="M7 18a4 4 0 01-.5-7.97A6 6 0 0118 9.5a4.25 4.25 0 01-.5 8.5"/><path d="M12 11v7M9 15l3 3 3-3"/>',
+    rebuild:'<path d="M20 11a8 8 0 00-14.9-3M4 4v4h4M4 13a8 8 0 0014.9 3M20 20v-4h-4"/>'
+  };
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const host=()=>document.getElementById('ois-notices');
+  let LIST=[];
+  function dismissed(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){return{}}}
+  function saveDismiss(id,v){try{const d=dismissed();d[id]=v||1;localStorage.setItem(KEY,JSON.stringify(d))}catch(e){}}
+  function plural(n,a,b,c){return n+' '+(n===1?a:n<5?b:c)}
+  function span(ms){const m=Math.max(1,Math.round(ms/60000));
+    if(m<60)return plural(m,'minuta','minuty','minut');
+    const h=Math.floor(m/60);if(h<24)return plural(h,'hodina','hodiny','hodin')+(m%60?' '+(m%60)+' min':'');
+    return plural(Math.floor(h/24),'den','dny','dní')}
+  function mmss(ms){const s=Math.max(0,Math.ceil(ms/1000));return s>=60?Math.floor(s/60)+':'+('0'+(s%60)).slice(-2):s+' s'}
+  function countdown(n){
+    if(n.type==='build')return 'Ještě '+mmss(buildEnd(n)-Date.now());
+    if(n.type!=='maintenance'||!n.startsAt)return'';
+    const now=Date.now(),s=Date.parse(n.startsAt),e=n.endsAt?Date.parse(n.endsAt):0;
+    if(now<s)return 'Začne za '+span(s-now);
+    if(e&&now<e)return 'Probíhá, zbývá '+span(e-now);
+    return 'Probíhá';
+  }
+  function visible(){
+    const now=Date.now(),d=dismissed();
+    return LIST.filter(n=>{
+      if(n.type==='build'){if(!n.startedAt||buildEnd(n)<now)return false;return true}
+      if(n.endsAt&&Date.parse(n.endsAt)<now)return false;
+      if(n.type!=='maintenance'&&n.startsAt&&Date.parse(n.startsAt)>now)return false;
+      if(n.dismissible!==false&&d[n.id]!=null&&d[n.id]>=(n.version||1))return false;
+      return true}).sort((a,b)=>(b.priority||0)-(a.priority||0)||(ORDER[b.type]||0)-(ORDER[a.type]||0));
+  }
+  function scheduleCollapse(el){clearTimeout(el._ct);el._ct=setTimeout(()=>collapse(el),BUILD_COLLAPSE_MS)}
+  function collapse(el){
+    if(!el.isConnected||el._chip)return;
+    el.classList.add('tochip');
+    setTimeout(()=>{
+      if(!el.isConnected)return;el.style.display='none';
+      const c=document.createElement('button');c.type='button';c.className='nt-chip';c.setAttribute('aria-label','Zobrazit automatickou zprávu');
+      c.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+ICON.build+'</svg><span class="chip-t">'+esc(mmss(buildEnd(el._n)-Date.now()))+'</span>';
+      c.addEventListener('click',()=>{c.remove();el._chip=null;el.classList.remove('tochip');el.style.display='';el.style.animation='none';void el.offsetWidth;el.style.animation='';scheduleCollapse(el)});
+      el.after(c);el._chip=c},560);
+  }
+  function buildEl(n){
+    const el=document.createElement('div'),t=ORDER[n.type]!=null?n.type:'info';
+    el.className='nt '+t;el.dataset.id=n.id;el.setAttribute('role',t==='danger'?'alert':'status');
+    if(t==='build'){const b=BUILD_TEXT[isMapPage()?'map':'other'];n=Object.assign({},n,{title:n.title||b.title,text:n.text||b.text,dismissible:false})}
+    const cd=countdown(n),bar=t==='maintenance'?'<div class="nt-bar"></div>':t==='rebuild'?'<div class="nt-bar'+(n.progress==null?' ind':'')+'"><i'+(n.progress!=null?' style="--p:'+Math.max(4,Math.min(100,n.progress))+'%"':'')+'></i></div>':(t==='build'?'<div class="nt-bar"></div>':'');
+    el.innerHTML='<div class="nt-ic"><svg viewBox="0 0 24 24" aria-hidden="true">'+ICON[t]+'</svg></div>'+
+     '<div class="nt-b"><div class="nt-t"><b>'+esc(n.title)+'</b>'+'<span class="nt-tag">'+esc(n.tag||TAGS[t])+'</span>'+'</div>'+
+     (n.text?'<div class="nt-p">'+esc(n.text)+'</div>':'')+(cd?'<div class="nt-cd"><i></i><span class="cdt">'+esc(cd)+'</span></div>':'')+'</div>'+
+     (n.link&&n.link.url?'<a class="nt-go" href="'+esc(n.link.url)+'">'+esc(n.link.label||'Zjistit více')+'</a>':'')+
+     (n.dismissible!==false?'<button class="nt-x" type="button" aria-label="Zavřít">×</button>':'')+bar;
+    el._n=n;
+    const xb=el.querySelector('.nt-x');
+    if(xb)xb.addEventListener('click',()=>{saveDismiss(n.id,n.version||1);el.classList.add('out');setTimeout(()=>sync(),450)});
+    if(t==='build'&&isMapPage())scheduleCollapse(el);
+    return el;
+  }
+  function sync(){
+    const H=host();if(!H)return;
+    const vis=visible(),show=vis.slice(0,2),ids=show.map(n=>n.id);
+    Array.from(H.children).forEach(ch=>{if(ch.classList.contains('nt-chip'))return;if(!ids.includes(ch.dataset.id))ch.remove()});
+    show.forEach(n=>{
+      let ex=H.querySelector('.nt[data-id="'+CSS.escape(n.id)+'"]');
+      if(!ex){ex=buildEl(n);H.appendChild(ex)}
+      else{
+        ex._n=n;
+        const cdt=ex.querySelector('.cdt');if(cdt)cdt.textContent=countdown(n);
+        if(ex._chip){const ct=ex._chip.querySelector('.chip-t');if(ct)ct.textContent=mmss(buildEnd(n)-Date.now())}
+      }
+    });
+  }
+  async function poll(){
+    try{
+      const r=await fetch('/api/notices',{credentials:'include'});
+      if(r.ok){const d=await r.json();if(Array.isArray(d.notices)){LIST=d.notices;sync()}}
+    }catch(_){}
+  }
+  setInterval(()=>sync(),1000);
+  setInterval(()=>poll(),30000);
+  poll();
+})();
+</script>
+'''
+
 def _full_page(title, body_html, is_map=False):
+    if is_map:
+        body_html = MAPA_NOTICES_CODE + body_html
     extra = 'overflow:hidden;' if is_map else ''
     map_head = ""
     if is_map:

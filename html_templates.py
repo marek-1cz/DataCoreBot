@@ -2491,93 +2491,232 @@ HTML_APP_MANAGEMENT = """
 """
 
 HTML_NOTIFICATIONS = """
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
-    <h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-bell" style="color:#f59e0b;"></i> Systém Oznámení Webu</h2>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+    <div>
+        <h2 style="margin: 0; color: #f8fafc; font-size: 22px; font-weight: 700; display:flex; align-items:center; gap:10px;">
+            <i class="fas fa-bullhorn" style="color: #38bdf8;"></i> Systém Oznámení na Webu & Launcheru
+        </h2>
+        <p style="margin: 4px 0 0; color: #94a3b8; font-size: 13px;">Nové typy oznámení (Upozornění, Výpadek, Průběh, Údržba, Novinka, Funkční) s živým náhledem.</p>
+    </div>
     <div style="display: flex; gap: 10px;">
-        <a href="/dashboard/notifications" class="btn" style="background: #f59e0b; color: #000; font-weight: bold; font-size: 13px;"><i class="fas fa-bullhorn"></i> Web Oznámení</a>
-        <a href="/dashboard/sprava-notifikaci" class="btn btn-dark" style="color: #a78bfa; font-size: 13px;"><i class="fas fa-paper-plane"></i> Notifikace Busů & Přímé Zprávy</a>
+        <a href="/dashboard/notifications" class="btn" style="background: linear-gradient(135deg, #2563eb, #38bdf8); color: #fff; font-weight: 700; font-size: 13px; border-radius: 8px; padding: 8px 16px;"><i class="fas fa-bullhorn"></i> Web Oznámení</a>
+        <a href="/dashboard/sprava-notifikaci" class="btn btn-dark" style="color: #cbd5e1; font-size: 13px; border-radius: 8px; padding: 8px 16px;"><i class="fas fa-paper-plane"></i> Notifikace Busů & Přímé Zprávy</a>
     </div>
 </div>
-<div style="display: flex; gap: 20px; flex-wrap: wrap;">
-    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 10px; border-top: 4px solid var(--warning);">
-        <h3 style="margin-top: 0; color: var(--warning);"><i class="fas fa-paper-plane"></i> Odeslat nové oznámení</h3>
+
+<!-- ================= MODERNÍ GLOBÁLNÍ OZNÁMENÍ WEBU ================= -->
+<div style="background: rgba(15,23,42,0.85); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 24px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+        <div>
+            <h3 style="margin:0; color:#38bdf8; font-size:18px; font-weight:700;"><i class="fas fa-layer-group"></i> Oznámení na novém webu (API /api/notices)</h3>
+            <span style="font-size:12px; color:#94a3b8;">Zde nastavená oznámení se ihned zobrazují nahoře na webu, v mapě i v aplikacích.</span>
+        </div>
+        <button type="button" onclick="addAnnouncement()" class="btn" style="background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); font-weight: 600; border-radius: 8px; padding: 8px 16px; cursor: pointer;">
+            <i class="fas fa-plus"></i> Přidat nové oznámení
+        </button>
+    </div>
+
+    <style>
+        .nt-preview-box { margin-top: 15px; padding: 14px; background: rgba(5,7,15,0.7); border-radius: 14px; border: 1px dashed rgba(255,255,255,0.12); }
+        .nt-badge-type { display:inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+        .nt-p-warning { --nc: #ffc933; }
+        .nt-p-danger { --nc: #ff6b6b; }
+        .nt-p-rebuild { --nc: #2f6bff; }
+        .nt-p-maintenance { --nc: #ffc933; }
+        .nt-p-info { --nc: #38d6ff; }
+        .nt-p-success { --nc: #35d07f; }
+        .card-preview { position:relative; display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:18px; color:#eaf0ff; overflow:hidden; }
+        .card-preview .ic-wrap { width:40px; height:40px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex:none; font-size:18px; }
+        .bar-ind { position:absolute; left:0; right:0; bottom:0; height:4px; }
+    </style>
+
+    <div id="announcement-list" style="display:flex; flex-direction:column; gap:24px; margin-bottom:24px;"></div>
+
+    <form action="/dashboard/set_announcement" method="POST" id="announcement-form">
+        <input type="hidden" name="announcements_json" id="announcements_json">
+        <button type="button" onclick="saveAnnouncements()" class="btn btn-warning" style="width: 100%; padding: 12px; font-weight: 700; font-size: 15px; border-radius: 10px; box-shadow: 0 4px 14px rgba(245,158,11,0.3);">
+            <i class="fas fa-save"></i> Uložit a aplikovat změny na webu
+        </button>
+    </form>
+</div>
+
+<!-- ================= LEGACY ZPRÁVY ================= -->
+<div class="section-title" style="margin-top: 40px; color:#94a3b8; font-size:16px;"><i class="fas fa-archive" style="color:#64748b;"></i> Starší interní zprávy (pro aplikaci / archiv)</div>
+<div style="display: flex; gap: 20px; flex-wrap: wrap; margin-top: 15px;">
+    <div style="flex: 1; min-width: 300px; background-color: var(--bg-panel); padding: 20px; border-radius: 12px; border-top: 4px solid var(--warning);">
+        <h4 style="margin-top: 0; color: var(--warning);"><i class="fas fa-paper-plane"></i> Poslat interní zprávu</h4>
         <form action="/dashboard/send_app_message" method="POST">
-            <label style="color: var(--text-muted); font-size: 13px;">Nadpis oznámení:</label><input type="text" name="title" placeholder="Např. Vánoční Update 1.5!" required>
-            <label style="color: var(--text-muted); font-size: 13px;">Text oznámení:</label><textarea name="content" rows="4" placeholder="Napište text zprávy..." required></textarea>
-            <label style="color: var(--text-muted); font-size: 13px;">Pro koho?</label>
+            <label style="color: var(--text-muted); font-size: 13px;">Nadpis:</label><input type="text" name="title" placeholder="Např. Aktualizace 1.5!" required>
+            <label style="color: var(--text-muted); font-size: 13px;">Text:</label><textarea name="content" rows="3" placeholder="Napište text zprávy..." required></textarea>
+            <label style="color: var(--text-muted); font-size: 13px;">Cílení:</label>
             <select name="target_type" id="target_type" onchange="toggleTargetData()" style="margin-bottom: 10px;"><option value="GLOBAL">Všichni uživatelé</option><option value="ROLE">Podle Rolí</option><option value="USERS">Vybraní uživatelé</option></select>
             <div id="target_data_container" style="display: none;"><input type="text" name="target_data" id="target_data" placeholder=""></div>
-            <div style="background-color: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; margin: 15px 0;"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--text-main); font-size: 13px;"><input type="checkbox" name="repeat" style="width: auto; margin: 0;"> Zobrazovat uživatelům DOKOLA</label></div>
-            <input type="text" name="expires_at" placeholder="Expirace: Např. 31.12.2026 23:59 (Volitelné)">
-            <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 10px;"><i class="fas fa-paper-plane"></i> Vytvořit Oznámení</button>
+            <div style="background-color: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; margin: 10px 0;"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--text-main); font-size: 13px;"><input type="checkbox" name="repeat" style="width: auto; margin: 0;"> Zobrazovat opakovaně</label></div>
+            <input type="text" name="expires_at" placeholder="Expirace: 31.12.2026 23:59 (Volitelně)">
+            <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 10px;"><i class="fas fa-paper-plane"></i> Odeslat zprávu</button>
         </form>
     </div>
     <div style="flex: 2; min-width: 300px;">
-        <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-            <h3 style="color: var(--success); margin-top: 0;"><i class="fas fa-broadcast-tower"></i> Aktivní Oznámení</h3>
+        <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 12px;">
+            <h4 style="color: var(--success); margin-top: 0;"><i class="fas fa-history"></i> Seznam zpráv</h4>
             <table><tr><th>Nadpis</th><th>Cílení</th><th>Opakování</th><th>Expirace</th><th>Akce</th></tr>
-            {% for m in messages %}{% if not m.get('is_archived') %}<tr><td style="color: var(--text-main); font-weight: bold;">{{ m.get('title', '') }}</td><td>{% if m.get('target_type') == 'GLOBAL' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">Globálně</span>{% else %}<span class="role-tag" style="background-color: #ef4444; color: white;">{{ m.get('target_type', '') }}</span>{% endif %}</td><td>{% if m.get('repeat') %}<span style="color:var(--warning); font-size: 12px;"><i class="fas fa-sync"></i> Ano</span>{% else %}<span style="color:var(--success); font-size: 12px;">Jen jednou</span>{% endif %}</td><td style="color: var(--text-muted); font-size: 12px;">{{ m.get('expires_at', 'Nikdy') or 'Nikdy' }}</td><td style="display: flex; gap: 5px;"><form action="/dashboard/archive_app_message" method="POST" style="margin:0;"><input type="hidden" name="message_id" value="{{ m.get('message_id', '') }}"><button type="submit" class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-archive"></i></button></form><form action="/dashboard/delete_app_message" method="POST" style="margin:0;"><input type="hidden" name="message_id" value="{{ m.get('message_id', '') }}"><button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Smazat?')"><i class="fas fa-trash"></i></button></form></td></tr>{% endif %}{% else %}<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádná aktivní oznámení.</td></tr>{% endfor %}</table>
+            {% for m in messages %}{% if not m.get('is_archived') %}<tr><td style="color: var(--text-main); font-weight: bold;">{{ m.get('title', '') }}</td><td>{% if m.get('target_type') == 'GLOBAL' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">Globální</span>{% else %}<span class="role-tag" style="background-color: #ef4444; color: white;">{{ m.get('target_type', '') }}</span>{% endif %}</td><td>{% if m.get('repeat') %}<span style="color:var(--warning); font-size: 12px;"><i class="fas fa-sync"></i> Ano</span>{% else %}<span style="color:var(--success); font-size: 12px;">Jen jednou</span>{% endif %}</td><td style="color: var(--text-muted); font-size: 12px;">{{ m.get('expires_at', 'Nikdy') or 'Nikdy' }}</td><td style="display: flex; gap: 5px;"><form action="/dashboard/archive_app_message" method="POST" style="margin:0;"><input type="hidden" name="message_id" value="{{ m.get('message_id', '') }}"><button type="submit" class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;"><i class="fas fa-archive"></i></button></form><form action="/dashboard/delete_app_message" method="POST" style="margin:0;"><input type="hidden" name="message_id" value="{{ m.get('message_id', '') }}"><button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="return confirm('Smazat?')"><i class="fas fa-trash"></i></button></form></td></tr>{% endif %}{% else %}<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádné aktivní zprávy.</td></tr>{% endfor %}</table>
         </div>
     </div>
-</div>
-
-<div class="section-title" style="margin-top: 40px;"><i class="fas fa-bullhorn" style="color:#ef4444;"></i> Globální Oznámení na Webu</div>
-<div id="announcement-app" style="max-width: 800px;">
-  <p style="color: #94a3b8; font-size: 13px; margin-top: 0;">Zde můžete nastavit více oznámení pro různé URL adresy.</p>
-  
-  <div id="announcement-list" style="display:flex; flex-direction:column; gap:20px; margin-bottom:20px;"></div>
-  
-  <button type="button" onclick="addAnnouncement()" class="btn btn-dark" style="margin-bottom: 20px;"><i class="fas fa-plus"></i> Přidat další oznámení</button>
-
-  <form action="/dashboard/set_announcement" method="POST" id="announcement-form">
-    <input type="hidden" name="announcements_json" id="announcements_json">
-    <button type="button" onclick="saveAnnouncements()" class="btn btn-warning" style="width: 100%;"><i class="fas fa-save"></i> Uložit všechna oznámení</button>
-  </form>
 </div>
 
 <script>
 let announcements = {{ announcements_json | safe }};
 if (!Array.isArray(announcements)) announcements = [];
 
+// Convert legacy entries to new format
+announcements.forEach(a => {
+    if (!a.type) {
+        const str = ((a.title || '') + ' ' + (a.text || '')).toLowerCase();
+        if (str.includes('předěláv') || str.includes('rebuild')) a.type = 'rebuild';
+        else if (str.includes('oprava') || str.includes('výpadek') || str.includes('chyb')) a.type = 'warning';
+        else if (str.includes('údržb')) a.type = 'maintenance';
+        else a.type = 'info';
+    }
+    if (a.priority == null) a.priority = 10;
+    if (a.dismissible == null) a.dismissible = true;
+    if (a.version == null) a.version = 1;
+});
+
+const TYPE_CONFIG = {
+    warning: { label: 'Upozornění', color: '#ffc933', icon: 'fa-exclamation-triangle', bg: 'rgba(255,201,51,0.12)' },
+    danger: { label: 'Výpadek', color: '#ff6b6b', icon: 'fa-times-circle', bg: 'rgba(255,107,107,0.12)' },
+    rebuild: { label: 'Průběh (Předělávání)', color: '#38d6ff', icon: 'fa-sync-alt', bg: 'rgba(56,214,255,0.12)' },
+    maintenance: { label: 'Údržba', color: '#ffc933', icon: 'fa-wrench', bg: 'rgba(255,201,51,0.12)' },
+    info: { label: 'Novinka', color: '#38bdf8', icon: 'fa-info-circle', bg: 'rgba(56,189,248,0.12)' },
+    success: { label: 'Funkční', color: '#35d07f', icon: 'fa-check-circle', bg: 'rgba(53,208,127,0.12)' }
+};
+
 function renderAnnouncements() {
     const list = document.getElementById('announcement-list');
     list.innerHTML = '';
-    announcements.forEach((a, index) => {
-        list.innerHTML += `
-        <div style="background: var(--bg-panel); border: 1px solid #334155; border-radius: 14px; padding: 24px; position:relative;">
-            <button type="button" onclick="removeAnnouncement(${index})" style="position:absolute; top:15px; right:15px; background:rgba(239,68,68,0.2); color:#ef4444; border:none; border-radius:5px; padding:5px 10px; cursor:pointer; font-size: 12px;"><i class="fas fa-trash"></i> Smazat</button>
-            
-            <div style="display:flex; flex-direction:column; gap:15px;">
-                <div>
-                  <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Aktivovat Oznámení</label>
-                  <select onchange="updateAnnouncement(${index}, 'active', this.value === 'true')" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white;">
-                    <option value="false" ${!a.active ? 'selected' : ''}>🔴 Vypnuto</option>
-                    <option value="true" ${a.active ? 'selected' : ''}>🟢 Zapnuto (Zobrazuje se)</option>
-                  </select>
-                </div>
-                
-                <div style="display:flex; gap:15px; flex-wrap:wrap;">
-                    <div style="flex:1; min-width:200px;">
-                        <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Zapnout od (volitelné)</label>
-                        <input type="datetime-local" onchange="updateAnnouncement(${index}, 'start_time', this.value)" value="${a.start_time || ''}" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
-                    </div>
-                    <div style="flex:1; min-width:200px;">
-                        <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Vypnout do (volitelné)</label>
-                        <input type="datetime-local" onchange="updateAnnouncement(${index}, 'end_time', this.value)" value="${a.end_time || ''}" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
-                    </div>
-                </div>
 
+    if (announcements.length === 0) {
+        list.innerHTML = '<div style="text-align:center; padding: 30px; color:#64748b; background:rgba(0,0,0,0.2); border-radius:12px;">Žádná oznámení nejsou vytvořena. Klikněte na tlačítko "Přidat nové oznámení" výše.</div>';
+        return;
+    }
+
+    announcements.forEach((a, index) => {
+        const typeKey = TYPE_CONFIG[a.type] ? a.type : 'info';
+        const tc = TYPE_CONFIG[typeKey];
+        const isActive = !!a.active;
+
+        list.innerHTML += `
+        <div style="background: rgba(30,41,59,0.7); border: 1px solid ${isActive ? tc.color : '#334155'}; border-radius: 16px; padding: 22px; position:relative; box-shadow: 0 4px 20px rgba(0,0,0,0.25);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span class="nt-badge-type" style="background:${tc.bg}; color:${tc.color}; border: 1px solid ${tc.color};">
+                        <i class="fas ${tc.icon}"></i> ${tc.label}
+                    </span>
+                    <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; color:#f8fafc; font-size:13px; font-weight:600;">
+                        <input type="checkbox" onchange="updateAnnouncement(${index}, 'active', this.checked)" ${isActive ? 'checked' : ''} style="width:16px; height:16px;">
+                        Aktivní na webu
+                    </label>
+                </div>
+                <button type="button" onclick="removeAnnouncement(${index})" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); border-radius:8px; padding:6px 12px; cursor:pointer; font-size: 12px; font-weight:600;">
+                    <i class="fas fa-trash"></i> Smazat
+                </button>
+            </div>
+
+            <!-- Formulářová pole -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-bottom:14px;">
                 <div>
-                  <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Zobrazit na URL (oddělujte čárkou, např. /mapa,/download)</label>
-                  <input type="text" onchange="updateAnnouncement(${index}, 'urls', this.value)" value="${a.urls || ''}" placeholder="/mapa, /download" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
+                    <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Typ oznámení</label>
+                    <select onchange="updateAnnouncement(${index}, 'type', this.value)" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc;">
+                        <option value="warning" ${a.type==='warning'?'selected':''}>Upozornění (žluté)</option>
+                        <option value="danger" ${a.type==='danger'?'selected':''}>Výpadek (červené)</option>
+                        <option value="rebuild" ${a.type==='rebuild'?'selected':''}>Průběh / Předělávání (modré pruhy)</option>
+                        <option value="maintenance" ${a.type==='maintenance'?'selected':''}>Údržba (odpočet + šrafování)</option>
+                        <option value="info" ${a.type==='info'?'selected':''}>Novinka (azurové)</option>
+                        <option value="success" ${a.type==='success'?'selected':''}>Funkční (zelené)</option>
+                    </select>
                 </div>
                 <div>
-                  <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Volitelný nadpis (nech prázdné pro výchozí)</label>
-                  <input type="text" onchange="updateAnnouncement(${index}, 'title', this.value)" value="${a.title || ''}" placeholder="Nouzový Režim!" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; box-sizing:border-box;">
+                    <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Nadpis</label>
+                    <input type="text" oninput="updateAnnouncement(${index}, 'title', this.value)" value="${esc(a.title||'')}" placeholder="Např. Probíhá úprava jízdních řádů" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
                 </div>
                 <div>
-                  <label style="color:white; font-size:14px; display:block; margin-bottom:5px;">Text oznámení (nové řádky se zachovají, HTML funguje)</label>
-                  <textarea onchange="updateAnnouncement(${index}, 'text', this.value)" rows="4" placeholder="Nějaký problém s mapou..." style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid #334155; color:white; font-family:sans-serif; box-sizing:border-box;">${a.text || ''}</textarea>
+                    <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Vlastní štítek (volitelný, např. DŮLEŽITÉ)</label>
+                    <input type="text" oninput="updateAnnouncement(${index}, 'tag', this.value)" value="${esc(a.tag||'')}" placeholder="${tc.label}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Priorita (vyšší číslo = zobrazí se výše)</label>
+                    <input type="number" oninput="updateAnnouncement(${index}, 'priority', parseInt(this.value)||10)" value="${a.priority!=null?a.priority:10}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                </div>
+            </div>
+
+            <div style="margin-bottom:14px;">
+                <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Text oznámení</label>
+                <textarea oninput="updateAnnouncement(${index}, 'text', this.value)" rows="3" placeholder="Popište situaci nebo novinku pro uživatele..." style="width:100%; padding:10px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box; font-family:inherit;">${esc(a.text||'')}</textarea>
+            </div>
+
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom:14px;">
+                <div>
+                    <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Odkaz tlačítka (volitelné, např. /podpora)</label>
+                    <input type="text" oninput="updateAnnouncement(${index}, 'link_url', this.value)" value="${esc(a.link_url||(a.link?a.link.url:'')||'')}" placeholder="/podpora" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Popis tlačítka</label>
+                    <input type="text" oninput="updateAnnouncement(${index}, 'link_label', this.value)" value="${esc(a.link_label||(a.link?a.link.label:'')||'Zjistit více')}" placeholder="Zjistit více" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Zobrazit od (volitelné)</label>
+                    <input type="datetime-local" onchange="updateAnnouncement(${index}, 'startsAt', this.value)" value="${a.startsAt||a.start_time||''}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Zobrazit do (volitelné)</label>
+                    <input type="datetime-local" onchange="updateAnnouncement(${index}, 'endsAt', this.value)" value="${a.endsAt||a.end_time||''}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                </div>
+            </div>
+
+            <!-- Možnosti pro Průběh (rebuild) -->
+            ${a.type==='rebuild'?`
+            <div style="background:rgba(47,107,255,0.08); border:1px solid rgba(47,107,255,0.25); border-radius:10px; padding:12px; margin-bottom:14px;">
+                <label style="color:#93c5fd; font-size:12px; font-weight:600; display:flex; justify-content:space-between;">
+                    <span>Průběh dokončení (progress)</span>
+                    <span id="prog-val-${index}">${a.progress!=null?a.progress+' %':'Neurčitý (animovaný)'}</span>
+                </label>
+                <div style="display:flex; align-items:center; gap:12px; margin-top:6px;">
+                    <input type="range" min="0" max="100" value="${a.progress!=null?a.progress:50}" oninput="updateAnnouncement(${index}, 'progress', parseInt(this.value)); document.getElementById('prog-val-${index}').textContent=this.value+' %'" style="flex:1;">
+                    <button type="button" onclick="updateAnnouncement(${index}, 'progress', null); document.getElementById('prog-val-${index}').textContent='Neurčitý'" class="btn btn-dark" style="padding:4px 8px; font-size:11px;">Neurčitý</button>
+                </div>
+            </div>`:''}
+
+            <!-- Nastavení zavírání -->
+            <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-bottom:14px; font-size:13px; color:#cbd5e1;">
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input type="checkbox" onchange="updateAnnouncement(${index}, 'dismissible', this.checked)" ${a.dismissible!==false?'checked':''} style="width:15px; height:15px;">
+                    Lze zavřít křížkem (uživatelsky)
+                </label>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="color:#94a3b8;">Verze oznámení:</span>
+                    <input type="number" oninput="updateAnnouncement(${index}, 'version', parseInt(this.value)||1)" value="${a.version||1}" style="width:60px; padding:4px 8px; border-radius:6px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; font-size:12px;">
+                    <small style="color:#64748b;">(Zvýšením čísla se zobrazí znovu i těm, kdo jej zavřeli)</small>
+                </div>
+            </div>
+
+            <!-- Živý náhled -->
+            <div class="nt-preview-box">
+                <div style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Živý náhled karty na webu:</div>
+                <div class="card-preview nt-p-${typeKey}" style="background:linear-gradient(135deg, rgba(8,13,34,0.95), rgba(15,23,42,0.95)); border:1px solid ${tc.color}; box-shadow:0 8px 24px rgba(0,0,0,0.5), 0 0 20px ${tc.bg};">
+                    <div class="ic-wrap" style="background:${tc.bg}; color:${tc.color};">
+                        <i class="fas ${tc.icon}"></i>
+                    </div>
+                    <div style="flex:1; min-width:0;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+                            <b style="font-size:14px; color:#f8fafc;">${esc(a.title || tc.label)}</b>
+                            <span class="nt-badge-type" style="background:${tc.bg}; color:${tc.color}; font-size:10px;">${esc(a.tag || tc.label)}</span>
+                        </div>
+                        <div style="color:#cbd5e1; font-size:13px; line-height:1.4;">${esc(a.text || 'Zde bude text oznámení...')}</div>
+                    </div>
+                    ${a.link_url ? `<a href="${esc(a.link_url)}" onclick="return false;" style="background:${tc.color}; color:#030712; padding:6px 14px; border-radius:999px; font-weight:800; font-size:12px; text-decoration:none; white-space:nowrap;">${esc(a.link_label||'Zjistit více')}</a>` : ''}
+                    ${a.dismissible !== false ? `<span style="color:#64748b; font-size:16px; margin-left:6px; cursor:pointer;">×</span>` : ''}
+                    ${a.type==='rebuild'?`<div class="bar-ind" style="background:linear-gradient(90deg, #2563eb, #38d6ff); width:${a.progress!=null?a.progress:50}%;"></div>`:''}
                 </div>
             </div>
         </div>
@@ -2585,41 +2724,63 @@ function renderAnnouncements() {
     });
 }
 
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
 function updateAnnouncement(index, field, value) {
-    announcements[index][field] = value;
+    if (announcements[index]) {
+        announcements[index][field] = value;
+        // Keep urls populated for backwards compat
+        if (!announcements[index].urls) announcements[index].urls = '/';
+        renderAnnouncements();
+    }
 }
 
 function addAnnouncement() {
-    announcements.push({
+    announcements.unshift({
         id: Date.now().toString(),
-        active: false,
+        type: 'info',
+        active: true,
         urls: '/',
         title: '',
         text: '',
-        start_time: '',
-        end_time: ''
+        tag: '',
+        priority: 10,
+        dismissible: true,
+        version: 1,
+        link_url: '',
+        link_label: 'Zjistit více',
+        startsAt: '',
+        endsAt: '',
+        progress: null
     });
     renderAnnouncements();
 }
 
 function removeAnnouncement(index) {
-    if(confirm('Opravdu smazat toto oznámení?')) {
+    if(confirm('Opravdu chcete toto oznámení smazat?')) {
         announcements.splice(index, 1);
         renderAnnouncements();
     }
 }
 
 function saveAnnouncements() {
+    // Sync links
+    announcements.forEach(a => {
+        if (a.link_url) {
+            a.link = { url: a.link_url, label: a.link_label || 'Zjistit více' };
+        } else {
+            a.link = null;
+        }
+        if (!a.urls) a.urls = '/';
+        a.start_time = a.startsAt || '';
+        a.end_time = a.endsAt || '';
+    });
     document.getElementById('announcements_json').value = JSON.stringify(announcements);
     document.getElementById('announcement-form').submit();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    if (announcements.length === 0) {
-        addAnnouncement();
-    } else {
-        renderAnnouncements();
-    }
+    renderAnnouncements();
 });
 </script>
 
