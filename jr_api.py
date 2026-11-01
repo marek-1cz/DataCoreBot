@@ -10,6 +10,7 @@ Poskytuje endpointy:
 import os
 import sqlite3
 import unicodedata
+from datetime import datetime
 from collections import defaultdict
 
 _CACHE_FEATURED = None
@@ -385,39 +386,64 @@ def get_line(line_id):
         sn = _short_name(r["route_short_name"])
         color = _get_color(sn)
 
-        # Get trips for this route with spoj_cislo
-        cur.execute("SELECT trip_id, spoj_cislo FROM trips WHERE route_id = ?", (line_id,))
-        all_trips = cur.fetchall()
-
-        # Split trips into Direction 0 (odd spoj_cislo) and Direction 1 (even spoj_cislo)
-        trips_d0 = [row["trip_id"] for row in all_trips if (row["spoj_cislo"] or 1) % 2 == 1]
-        trips_d1 = [row["trip_id"] for row in all_trips if (row["spoj_cislo"] or 1) % 2 == 0]
+        today_str = datetime.now().strftime("%Y%m%d")
+        cur.execute("SELECT count(*) FROM calendar WHERE start_date <= ? AND end_date >= ?", (today_str, today_str))
+        if cur.fetchone()[0] == 0:
+            cur.execute("SELECT max(end_date) FROM calendar")
+            m_end = cur.fetchone()[0]
+            if m_end:
+                today_str = m_end
 
         directions = []
-        for dir_idx, tids in enumerate([trips_d0, trips_d1]):
+        for dir_idx, parity in enumerate([1, 0]):
+            cur.execute("""
+                SELECT t.trip_id, t.spoj_cislo
+                FROM trips t
+                JOIN calendar c ON t.service_id = c.service_id
+                WHERE t.route_id = ?
+                  AND c.start_date <= ?
+                  AND c.end_date >= ?
+                  AND (t.spoj_cislo % 2) = ?
+                ORDER BY t.spoj_cislo
+            """, (line_id, today_str, today_str, parity))
+            active_trips = cur.fetchall()
+            tids = [row["trip_id"] for row in active_trips]
+
+            if not tids:
+                cur.execute("SELECT trip_id FROM trips WHERE route_id = ? AND (spoj_cislo % 2) = ?", (line_id, parity))
+                tids = [row["trip_id"] for row in cur.fetchall()]
+
+            if not tids:
+                continue
+
+            cur.execute(f"""
+                SELECT s.name as stop_name, st.pickup_type
+                FROM stop_times st
+                JOIN stops s ON st.stop_id = s.stop_id
+                WHERE st.trip_id IN ({','.join('?' for _ in tids)})
+                  AND st.arrival_time != '' AND st.arrival_time IS NOT NULL AND st.pickup_type != '1'
+                GROUP BY s.name
+            """, tids)
+            valid_rows = cur.fetchall()
+            valid_stop_names = {row["stop_name"]: (row["pickup_type"] in ('2', '3')) for row in valid_rows}
+
             best_seq = []
-            for tid in tids[:25]:
+            for tid in tids[:40]:
                 cur.execute("""
-                    SELECT s.name as stop_name, st.pickup_type
+                    SELECT s.name as stop_name, st.pickup_type, st.arrival_time
                     FROM stop_times st
                     JOIN stops s ON st.stop_id = s.stop_id
                     WHERE st.trip_id = ?
                     ORDER BY st.stop_sequence
                 """, (tid,))
                 rows = cur.fetchall()
-                if len(rows) > len(best_seq):
-                    best_seq = [(row["stop_name"], row["pickup_type"] in ('2', '3')) for row in rows]
-
-            if not best_seq and tids:
-                # Fallback to any trip
-                cur.execute("""
-                    SELECT s.name as stop_name, st.pickup_type
-                    FROM stop_times st
-                    JOIN stops s ON st.stop_id = s.stop_id
-                    WHERE st.trip_id = ?
-                    ORDER BY st.stop_sequence
-                """, (tids[0],))
-                best_seq = [(row["stop_name"], row["pickup_type"] in ('2', '3')) for row in cur.fetchall()]
+                seq = [
+                    (row["stop_name"], row["pickup_type"] in ('2', '3') or valid_stop_names.get(row["stop_name"], False))
+                    for row in rows
+                    if row["stop_name"] in valid_stop_names
+                ]
+                if len(seq) > len(best_seq):
+                    best_seq = seq
 
             if best_seq:
                 stops = [{
@@ -430,7 +456,6 @@ def get_line(line_id):
                     "stops": stops
                 })
 
-        # If only one direction was found (e.g. single circular route), create reverse if applicable
         if len(directions) == 1 and len(directions[0]["stops"]) > 1:
             rev_stops = list(reversed(directions[0]["stops"]))
             directions.append({
@@ -478,22 +503,42 @@ def get_trips(line_id, dir_idx=0, day="weekday"):
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
+        today_str = datetime.now().strftime("%Y%m%d")
+        cur.execute("SELECT count(*) FROM calendar WHERE start_date <= ? AND end_date >= ?", (today_str, today_str))
+        if cur.fetchone()[0] == 0:
+            cur.execute("SELECT max(end_date) FROM calendar")
+            m_end = cur.fetchone()[0]
+            if m_end:
+                today_str = m_end
+
         col = "monday" if day == "weekday" else ("saturday" if day == "saturday" else "sunday")
-        cur.execute(f"SELECT service_id FROM calendar WHERE {col} = 1")
+        
+        cur.execute(f"SELECT service_id FROM calendar WHERE {col} = 1 AND start_date <= ? AND end_date >= ?", (today_str, today_str))
         allowed_services = set(r["service_id"] for r in cur.fetchall())
 
+        if not allowed_services:
+            cur.execute(f"SELECT service_id FROM calendar WHERE {col} = 1")
+            allowed_services = set(r["service_id"] for r in cur.fetchall())
+
         cur.execute("SELECT trip_id, service_id, spoj_cislo FROM trips WHERE route_id = ?", (line_id,))
-        # Strict parity filtering: dir 0 = odd, dir 1 = even
         target_parity = 1 if dir_idx == 0 else 0
-        matching_trips = [
-            r["trip_id"] for r in cur.fetchall() 
+        matching_rows = [
+            r for r in cur.fetchall() 
             if r["service_id"] in allowed_services and (r["spoj_cislo"] or 1) % 2 == target_parity
         ]
+
+        seen_spoj = set()
+        matching_trips = []
+        for r in matching_rows:
+            sc = r["spoj_cislo"]
+            if sc not in seen_spoj:
+                seen_spoj.add(sc)
+                matching_trips.append(r["trip_id"])
 
         res_trips = []
         for tid in matching_trips:
             cur.execute("""
-                SELECT s.name as stop_name, st.arrival_time
+                SELECT s.name as stop_name, st.arrival_time, st.pickup_type
                 FROM stop_times st
                 JOIN stops s ON st.stop_id = s.stop_id
                 WHERE st.trip_id = ?
@@ -506,7 +551,7 @@ def get_trips(line_id, dir_idx=0, day="weekday"):
             t_map = {}
             for r in rows:
                 arr = (r["arrival_time"] or "").strip()
-                if arr:
+                if arr and r["pickup_type"] != '1':
                     t_map[r["stop_name"]] = arr[:5]
 
             times = [t_map.get(s_name) for s_name in target_stops]
@@ -522,7 +567,6 @@ def get_trips(line_id, dir_idx=0, day="weekday"):
                 "times": times
             })
 
-        # Sort trips ascending by first departure time
         res_trips.sort(key=lambda x: x["first_time"])
         conn.close()
         return {"trips": res_trips}

@@ -2655,15 +2655,54 @@ function renderAnnouncements() {
                 <textarea oninput="updateAnnouncement(${index}, 'text', this.value)" rows="3" placeholder="Popište situaci nebo novinku pro uživatele..." style="width:100%; padding:10px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box; font-family:inherit;">${esc(a.text||'')}</textarea>
             </div>
 
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom:14px;">
+            <!-- CHOVÁNÍ ZOBRAZENÍ A ZAVÍRÁNÍ -->
+            <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px; margin-bottom:14px; display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:14px;">
                 <div>
-                    <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Odkaz tlačítka (volitelné, např. /podpora)</label>
-                    <input type="text" oninput="updateAnnouncement(${index}, 'link_url', this.value)" value="${esc(a.link_url||(a.link?a.link.url:'')||'')}" placeholder="/podpora" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                    <label style="color:#38bdf8; font-size:12px; font-weight:700; display:block; margin-bottom:4px;"><i class="fas fa-eye"></i> Kdy a jak často zobrazit</label>
+                    <select onchange="updateAnnouncement(${index}, 'frequency', this.value)" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc;">
+                        <option value="always" ${(a.frequency||'always')==='always'?'selected':''}>Zobrazit pořád (při každé návštěvě, dokud nezavře)</option>
+                        <option value="session" ${(a.frequency)==='session'?'selected':''}>Při každé návštěvě (1× za relaci prohlížeče)</option>
+                        <option value="daily" ${(a.frequency)==='daily'?'selected':''}>Jednou za 24 hodin</option>
+                        <option value="once" ${(a.frequency)==='once'?'selected':''}>Zobrazit pouze jednou (jednorázově)</option>
+                    </select>
+                    <small style="color:#94a3b8; font-size:11px; display:block; margin-top:3px;">Podle cookies / localStorage.</small>
                 </div>
                 <div>
-                    <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Popis tlačítka</label>
-                    <input type="text" oninput="updateAnnouncement(${index}, 'link_label', this.value)" value="${esc(a.link_label||(a.link?a.link.label:'')||'Zjistit více')}" placeholder="Zjistit více" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                    <label style="color:#38bdf8; font-size:12px; font-weight:700; display:block; margin-bottom:4px;"><i class="fas fa-times-circle"></i> Způsob zavření / mizení</label>
+                    <select onchange="updateAnnouncement(${index}, 'dismiss_behavior', this.value)" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc;">
+                        <option value="close_btn" ${(a.dismiss_behavior||(a.dismissible!==false?'close_btn':'permanent'))==='close_btn'?'selected':''}>Lze vypnout křížkem</option>
+                        <option value="auto_10s" ${(a.dismiss_behavior)==='auto_10s'?'selected':''}>Samo zmizí za 10s (bez křížku)</option>
+                        <option value="both" ${(a.dismiss_behavior)==='both'?'selected':''}>Samo zmizí za 10s + lze vypnout křížkem</option>
+                        <option value="permanent" ${(a.dismiss_behavior||(a.dismissible===false?'permanent':'close_btn'))==='permanent'?'selected':''}>Nezavíratelné (trvalé bez křížku)</option>
+                    </select>
+                    <small style="color:#94a3b8; font-size:11px; display:block; margin-top:3px;">Ovlivňuje křížek a časovač 10 sekund.</small>
                 </div>
+            </div>
+
+            <!-- TLAČÍTKO ODKAZU -->
+            <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <label style="color:#f8fafc; font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <input type="checkbox" onchange="toggleLink(${index}, this.checked)" ${a.has_link !== false && a.link_url ? 'checked' : ''} style="width:16px; height:16px;">
+                        <span>Zahrnout tlačítko odkazu na kartě</span>
+                    </label>
+                    ${a.link_url ? `<button type="button" onclick="removeLink(${index})" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); border-radius:6px; padding:4px 10px; font-size:11px; cursor:pointer;"><i class="fas fa-trash"></i> Odebrat odkaz</button>` : ''}
+                </div>
+                ${(a.has_link !== false && a.link_url) || a.show_link_inputs ? `
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px;">
+                    <div>
+                        <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Cílová URL (např. /podpora nebo https://...)</label>
+                        <input type="text" oninput="updateAnnouncement(${index}, 'link_url', this.value)" value="${esc(a.link_url||(a.link?a.link.url:'')||'')}" placeholder="/podpora" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Text na tlačítku</label>
+                        <input type="text" oninput="updateAnnouncement(${index}, 'link_label', this.value)" value="${esc(a.link_label||(a.link?a.link.label:'')||'Zjistit více')}" placeholder="Zjistit více" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                    </div>
+                </div>`: `<div style="color:#64748b; font-size:12px; font-style:italic;">Tlačítko odkazu je vypnuto. Na kartě se nezobrazí žádné tlačítko.</div>`}
+            </div>
+
+            <!-- ČASOVÉ ROZMEZÍ & VERZE -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom:14px;">
                 <div>
                     <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Zobrazit od (volitelné)</label>
                     <input type="datetime-local" onchange="updateAnnouncement(${index}, 'startsAt', this.value)" value="${a.startsAt||a.start_time||''}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
@@ -2671,6 +2710,10 @@ function renderAnnouncements() {
                 <div>
                     <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Zobrazit do (volitelné)</label>
                     <input type="datetime-local" onchange="updateAnnouncement(${index}, 'endsAt', this.value)" value="${a.endsAt||a.end_time||''}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Verze oznámení (číslo)</label>
+                    <input type="number" oninput="updateAnnouncement(${index}, 'version', parseInt(this.value)||1)" value="${a.version||1}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
                 </div>
             </div>
 
@@ -2687,19 +2730,6 @@ function renderAnnouncements() {
                 </div>
             </div>`:''}
 
-            <!-- Nastavení zavírání -->
-            <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-bottom:14px; font-size:13px; color:#cbd5e1;">
-                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-                    <input type="checkbox" onchange="updateAnnouncement(${index}, 'dismissible', this.checked)" ${a.dismissible!==false?'checked':''} style="width:15px; height:15px;">
-                    Lze zavřít křížkem (uživatelsky)
-                </label>
-                <div style="display:flex; align-items:center; gap:6px;">
-                    <span style="color:#94a3b8;">Verze oznámení:</span>
-                    <input type="number" oninput="updateAnnouncement(${index}, 'version', parseInt(this.value)||1)" value="${a.version||1}" style="width:60px; padding:4px 8px; border-radius:6px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; font-size:12px;">
-                    <small style="color:#64748b;">(Zvýšením čísla se zobrazí znovu i těm, kdo jej zavřeli)</small>
-                </div>
-            </div>
-
             <!-- Živý náhled -->
             <div class="nt-preview-box">
                 <div style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Živý náhled karty na webu:</div>
@@ -2714,8 +2744,8 @@ function renderAnnouncements() {
                         </div>
                         <div style="color:#cbd5e1; font-size:13px; line-height:1.4;">${esc(a.text || 'Zde bude text oznámení...')}</div>
                     </div>
-                    ${a.link_url ? `<a href="${esc(a.link_url)}" onclick="return false;" style="background:${tc.color}; color:#030712; padding:6px 14px; border-radius:999px; font-weight:800; font-size:12px; text-decoration:none; white-space:nowrap;">${esc(a.link_label||'Zjistit více')}</a>` : ''}
-                    ${a.dismissible !== false ? `<span style="color:#64748b; font-size:16px; margin-left:6px; cursor:pointer;">×</span>` : ''}
+                    ${a.has_link !== false && a.link_url && a.link_url.trim() ? `<a href="${esc(a.link_url)}" onclick="return false;" style="background:${tc.color}; color:#030712; padding:6px 14px; border-radius:999px; font-weight:800; font-size:12px; text-decoration:none; white-space:nowrap;">${esc(a.link_label||'Zjistit více')}</a>` : ''}
+                    ${((a.dismiss_behavior==='close_btn'||a.dismiss_behavior==='both'||(!a.dismiss_behavior&&a.dismissible!==false))) ? `<span style="color:#64748b; font-size:16px; margin-left:6px; cursor:pointer;" title="Křížek pro zavření">×</span>` : ''}
                     ${a.type==='rebuild'?`<div class="bar-ind" style="background:linear-gradient(90deg, #2563eb, #38d6ff); width:${a.progress!=null?a.progress:50}%;"></div>`:''}
                 </div>
             </div>
@@ -2729,8 +2759,34 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 function updateAnnouncement(index, field, value) {
     if (announcements[index]) {
         announcements[index][field] = value;
-        // Keep urls populated for backwards compat
+        if (field === 'dismiss_behavior') {
+            announcements[index].dismissible = (value === 'close_btn' || value === 'both');
+        }
         if (!announcements[index].urls) announcements[index].urls = '/';
+        renderAnnouncements();
+    }
+}
+
+function toggleLink(index, enabled) {
+    if (announcements[index]) {
+        announcements[index].has_link = enabled;
+        announcements[index].show_link_inputs = enabled;
+        if (!enabled) {
+            announcements[index].link_url = '';
+        } else if (!announcements[index].link_url) {
+            announcements[index].link_url = '/podpora';
+            announcements[index].link_label = 'Zjistit více';
+        }
+        renderAnnouncements();
+    }
+}
+
+function removeLink(index) {
+    if (announcements[index]) {
+        announcements[index].has_link = false;
+        announcements[index].link_url = '';
+        announcements[index].link_label = '';
+        announcements[index].show_link_inputs = false;
         renderAnnouncements();
     }
 }

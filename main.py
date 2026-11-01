@@ -159,114 +159,12 @@ def add_security_headers(response):
     return response
 
 @app.after_request
-def inject_announcement(response):
+def record_daily_requests(response):
     try:
         from daily_reporter import TRACKER
         TRACKER.record_request(response.status_code, request.path)
     except Exception:
         pass
-    if response.content_type and 'text/html' in response.content_type:
-        path = request.path
-        try:
-            a_data_str = get_cached_setting('announcement_data', '')
-            active_announcements = []
-            
-            if a_data_str:
-                import json
-                a_data = json.loads(a_data_str)
-                now = get_prague_time().replace(tzinfo=None)
-                
-                for a in a_data:
-                    if not a.get('active'):
-                        continue
-                        
-                    # Check schedule
-                    skip = False
-                    st_str = a.get('start_time')
-                    en_str = a.get('end_time')
-                    if st_str:
-                        try:
-                            st_dt = datetime.strptime(st_str, "%Y-%m-%dT%H:%M")
-                            if now < st_dt: skip = True
-                        except: pass
-                    if en_str:
-                        try:
-                            en_dt = datetime.strptime(en_str, "%Y-%m-%dT%H:%M")
-                            if now > en_dt: skip = True
-                        except: pass
-                        
-                    if skip:
-                        continue
-                        
-                    urls = [u.strip() for u in a.get('urls', '').split(',') if u.strip()]
-                    for u in urls:
-                        if u in ('*', 'all', 'vse') or path == u or path.startswith(u) or (not u.startswith('/') and path.startswith('/' + u)):
-                            active_announcements.append(a)
-                            break
-            else:
-                a_url = get_cached_setting('announcement_url', '')
-                a_text = get_cached_setting('announcement_text', '')
-                a_title = get_cached_setting('announcement_title', 'Oznámení od Administrace')
-                a_active = get_cached_setting('announcement_active', 'false')
-                
-                if a_active == 'true' and a_url and a_text:
-                    urls = [u.strip() for u in a_url.split(',') if u.strip()]
-                    for u in urls:
-                        if u in ('*', 'all', 'vse') or path == u or path.startswith(u) or (not u.startswith('/') and path.startswith('/' + u)):
-                            active_announcements.append({"title": a_title, "text": a_text, "id": "legacy"})
-                            break
-
-            if active_announcements:
-                html = response.get_data(as_text=True)
-                
-                banners_html = '<div class="sys-announcement-wrapper">'
-                for i, a in enumerate(active_announcements):
-                    a_text_html = a.get('text', '').replace('\n', '<br>')
-                    disp_title = a.get('title') if a.get('title') else "Oznámení od Administrace"
-                    a_id = f"sys-announcement-{a.get('id', i)}"
-                    
-                    # z-index goes down so the first one is on top for mobile stack
-                    banners_html += f"""
-                    <div id="{a_id}" class="sys-banner" style="z-index:{999 - i};">
-                      <div style="position:absolute; top:0; left:0; right:0; height:4px; background: repeating-linear-gradient(-45deg, #fbbf24, #fbbf24 15px, #0f172a 15px, #0f172a 30px);"></div>
-                      <h3 style="margin:8px 0 5px 0;font-size:15px;color:#fbbf24;text-transform:uppercase;letter-spacing:1px;"><i class="fas fa-exclamation-triangle"></i> {disp_title}</h3>
-                      <p style="margin:0;font-size:14px;color:#e2e8f0;">{a_text_html}</p>
-                      <button onclick="let el=document.getElementById('{a_id}'); el.style.opacity='0'; el.style.transform='translateY(-20px)'; setTimeout(()=>el.style.display='none', 300);" style="position:absolute; top:10px; right:10px; background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:18px; transition:0.2s;" onmouseover="this.style.color='white'" onmouseout="this.style.color='#94a3b8'">&times;</button>
-                    </div>
-                    """
-                
-                banners_html += "</div>"
-                
-                css = """
-                <style>
-                .sys-announcement-wrapper {
-                    position: fixed; top: 90px; left: 50%; transform: translateX(-50%);
-                    z-index: 99999; display: flex; justify-content: center; gap: 20px;
-                    width: max-content; max-width: 90%; pointer-events: none;
-                }
-                .sys-banner {
-                    pointer-events: auto; background: #0f172a; color: white; padding: 15px 45px 15px 30px;
-                    border-radius: 8px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); text-align: center;
-                    font-family: sans-serif; border: 1px solid #334155; position: relative;
-                    min-width: 250px; max-width: 600px; overflow: hidden;
-                    animation: sysBannerFadeIn 0.5s ease-out; transition: opacity 0.3s, transform 0.3s;
-                }
-                @media (max-width: 768px) {
-                    .sys-announcement-wrapper { display: block; width: 90%; }
-                    .sys-banner { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 100%; box-sizing: border-box; max-width: none; }
-                }
-                @keyframes sysBannerFadeIn { from { top: -50px; opacity: 0; } to { opacity: 1; } }
-                </style>
-                """
-                
-                banners_html += css
-                if '</body>' in html:
-                    html = html.replace('</body>', banners_html + '</body>')
-                else:
-                    html += banners_html
-                response.set_data(html)
-        except Exception as e: 
-            print("Banner inject error:", e)
     return response
 
 def get_prague_time():
@@ -2831,9 +2729,19 @@ def api_notices():
                             else:
                                 t = "info"
 
-                        link_obj = it.get("link")
-                        if not isinstance(link_obj, dict) and it.get("link_url"):
-                            link_obj = {"url": it.get("link_url"), "label": it.get("link_label", "Zjistit více")}
+                        link_obj = None
+                        has_link = it.get("has_link", True)
+                        if has_link:
+                            l_url = it.get("link_url") or (it.get("link", {}).get("url") if isinstance(it.get("link"), dict) else "")
+                            if l_url and str(l_url).strip():
+                                l_lbl = it.get("link_label") or (it.get("link", {}).get("label") if isinstance(it.get("link"), dict) else "Zjistit více")
+                                link_obj = {"url": str(l_url).strip(), "label": str(l_lbl).strip() if l_lbl else "Zjistit více"}
+
+                        freq = it.get("frequency") or it.get("freq") or "always"
+                        beh = it.get("dismiss_behavior")
+                        if not beh:
+                            beh = "close_btn" if it.get("dismissible", True) else "permanent"
+                        dismissible = (beh in ("close_btn", "both"))
 
                         notices.append({
                             "id": str(it.get("id")),
@@ -2843,7 +2751,10 @@ def api_notices():
                             "tag": it.get("tag", ""),
                             "link": link_obj,
                             "priority": int(it.get("priority", 10)),
-                            "dismissible": bool(it.get("dismissible", True)),
+                            "frequency": freq,
+                            "dismiss_behavior": beh,
+                            "dismissible": dismissible,
+                            "auto_hide_seconds": 10 if beh in ("auto_10s", "both") else None,
                             "version": int(it.get("version", 1)),
                             "progress": it.get("progress"),
                             "startsAt": it.get("startsAt") or it.get("start_time") or None,

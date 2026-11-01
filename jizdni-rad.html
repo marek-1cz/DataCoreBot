@@ -647,7 +647,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const norm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 const lite=()=>document.documentElement.classList.contains('lite');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const toMin=t=>{const p=String(t).split(':');return (+p[0])*60+(+p[1])};
+const toMin=t=>{if(!t)return 0;const p=String(t).split(':');return (+p[0])*60+(+p[1]||0)};
 const pad=n=>(n<10?'0':'')+n;
 const fmt=m=>pad(Math.floor(m/60)%24)+':'+pad(m%60);
 const todayType=()=>{const d=new Date().getDay();return d===0?'sunday':d===6?'saturday':'weekday'};
@@ -856,7 +856,7 @@ async function loadTrips(){
   S.trips=S.cache[key];renderResults();
 }
 function computeRows(){
-  const st=curStops(),fi=st.findIndex(s=>s.id===S.from),ti=S.to?st.findIndex(s=>s.id===S.to):-1;
+  const st=curStops(); let fi=st.findIndex(s=>s.id===S.from); if(fi<0){fi=0;if(st[0])S.from=st[0].id;} const ti=S.to?st.findIndex(s=>s.id===S.to):-1;
   const rows=[];
   (S.trips||[]).forEach(t=>{
     if(!t.times[fi])return;
@@ -884,7 +884,7 @@ function tagsOf(r){
 function renderResults(){
   const st=curStops(),rows=S.rows=computeRows(),isToday=S.day===todayType(),nm=nowMin();
   const ni=isToday?rows.findIndex(r=>r.d>=nm&&!r.noToday):-1;S.nextI=ni;
-  const fname=st.find(s=>s.id===S.from).name;
+  const fObj=st.find(s=>s.id===S.from)||st[0]||{}; const fname=fObj.name||'';
   $('#resT').textContent='Odjezdy ze zastávky '+fname+' ('+DAYN[S.day]+')';
   const anyNo=isToday&&(S.trips||[]).some(t=>t.today===false);
   const ob=$('#onlyT');ob.hidden=!anyNo;ob.setAttribute('aria-pressed',!!S.onlyToday);
@@ -1163,6 +1163,19 @@ bind();renderRec();loadHome();fromHash();
         if(n.type==='build'){if(!n.startedAt||buildEnd(n)<now)return false;return true}
         if(n.endsAt&&Date.parse(n.endsAt)<now)return false;
         if(n.type!=='maintenance'&&n.startsAt&&Date.parse(n.startsAt)>now)return false;
+
+        const freq=n.frequency||'always';
+        if(freq==='once'){
+          try{if(localStorage.getItem('ois-notice-seen-'+n.id)>=(n.version||1))return false}catch(_){}
+        }else if(freq==='session'){
+          try{if(sessionStorage.getItem('ois-notice-session-'+n.id))return false}catch(_){}
+        }else if(freq==='daily'){
+          try{
+            const last=parseInt(localStorage.getItem('ois-notice-daily-'+n.id)||'0',10);
+            if(now-last<86400000)return false;
+          }catch(_){}
+        }
+
         if(n.dismissible!==false&&d[n.id]!=null&&d[n.id]>=(n.version||1))return false;
         return true}).sort((a,b)=>(b.priority||0)-(a.priority||0)||(ORDER[b.type]||0)-(ORDER[a.type]||0));
     }
@@ -1181,15 +1194,36 @@ bind();renderRec();loadHome();fromHash();
       const el=document.createElement('div'),t=ORDER[n.type]!=null?n.type:'info';
       el.className='nt '+t;el.dataset.id=n.id;el.setAttribute('role',t==='danger'?'alert':'status');
       if(t==='build'){const b=BUILD_TEXT[isMapPage()?'map':'other'];n=Object.assign({},n,{title:n.title||b.title,text:n.text||b.text,dismissible:false})}
+
+      const freq=n.frequency||'always';
+      if(freq==='once'){try{localStorage.setItem('ois-notice-seen-'+n.id,n.version||1)}catch(_){}}
+      else if(freq==='session'){try{sessionStorage.setItem('ois-notice-session-'+n.id,'1')}catch(_){}}
+      else if(freq==='daily'){try{localStorage.setItem('ois-notice-daily-'+n.id,Date.now())}catch(_){}}
+
+      const beh=n.dismiss_behavior||(n.dismissible===false?'permanent':'close_btn');
+      const showClose=(beh==='close_btn'||beh==='both'||(n.dismissible!==false&&beh!=='auto_10s'&&beh!=='permanent'));
+      const autoHide=(beh==='auto_10s'||beh==='both');
+      const autoHideSec=n.auto_hide_seconds||10;
+
       const cd=countdown(n),bar=t==='maintenance'?'<div class="nt-bar"></div>':t==='rebuild'?'<div class="nt-bar'+(n.progress==null?' ind':'')+'"><i'+(n.progress!=null?' style="--p:'+Math.max(4,Math.min(100,n.progress))+'%"':'')+'></i></div>':(t==='build'?'<div class="nt-bar"></div>':'');
       el.innerHTML='<div class="nt-ic"><svg viewBox="0 0 24 24" aria-hidden="true">'+ICON[t]+'</svg></div>'+
        '<div class="nt-b"><div class="nt-t"><b>'+esc(n.title)+'</b>'+'<span class="nt-tag">'+esc(n.tag||TAGS[t])+'</span>'+'</div>'+
        (n.text?'<div class="nt-p">'+esc(n.text)+'</div>':'')+(cd?'<div class="nt-cd"><i></i><span class="cdt">'+esc(cd)+'</span></div>':'')+'</div>'+
-       (n.link&&n.link.url?'<a class="nt-go" href="'+esc(n.link.url)+'">'+esc(n.link.label||'Zjistit více')+'</a>':'')+
-       (n.dismissible!==false?'<button class="nt-x" type="button" aria-label="Zavřít">×</button>':'')+bar;
+       (n.link&&n.link.url&&n.link.url.trim()?'<a class="nt-go" href="'+esc(n.link.url)+'">'+esc(n.link.label||'Zjistit více')+'</a>':'')+
+       (showClose?'<button class="nt-x" type="button" aria-label="Zavřít">×</button>':'')+bar;
       el._n=n;
       const xb=el.querySelector('.nt-x');
       if(xb)xb.addEventListener('click',()=>{saveDismiss(n.id,n.version||1);el.classList.add('out');setTimeout(()=>sync(),450)});
+
+      if(autoHide){
+        setTimeout(()=>{
+          if(el.isConnected){
+            el.classList.add('out');
+            setTimeout(()=>sync(),450);
+          }
+        }, autoHideSec*1000);
+      }
+
       if(t==='build'&&isMapPage())scheduleCollapse(el);
       return el;
     }

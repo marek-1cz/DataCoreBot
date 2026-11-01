@@ -1412,6 +1412,19 @@ bind();loadAll();
         if(n.type==='build'){if(!n.startedAt||buildEnd(n)<now)return false;return true}
         if(n.endsAt&&Date.parse(n.endsAt)<now)return false;
         if(n.type!=='maintenance'&&n.startsAt&&Date.parse(n.startsAt)>now)return false;
+
+        const freq=n.frequency||'always';
+        if(freq==='once'){
+          try{if(localStorage.getItem('ois-notice-seen-'+n.id)>=(n.version||1))return false}catch(_){}
+        }else if(freq==='session'){
+          try{if(sessionStorage.getItem('ois-notice-session-'+n.id))return false}catch(_){}
+        }else if(freq==='daily'){
+          try{
+            const last=parseInt(localStorage.getItem('ois-notice-daily-'+n.id)||'0',10);
+            if(now-last<86400000)return false;
+          }catch(_){}
+        }
+
         if(n.dismissible!==false&&d[n.id]!=null&&d[n.id]>=(n.version||1))return false;
         return true}).sort((a,b)=>(b.priority||0)-(a.priority||0)||(ORDER[b.type]||0)-(ORDER[a.type]||0));
     }
@@ -1430,15 +1443,36 @@ bind();loadAll();
       const el=document.createElement('div'),t=ORDER[n.type]!=null?n.type:'info';
       el.className='nt '+t;el.dataset.id=n.id;el.setAttribute('role',t==='danger'?'alert':'status');
       if(t==='build'){const b=BUILD_TEXT[isMapPage()?'map':'other'];n=Object.assign({},n,{title:n.title||b.title,text:n.text||b.text,dismissible:false})}
+
+      const freq=n.frequency||'always';
+      if(freq==='once'){try{localStorage.setItem('ois-notice-seen-'+n.id,n.version||1)}catch(_){}}
+      else if(freq==='session'){try{sessionStorage.setItem('ois-notice-session-'+n.id,'1')}catch(_){}}
+      else if(freq==='daily'){try{localStorage.setItem('ois-notice-daily-'+n.id,Date.now())}catch(_){}}
+
+      const beh=n.dismiss_behavior||(n.dismissible===false?'permanent':'close_btn');
+      const showClose=(beh==='close_btn'||beh==='both'||(n.dismissible!==false&&beh!=='auto_10s'&&beh!=='permanent'));
+      const autoHide=(beh==='auto_10s'||beh==='both');
+      const autoHideSec=n.auto_hide_seconds||10;
+
       const cd=countdown(n),bar=t==='maintenance'?'<div class="nt-bar"></div>':t==='rebuild'?'<div class="nt-bar'+(n.progress==null?' ind':'')+'"><i'+(n.progress!=null?' style="--p:'+Math.max(4,Math.min(100,n.progress))+'%"':'')+'></i></div>':(t==='build'?'<div class="nt-bar"></div>':'');
       el.innerHTML='<div class="nt-ic"><svg viewBox="0 0 24 24" aria-hidden="true">'+ICON[t]+'</svg></div>'+
        '<div class="nt-b"><div class="nt-t"><b>'+esc(n.title)+'</b>'+'<span class="nt-tag">'+esc(n.tag||TAGS[t])+'</span>'+'</div>'+
        (n.text?'<div class="nt-p">'+esc(n.text)+'</div>':'')+(cd?'<div class="nt-cd"><i></i><span class="cdt">'+esc(cd)+'</span></div>':'')+'</div>'+
-       (n.link&&n.link.url?'<a class="nt-go" href="'+esc(n.link.url)+'">'+esc(n.link.label||'Zjistit více')+'</a>':'')+
-       (n.dismissible!==false?'<button class="nt-x" type="button" aria-label="Zavřít">×</button>':'')+bar;
+       (n.link&&n.link.url&&n.link.url.trim()?'<a class="nt-go" href="'+esc(n.link.url)+'">'+esc(n.link.label||'Zjistit více')+'</a>':'')+
+       (showClose?'<button class="nt-x" type="button" aria-label="Zavřít">×</button>':'')+bar;
       el._n=n;
       const xb=el.querySelector('.nt-x');
       if(xb)xb.addEventListener('click',()=>{saveDismiss(n.id,n.version||1);el.classList.add('out');setTimeout(()=>sync(),450)});
+
+      if(autoHide){
+        setTimeout(()=>{
+          if(el.isConnected){
+            el.classList.add('out');
+            setTimeout(()=>sync(),450);
+          }
+        }, autoHideSec*1000);
+      }
+
       if(t==='build'&&isMapPage())scheduleCollapse(el);
       return el;
     }
