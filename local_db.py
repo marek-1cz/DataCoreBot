@@ -249,6 +249,33 @@ def init_local_db():
             conn.execute("CREATE INDEX IF NOT EXISTS idx_depot_loc_name ON depot_history_local(depot_name, arrived_at);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_depot_loc_spz ON depot_history_local(spz);")
             conn.execute("""
+                CREATE TABLE IF NOT EXISTS bus_history_local (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    trip_id TEXT UNIQUE,
+                    bus_id TEXT,
+                    spz TEXT,
+                    spz_verified INTEGER DEFAULT 0,
+                    linka TEXT,
+                    spoj_num TEXT,
+                    origin TEXT,
+                    destination TEXT,
+                    jr_link TEXT,
+                    start_scheduled TEXT,
+                    start_actual TEXT,
+                    end_actual TEXT,
+                    last_lat REAL,
+                    last_lng REAL,
+                    end_lat REAL,
+                    end_lng REAL,
+                    end_stop TEXT,
+                    status TEXT,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bus_hist_spz ON bus_history_local(spz, created_at);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bus_hist_trip ON bus_history_local(trip_id);")
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS settings_local (
                     setting_key TEXT PRIMARY KEY,
                     setting_value TEXT
@@ -1525,3 +1552,118 @@ def local_delete_depot_zone(zone_id):
             json.dump(zones, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[LOCAL DB] Chyba mazani depot_zones_local: {e}", flush=True)
+
+
+def local_bus_history_upsert(record: dict):
+    """Vloží nebo aktualizuje záznam jízdy/spoje v lokální SQLite databázi."""
+    try:
+        with _get_local_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO bus_history_local (
+                    trip_id, bus_id, spz, spz_verified, linka, spoj_num, origin, destination,
+                    jr_link, start_scheduled, start_actual, end_actual, last_lat, last_lng,
+                    end_lat, end_lng, end_stop, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(trip_id) DO UPDATE SET
+                    spz=coalesce(excluded.spz, bus_history_local.spz),
+                    spz_verified=coalesce(excluded.spz_verified, bus_history_local.spz_verified),
+                    linka=coalesce(excluded.linka, bus_history_local.linka),
+                    spoj_num=coalesce(excluded.spoj_num, bus_history_local.spoj_num),
+                    origin=coalesce(excluded.origin, bus_history_local.origin),
+                    destination=coalesce(excluded.destination, bus_history_local.destination),
+                    jr_link=coalesce(excluded.jr_link, bus_history_local.jr_link),
+                    start_scheduled=coalesce(excluded.start_scheduled, bus_history_local.start_scheduled),
+                    start_actual=coalesce(excluded.start_actual, bus_history_local.start_actual),
+                    end_actual=coalesce(excluded.end_actual, bus_history_local.end_actual),
+                    last_lat=coalesce(excluded.last_lat, bus_history_local.last_lat),
+                    last_lng=coalesce(excluded.last_lng, bus_history_local.last_lng),
+                    end_lat=coalesce(excluded.end_lat, bus_history_local.end_lat),
+                    end_lng=coalesce(excluded.end_lng, bus_history_local.end_lng),
+                    end_stop=coalesce(excluded.end_stop, bus_history_local.end_stop),
+                    status=coalesce(excluded.status, bus_history_local.status),
+                    updated_at=excluded.updated_at
+            """, (
+                record.get("trip_id"),
+                str(record.get("bus_id") or ""),
+                record.get("spz"),
+                1 if record.get("spz_verified") else 0,
+                record.get("linka"),
+                str(record.get("spoj_num") or ""),
+                record.get("origin"),
+                record.get("destination"),
+                record.get("jr_link"),
+                record.get("start_scheduled"),
+                record.get("start_actual"),
+                record.get("end_actual"),
+                record.get("last_lat"),
+                record.get("last_lng"),
+                record.get("end_lat"),
+                record.get("end_lng"),
+                record.get("end_stop"),
+                record.get("status"),
+                record.get("created_at"),
+                record.get("updated_at")
+            ))
+            conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba local_bus_history_upsert: {e}", flush=True)
+
+
+def local_bus_history_close(trip_id: str, end_actual: str, end_lat: float = None, end_lng: float = None, end_stop: str = None, status: str = None):
+    """Uzavře aktivní jízdu v lokální SQLite databázi (konec linky, přepnutí na novou linku nebo ztráta signálu)."""
+    if not trip_id:
+        return
+    try:
+        with _get_local_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE bus_history_local
+                SET end_actual=?,
+                    end_lat=coalesce(?, end_lat, last_lat),
+                    end_lng=coalesce(?, end_lng, last_lng),
+                    end_stop=coalesce(?, end_stop),
+                    status=coalesce(?, status),
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE trip_id=? AND (end_actual IS NULL OR end_actual = '')
+            """, (end_actual, end_lat, end_lng, end_stop, status, trip_id))
+            conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba local_bus_history_close: {e}", flush=True)
+
+
+def local_bus_history_get(spz: str = None, limit: int = 100) -> list:
+    """Vrací jízdy z lokální SQLite databáze seřazené od nejnovějších."""
+    try:
+        with _get_local_conn() as conn:
+            cur = conn.cursor()
+            if spz:
+                clean_s = spz.replace(" ", "").upper()
+                cur.execute("""
+                    SELECT trip_id, bus_id, spz, spz_verified, linka, spoj_num, origin, destination,
+                           jr_link, start_scheduled, start_actual, end_actual, last_lat, last_lng,
+                           end_lat, end_lng, end_stop, status, created_at, updated_at
+                    FROM bus_history_local
+                    WHERE REPLACE(UPPER(spz), ' ', '') LIKE ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                """, (f"%{clean_s}%", limit))
+            else:
+                cur.execute("""
+                    SELECT trip_id, bus_id, spz, spz_verified, linka, spoj_num, origin, destination,
+                           jr_link, start_scheduled, start_actual, end_actual, last_lat, last_lng,
+                           end_lat, end_lng, end_stop, status, created_at, updated_at
+                    FROM bus_history_local
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                """, (limit,))
+            rows = []
+            cols = ["trip_id", "bus_id", "spz", "spz_verified", "linka", "spoj_num", "origin", "destination",
+                    "jr_link", "start_scheduled", "start_actual", "end_actual", "last_lat", "last_lng",
+                    "end_lat", "end_lng", "end_stop", "status", "created_at", "updated_at"]
+            for r in cur.fetchall():
+                rows.append(dict(zip(cols, r)))
+            return rows
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba local_bus_history_get: {e}", flush=True)
+        return []

@@ -273,6 +273,32 @@ footer p{max-width:640px;margin:0 auto;line-height:1.6}
 html.lite .btn-main::after{display:none}
 html.lite .acard,html.lite .dcard,html.lite .tile,html.lite .rows>*,html.lite .avatar{animation:none!important}
 
+/* === DETAIL VOZIDLA & SPOJE STYLES === */
+.dtabs{display:flex;gap:8px;margin:16px 0 14px;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:10px;flex-wrap:wrap}
+.dtab{padding:8px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:var(--muted);font-weight:600;font-size:.85rem;cursor:pointer;transition:all .2s}
+.dtab:hover{background:rgba(255,255,255,.1);color:#fff}
+.dtab.on{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 4px 15px rgba(47,107,255,.4)}
+.dlive-box{padding:14px 18px;border-radius:18px;background:linear-gradient(135deg,rgba(56,214,255,.08),rgba(47,107,255,.05));border:1px solid rgba(56,214,255,.25);margin:14px 0 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.dlive-info{font-size:.85rem;color:#cbd5e1}
+.dlive-info b{color:#fff;display:block;font-size:1.05rem;margin-bottom:3px}
+.trip-card{padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);margin-bottom:12px;transition:border-color .2s}
+.trip-card:hover{border-color:rgba(56,214,255,.3)}
+.trip-card-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.badge-l{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;background:rgba(56,214,255,.15);color:#38d6ff;font-weight:700;font-size:.85rem;border:1px solid rgba(56,214,255,.3)}
+.badge-sp{padding:4px 8px;border-radius:8px;background:rgba(255,255,255,.1);color:#e2e8f0;font-weight:600;font-size:.8rem}
+.trip-times{font-size:.88rem;color:#cbd5e1}
+.trip-times b{color:#fff}
+.trip-route{font-size:1rem;color:#f8fafc;margin:6px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.trip-loc{font-size:.85rem;color:#94a3b8;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;background:rgba(0,0,0,.2);padding:6px 10px;border-radius:8px}
+.btn-map-link{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:6px;background:rgba(56,214,255,.12);color:#38d6ff;font-size:.78rem;text-decoration:none;border:1px solid rgba(56,214,255,.3);font-weight:600;transition:all .2s}
+.btn-map-link:hover{background:rgba(56,214,255,.25);color:#fff;text-decoration:none}
+.trip-stat{display:inline-block;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.06);color:#94a3b8;font-size:.78rem}
+.ev-mode-tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.ev-mode-btn{padding:8px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:var(--muted);font-weight:600;font-size:.85rem;cursor:pointer;transition:all .2s}
+.ev-mode-btn:hover{background:rgba(255,255,255,.1);color:#fff}
+.ev-mode-btn.on{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 4px 15px rgba(47,107,255,.4)}
+
+
 /* ============ HORNÍ SKLENĚNÝ PANEL (JAKO NA HOME) ============ */
 .ois-nav{
   position:fixed;top:16px;left:0;right:0;margin-left:auto;margin-right:auto;width:fit-content;width:-moz-fit-content;transform:none;z-index:100;box-sizing:border-box;
@@ -624,6 +650,14 @@ function parseT(v){
   if(v instanceof Date)return +v;
   const s=String(v).trim();
   if(/[zZ]$|[+-]\d\d:?\d\d$/.test(s)){const t=Date.parse(s);return isNaN(t)?null:t}
+  const tm=s.match(/^(\d{1,2}):(\d\d)(?::(\d\d))?$/);
+  if(tm){
+    const now=new Date();
+    const y=now.getFullYear(), mo=now.getMonth()+1, d=now.getDate();
+    const h=+tm[1], mi=+tm[2], se=+(tm[3]||0);
+    const guess=Date.UTC(y,mo-1,d,h,mi,se);
+    let t=guess-tzOffset(guess);t=guess-tzOffset(t);return t;
+  }
   let m=s.match(/^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d)(?::(\d\d))?/),y,mo,d,h,mi,se;
   if(m){y=+m[1];mo=+m[2];d=+m[3];h=+m[4];mi=+m[5];se=+(m[6]||0)}
   else{m=s.match(/^(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4})[ ,T]+(\d{1,2}):(\d\d)(?::(\d\d))?/);if(!m){const t=Date.parse(s);return isNaN(t)?null:t}
@@ -794,9 +828,92 @@ function eList(){
   a.sort((x,y)=>cmp(key[k](x),key[k](y),d)||(y.arr-x.arr));
   return a;
 }
+S.evMode = S.evMode || 'depots';
+
+function getTripsEvidenceList(){
+  let trips = [];
+  const spzChip = S.chips.find(c => c.k === 'spz');
+  const targetSpz = spzChip ? spzChip.v.trim().toUpperCase() : null;
+  const qClean = norm(S.q);
+
+  S.vehicles.forEach(v => {
+    if(targetSpz && v.spz.replace(/\s/g,'').toUpperCase() !== targetSpz.replace(/\s/g,'')) return;
+    if(qClean && !norm(v.spz).includes(qClean) && !norm(v.type).includes(qClean) && !norm(v.line).includes(qClean)) return;
+    (v.trips || []).forEach(t => {
+      trips.push({
+        spz: v.spz,
+        vzor: v.vzor,
+        line: t.line,
+        spoj: t.spoj || t.spoj_num || '–',
+        origin: t.origin || '',
+        dest: t.dest || '',
+        from: t.from,
+        to: t.to,
+        rawFrom: t.rawFrom,
+        rawTo: t.rawTo,
+        end_lat: t.end_lat,
+        end_lng: t.end_lng,
+        end_stop: t.end_stop,
+        status: t.status,
+        dur: (t.to && t.from) ? (t.to - t.from) : null
+      });
+    });
+  });
+  trips.sort((a,b) => (b.from || 0) - (a.from || 0));
+  return trips;
+}
+
 function renderE(){
+  const isTrips = S.evMode === 'trips';
+  const bDep = $('#btnEvDepots'), bTrp = $('#btnEvTrips');
+  if(bDep) bDep.classList.toggle('on', !isTrips);
+  if(bTrp) bTrp.classList.toggle('on', isTrips);
+
+  const spzChip = S.chips.find(c => c.k === 'spz');
+  if(spzChip){
+    $('#evFor').textContent = 'Vozidlo ' + spzChip.v;
+  } else {
+    $('#evFor').textContent = S.eDepot ? S.eDepot : (isTrips ? 'Všechny linky a jízdy' : 'Všechny vozovny');
+  }
+  $('#evClr').hidden = !S.eDepot && !spzChip;
+
+  if(isTrips){
+    const a = getTripsEvidenceList(), shown = a.slice(0, S.eShown);
+    $('#evHeading').textContent = 'Evidence jízd a spojů';
+    $('#eCount').textContent = a.length ? ('Jízd: ' + a.length + (a.length > shown.length ? ' · zobrazeno ' + shown.length : '')) : '';
+    const head = '<div class="tr th te" role="row">' +
+      '<div class="cell c-spz">SPZ</div>' +
+      '<div class="cell" style="flex:1">Linka & Spoj</div>' +
+      '<div class="cell" style="flex:2">Trasa (Odkud ➔ Kam)</div>' +
+      '<div class="cell" style="flex:1">Vyjel</div>' +
+      '<div class="cell" style="flex:1">Dojel</div>' +
+      '<div class="cell" style="flex:2">Kde dojel (Místo & Mapa)</div>' +
+      '<div class="cell" style="flex:1">Stav</div>' +
+    '</div>';
+    if(S.loading){$('#eTbl').innerHTML=head+'<div class="skel"></div>'.repeat(6);$('#eMore').hidden=true;return}
+    if(!a.length){$('#eTbl').innerHTML='<div class="empty"><b>Žádné jízdy</b>Pro toto vozidlo nebo filtry nebyly nalezeny žádné jízdy.</div>';$('#eMore').hidden=true;return}
+    $('#eTbl').innerHTML = head + shown.map(x => {
+      const tFrom = esc(x.rawFrom || (x.from ? dt(x.from) : '–'));
+      const tTo = esc(x.rawTo || (x.to ? dt(x.to) : 'V jízdě'));
+      const tStop = esc(x.end_stop || x.dest || 'Konečná');
+      const mapLink = (x.end_lat && x.end_lng) ? (' <a href="/mapa?lat=' + x.end_lat + '&lng=' + x.end_lng + '&zoom=16" target="_blank" class="btn-map-link">🗺️ Mapa</a>') : '';
+      return '<div class="tr rw te' + (x.vzor?' is-vzor':'') + '" role="row" tabindex="0" data-spz="' + esc(x.spz) + '">' +
+        '<div class="cell c-spz">' + plate(x.spz) + '</div>' +
+        '<div class="cell" style="flex:1"><span class="badge-l" style="padding:2px 8px;font-size:.78rem;">L ' + esc(x.line||'?') + '</span> <span class="badge-sp" style="padding:2px 6px;font-size:.75rem;">' + esc(x.spoj) + '</span></div>' +
+        '<div class="cell" style="flex:2;font-size:.85rem;"><b>' + esc(x.origin||'–') + '</b> ➔ <b>' + esc(x.dest||'–') + '</b></div>' +
+        '<div class="cell" style="flex:1;font-size:.85rem;"><span class="t">' + tFrom + '</span></div>' +
+        '<div class="cell" style="flex:1;font-size:.85rem;"><span class="t">' + tTo + '</span></div>' +
+        '<div class="cell" style="flex:2;font-size:.82rem;">📍 ' + tStop + mapLink + '</div>' +
+        '<div class="cell" style="flex:1;font-size:.78rem;"><span class="trip-stat">' + esc(x.status||'Dokončeno') + '</span></div>' +
+      '</div>';
+    }).join('');
+    $('#eMore').hidden = a.length <= shown.length;
+    $('#eMore').textContent = 'Zobrazit dalších ' + Math.min(CONFIG.pageSize, a.length - shown.length) + ' z ' + (a.length - shown.length);
+    return;
+  }
+
+  $('#evHeading').textContent = 'Evidence příjezdů a odjezdů do vozoven';
   const a=eList(),shown=a.slice(0,S.eShown);
-  $('#evFor').textContent=S.eDepot?S.eDepot:'Všechny vozovny';$('#evClr').hidden=!S.eDepot;
   $('#eCount').textContent=a.length?('Záznamů: '+a.length+(a.length>shown.length?' · zobrazeno '+shown.length:'')):'';
   const head=HEAD({cls:'te',c:[['spz','SPZ'],['depot','Vozovna'],['arr','Přijel'],['left','Odjel'],['dur','Doba stání']]},S.eSort);
   if(S.loading){$('#eTbl').innerHTML=head+'<div class="skel"></div>'.repeat(6);$('#eMore').hidden=true;return}
@@ -916,29 +1033,141 @@ function resetShown(){S.vShown=S.eShown=CONFIG.pageSize}
 /* =====================================================================
    DETAIL VOZIDLA
    ===================================================================== */
-function openDetail(spz){
-  const v=S.bySpz.get(spz);if(!v)return;
-  const rs=S.records.filter(x=>x.spz===spz).sort((a,b)=>b.arr-a.arr);
-  const lim=Date.now()-30*864e5,r30=rs.filter(x=>x.arr>=lim),closed=r30.filter(x=>!x.active);
-  const avg=closed.length?closed.reduce((s,x)=>s+x.dur,0)/closed.length:null;
-  const cnt=new Map();r30.forEach(x=>cnt.set(x.depot,(cnt.get(x.depot)||0)+1));
-  const fav=[...cnt].sort((a,b)=>b[1]-a[1])[0];
-  const ev=[];
-  rs.forEach(x=>{ev.push({t:x.arr,c:'arr',h:'Příjezd do vozovny',s:x.depot});if(x.left)ev.push({t:x.left,c:'lea',h:'Odjezd z vozovny',s:x.depot+' · stál '+dur(x.dur)})});
-  v.trips.forEach(t=>{if(t.to!=null)ev.push({t:t.to,c:'trp',h:'Jízda: linka '+(t.line||'?')+' → '+(t.dest||'?'),s:t.from!=null?'Trvání '+dur(t.to-t.from)+' · začátek '+dt(t.from):''})});
-  ev.sort((a,b)=>b.t-a.t);
-  $('#dbox').innerHTML='<button class="dx" type="button" data-close aria-label="Zavřít">×</button>'+
-   '<div class="dtop"><div class="row">'+plate(v.spz,true)+vz(v)+stB(v.status)+'</div><h2 id="dTitle">'+esc(v.type||'Neznámý typ vozidla')+(v.op?' <span class="muted" style="font-weight:500">· '+esc(v.op)+'</span>':'')+'</h2></div>'+
-   '<div class="kv">'+
-   '<div><small>Naposledy viděno</small><b>'+ago(v.seen)+'</b></div>'+
-   '<div><small>Linka</small><b>'+(v.line?esc(v.line)+(v.dest?' → '+esc(v.dest):''):'–')+'</b></div>'+
-   '<div><small>Vozovna</small><b>'+(v.depot?'<button class="xl" type="button" data-depot-go="'+esc(v.depot)+'">'+esc(v.depot)+'</button>':'–')+'</b></div>'+
-   '<div><small>Příjezdů za 30 dní</small><b>'+r30.length+'</b></div>'+
-   '<div><small>Průměrné stání</small><b>'+dur(avg)+'</b></div>'+
-   '<div><small>Nejčastěji</small><b>'+(fav?'<button class="xl" type="button" data-depot-go="'+esc(fav[0])+'">'+esc(fav[0])+'</button>':'–')+'</b></div></div>'+
-   '<div class="dact">'+(v.depot?'<button class="btnx" type="button" data-depot-go="'+esc(v.depot)+'">Otevřít vozovnu →</button>':'')+'<button class="btnx" type="button" data-ev-spz="'+esc(v.spz)+'">Evidence tohoto vozidla →</button></div>'+
-   '<h3>Historie</h3>'+(ev.length?'<ul class="tl">'+ev.slice(0,40).map(e=>'<li class="'+e.c+'"><b>'+esc(e.h)+'</b><small>'+dt(e.t)+(e.s?' · '+esc(e.s):'')+'</small></li>').join('')+'</ul>':'<div class="muted">Pro toto vozidlo zatím nejsou žádné záznamy.</div>');
-  const d=$('#dlg');if(!d.open)d.showModal();$('#dbox').scrollTop=0;
+let _currentDlgSpz = null;
+let _currentDlgTab = 'trips';
+let _dlgData = null;
+
+function renderDetailModal(v, fullData, activeTab){
+  const spz = v.spz;
+  const rs = S.records.filter(x=>x.spz===spz).sort((a,b)=>b.arr-a.arr);
+  const lim = Date.now()-30*864e5, r30 = rs.filter(x=>x.arr>=lim), closed = r30.filter(x=>!x.active);
+  const avg = closed.length ? closed.reduce((s,x)=>s+x.dur,0)/closed.length : null;
+  const cnt = new Map(); r30.forEach(x=>cnt.set(x.depot,(cnt.get(x.depot)||0)+1));
+  const fav = [...cnt].sort((a,b)=>b[1]-a[1])[0];
+
+  const live = (fullData && fullData.live) || {};
+  const currLine = live.line || v.line;
+  const currDest = live.destination || v.dest;
+  const currStop = live.stop || '';
+  const currLat = live.lat;
+  const currLng = live.lng;
+  const driver = (fullData && fullData.driver) || v.driver || '';
+  const note = (fullData && fullData.note) || v.note || '';
+
+  const trips = (fullData && fullData.trips && fullData.trips.length) ? fullData.trips : (v.trips || []);
+  const depots = (fullData && fullData.depot_visits && fullData.depot_visits.length) ? fullData.depot_visits : rs;
+
+  let tripsHtml = '';
+  if(!trips.length){
+    tripsHtml = '<div class="muted" style="padding:16px 0;">Pro toto vozidlo zatím nebyly zaznamenány žádné jízdy linky.</div>';
+  } else {
+    tripsHtml = trips.map(t => {
+      const lineNum = esc(t.linka || t.line || '?');
+      const spojNum = esc(t.spoj_num || t.spoj || '–');
+      const tFrom = esc(t.start_actual || t.rawFrom || (t.from ? dt(t.from) : '–'));
+      const tTo = esc(t.end_actual || t.rawTo || (t.to ? dt(t.to) : 'V jízdě'));
+      const tOrigin = esc(t.origin || 'Výchozí zastávka');
+      const tDest = esc(t.destination || t.dest || 'Cílová zastávka');
+      const tStop = esc(t.end_stop || t.destination || t.dest || 'Konečná');
+      const tLat = t.end_lat || t.last_lat;
+      const tLng = t.end_lng || t.last_lng;
+      const mapBtn = (tLat && tLng) ? '<a href="/mapa?lat='+tLat+'&lng='+tLng+'&zoom=16" target="_blank" class="btn-map-link">🗺️ Ukázat bod ukončení na mapě ['+Number(tLat).toFixed(4)+', '+Number(tLng).toFixed(4)+']</a>' : '';
+
+      return '<div class="trip-card">' +
+        '<div class="trip-card-head">' +
+          '<div style="display:flex;align-items:center;gap:8px;">' +
+            '<span class="badge-l">Linka ' + lineNum + '</span>' +
+            '<span class="badge-sp">Spoj ' + spojNum + '</span>' +
+          '</div>' +
+          '<div class="trip-times">🕒 Vyjel: <b>' + tFrom + '</b> ➜ 🏁 Dojel: <b>' + tTo + '</b></div>' +
+        '</div>' +
+        '<div class="trip-route"><b>' + tOrigin + '</b> ➔ <b>' + tDest + '</b></div>' +
+        '<div class="trip-loc">📍 <b>Kde dojel:</b> <span>' + tStop + '</span> ' + mapBtn + '</div>' +
+        (t.status ? '<div style="margin-top:6px;"><span class="trip-stat">Stav: ' + esc(t.status) + '</span></div>' : '') +
+      '</div>';
+    }).join('');
+  }
+
+  let depotsHtml = '';
+  if(!depots.length){
+    depotsHtml = '<div class="muted" style="padding:16px 0;">Žádné záznamy o pobytech ve vozovnách.</div>';
+  } else {
+    depotsHtml = depots.map(d => {
+      const dName = esc(d.depot_name || d.depot || 'Vozovna');
+      const arrT = dt(d.arr || parseT(d.arrived_at));
+      const isAct = d.active || (!d.left && !d.left_at);
+      const leftT = isAct ? '<span class="st depot" style="display:inline-block;">🟢 Aktuálně zde stojí</span>' : ('📤 Odjezd: <b>' + dt(d.left || parseT(d.left_at)) + '</b>');
+      const durMs = d.dur || (d.arrived_at && d.left_at ? (parseT(d.left_at) - parseT(d.arrived_at)) : (d.arrived_at ? (Date.now() - parseT(d.arrived_at)) : null));
+      return '<div class="trip-card">' +
+        '<div class="trip-card-head"><b style="font-size:1.05rem;color:#f8fafc;">' + dName + '</b><span>' + (isAct ? '<small style="color:var(--green)">V depu</small>' : '⏱️ Stál: <b>' + dur(durMs) + '</b>') + '</span></div>' +
+        '<div style="font-size:.88rem;color:#cbd5e1;display:flex;gap:16px;flex-wrap:wrap;margin-top:4px;"><span>📥 Příjezd: <b>' + arrT + '</b></span><span>' + leftT + '</span></div>' +
+      '</div>';
+    }).join('');
+  }
+
+  $('#dbox').innerHTML = '<button class="dx" type="button" data-close aria-label="Zavřít">×</button>' +
+    '<div class="dtop">' +
+      '<div class="row">' + plate(v.spz,true) + vz(v) + stB(v.status) +
+        (driver ? '<span class="badge-sp" style="background:rgba(56,214,255,.15);color:#38d6ff;">👤 ' + esc(driver) + '</span>' : '') +
+        (note ? '<span class="badge-sp" style="background:rgba(255,201,51,.15);color:#ffc933;">📝 ' + esc(note) + '</span>' : '') +
+      '</div>' +
+      '<h2 id="dTitle">' + esc(v.type||'Neznámý typ vozidla') + (v.op?' <span class="muted" style="font-weight:500">· '+esc(v.op)+'</span>':'') + '</h2>' +
+    '</div>' +
+    '<div class="dlive-box">' +
+      '<div class="dlive-info">' +
+        '<b>Aktuální / Poslední poloha</b>' +
+        '<span>' + (currStop ? '📍 ' + esc(currStop) : 'Linka ' + esc(currLine || '–') + ' → ' + esc(currDest || '–')) +
+        (currLat && currLng ? ' <small class="muted">(' + Number(currLat).toFixed(4) + ', ' + Number(currLng).toFixed(4) + ')</small>' : '') + '</span>' +
+      '</div>' +
+      '<a href="/mapa?bus=' + encodeURIComponent(v.spz) + '" target="_blank" class="btnx" style="background:var(--cyan,#06b6d4);color:#000;font-weight:700;">🗺️ Zobrazit na živé mapě →</a>' +
+    '</div>' +
+    '<div class="kv">' +
+      '<div><small>Naposledy viděno</small><b>' + ago(v.seen) + '</b></div>' +
+      '<div><small>Linka & Cíl</small><b>' + (currLine ? esc(currLine) + (currDest ? ' → ' + esc(currDest) : '') : '–') + '</b></div>' +
+      '<div><small>Vozovna</small><b>' + (v.depot ? '<button class="xl" type="button" data-depot-go="' + esc(v.depot) + '">' + esc(v.depot) + '</button>' : '–') + '</b></div>' +
+      '<div><small>Příjezdů za 30 dní</small><b>' + r30.length + '</b></div>' +
+      '<div><small>Průměrné stání</small><b>' + dur(avg) + '</b></div>' +
+      '<div><small>Domovské depo</small><b>' + (fav ? '<button class="xl" type="button" data-depot-go="' + esc(fav[0]) + '">' + esc(fav[0]) + '</button>' : '–') + '</b></div>' +
+    '</div>' +
+    '<div class="dtabs">' +
+      '<button type="button" class="dtab ' + (activeTab==='trips'?'on':'') + '" id="dlgTabTrips" data-dlgtab="trips">🚌 Historie spojů a linek (' + trips.length + ')</button>' +
+      '<button type="button" class="dtab ' + (activeTab==='depots'?'on':'') + '" id="dlgTabDepots" data-dlgtab="depots">🏢 Pobyty ve vozovnách (' + depots.length + ')</button>' +
+    '</div>' +
+    '<div id="dlgTabContent">' + (activeTab === 'trips' ? tripsHtml : depotsHtml) + '</div>' +
+    '<div class="dact" style="margin-top:20px;">' +
+      (v.depot ? '<button class="btnx" type="button" data-depot-go="' + esc(v.depot) + '">Otevřít vozovnu →</button>' : '') +
+      '<button class="btnx" type="button" data-ev-spz="' + esc(v.spz) + '">Evidence tohoto vozidla (všechny záznamy) →</button>' +
+    '</div>';
+
+  const bTrips = $('#dlgTabTrips'), bDepots = $('#dlgTabDepots');
+  if(bTrips) bTrips.addEventListener('click', ()=>{ _currentDlgTab = 'trips'; renderDetailModal(v, fullData, 'trips'); });
+  if(bDepots) bDepots.addEventListener('click', ()=>{ _currentDlgTab = 'depots'; renderDetailModal(v, fullData, 'depots'); });
+}
+
+async function openDetail(spz){
+  const v = S.bySpz.get(spz) || { spz, type: 'Autobus IDPK', op: 'Arriva', status: 'off', trips: [] };
+  _currentDlgSpz = spz;
+  _currentDlgTab = 'trips';
+  _dlgData = null;
+
+  renderDetailModal(v, null, 'trips');
+
+  const d = $('#dlg');
+  if(!d.open) d.showModal();
+  $('#dbox').scrollTop = 0;
+
+  try {
+    const res = await fetch('/api/history_spz/' + encodeURIComponent(spz), { credentials: 'include' });
+    if(res.ok){
+      const data = await res.json();
+      if(_currentDlgSpz === spz){
+        _dlgData = data;
+        renderDetailModal(v, data, _currentDlgTab);
+      }
+    }
+  } catch(e) {
+    console.warn("Chyba nacitani detailu vozu:", e);
+  }
 }
 
 /* =====================================================================

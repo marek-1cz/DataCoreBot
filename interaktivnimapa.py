@@ -8301,6 +8301,19 @@ def _process_depot_tracking(bus_id, c, now):
 
         if not active_sess:
             # Nový příjezd!
+            # Pokud měl vůz otevřenou jízdu, bezpečně ji uzavřeme s označením vjezdu do vozovny:
+            if c.get("actual_start_time") and not c.get("_trip_closed"):
+                try:
+                    close_active_trip(
+                        c,
+                        end_time_str=now.strftime('%H:%M'),
+                        end_lat=lat,
+                        end_lng=lng,
+                        end_stop=f"Vozovna: {depot_name}",
+                        reason=f"Příjezd do vozovny ({depot_name})"
+                    )
+                except Exception:
+                    pass
             is_imprecise = (now - SCRIPT_START_TIME).total_seconds() < 120 if SCRIPT_START_TIME else False
             arr_time = get_prague_iso()
             db_c = get_db_client()
@@ -9743,78 +9756,141 @@ def log_spz_change(bus_id, old_spz, new_spz, reason="auto", admin_note=""):
         pass
 
 
-def close_previous_trips(db, spz, current_trip_id, end_time_str):
-    if not db or not spz or spz == "Neznámá":
+def close_previous_trips(db, spz, current_trip_id, end_time_str, end_lat=None, end_lng=None, end_stop=None):
+    """Uzavře všechny předchozí otevřené jízdy pro danou SPZ při zahájení nového spoje."""
+    if not spz or spz in ("Neznámá", "Neznama", "?", "", "None"):
         return
+    # Uzavřeme v lokální SQLite databázi
     try:
-        resp = db.table("bus_history").select("trip_id").eq("spz", spz) \
-                 .is_("end_actual", None).neq("trip_id", current_trip_id).execute()
-        for row in (resp.data or []):
-            try:
-                db.table("bus_history").update({
-                    "end_actual": end_time_str,
-                    "status": "Ukončeno (Nový spoj zahájen)",
-                    "updated_at": get_prague_time().isoformat(),
-                }).eq("trip_id", row["trip_id"]).execute()
-            except Exception:
-                pass
+        from local_db import local_bus_history_close
+        local_bus_history_close(
+            trip_id=current_trip_id,
+            end_actual=end_time_str,
+            end_lat=end_lat,
+            end_lng=end_lng,
+            end_stop=end_stop or "Ukončeno (Nový spoj zahájen)",
+            status="Ukončeno (Nový spoj zahájen)"
+        )
     except Exception:
         pass
-
-
-def close_trip_on_disappear(db, c, end_time_str, end_lat=None, end_lng=None, reason="Zmizel z PVVD"):
-    """Uzavře otevřený bus_history záznam (nastaví end_actual, end_lat, end_lng) když vůz zmizí z PVVD.
-    Zabrání tomu, aby jízdy zůstávaly otevřené navždy."""
     if not db:
+        return
+    def _do_close():
+        try:
+            resp = db.table("bus_history").select("trip_id").eq("spz", spz) \
+                     .is_("end_actual", None).neq("trip_id", current_trip_id).execute()
+            for row in (resp.data or []):
+                try:
+                    upd = {
+                        "end_actual": end_time_str,
+                        "status": f"Ukončeno (posl. zast.: {end_stop or '?'})",
+                        "updated_at": get_prague_time().isoformat(),
+                    }
+                    if end_lat is not None:
+                        upd["end_lat"] = end_lat
+                        upd["last_lat"] = end_lat
+                    if end_lng is not None:
+                        upd["end_lng"] = end_lng
+                        upd["last_lng"] = end_lng
+                    db.table("bus_history").update(upd).eq("trip_id", row["trip_id"]).execute()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    threading.Thread(target=_do_close, daemon=True).start()
+
+
+def close_active_trip(c, end_time_str=None, end_lat=None, end_lng=None, end_stop=None, reason="Ukončeno"):
+    """
+    Kompletně a bezpečně uzavře aktuální jízdu / spoj vozidla:
+    - Zapíše čas ukončení (end_actual)
+    - Zapíše přesnou koncovou GPS polohu (end_lat, end_lng, last_lat, last_lng)
+    - Zapíše koncovou zastávku / místo (end_stop)
+    - Zapíše do Supabase DB i do lokální persistentní SQLite databáze.
+    """
+    if not c:
         return
     trip_id = c.get("trip_id")
     spz = c.get("spz")
     if not trip_id or not spz or spz in ("Neznámá", "Neznama", "?", "", "None"):
         return
-    # Kontrola: zapsal jsme tento trip do DB?
-    if not c.get("_history_written"):
+    if not c.get("actual_start_time") and not c.get("_history_written"):
         return
-    # Nekončit znovu pokud už je uzavřeno
     if c.get("_trip_closed"):
         return
-    def _do_close(tid, t_end, t_lat, t_lng, t_reason):
+
+    now_prague = get_prague_time()
+    t_end = end_time_str or now_prague.strftime('%H:%M')
+    t_lat = end_lat if end_lat is not None else c.get("lat")
+    t_lng = end_lng if end_lng is not None else c.get("lng")
+    t_stop = end_stop or c.get("nearest_stop") or c.get("real_zastavka") or c.get("destination") or "Konečná"
+
+    status_msg = f"{reason}"
+    if t_stop and t_stop not in status_msg:
+        status_msg = f"{status_msg} (konec: {t_stop})"
+
+    # 1. Okamžitý zápis do lokální SQLite databáze (100% spolehlivost)
+    try:
+        from local_db import local_bus_history_close
+        local_bus_history_close(
+            trip_id=trip_id,
+            end_actual=t_end,
+            end_lat=t_lat,
+            end_lng=t_lng,
+            end_stop=t_stop,
+            status=status_msg
+        )
+    except Exception as e_loc:
+        print(f"[HISTORY-CLOSE-LOCAL] Chyba: {e_loc}", flush=True)
+
+    c["actual_end_time"] = t_end
+    c["_trip_closed"] = True
+
+    # 2. Asynchronní zápis do cloudové DB (Supabase)
+    def _do_cloud_close(tid, t_end_val, lat_val, lng_val, stat_val):
+        db = get_db_client()
+        if not db:
+            return
         try:
-            import main as _main_mod
-            if getattr(_main_mod, 'EGRESS_SAVE_MODE', False):
-                return
             update_payload = {
-                "end_actual": t_end,
-                "status": t_reason,
+                "end_actual": t_end_val,
+                "status": stat_val,
                 "updated_at": get_prague_time().isoformat(),
             }
-            if t_lat is not None:
-                update_payload["last_lat"] = t_lat
-            if t_lng is not None:
-                update_payload["last_lng"] = t_lng
-            db.table("bus_history").update(update_payload).eq("trip_id", tid).is_("end_actual", None).execute()
-        except Exception as e:
-            print(f"[HISTORY-CLOSE] Chyba uzavírání trip {tid}: {e}", flush=True)
-    threading.Thread(target=_do_close, args=(trip_id, end_time_str, end_lat, end_lng, reason), daemon=True).start()
-    c["_trip_closed"] = True
+            if lat_val is not None:
+                update_payload["last_lat"] = lat_val
+                update_payload["end_lat"] = lat_val
+            if lng_val is not None:
+                update_payload["last_lng"] = lng_val
+                update_payload["end_lng"] = lng_val
+            db.table("bus_history").update(update_payload).eq("trip_id", tid).execute()
+        except Exception as e_cloud:
+            print(f"[HISTORY-CLOSE-CLOUD] Chyba uzavření trip {tid}: {e_cloud}", flush=True)
+
+    threading.Thread(target=_do_cloud_close, args=(trip_id, t_end, t_lat, t_lng, status_msg), daemon=True).start()
+
+
+def close_trip_on_disappear(db, c, end_time_str, end_lat=None, end_lng=None, reason="Zmizel z PVVD"):
+    """Uzavře jízdu při zmizení vozu ze signálu / PVVD."""
+    close_active_trip(c, end_time_str=end_time_str, end_lat=end_lat, end_lng=end_lng,
+                      end_stop=c.get("nearest_stop") or c.get("real_zastavka"), reason=reason)
 
 
 def _is_tracked_line(linka_str):
     if not linka_str:
         return False
-    num = re.sub(r'\D', '', re.sub(r'/.*', '', str(linka_str)).strip())
-    if num.startswith("490") or num.startswith("496"):
-        return True
-    if len(num) == 3 and (num.startswith("7") or num.startswith("4") or num.startswith("2") or num.startswith("3")):
-        return True
-    return False
+    clean = str(linka_str).strip()
+    if clean in ("0", "-1", "None", "Neznámá", "Neznama", "?", "", "False"):
+        return False
+    return True
 
 
 def upsert_to_history(db, c):
     global TRACKED_SPZS
-    if c.get("is_train") or is_train_vehicle(c.get("inflow_id") or c.get("bus_id") or "", c.get("line") or "") or not db:
+    if not c or c.get("is_train") or is_train_vehicle(c.get("inflow_id") or c.get("bus_id") or "", c.get("line") or ""):
         return
     spz = c.get("spz")
-    if not spz or spz == "Neznámá":
+    if not spz or spz in ("Neznámá", "Neznama", "?", "", "None", "Aktivní hledání", "Aktivni hledani"):
         return
     final_linka = c.get("real_linka_spoj") or c.get("line", "")
     if not _is_tracked_line(final_linka):
@@ -9822,7 +9898,16 @@ def upsert_to_history(db, c):
     if not c.get("actual_start_time") and not c.get("actual_end_time"):
         return
     TRACKED_SPZS.add(spz)
-    jr_l = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={c['inflow_id']}&currentStopId=0"
+
+    # Číslo spoje (pokud je dostupné z real_linka_spoj nebo spoj_num)
+    spoj_num = c.get("spoj_num")
+    if not spoj_num and "/" in str(final_linka):
+        try:
+            spoj_num = str(final_linka).split("/")[1].strip()
+        except Exception:
+            pass
+
+    jr_l = f"https://pvvd.idpk.cz/Ajax/GetTimetable?vehicleNumber={c.get('inflow_id') or c.get('bus_id') or 0}&currentStopId=0"
     status_to_save = c.get("status") or ""
     if c.get("actual_end_time"):
         if c.get("arrival_delay") is not None and c.get("locked_arrival_delay"):
@@ -9837,29 +9922,57 @@ def upsert_to_history(db, c):
                 if arr_txt not in status_to_save and "Příjezd:" not in status_to_save:
                     status_to_save = f"{status_to_save} ({arr_txt})"
             except Exception:
-                if "Příjezd:" not in status_to_save:
-                    status_to_save = f"{status_to_save} (Příjezd: Nezjištěno)"
-        else:
-            if "Příjezd:" not in status_to_save:
-                status_to_save = f"{status_to_save} (Příjezd: Nezjištěno)"
+                pass
 
+    # Unikátní trip_id: Každá jízda má své vlastní jednoznačné trip_id
+    curr_trip_id = c.get("trip_id")
+    if not curr_trip_id or not str(curr_trip_id).startswith(f"TRIP-{spz}"):
+        clean_l = normalize_line(final_linka) or final_linka
+        clean_num = re.sub(r'\D', '', str(clean_l).split('/')[0]) or "L"
+        curr_trip_id = f"TRIP-{spz}-{clean_num}-{spoj_num or '1'}-{int(time.time())}"
+        c["trip_id"] = curr_trip_id
+
+    now_prague = get_prague_time()
     payload_full = {
-        "trip_id": c["trip_id"], "spz": spz, "spz_verified": c.get("spz_verified", False),
-        "spz_3factor": c.get("spz_3factor", False), "spz_conflict_warn": c.get("spz_conflict_warn", False),
-        "linka": final_linka, "jr_link": jr_l, "start_scheduled": c.get("first_dep_time"),
-        "start_actual": c.get("actual_start_time"), "end_actual": c.get("actual_end_time"),
-        "last_lat": c.get("lat"), "last_lng": c.get("lng"), "status": status_to_save,
-        "created_at": c["created_at"].isoformat(), "updated_at": get_prague_time().isoformat(),
+        "trip_id": curr_trip_id,
+        "spz": spz,
+        "spz_verified": c.get("spz_verified", False),
+        "spz_3factor": c.get("spz_3factor", False),
+        "spz_conflict_warn": c.get("spz_conflict_warn", False),
+        "linka": final_linka,
+        "jr_link": jr_l,
+        "start_scheduled": c.get("first_dep_time"),
+        "start_actual": c.get("actual_start_time"),
+        "end_actual": c.get("actual_end_time"),
+        "last_lat": c.get("lat"),
+        "last_lng": c.get("lng"),
+        "status": status_to_save,
+        "created_at": c.get("created_at", now_prague).isoformat() if hasattr(c.get("created_at"), 'isoformat') else str(c.get("created_at") or now_prague.isoformat()),
+        "updated_at": now_prague.isoformat(),
     }
+
+    # 1. Okamžitý lokální zápis do SQLite (bez ztráty dat)
+    try:
+        from local_db import local_bus_history_upsert
+        local_payload = dict(payload_full)
+        local_payload["bus_id"] = str(c.get("inflow_id") or c.get("bus_id") or "")
+        local_payload["spoj_num"] = str(spoj_num or "")
+        local_payload["origin"] = c.get("first_stop_name") or ""
+        local_payload["destination"] = c.get("destination") or ""
+        local_payload["end_stop"] = c.get("nearest_stop") or c.get("real_zastavka") or c.get("destination") or ""
+        local_bus_history_upsert(local_payload)
+        c["_history_written"] = True
+    except Exception as e_loc:
+        print(f"[HISTORY-LOCAL-UPSERT] Chyba: {e_loc}", flush=True)
+
+    # 2. Asynchronní cloudový zápis do Supabase
     def _do_async_upsert(pl):
+        if not db:
+            return
         try:
-            import main as _main_mod
-            if getattr(_main_mod, 'EGRESS_SAVE_MODE', False):
-                return
             db.table("bus_history").upsert(pl).execute()
-            # Označit že jsme záznam zapsali (pro close_trip_on_disappear)
             c["_history_written"] = True
-            c["_trip_closed"] = False  # reset - nový upsert = otevřený
+            c["_trip_closed"] = False
         except Exception as e:
             err_str = str(e)
             if "PGRST204" in err_str or "spz_3factor" in err_str or "spz_conflict_warn" in err_str:
@@ -10465,8 +10578,24 @@ def background_map_worker():
                 # D) Odjezd ze stavu konečné po ukončení spoje
                 terminal_departed = bool(c.get("_terminal_reached") and (is_moving or dm >= 25.0))
 
-                # Pokud nastala jakákoliv změna trasy/spoje, okamžitě vymaž staré neplatné spojové údaje:
+                # Pokud nastala jakákoliv změna trasy/spoje, nejprve bezpečně uzavři a ulož předchozí jízdu do historie:
+                if (line_switched or dest_switched or terminal_departed) and c.get("actual_start_time") and not c.get("_trip_closed"):
+                    try:
+                        close_active_trip(
+                            c,
+                            end_lat=lat,
+                            end_lng=lng,
+                            end_stop=c.get("nearest_stop") or c.get("real_zastavka") or c.get("destination"),
+                            reason=f"Přejezd na nový spoj / linku (posl. zast.: {c.get('nearest_stop') or c.get('destination') or '?'})"
+                        )
+                    except Exception as e_cl:
+                        print(f"[HISTORY] Chyba uzavření při přepnutí: {e_cl}", flush=True)
+
+                # Pokud nastala jakákoliv změna trasy/spoje, vymaž staré neplatné spojové údaje a připrav nový trip:
                 if line_switched or dest_switched or terminal_departed:
+                    clean_l = normalize_line(curr_norm_line or raw_line) or raw_line or ""
+                    clean_n = re.sub(r'\D', '', str(clean_l).split('/')[0]) or "L"
+                    c["trip_id"] = f"TRIP-{spz or bid}-{clean_n}-1-{int(time.time())}"
                     c["real_linka_spoj"] = None
                     c["spoj_num"] = None
                     c["last_known_spoj"] = None
@@ -10478,6 +10607,8 @@ def background_map_worker():
                     c["actual_start_time"] = None
                     c["actual_end_time"] = None
                     c["_terminal_reached"] = False
+                    c["_trip_closed"] = False
+                    c["_history_written"] = False
                     c["locked_arrival_delay"] = False
                     c["arrival_delay"] = None
                     c["tt_is_fetching"] = False
@@ -10652,6 +10783,19 @@ def background_map_worker():
                                 if not c.get("actual_end_time"):
                                     c["actual_end_time"] = now.strftime('%H:%M')
                                 c["_end_written"] = False
+                                # Bezpečně uzavřít dojezd do konečné
+                                if not c.get("_trip_closed"):
+                                    try:
+                                        close_active_trip(
+                                            c,
+                                            end_time_str=c.get("actual_end_time") or now.strftime('%H:%M'),
+                                            end_lat=lat,
+                                            end_lng=lng,
+                                            end_stop=c.get("destination") or c.get("nearest_stop") or "Konečná",
+                                            reason=f"Dojezd do konečné ({c.get('destination') or '?'})"
+                                        )
+                                    except Exception:
+                                        pass
                             delay = c.get("arrival_delay", 0)
 
                         # 5. PŘIŘAZENÍ STATUSU A BARVY:
@@ -14209,45 +14353,70 @@ def api_historie_vehicles():
             "trips": []
         }
 
-    # 3. Z bus_history vytáhneme poslední jízdy a další SPZ
+    # 3. Z bus_history (Cloud + Local DB) vytáhneme poslední jízdy a další SPZ
+    all_recent_trips = []
+    try:
+        from local_db import local_bus_history_get
+        all_recent_trips.extend(local_bus_history_get(limit=500))
+    except Exception:
+        pass
+
     db = get_db_client()
     if db:
         try:
-            h_res = db.table("bus_history").select("spz, linka, status, start_actual, end_actual, created_at").order("created_at", desc=True).limit(500).execute()
-            for row in (h_res.data or []):
-                s = str(row.get("spz") or "").strip()
-                if not s or s in ("Neznámá", "Neznama", "?", "") or s.startswith("[ID:"):
-                    continue
-                clean_s = s.replace(" ", "").upper()
-                if len(clean_s) >= 3 and clean_s[1] == 'T':
-                    continue
-                if s not in vehicles_dict:
-                    vehicles_dict[s] = {
-                        "spz": s,
-                        "type": "Autobus IDPK",
-                        "operator": "IDPK",
-                        "line": str(row.get("linka") or ""),
-                        "dest": "",
-                        "last_seen": row.get("end_actual") or row.get("start_actual") or row.get("created_at"),
-                        "status": "off",
-                        "depot": "",
-                        "trips": []
-                    }
-                if len(vehicles_dict[s]["trips"]) < 5:
-                    dest = ""
-                    stat = str(row.get("status") or "")
-                    if "posl. zast.:" in stat:
-                        dest = stat.split("posl. zast.:")[-1].replace(")", "").strip()
-                    elif "Konečná:" in stat:
-                        dest = stat.split("Konečná:")[-1].split("(")[0].strip()
-                    vehicles_dict[s]["trips"].append({
-                        "line": str(row.get("linka") or ""),
-                        "dest": dest or stat,
-                        "from": row.get("start_actual") or row.get("created_at"),
-                        "to": row.get("end_actual") or None
-                    })
+            h_res = db.table("bus_history").select("trip_id, spz, linka, status, start_actual, end_actual, last_lat, last_lng, end_lat, end_lng, created_at").order("created_at", desc=True).limit(500).execute()
+            all_recent_trips.extend(h_res.data or [])
         except Exception as e_h:
             print(f"[API HISTORIE VEHICLES ERROR] {e_h}", flush=True)
+
+    seen_v_trips = set()
+    for row in all_recent_trips:
+        s = str(row.get("spz") or "").strip()
+        if not s or s in ("Neznámá", "Neznama", "?", "", "None") or s.startswith("[ID:"):
+            continue
+        clean_s = s.replace(" ", "").upper()
+        if len(clean_s) >= 3 and clean_s[1] == 'T':
+            continue
+        if s not in vehicles_dict:
+            vehicles_dict[s] = {
+                "spz": s,
+                "type": SPZ_MEMORY.get(s, {}).get("vehicle_type") or "Autobus IDPK",
+                "operator": "Arriva",
+                "line": str(row.get("linka") or ""),
+                "dest": "",
+                "last_seen": row.get("end_actual") or row.get("start_actual") or row.get("created_at"),
+                "status": "off",
+                "depot": "",
+                "trips": []
+            }
+        t_key = f"{s}_{row.get('trip_id') or row.get('created_at')}"
+        if t_key in seen_v_trips:
+            continue
+        seen_v_trips.add(t_key)
+
+        if len(vehicles_dict[s]["trips"]) < 10:
+            dest = row.get("destination") or ""
+            stat = str(row.get("status") or "")
+            if not dest:
+                if "posl. zast.:" in stat:
+                    dest = stat.split("posl. zast.:")[-1].replace(")", "").strip()
+                elif "Konečná:" in stat:
+                    dest = stat.split("Konečná:")[-1].split("(")[0].strip()
+                elif "konec:" in stat:
+                    dest = stat.split("konec:")[-1].replace(")", "").strip()
+            vehicles_dict[s]["trips"].append({
+                "trip_id": row.get("trip_id"),
+                "line": str(row.get("linka") or ""),
+                "spoj": str(row.get("spoj_num") or (row.get("linka").split("/")[1].strip() if "/" in str(row.get("linka") or "") else "")),
+                "origin": row.get("origin") or "",
+                "dest": dest or stat,
+                "from": row.get("start_actual") or row.get("created_at"),
+                "to": row.get("end_actual") or None,
+                "end_lat": row.get("end_lat") or row.get("last_lat"),
+                "end_lng": row.get("end_lng") or row.get("last_lng"),
+                "end_stop": row.get("end_stop") or dest,
+                "status": stat
+            })
 
     return jsonify(list(vehicles_dict.values()))
 
@@ -15223,16 +15392,124 @@ def api_history_full():
 
 
 @mapa_bp.route('/api/history_spz/<spz>')
+@mapa_bp.route('/api/historie/vehicle/<spz>')
 def api_history_spz(spz):
+    clean_spz = spz.strip()
+    norm_key = normalize_spz_key(clean_spz)
+    
+    # 1. Živá data vozidla z GLOBAL_BUS_CACHE / SPZ_MEMORY
+    live_bus = None
+    for bid, bc in safe_bus_cache_items():
+        if bc.get("spz") and normalize_spz_key(bc.get("spz")) == norm_key:
+            live_bus = bc
+            break
+
+    # 2. Načtení dat z lokální SQLite DB
+    from local_db import local_bus_history_get, local_depot_history_get
+    local_trips = local_bus_history_get(spz=clean_spz, limit=100)
+    local_depots = local_depot_history_get(spz=clean_spz, limit=50)
+
+    # 3. Načtení dat z Cloud DB (Supabase)
+    cloud_trips = []
+    cloud_depots = []
     db = get_db_client()
-    if not db:
-        return jsonify({"data": [], "depot_visits": [], "error": "DB nedostupna"})
-    try:
-        res = db.table("bus_history").select("*").eq("spz", spz).order("created_at", desc=True).limit(100).execute()
-        depot_res = db.table("depot_history").select("*").eq("spz", spz).order("arrived_at", desc=True).limit(50).execute()
-        return jsonify({"data": res.data, "depot_visits": depot_res.data or []})
-    except Exception as e:
-        return jsonify({"data": [], "depot_visits": [], "error": str(e)})
+    if db:
+        try:
+            res = db.table("bus_history").select("*").eq("spz", clean_spz).order("created_at", desc=True).limit(100).execute()
+            cloud_trips = res.data or []
+        except Exception:
+            pass
+        try:
+            depot_res = db.table("depot_history").select("*").eq("spz", clean_spz).order("arrived_at", desc=True).limit(50).execute()
+            cloud_depots = depot_res.data or []
+        except Exception:
+            pass
+
+    # 4. Sloučení a deduplikace jízd (podle trip_id)
+    merged_trips = []
+    seen_trip_ids = set()
+    for t in local_trips:
+        tid = t.get("trip_id")
+        if tid: seen_trip_ids.add(tid)
+        merged_trips.append(t)
+
+    for t in cloud_trips:
+        tid = t.get("trip_id")
+        if tid and tid in seen_trip_ids:
+            continue
+        if tid: seen_trip_ids.add(tid)
+        merged_trips.append({
+            "trip_id": t.get("trip_id"),
+            "spz": t.get("spz"),
+            "linka": t.get("linka"),
+            "spoj_num": t.get("spoj_num") or (t.get("linka").split("/")[1].strip() if "/" in str(t.get("linka") or "") else ""),
+            "origin": t.get("origin") or "",
+            "destination": t.get("destination") or "",
+            "start_scheduled": t.get("start_scheduled"),
+            "start_actual": t.get("start_actual"),
+            "end_actual": t.get("end_actual"),
+            "last_lat": t.get("end_lat") or t.get("last_lat"),
+            "last_lng": t.get("end_lng") or t.get("last_lng"),
+            "end_lat": t.get("end_lat") or t.get("last_lat"),
+            "end_lng": t.get("end_lng") or t.get("last_lng"),
+            "end_stop": t.get("end_stop") or (t.get("status").split("posl. zast.:")[1].replace(")", "").strip() if "posl. zast.:" in str(t.get("status") or "") else (t.get("status").split("konec:")[1].replace(")", "").strip() if "konec:" in str(t.get("status") or "") else "")),
+            "status": t.get("status"),
+            "created_at": t.get("created_at"),
+            "updated_at": t.get("updated_at"),
+        })
+
+    merged_trips.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
+
+    # 5. Sloučení a deduplikace vozoven
+    merged_depots = []
+    seen_depot_keys = set()
+    for d in (local_depots + cloud_depots):
+        d_key = f"{d.get('depot_name')}_{d.get('arrived_at')}"
+        if d_key in seen_depot_keys:
+            continue
+        seen_depot_keys.add(d_key)
+        merged_depots.append({
+            "depot_name": resolve_depot_name(d.get("depot_name") or ""),
+            "spz": d.get("spz"),
+            "arrived_at": d.get("arrived_at"),
+            "left_at": d.get("left_at")
+        })
+
+    merged_depots.sort(key=lambda x: str(x.get("arrived_at") or ""), reverse=True)
+
+    # Metadata vozidla
+    v_type = (live_bus.get("vehicle_type") if live_bus else None) or SPZ_MEMORY.get(clean_spz, {}).get("vehicle_type") or "Autobus IDPK"
+    op = (live_bus.get("operator") if live_bus else None) or "Arriva"
+    driver = (live_bus.get("admin_driver") if live_bus else None) or SPZ_MEMORY.get(clean_spz, {}).get("admin_driver") or ""
+    note = (live_bus.get("admin_note") if live_bus else None) or SPZ_MEMORY.get(clean_spz, {}).get("admin_note") or ""
+
+    curr_line = (live_bus.get("line") if live_bus else None) or ""
+    curr_dest = (live_bus.get("destination") if live_bus else None) or ""
+    curr_status = (live_bus.get("status") if live_bus else None) or "Offline"
+    curr_lat = live_bus.get("lat") if live_bus else None
+    curr_lng = live_bus.get("lng") if live_bus else None
+    curr_stop = (live_bus.get("nearest_stop") or live_bus.get("real_zastavka")) if live_bus else ""
+
+    return jsonify({
+        "spz": clean_spz,
+        "type": v_type,
+        "operator": op,
+        "driver": driver,
+        "note": note,
+        "live": {
+            "line": curr_line,
+            "destination": curr_dest,
+            "status": curr_status,
+            "lat": curr_lat,
+            "lng": curr_lng,
+            "stop": curr_stop,
+            "in_depot": bool(live_bus and (live_bus.get("_in_depot") or live_bus.get("in_depot"))),
+            "depot_name": resolve_depot_name(live_bus.get("depot_name") or "") if live_bus else ""
+        },
+        "trips": merged_trips,
+        "data": merged_trips,
+        "depot_visits": merged_depots
+    })
 
 # === ROUTE BACKEND (GTFS in-memory + Nominatim fallback per zastavku) ===
 
