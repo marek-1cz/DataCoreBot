@@ -769,7 +769,7 @@ def track_web_visitors():
         if request.method == 'GET':
             p = request.path
             # Ignorovat assety, API, interní routy
-            if not p.startswith(('/static/', '/api/', '/dashboard', '/debug', '/favicon', '/robots', '/.well-known')):
+            if not p.startswith(('/static/', '/api/', '/dashboard', '/debug', '/favicon', '/robots', '/sitemap', '/google', '/.well-known')):
                 ua = request.headers.get('User-Agent', '').lower()
                 if not any(b in ua for b in ['bot', 'crawl', 'spider', 'slurp', 'mediapartners', 'lighthouse', 'headless']):
                     ip = get_real_client_ip(request)
@@ -2684,6 +2684,14 @@ def sitemap_xml():
         '</urlset>'
     )
     return Response(xml, mimetype="application/xml; charset=utf-8")
+
+@app.route('/google94ce5c70ba2b1e7c.html')
+def google_verification_exact():
+    return Response("google-site-verification: google94ce5c70ba2b1e7c.html", mimetype="text/html; charset=utf-8")
+
+@app.route('/google<token>.html')
+def google_verification_generic(token):
+    return Response(f"google-site-verification: google{token}.html", mimetype="text/html; charset=utf-8")
 
 @app.route('/overeni')
 def stranka_overeni():
