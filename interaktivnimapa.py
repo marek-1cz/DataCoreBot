@@ -13121,29 +13121,8 @@ def stranka_mapa():
     except:
         pass
 
-    # Automatické rozpoznání administrátora i na /mapa
-    is_admin, admin_name = _check_admin_request()
-    is_admin_str = 'true' if is_admin else 'false'
-    ad_btn = _AD_BTN_ADMIN if is_admin else _AD_BTN_NORMAL
-    admin_banner = ''
-    if is_admin:
-        mode_label = "PVVD IDPK" if POSITION_SOURCE_MODE == "pvvd" else "Arriva Live"
-        mode_color = "#38bdf8" if POSITION_SOURCE_MODE == "pvvd" else "#34d399"
-        mode_border = "rgba(56,189,248,0.3)" if POSITION_SOURCE_MODE == "pvvd" else "rgba(16,185,129,0.3)"
-        mode_bg = "rgba(56,189,248,0.1)" if POSITION_SOURCE_MODE == "pvvd" else "rgba(16,185,129,0.15)"
-        admin_banner = (
-            '<div style="position:relative;margin-top:58px;padding:4px;text-align:center;">'
-            '<span style="display:inline-block;background:rgba(56,189,248,0.1);color:#38bdf8;'
-            'padding:3px 14px;border-radius:20px;font-size:11px;font-weight:bold;'
-            'border:1px solid rgba(56,189,248,0.3);">Admin režim aktivní</span>'
-            f'<span style="display:inline-block;margin-left:8px;background:{mode_bg};color:{mode_color};'
-            f'padding:3px 12px;border-radius:20px;font-size:11px;font-weight:bold;'
-            f'border:1px solid {mode_border};">Zdroj GPS: {mode_label}</span>'
-            '</div>'
-        )
-
     avatar_html = _get_avatar_html(request)
-    html = HTML_MAPA.replace('__ADMIN_BANNER__', admin_banner).replace('__IS_ADMIN__', is_admin_str).replace('__AD_BTN__', ad_btn).replace('__AVATAR__', avatar_html)
+    html = HTML_MAPA.replace('__ADMIN_BANNER__', '').replace('__IS_ADMIN__', 'false').replace('__AD_BTN__', _AD_BTN_NORMAL).replace('__AVATAR__', avatar_html)
     return _full_page("Mapa", html, is_map=True)
 
 
