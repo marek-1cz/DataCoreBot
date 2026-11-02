@@ -2633,6 +2633,23 @@ def stranka_pomoc():
     except Exception as e:
         return render_error_page(500, "Chyba", str(e)), 500
 
+@app.route('/soukromi')
+@app.route('/gdpr')
+@app.route('/privacy')
+def stranka_soukromi():
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(curr_dir, "soukromi.html")
+        if not os.path.exists(path):
+            path = os.path.join(os.path.dirname(curr_dir), "soukromi.html")
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
+            content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+        return Response(content, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        return render_error_page(500, "Chyba soukromí", str(e)), 500
+
 @app.route('/overeni')
 def stranka_overeni():
     try:

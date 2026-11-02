@@ -14356,6 +14356,28 @@ def stranka_historie_index(spz=None):
 def stranka_historie_old():
     return _full_page("Historie", HTML_HISTORIE_INDEX)
 
+@mapa_bp.route('/soukromi')
+@mapa_bp.route('/gdpr')
+@mapa_bp.route('/privacy')
+def stranka_soukromi_bp():
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        template_path = os.path.join(curr_dir, "soukromi.html")
+        if not os.path.exists(template_path):
+            template_path = os.path.join(os.path.dirname(curr_dir), "soukromi.html")
+        with open(template_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        try:
+            from main import is_admin_bypass_active, ADMIN_BYPASS_BAR
+            if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
+                content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+        except Exception:
+            pass
+        return Response(content, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        print(f"[SOUKROMI ERROR] {e}", flush=True)
+        return Response("Chyba načítání stránky soukromí", status=500, mimetype="text/plain; charset=utf-8")
+
 
 # @mapa_bp.route("/historie/<spz>") handled by stranka_historie_index
 
