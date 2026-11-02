@@ -5745,7 +5745,7 @@ async function fetchBuses(){
           : `LINKA: ${_linkaNum || 'Neznámá'} <span style="color:#94a3b8;font-size:11px;font-weight:600;margin-left:3px;">(SPOJ NEZNÁMÝ)</span>`);
       
       let _vType = (bus.vehicle_type && typeof bus.vehicle_type === 'string') ? bus.vehicle_type.trim() : '';
-      if (_vType && !/setra|crossway|iveco|sor|man|mercedes|scania|solaris|rosero|isuzu|volvo|karosa|citaro|urbanway/i.test(_vType) && /plzeň|plzen|klatov|domažl|domazl|tachov|rokycan|sušic|susic|stříbr|stribr|kralovic|nepomuk|přeštic|prestic|čechy|cechy|praha|středočesk|stredocesk|oblast|kraj|region|arriva/i.test(_vType)) {
+      if (/^(plzeňsko|klatovsko|domažlicko|tachovsko|rokycansko|sušicko|stříbrsko|kralovicko|nepomucko|přešticko|praha a střední čechy|střední čechy|středočesko|kladno|nezjištěno|neznámé|unknown|none|null|-|\?)$/i.test(_vType.trim())) {
         _vType = '';
       }
 
@@ -7353,8 +7353,8 @@ def normalize_line(line_raw: str) -> str:
     return str(line_raw).strip()
 
 def is_valid_vehicle_type(vt: str) -> bool:
-    """Ověří, zda text představuje skutečný model vozidla (např. Setra, Crossway, SOR),
-    a nikoliv provozní oblast (např. Plzeňsko, Klatovsko, Praha a Střední Čechy)."""
+    """Ověří, zda text představuje skutečný model vozidla (např. Setra, Crossway, SOR, Bus Design Sprinter),
+    a nikoliv pouze provozní oblast z Arrivy (např. Plzeňsko, Klatovsko, Praha a Střední Čechy)."""
     if not vt or not isinstance(vt, str):
         return False
     v = vt.strip()
@@ -7363,20 +7363,21 @@ def is_valid_vehicle_type(vt: str) -> bool:
     v_norm = "".join(
         c for c in unicodedata.normalize("NFD", v.lower())
         if unicodedata.category(c) != "Mn"
-    )
-    invalid_keywords = [
-        "plzen", "klatov", "domazl", "tachov", "rokycan",
-        "susic", "stribr", "kralovic", "nepomuk", "prestic",
-        "cechy", "praha", "stredocesk", "morav", "sever", "jih", "vychod", "zapad",
-        "oblast", "kraj", "region", "provozovna", "depo", "arriva", "linka", "spoj",
-        "nezjisteno", "nezname", "unknown", "bus", "autobus", "mhd"
-    ]
-    for kw in invalid_keywords:
-        if kw in v_norm:
-            known_makers = ["setra", "iveco", "crossway", "sor", "man", "mercedes", "scania", "solaris", "rosero", "isuzu", "volvo", "karosa", "citaro", "urbanway"]
-            if any(maker in v_norm for maker in known_makers):
-                break
-            return False
+    ).strip()
+    # Odfiltrujeme pouze čisté neznámé hodnoty
+    if v_norm in ("neznamy", "neznama", "nezjisteno", "nezname", "unknown", "none", "null", "-", "?", "undefined"):
+        return False
+
+    # Provozní oblasti z Arriva GraphQL feedu (kde pole type obsahuje oblast, např. 'Plzeňsko', 'Praha a Střední Čechy')
+    arriva_regions = {
+        "plzensko", "klatovsko", "domazlicko", "tachovsko", "rokycansko",
+        "susicko", "stribrsko", "kralovicko", "nepomucko", "presticko",
+        "praha a stredni cechy", "stredni cechy", "stredocesko", "kralovehradecko a pardubicko",
+        "kladno", "ceska republika", "oblast"
+    }
+    if v_norm in arriva_regions:
+        return False
+
     return True
 
 def sanitize_vehicle_type(vt: str) -> str:
