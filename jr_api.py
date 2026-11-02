@@ -18,6 +18,53 @@ _CACHE_ROUTES = None
 _CACHE_STOPS = None
 _LINE_CACHE = {}
 
+def align_trip_times(trip_stops, target_stops):
+    """
+    Monotonically aligns an ordered trip's served stops to the master route sequence.
+    trip_stops: list of (stop_name, time_str) in stop_sequence order
+    target_stops: list of stop_name in the route master sequence
+    Returns: list of time_str or None of length len(target_stops)
+    """
+    n = len(target_stops)
+    m = len(trip_stops)
+    if not m or not n:
+        return [None] * n
+
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    parent = [[None] * (n + 1) for _ in range(m + 1)]
+
+    for k in range(1, m + 1):
+        ts_name = trip_stops[k - 1][0]
+        row_dp_prev = dp[k - 1]
+        row_dp_curr = dp[k]
+        row_parent = parent[k]
+        for i in range(1, n + 1):
+            best = row_dp_curr[i - 1]
+            p = (k, i - 1, False)
+
+            if row_dp_prev[i] > best:
+                best = row_dp_prev[i]
+                p = (k - 1, i, False)
+
+            if ts_name == target_stops[i - 1]:
+                match_val = row_dp_prev[i - 1] + 1
+                if match_val > best:
+                    best = match_val
+                    p = (k - 1, i - 1, True)
+
+            row_dp_curr[i] = best
+            row_parent[i] = p
+
+    curr_k, curr_i = m, n
+    matched = {}
+    while curr_k > 0 and curr_i > 0:
+        pk, pi, is_match = parent[curr_k][curr_i]
+        if is_match:
+            matched[curr_i - 1] = trip_stops[curr_k - 1][1]
+        curr_k, curr_i = pk, pi
+
+    return [matched.get(i, None) for i in range(n)]
+
 def _get_db_path():
     curr_dir = os.path.dirname(os.path.abspath(__file__))
     for name in ["gtfs_stops_idpk.db", "gtfs_idpk.db", "gtfs.db"]:
@@ -327,8 +374,20 @@ def get_line(line_id):
             valid_stop_names = {row["stop_name"]: (row["pickup_type"] in ('2', '3')) for row in valid_rows}
 
             # 3. Nalezení nejúplnější trasy (master sequence)
+            # Vybrat spoje s největším počtem zastávek
+            cur.execute(f"""
+                SELECT t.trip_id, count(st.stop_sequence) as cnt
+                FROM trips t
+                JOIN stop_times st ON t.trip_id = st.trip_id
+                WHERE t.trip_id IN ({','.join('?' for _ in tids[:200])})
+                GROUP BY t.trip_id
+                ORDER BY cnt DESC
+                LIMIT 25
+            """, tids[:200])
+            best_candidate_tids = [r["trip_id"] for r in cur.fetchall()] or tids[:25]
+
             best_seq = []
-            for tid in tids[:50]:
+            for tid in best_candidate_tids:
                 cur.execute("""
                     SELECT s.name as stop_name, st.pickup_type, st.arrival_time
                     FROM stop_times st
@@ -472,13 +531,13 @@ def get_trips(line_id, dir_idx=0, day="weekday"):
             if not rows:
                 continue
 
-            t_map = {}
+            trip_stops = []
             for r in rows:
                 arr = (r["arrival_time"] or "").strip()
                 if arr and r["pickup_type"] != '1':
-                    t_map[r["stop_name"]] = arr[:5]
+                    trip_stops.append((r["stop_name"], arr[:5]))
 
-            times = [t_map.get(s_name) for s_name in target_stops]
+            times = align_trip_times(trip_stops, target_stops)
             non_null = [t for t in times if t]
             if len(non_null) < 2:
                 continue

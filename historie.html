@@ -1140,7 +1140,8 @@ function renderDetailModal(v, fullData, activeTab){
       '<button type="button" class="dtab ' + (activeTab==='depots'?'on':'') + '" id="dlgTabDepots" data-dlgtab="depots">🏢 Pobyty ve vozovnách (' + depots.length + ')</button>' +
     '</div>' +
     '<div id="dlgTabContent">' + (activeTab === 'trips' ? tripsHtml : depotsHtml) + '</div>' +
-    '<div class="dact" style="margin-top:20px;">' +
+    '<div class="dact" style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;">' +
+      '<a href="/historie/' + encodeURIComponent(v.spz) + '" class="btnx" style="background:linear-gradient(135deg,#0284c7,#0369a1);color:#fff;font-weight:700;">📄 Celá stránka historie vozu →</a>' +
       (v.depot ? '<button class="btnx" type="button" data-depot-go="' + esc(v.depot) + '">Otevřít vozovnu →</button>' : '') +
       '<button class="btnx" type="button" data-ev-spz="' + esc(v.spz) + '">Evidence tohoto vozidla (všechny záznamy) →</button>' +
     '</div>';

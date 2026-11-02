@@ -2958,10 +2958,50 @@ if(IS_ADMIN){let ab=document.getElementById('admin-mode-badge');if(ab)ab.style.d
 
 // === MAP ===
 var dLat=49.7384,dLng=13.3736,dZoom=12;
+var _uParams = new URLSearchParams(window.location.search);
+var qLat = _uParams.get('lat'), qLng = _uParams.get('lng'), qZoom = _uParams.get('zoom');
+var qLabel = _uParams.get('label') || _uParams.get('stop') || _uParams.get('name') || '';
+var qLine = _uParams.get('line') || '';
+var qSpz = _uParams.get('spz') || _uParams.get('bus') || '';
 var hp=window.location.hash.replace('#','').split(',');
-if(hp.length===2&&!isNaN(hp[0])&&!isNaN(hp[1])&&hp[0]!==""){dLat=parseFloat(hp[0]);dLng=parseFloat(hp[1]);dZoom=17;}
+
+if(qLat && qLng && !isNaN(parseFloat(qLat)) && !isNaN(parseFloat(qLng))){
+  dLat = parseFloat(qLat);
+  dLng = parseFloat(qLng);
+  dZoom = (qZoom && !isNaN(parseInt(qZoom, 10))) ? parseInt(qZoom, 10) : 16;
+} else if(hp.length===2&&!isNaN(hp[0])&&!isNaN(hp[1])&&hp[0]!==""){
+  dLat=parseFloat(hp[0]);dLng=parseFloat(hp[1]);dZoom=17;
+}
+
 var map=L.map('map',{zoomControl:false}).setView([dLat,dLng],dZoom);
 L.control.zoom({position:'bottomleft'}).addTo(map);
+
+// Pokud byly v URL předány souřadnice ukončení trasy, vykreslit výrazný koncový pin s popupem
+if((qLat && qLng && !isNaN(parseFloat(qLat)) && !isNaN(parseFloat(qLng))) || (hp.length===2 && !isNaN(hp[0]) && !isNaN(hp[1]) && hp[0]!=="")){
+  setTimeout(function(){
+    try {
+      var pinLat = (qLat && qLng) ? parseFloat(qLat) : parseFloat(hp[0]);
+      var pinLng = (qLat && qLng) ? parseFloat(qLng) : parseFloat(hp[1]);
+      var endIcon = L.divIcon({
+        className: 'end-location-pin',
+        html: '<div style="display:flex;align-items:center;justify-content:center;width:42px;height:42px;background:rgba(239,68,68,0.92);border:3px solid #ffffff;border-radius:50%;box-shadow:0 0 25px rgba(239,68,68,0.85),0 4px 12px rgba(0,0,0,0.6);color:#ffffff;font-size:20px;cursor:pointer;">\\ud83c\\udfc1</div>',
+        iconSize: [42, 42],
+        iconAnchor: [21, 21],
+        popupAnchor: [0, -24]
+      });
+      var endMarker = L.marker([pinLat, pinLng], { icon: endIcon, zIndexOffset: 2000 }).addTo(map);
+      var pHtml = '<div style="font-family:Inter,system-ui,sans-serif;padding:8px;min-width:220px;color:#0f172a;">' +
+        '<div style="font-size:11px;font-weight:800;color:#ef4444;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px;">\\ud83c\\udfc1 Konec trasy / Zaznamenan\\u00e1 poloha</div>' +
+        (qLine ? '<div style="font-size:15px;font-weight:800;color:#0f172a;margin-bottom:2px;">Linka ' + String(qLine).replace(/[<>&]/g,'') + '</div>' : '') +
+        (qSpz ? '<div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:4px;">V\\u016fz: ' + String(qSpz).replace(/[<>&]/g,'') + '</div>' : '') +
+        (qLabel ? '<div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:4px;">' + String(qLabel).replace(/[<>&]/g,'') + '</div>' : '') +
+        '<div style="font-size:11px;color:#64748b;font-family:monospace;">GPS: ' + pinLat.toFixed(5) + ', ' + pinLng.toFixed(5) + '</div>' +
+        '</div>';
+      endMarker.bindPopup(pHtml).openPopup();
+      map.setView([pinLat, pinLng], dZoom);
+    } catch(err) { console.error('End pin error:', err); }
+  }, 400);
+}
 window.mapLayers = {
   osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
   dark: L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=68be98ba-5497-41e4-b14e-0aaa9649aafd',{maxZoom:20,attribution:'&copy; Stadia Maps'}),
@@ -3922,11 +3962,12 @@ function showMapToast(msg) {
   t._to = setTimeout(() => { t.style.opacity = '0'; }, 3000);
 }
 
-// === URL TRACKING (?track=BUS_ID) ===
+// === URL TRACKING (?track=BUS_ID or ?bus=SPZ or ?spz=SPZ or ?id=ID) ===
 (function() {
-  let trackId = new URLSearchParams(location.search).get('track');
+  var p = new URLSearchParams(location.search);
+  var trackId = p.get('track') || p.get('bus') || p.get('spz') || p.get('id');
   if(!trackId) return;
-  window._pendingTrackId = String(trackId);
+  window._pendingTrackId = String(trackId).trim();
   // Pokus se otevřít popup při každém refreshi dat po načtení
   window._trackAttempts = 0;
 })();
@@ -6000,21 +6041,46 @@ async function fetchBuses(){
 
     setTimeout(()=>{isRefreshing=false;},50);
 
-    // URL ?track=BUS_ID: automaticky otevřít popup sledovaného autobusu
-    if(window._pendingTrackId && window._trackAttempts < 15) {
+    // URL ?track=BUS_ID / ?bus=SPZ: automaticky otevřít popup a sledovat vůz
+    if(window._pendingTrackId && window._trackAttempts < 25) {
       window._trackAttempts++;
-      let tId = window._pendingTrackId;
-      let tMarker = window.busMarkersMap && window.busMarkersMap.get(tId);
-      if(!tMarker) {
-        // Zkus najít podle SPZ
-        let tBus = lastArr.find(b => String(b.id)===tId || b.spz===tId);
-        if(tBus) tMarker = window.busMarkersMap.get(tBus.id);
+      var tId = window._pendingTrackId;
+      var clean = function(s){ return String(s || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase(); };
+      var cTid = clean(tId);
+
+      var tBus = null;
+      var tMarker = null;
+
+      // 1. Zkusit najít přímo v busMarkersMap
+      if(window.busMarkersMap) {
+        tMarker = window.busMarkersMap.get(tId) || window.busMarkersMap.get(parseInt(tId, 10));
       }
-      if(tMarker) {
-        window._pendingTrackId = null;
-        let tBus2 = lastArr.find(b => window.busMarkersMap && window.busMarkersMap.get(b.id) === tMarker);
-        if(tBus2) { map.setView([tBus2.lat, tBus2.lng], 16); }
-        setTimeout(() => { try { tMarker.openPopup(); } catch(e){} }, 400);
+
+      // 2. Najít vůz v lastArr
+      if(typeof lastArr !== 'undefined' && Array.isArray(lastArr)) {
+        tBus = lastArr.find(function(b) {
+          if(!b) return false;
+          if(String(b.id) === tId || String(b.bus_id) === tId || String(b.inflow_id) === tId) return true;
+          if(b.spz && clean(b.spz) === cTid) return true;
+          if(b.spz && b.spz.toUpperCase() === tId.toUpperCase()) return true;
+          return false;
+        });
+      }
+
+      if(!tMarker && tBus && window.busMarkersMap) {
+        tMarker = window.busMarkersMap.get(tBus.id) || window.busMarkersMap.get(String(tBus.id));
+      }
+
+      if(tBus && (tMarker || (tBus.lat && tBus.lng))) {
+        window._pendingTrackId = null; // tracking úspěšně aktivován
+        var targetLat = tBus.lat, targetLng = tBus.lng;
+        map.setView([targetLat, targetLng], 16);
+        if(tMarker) {
+          setTimeout(function() { try { tMarker.openPopup(); } catch(e){} }, 300);
+        }
+        if(typeof window.toggleFollow === 'function') {
+          try { window.toggleFollow(tBus.id, tBus.inflow_id); } catch(e){}
+        }
       }
     }
 
@@ -14334,13 +14400,24 @@ def api_admin_spz_meta_save():
 @mapa_bp.route('/historie')
 @mapa_bp.route('/historie/<spz>')
 def stranka_historie_index(spz=None):
+    if not spz:
+        q_spz = request.args.get('spz', '').strip()
+        if q_spz:
+            return redirect(f"/historie/{q_spz}", code=302)
     try:
         curr_dir = os.path.dirname(os.path.abspath(__file__))
-        template_path = os.path.join(curr_dir, "new_web_historie.html")
-        if not os.path.exists(template_path):
-            template_path = os.path.join(os.path.dirname(curr_dir), "new_web_historie.html")
+        if spz:
+            template_path = os.path.join(curr_dir, "vehicle_detail.html")
+            if not os.path.exists(template_path):
+                template_path = os.path.join(os.path.dirname(curr_dir), "vehicle_detail.html")
+        else:
+            template_path = os.path.join(curr_dir, "new_web_historie.html")
+            if not os.path.exists(template_path):
+                template_path = os.path.join(os.path.dirname(curr_dir), "new_web_historie.html")
         with open(template_path, "r", encoding="utf-8") as f:
             content = f.read()
+        if spz:
+            content = content.replace("__PAGE_SPZ__", spz.strip())
         try:
             from main import is_admin_bypass_active, ADMIN_BYPASS_BAR
             if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
@@ -15598,8 +15675,8 @@ def api_history_spz(spz):
 
     # 2. Načtení dat z lokální SQLite DB
     from local_db import local_bus_history_get, local_depot_history_get
-    local_trips = local_bus_history_get(spz=clean_spz, limit=100)
-    local_depots = local_depot_history_get(spz=clean_spz, limit=50)
+    local_trips = local_bus_history_get(spz=clean_spz, limit=1000)
+    local_depots = local_depot_history_get(spz=clean_spz, limit=500)
 
     # 3. Načtení dat z Cloud DB (Supabase)
     cloud_trips = []
@@ -15608,21 +15685,21 @@ def api_history_spz(spz):
     if db:
         try:
             or_filter = ",".join([f"spz.eq.{v}" for v in spz_variants] + [f"spz.ilike.%{clean_no_space}%"])
-            res = db.table("bus_history").select("*").or_(or_filter).order("created_at", desc=True).limit(100).execute()
+            res = db.table("bus_history").select("*").or_(or_filter).order("created_at", desc=True).limit(1000).execute()
             cloud_trips = res.data or []
         except Exception:
             try:
-                res = db.table("bus_history").select("*").in_("spz", spz_variants).order("created_at", desc=True).limit(100).execute()
+                res = db.table("bus_history").select("*").in_("spz", spz_variants).order("created_at", desc=True).limit(1000).execute()
                 cloud_trips = res.data or []
             except Exception:
                 pass
         try:
             or_filter = ",".join([f"spz.eq.{v}" for v in spz_variants] + [f"spz.ilike.%{clean_no_space}%"])
-            depot_res = db.table("depot_history").select("*").or_(or_filter).order("arrived_at", desc=True).limit(50).execute()
+            depot_res = db.table("depot_history").select("*").or_(or_filter).order("arrived_at", desc=True).limit(500).execute()
             cloud_depots = depot_res.data or []
         except Exception:
             try:
-                depot_res = db.table("depot_history").select("*").in_("spz", spz_variants).order("arrived_at", desc=True).limit(50).execute()
+                depot_res = db.table("depot_history").select("*").in_("spz", spz_variants).order("arrived_at", desc=True).limit(500).execute()
                 cloud_depots = depot_res.data or []
             except Exception:
                 pass
