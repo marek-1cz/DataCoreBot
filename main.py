@@ -4228,7 +4228,9 @@ class WebAuthView(discord.ui.View):
 @app.route('/register')
 @app.route('/login')
 def auth_pages():
-    cookie_token = request.cookies.get('web_session_token')
+    if session.get('logged_in'):
+        return redirect('/ucet')
+    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
     if cookie_token:
         user = get_cached_session_user(cookie_token)
         if user:

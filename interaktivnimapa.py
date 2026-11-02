@@ -8670,6 +8670,17 @@ def are_destinations_compatible(dest_local, dest_arriva):
     return True, False
 
 
+def _bearing_diff(b1, b2):
+    """Vrátí absolutní úhlový rozdíl mezi dvěma azimuty (0-180 stupňů)."""
+    try:
+        if b1 is None or b2 is None:
+            return 0.0
+        diff = abs(float(b1) - float(b2)) % 360
+        return min(diff, 360.0 - diff)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def is_bearing_compatible(b1, b2, max_diff=85):
     """Vrací zda úhly jízdy nejsou v protisměru (např. jeden na sever a druhý na jih)."""
     if b1 is None or b2 is None:
@@ -12301,7 +12312,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
 @mapa_bp.route('/api/notifications/delivery_info', methods=['GET'])
 def api_notif_delivery_info():
     """Vrátí informace o tom, kam se doručují notifikace."""
-    cookie_token = request.cookies.get('web_session_token')
+    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
     admin_discord_id = session.get('discord_id') if session.get('logged_in') else None
     
     if not cookie_token and not admin_discord_id:
@@ -12991,61 +13002,99 @@ _AD_BTN_ADMIN  = '<a href="/mapa" class="n-btn n-back">⬅️ Zp\u011bt</a>'
 
 
 def _get_avatar_html(req):
-    cookie_token = req.cookies.get('web_session_token')
-    if cookie_token and HAS_SUPABASE:
-        try:
-            db = get_db_client()
-            u = find_user_by_session_token(db, cookie_token)
-            if u:
+    u = None
+    # 1. Zkusit standardně přihlášeného uživatele z main
+    try:
+        from main import get_current_authenticated_user
+        u = get_current_authenticated_user()
+    except Exception:
+        pass
 
-                avatar_src = u.get('avatar_url')
-                img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>'
-                display_name = u.get('nick') or u.get('email') or 'Uživatel'
-                discord_id_text = f"<br>Discord ID: {u.get('discord_id')}" if u.get('discord_id') else ""
-                
-                return f"""
-                <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onclick="toggleUserDropdown(this, event);" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
-                  <div class="user-avatar-circle" style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow: 0 0 10px rgba(56,189,248,0.5); flex-shrink:0;">
-                    {img_tag}
-                  </div>
-                  <span style="color:white; font-weight:bold; font-size:14px; max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{display_name}</span>
-                  
-                  <div class="user-dropdown-menu" onclick="event.stopPropagation();" style="display:none; position:absolute; top:calc(100% + 10px); right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left; box-sizing:border-box;">
-                    <div style="color:white; font-size:14px; font-weight:bold; margin-bottom:5px;">{display_name}</div>
-                    <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{u.get('email') or 'Neznámý e-mail'}{discord_id_text}</div>
-                    <a href="/ucet" style="display:block; width:100%; box-sizing:border-box; background:#38bdf8; color:black; text-align:center; padding:8px; border-radius:6px; text-decoration:none; font-weight:bold; margin: 0 0 8px 0; white-space:nowrap;"><i class="fas fa-cog"></i> Můj Účet</a>
-                    <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="display:block; width:100%; box-sizing:border-box; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold; transition:0.2s; margin:0; white-space:nowrap;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.2)'; this.style.color='#ef4444';"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
-                  </div>
-                </div>
-                <script>
-                window.toggleUserDropdown = function(wrap, e) {{
-                  if (e) e.stopPropagation();
-                  let d = wrap.querySelector('.user-dropdown-menu');
-                  if (!d) return;
-                  let isVis = d.style.display === 'block';
-                  document.querySelectorAll('.user-dropdown-menu').forEach(function(m) {{ m.style.display = 'none'; }});
-                  if (!isVis) {{
-                    d.style.display = 'block';
-                    let rect = d.getBoundingClientRect();
-                    if (rect.left < 8) {{
-                      d.style.left = '0';
-                      d.style.right = 'auto';
-                    }} else if (rect.right > window.innerWidth - 8) {{
-                      d.style.right = '0';
-                      d.style.left = 'auto';
-                    }}
-                  }}
-                }};
-                if (!window._userDropdownInit) {{
-                  window._userDropdownInit = true;
-                  document.addEventListener('click', function(e) {{
-                    if (!e.target.closest('.user-avatar-wrap')) {{
-                      document.querySelectorAll('.user-dropdown-menu').forEach(function(m) {{ m.style.display = 'none'; }});
-                    }}
-                  }});
+    # 2. Zkusit session (pokud je přihlášen např. přes Discord, Dashboard nebo e-mail)
+    if not u and session.get('logged_in'):
+        did = str(session.get('discord_id') or "")
+        nick = session.get('discord_nick') or session.get('nick') or "Uživatel"
+        email = session.get('email') or ""
+        avatar = session.get('avatar_url') or session.get('discord_avatar') or ""
+        if not avatar and did and HAS_SUPABASE:
+            try:
+                db = get_db_client()
+                if db:
+                    res = db.table("users").select("avatar_url, nick, email").eq("discord_id", did).execute().data
+                    if res:
+                        avatar = res[0].get("avatar_url") or avatar
+                        nick = res[0].get("nick") or nick
+                        email = res[0].get("email") or email
+            except Exception:
+                pass
+        u = {
+            "nick": nick,
+            "email": email,
+            "discord_id": did,
+            "avatar_url": avatar
+        }
+
+    # 3. Zkusit web nebo admin session token v cookies
+    if not u:
+        cookie_token = req.cookies.get('web_session_token') or req.cookies.get('admin_session_token')
+        if cookie_token and HAS_SUPABASE:
+            try:
+                db = get_db_client()
+                if db:
+                    u = find_user_by_session_token(db, cookie_token)
+            except Exception:
+                pass
+
+    if u:
+        try:
+            avatar_src = u.get('avatar_url')
+            img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>'
+            display_name = u.get('nick') or u.get('email') or 'Uživatel'
+            discord_id_text = f"<br>Discord ID: {u.get('discord_id')}" if u.get('discord_id') else ""
+            
+            return f"""
+            <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onclick="toggleUserDropdown(this, event);" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
+              <div class="user-avatar-circle" style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow: 0 0 10px rgba(56,189,248,0.5); flex-shrink:0;">
+                {img_tag}
+              </div>
+              <span style="color:white; font-weight:bold; font-size:14px; max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{display_name}</span>
+              
+              <div class="user-dropdown-menu" onclick="event.stopPropagation();" style="display:none; position:absolute; top:calc(100% + 10px); right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left; box-sizing:border-box;">
+                <div style="color:white; font-size:14px; font-weight:bold; margin-bottom:5px;">{display_name}</div>
+                <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{u.get('email') or 'Neznámý e-mail'}{discord_id_text}</div>
+                <a href="/ucet" style="display:block; width:100%; box-sizing:border-box; background:#38bdf8; color:black; text-align:center; padding:8px; border-radius:6px; text-decoration:none; font-weight:bold; margin: 0 0 8px 0; white-space:nowrap;"><i class="fas fa-cog"></i> Můj Účet</a>
+                <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="display:block; width:100%; box-sizing:border-box; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold; transition:0.2s; margin:0; white-space:nowrap;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.2)'; this.style.color='#ef4444';"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
+              </div>
+            </div>
+            <script>
+            window.toggleUserDropdown = function(wrap, e) {{
+              if (e) e.stopPropagation();
+              let d = wrap.querySelector('.user-dropdown-menu');
+              if (!d) return;
+              let isVis = d.style.display === 'block';
+              document.querySelectorAll('.user-dropdown-menu').forEach(function(m) {{ m.style.display = 'none'; }});
+              if (!isVis) {{
+                d.style.display = 'block';
+                let rect = d.getBoundingClientRect();
+                if (rect.left < 8) {{
+                  d.style.left = '0';
+                  d.style.right = 'auto';
+                }} else if (rect.right > window.innerWidth - 8) {{
+                  d.style.right = '0';
+                  d.style.left = 'auto';
                 }}
-                </script>
-                """
+              }}
+            }};
+            if (!window._userDropdownInit) {{
+              window._userDropdownInit = true;
+              document.addEventListener('click', function(e) {{
+                if (!e.target.closest('.user-avatar-wrap')) {{
+                  document.querySelectorAll('.user-dropdown-menu').forEach(function(m) {{ m.style.display = 'none'; }});
+                }}
+              }});
+            }}
+            </script>
+            """
         except:
             pass
             
@@ -13071,8 +13120,30 @@ def stranka_mapa():
                 return render_template_string(HTML_MAP_OFFLINE)
     except:
         pass
+
+    # Automatické rozpoznání administrátora i na /mapa
+    is_admin, admin_name = _check_admin_request()
+    is_admin_str = 'true' if is_admin else 'false'
+    ad_btn = _AD_BTN_ADMIN if is_admin else _AD_BTN_NORMAL
+    admin_banner = ''
+    if is_admin:
+        mode_label = "PVVD IDPK" if POSITION_SOURCE_MODE == "pvvd" else "Arriva Live"
+        mode_color = "#38bdf8" if POSITION_SOURCE_MODE == "pvvd" else "#34d399"
+        mode_border = "rgba(56,189,248,0.3)" if POSITION_SOURCE_MODE == "pvvd" else "rgba(16,185,129,0.3)"
+        mode_bg = "rgba(56,189,248,0.1)" if POSITION_SOURCE_MODE == "pvvd" else "rgba(16,185,129,0.15)"
+        admin_banner = (
+            '<div style="position:relative;margin-top:58px;padding:4px;text-align:center;">'
+            '<span style="display:inline-block;background:rgba(56,189,248,0.1);color:#38bdf8;'
+            'padding:3px 14px;border-radius:20px;font-size:11px;font-weight:bold;'
+            'border:1px solid rgba(56,189,248,0.3);">Admin režim aktivní</span>'
+            f'<span style="display:inline-block;margin-left:8px;background:{mode_bg};color:{mode_color};'
+            f'padding:3px 12px;border-radius:20px;font-size:11px;font-weight:bold;'
+            f'border:1px solid {mode_border};">Zdroj GPS: {mode_label}</span>'
+            '</div>'
+        )
+
     avatar_html = _get_avatar_html(request)
-    html = HTML_MAPA.replace('__ADMIN_BANNER__', '').replace('__IS_ADMIN__', 'false').replace('__AD_BTN__', _AD_BTN_NORMAL).replace('__AVATAR__', avatar_html)
+    html = HTML_MAPA.replace('__ADMIN_BANNER__', admin_banner).replace('__IS_ADMIN__', is_admin_str).replace('__AD_BTN__', ad_btn).replace('__AVATAR__', avatar_html)
     return _full_page("Mapa", html, is_map=True)
 
 
