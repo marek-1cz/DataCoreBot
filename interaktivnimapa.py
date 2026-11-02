@@ -4046,13 +4046,9 @@ function checkSW(uptimeSec){
 function isTrainVehicle(bus) {
   if (!bus) return false;
   if (bus.is_train) return true;
-  let bid = String(bus.id || '').trim();
-  if (bid.startsWith('-')) return true;
   let l = String(bus.line || bus.real_linka_spoj || '').trim();
   if (/^(Os|Sp|R|Ex|IC|EC|SC|rj|RJ|EN|LE|TL|TLX|GWTR|Vlak)\b/i.test(l)) return true;
   if (/^(P[1-9]|P[1-3][0-9])\b/i.test(l)) return true;
-  let s = l + ' ' + bid;
-  if (/1093|1081|7265|1094|7512|7430|554|27849|27828|750|7280/.test(s)) return true;
   return false;
 }
 
@@ -4073,9 +4069,8 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false,ageT
   
   let reallyTrain = Boolean(isTrain);
   if (!reallyTrain) {
-    let bid = String(busId || '').trim();
     let l = String(lineText || '').trim();
-    if (bid.startsWith('-') || /^(Os|Sp|R|Ex|IC|EC|SC|rj|RJ|EN|LE|TL|TLX|GWTR|Vlak)\b/i.test(l) || /^(P[1-9]|P[1-3][0-9])\b/i.test(l) || /1093|1081|7265|1094|7512|7430|554|27849|27828|750|7280/.test(l + ' ' + bid)) {
+    if (/^(Os|Sp|R|Ex|IC|EC|SC|rj|RJ|EN|LE|TL|TLX|GWTR|Vlak)\b/i.test(l) || /^(P[1-9]|P[1-3][0-9])\b/i.test(l)) {
       reallyTrain = true;
     }
   }
@@ -7337,7 +7332,7 @@ def normalize_line(line_raw: str) -> str:
     if not line_raw:
         return ""
     digits = "".join(ch for ch in str(line_raw) if ch.isdigit())
-    if len(digits) == 6 and (digits.startswith("4") or digits.startswith("3")):
+    if len(digits) == 6 and digits[0] in "123456789":
         return str(int(digits[-3:]))  # '490722' -> '722'
     if digits:
         v = int(digits)
@@ -8045,26 +8040,32 @@ def _name_suggests_train(name):
 
 def is_train_vehicle(bus_id, line="", traction=""):
     """Spolehlivě určí, zda jde o vlak (vlaky nesmí dostávat SPZ, poznámky ani být považovány za busy)."""
-    bid_str = str(bus_id or "").strip()
-    if bid_str.startswith("-"):
-        return True
-    try:
-        if int(bid_str) < 0:
-            return True
-    except (ValueError, TypeError):
-        pass
-    if str(traction or "").upper() == "TRAIN":
-        return True
+    trac = str(traction or "").upper().strip()
+    # 1. Pokud je trakce explicitně autobus, trolejbus nebo tramvaj, NIKDY to není vlak!
+    if trac in ("BUS", "TROLLEYBUS", "TRAM"):
+        return False
+
     l_str = str(line or "").strip()
-    if re.match(r'^P\d{1,2}\b', l_str, re.IGNORECASE):
+    digits = "".join(ch for ch in l_str if ch.isdigit())
+
+    # 2. 6místné licenční číslo autobusové linky (např. 100304, 210546, 380954, 490722, 440752) je VŽDY autobus!
+    if len(digits) == 6 and digits[0] in "123456789":
+        return False
+
+    # 3. Explicitní trakce TRAIN
+    if trac == "TRAIN":
         return True
-    if l_str.startswith(("Os ", "Sp ", "R ", "Ex ", "IC ", "EC ", "SC ", "rj ", "RJ ", "EN ", "LE ", "TL ", "TLX ", "GWTR ", "Os", "Sp", "Ex", "Vlak")):
+
+    # 4. Oficiální vlakové linky IDPK a železniční kategorie (P1-P31, Os, Sp, R, Ex, IC, EC, SC, RJ, LE, TL, GWTR...)
+    if re.match(r'^P([1-9]|[1-3][0-9])\b', l_str, re.IGNORECASE):
+        return True
+    if re.match(r'^(Os|Sp|R|Ex|IC|EC|SC|RJ|LE|TL|TLX|GWTR|Rx)\b', l_str, re.IGNORECASE):
         return True
     if re.search(r'\b(vlak|train|rychlik|osobak|spech)\b', l_str, re.IGNORECASE):
         return True
-    # Pouze pokud linka obsahuje explicitní označení vlaku s číslem (např. Os 7512, R 750)
     if re.search(r'\b(Os|Sp|R|Ex|IC|EC|SC|RJ|LE|TL|GWTR)\s*\d+', l_str, re.IGNORECASE):
         return True
+
     return False
 
 
@@ -11471,6 +11472,14 @@ def background_map_worker():
             for t in train_inflow:
                 t_id = str(t.get("id", "0"))
                 t_line = str(t.get("text") or t.get("line") or "").strip() or "Vlak"
+                if t_line.isdigit():
+                    num = int(t_line)
+                    if num >= 7000:
+                        t_line = f"Os {num}"
+                    elif num >= 100:
+                        t_line = f"R {num}"
+                    else:
+                        t_line = f"Vlak {num}"
                 t_dest = str(t.get("finalStopName") or "").strip() or "Vlak"
                 t_lat = float(t.get("lat") or 0)
                 t_lng = float(t.get("lng") or 0)
