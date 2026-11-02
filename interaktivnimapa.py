@@ -2880,7 +2880,7 @@ window.adminSetSPZ=(id)=>{
   }
 };
 window.adminClearSPZ=(id)=>{
-  if(confirm('Opravdu vymazat SPZ u vozu #'+id+'?\n\nZámek bude odstraněn a systém sám automaticky vyhledá správnou SPZ.')){
+  if(confirm('Opravdu vymazat SPZ u vozu #'+id+'?\\n\\nZámek bude odstraněn a systém sám automaticky vyhledá správnou SPZ.')){
     let el=document.getElementById('adm_spz_'+id);if(el)el.value='';
     adminAction('clear_spz',id);
   }

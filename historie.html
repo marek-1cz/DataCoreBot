@@ -556,8 +556,12 @@ html.lite .acard,html.lite .dcard,html.lite .tile,html.lite .rows>*,html.lite .a
     <div class="count" id="dCount"></div>
     <div class="depots" id="depots"></div>
 
+    <div class="ev-mode-tabs" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+      <button type="button" class="btnx ev-mode-btn on" id="btnEvDepots" data-evmode="depots">🏢 Evidence vozoven (Příjezdy & Odjezdy)</button>
+      <button type="button" class="btnx ev-mode-btn" id="btnEvTrips" data-evmode="trips">🚌 Evidence spojů a jízd (Linky, Trasy & Dojezdy)</button>
+    </div>
     <div class="evhead" id="evid">
-      <div><h3>Evidence příjezdů a odjezdů</h3><p id="evFor">Všechny vozovny</p></div>
+      <div><h3 id="evHeading">Evidence příjezdů a odjezdů</h3><p id="evFor">Všechny vozovny</p></div>
       <button class="btnx" id="evClr" type="button" hidden>Zrušit filtr vozovny ×</button>
     </div>
     <div class="tools">
@@ -881,7 +885,7 @@ function renderE(){
 
   if(isTrips){
     const a = getTripsEvidenceList(), shown = a.slice(0, S.eShown);
-    $('#evHeading').textContent = 'Evidence jízd a spojů';
+    const evH1 = $('#evHeading'); if(evH1) evH1.textContent = 'Evidence jízd a spojů';
     $('#eCount').textContent = a.length ? ('Jízd: ' + a.length + (a.length > shown.length ? ' · zobrazeno ' + shown.length : '')) : '';
     const head = '<div class="tr th te" role="row">' +
       '<div class="cell c-spz">SPZ</div>' +
@@ -914,7 +918,7 @@ function renderE(){
     return;
   }
 
-  $('#evHeading').textContent = 'Evidence příjezdů a odjezdů do vozoven';
+  const evH2 = $('#evHeading'); if(evH2) evH2.textContent = 'Evidence příjezdů a odjezdů do vozoven';
   const a=eList(),shown=a.slice(0,S.eShown);
   $('#eCount').textContent=a.length?('Záznamů: '+a.length+(a.length>shown.length?' · zobrazeno '+shown.length:'')):'';
   const head=HEAD({cls:'te',c:[['spz','SPZ'],['depot','Vozovna'],['arr','Přijel'],['left','Odjel'],['dur','Doba stání']]},S.eSort);
@@ -1239,6 +1243,9 @@ function bind(){
     const r=e.target.closest('[data-spz]');if(r)openDetail(r.dataset.spz);
   });
   /* evidence */
+  const bEvDep = $('#btnEvDepots'), bEvTrp = $('#btnEvTrips');
+  if(bEvDep) bEvDep.addEventListener('click', ()=>{ S.evMode='depots'; S.eShown=CONFIG.pageSize; renderE(); });
+  if(bEvTrp) bEvTrp.addEventListener('click', ()=>{ S.evMode='trips'; S.eShown=CONFIG.pageSize; renderE(); });
   $('#eState').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(!b)return;S.eState=b.dataset.v;$$('#eState .pillb').forEach(x=>x.setAttribute('aria-pressed',x===b));S.eShown=CONFIG.pageSize;renderE()});
   $('#eDepot').addEventListener('change',e=>{S.eDepot=e.target.value;S.eShown=CONFIG.pageSize;renderE();renderD();syncHash()});
   $('#ePer').addEventListener('change',e=>{S.ePer=+e.target.value;S.eShown=CONFIG.pageSize;renderE()});
