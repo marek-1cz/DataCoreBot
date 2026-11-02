@@ -4045,19 +4045,17 @@ function checkSW(uptimeSec){
 // === POMOCNÁ DETEKCE VLAKU PRO FRONTEND ===
 function isTrainVehicle(bus) {
   if (!bus) return false;
+  // 1. Z PVVD nebo serveru: pokud je is_train true nebo traction TRAIN -> je to 100% VLAK!
+  if (bus.is_train === true || String(bus.traction || '').toUpperCase() === 'TRAIN') return true;
+
+  // 2. Pokud má vůz reálnou SPZ, model vozidla, nebo parkuje ve vozovně -> je to 100% AUTOBUS!
   let spz = String(bus.spz || '').trim().toUpperCase();
-  if (spz && spz !== 'NEZN\xc3\x81M\xc3\x81' && spz !== 'NEZNAMA' && spz !== 'AKTIVN\xc3\x8d HLED\xc3\x81N\xc3\x8d' && spz !== 'AKTIVNI HLEDANI' && spz !== '?') {
+  if (spz && spz !== 'NEZNÁMÁ' && spz !== 'NEZNAMA' && spz !== 'AKTIVNÍ HLEDÁNÍ' && spz !== 'AKTIVNI HLEDANI' && spz !== '?') {
     return false;
   }
   if (bus.vehicle_type || bus.in_depot) return false;
 
   let l = String(bus.line || bus.real_linka_spoj || '').trim();
-  let lPart = l.split('/')[0].trim();
-  if (/^[1-9][0-9]{2,5}$/.test(lPart) && !/^(Os|Sp|R|Ex|IC|EC|SC|RJ|LE|TL|GWTR|P[1-9]|P[1-3][0-9])\b/i.test(l)) {
-    return false;
-  }
-
-  if (bus.is_train) return true;
   if (/^(Os|Sp|R|Ex|IC|EC|SC|rj|RJ|EN|LE|TL|TLX|GWTR|Vlak)\b/i.test(l)) return true;
   if (/^(P[1-9]|P[1-3][0-9])\b/i.test(l)) return true;
   return false;
@@ -5740,9 +5738,11 @@ async function fetchBuses(){
         delete window.requestedSpojeMap[bus.id];
       }
 
-      let _hlavickaSpoj = _spojNum
-        ? `LINKOSPOJ: ${_linkaNum || '?'}/${_spojNum}`
-        : `LINKA: ${_linkaNum || 'Neznámá'} <span style="color:#94a3b8;font-size:11px;font-weight:600;margin-left:3px;">(SPOJ NEZNÁMÝ)</span>`;
+      let _hlavickaSpoj = isTrain
+        ? `<i class="fas fa-train" style="margin-right:6px;color:#38bdf8;"></i> VLAK: ${_linkaNum || 'Neznámý'}`
+        : (_spojNum
+          ? `LINKOSPOJ: ${_linkaNum || '?'}/${_spojNum}`
+          : `LINKA: ${_linkaNum || 'Neznámá'} <span style="color:#94a3b8;font-size:11px;font-weight:600;margin-left:3px;">(SPOJ NEZNÁMÝ)</span>`);
       
       let _vType = (bus.vehicle_type && typeof bus.vehicle_type === 'string') ? bus.vehicle_type.trim() : '';
       if (_vType && !/setra|crossway|iveco|sor|man|mercedes|scania|solaris|rosero|isuzu|volvo|karosa|citaro|urbanway/i.test(_vType) && /plzeň|plzen|klatov|domažl|domazl|tachov|rokycan|sušic|susic|stříbr|stribr|kralovic|nepomuk|přeštic|prestic|čechy|cechy|praha|středočesk|stredocesk|oblast|kraj|region|arriva/i.test(_vType)) {
@@ -14826,13 +14826,13 @@ def api_live_buses():
         bid_str = str(b_copy.get("id") or "")
         b_copy["is_watched"] = bool(bid_str in WATCHED_SPZ_BUSES)
         b_copy["is_ignored"] = bool(bid_str in IGNORED_SPZ_ERRORS)
+        # Vlaky z PVVD mají VŽDY is_train == True nebo traction == "TRAIN"
+        is_tr = bool(b_copy.get("is_train") or b_copy.get("traction") == "TRAIN" or is_train_vehicle(b_copy.get("id"), b_copy.get("line"), b_copy.get("traction")))
+
+        # Autobusy mají reálnou SPZ, model vozu nebo jsou ve vozovně
         spz_val = str(b_copy.get("spz") or "").strip().upper()
         has_real_spz = bool(spz_val and spz_val not in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"))
-        has_vtype = bool(b_copy.get("vehicle_type"))
-        is_in_depot = bool(b_copy.get("in_depot"))
-
-        is_tr = is_train_vehicle(b_copy.get("id"), b_copy.get("line"))
-        if has_real_spz or has_vtype or is_in_depot:
+        if has_real_spz or b_copy.get("vehicle_type") or b_copy.get("in_depot"):
             is_tr = False
 
         if is_tr:
@@ -14840,6 +14840,7 @@ def api_live_buses():
             if b_copy.get("color_class") == "bg-lastpos" or b_copy.get("status") == "Poslední známá poloha":
                 continue
             b_copy["is_train"] = True
+            b_copy["traction"] = "TRAIN"
             b_copy["spz"] = "Neznámá"
             b_copy["spz_verified"] = False
             b_copy["admin_spz_verified"] = False
