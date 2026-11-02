@@ -2871,7 +2871,28 @@ window.adminHardRefresh=(id)=>{if(confirm('Provést HARD REFRESH vozu #'+id+'?\\
 window.adminStatusRefresh=(id)=>adminAction('status_refresh',id);
 window.adminActiveSearchSpz=(id)=>adminAction('active_search_spz',id);
 window.adminRecheck=(id)=>adminAction('active_search_spz',id);
-window.adminSetSPZ=(id)=>{let spz=document.getElementById('adm_spz_'+id)?.value;if(spz)adminAction('edit_spz',id,{spz});};
+window.adminSetSPZ=(id)=>{
+  let spz=document.getElementById('adm_spz_'+id)?.value?.trim();
+  if(spz){
+    adminAction('edit_spz',id,{spz});
+  } else {
+    window.adminClearSPZ(id);
+  }
+};
+window.adminClearSPZ=(id)=>{
+  if(confirm('Opravdu vymazat SPZ u vozu #'+id+'?\n\nZámek bude odstraněn a systém sám automaticky vyhledá správnou SPZ.')){
+    let el=document.getElementById('adm_spz_'+id);if(el)el.value='';
+    adminAction('clear_spz',id);
+  }
+};
+window.adminClearNote=(id)=>{
+  let el=document.getElementById('adm_note_'+id);if(el)el.value='';
+  adminAction('clear_note',id);
+};
+window.adminClearDriver=(id)=>{
+  let el=document.getElementById('adm_driver_'+id);if(el)el.value='';
+  adminAction('clear_driver',id);
+};
 window.adminSaveAll=(id,permanent)=>{
   let spz=document.getElementById('adm_spz_'+id)?.value?.trim()||'';
   let st=document.getElementById('adm_st_'+id)?.value?.trim()||'',col=document.getElementById('adm_col_'+id)?.value?.trim()||'',note=document.getElementById('adm_note_'+id)?.value?.trim()||'',driver=document.getElementById('adm_driver_'+id)?.value?.trim()||'';
@@ -5784,14 +5805,17 @@ async function fetchBuses(){
             
             ${isTrain ? '' : `<div style="display:flex;gap:6px;margin-top:8px;">
               <input type="text" id="adm_spz_${bus.id}" value="${cSpz}" data-orig="${oSpz}" placeholder="SPZ" class="adm-inp" style="flex:2;margin-top:0;">
-              <button onclick="adminSetSPZ('${bus.id}')" style="flex:1;background:#10b981;color:white;border:none;border-radius:5px;font-size:13px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;">💾 Uložit</button>
+              <button onclick="adminSetSPZ('${bus.id}')" style="flex:1;background:#10b981;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px 4px;touch-action:manipulation;" title="Uložit a uzamknout zadanou SPZ natrvalo">💾 Zamknout</button>
             </div>
-            ${adminLockBtn}
-            
-            <!-- Tlačítko Aktivní hledání SPZ -->
-            <button onclick="adminAction('active_search_spz','${bus.id}')" style="width:100%;margin-top:6px;background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid #0284c7;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;padding:9px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:6px;" title="Zahodí stávající SPZ a nastaví Aktivní hledání. Jakmile se vůz objeví na mapě Arriva, systém mu automaticky přiřadí ověřenou SPZ.">
-              <i class="fas fa-satellite-dish fa-spin"></i> Aktivní hledání SPZ
-            </button>`}
+            <div style="display:flex;gap:6px;margin-top:6px;">
+              <button onclick="adminClearSPZ('${bus.id}')" style="flex:1;background:#7f1d1d;color:#fecaca;border:1px solid #b91c1c;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:8px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Vymaže SPZ a zruší admin zámek – systém sám automaticky vyhledá správnou SPZ">
+                <i class="fas fa-trash-alt"></i> Vymazat SPZ
+              </button>
+              <button onclick="adminAction('active_search_spz','${bus.id}')" style="flex:1;background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid #0284c7;border-radius:5px;font-size:11px;cursor:pointer;font-weight:bold;padding:8px 4px;touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:4px;" title="Zahodí stávající SPZ a nastaví Aktivní hledání přes Arriva vysílače">
+                <i class="fas fa-satellite-dish"></i> Hledat SPZ
+              </button>
+            </div>
+            ${adminLockBtn}`}
             
             <button class="adm-toggle-btn" onclick="let el=document.getElementById('adm_grafika_${bus.id}'); if(el.style.display==='none'){el.style.display='block';this.innerText='🔼 Skrýt vzhled a úpravy';}else{el.style.display='none';this.innerText='🎨 Vzhled a další úpravy';}">${isGrafikaOpen ? '🔼 Skrýt vzhled a úpravy' : '🎨 Vzhled a další úpravy'}</button>
             
@@ -5809,8 +5833,14 @@ async function fetchBuses(){
                 <option value="bg-orange" ${bus.color_class==='bg-orange'?'selected':''}>Oranžová</option>
                 <option value="bg-bug" ${bus.color_class==='bg-bug'?'selected':''}>Označeno jako BUG</option>
               </select>
-              ${isTrain ? '' : `<input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznámka..." class="adm-inp" style="margin-top:6px;">
-              <input type="text" id="adm_driver_${bus.id}" value="${cDriver}" data-orig="${bus.admin_driver||''}" placeholder="Jméno řidiče..." class="adm-inp" style="margin-top:6px;">`}
+              ${isTrain ? '' : `<div style="display:flex;gap:4px;margin-top:6px;">
+                <input type="text" id="adm_note_${bus.id}" value="${cNote}" data-orig="${bus.admin_note||''}" placeholder="Poznámka..." class="adm-inp" style="flex:1;margin-top:0;">
+                <button onclick="adminClearNote('${bus.id}')" style="background:#1e293b;color:#f87171;border:1px solid #334155;border-radius:5px;padding:0 8px;cursor:pointer;font-size:11px;" title="Vymazat poznámku">✕</button>
+              </div>
+              <div style="display:flex;gap:4px;margin-top:6px;">
+                <input type="text" id="adm_driver_${bus.id}" value="${cDriver}" data-orig="${bus.admin_driver||''}" placeholder="Jméno řidiče..." class="adm-inp" style="flex:1;margin-top:0;">
+                <button onclick="adminClearDriver('${bus.id}')" style="background:#1e293b;color:#f87171;border:1px solid #334155;border-radius:5px;padding:0 8px;cursor:pointer;font-size:11px;" title="Vymazat řidiče">✕</button>
+              </div>`}
               <div style="display:flex;gap:6px;margin-top:8px;">
                 <button onclick="adminSaveAll('${bus.id}',true)" class="adm-btn" style="flex:1;background:#1e40af;color:white;">📌 Uložit natrvalo</button>
                 <button onclick="adminSaveAll('${bus.id}',false)" class="adm-btn" style="flex:1;background:#334155;color:#94a3b8;">⏱️ Dočasně</button>
@@ -6836,6 +6866,22 @@ def _load_spz_settings(db_client=None):
                                 SPZ_METADATA[nk] = v
                         loaded_from_supabase = True
                         print(f"[SPZ-SETTINGS] Načteno {len(SPZ_METADATA)} záznamů SPZ metadat přímo z persistentní Supabase (autoritativní).", flush=True)
+
+            # Načtení trvalých zámků administrátora (ADMIN_SPZ_LOCKS) ze Supabase
+            try:
+                sb_locks = db_c.table("settings").select("setting_value").eq("setting_key", "admin_spz_locks").execute()
+                if sb_locks and sb_locks.data and len(sb_locks.data) > 0:
+                    raw_locks = sb_locks.data[0].get("setting_value")
+                    if raw_locks:
+                        locks_dict = json.loads(raw_locks)
+                        if isinstance(locks_dict, dict):
+                            for lk_k, lk_v in locks_dict.items():
+                                if isinstance(lk_v, dict) and lk_v.get("spz"):
+                                    ADMIN_SPZ_LOCKS[str(lk_k)] = lk_v
+                                    ADMIN_SPZ_LOCKS[lk_k] = lk_v
+                            print(f"[SPZ-SETTINGS] Načteno {len(locks_dict)} admin zámků SPZ ze Supabase.", flush=True)
+            except Exception as e_lks:
+                print(f"[SPZ-SETTINGS] Supabase admin locks load err: {e_lks}", flush=True)
             
             # Uživatelský požadavek: Výchozí režim zdroje polohy vozidel je VŽDY "pvvd".
             # Při restartu systému se poloha vozidel NIKDY nesmí sama přepnout na arrivu.
@@ -6885,6 +6931,11 @@ def _load_spz_settings(db_client=None):
                             if nk and isinstance(v, dict) and nk not in SPZ_METADATA:
                                 v["spz"] = format_spz_display(v.get("spz") or nk)
                                 SPZ_METADATA[nk] = v
+                    if "admin_locks" in data and isinstance(data["admin_locks"], dict):
+                        for k, v in data["admin_locks"].items():
+                            if isinstance(v, dict) and v.get("spz"):
+                                ADMIN_SPZ_LOCKS[str(k)] = v
+                                ADMIN_SPZ_LOCKS[k] = v
         except Exception as e:
             print(f"[SPZ-SETTINGS] Load json err: {e}", flush=True)
     else:
@@ -6901,11 +6952,17 @@ def _load_spz_settings(db_client=None):
                         WATCHED_SPZ_BUSES = set(str(x) for x in data["watched_buses"])
                     if "ignored_errors" in data:
                         IGNORED_SPZ_ERRORS = set(str(x) for x in data["ignored_errors"])
+                    if "admin_locks" in data and isinstance(data["admin_locks"], dict):
+                        for k, v in data["admin_locks"].items():
+                            if isinstance(v, dict) and v.get("spz") and str(k) not in ADMIN_SPZ_LOCKS:
+                                ADMIN_SPZ_LOCKS[str(k)] = v
+                                ADMIN_SPZ_LOCKS[k] = v
         except Exception:
             pass
 
 
 def _save_spz_settings(db_client=None):
+    safe_locks = {str(k): v for k, v in ADMIN_SPZ_LOCKS.items() if isinstance(v, dict) and v.get("spz")}
     try:
         with open(_SPZ_SETTINGS_PATH, "w", encoding="utf-8") as f:
             json.dump({
@@ -6913,7 +6970,8 @@ def _save_spz_settings(db_client=None):
                 "auto_resolve": AUTO_RESOLVE_SPZ,
                 "watched_buses": list(WATCHED_SPZ_BUSES),
                 "ignored_errors": list(IGNORED_SPZ_ERRORS),
-                "spz_metadata": SPZ_METADATA
+                "spz_metadata": SPZ_METADATA,
+                "admin_locks": safe_locks
             }, f, indent=2, ensure_ascii=False)
     except Exception as e:
         print(f"[SPZ-SETTINGS] Save err: {e}", flush=True)
@@ -6925,9 +6983,14 @@ def _save_spz_settings(db_client=None):
             db_c = get_db_client()
         if db_c:
             meta_json = json.dumps(SPZ_METADATA, ensure_ascii=False)
+            locks_json = json.dumps(safe_locks, ensure_ascii=False)
             db_c.table("settings").upsert({
                 "setting_key": "spz_metadata",
                 "setting_value": meta_json
+            }).execute()
+            db_c.table("settings").upsert({
+                "setting_key": "admin_spz_locks",
+                "setting_value": locks_json
             }).execute()
             db_c.table("settings").upsert({
                 "setting_key": "map_position_source_mode",
@@ -8422,9 +8485,9 @@ def _process_depot_tracking(bus_id, c, now):
                 DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
     else:
         # Vůz NENÍ ve vozovně (depot_name is None)
-        # KRITICKÉ: Pokud je vůz offline nebo zmizel z mapy PVVD (řidič zhasnul motor na noc),
+        # KRITICKÉ: Pokud je vůz offline (řidič zhasnul motor na noc ve vozovně),
         # ZŮSTÁVÁ NADÁLE VE VOZOVNĚ! Nesmíme ho odepsat!
-        is_offline = bool(c.get("is_offline")) or "Zmizel z mapy" in str(c.get("status", ""))
+        is_offline = bool(c.get("is_offline"))
         
         # Odjezd se zapíše POUZE tehdy, když se vůz objeví ŽIVĚ s platnou GPS polohou MIMO areál vozovny!
         if active_sess and not is_offline and lat and lng:
@@ -8473,6 +8536,23 @@ def _process_depot_tracking(bus_id, c, now):
             print(f"[DEPOT] Vůz {active_sess.get('spz')} opustil vozovnu '{old_depot}' v {left_time}", flush=True)
             c["_in_depot"] = False
             c["in_depot"] = False
+            c.pop("depot_name", None)
+            c.pop("_depot_name", None)
+        elif not is_offline:
+            # Vůz je živý a mimo zónu vozovny -> nesmí zůstat viset stav 'Vozovna'
+            c["_in_depot"] = False
+            c["in_depot"] = False
+            c.pop("depot_name", None)
+            c.pop("_depot_name", None)
+            if str(c.get("status", "")).startswith("Vozovna:"):
+                cur_l = c.get("line") or c.get("raw_line")
+                if cur_l and cur_l not in ("0", "-1", "None", "Neznámá", "Neznama"):
+                    del_val = int(c.get("delay") or 0)
+                    c["status"] = f"Jízda (+{del_val} min)" if c.get("is_moving") else f"Stojí (+{del_val} min)"
+                    c["color_class"] = "bg-green" if del_val < 10 else "bg-red"
+                else:
+                    c["status"] = "Manipulační jízda"
+                    c["color_class"] = "bg-blue"
 
 
 
@@ -10662,6 +10742,29 @@ def background_map_worker():
                     c.pop("offline_lng", None)
                     c.pop("offline_stop", None)
 
+                    # Pojistka: Pokud byl vůz offline nebo zaseknutý na zmizení či ve vozovně a teď se živě hýbe:
+                    prev_status_str = str(c.get("status", ""))
+                    was_stuck = bool(prev_status_str == "Zmizel z mapy PVVD" or "Zmizel z mapy" in prev_status_str or (not in_depot_zone and prev_status_str.startswith("Vozovna:")))
+                    if was_stuck:
+                        c["last_moved"] = now
+                        c["last_moved_epoch"] = now.timestamp()
+                        c["last_moved_lat"] = lat
+                        c["last_moved_lng"] = lng
+                        inact = 0.0
+                        is_moving = True
+                        if not in_depot_zone:
+                            c["in_depot"] = False
+                            c["_in_depot"] = False
+                            c.pop("depot_name", None)
+                            c.pop("_depot_name", None)
+                        if has_route:
+                            del_cur = int(delay or 0)
+                            c["status"] = f"Jízda (+{del_cur} min)" if del_cur > 0 else ("Jízda (Načas)" if del_cur == 0 else f"Jízda (Náskok {abs(del_cur)} min)")
+                            c["color_class"] = "bg-green" if del_cur < 10 else "bg-red"
+                        else:
+                            c["status"] = "Manipulační jízda"
+                            c["color_class"] = "bg-blue"
+
                     clean_line = curr_norm_line or raw_line or normalize_line(last_valid_line) or last_valid_line
                     display_line = clean_line
                     if has_route:
@@ -10963,6 +11066,11 @@ def background_map_worker():
                 _process_depot_tracking(bid, c, now)
 
                 # Admin overrides
+                if is_moving and dm >= 25.0:
+                    if str(c.get("admin_status_override", "")).startswith("Vozovna:") or "Zmizel" in str(c.get("admin_status_override", "")):
+                        c["admin_status_override"] = None
+                        c["admin_color_override"] = None
+
                 if c.get("admin_color_override"):
                     c["color_class"] = c["admin_color_override"]
                 if c.get("admin_status_override"):
@@ -12951,7 +13059,7 @@ def api_admin_map_action():
     elif action == "edit_spz":
         new_spz = str(data.get("spz", "")).strip()
         if new_spz.upper() in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", ""):
-            return jsonify({"status": "error", "message": "Nelze nastavit admin-ověření pro Neznámou SPZ! Pro odstranění SPZ použijte reset."}), 400
+            return jsonify({"status": "error", "message": "Nelze nastavit admin-ověření pro Neznámou SPZ! Pro odstranění SPZ použijte tlačítko Vymazat SPZ."}), 400
         if new_spz:
             old_spz = c.get("spz")
             c["spz"] = new_spz
@@ -12963,6 +13071,7 @@ def api_admin_map_action():
             c["is_locked_by_admin"] = True
             c["admin_flag"] = True
             c["investigating"] = False
+            c["spz_frozen"] = True
             
             try:
                 FUSION_ENGINE.registry_by_pvvd.setdefault(str(bus_id), {})["locked_spz"] = new_spz
@@ -12970,19 +13079,42 @@ def api_admin_map_action():
                 FUSION_ENGINE.save_state()
             except Exception:
                 pass
-            ADMIN_SPZ_LOCKS[bus_id] = {
+            lock_obj = {
                 "spz": new_spz,
                 "admin_note": c.get("admin_note", ""),
                 "admin_driver": c.get("admin_driver", ""),
                 "is_locked_by_admin": True,
             }
+            ADMIN_SPZ_LOCKS[str(bus_id)] = lock_obj
+            ADMIN_SPZ_LOCKS[bus_id] = lock_obj
+            _save_spz_settings()
+            try:
+                _db_av = get_db_client()
+                if _db_av:
+                    _db_av.table("spz_cache").upsert({
+                        "bus_id": str(bus_id),
+                        "spz": new_spz,
+                        "linka": c.get("line") or "",
+                        "lat": c.get("lat"),
+                        "lng": c.get("lng"),
+                        "spz_verified": True,
+                        "admin_verified": True,
+                        "is_locked_by_admin": True,
+                        "admin_driver": c.get("admin_driver", ""),
+                        "admin_note": c.get("admin_note", ""),
+                        "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
+                    }).execute()
+            except Exception as e_av:
+                print(f"[EDIT-SPZ] Chyba zápisu spz_cache: {e_av}", flush=True)
+
             log_spz_change(bus_id, old_spz, new_spz, reason="admin_edit", admin_note=c.get("admin_note", ""))
             try:
                 from main import send_log
                 send_log("🚌 Úprava SPZ Autobusu", f"**Administrátor:** {admin_name}\n**MAP ID:** {bus_id}\n**Nová SPZ:** {new_spz}\n**Původní SPZ:** {old_spz or 'Neznámá'}\n**Linka:** {c.get('line') or '-'}\n**Poznámka:** {c.get('admin_note') or '-'}", 0x38bdf8)
             except Exception: pass
+            return jsonify({"status": "success", "message": f"SPZ {new_spz} byla úspěšně nastavena a uzamčena.", "spz": new_spz})
 
-    elif action in ("active_search_spz", "recheck_spz", "force_refresh", "reset_spz"):
+    elif action in ("clear_spz", "active_search_spz", "recheck_spz", "force_refresh", "reset_spz"):
         old_spz = c.get("spz") or "Aktivní hledání"
         c["spz"] = "Aktivní hledání"
         c["spz_locked"] = False
@@ -13004,6 +13136,16 @@ def api_admin_map_action():
         ADMIN_SPZ_LOCKS.pop(bus_id, None)
         ADMIN_SPZ_LOCKS.pop(str(bus_id), None)
         try:
+            ADMIN_SPZ_LOCKS.pop(int(bus_id), None)
+        except Exception:
+            pass
+        try:
+            FUSION_ENGINE.registry_by_pvvd.setdefault(str(bus_id), {}).pop("locked_spz", None)
+            FUSION_ENGINE.registry_by_pvvd[str(bus_id)]["spz"] = None
+            FUSION_ENGINE.save_state()
+        except Exception:
+            pass
+        try:
             from local_db import local_spz_purge_invalid_admin
             local_spz_purge_invalid_admin(bus_id)
         except Exception:
@@ -13011,7 +13153,7 @@ def api_admin_map_action():
         try:
             _db_av = get_db_client()
             if _db_av:
-                _db_av.table("spz_cache").delete().eq("bus_id", bus_id).execute()
+                _db_av.table("spz_cache").delete().eq("bus_id", str(bus_id)).execute()
         except Exception:
             pass
 
@@ -13019,12 +13161,36 @@ def api_admin_map_action():
         IGNORED_SPZ_ERRORS.discard(str(bus_id))
         _save_spz_settings()
 
-        log_spz_change(bus_id, old_spz, "Aktivní hledání", reason="admin_active_search", admin_note=f"Aktivní hledání adminem {admin_name}")
-        msg = f"Vůz #{bus_id}: Zahájeno aktivní hledání SPZ. Systém čeká na Arriva vysílač a po vyjetí automaticky přiřadí správnou SPZ."
-        log_automation_action("spz_reset_watch", bus_id, f"Admin {admin_name} zahájil aktivní hledání u #{bus_id}", msg, spz="Aktivní hledání", line=c.get("line"))
+        msg = f"Vůz #{bus_id}: SPZ byla vymazána a zámek odstraněn. Systém nyní sám najde správnou SPZ."
+        log_spz_change(bus_id, old_spz, "Aktivní hledání", reason="admin_clear_spz", admin_note=f"Vymazání SPZ adminem {admin_name}")
+        log_automation_action("spz_clear", bus_id, f"Admin {admin_name} vymazal SPZ u #{bus_id}", msg, spz="Aktivní hledání", line=c.get("line"))
 
         analyze_spz_anomalies_and_conflicts(auto_resolve=True)
-        return jsonify({"status": "success", "message": msg})
+        return jsonify({"status": "success", "message": msg, "spz": "Aktivní hledání"})
+
+    elif action == "clear_driver":
+        c["admin_driver"] = ""
+        b_spz = c.get("spz")
+        if b_spz and normalize_spz_key(b_spz):
+            set_spz_metadata(b_spz, driver="", note=c.get("admin_note", ""), admin_nick=admin_name)
+        for k_bid in (bus_id, str(bus_id)):
+            if k_bid in ADMIN_SPZ_LOCKS:
+                ADMIN_SPZ_LOCKS[k_bid]["admin_driver"] = ""
+        _save_spz_settings()
+        msg = f"Vůz #{bus_id}: Jméno řidiče bylo smazáno."
+        return jsonify({"status": "success", "message": msg, "admin_driver": ""})
+
+    elif action == "clear_note":
+        c["admin_note"] = ""
+        b_spz = c.get("spz")
+        if b_spz and normalize_spz_key(b_spz):
+            set_spz_metadata(b_spz, driver=c.get("admin_driver", ""), note="", admin_nick=admin_name)
+        for k_bid in (bus_id, str(bus_id)):
+            if k_bid in ADMIN_SPZ_LOCKS:
+                ADMIN_SPZ_LOCKS[k_bid]["admin_note"] = ""
+        _save_spz_settings()
+        msg = f"Vůz #{bus_id}: Poznámka byla smazána."
+        return jsonify({"status": "success", "message": msg, "admin_note": ""})
 
     elif action == "status_refresh":
         c["admin_status_override"] = None
@@ -13160,6 +13326,7 @@ def api_admin_map_action():
                 ADMIN_SPZ_LOCKS[k_bid]["admin_driver"] = new_driver
                 if new_col and new_col not in ("", "\u2500\u2500"):
                     ADMIN_SPZ_LOCKS[k_bid]["color_class"] = new_col
+        _save_spz_settings()
 
         # Záznam do logu dashboardu (Bod 7)
         if new_driver:
@@ -15396,6 +15563,9 @@ def api_history_full():
 def api_history_spz(spz):
     clean_spz = spz.strip()
     norm_key = normalize_spz_key(clean_spz)
+    clean_no_space = clean_spz.replace(" ", "").upper()
+    spaced_spz = f"{clean_no_space[:3]} {clean_no_space[3:]}" if len(clean_no_space) == 7 else clean_spz
+    spz_variants = list(dict.fromkeys([clean_spz, clean_no_space, spaced_spz]))
     
     # 1. Živá data vozidla z GLOBAL_BUS_CACHE / SPZ_MEMORY
     live_bus = None
@@ -15415,15 +15585,25 @@ def api_history_spz(spz):
     db = get_db_client()
     if db:
         try:
-            res = db.table("bus_history").select("*").eq("spz", clean_spz).order("created_at", desc=True).limit(100).execute()
+            or_filter = ",".join([f"spz.eq.{v}" for v in spz_variants] + [f"spz.ilike.%{clean_no_space}%"])
+            res = db.table("bus_history").select("*").or_(or_filter).order("created_at", desc=True).limit(100).execute()
             cloud_trips = res.data or []
         except Exception:
-            pass
+            try:
+                res = db.table("bus_history").select("*").in_("spz", spz_variants).order("created_at", desc=True).limit(100).execute()
+                cloud_trips = res.data or []
+            except Exception:
+                pass
         try:
-            depot_res = db.table("depot_history").select("*").eq("spz", clean_spz).order("arrived_at", desc=True).limit(50).execute()
+            or_filter = ",".join([f"spz.eq.{v}" for v in spz_variants] + [f"spz.ilike.%{clean_no_space}%"])
+            depot_res = db.table("depot_history").select("*").or_(or_filter).order("arrived_at", desc=True).limit(50).execute()
             cloud_depots = depot_res.data or []
         except Exception:
-            pass
+            try:
+                depot_res = db.table("depot_history").select("*").in_("spz", spz_variants).order("arrived_at", desc=True).limit(50).execute()
+                cloud_depots = depot_res.data or []
+            except Exception:
+                pass
 
     # 4. Sloučení a deduplikace jízd (podle trip_id)
     merged_trips = []
@@ -15475,13 +15655,31 @@ def api_history_spz(spz):
             "left_at": d.get("left_at")
         })
 
+    # Doplnění aktivní relace vozovny, pokud vůz právě parkuje
+    for s_key, sess in list(DEPOT_ACTIVE_SESSIONS.items()):
+        s_spz = sess.get("spz") or ""
+        if normalize_spz_key(s_spz) == norm_key:
+            merged_depots.insert(0, {
+                "depot_name": resolve_depot_name(sess.get("depot_name") or ""),
+                "spz": s_spz,
+                "arrived_at": sess.get("arrived_at"),
+                "left_at": None
+            })
+            break
+
     merged_depots.sort(key=lambda x: str(x.get("arrived_at") or ""), reverse=True)
 
     # Metadata vozidla
-    v_type = (live_bus.get("vehicle_type") if live_bus else None) or SPZ_MEMORY.get(clean_spz, {}).get("vehicle_type") or "Autobus IDPK"
+    mem_obj = {}
+    for v_var in spz_variants:
+        if v_var in SPZ_MEMORY:
+            mem_obj = SPZ_MEMORY[v_var]
+            break
+
+    v_type = (live_bus.get("vehicle_type") if live_bus else None) or mem_obj.get("vehicle_type") or "Autobus IDPK"
     op = (live_bus.get("operator") if live_bus else None) or "Arriva"
-    driver = (live_bus.get("admin_driver") if live_bus else None) or SPZ_MEMORY.get(clean_spz, {}).get("admin_driver") or ""
-    note = (live_bus.get("admin_note") if live_bus else None) or SPZ_MEMORY.get(clean_spz, {}).get("admin_note") or ""
+    driver = (live_bus.get("admin_driver") if live_bus else None) or mem_obj.get("admin_driver") or ""
+    note = (live_bus.get("admin_note") if live_bus else None) or mem_obj.get("admin_note") or ""
 
     curr_line = (live_bus.get("line") if live_bus else None) or ""
     curr_dest = (live_bus.get("destination") if live_bus else None) or ""
@@ -15829,9 +16027,14 @@ def api_depot_history():
     
     data = []
     db = get_db_client()
+    is_all_depots = not depot_name or depot_name.lower() in ('all', 'vse', 'vše', '')
+    resolved_name = resolve_depot_name(depot_name) if not is_all_depots else None
+
     if db:
         try:
-            query = db.table("depot_history").select("*").eq("depot_name", depot_name)
+            query = db.table("depot_history").select("*")
+            if not is_all_depots:
+                query = query.or_(f"depot_name.eq.{depot_name},depot_name.eq.{resolved_name},depot_name.ilike.%{resolved_name}%")
             if search_q:
                 query = query.ilike("spz", f"%{search_q}%")
             res = query.order("arrived_at", desc=is_desc).limit(500).execute()
@@ -15843,11 +16046,47 @@ def api_depot_history():
     if not data:
         try:
             from local_db import local_depot_history_get
-            data = local_depot_history_get(depot_name=depot_name, spz=search_q if search_q else None, limit=500, sort_desc=is_desc)
+            data = local_depot_history_get(depot_name=None if is_all_depots else (resolved_name or depot_name), spz=search_q if search_q else None, limit=500, sort_desc=is_desc)
         except Exception:
             pass
 
-    return jsonify({"status": "success", "data": data})
+    # Doplnění aktivně parkujících z paměti DEPOT_ACTIVE_SESSIONS
+    active_in_depot = []
+    for s_key, sess in list(DEPOT_ACTIVE_SESSIONS.items()):
+        s_dep = sess.get("depot_name") or ""
+        if not is_all_depots:
+            r_req = (resolved_name or depot_name or "").lower()
+            r_sess = resolve_depot_name(s_dep).lower()
+            if r_req != r_sess and r_req not in r_sess and r_sess not in r_req:
+                continue
+        s_spz = sess.get("spz") or ""
+        if search_q and search_q not in s_spz.lower():
+            continue
+        active_in_depot.append({
+            "id": sess.get("id") or f"act_{s_key}",
+            "depot_name": s_dep,
+            "spz": s_spz,
+            "bus_id": sess.get("bus_id"),
+            "arrived_at": sess.get("arrived_at"),
+            "left_at": None,
+            "is_imprecise": sess.get("is_imprecise", False)
+        })
+
+    # Sloučení: aktivní parkující dopředu bez duplicit
+    seen_spz_active = set()
+    merged = []
+    for act_row in active_in_depot:
+        spz_k = act_row["spz"]
+        if spz_k not in seen_spz_active:
+            seen_spz_active.add(spz_k)
+            merged.append(act_row)
+
+    seen_ids = {r.get("id") for r in merged}
+    for row in data:
+        if row.get("id") not in seen_ids:
+            merged.append(row)
+
+    return jsonify({"status": "success", "data": merged})
 
 @mapa_bp.route('/api/admin/delete_depot_history', methods=['POST'])
 def api_admin_delete_depot_history():

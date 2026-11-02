@@ -1382,8 +1382,9 @@ def local_depot_history_get(depot_name: str = None, spz: str = None, limit: int 
                 query += " AND depot_name = ?"
                 args.append(depot_name)
             if spz:
-                query += " AND spz LIKE ?"
-                args.append(f"%{spz}%")
+                clean_s = spz.replace(" ", "").upper()
+                query += " AND (spz LIKE ? OR REPLACE(UPPER(spz), ' ', '') LIKE ?)"
+                args.extend([f"%{spz}%", f"%{clean_s}%"])
             order_dir = "DESC" if sort_desc else "ASC"
             query += f" ORDER BY arrived_at {order_dir} LIMIT {int(limit)}"
             cur.execute(query, args)

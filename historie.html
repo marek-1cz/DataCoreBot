@@ -731,9 +731,9 @@ async function getJSON(url){const r=await fetch(url,{credentials:'include',heade
 async function fetchAll(){
   if(CONFIG.DEMO){await new Promise(r=>setTimeout(r,250));return demoData()}
   const [dep,rec,veh]=await Promise.all([
-    getJSON(CONFIG.api.depots).catch(e=>{throw e}),
-    getJSON(CONFIG.api.records),
-    CONFIG.api.vehicles?getJSON(CONFIG.api.vehicles).catch(()=>[]):Promise.resolve([])
+    getJSON(CONFIG.api.depots).catch(e=>{console.warn("Chyba depots:",e);return [];}),
+    getJSON(CONFIG.api.records).catch(e=>{console.warn("Chyba records:",e);return [];}),
+    CONFIG.api.vehicles?getJSON(CONFIG.api.vehicles).catch(e=>{console.warn("Chyba vehicles:",e);return [];}):Promise.resolve([])
   ]);
   const arr=x=>Array.isArray(x)?x:(x&&(x.data||x.items||x.records||x.vehicles||x.depots))||[];
   return{vehicles:arr(veh),depots:arr(dep),records:arr(rec)};
@@ -761,12 +761,12 @@ function build(raw){
       if(v.status==='run'||v.status==='off')v.depot=v.status==='depot'?v.depot:'';
     }
   });
-  recs.forEach(x=>{x.v=map.get(x.spz)});
+  recs.forEach(x=>{x.v=map.get(x.spz)||{spz:x.spz,type:'',op:'',line:'',dest:'',seen:null,status:'',depot:x.depot,trips:[]}});
   const depots=(raw.depots||[]).filter(d=>d&&d.name).map(d=>({name:d.name,color:safeColor(d.color),cap:+d.capacity||0,vzor:!!d.vzor}));
   recs.forEach(x=>{if(!depots.some(d=>d.name===x.depot))depots.push({name:x.depot,color:'#2f6bff',cap:0})});
   S.vehicles=[...map.values()];S.records=recs;S.depots=depots;S.bySpz=map;
   S.vehicles.forEach(v=>{v.hay=[v.spz,v.type,v.op,v.line,v.dest,v.depot].map(norm).join('|')});
-  recs.forEach(x=>{x.hay=[x.spz,x.depot,x.v.line,x.v.dest,x.v.type].map(norm).join('|')});
+  recs.forEach(x=>{const v=x.v||{};x.hay=[x.spz,x.depot,v.line||'',v.dest||'',v.type||''].map(norm).join('|')});
 }
 
 /* =====================================================================
@@ -774,10 +774,11 @@ function build(raw){
    ===================================================================== */
 function tokens(){return S.q.split(/\s+/).map(norm).filter(Boolean)}
 function chipOK(c,v,depotName){
-  if(c.k==='spz')return norm(v.spz)===norm(c.v);
-  if(c.k==='line')return v.line===c.v||v.trips.some(t=>String(t.line)===c.v);
-  if(c.k==='dest')return v.dest===c.v;
-  if(c.k==='depot')return depotName!=null?depotName===c.v:(v.depot===c.v||S.records.some(r=>r.spz===v.spz&&r.depot===c.v));
+  const vObj=v||{};
+  if(c.k==='spz')return norm(vObj.spz)===norm(c.v);
+  if(c.k==='line')return (vObj.line||'')===c.v||(Array.isArray(vObj.trips)&&vObj.trips.some(t=>String(t.line)===c.v));
+  if(c.k==='dest')return (vObj.dest||'')===c.v;
+  if(c.k==='depot')return depotName!=null?depotName===c.v:((vObj.depot||'')===c.v||S.records.some(r=>r.spz===vObj.spz&&r.depot===c.v));
   return true;
 }
 function matchV(v){const t=tokens();return t.every(x=>v.hay.includes(x))&&S.chips.every(c=>chipOK(c,v))}
@@ -1331,16 +1332,18 @@ async function load(silent){
       const pathMatch = location.pathname.match(/\/historie\/([^\/?#]+)/);
       const targetSpz = urlP.get('spz') || hashP.get('spz') || (pathMatch ? decodeURIComponent(pathMatch[1]) : null);
       if(targetSpz){
-        const cleanSpz = targetSpz.trim().toUpperCase();
+        const cleanSpz = targetSpz.trim();
+        const normTarget = norm(cleanSpz);
         let foundSpz = null;
         for(const k of S.bySpz.keys()){
-          if(k.toUpperCase() === cleanSpz){ foundSpz = k; break; }
+          if(norm(k) === normTarget){ foundSpz = k; break; }
         }
         if(foundSpz){
           openDetail(foundSpz);
         } else {
-          $('#q').value = targetSpz;
-          S.q = targetSpz;
+          openDetail(cleanSpz);
+          $('#q').value = cleanSpz;
+          S.q = cleanSpz;
           syncBox();
           resetShown();
           renderAll();
