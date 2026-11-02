@@ -8871,7 +8871,11 @@ async def on_ready():
     try: bot.add_view(LauncherInstallView())
     except: pass
     try:
-        for guild in bot.guilds: bot.invites_cache[guild.id] = await guild.invites()
+        for guild in bot.guilds:
+            try:
+                inv_list = await guild.invites()
+                bot.invites_cache[guild.id] = {inv.code: (inv.uses or 0) for inv in inv_list}
+            except Exception: pass
     except: pass
     trigger_setup_messages_update()
     if not keepalive_ping.is_running(): keepalive_ping.start()
@@ -8950,8 +8954,74 @@ async def cmd_debugvozovna(ctx):
 bot.remove_command("help")
 
 @bot.event
+async def on_invite_create(invite):
+    try:
+        g_id = invite.guild.id
+        if g_id not in bot.invites_cache:
+            bot.invites_cache[g_id] = {}
+        bot.invites_cache[g_id][invite.code] = invite.uses or 0
+    except Exception:
+        pass
+
+@bot.event
+async def on_invite_delete(invite):
+    try:
+        g_id = invite.guild.id
+        if g_id in bot.invites_cache and invite.code in bot.invites_cache[g_id]:
+            del bot.invites_cache[g_id][invite.code]
+    except Exception:
+        pass
+
+@bot.event
 async def on_member_join(member):
-    await async_send_log("👋 Nový člen na serveru", f"**Uživatel:** {member.mention} ({member.name})\n**ID:** `{member.id}`\n**Datum:** {get_prague_time().strftime('%d.%m.%Y %H:%M')}", 0x10b981)
+    invite_source = "Neznámý (přímé připojení, integrace nebo chybějící oprávnění bota)"
+    inviter_str = None
+    uses_count_str = None
+
+    try:
+        cached_map = bot.invites_cache.get(member.guild.id, {})
+        current_invites = await member.guild.invites()
+        new_map = {}
+        matched_invite = None
+
+        for inv in current_invites:
+            new_map[inv.code] = inv.uses or 0
+            old_uses = cached_map.get(inv.code, 0)
+            if (inv.uses or 0) > old_uses and not matched_invite:
+                matched_invite = inv
+
+        bot.invites_cache[member.guild.id] = new_map
+
+        if matched_invite:
+            code = matched_invite.code
+            uses = matched_invite.uses or 0
+            max_u = f" / {matched_invite.max_uses}" if matched_invite.max_uses else ""
+            uses_count_str = f"{uses}{max_u}×"
+            
+            if matched_invite.inviter:
+                inviter_str = f"{matched_invite.inviter.mention} (`{matched_invite.inviter.name}`)"
+            
+            if code in ["vmTagbC9mF", "idpk"]:
+                invite_source = f"[`discord.gg/{code}`](https://discord.gg/{code}) *(🌐 Oficiální web / mapa)*"
+            else:
+                invite_source = f"[`discord.gg/{code}`](https://discord.gg/{code}) *(odkaz pro fóra / sdílení)*"
+        elif member.guild.vanity_url_code:
+            invite_source = f"`discord.gg/{member.guild.vanity_url_code}` *(Vanity URL)*"
+    except Exception as e:
+        print(f"[on_member_join invite tracking error] {e}", flush=True)
+
+    desc_lines = [
+        f"**Uživatel:** {member.mention} (`{member.name}`)",
+        f"**ID uživatele:** `{member.id}`",
+        f"**Odkud přišel (pozvánka):** {invite_source}"
+    ]
+    if inviter_str:
+        desc_lines.append(f"**Pozvánku vytvořil:** {inviter_str}")
+    if uses_count_str:
+        desc_lines.append(f"**Počet použití pozvánky:** {uses_count_str}")
+    desc_lines.append(f"**Datum a čas:** {get_prague_time().strftime('%d.%m.%Y %H:%M')}")
+
+    await async_send_log("👋 Nový člen na Discord serveru", "\n".join(desc_lines), color=0x10b981)
 
 @bot.event
 async def on_member_update(before, after):

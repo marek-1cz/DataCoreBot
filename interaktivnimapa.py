@@ -1794,6 +1794,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
     <button id="pub-stops-btn" onclick="togglePubStops()"><i class="fas fa-bus"></i> Zastávky</button>
     <button id="lines-overlay-btn-pub" onclick="toggleLinesPanel()" class="n-btn"><i class="fas fa-route"></i> Linky</button>
     <button id="moving-only-btn" onclick="toggleOnlyMovingBuses()" class="n-btn" title="Zobrazit pouze vozy v jízdě (skrýt odstavené, vozovny a neaktivní)"><i class="fas fa-play"></i> Pouze v jízdě</button>
+    <a href="https://discord.gg/vmTagbC9mF" target="_blank" rel="noopener" class="n-btn" title="Připojit se na náš Discord server" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;background:rgba(88,101,242,0.18);border:1px solid rgba(88,101,242,0.4);color:#818cf8;"><i class="fab fa-discord" style="color:#5865F2;"></i> Discord</a>
     <div class="n-sp"></div>
     <div class="n-clock"><span id="systemTimeClock">--:--:--</span></div>
     <div style="position:relative;flex-shrink:0;" id="spz-search-wrap">
@@ -2263,7 +2264,12 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
 
     <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;">
       <span style="font-size:10px;color:#64748b;">OIS IDPK &copy; 2026</span>
-      <a href="/soukromi" target="_blank" style="font-size:11px;color:#8da2cf;text-decoration:none;display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;" onmouseover="this.style.color='#38d6ff';this.style.borderColor='rgba(56,189,248,0.4)'" onmouseout="this.style.color='#8da2cf';this.style.borderColor='rgba(255,255,255,0.08)'">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <a href="https://discord.gg/vmTagbC9mF" target="_blank" rel="noopener" style="font-size:11px;color:#818cf8;text-decoration:none;display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;background:rgba(88,101,242,0.12);border:1px solid rgba(88,101,242,0.3);transition:all 0.15s;" onmouseover="this.style.color='#a5b4fc';this.style.borderColor='rgba(88,101,242,0.6)'" onmouseout="this.style.color='#818cf8';this.style.borderColor='rgba(88,101,242,0.3)'">
+          <i class="fab fa-discord" style="font-size:12px;color:#5865f2;"></i>
+          <span>Discord server</span>
+        </a>
+        <a href="/soukromi" target="_blank" style="font-size:11px;color:#8da2cf;text-decoration:none;display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;" onmouseover="this.style.color='#38d6ff';this.style.borderColor='rgba(56,189,248,0.4)'" onmouseout="this.style.color='#8da2cf';this.style.borderColor='rgba(255,255,255,0.08)'">
         <i class="fas fa-shield-alt" style="font-size:11px;"></i>
         <span>GDPR & Soukromí</span>
       </a>
