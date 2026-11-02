@@ -737,29 +737,145 @@ def resolve_ip_geo(ip, cf_hint=None):
     _IP_GEO_CACHE[ip] = (now, res)
     return res
 
-def log_web_visit_async(ip, cf_hint, path):
-    """Zaznamená návštěvu webu do lokální SQLite databáze (0% zátěž na Supabase)."""
+_RECENT_DISCORD_VISIT_LOGS = {}  # {ip: (timestamp, source)}
+
+def format_visitor_source(referrer, full_url):
+    ref = (referrer or "").strip()
+    url = (full_url or "").strip()
+
+    if ref:
+        ref_low = ref.lower()
+        if any(d in ref_low for d in ("discord.com", "discordapp.com", "android-app://com.discord")):
+            return "💬 Discord (zpráva / server)"
+        if "k-report.net" in ref_low:
+            return f"🚆 Fórum K-Report (`{ref}`)"
+        if "seznam-autobusu.cz" in ref_low:
+            return f"🚌 Seznam-autobusu.cz (`{ref}`)"
+        if any(fb in ref_low for fb in ("facebook.com", "fb.com", "fb.me", "m.facebook.com", "l.facebook.com")):
+            return "📘 Facebook"
+        if "instagram.com" in ref_low:
+            return "📷 Instagram"
+        if "reddit.com" in ref_low:
+            return f"🤖 Reddit (`{ref}`)"
+        if "google." in ref_low:
+            return "🔍 Vyhledávač Google"
+        if "seznam.cz" in ref_low:
+            return "🔍 Vyhledávač Seznam.cz"
+        if "bing.com" in ref_low:
+            return "🔍 Vyhledávač Bing"
+        if "datacorebot.koyeb.app" in ref_low:
+            return "🔄 Interní navigace v rámci webu"
+        return f"🔗 Odkaz z webu: `{ref}`"
+
+    try:
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(url)
+        qs = parse_qs(parsed.query)
+        for param in ('ref', 'source', 'utm_source', 'src', 'from', 's'):
+            if param in qs and qs[param]:
+                val = qs[param][0]
+                return f"🎯 Odkaz s parametrem: `{param}={val}`"
+    except Exception:
+        pass
+
+    return "➡️ Přímý přístup (zadaná URL / záložka / odkaz v privátním okně)"
+
+def detect_device(ua_str):
+    ua = (ua_str or "").lower()
+    if not ua:
+        return "Neznámé zařízení"
+    device = "💻 Počítač"
+    if any(m in ua for m in ("android", "iphone", "ipad", "mobile")):
+        if "iphone" in ua:
+            device = "📱 Apple iPhone"
+        elif "ipad" in ua:
+            device = "📱 Apple iPad"
+        elif "android" in ua:
+            device = "📱 Mobil (Android)"
+        else:
+            device = "📱 Mobil"
+    elif "windows" in ua:
+        device = "💻 Windows PC"
+    elif "macintosh" in ua or "mac os" in ua:
+        device = "💻 Mac"
+    elif "linux" in ua:
+        device = "💻 Linux"
+
+    browser = ""
+    if "chrome" in ua and "edg" not in ua and "opr" not in ua:
+        browser = "Chrome"
+    elif "firefox" in ua:
+        browser = "Firefox"
+    elif "safari" in ua and "chrome" not in ua:
+        browser = "Safari"
+    elif "edg" in ua:
+        browser = "Edge"
+    elif "opera" in ua or "opr" in ua:
+        browser = "Opera"
+
+    return f"{device} ({browser})" if browser else device
+
+def log_web_visit_async(ip, cf_hint, path, referrer=None, full_url=None, user_agent=None):
+    """Zaznamená návštěvu webu do lokální SQLite databáze a odešle přehled do Discord logu."""
     def _worker():
         try:
             if not ip:
                 return
             now_ts = time.time()
-            last_ts = _RECENT_WEB_VISITS.get(ip, 0)
-            if now_ts - last_ts < 900:
+            source = format_visitor_source(referrer, full_url)
+            is_internal = "Interní navigace" in source
+
+            # 1. Zápis do lokální databáze (s 15minutovým limitem na IP pro DB statistiky)
+            last_db_ts = _RECENT_WEB_VISITS.get(ip, 0)
+            if now_ts - last_db_ts >= 900:
+                _RECENT_WEB_VISITS[ip] = now_ts
+                geo = resolve_ip_geo(ip, cf_hint)
+                now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
+                clean_path = (path or "/").split("?")[0][:60]
+                combined = f"{geo['country_code']}|{geo['country_name']}|{geo['region']}|{geo['city']}|{clean_path}"
+                try:
+                    from local_db import local_log_web_visit
+                    local_log_web_visit(ip, combined, now_str)
+                except Exception:
+                    pass
+
+            # 2. Odeslání do Discord logu:
+            # - Ignorujeme běžné prokliky uvnitř webu (např. z / na /mapa)
+            # - Limitujeme na 1 hlášení na IP za 10 minut (pokud nepřijde z jiného externího zdroje)
+            if is_internal:
                 return
-            _RECENT_WEB_VISITS[ip] = now_ts
+
+            last_disc_ts, last_disc_source = _RECENT_DISCORD_VISIT_LOGS.get(ip, (0, ""))
+            if (now_ts - last_disc_ts < 600) and (last_disc_source == source):
+                return
+
+            _RECENT_DISCORD_VISIT_LOGS[ip] = (now_ts, source)
 
             geo = resolve_ip_geo(ip, cf_hint)
-            now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
-            clean_path = (path or "/").split("?")[0][:60]
-            combined = f"{geo['country_code']}|{geo['country_name']}|{geo['region']}|{geo['city']}|{clean_path}"
-            try:
-                from local_db import local_log_web_visit
-                local_log_web_visit(ip, combined, now_str)
-            except Exception:
-                pass
-        except Exception:
-            pass
+            loc_parts = [p for p in (geo.get('city'), geo.get('region'), geo.get('country_name')) if p]
+            loc_str = ", ".join(loc_parts) if loc_parts else "Neznámá"
+            device_str = detect_device(user_agent)
+            clean_path = (path or "/").split("?")[0]
+
+            is_external = not source.startswith("➡️")
+            color = 0x10b981 if is_external else 0x38bdf8
+
+            desc = (
+                f"🔗 **Odkud přišel (Zdroj):** {source}\n"
+                f"📍 **Otevřená stránka:** `{clean_path}`\n"
+                f"🌍 **Lokalita:** {loc_str}\n"
+                f"💻 **Zařízení:** `{device_str}`\n"
+                f"🌐 **IP adresa:** `{ip}`"
+            )
+
+            send_log(
+                title="🌐 Nový návštěvník na webu",
+                description=desc,
+                color=color,
+                channel_name="🖥️・datacore-logs"
+            )
+        except Exception as e:
+            print(f"[VISIT LOG ERR] {e}", flush=True)
 
     Thread(target=_worker, daemon=True).start()
 
@@ -770,11 +886,14 @@ def track_web_visitors():
             p = request.path
             # Ignorovat assety, API, interní routy
             if not p.startswith(('/static/', '/api/', '/dashboard', '/debug', '/favicon', '/robots', '/sitemap', '/google', '/.well-known')):
-                ua = request.headers.get('User-Agent', '').lower()
-                if not any(b in ua for b in ['bot', 'crawl', 'spider', 'slurp', 'mediapartners', 'lighthouse', 'headless']):
+                ua = request.headers.get('User-Agent', '')
+                ua_low = ua.lower()
+                if not any(b in ua_low for b in ['bot', 'crawl', 'spider', 'slurp', 'mediapartners', 'lighthouse', 'headless']):
                     ip = get_real_client_ip(request)
                     cf = request.headers.get('CF-IPCountry')
-                    log_web_visit_async(ip, cf, p)
+                    ref = request.referrer or ""
+                    full_url = request.url
+                    log_web_visit_async(ip, cf, p, referrer=ref, full_url=full_url, user_agent=ua)
     except Exception:
         pass
 
