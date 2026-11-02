@@ -2687,11 +2687,13 @@ def sitemap_xml():
 
 @app.route('/google94ce5c70ba2b1e7c.html')
 def google_verification_exact():
+    curr_dir = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(curr_dir, "google94ce5c70ba2b1e7c.html")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return Response(content, mimetype="text/html; charset=utf-8")
     return Response("google-site-verification: google94ce5c70ba2b1e7c.html", mimetype="text/html; charset=utf-8")
-
-@app.route('/google<token>.html')
-def google_verification_generic(token):
-    return Response(f"google-site-verification: google{token}.html", mimetype="text/html; charset=utf-8")
 
 @app.route('/overeni')
 def stranka_overeni():
