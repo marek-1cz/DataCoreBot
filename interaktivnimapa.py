@@ -4045,8 +4045,19 @@ function checkSW(uptimeSec){
 // === POMOCNÁ DETEKCE VLAKU PRO FRONTEND ===
 function isTrainVehicle(bus) {
   if (!bus) return false;
-  if (bus.is_train) return true;
+  let spz = String(bus.spz || '').trim().toUpperCase();
+  if (spz && spz !== 'NEZN\xc3\x81M\xc3\x81' && spz !== 'NEZNAMA' && spz !== 'AKTIVN\xc3\x8d HLED\xc3\x81N\xc3\x8d' && spz !== 'AKTIVNI HLEDANI' && spz !== '?') {
+    return false;
+  }
+  if (bus.vehicle_type || bus.in_depot) return false;
+
   let l = String(bus.line || bus.real_linka_spoj || '').trim();
+  let lPart = l.split('/')[0].trim();
+  if (/^[1-9][0-9]{2,5}$/.test(lPart) && !/^(Os|Sp|R|Ex|IC|EC|SC|RJ|LE|TL|GWTR|P[1-9]|P[1-3][0-9])\b/i.test(l)) {
+    return false;
+  }
+
+  if (bus.is_train) return true;
   if (/^(Os|Sp|R|Ex|IC|EC|SC|rj|RJ|EN|LE|TL|TLX|GWTR|Vlak)\b/i.test(l)) return true;
   if (/^(P[1-9]|P[1-3][0-9])\b/i.test(l)) return true;
   return false;
@@ -4079,11 +4090,11 @@ function buildMarkerSvg(mc,bearing,lineText,isTrain,busId,isWithdrawn=false,ageT
     let tr = 11;
     let sCol = mc === 'bg-lastpos' ? '#f472b6' : 'white';
     let lClean = String(lineText || '').trim();
-    let lShort = lClean.length > 5 ? lClean.slice(0, 4) : lClean;
     let si = `<rect x="${cx-tr+1}" y="${cy-tr+1}" width="${tr*2}" height="${tr*2}" rx="3" fill="rgba(0,0,0,0.3)"/>`;
     si += `<rect x="${cx-tr}" y="${cy-tr}" width="${tr*2}" height="${tr*2}" rx="3" fill="${bgC}" stroke="${sCol}" stroke-width="2" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.6));"/>`;
-    if (lShort) {
-      si += `<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="#fff" font-weight="bold" font-size="7" font-family="'Segoe UI',system-ui,sans-serif">${lShort}</text>`;
+    if (lClean) {
+      let fSize = lClean.length >= 5 ? 6 : (lClean.length === 4 ? 7.5 : 8);
+      si += `<text x="${cx}" y="${cy+1}" dominant-baseline="middle" text-anchor="middle" fill="#fff" font-weight="bold" font-size="${fSize}" font-family="'Segoe UI',system-ui,sans-serif">${lClean}</text>`;
     }
     return `<svg width="36" height="${h}" viewBox="0 0 36 ${h}" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">${si}${ageBadge}</svg>`;
   }
@@ -8041,16 +8052,20 @@ def _name_suggests_train(name):
 def is_train_vehicle(bus_id, line="", traction=""):
     """Spolehlivě určí, zda jde o vlak (vlaky nesmí dostávat SPZ, poznámky ani být považovány za busy)."""
     trac = str(traction or "").upper().strip()
-    # 1. Pokud je trakce explicitně autobus, trolejbus nebo tramvaj, NIKDY to není vlak!
     if trac in ("BUS", "TROLLEYBUS", "TRAM"):
         return False
 
     l_str = str(line or "").strip()
-    digits = "".join(ch for ch in l_str if ch.isdigit())
+    l_part = l_str.split("/")[0].strip()
+    digits = "".join(ch for ch in l_part if ch.isdigit())
 
-    # 2. 6místné licenční číslo autobusové linky (např. 100304, 210546, 380954, 490722, 440752) je VŽDY autobus!
+    # 1. 6místné licenční číslo autobusové linky (např. 490750, 440752, 100404, 210546) je VŽDY autobus!
     if len(digits) == 6 and digits[0] in "123456789":
         return False
+    # 2. 1-3místné běžné autobusové linky (např. 750, 752, 722, 212) bez vlakové předpony
+    if len(digits) in (1, 2, 3) and not re.match(r'^(Os|Sp|R|Ex|IC|EC|SC|RJ|LE|TL|TLX|GWTR|Rx|P[1-9]|P[1-3][0-9])\b', l_str, re.IGNORECASE):
+        if trac != "TRAIN":
+            return False
 
     # 3. Explicitní trakce TRAIN
     if trac == "TRAIN":
@@ -11472,14 +11487,6 @@ def background_map_worker():
             for t in train_inflow:
                 t_id = str(t.get("id", "0"))
                 t_line = str(t.get("text") or t.get("line") or "").strip() or "Vlak"
-                if t_line.isdigit():
-                    num = int(t_line)
-                    if num >= 7000:
-                        t_line = f"Os {num}"
-                    elif num >= 100:
-                        t_line = f"R {num}"
-                    else:
-                        t_line = f"Vlak {num}"
                 t_dest = str(t.get("finalStopName") or "").strip() or "Vlak"
                 t_lat = float(t.get("lat") or 0)
                 t_lng = float(t.get("lng") or 0)
@@ -14819,7 +14826,15 @@ def api_live_buses():
         bid_str = str(b_copy.get("id") or "")
         b_copy["is_watched"] = bool(bid_str in WATCHED_SPZ_BUSES)
         b_copy["is_ignored"] = bool(bid_str in IGNORED_SPZ_ERRORS)
-        is_tr = bool(b_copy.get("is_train") or is_train_vehicle(b_copy.get("id"), b_copy.get("line")))
+        spz_val = str(b_copy.get("spz") or "").strip().upper()
+        has_real_spz = bool(spz_val and spz_val not in ("NEZNÁMÁ", "NEZNAMA", "NEZNAMY", "?", "", "NONE", "AKTIVNÍ HLEDÁNÍ", "AKTIVNI HLEDANI"))
+        has_vtype = bool(b_copy.get("vehicle_type"))
+        is_in_depot = bool(b_copy.get("in_depot"))
+
+        is_tr = is_train_vehicle(b_copy.get("id"), b_copy.get("line"))
+        if has_real_spz or has_vtype or is_in_depot:
+            is_tr = False
+
         if is_tr:
             # Vlaky NIKDY nesmí být na mapě jako offline/poslední známá poloha!
             if b_copy.get("color_class") == "bg-lastpos" or b_copy.get("status") == "Poslední známá poloha":
@@ -14831,8 +14846,10 @@ def api_live_buses():
             b_copy["admin_note"] = ""
             b_copy["admin_driver"] = ""
             b_copy["admin_flag"] = False
-        elif not is_admin:
-            b_copy.pop("admin_driver", None)
+        else:
+            b_copy["is_train"] = False
+            if not is_admin:
+                b_copy.pop("admin_driver", None)
         buses_to_send.append(b_copy)
             
     resp = jsonify({
