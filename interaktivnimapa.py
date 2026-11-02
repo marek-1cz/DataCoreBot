@@ -2260,6 +2260,14 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
         <i class="fas fa-history" style="color:#f472b6;"></i> Záznamy zmizení vozů z PVVD mapy
       </button>
     </div>
+
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:10px;color:#64748b;">OIS IDPK &copy; 2026</span>
+      <a href="/soukromi" target="_blank" style="font-size:11px;color:#8da2cf;text-decoration:none;display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;" onmouseover="this.style.color='#38d6ff';this.style.borderColor='rgba(56,189,248,0.4)'" onmouseout="this.style.color='#8da2cf';this.style.borderColor='rgba(255,255,255,0.08)'">
+        <i class="fas fa-shield-alt" style="font-size:11px;"></i>
+        <span>GDPR & Soukromí</span>
+      </a>
+    </div>
   </div>
 </div>
 

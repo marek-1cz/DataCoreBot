@@ -2607,6 +2607,7 @@ def redirect_provoz_idpk():
     return redirect('/#/provoz')
 
 @app.route('/jizdni-rad')
+@app.route('/jizni-rad')
 def stranka_jizdni_rad():
     try:
         curr_dir = os.path.dirname(os.path.abspath(__file__))
@@ -2649,6 +2650,40 @@ def stranka_soukromi():
         return Response(content, mimetype="text/html; charset=utf-8")
     except Exception as e:
         return render_error_page(500, "Chyba soukromí", str(e)), 500
+
+@app.route('/robots.txt')
+def robots_txt():
+    content = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Allow: /mapa\n"
+        "Allow: /jizdni-rad\n"
+        "Allow: /jizni-rad\n"
+        "Allow: /historie\n"
+        "Allow: /soukromi\n"
+        "Allow: /gdpr\n"
+        "Disallow: /api/\n"
+        "Disallow: /dashboard/\n"
+        "Disallow: /mapa_admin\n"
+        "Disallow: /admin\n"
+        "Disallow: /debug\n\n"
+        "Sitemap: https://datacorebot.koyeb.app/sitemap.xml\n"
+    )
+    return Response(content, mimetype="text/plain; charset=utf-8")
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        '  <url><loc>https://datacorebot.koyeb.app/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
+        '  <url><loc>https://datacorebot.koyeb.app/mapa</loc><changefreq>always</changefreq><priority>0.9</priority></url>\n'
+        '  <url><loc>https://datacorebot.koyeb.app/jizdni-rad</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
+        '  <url><loc>https://datacorebot.koyeb.app/historie</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>\n'
+        '  <url><loc>https://datacorebot.koyeb.app/soukromi</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>\n'
+        '</urlset>'
+    )
+    return Response(xml, mimetype="application/xml; charset=utf-8")
 
 @app.route('/overeni')
 def stranka_overeni():

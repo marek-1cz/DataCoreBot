@@ -507,6 +507,7 @@ html.lite .jr-m.next,html.lite .jr-next .in{box-shadow:none}
   <a href="/mapa">Interaktivní mapa IDPK</a>
   <a href="/led-panel">LED Panel Simulátor</a>
   <a href="/podpora" data-r="podpora" style="color:var(--cyan);">Podpora / Hlášení chyb</a>
+  <a href="/soukromi" data-r="soukromi">Ochrana soukromí & GDPR</a>
   <a href="/ucet">Můj účet</a>
 </div>
 <div id="ois-notices" aria-live="polite" role="region" aria-label="Oznámení"></div>
@@ -773,7 +774,8 @@ function renderLine(){
   const b=$('#lBadge');b.textContent=l.short;b.style.setProperty('--c',l.color||'#2f6bff');b.style.animation='none';void b.offsetWidth;b.style.animation='';
   $('#lName').textContent=l.name;$('#lDir').textContent='Směr: '+st[st.length-1].name;
   $('#swap').hidden=l.directions.length<2;
-  const fi=st.findIndex(s=>s.id===S.from);
+  let fi=st.findIndex(s=>s.id===S.from);
+  if(fi<0){fi=0;if(st[0])S.from=st[0].id;}
   $('#selFrom').innerHTML=st.slice(0,-1).map(s=>'<option value="'+esc(s.id)+'"'+(s.id===S.from?' selected':'')+'>'+esc(s.name)+(s.request?'  ·  na znamení':'')+'</option>').join('');
   $('#selTo').innerHTML='<option value="">Celá trasa (do konce)</option>'+st.slice(fi+1).map(s=>'<option value="'+esc(s.id)+'"'+(s.id===S.to?' selected':'')+'>'+esc(s.name)+(s.request?'  ·  na znamení':'')+'</option>').join('');
   renderRoute();
@@ -915,7 +917,8 @@ function openTrip(i){
   let fn=-1,ln=-1;r.t.times.forEach((x,k)=>{if(x){if(fn<0)fn=k;ln=k}});
   const b=$('#dBadge');b.textContent=l.short;b.style.setProperty('--c',l.color||'#2f6bff');
   $('#dT').textContent=st[0].name+' → '+st[st.length-1].name;
-  $('#dS').textContent='Odjezd '+r.dep+(r.arr?' · příjezd '+r.arr+' · '+(r.a-r.d)+' min':'');
+  let durTxt='';if(r.arr&&r.a!=null&&r.d!=null){let diff=r.a-r.d;if(diff<0)diff+=1440;durTxt=' · příjezd '+r.arr+' · '+diff+' min';}
+  $('#dS').textContent='Odjezd '+r.dep+durTxt;
   $('#dTags').innerHTML=tagsOf(r).map(y=>'<em class="jr-tag '+y.c+'">'+esc(y.t)+'</em>').join('')+(r.note?'<p class="jr-note">'+esc(r.note)+'</p>':'');
   $('#dL').innerHTML=st.map((s,k)=>{const tm=r.t.times[k];const cls=!tm?((k>fn&&k<ln)?'pass':'skip'):(k<fi||k>r.endI)?'out':(k===fi?'beg':(k===r.endI?'end':''));
     return '<li class="'+cls+(s.request?' rq':'')+'" style="--i:'+k+'"><time>'+(tm||(cls==='pass'?'<small>projíždí</small>':'–'))+'</time><span>'+esc(s.name)+(cls==='skip'?' <small style="color:var(--muted)">(nejede)</small>':'')+(s.request?'<em class="jr-rq">'+BELL+'Na znamení</em>':'')+'</span></li>'}).join('');
@@ -946,9 +949,18 @@ function goBack(){
 /* ---------- adresa (odkaz na vybraný jízdní řád) ---------- */
 function syncHash(){if(!S.line)return;const p=new URLSearchParams({line:S.line.id,dir:S.dir,from:S.from,day:S.day});if(S.to)p.set('to',S.to);try{history.replaceState(null,'','#'+p)}catch(e){}}
 async function fromHash(){
-  const p=new URLSearchParams(location.hash.slice(1));if(!p.get('line'))return;
-  if(['weekday','saturday','sunday'].indexOf(p.get('day'))>=0)S.day=p.get('day');
-  await selectLine(p.get('line'),{dir:p.get('dir'),from:p.get('from'),to:p.get('to'),day:p.get('day')});
+  const hashP=new URLSearchParams(location.hash.slice(1));
+  const queryP=new URLSearchParams(location.search);
+  const line=hashP.get('line')||queryP.get('line')||queryP.get('l')||queryP.get('id');
+  const dir=hashP.get('dir')||queryP.get('dir');
+  const from=hashP.get('from')||queryP.get('from');
+  const to=hashP.get('to')||queryP.get('to');
+  const day=hashP.get('day')||queryP.get('day');
+  const q=hashP.get('q')||queryP.get('q');
+  if(q){$('#q').value=q;$('#qx').hidden=false;doSearch();}
+  if(!line)return;
+  if(['weekday','saturday','sunday'].indexOf(day)>=0)S.day=day;
+  await selectLine(line,{dir:dir,from:from,to:to,day:day});
 }
 
 /* ---------- události ---------- */
