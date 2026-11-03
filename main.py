@@ -868,12 +868,8 @@ def log_web_visit_async(ip, cf_hint, path, referrer=None, full_url=None, user_ag
                 f"🌐 **IP adresa:** `{ip}`"
             )
 
-            send_log(
-                title="🌐 Nový návštěvník na webu",
-                description=desc,
-                color=color,
-                channel_name="🖥️・datacore-logs"
-            )
+            # Odesílání jednotlivých návštěvníků do Discord logu bylo na žádost vypnuto (šetří spam)
+            pass
         except Exception as e:
             print(f"[VISIT LOG ERR] {e}", flush=True)
 

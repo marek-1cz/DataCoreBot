@@ -7406,7 +7406,8 @@ def normalize_line(line_raw: str) -> str:
 
 def is_valid_vehicle_type(vt: str) -> bool:
     """Ověří, zda text představuje skutečný model vozidla (např. Setra, Crossway, SOR, Bus Design Sprinter),
-    a nikoliv pouze provozní oblast z Arrivy (např. Plzeňsko, Klatovsko, Praha a Střední Čechy)."""
+    a nikoliv pouze provozní oblast z Arrivy (např. Plzeňsko, Klatovsko, Praha a Střední Čechy)
+    ani pouhé evidenční číslo / číslo vozu z PVVD či cizích krajů (např. 9599 nebo 'Vozidlo 9599')."""
     if not vt or not isinstance(vt, str):
         return False
     v = vt.strip()
@@ -7418,6 +7419,13 @@ def is_valid_vehicle_type(vt: str) -> bool:
     ).strip()
     # Odfiltrujeme pouze čisté neznámé hodnoty
     if v_norm in ("neznamy", "neznama", "nezjisteno", "nezname", "unknown", "none", "null", "-", "?", "undefined"):
+        return False
+
+    # Odfiltrujeme čistá evidenční čísla a tvary jako "9599", "vozidlo 9599", "vuz 1234", "ev. č. 9599" z PVVD
+    if v_norm.isdigit():
+        return False
+    import re
+    if re.match(r'^(vozidlo|vuz|bus|ev\.?\s*c\.?)\s*\d+$', v_norm):
         return False
 
     # Provozní oblasti z Arriva GraphQL feedu (kde pole type obsahuje oblast, např. 'Plzeňsko', 'Praha a Střední Čechy')
@@ -11863,6 +11871,11 @@ def background_map_worker():
         except Exception as crash_error:
             import traceback
             err_str = f"Hlavni smycka selhala: {crash_error}\n{traceback.format_exc()}"
+            try:
+                from daily_reporter import TRACKER
+                TRACKER.record_map_crash(str(crash_error))
+            except Exception:
+                pass
             try:
                 sys_log(err_str)
             except Exception:
