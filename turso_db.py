@@ -94,15 +94,15 @@ def is_turso_blocked_error(err_str: str) -> bool:
     if not err_str:
         return False
     low = str(err_str).lower()
+    if "write operations are forbidden" in low or "writes are blocked" in low:
+        return False
     return any(p in low for p in [
         "reads are blocked",
         "sql read operations are forbidden",
-        "operation was blocked",
         "read limit",
         "limit has now been reached",
-        "quota exceeded",
-        "plan limit",
-        "exceeded your plan"
+        "read quota exceeded",
+        "plan limit"
     ])
 
 def is_turso_blocked() -> bool:

@@ -1268,7 +1268,11 @@ class AppAuthView(discord.ui.View):
         try:
             db = get_db()
             if db:
-                db.table("users").update({"login_token": "approved"}).eq("discord_id", target_id).execute()
+                user_nick = interaction.user.display_name or interaction.user.name
+                update_dict = {"login_token": "approved"}
+                if user_nick:
+                    update_dict["nick"] = user_nick
+                db.table("users").update(update_dict).eq("discord_id", target_id).execute()
         except Exception:
             pass
         await interaction.response.edit_message(content="✅ **Přihlášení úspěšně schváleno!**", embed=None, view=None)
@@ -1304,7 +1308,11 @@ class DashboardAuthView(discord.ui.View):
         try:
             db = get_db()
             if db:
-                db.table("users").update({"login_token": "approved"}).eq("discord_id", target_id).execute()
+                user_nick = interaction.user.display_name or interaction.user.name
+                update_dict = {"login_token": "approved"}
+                if user_nick:
+                    update_dict["nick"] = user_nick
+                db.table("users").update(update_dict).eq("discord_id", target_id).execute()
         except Exception:
             pass
         await interaction.response.edit_message(content="✅ **Přístup na webový Dashboard byl schválen!**", embed=None, view=None)
@@ -2133,16 +2141,16 @@ class DynamicDownloadView(discord.ui.View):
                     if chk.data:
                         if chk.data[0].get('is_banned'): return await i2.followup.send("**Přístup zamítnut:** Máte BAN.", ephemeral=True)
                         if chk.data[0].get('is_deleted'):
-                            hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
-                            nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
+                            hid = db.table("users").select("app_id").lt("app_id", 2000).order("app_id", desc=True).limit(1).execute()
+                            nid = int(hid.data[0]["app_id"]) + 1 if (hid.data and hid.data[0].get("app_id")) else 1001
                             r = pend['roles'] if pend else "User"
                             db.table("users").update({"app_id": nid, "nick": n, "is_deleted": False, "role": r}).eq("discord_id", d_id).execute()
                             u_role = r
                             if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
                         else: u_role = chk.data[0].get('role', 'User')
                     else:
-                        hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
-                        nid = hid.data[0]["app_id"] + 1 if hid.data else 1000
+                        hid = db.table("users").select("app_id").lt("app_id", 2000).order("app_id", desc=True).limit(1).execute()
+                        nid = int(hid.data[0]["app_id"]) + 1 if (hid.data and hid.data[0].get("app_id")) else 1001
                         r = pend['roles'] if pend else "User"
                         db.table("users").insert({"app_id": nid, "discord_id": d_id, "nick": n, "role": r, "hwid": "", "ip_address": "", "is_banned": False, "is_deleted": False, "deleted_at": "", "dashboard_access": False, "login_token": "", "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
                         u_role = r
@@ -4321,7 +4329,11 @@ class WebAuthView(discord.ui.View):
         try:
             db = get_db()
             if db:
-                db.table("users").update({"login_token": "approved"}).eq("discord_id", target_id).execute()
+                user_nick = interaction.user.display_name or interaction.user.name
+                update_dict = {"login_token": "approved"}
+                if user_nick:
+                    update_dict["nick"] = user_nick
+                db.table("users").update(update_dict).eq("discord_id", target_id).execute()
         except Exception:
             pass
         await interaction.response.edit_message(content="✅ **Přihlášení na web OIS IDPK bylo úspěšné!** Můžete se vrátit do prohlížeče.", embed=None, view=None)
@@ -4403,10 +4415,10 @@ def process_web_auth_discord(discord_id, client_ip):
         user = db.table("users").select("*").eq("discord_id", discord_id_str).execute().data
         if not user:
             try:
-                highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
-                new_app_id = (highest[0]["app_id"] + 1) if (highest and highest[0].get("app_id")) else 1001
+                highest = db.table("users").select("app_id").lt("app_id", 2000).order("app_id", desc=True).limit(1).execute().data
+                new_app_id = (int(highest[0]["app_id"]) + 1) if (highest and highest[0].get("app_id")) else 1001
             except:
-                new_app_id = None
+                new_app_id = 1001
             insert_data = {"discord_id": discord_id_str, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": ""}
             if new_app_id: insert_data["app_id"] = new_app_id
             db.table("users").insert(insert_data).execute()
@@ -4420,6 +4432,14 @@ def process_web_auth_discord(discord_id, client_ip):
                     await bot.wait_until_ready()
                 u = bot.get_user(int(discord_id_str)) or await bot.fetch_user(int(discord_id_str))
                 if u: 
+                    d_nick = getattr(u, 'display_name', None) or getattr(u, 'name', None)
+                    if d_nick:
+                        try:
+                            cur_u = db.table("users").select("nick").eq("discord_id", discord_id_str).execute().data
+                            if not cur_u or not cur_u[0].get("nick"):
+                                db.table("users").update({"nick": d_nick}).eq("discord_id", discord_id_str).execute()
+                        except Exception:
+                            pass
                     await u.send(embed=discord.Embed(title="🔐 Webové ověření", description="Kliknutím na tlačítko níže se přihlásíte do interaktivní mapy a softwaru OIS IDPK.", color=0x38bdf8), view=WebAuthView(token, discord_id_str))
                     print(f"[AUTH] DM úspěšně naplánováno a odesláno uživateli {discord_id_str}")
                 else:
@@ -4440,10 +4460,11 @@ def process_web_auth_discord(discord_id, client_ip):
         print(f"[AUTH] Chyba v process_web_auth_discord: {e}")
         return {"status": "error", "message": f"Došlo k chybě: {str(e)}"}, 500
 
-def process_web_auth_email(email, intent, client_ip):
+def process_web_auth_email(email, intent, client_ip, nick=None):
     if not _rate_limit_check(f'auth_email:{client_ip}', 6, 120):
         return {'status': 'error', 'message': 'Příliš mnoho pokusů o zaslání e-mailu. Zkuste to za chvíli.'}, 429
     email_str = str(email or '').strip()
+    nick_str = str(nick or '').strip()
     if not email_str or '@' not in email_str:
         return {"status": "error", "message": "Neplatný e-mail."}, 400
     db = get_db()
@@ -4453,8 +4474,10 @@ def process_web_auth_email(email, intent, client_ip):
     try:
         user = db.table("users").select("*").eq("email", email_str).execute().data
         if not user:
+            if not nick_str:
+                return {"status": "error", "message": "Pro registraci přes e-mail je povinné zadat přezdívku."}, 400
             try:
-                highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
+                highest = db.table("users").select("app_id").gte("app_id", 2000).order("app_id", desc=True).limit(1).execute().data
                 if highest and highest[0].get("app_id"):
                     highest_val = int(highest[0]["app_id"])
                     new_app_id = 2001 if highest_val < 2001 else highest_val + 1
@@ -4462,9 +4485,15 @@ def process_web_auth_email(email, intent, client_ip):
                     new_app_id = 2001
             except:
                 new_app_id = 2001
-            insert_data = {"email": email_str, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": "", "discord_id": "čeká na odpověd"}
+            insert_data = {"email": email_str, "nick": nick_str, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": "", "discord_id": "čeká na odpověd"}
             if new_app_id: insert_data["app_id"] = new_app_id
             db.table("users").insert(insert_data).execute()
+        else:
+            if nick_str and not user[0].get("nick"):
+                try:
+                    db.table("users").update({"nick": nick_str}).eq("email", email_str).execute()
+                except Exception:
+                    pass
         
         import time as _t
         import random
@@ -4494,8 +4523,9 @@ def web_auth_email_request():
     client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
     data = request.get_json(silent=True) or {}
     email = data.get('email') or request.form.get('email')
+    nick = data.get('nick') or request.form.get('nick')
     intent = data.get('intent', 'login')
-    res, code = process_web_auth_email(email, intent, client_ip)
+    res, code = process_web_auth_email(email, intent, client_ip, nick=nick)
     return jsonify(res), code
 
 @app.route('/api/auth/status')
@@ -5020,12 +5050,13 @@ def api_auth_discord_status():
 def api_auth_email_start():
     client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
     data = request.get_json(silent=True) or {}
-    email = str(data.get('email') or '').strip()
+    email = str(data.get('email') or request.form.get('email') or '').strip()
+    nick = str(data.get('nick') or request.form.get('nick') or '').strip()
     mode = str(data.get('mode') or 'code')
     intent = 'code' if mode == 'code' else 'login'
     if not email:
         return jsonify({"ok": False, "error": "Chybí e-mail."}), 400
-    res, code = process_web_auth_email(email, intent, client_ip)
+    res, code = process_web_auth_email(email, intent, client_ip, nick=nick)
     if res.get('status') == 'success':
         return jsonify({"ok": True})
     return jsonify({"ok": False, "error": res.get('message', 'Chyba')}), code
@@ -9352,14 +9383,14 @@ async def register(ctx, target_id: str = None):
     if check:
         if check[0].get('is_banned'): return await ctx.send("❌ Tento účet má BAN.")
         elif check[0].get('is_deleted'):
-            highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
-            new_app_id = highest[0]["app_id"] + 1 if highest else 1000
+            highest = db.table("users").select("app_id").lt("app_id", 2000).order("app_id", desc=True).limit(1).execute().data
+            new_app_id = int(highest[0]["app_id"]) + 1 if (highest and highest[0].get("app_id")) else 1001
             db.table("users").update({"app_id": new_app_id, "nick": nick, "is_deleted": False, "deleted_at": "", "registered_at": now_str}).eq("discord_id", discord_id).execute()
             await ctx.send(f"✅ Smazaný účet obnoven! Nové App ID: **#{new_app_id}**.")
         else: await ctx.send("ℹ️ Tento uživatel již je zaregistrován!")
     else:
-        highest = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute().data
-        new_app_id = highest[0]["app_id"] + 1 if highest else 1000
+        highest = db.table("users").select("app_id").lt("app_id", 2000).order("app_id", desc=True).limit(1).execute().data
+        new_app_id = int(highest[0]["app_id"]) + 1 if (highest and highest[0].get("app_id")) else 1001
         db.table("users").insert({"app_id": new_app_id, "discord_id": discord_id, "nick": nick, "role": "User", "hwid": "", "ip_address": "", "is_banned": False, "is_deleted": False, "deleted_at": "", "dashboard_access": False, "login_token": "", "registered_at": now_str}).execute()
         await ctx.send(f"✅ Zaregistrován! App ID: **#{new_app_id}**.")
 

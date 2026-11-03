@@ -6628,6 +6628,7 @@ setInterval(loadDepotZones,20000); // refresh kazdych 20 sekund
 # === GLOBALNI STAV ===
 GLOBAL_BUS_CACHE    = {}
 ADMIN_SPZ_LOCKS     = {}
+SPZ_MISMATCH_TRACKER = {}
 LIVE_BUSES_DATA     = []
 TRACKED_SPZS        = set()
 WORKER_START_TIME   = None

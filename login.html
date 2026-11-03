@@ -512,8 +512,10 @@ html.lite .lg-trip .bus svg{animation:none}
       </form>
 
       <form id="f-email" role="tabpanel" aria-labelledby="t-email" novalidate hidden>
+        <div class="lg-fld"><label for="in-nick">Vaše přezdívka</label>
+          <input class="lg-inp" id="in-nick" type="text" autocomplete="nickname" spellcheck="false" placeholder="Např. Honza123" required></div>
         <div class="lg-fld"><label for="in-ml">E-mail</label>
-          <input class="lg-inp" id="in-ml" type="email" inputmode="email" autocomplete="email" spellcheck="false" placeholder="vas@email.cz"></div>
+          <input class="lg-inp" id="in-ml" type="email" inputmode="email" autocomplete="email" spellcheck="false" placeholder="vas@email.cz" required></div>
         <div class="lg-err" id="e-ml" role="alert"></div>
         <button class="btn-main lg-go" id="go-ml" type="submit">Poslat přihlašovací odkaz <svg class="lg-ic" aria-hidden="true"><use href="#i-arrow"/></svg></button>
         <p class="lg-fine">Pošleme vám odkaz a 5místný kód. Žádné heslo si nemusíte pamatovat.</p>
@@ -658,12 +660,15 @@ function pollDiscord(id){
 /* ---- E-mail ---- */
 async function emailSubmit(e){
   e.preventDefault();if(S.busy)return;
+  const n=($('#in-nick')?.value||'').trim();
   const m=$('#in-ml').value.trim();
+  if(!n)return err('#e-ml','#in-nick','Zadejte prosím svou přezdívku.');
+  if(n.length<2)return err('#e-ml','#in-nick','Přezdívka musí mít alespoň 2 znaky.');
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(m))return err('#e-ml','#in-ml','Zadejte platný e-mail.');
   err('#e-ml','#in-ml','');busy($('#go-ml'),true,'Odesílám…');
   try{
-    if(CONFIG.DEMO)await sleep(800);else await call(CONFIG.api.emailStart,{email:m,mode:'login'});
-    S.email=m;busy($('#go-ml'),false);showEmail();
+    if(CONFIG.DEMO)await sleep(800);else await call(CONFIG.api.emailStart,{email:m,nick:n,mode:'login'});
+    S.email=m;S.nick=n;busy($('#go-ml'),false);showEmail();
   }catch(x){busy($('#go-ml'),false);err('#e-ml','#in-ml',x.status===429?'Příliš mnoho pokusů. Zkuste to za chvíli.':(x.message||'E-mail se nepodařilo odeslat.'))}
 }
 function showEmail(){
@@ -677,7 +682,7 @@ function cooldown(){
 }
 async function resend(){
   if($('#resend').disabled)return;
-  try{if(CONFIG.DEMO)await sleep(400);else await call(CONFIG.api.emailStart,{email:S.email,mode:'login'});toast('E-mail jsme poslali znovu.');cooldown()}
+  try{if(CONFIG.DEMO)await sleep(400);else await call(CONFIG.api.emailStart,{email:S.email,nick:S.nick,mode:'login'});toast('E-mail jsme poslali znovu.');cooldown()}
   catch(x){toast(x.message||'E-mail se nepodařilo poslat znovu.')}
 }
 async function codeSubmit(e){
@@ -709,6 +714,7 @@ function bind(){
   $('#f-code').addEventListener('submit',codeSubmit);
   $('#in-code').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'');err('#e-code','#in-code','')});
   $('#in-dc').addEventListener('input',()=>err('#e-dc','#in-dc',''));
+  $('#in-nick')?.addEventListener('input',()=>err('#e-ml','#in-nick',''));
   $('#in-ml').addEventListener('input',()=>err('#e-ml','#in-ml',''));
   $('#dc-help').addEventListener('click',e=>{e.preventDefault();$('#dc-tip').hidden=!$('#dc-tip').hidden});
   $('#dc-cancel').addEventListener('click',()=>{clearInterval(S.poll);show('form')});

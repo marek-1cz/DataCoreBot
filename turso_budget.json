@@ -1,12 +1,12 @@
 {
   "month": "2026-11",
-  "row_reads": 1648,
-  "queries_count": 30,
-  "blocked": true,
-  "blocked_reason": "Operation was blocked: SQL write operations are forbidden (writes are blocked, do you need to upgrade your plan?)",
-  "last_blocked_ts": 1793735178.7995293,
-  "saving_mode": true,
-  "circuit_breaker": true,
+  "row_reads": 1705,
+  "queries_count": 36,
+  "blocked": false,
+  "blocked_reason": "",
+  "last_blocked_ts": 0.0,
+  "saving_mode": false,
+  "circuit_breaker": false,
   "last_probe_ts": 0.0,
   "last_save_ts": 1793735178.6707408
 }
