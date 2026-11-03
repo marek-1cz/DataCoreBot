@@ -13166,13 +13166,34 @@ def _full_page(title, body_html, is_map=False):
     }
 }
 </style>"""
+    canonical_tag = '<link rel="canonical" href="https://datacorebot.koyeb.app/mapa">' if is_map else ''
+    meta_desc = '<meta name="description" content="Živá interaktivní mapa autobusů IDPK v reálném čase od DataCoreBot (marekk_czz). GPS poloha vozidel, zpoždění, linky a vozovny v Plzeňském kraji.">' if is_map else ''
+    json_ld = '''<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Živá Interaktivní Mapa Autobusů IDPK",
+  "url": "https://datacorebot.koyeb.app/mapa",
+  "applicationCategory": "MapApplication",
+  "author": {
+    "@type": "Person",
+    "name": "marekk_czz",
+    "alternateName": "DataCoreBot"
+  },
+  "description": "Živá interaktivní mapa spojů IDPK v reálném čase od tvůrce DataCoreBot."
+}
+</script>''' if is_map else ''
+    page_title = "Živá Interaktivní Mapa Autobusů IDPK | DataCoreBot" if is_map else f"{title} | OIS IDPK"
     resp = Response(
         f"""<!DOCTYPE html>
-<html style="background:#0f172a;">
+<html lang="cs" style="background:#0f172a;">
 <head>
-<title>{title} | OIS IDPK</title>
+<title>{page_title}</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+{canonical_tag}
+{meta_desc}
+{json_ld}
 {map_head}
 </head>
 <body style="background:#0f172a;color:white;{extra}margin:0;padding:0;">{body_html}</body>

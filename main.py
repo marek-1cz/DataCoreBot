@@ -2789,7 +2789,13 @@ def robots_txt():
         "Disallow: /dashboard/\n"
         "Disallow: /mapa_admin\n"
         "Disallow: /admin\n"
-        "Disallow: /debug\n\n"
+        "Disallow: /debug\n"
+        "Disallow: /login\n"
+        "Disallow: /register\n"
+        "Disallow: /blocked\n"
+        "Disallow: /login_blocked\n"
+        "Disallow: /ucet\n"
+        "Disallow: /overeni\n\n"
         "Sitemap: https://datacorebot.koyeb.app/sitemap.xml\n"
     )
     return Response(content, mimetype="text/plain; charset=utf-8")
