@@ -90,6 +90,10 @@ GHOST_DIST_STRICT     = 0.010
 DUPLICATE_GRACE_SEC   = 120
 DEPOT_CHECK_INTERVAL_SEC = 20  # jak casto kontrolovat vjezd busu do vozovny
 DEPOT_ACTIVE_SESSIONS = {}  # {spz: {"id": uuid, "depot_name": str, "arrived_at": str, "is_imprecise": bool}}
+# Debounce slovník: bus_id -> {"depot_name": ..., "first_seen": float (time.time()), "spz": ...}
+# Vůz se zapíše do depot_history AŽ tehdy, když je v polygonu nepřetržitě 2+ minuty
+DEPOT_DEBOUNCE: dict = {}
+DEPOT_DEBOUNCE_SEC: int = 120  # 2 minuty
 try:
     SCRIPT_START_TIME = datetime.now(ZoneInfo("Europe/Prague")).replace(tzinfo=None)
 except Exception:
@@ -6930,6 +6934,38 @@ def format_spz_display(raw_spz: str) -> str:
 
 def _load_spz_settings(db_client=None):
     global AUTO_RESOLVE_SPZ, WATCHED_SPZ_BUSES, IGNORED_SPZ_ERRORS, SPZ_METADATA, POSITION_SOURCE_MODE
+    # 0. Primární autoritativní načtení z Cloudflare D1 spz_registry
+    try:
+        from cloudflare_d1 import get_d1_client as get_d1
+        _d1 = get_d1()
+        d1_rows = _d1.execute("SELECT * FROM spz_registry")
+        for r in (d1_rows or []):
+            b_id = str(r.get("bus_id") or "")
+            s_val = str(r.get("spz") or "").strip()
+            if not b_id or not s_val:
+                continue
+            is_l = bool(r.get("is_locked"))
+            if is_l or r.get("source") == "admin_set":
+                lock_data = {
+                    "spz": s_val,
+                    "admin_note": r.get("admin_note", ""),
+                    "admin_driver": r.get("admin_driver", ""),
+                    "is_locked_by_admin": True,
+                    "vehicle_type": r.get("vehicle_type", "")
+                }
+                ADMIN_SPZ_LOCKS[b_id] = lock_data
+            k = normalize_spz_key(s_val)
+            if k:
+                SPZ_METADATA[k] = {
+                    "spz": format_spz_display(s_val),
+                    "driver": r.get("admin_driver", ""),
+                    "note": r.get("admin_note", ""),
+                    "vehicle_type": r.get("vehicle_type", "")
+                }
+        if d1_rows:
+            print(f"[SPZ-SETTINGS] Načteno {len(d1_rows)} záznamů SPZ z Cloudflare D1.", flush=True)
+    except Exception as e_d1_spz:
+        print(f"[SPZ-SETTINGS] Chyba načtení D1 spz_registry: {e_d1_spz}", flush=True)
 
     db_c = db_client
     if not db_c and "get_db_client" in globals():
@@ -7584,8 +7620,46 @@ class BusFusionEngine:
             p_lng = float(p.get("lng") or 0)
             p_delay = p.get("delay")
 
-            # Pokud má admin zámek, přeskočíme auto-párování tohoto vozu
+            # Pokud má admin zámek, NIKDY nepřepisujeme SPZ a zkontrolujeme případný 3x nesoulad s Arrivou
             if p_id in admin_locks:
+                lk = admin_locks[p_id]
+                lk_spz = lk.get("spz") if isinstance(lk, dict) else str(lk)
+                if lk_spz and p_lat and p_lng:
+                    found_arr = None
+                    for a in arriva_buses:
+                        a_lat = float(a.get("lat") or 0)
+                        a_lng = float(a.get("lng") or 0)
+                        if a_lat and a_lng and haversine_m(p_lat, p_lng, a_lat, a_lng) <= 350.0:
+                            found_arr = a
+                            break
+                    if found_arr:
+                        a_spz = found_arr.get("spz")
+                        if a_spz and normalize_spz_key(a_spz) != normalize_spz_key(lk_spz):
+                            tr = SPZ_MISMATCH_TRACKER.setdefault(p_id, {"diff_spz": a_spz, "count": 0, "alerted": False})
+                            if tr["diff_spz"] == a_spz:
+                                tr["count"] += 1
+                                if tr["count"] >= 3 and not tr.get("alerted"):
+                                    tr["alerted"] = True
+                                    try:
+                                        from cloudflare_d1 import get_d1_client as get_d1
+                                        get_d1().execute("UPDATE spz_registry SET conflict_detected = 1, conflict_spz = ? WHERE bus_id = ?", [a_spz, str(p_id)])
+                                    except Exception:
+                                        pass
+                                    try:
+                                        from main import send_log
+                                        send_log("⚠️ Nesoulad SPZ (3× po sobě na Arriva mapě)",
+                                                 f"**Vůz ID:** `{p_id}`\n**Linka:** {p_line or '?'}\n**Adminem uzamčená SPZ:** `{lk_spz}`\n**Arriva detekuje:** `{a_spz}`\nℹ️ *Admin zámek zůstává aktivní, SPZ nebyla automaticky přepsána.*",
+                                                 0xf59e0b)
+                                    except Exception:
+                                        pass
+                            else:
+                                tr["diff_spz"] = a_spz
+                                tr["count"] = 1
+                                tr["alerted"] = False
+                        else:
+                            if p_id in SPZ_MISMATCH_TRACKER:
+                                SPZ_MISMATCH_TRACKER[p_id]["count"] = 0
+                                SPZ_MISMATCH_TRACKER[p_id]["alerted"] = False
                 continue
 
             prev_record = self.registry_by_pvvd.get(p_id, {})
@@ -8306,11 +8380,39 @@ def _load_depot_zones(db):
 
 def _load_depot_active_sessions(db):
     global DEPOT_ACTIVE_SESSIONS
+    loaded = {}
+    # Primarne nacti z Cloudflare D1
+    try:
+        from cloudflare_d1 import get_d1_client as get_d1
+        d1 = get_d1()
+        rows_d1 = d1.execute("SELECT * FROM depot_history WHERE left_at IS NULL AND bus_id NOT LIKE 'SYSTEM_%'")
+        for row in rows_d1:
+            spz_val = str(row.get("spz") or "").strip()
+            if spz_val == "BACKUP":
+                continue
+            bid = str(row.get("bus_id") or f"unknown_{row['id']}")
+            sess_data = {
+                "id": row["id"],
+                "depot_name": row["depot_name"],
+                "arrived_at": row["arrived_at"],
+                "is_imprecise": bool(row.get("is_imprecise", False)),
+                "spz": spz_val,
+                "bus_id": bid
+            }
+            loaded[bid] = sess_data
+            if spz_val and not spz_val.startswith("[ID:"):
+                loaded[normalize_spz_key(spz_val)] = sess_data
+        if loaded:
+            DEPOT_ACTIVE_SESSIONS = loaded
+            print(f"[DEPOT] Nacteno {len(loaded)} aktivnich navstev z D1.", flush=True)
+            return
+    except Exception as e_d1:
+        print(f"[DEPOT] D1 load failed, fallback na Turso: {e_d1}", flush=True)
+    # Fallback: nacti z Turso (puvodni logika)
     if not db:
         return
     try:
         res = db.table("depot_history").select("*").is_("left_at", "null").execute()
-        loaded = {}
         for row in (res.data or []):
             spz_val = str(row.get("spz") or "").strip()
             if spz_val == "BACKUP" or str(row.get("bus_id", "")).startswith("SYSTEM_"):
@@ -8324,12 +8426,11 @@ def _load_depot_active_sessions(db):
                 "spz": spz_val,
                 "bus_id": bid
             }
-            # Uložíme pod bus_id i pod normalizovanou SPZ (pro přežití restartů a změn trip_id)
             loaded[bid] = sess_data
             if spz_val and not spz_val.startswith("[ID:"):
                 loaded[normalize_spz_key(spz_val)] = sess_data
         DEPOT_ACTIVE_SESSIONS = loaded
-        print(f"[DEPOT] Nacteno {len(loaded)} aktivnich navstev ve vozovnach.", flush=True)
+        print(f"[DEPOT] Nacteno {len(loaded)} aktivnich navstev ve vozovnach (Turso).", flush=True)
     except Exception as e:
         print(f"[DEPOT] Tabulka depot_history nedostupna: {e}", flush=True)
 
@@ -8408,12 +8509,13 @@ def _process_depot_tracking(bus_id, c, now):
     """
     Spravuje evidenci vjezdů a výjezdů autobusů do/z vozoven (depot_history).
     Klíčování primárně podle SPZ vozidla (s fallbackem na bus_id).
-    - Pokud vůz vjede do vozovny a ještě tam není evidován -> zapíše nový záznam do depot_history.
-    - Pokud vůz zmizí z PVVD / jde offline -> ZŮSTÁVÁ NADÁLE VE VOZOVNĚ (left_at se nezapisuje!).
-    - Pokud se vůz ráno/později objeví s aktivní polohou MIMO vozovnu -> zapíše left_at = čas výjezdu.
-    - Pokud přejede přímo do jiné vozovny -> uzavře starou a zapíše novou.
+    - Využívá Cloudflare D1 pro trvalé a rychlé ukládání (bez limitů Turso).
+    - Debounce 2 minuty: vjezd se zapíše až po 2 minutách stání v polygonu.
+    - Pokud vůz zmizí z PVVD během pobytu v depu -> zapíše se okamžitě a zůstává v depu!
+    - Status na mapě ukazuje žlutou barvu a text 'Vozovna: {depot} (Zmizel z PVVD {čas})'.
+    - Výjezd se zapíše POUZE tehdy, když vůz aktivně vyjede mimo areál depa s GPS.
     """
-    global DEPOT_ACTIVE_SESSIONS, DEPOT_DISCORD_QUEUE
+    global DEPOT_ACTIVE_SESSIONS, DEPOT_DISCORD_QUEUE, DEPOT_DEBOUNCE
     if not c or c.get("is_train") or c.get("color_class") == "bg-bug":
         return
 
@@ -8425,16 +8527,15 @@ def _process_depot_tracking(bus_id, c, now):
     spz_val = c.get("spz")
     eff_spz = spz_val if (spz_val and spz_val not in ("Neznámá", "Neznama", "?", "", "None", "Aktivní hledání", "Aktivni hledani")) else None
     
-    # Ochrana: Ostrvské busy (SPZ s 'T' na 2. pozici) do databáze Plzeňska nepatří
+    # Ochrana: Ostravské busy (SPZ s 'T' na 2. pozici) do databáze Plzeňska nepatří
     if eff_spz:
         clean_check = eff_spz.replace(" ", "").upper()
         if len(clean_check) >= 3 and clean_check[1] == 'T':
             return
 
-    # Primární klíč pro sledování je SPZ, sekundární je bus_id
     tracking_key = normalize_spz_key(eff_spz) if eff_spz else f"ID_{bid_str}"
 
-    # Najdeme existující aktivní session pro toto vozidlo (podle SPZ i podle bus_id)
+    # Najdeme existující aktivní session pro toto vozidlo
     active_sess = None
     active_key = None
     if eff_spz:
@@ -8446,6 +8547,9 @@ def _process_depot_tracking(bus_id, c, now):
         active_sess = DEPOT_ACTIVE_SESSIONS[bid_str]
         active_key = bid_str
 
+    is_offline = bool(c.get("is_offline"))
+    now_ts = time.time()
+
     if depot_name:
         # Vůz JE ve vozovně
         c["_in_depot"] = True
@@ -8455,119 +8559,151 @@ def _process_depot_tracking(bus_id, c, now):
         c["depot_name"] = depot_name
         if not c.get("admin_lock_display") and c.get("color_class") != "bg-bug":
             c["color_class"] = "bg-yellow"
-            c["status"] = f"Vozovna: {depot_name}"
+            if is_offline:
+                lost_str = c.get("pvvd_lost_time") or now.strftime('%d.%m. %H:%M')
+                c["pvvd_lost_time"] = lost_str
+                c["status"] = f"Vozovna: {depot_name} (Zmizel z PVVD {lost_str})"
+            else:
+                c["status"] = f"Vozovna: {depot_name}"
 
         db_spz = eff_spz or f"[ID: {bid_str}]"
 
         if not active_sess:
-            # Nový příjezd!
-            # Pokud měl vůz otevřenou jízdu, bezpečně ji uzavřeme s označením vjezdu do vozovny:
-            if c.get("actual_start_time") and not c.get("_trip_closed"):
-                try:
-                    close_active_trip(
-                        c,
-                        end_time_str=now.strftime('%H:%M'),
-                        end_lat=lat,
-                        end_lng=lng,
-                        end_stop=f"Vozovna: {depot_name}",
-                        reason=f"Příjezd do vozovny ({depot_name})"
-                    )
-                except Exception:
-                    pass
-            is_imprecise = (now - SCRIPT_START_TIME).total_seconds() < 120 if SCRIPT_START_TIME else False
-            arr_time = get_prague_iso()
-            db_c = get_db_client()
+            # Nový příjezd - vyhodnocení debounce
+            deb = DEPOT_DEBOUNCE.get(bid_str)
+            ready_to_record = False
 
-            # Pravidlo pro stejnou SPZ: Pokud tato SPZ už má v DB otevřený záznam (left_at IS NULL),
-            # uzavřeme jej, aby nevznikaly vícenásobné otevřené relace
-            if eff_spz and db_c:
-                try:
-                    db_c.table("depot_history").update({"left_at": arr_time}).eq("spz", eff_spz).is_("left_at", "null").execute()
-                except Exception:
-                    pass
+            if is_offline and deb:
+                # Vůz byl v depu a zhasnul motor (zmizel z PVVD) -> potvrdíme okamžitě!
+                ready_to_record = True
+            elif deb is None:
+                DEPOT_DEBOUNCE[bid_str] = {
+                    "depot_name": depot_name,
+                    "first_seen": now_ts,
+                    "spz": db_spz
+                }
+            elif deb.get("depot_name") != depot_name:
+                # Přejel do jiné zóny depa
+                DEPOT_DEBOUNCE[bid_str] = {
+                    "depot_name": depot_name,
+                    "first_seen": now_ts,
+                    "spz": db_spz
+                }
+            elif now_ts - deb.get("first_seen", 0) >= DEPOT_DEBOUNCE_SEC:
+                ready_to_record = True
 
-            new_id = None
-            if db_c:
+            if ready_to_record:
+                DEPOT_DEBOUNCE.pop(bid_str, None)
+                if c.get("actual_start_time") and not c.get("_trip_closed"):
+                    try:
+                        close_active_trip(
+                            c,
+                            end_time_str=now.strftime('%H:%M'),
+                            end_lat=lat,
+                            end_lng=lng,
+                            end_stop=f"Vozovna: {depot_name}",
+                            reason=f"Příjezd do vozovny ({depot_name})"
+                        )
+                    except Exception:
+                        pass
+
+                arr_time = get_prague_iso()
+                pvvd_lost_iso = arr_time if is_offline else None
+                if is_offline and not c.get("pvvd_lost_time"):
+                    c["pvvd_lost_time"] = now.strftime('%d.%m. %H:%M')
+                    c["status"] = f"Vozovna: {depot_name} (Zmizel z PVVD {c['pvvd_lost_time']})"
+
+                new_id = None
+                # Zápis do Cloudflare D1
                 try:
-                    resp = db_c.table("depot_history").insert({
+                    from cloudflare_d1 import get_d1_client as get_d1
+                    _d1 = get_d1()
+                    if eff_spz:
+                        _d1.execute("UPDATE depot_history SET left_at = ?, status = 'LEFT' WHERE spz = ? AND left_at IS NULL", [arr_time, eff_spz])
+                    new_id = _d1.insert("depot_history", {
                         "spz": db_spz,
                         "bus_id": bid_str,
                         "depot_name": depot_name,
                         "arrived_at": arr_time,
-                        "is_imprecise": 1 if is_imprecise else 0
-                    }).execute()
-                    if resp.data:
-                        new_id = resp.data[0]["id"]
-                except Exception as e_ins:
-                    print(f"[DEPOT] Chyba zapisu DB prijezdu pro spz={db_spz}: {e_ins}", flush=True)
+                        "pvvd_lost_at": pvvd_lost_iso,
+                        "status": "IN_DEPOT"
+                    })
+                except Exception as e_d1:
+                    print(f"[D1] Chyba zapisu prijezdu pro spz={db_spz}: {e_d1}", flush=True)
 
-            sess_data = {
-                "id": new_id,
-                "depot_name": depot_name,
-                "arrived_at": arr_time,
-                "is_imprecise": is_imprecise,
-                "spz": db_spz,
-                "bus_id": bid_str
-            }
-            DEPOT_ACTIVE_SESSIONS[tracking_key] = sess_data
-            if tracking_key != bid_str:
-                DEPOT_ACTIVE_SESSIONS[bid_str] = sess_data
-            try:
-                from local_db import local_depot_history_upsert
-                local_depot_history_upsert(depot_name, bid_str, db_spz, arr_time, record_id=new_id)
-            except Exception:
-                pass
-            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
-            try:
-                log_automation_action(
-                    "depot_in",
-                    bid_str,
-                    f"Vůz {db_spz} (bus_id={bid_str}) vjel do vozovny '{depot_name}'",
-                    f"Linka {c.get('line') or '?'}, SPZ: {db_spz}. Detekováno v polygonu depa.",
-                    spz=db_spz,
-                    line=c.get("line")
-                )
-            except Exception:
-                pass
-            print(f"[DEPOT] Vůz {db_spz} (bus_id={bid_str}) vjel do vozovny '{depot_name}'", flush=True)
+                sess_data = {
+                    "id": new_id,
+                    "depot_name": depot_name,
+                    "arrived_at": arr_time,
+                    "is_imprecise": False,
+                    "spz": db_spz,
+                    "bus_id": bid_str,
+                    "pvvd_lost_at": pvvd_lost_iso
+                }
+                DEPOT_ACTIVE_SESSIONS[tracking_key] = sess_data
+                if tracking_key != bid_str:
+                    DEPOT_ACTIVE_SESSIONS[bid_str] = sess_data
+                try:
+                    from local_db import local_depot_history_upsert
+                    local_depot_history_upsert(depot_name, bid_str, db_spz, arr_time, record_id=new_id)
+                except Exception:
+                    pass
+                DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
+                try:
+                    log_automation_action(
+                        "depot_in",
+                        bid_str,
+                        f"Vůz {db_spz} (bus_id={bid_str}) vjel do vozovny '{depot_name}'",
+                        f"Linka {c.get('line') or '?'}, SPZ: {db_spz}. Detekováno v polygonu depa.",
+                        spz=db_spz,
+                        line=c.get("line")
+                    )
+                except Exception:
+                    pass
+                print(f"[DEPOT] Vůz {db_spz} (bus_id={bid_str}) evidován ve vozovně '{depot_name}'", flush=True)
         else:
             # Vůz již je evidován ve vozovně
-            # 1. Pokud neměl SPZ a teď ji má, aktualizujeme
+            DEPOT_DEBOUNCE.pop(bid_str, None)
+            if is_offline and not active_sess.get("pvvd_lost_at"):
+                active_sess["pvvd_lost_at"] = get_prague_iso()
+                c["pvvd_lost_time"] = now.strftime('%d.%m. %H:%M')
+                c["status"] = f"Vozovna: {depot_name} (Zmizel z PVVD {c['pvvd_lost_time']})"
+                try:
+                    from cloudflare_d1 import get_d1_client as get_d1
+                    if active_sess.get("id"):
+                        get_d1().update("depot_history", {"pvvd_lost_at": active_sess["pvvd_lost_at"]}, "id", active_sess["id"])
+                except Exception:
+                    pass
+
+            # Pokud neměl SPZ a teď ji má, aktualizujeme
             if eff_spz and (not active_sess.get("spz") or str(active_sess.get("spz")).startswith("[ID:")):
                 active_sess["spz"] = eff_spz
-                db_c = get_db_client()
-                if db_c and active_sess.get("id"):
-                    try:
-                        db_c.table("depot_history").update({"spz": eff_spz}).eq("id", active_sess["id"]).execute()
-                    except Exception:
-                        pass
+                try:
+                    from cloudflare_d1 import get_d1_client as get_d1
+                    if active_sess.get("id"):
+                        get_d1().update("depot_history", {"spz": eff_spz}, "id", active_sess["id"])
+                except Exception:
+                    pass
                 norm_spz = normalize_spz_key(eff_spz)
                 DEPOT_ACTIVE_SESSIONS[norm_spz] = active_sess
 
-            # 2. Pokud přejel do JINÉ vozovny
+            # Pokud přejel do JINÉ vozovny
             if depot_name != active_sess.get("depot_name"):
-                old_depot = active_sess.get("depot_name")
                 switch_time = get_prague_iso()
-                db_c = get_db_client()
-                if db_c and active_sess.get("id"):
-                    try:
-                        db_c.table("depot_history").update({"left_at": switch_time}).eq("id", active_sess["id"]).execute()
-                    except Exception:
-                        pass
-                new_id = None
-                if db_c:
-                    try:
-                        resp = db_c.table("depot_history").insert({
-                            "spz": active_sess.get("spz") or db_spz,
-                            "bus_id": bid_str,
-                            "depot_name": depot_name,
-                            "arrived_at": switch_time,
-                            "is_imprecise": 0
-                        }).execute()
-                        if resp.data:
-                            new_id = resp.data[0]["id"]
-                    except Exception:
-                        pass
+                try:
+                    from cloudflare_d1 import get_d1_client as get_d1
+                    _d1 = get_d1()
+                    if active_sess.get("id"):
+                        _d1.update("depot_history", {"left_at": switch_time, "status": "LEFT"}, "id", active_sess["id"])
+                    new_id = _d1.insert("depot_history", {
+                        "spz": active_sess.get("spz") or db_spz,
+                        "bus_id": bid_str,
+                        "depot_name": depot_name,
+                        "arrived_at": switch_time,
+                        "status": "IN_DEPOT"
+                    })
+                except Exception:
+                    new_id = None
                 sess_data = {
                     "id": new_id,
                     "depot_name": depot_name,
@@ -8582,9 +8718,8 @@ def _process_depot_tracking(bus_id, c, now):
                 DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
     else:
         # Vůz NENÍ ve vozovně (depot_name is None)
-        # KRITICKÉ: Pokud je vůz offline (řidič zhasnul motor na noc ve vozovně),
-        # ZŮSTÁVÁ NADÁLE VE VOZOVNĚ! Nesmíme ho odepsat!
-        is_offline = bool(c.get("is_offline"))
+        # Pokud je vůz offline (zhasnutý motor na noc ve vozovně), ZŮSTÁVÁ NADÁLE VE VOZOVNĚ!
+        DEPOT_DEBOUNCE.pop(bid_str, None)
         
         # Odjezd se zapíše POUZE tehdy, když se vůz objeví ŽIVĚ s platnou GPS polohou MIMO areál vozovny!
         if active_sess and not is_offline and lat and lng:
@@ -8597,19 +8732,15 @@ def _process_depot_tracking(bus_id, c, now):
                 local_depot_history_upsert(old_depot, bid_str, sess_spz, active_sess.get("arrived_at", left_time), left_at=left_time, record_id=session_id)
             except Exception:
                 pass
-            db_c = get_db_client()
-            if db_c:
+            try:
+                from cloudflare_d1 import get_d1_client as get_d1
+                _d1 = get_d1()
                 if session_id:
-                    try:
-                        db_c.table("depot_history").update({"left_at": left_time}).eq("id", session_id).execute()
-                    except Exception as e_left:
-                        print(f"[DEPOT] Chyba zapisu DB odjezdu pro {tracking_key}: {e_left}", flush=True)
-                # Pravidlo pro stejnou SPZ: Uzavřít/přepsat poslední záznam pro tuto SPZ, že odjel
-                if eff_spz:
-                    try:
-                        db_c.table("depot_history").update({"left_at": left_time}).eq("spz", eff_spz).is_("left_at", "null").execute()
-                    except Exception:
-                        pass
+                    _d1.update("depot_history", {"left_at": left_time, "status": "LEFT"}, "id", session_id)
+                elif eff_spz:
+                    _d1.execute("UPDATE depot_history SET left_at = ?, status = 'LEFT' WHERE spz = ? AND left_at IS NULL", [left_time, eff_spz])
+            except Exception as e_left:
+                print(f"[D1] Chyba zapisu odjezdu pro {tracking_key}: {e_left}", flush=True)
             
             # Smažeme z aktivních session
             DEPOT_ACTIVE_SESSIONS.pop(tracking_key, None)
@@ -8650,8 +8781,6 @@ def _process_depot_tracking(bus_id, c, now):
                 else:
                     c["status"] = "Manipulační jízda"
                     c["color_class"] = "bg-blue"
-
-
 
 def are_destinations_compatible(dest_local, dest_arriva):
     """
@@ -10034,26 +10163,35 @@ def close_active_trip(c, end_time_str=None, end_lat=None, end_lng=None, end_stop
     c["actual_end_time"] = t_end
     c["_trip_closed"] = True
 
-    # 2. Asynchronní zápis do cloudové DB (Supabase)
+    # 2. Asynchronní zápis do Cloudflare D1 (bus_trips)
     def _do_cloud_close(tid, t_end_val, lat_val, lng_val, stat_val):
-        db = get_db_client()
-        if not db:
-            return
         try:
-            update_payload = {
-                "end_actual": t_end_val,
-                "status": stat_val,
-                "updated_at": get_prague_time().isoformat(),
-            }
-            if lat_val is not None:
-                update_payload["last_lat"] = lat_val
-                update_payload["end_lat"] = lat_val
-            if lng_val is not None:
-                update_payload["last_lng"] = lng_val
-                update_payload["end_lng"] = lng_val
-            db.table("bus_history").update(update_payload).eq("trip_id", tid).execute()
-        except Exception as e_cloud:
-            print(f"[HISTORY-CLOSE-CLOUD] Chyba uzavření trip {tid}: {e_cloud}", flush=True)
+            from cloudflare_d1 import get_d1_client as get_d1
+            _d1 = get_d1()
+            first_s = c.get("first_stop_name") or ""
+            first_t = c.get("actual_start_time") or c.get("first_dep_time") or ""
+            f_linka = c.get("real_linka_spoj") or c.get("line") or ""
+            spoj_v = str(c.get("spoj_num") or "")
+            b_id = str(c.get("inflow_id") or c.get("bus_id") or "")
+            del_m = int(c.get("delay") or 0)
+            
+            _d1.insert("bus_trips", {
+                "trip_id": str(tid),
+                "bus_id": b_id,
+                "spz": str(spz),
+                "linka": str(f_linka),
+                "spoj": spoj_v,
+                "first_stop": str(first_s),
+                "first_stop_time": str(first_t),
+                "last_stop": str(t_stop or ""),
+                "last_stop_time": str(t_end_val or ""),
+                "end_lat": float(lat_val) if lat_val is not None else None,
+                "end_lng": float(lng_val) if lng_val is not None else None,
+                "delay_min": del_m,
+                "status": str(stat_val or "COMPLETED")
+            })
+        except Exception as e_d1_tr:
+            print(f"[D1-TRIP-CLOSE] Chyba zápisu bus_trips: {e_d1_tr}", flush=True)
 
     threading.Thread(target=_do_cloud_close, args=(trip_id, t_end, t_lat, t_lng, status_msg), daemon=True).start()
 
@@ -10153,27 +10291,10 @@ def upsert_to_history(db, c):
     except Exception as e_loc:
         print(f"[HISTORY-LOCAL-UPSERT] Chyba: {e_loc}", flush=True)
 
-    # 2. Asynchronní cloudový zápis do Supabase
-    def _do_async_upsert(pl):
-        if not db:
-            return
-        try:
-            db.table("bus_history").upsert(pl).execute()
-            c["_history_written"] = True
-            c["_trip_closed"] = False
-        except Exception as e:
-            err_str = str(e)
-            if "PGRST204" in err_str or "spz_3factor" in err_str or "spz_conflict_warn" in err_str:
-                payload_fallback = {k: v for k, v in pl.items()
-                                    if k not in ("spz_3factor", "spz_conflict_warn")}
-                try:
-                    db.table("bus_history").upsert(payload_fallback).execute()
-                    c["_history_written"] = True
-                    c["_trip_closed"] = False
-                except Exception:
-                    pass
-
-    threading.Thread(target=_do_async_upsert, args=(payload_full,), daemon=True).start()
+    # Živý stav jízdy je bezpečně zaznamenán v lokální SQLite.
+    # Do cloudové D1 se kompletní jízda zapíše až po jejím dokončení v close_active_trip (šetří 99 % kvóty).
+    c["_history_written"] = True
+    c["_trip_closed"] = False
 
 
 _bg_flush_in_progress = False
@@ -11650,7 +11771,8 @@ def background_map_worker():
                                     r_copy.pop("offline_since_time", None)
                                     r_copy.pop("parked_since", None)
                                     sb_cache_rows.append(r_copy)
-                                dbc.table("spz_cache").upsert(sb_cache_rows).execute()
+                                # Šetříme Turso kvótu - hromadný dump 360 řádků každých 5 min vyřazen
+                                pass
                                 try:
                                     from local_db import try_sync_to_supabase as _try_sync
                                     _try_sync(dbc)
@@ -13236,23 +13358,25 @@ def api_admin_map_action():
             ADMIN_SPZ_LOCKS[bus_id] = lock_obj
             _save_spz_settings()
             try:
-                _db_av = get_db_client()
-                if _db_av:
-                    _db_av.table("spz_cache").upsert({
-                        "bus_id": str(bus_id),
-                        "spz": new_spz,
-                        "linka": c.get("line") or "",
-                        "lat": c.get("lat"),
-                        "lng": c.get("lng"),
-                        "spz_verified": True,
-                        "admin_verified": True,
-                        "is_locked_by_admin": True,
-                        "admin_driver": c.get("admin_driver", ""),
-                        "admin_note": c.get("admin_note", ""),
-                        "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
-                    }).execute()
+                from cloudflare_d1 import get_d1_client as get_d1
+                _d1 = get_d1()
+                _d1.upsert("spz_registry", {
+                    "bus_id": str(bus_id),
+                    "spz": new_spz,
+                    "spz_display": format_spz_display(new_spz),
+                    "source": "admin_set",
+                    "is_locked": 1,
+                    "admin_note": c.get("admin_note", ""),
+                    "admin_driver": c.get("admin_driver", ""),
+                    "vehicle_type": c.get("vehicle_type", ""),
+                    "confidence": 100,
+                    "conflict_detected": 0,
+                    "conflict_spz": "",
+                    "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
+                    "updated_by": admin_name or "admin"
+                }, "bus_id")
             except Exception as e_av:
-                print(f"[EDIT-SPZ] Chyba zápisu spz_cache: {e_av}", flush=True)
+                print(f"[D1-EDIT-SPZ] Chyba zápisu spz_registry: {e_av}", flush=True)
 
             log_spz_change(bus_id, old_spz, new_spz, reason="admin_edit", admin_note=c.get("admin_note", ""))
             try:
@@ -13262,6 +13386,10 @@ def api_admin_map_action():
             return jsonify({"status": "success", "message": f"SPZ {new_spz} byla úspěšně nastavena a uzamčena.", "spz": new_spz})
 
     elif action in ("clear_spz", "active_search_spz", "recheck_spz", "force_refresh", "reset_spz"):
+        try:
+            from cloudflare_d1 import get_d1_client as get_d1
+            get_d1().execute("DELETE FROM spz_registry WHERE bus_id = ?", [str(bus_id)])
+        except Exception: pass
         old_spz = c.get("spz") or "Aktivní hledání"
         c["spz"] = "Aktivní hledání"
         c["spz_locked"] = False
@@ -16221,17 +16349,23 @@ def api_depot_history():
     is_all_depots = not depot_name or depot_name.lower() in ('all', 'vse', 'vše', '')
     resolved_name = resolve_depot_name(depot_name) if not is_all_depots else None
 
-    if db:
-        try:
-            query = db.table("depot_history").select("*")
-            if not is_all_depots:
-                query = query.or_(f"depot_name.eq.{depot_name},depot_name.eq.{resolved_name},depot_name.ilike.%{resolved_name}%")
-            if search_q:
-                query = query.ilike("spz", f"%{search_q}%")
-            res = query.order("arrived_at", desc=is_desc).limit(500).execute()
-            data = res.data or []
-        except Exception:
-            data = []
+    # Primární načtení z Cloudflare D1
+    try:
+        from cloudflare_d1 import get_d1_client as get_d1
+        _d1 = get_d1()
+        sql = "SELECT * FROM depot_history WHERE 1=1"
+        params = []
+        if not is_all_depots:
+            sql += " AND (depot_name = ? OR depot_name LIKE ?)"
+            params.extend([depot_name, f"%{resolved_name or depot_name}%"])
+        if search_q:
+            sql += " AND spz LIKE ?"
+            params.append(f"%{search_q}%")
+        order_dir = "DESC" if is_desc else "ASC"
+        sql += f" ORDER BY arrived_at {order_dir} LIMIT 500"
+        data = _d1.execute(sql, params)
+    except Exception as e_d1_api:
+        data = []
 
     # Fallback na lokální SQLite tabulku, pokud DB selže nebo je prázdná
     if not data:
