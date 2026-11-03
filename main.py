@@ -8627,11 +8627,22 @@ async def update_depot_discord_messages():
             except Exception:
                 pass
 
+        all_records = []
         try:
-            all_records = db.table("depot_history").select("*").eq("depot_name", depot_name).neq("spz", "BACKUP").order("arrived_at", desc=True).limit(50).execute().data or []
-        except Exception as e_rec:
-            print(f"[DEPOT DISCORD] Chyba cteni depot_history pro {depot_name}: {e_rec}", flush=True)
+            from cloudflare_d1 import get_d1_client as _get_d1
+            _d1 = _get_d1()
+            all_records = _d1.execute(
+                "SELECT * FROM depot_history WHERE (depot_name = ? OR depot_name LIKE ?) AND (bus_id NOT LIKE 'SYSTEM_%' AND spz != 'BACKUP') ORDER BY arrived_at DESC LIMIT 50",
+                [depot_name, f"%{depot_name}%"]
+            )
+        except Exception:
             all_records = []
+
+        if not all_records and db:
+            try:
+                all_records = db.table("depot_history").select("*").eq("depot_name", depot_name).neq("spz", "BACKUP").order("arrived_at", desc=True).limit(50).execute().data or []
+            except Exception:
+                all_records = []
 
         if not all_records:
             try:
@@ -8640,40 +8651,45 @@ async def update_depot_discord_messages():
             except Exception:
                 all_records = []
 
-        # Deduplikace podle SPZ: zachováme nejnovější záznam pro každou SPZ
-        dedup_records = []
-        seen_spz = set()
-        for r in all_records:
-            s = r.get("spz")
-            if s and s not in seen_spz:
-                seen_spz.add(s)
-                dedup_records.append(r)
-            elif not s:
-                dedup_records.append(r)
+        # Přísná deduplikace: 1 zástupce na vozidlo (žádná duplicita na Discordu)
+        active_map = {}
+        recent_map = {}
 
-        # Zkontrolujeme také DEPOT_ACTIVE_SESSIONS
-        active_spz_map = {}
-        for r in dedup_records:
-            if not r.get("left_at"):
-                active_spz_map[r.get("spz") or str(r.get("bus_id"))] = r
+        for r in all_records:
+            s_raw = r.get("spz") or ""
+            b_raw = str(r.get("bus_id") or "")
+            clean_s = s_raw.replace(" ", "").upper()
+            canon_k = clean_s or b_raw
+            if not canon_k:
+                continue
+            is_active = not r.get("left_at")
+            if is_active:
+                if canon_k not in active_map:
+                    active_map[canon_k] = r
+            else:
+                if canon_k not in recent_map and canon_k not in active_map:
+                    recent_map[canon_k] = r
 
         try:
             from interaktivnimapa import DEPOT_ACTIVE_SESSIONS
             for sk, sv in list(DEPOT_ACTIVE_SESSIONS.items()):
                 if sv.get("depot_name") == depot_name:
-                    s_spz = sv.get("spz") or sk
-                    if s_spz not in active_spz_map:
-                        active_spz_map[s_spz] = {
-                            "spz": s_spz,
+                    s_raw = sv.get("spz") or sk
+                    b_raw = str(sv.get("bus_id") or "")
+                    clean_s = str(s_raw).replace(" ", "").upper()
+                    canon_k = clean_s if not clean_s.startswith("[ID:") else b_raw
+                    if canon_k and canon_k not in active_map:
+                        active_map[canon_k] = {
+                            "spz": s_raw,
                             "arrived_at": sv.get("arrived_at"),
                             "left_at": None,
-                            "bus_id": sv.get("bus_id")
+                            "bus_id": b_raw
                         }
         except Exception:
             pass
 
-        active = list(active_spz_map.values())
-        recent = [r for r in dedup_records if r.get("left_at")][:5]
+        active = list(active_map.values())
+        recent = list(recent_map.values())[:5]
         
         embed = discord.Embed(title=f"🅿️ Vozovna: {depot_name}", color=color_val)
         

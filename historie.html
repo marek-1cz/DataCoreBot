@@ -717,19 +717,7 @@ const S={
 
 /* VZORY: jen 3 vozidla a 1 vozovna, vše označené jako VZOR (vzor:true). Žádná náhodná ani reálná data. */
 function demoData(){
-  const now=Date.now(),M=6e4,H=36e5,iso=t=>new Date(t).toISOString(),dn='Vozovna (vzor)',v0={vzor:true,type:'Typ vozidla (vzor)',operator:'Dopravce (vzor)',line:'000',dest:'Konečná (vzor)'};
-  const vehicles=[
-    Object.assign({},v0,{spz:'A00 0000',last_seen:iso(now-2*M),status:'run',depot:'',trips:[{line:'000',dest:'Konečná (vzor)',from:iso(now-4*H),to:iso(now-2*H)}]}),
-    Object.assign({},v0,{spz:'A00 0001',last_seen:iso(now-90*M),status:'depot',depot:dn,trips:[{line:'000',dest:'Konečná (vzor)',from:iso(now-5*H),to:iso(now-100*M)}]}),
-    Object.assign({},v0,{spz:'A00 0002',line:'',dest:'',last_seen:iso(now-30*H),status:'off',depot:'',trips:[]})
-  ];
-  const depots=[{name:dn,color:'#2f6bff',capacity:10,vzor:true}];
-  const records=[
-    {vzor:true,depot_name:dn,spz:'A00 0001',arrived_at:iso(now-90*M),left_at:null},
-    {vzor:true,depot_name:dn,spz:'A00 0002',arrived_at:iso(now-12*H),left_at:iso(now-4*H)},
-    {vzor:true,depot_name:dn,spz:'A00 0000',arrived_at:iso(now-30*H),left_at:iso(now-22*H)}
-  ];
-  return{vehicles,depots,records};
+  return {vehicles:[], depots:[], records:[]};
 }
 
 async function getJSON(url){const r=await fetch(url,{credentials:'include',headers:{'Accept':'application/json'}});if(!r.ok)throw new Error(url+' → '+r.status);return r.json()}
@@ -1105,7 +1093,7 @@ function renderDetailModal(v, fullData, activeTab){
       const leftT = isAct ? '<span class="st depot" style="display:inline-block;">🟢 Aktuálně zde stojí</span>' : ('📤 Odjezd: <b>' + dt(d.left || parseT(d.left_at)) + '</b>');
       const durMs = d.dur || (d.arrived_at && d.left_at ? (parseT(d.left_at) - parseT(d.arrived_at)) : (d.arrived_at ? (Date.now() - parseT(d.arrived_at)) : null));
       return '<div class="trip-card">' +
-        '<div class="trip-card-head"><b style="font-size:1.05rem;color:#f8fafc;">' + dName + '</b><span>' + (isAct ? '<small style="color:var(--green)">V depu</small>' : '⏱️ Stál: <b>' + dur(durMs) + '</b>') + '</span></div>' +
+        '<div class="trip-card-head"><b style="font-size:1.05rem;color:#f8fafc;">' + dName + '</b><span>' + (isAct ? '<small style="color:var(--green)">Ve vozovně</small>' : '⏱️ Stál: <b>' + dur(durMs) + '</b>') + '</span></div>' +
         '<div style="font-size:.88rem;color:#cbd5e1;display:flex;gap:16px;flex-wrap:wrap;margin-top:4px;"><span>📥 Příjezd: <b>' + arrT + '</b></span><span>' + leftT + '</span></div>' +
       '</div>';
     }).join('');
@@ -1133,7 +1121,7 @@ function renderDetailModal(v, fullData, activeTab){
       '<div><small>Vozovna</small><b>' + (v.depot ? '<button class="xl" type="button" data-depot-go="' + esc(v.depot) + '">' + esc(v.depot) + '</button>' : '–') + '</b></div>' +
       '<div><small>Příjezdů za 30 dní</small><b>' + r30.length + '</b></div>' +
       '<div><small>Průměrné stání</small><b>' + dur(avg) + '</b></div>' +
-      '<div><small>Domovské depo</small><b>' + (fav ? '<button class="xl" type="button" data-depot-go="' + esc(fav[0]) + '">' + esc(fav[0]) + '</button>' : '–') + '</b></div>' +
+      '<div><small>Nejčastější vozovna</small><b>' + (fav ? '<button class="xl" type="button" data-depot-go="' + esc(fav[0]) + '">' + esc(fav[0]) + '</button>' : '–') + '</b></div>' +
     '</div>' +
     '<div class="dtabs">' +
       '<button type="button" class="dtab ' + (activeTab==='trips'?'on':'') + '" id="dlgTabTrips" data-dlgtab="trips">🚌 Historie spojů a linek (' + trips.length + ')</button>' +

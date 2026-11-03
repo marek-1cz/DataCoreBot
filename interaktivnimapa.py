@@ -943,14 +943,23 @@ function renderDepotAccordion(zones) {
   zones.forEach(z => {
     let cleanName = resolveDepotName(z.name || z.color);
     let color = z.color || '#facc15';
-    let parkedCount = (z.buses || []).length;
+    let uniqueBuses = [];
+    let seenAccSpz = new Set();
+    (z.buses || []).forEach(b => {
+      let k = (b.spz || b.id || '?').replace(/\\s+/g, '').toUpperCase();
+      if (!seenAccSpz.has(k)) {
+        seenAccSpz.add(k);
+        uniqueBuses.push(b);
+      }
+    });
+    let parkedCount = uniqueBuses.length;
     let cardId = 'depot_card_' + (z.id || Math.random().toString(36).substring(7));
 
     let busesListHtml = '';
     if (parkedCount === 0) {
       busesListHtml = '<div style="color:#64748b;font-size:12px;text-align:center;padding:15px;">Aktuálně zde neparkuje žádný evidovaný autobus.</div>';
     } else {
-      (z.buses || []).forEach(b => {
+      uniqueBuses.forEach(b => {
         let spz = b.spz || 'Neznámá';
         busesListHtml += `
           <div class="depot-entry-row">
@@ -1833,7 +1842,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
       <span style="color:#ef4444;">● Červená:</span> Zpoždění 5 minut a více<br>
       <span style="color:#a855f7;">● Fialová:</span> Vozidlo dojelo na konečnou zastávku<br>
       <span style="color:#94a3b8;">● Šedá:</span> Vozidlo je odstaveno (stojí na místě 10+ min bez jízdy)<br>
-      <span style="color:#facc15;">● Žlutá:</span> Vozidlo se nachází ve vozovně (depu)<br>
+      <span style="color:#facc15;">● Žlutá:</span> Vozidlo se nachází ve vozovně<br>
       <span style="color:#f472b6;">● Černo-šedo-růžová:</span> Zmizel z mapy PVVD (poslední známá poloha)<br><br>
       <b>Tipy a triky pro uživatele:</b><br>
       V detailu každého vozidla (po kliknutí na jeho ikonu) naleznete přímý odkaz na jeho kartu na webu <b>seznam-autobusu.cz</b>.<br><br>
@@ -1955,7 +1964,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
             </label>
             
             <div style="background:#1e293b;padding:8px 12px;border-radius:8px;border:1px solid #334155;">
-              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" id="nt-depot-in" onchange="document.getElementById('nt-depot-name-in').style.display = this.checked ? 'block' : 'none'"> <span>🅿️ <b>Vozovna</b> – autobus zajel do depa</span></label>
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" id="nt-depot-in" onchange="document.getElementById('nt-depot-name-in').style.display = this.checked ? 'block' : 'none'"> <span>🅿️ <b>Vozovna</b> – autobus zajel do vozovny</span></label>
               <select id="nt-depot-name-in" class="depot-dynamic-select" style="width:100%;margin-top:6px;padding:6px 10px;background:#0f172a;color:white;border:1px solid #334155;border-radius:6px;font-size:12px;box-sizing:border-box;display:none;">
                 <option value="all">Jakákoliv vozovna</option>
               </select>
@@ -6312,7 +6321,7 @@ window.updateActiveDepotPopup = function() {
             let seenSpz = new Set();
             let uniqueBuses = [];
             for(let b of z.buses) {
-                let spzKey = b.spz || '?';
+                let spzKey = (b.spz || b.id || '?').replace(/\\s+/g, '').toUpperCase();
                 if(!seenSpz.has(spzKey)) { seenSpz.add(spzKey); uniqueBuses.push(b); }
             }
             let zColor = z.color || '#facc15';
@@ -6328,7 +6337,7 @@ window.updateActiveDepotPopup = function() {
                 </span>`;
             }).join('');
         } else {
-            activeDiv.innerHTML = '<span style="color:#64748b;font-size:12px;padding:4px;">Žádný bus v depu</span>';
+            activeDiv.innerHTML = '<span style="color:#64748b;font-size:12px;padding:4px;">Žádný autobus ve vozovně</span>';
         }
     }
     
@@ -6421,12 +6430,12 @@ window.deleteDepotRecord = async function(id, depotName) {
         let r = await fetch('/api/admin/delete_depot_history', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})});
         let d = await r.json();
         if(d.status==='success') {
-            appLog('Záznam z depa smazán', 'ok');
+            appLog('Záznam z vozovny smazán', 'ok');
             loadDepotZones();
         } else {
             appLog('Chyba mazání: '+d.message, 'error');
         }
-    } catch(e) { appLog('Chyba komunikace při mazání z depa', 'error'); }
+    } catch(e) { appLog('Chyba komunikace při mazání z vozovny', 'error'); }
 };
 
 function renderDepotList(){
@@ -6851,7 +6860,7 @@ if not AUTOMATION_ACTIVITY_LOG:
         "spz": "",
         "line": "",
         "title": "Automatika interaktivní mapy aktivní",
-        "detail": "Systém průběžně monitoruje SPZ, vjezdy/výjezdy z depa, konečné stanice a hlídá vozy zařazené do sledování.",
+        "detail": "Systém průběžně monitoruje SPZ, vjezdy/výjezdy z vozoven, konečné stanice a hlídá vozy zařazené do sledování.",
         "map_url": "https://datacorebot.koyeb.app/mapa"
     })
     _save_automation_log()
@@ -8619,7 +8628,8 @@ def _process_depot_tracking(bus_id, c, now):
                     from cloudflare_d1 import get_d1_client as get_d1
                     _d1 = get_d1()
                     if eff_spz:
-                        _d1.execute("UPDATE depot_history SET left_at = ?, status = 'LEFT' WHERE spz = ? AND left_at IS NULL", [arr_time, eff_spz])
+                        # Nikdy nemuze bus byt ve dvou vozovnach najednou ani 2x v jedne:
+                        _d1.execute("UPDATE depot_history SET left_at = ?, status = 'LEFT' WHERE (bus_id = ? OR spz = ?) AND left_at IS NULL", [arr_time, bid_str, eff_spz or ""])
                     new_id = _d1.insert("depot_history", {
                         "spz": db_spz,
                         "bus_id": bid_str,
@@ -8640,6 +8650,10 @@ def _process_depot_tracking(bus_id, c, now):
                     "bus_id": bid_str,
                     "pvvd_lost_at": pvvd_lost_iso
                 }
+                for k in list(DEPOT_ACTIVE_SESSIONS.keys()):
+                    sv = DEPOT_ACTIVE_SESSIONS[k]
+                    if sv.get("bus_id") == bid_str or (eff_spz and normalize_spz_key(sv.get("spz")) == normalize_spz_key(eff_spz)):
+                        DEPOT_ACTIVE_SESSIONS.pop(k, None)
                 DEPOT_ACTIVE_SESSIONS[tracking_key] = sess_data
                 if tracking_key != bid_str:
                     DEPOT_ACTIVE_SESSIONS[bid_str] = sess_data
@@ -8654,7 +8668,7 @@ def _process_depot_tracking(bus_id, c, now):
                         "depot_in",
                         bid_str,
                         f"Vůz {db_spz} (bus_id={bid_str}) vjel do vozovny '{depot_name}'",
-                        f"Linka {c.get('line') or '?'}, SPZ: {db_spz}. Detekováno v polygonu depa.",
+                        f"Linka {c.get('line') or '?'}, SPZ: {db_spz}. Detekováno v areálu vozovny.",
                         spz=db_spz,
                         line=c.get("line")
                     )
@@ -8712,6 +8726,10 @@ def _process_depot_tracking(bus_id, c, now):
                     "spz": active_sess.get("spz") or db_spz,
                     "bus_id": bid_str
                 }
+                for k in list(DEPOT_ACTIVE_SESSIONS.keys()):
+                    sv = DEPOT_ACTIVE_SESSIONS[k]
+                    if sv.get("bus_id") == bid_str or (eff_spz and normalize_spz_key(sv.get("spz")) == normalize_spz_key(eff_spz)):
+                        DEPOT_ACTIVE_SESSIONS.pop(k, None)
                 DEPOT_ACTIVE_SESSIONS[tracking_key] = sess_data
                 if tracking_key != bid_str:
                     DEPOT_ACTIVE_SESSIONS[bid_str] = sess_data
@@ -8737,8 +8755,8 @@ def _process_depot_tracking(bus_id, c, now):
                 _d1 = get_d1()
                 if session_id:
                     _d1.update("depot_history", {"left_at": left_time, "status": "LEFT"}, "id", session_id)
-                elif eff_spz:
-                    _d1.execute("UPDATE depot_history SET left_at = ?, status = 'LEFT' WHERE spz = ? AND left_at IS NULL", [left_time, eff_spz])
+                if True:
+                    _d1.execute("UPDATE depot_history SET left_at = ?, status = 'LEFT' WHERE (bus_id = ? OR spz = ?) AND left_at IS NULL", [left_time, bid_str, eff_spz or ""])
             except Exception as e_left:
                 print(f"[D1] Chyba zapisu odjezdu pro {tracking_key}: {e_left}", flush=True)
             
@@ -8767,7 +8785,16 @@ def _process_depot_tracking(bus_id, c, now):
             c.pop("depot_name", None)
             c.pop("_depot_name", None)
         elif not is_offline:
-            # Vůz je živý a mimo zónu vozovny -> nesmí zůstat viset stav 'Vozovna'
+            # Vůz je živý a mimo zónu vozovny -> nesmí zůstat viset stav 'Vozovna' ani relace v D1/paměti
+            if (c.get("line") or (lat and lng)) and not active_sess:
+                try:
+                    from cloudflare_d1 import get_d1_client as _get_d1
+                    _get_d1().execute("UPDATE depot_history SET left_at = ?, status = 'LEFT' WHERE (bus_id = ? OR spz = ?) AND left_at IS NULL", [get_prague_iso(), bid_str, eff_spz or ""])
+                except Exception:
+                    pass
+                for _k in list(DEPOT_ACTIVE_SESSIONS.keys()):
+                    if DEPOT_ACTIVE_SESSIONS[_k].get("bus_id") == bid_str or (eff_spz and normalize_spz_key(DEPOT_ACTIVE_SESSIONS[_k].get("spz")) == normalize_spz_key(eff_spz)):
+                        DEPOT_ACTIVE_SESSIONS.pop(_k, None)
             c["_in_depot"] = False
             c["in_depot"] = False
             c.pop("depot_name", None)
@@ -15898,6 +15925,56 @@ def api_history_spz(spz):
     local_trips = local_bus_history_get(spz=clean_spz, limit=1000)
     local_depots = local_depot_history_get(spz=clean_spz, limit=500)
 
+    # 2b. Načtení dat z Cloudflare D1 (hlavní telemetrická DB)
+    d1_trips = []
+    d1_depots = []
+    try:
+        from cloudflare_d1 import get_d1_client as _get_d1
+        _d1 = _get_d1()
+        bid_cand = live_bus.get("bus_id") if live_bus else None
+        if not bid_cand:
+            reg = _d1.execute("SELECT bus_id FROM spz_registry WHERE spz = ? OR spz = ?", [clean_no_space, spaced_spz])
+            if reg: bid_cand = reg[0].get("bus_id")
+
+        q_params = [clean_no_space, spaced_spz, clean_spz]
+        q_where = "spz = ? OR spz = ? OR spz = ?"
+        if bid_cand:
+            q_where += " OR bus_id = ?"
+            q_params.append(str(bid_cand))
+
+        d1_trips_raw = _d1.execute(f"SELECT * FROM bus_trips WHERE {q_where} ORDER BY created_at DESC LIMIT 1000", q_params)
+        for t in (d1_trips_raw or []):
+            d1_trips.append({
+                "trip_id": t.get("trip_id"),
+                "spz": t.get("spz"),
+                "linka": t.get("linka"),
+                "spoj_num": t.get("spoj") or "",
+                "origin": t.get("first_stop") or "",
+                "destination": t.get("last_stop") or "",
+                "start_scheduled": t.get("first_stop_time"),
+                "start_actual": t.get("first_stop_time"),
+                "end_actual": t.get("last_stop_time"),
+                "last_lat": t.get("end_lat"),
+                "last_lng": t.get("end_lng"),
+                "end_lat": t.get("end_lat"),
+                "end_lng": t.get("end_lng"),
+                "end_stop": t.get("last_stop") or "",
+                "status": t.get("status") or "COMPLETED",
+                "created_at": t.get("created_at"),
+                "updated_at": t.get("created_at")
+            })
+
+        d1_depots_raw = _d1.execute(f"SELECT * FROM depot_history WHERE ({q_where}) AND (bus_id NOT LIKE 'SYSTEM_%' AND spz != 'BACKUP') ORDER BY arrived_at DESC LIMIT 500", q_params)
+        for d in (d1_depots_raw or []):
+            d1_depots.append({
+                "depot_name": d.get("depot_name"),
+                "spz": d.get("spz"),
+                "arrived_at": d.get("arrived_at"),
+                "left_at": d.get("left_at")
+            })
+    except Exception as e_d1_vh:
+        print(f"[HISTORIE-D1] Chyba načtení historie vozu: {e_d1_vh}", flush=True)
+
     # 3. Načtení dat z Cloud DB (Supabase)
     cloud_trips = []
     cloud_depots = []
@@ -15927,7 +16004,7 @@ def api_history_spz(spz):
     # 4. Sloučení a deduplikace jízd (podle trip_id)
     merged_trips = []
     seen_trip_ids = set()
-    for t in local_trips:
+    for t in (d1_trips + local_trips):
         tid = t.get("trip_id")
         if tid: seen_trip_ids.add(tid)
         merged_trips.append(t)
@@ -15962,7 +16039,7 @@ def api_history_spz(spz):
     # 5. Sloučení a deduplikace vozoven
     merged_depots = []
     seen_depot_keys = set()
-    for d in (local_depots + cloud_depots):
+    for d in (d1_depots + local_depots + cloud_depots):
         d_key = f"{d.get('depot_name')}_{d.get('arrived_at')}"
         if d_key in seen_depot_keys:
             continue
@@ -16263,8 +16340,10 @@ def api_depot_zones():
             pass
     zones_out = []
     for zone in DEPOT_ZONES:
-        # Spocitej busy v teto vozovne
+        # Spocitej busy v teto vozovne (striktně bez duplicit, 1 zástupce per vůz)
         buses_in_dict = {}
+        seen_bids = set()
+        seen_spzs = set()
         poly = zone.get("polygon", [])
         for bid, bc in safe_bus_cache_items():
             if bc.get("color_class") == "bg-bug" or bc.get("is_train") or bc.get("is_withdrawn"):
@@ -16281,49 +16360,64 @@ def api_depot_zones():
                     bc["depot_name"] = zone["name"]
             if is_here:
                 spz = bc.get("spz") or "Neznámá"
-                dict_key = bid if spz in ("Nezn\u00e1m\u00e1", "Neznámá") else spz
-                if dict_key not in buses_in_dict:
-                    arrived_at = None
-                    is_imprecise = False
-                    session_id = None
-                    if bid in DEPOT_ACTIVE_SESSIONS:
-                        arrived_at = DEPOT_ACTIVE_SESSIONS[bid].get("arrived_at")
-                        is_imprecise = DEPOT_ACTIVE_SESSIONS[bid].get("is_imprecise", False)
-                        session_id = DEPOT_ACTIVE_SESSIONS[bid].get("id")
-                    elif spz in DEPOT_ACTIVE_SESSIONS:
-                        arrived_at = DEPOT_ACTIVE_SESSIONS[spz].get("arrived_at")
-                        is_imprecise = DEPOT_ACTIVE_SESSIONS[spz].get("is_imprecise", False)
-                        session_id = DEPOT_ACTIVE_SESSIONS[spz].get("id")
-                    elif bc.get("parked_since"):
-                        try:
-                            arrived_at = datetime.fromtimestamp(bc["parked_since"]).isoformat()
-                        except Exception:
-                            pass
-                        
-                    buses_in_dict[dict_key] = {
-                        "id": bid,
-                        "session_id": session_id,
-                        "spz": spz,
-                        "line": bc.get("line") or "",
-                        "spz_verified": bc.get("spz_verified", False),
-                        "arrived_at": arrived_at,
-                        "is_imprecise": is_imprecise
-                    }
+                norm_s = normalize_spz_key(spz)
+                b_str = str(bid)
+                if (norm_s and norm_s in seen_spzs) or b_str in seen_bids:
+                    continue
+                if norm_s: seen_spzs.add(norm_s)
+                seen_bids.add(b_str)
+                arrived_at = None
+                is_imprecise = False
+                session_id = None
+                if bid in DEPOT_ACTIVE_SESSIONS:
+                    arrived_at = DEPOT_ACTIVE_SESSIONS[bid].get("arrived_at")
+                    is_imprecise = DEPOT_ACTIVE_SESSIONS[bid].get("is_imprecise", False)
+                    session_id = DEPOT_ACTIVE_SESSIONS[bid].get("id")
+                elif norm_s and norm_s in DEPOT_ACTIVE_SESSIONS:
+                    arrived_at = DEPOT_ACTIVE_SESSIONS[norm_s].get("arrived_at")
+                    is_imprecise = DEPOT_ACTIVE_SESSIONS[norm_s].get("is_imprecise", False)
+                    session_id = DEPOT_ACTIVE_SESSIONS[norm_s].get("id")
+                elif bc.get("parked_since"):
+                    try:
+                        arrived_at = datetime.fromtimestamp(bc["parked_since"]).isoformat()
+                    except Exception:
+                        pass
+                    
+                buses_in_dict[norm_s or b_str] = {
+                    "id": bid,
+                    "session_id": session_id,
+                    "spz": spz,
+                    "line": bc.get("line") or "",
+                    "spz_verified": bc.get("spz_verified", False),
+                    "arrived_at": arrived_at,
+                    "is_imprecise": is_imprecise
+                }
         
         # Zkontrolujeme také aktivní relace v DEPOT_ACTIVE_SESSIONS
         for s_key, s_data in list(DEPOT_ACTIVE_SESSIONS.items()):
             if s_data.get("depot_name") == zone["name"]:
-                s_spz = s_data.get("spz") or s_key
-                if s_spz and s_spz not in buses_in_dict:
-                    buses_in_dict[s_spz] = {
-                        "id": s_data.get("bus_id") or "",
-                        "session_id": s_data.get("id"),
-                        "spz": s_spz,
-                        "line": "",
-                        "spz_verified": True,
-                        "arrived_at": s_data.get("arrived_at"),
-                        "is_imprecise": s_data.get("is_imprecise", False)
-                    }
+                s_spz = s_data.get("spz") or ""
+                s_bid = str(s_data.get("bus_id") or "")
+                norm_s = normalize_spz_key(s_spz)
+                if (norm_s and norm_s in seen_spzs) or (s_bid and s_bid in seen_bids):
+                    k_match = norm_s if (norm_s and norm_s in buses_in_dict) else (s_bid if s_bid in buses_in_dict else None)
+                    if k_match:
+                        if not buses_in_dict[k_match].get("session_id"):
+                            buses_in_dict[k_match]["session_id"] = s_data.get("id")
+                        if not buses_in_dict[k_match].get("arrived_at"):
+                            buses_in_dict[k_match]["arrived_at"] = s_data.get("arrived_at")
+                    continue
+                if norm_s: seen_spzs.add(norm_s)
+                if s_bid: seen_bids.add(s_bid)
+                buses_in_dict[norm_s or s_bid] = {
+                    "id": s_bid or s_key,
+                    "session_id": s_data.get("id"),
+                    "spz": s_spz or s_key,
+                    "line": "",
+                    "spz_verified": True,
+                    "arrived_at": s_data.get("arrived_at"),
+                    "is_imprecise": s_data.get("is_imprecise", False)
+                }
 
         buses_in = list(buses_in_dict.values())
         zones_out.append({
@@ -16353,7 +16447,7 @@ def api_depot_history():
     try:
         from cloudflare_d1 import get_d1_client as get_d1
         _d1 = get_d1()
-        sql = "SELECT * FROM depot_history WHERE 1=1"
+        sql = "SELECT * FROM depot_history WHERE (bus_id NOT LIKE 'SYSTEM_%' AND spz != 'BACKUP')"
         params = []
         if not is_all_depots:
             sql += " AND (depot_name = ? OR depot_name LIKE ?)"
@@ -16397,18 +16491,25 @@ def api_depot_history():
             "is_imprecise": sess.get("is_imprecise", False)
         })
 
-    # Sloučení: aktivní parkující dopředu bez duplicit
-    seen_spz_active = set()
+    # Sloučení: aktivní parkující dopředu bez duplicit (1 zástupce per vůz)
+    seen_active_keys = set()
     merged = []
     for act_row in active_in_depot:
-        spz_k = act_row["spz"]
-        if spz_k not in seen_spz_active:
-            seen_spz_active.add(spz_k)
-            merged.append(act_row)
+        canon_k = normalize_spz_key(act_row.get("spz")) or str(act_row.get("bus_id") or "")
+        if not canon_k or canon_k in seen_active_keys:
+            continue
+        seen_active_keys.add(canon_k)
+        merged.append(act_row)
 
     seen_ids = {r.get("id") for r in merged}
     for row in data:
+        # Pokud již je vůz v aktivních z paměti a tento řádek je také aktivní (left_at IS NULL), přeskočíme duplicitu
+        r_canon = normalize_spz_key(row.get("spz")) or str(row.get("bus_id") or "")
+        if not row.get("left_at") and r_canon in seen_active_keys:
+            continue
         if row.get("id") not in seen_ids:
+            if not row.get("left_at") and r_canon:
+                seen_active_keys.add(r_canon)
             merged.append(row)
 
     return jsonify({"status": "success", "data": merged})
