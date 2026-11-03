@@ -16428,7 +16428,15 @@ def api_admin_delete_depot_history():
         return jsonify({"status": "error", "message": "DB nedostupna"}), 500
         
     try:
-        db.table("depot_history").delete().eq("id", record_id).execute()
+        try:
+            from cloudflare_d1 import get_d1_client as _get_d1
+            _get_d1().execute("DELETE FROM depot_history WHERE id = ?", [int(record_id)])
+        except Exception as e_d1_del:
+            print(f"[D1-DEL-DEPOT] Chyba smazání z D1: {e_d1_del}", flush=True)
+        try:
+            db.table("depot_history").delete().eq("id", record_id).execute()
+        except Exception:
+            pass
         # Take to zmaz z pameti pokud je to aktivni
         for s_spz, s_data in list(DEPOT_ACTIVE_SESSIONS.items()):
             if s_data["id"] == record_id:

@@ -143,7 +143,7 @@ def set_turso_blocked(val: bool, reason: str = ""):
     if val and (not old_val or time.time() - _LAST_ALERT_TS > 3600):
         _LAST_ALERT_TS = time.time()
         print("\n" + "="*80, flush=True)
-        print("[TURSO SHIELD] 🚨 POZOR: Cloudová databáze Turso dosáhla limitu čtení (READS BLOCKED)!", flush=True)
+        print("[TURSO SHIELD] [!] POZOR: Cloudova databaze Turso - BLOCKED stav!", flush=True)
         print(f"[TURSO SHIELD] Důvod: {reason or _TURSO_STATE.get('blocked_reason')}", flush=True)
         print("[TURSO SHIELD] Okamžitě aktivován NOUZOVÝ AUTONOMNÍ REŽIM: Všechny čtecí SELECT dotazy jsou", flush=True)
         print("[TURSO SHIELD] obsluhovány z in-memory cache, lokální SQLite (datacore_local.db) a JSON záloh.", flush=True)
