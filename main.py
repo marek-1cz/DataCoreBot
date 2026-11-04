@@ -6615,6 +6615,7 @@ def dashboard_main():
             elif f: query = query.ilike("role", f"%{f}%").neq("is_deleted", True)
             else: query = query.neq("is_deleted", True).order("app_id")
             users_data = query.execute().data or []
+            users_data = [u for u in users_data if not _is_tombstoned_user(u)]
             now = get_prague_time().replace(tzinfo=None)
             for u in users_data:
                 if u.get("is_online"):
@@ -6692,13 +6693,17 @@ def edit_user():
                 try:
                     with open("debug_log.txt", "a") as f: f.write(f"save result: {res.data}\n")
                 except: pass
-                if valid_discord_id: sync_roles_from_flask(valid_discord_id, r_str)
+                _AUTH_CACHE.clear()
+                if valid_discord_id:
+                    sync_roles_from_flask(valid_discord_id, r_str)
+                    _AUTH_CACHE[str(valid_discord_id)] = (time.time(), normalize_role_string(r_str), False)
                 flash('Údaje upraveny!', 'success')
             elif action == 'ban':
                 try:
                     with open("debug_log.txt", "a") as f: f.write("executing ban query...\n")
                 except: pass
                 res = build_query({"is_banned": True, "dashboard_access": False}).execute()
+                _AUTH_CACHE.clear()
                 if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl v databázi nalezen.", "error")
                 else: flash('BAN udělen.', 'warning')
                 if bot.loop and bot.loop.is_running() and bot.is_ready() and valid_discord_id:
@@ -6707,6 +6712,7 @@ def edit_user():
                 if valid_discord_id and str(session.get('discord_id')) == str(valid_discord_id): session.clear()
             elif action == 'unban':
                 res = build_query({"is_banned": False, "dashboard_access": True}).execute()
+                _AUTH_CACHE.clear()
                 if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl v databázi nalezen.", "error")
                 else: flash('BAN zrušen.', 'success')
                 if bot.loop and bot.loop.is_running() and bot.is_ready() and valid_discord_id:
@@ -6718,17 +6724,22 @@ def edit_user():
                 except: pass
                 now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
                 res = build_query({"is_deleted": True, "deleted_at": now_str, "dashboard_access": False}).execute()
+                _AUTH_CACHE.clear()
                 if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl v databázi nalezen pro smazání.", "error")
                 else: flash('Účet smazán (Soft Delete).', 'danger')
                 if valid_discord_id and str(session.get('discord_id')) == str(valid_discord_id): session.clear()
             elif action == 'restore':
                 res = build_query({"is_deleted": False, "deleted_at": "", "dashboard_access": True}).execute()
+                _AUTH_CACHE.clear()
                 if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl v databázi nalezen.", "error")
                 else: flash('Účet obnoven!', 'success')
             elif action == 'hard_delete':
                 for t in ["user_stats_lines", "user_stats_stops", "app_sessions", "download_logs", "feedback", "read_messages"]:
                     try: build_delete_query(t).execute()
                     except: pass
+                res = build_delete_query("users").execute()
+                _add_deleted_tombstone({"discord_id": valid_discord_id, "app_id": app_id})
+                _AUTH_CACHE.clear()
                 if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl nalezen pro permanentní smazání.", "error")
                 else: flash('Účet a všechna jeho data byla trvale smazána.', 'dark')
                 if valid_discord_id and str(session.get('discord_id')) == str(valid_discord_id): session.clear()

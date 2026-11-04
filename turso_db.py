@@ -279,8 +279,344 @@ def invalidate_query_cache(table_name):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# LOKÁLNÍ AUTONOMNÍ FALLBACK ENGINE PRO SELECT DOTAZY
+# LOKÁLNÍ AUTONOMNÍ FALLBACK & PERSISTENCE ENGINE PRO USERS A OSTATNÍ TABULKY
 # ═══════════════════════════════════════════════════════════════════════════════
+def _find_file(fn):
+    for d in [_BASE_DIR, os.path.dirname(_BASE_DIR)]:
+        p = os.path.join(d, fn)
+        if os.path.exists(p):
+            return p
+    return os.path.join(_BASE_DIR, fn)
+
+def _load_deleted_tombstones():
+    t_file = _find_file("deleted_users.json")
+    if t_file and os.path.exists(t_file):
+        try:
+            with open(t_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"app_ids": [1025, 1028, 2006], "ids": [44, 47, 77], "discord_ids": ["1501257673239433256", "1362792557561511956", "666729775879946253"]}
+
+def _is_tombstoned_user(u, tombstones=None):
+    if not u or not isinstance(u, dict):
+        return False
+    if tombstones is None:
+        tombstones = _load_deleted_tombstones()
+    t_app_ids = [str(x) for x in tombstones.get("app_ids", [])]
+    t_ids = [str(x) for x in tombstones.get("ids", [])]
+    t_discord_ids = [str(x) for x in tombstones.get("discord_ids", [])]
+    
+    aid = str(u.get("app_id") or "").strip()
+    uid = str(u.get("id") or "").strip()
+    did = str(u.get("discord_id") or "").strip()
+    
+    if aid and aid in t_app_ids:
+        return True
+    if uid and uid in t_ids:
+        return True
+    if did and did in t_discord_ids:
+        return True
+    return False
+
+def _add_deleted_tombstone(u):
+    if not u or not isinstance(u, dict):
+        return
+    t_file = _find_file("deleted_users.json")
+    try:
+        t = _load_deleted_tombstones()
+        aid = u.get("app_id")
+        uid = u.get("id")
+        did = u.get("discord_id")
+        
+        if aid is not None:
+            try: aid_int = int(aid)
+            except: aid_int = aid
+            if aid_int not in t.setdefault("app_ids", []):
+                t["app_ids"].append(aid_int)
+        if uid is not None:
+            try: uid_int = int(uid)
+            except: uid_int = uid
+            if uid_int not in t.setdefault("ids", []):
+                t["ids"].append(uid_int)
+        if did is not None:
+            did_str = str(did).strip()
+            if did_str and did_str not in t.setdefault("discord_ids", []):
+                t["discord_ids"].append(did_str)
+                
+        with open(t_file, "w", encoding="utf-8") as f:
+            json.dump(t, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[TURSO LOCAL DB] Error saving tombstone: {e}", flush=True)
+
+def _extract_arg_val(arg):
+    if isinstance(arg, dict) and "value" in arg:
+        return arg["value"]
+    return arg
+
+def _match_user_dict(u, where_clauses, args):
+    if not where_clauses:
+        return True
+    arg_vals = [_extract_arg_val(a) for a in (args or [])]
+    for idx, w in enumerate(where_clauses):
+        val = arg_vals[idx] if idx < len(arg_vals) else None
+        val_str = str(val).strip() if val is not None else ""
+        
+        if " = ?" in w:
+            col = w.split(" = ?")[0].strip().strip('"')
+            if col in ("is_banned", "is_deleted", "dashboard_access", "is_online"):
+                b_val = (val is True) or (val_str.lower() in ("true", "1"))
+                if bool(u.get(col)) != b_val:
+                    return False
+            else:
+                u_val_str = str(u.get(col) or "").strip()
+                if u_val_str.lower() != val_str.lower():
+                    return False
+
+        elif " != ?" in w:
+            col = w.split(" != ?")[0].strip().strip('"')
+            if col in ("is_banned", "is_deleted", "dashboard_access", "is_online"):
+                b_val = (val is True) or (val_str.lower() in ("true", "1"))
+                if bool(u.get(col)) == b_val:
+                    return False
+            else:
+                u_val_str = str(u.get(col) or "").strip()
+                if u_val_str.lower() == val_str.lower():
+                    return False
+
+        elif "LIKE" in w.upper():
+            clean_pat = val_str.strip("%").lower()
+            matched = False
+            for col in ("role", "nick", "email", "web_session_token"):
+                if f'"{col}"' in w or col in w:
+                    u_val = str(u.get(col) or "").lower()
+                    if clean_pat in u_val:
+                        matched = True
+                    break
+            if not matched:
+                return False
+
+        elif "IS NULL" in w.upper():
+            col = w.split()[0].strip().strip('"')
+            if u.get(col) is not None and str(u.get(col)).strip() != "":
+                return False
+
+    return True
+
+def _merge_users_with_backup(res_rows, where_clauses=None, args=None, order_by=None, limit_val=None, columns="*"):
+    tombstones = _load_deleted_tombstones()
+    u_file = _find_file("users_backup.json")
+    backup_users = []
+    if u_file and os.path.exists(u_file):
+        try:
+            with open(u_file, "r", encoding="utf-8") as f:
+                backup_users = json.load(f)
+        except Exception:
+            backup_users = []
+
+    backup_by_did = {}
+    backup_by_id = {}
+    backup_by_aid = {}
+    for bu in backup_users:
+        if _is_tombstoned_user(bu, tombstones):
+            continue
+        did = str(bu.get("discord_id") or "").strip()
+        uid = str(bu.get("id") or "").strip()
+        aid = str(bu.get("app_id") or "").strip()
+        if did: backup_by_did[did] = bu
+        if uid: backup_by_id[uid] = bu
+        if aid: backup_by_aid[aid] = bu
+
+    merged_dict = {}
+    for r in (res_rows or []):
+        if _is_tombstoned_user(r, tombstones):
+            continue
+        did = str(r.get("discord_id") or "").strip()
+        uid = str(r.get("id") or "").strip()
+        aid = str(r.get("app_id") or "").strip()
+        
+        local_u = None
+        if did and did in backup_by_did: local_u = backup_by_did[did]
+        elif uid and uid in backup_by_id: local_u = backup_by_id[uid]
+        elif aid and aid in backup_by_aid: local_u = backup_by_aid[aid]
+
+        u_copy = dict(r)
+        if local_u:
+            for fld in ("role", "hwid", "ip_address", "is_banned", "is_deleted", "deleted_at", "dashboard_access", "nick", "email", "web_login_at", "login_token", "download_token"):
+                if fld in local_u and local_u[fld] is not None:
+                    u_copy[fld] = local_u[fld]
+
+        k = did or (f"id_{uid}" if uid else f"aid_{aid}")
+        merged_dict[k] = u_copy
+
+    for bu in backup_users:
+        if _is_tombstoned_user(bu, tombstones):
+            continue
+        did = str(bu.get("discord_id") or "").strip()
+        uid = str(bu.get("id") or "").strip()
+        aid = str(bu.get("app_id") or "").strip()
+        k = did or (f"id_{uid}" if uid else f"aid_{aid}")
+        if k not in merged_dict:
+            merged_dict[k] = dict(bu)
+
+    result = []
+    for u in merged_dict.values():
+        if _match_user_dict(u, where_clauses or [], args or []):
+            result.append(u)
+
+    if order_by:
+        for ob in reversed(order_by):
+            parts = ob.strip().split()
+            col = parts[0].strip('"')
+            desc = len(parts) > 1 and parts[1].upper() == "DESC"
+            def _sort_key(item, c=col):
+                v = item.get(c)
+                if v is None: return -999999999 if desc else 999999999
+                try: return float(v)
+                except (ValueError, TypeError): return str(v).lower()
+            result.sort(key=_sort_key, reverse=desc)
+
+    if limit_val is not None:
+        result = result[:int(limit_val)]
+
+    if columns and columns != "*":
+        req_cols = [c.strip().strip('"') for c in columns.split(",") if c.strip()]
+        result = [{c: item.get(c) for c in req_cols} for item in result]
+
+    return result
+
+def _local_update_users(where_clauses, args, payload_data):
+    u_file = _find_file("users_backup.json")
+    data = []
+    if os.path.exists(u_file):
+        try:
+            with open(u_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            data = []
+
+    updated = []
+    for u in data:
+        if _match_user_dict(u, where_clauses, args):
+            u.update(payload_data)
+            updated.append(u.copy())
+
+    if not updated and _GLOBAL_TURSO_CLIENT:
+        try:
+            where_sql = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+            res = _GLOBAL_TURSO_CLIENT._execute_single(f"SELECT * FROM \"users\"{where_sql};", args, bypass_block_check=True)
+            if res.data:
+                for row in res.data:
+                    row.update(payload_data)
+                    data.append(row)
+                    updated.append(row.copy())
+        except Exception:
+            pass
+
+    if not updated:
+        arg_vals = [_extract_arg_val(a) for a in (args or [])]
+        fallback_u = dict(payload_data)
+        for idx, w in enumerate(where_clauses or []):
+            val = arg_vals[idx] if idx < len(arg_vals) else None
+            if '"discord_id" = ?' in w and val:
+                fallback_u["discord_id"] = str(val)
+            elif '"app_id" = ?' in w and val:
+                fallback_u["app_id"] = val
+            elif '"id" = ?' in w and val:
+                fallback_u["id"] = val
+        if fallback_u.get("discord_id") or fallback_u.get("app_id") or fallback_u.get("id"):
+            data.append(fallback_u)
+            updated.append(fallback_u.copy())
+
+    if updated:
+        try:
+            with open(u_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[TURSO LOCAL DB] Error saving users_backup.json: {e}", flush=True)
+
+    return updated
+
+def _local_delete_users(where_clauses, args):
+    u_file = _find_file("users_backup.json")
+    data = []
+    if os.path.exists(u_file):
+        try:
+            with open(u_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            data = []
+
+    remaining = []
+    deleted = []
+    for u in data:
+        if _match_user_dict(u, where_clauses, args):
+            deleted.append(u)
+            _add_deleted_tombstone(u)
+        else:
+            remaining.append(u)
+
+    if not deleted and _GLOBAL_TURSO_CLIENT:
+        try:
+            where_sql = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+            res = _GLOBAL_TURSO_CLIENT._execute_single(f"SELECT * FROM \"users\"{where_sql};", args, bypass_block_check=True)
+            if res.data:
+                for row in res.data:
+                    deleted.append(row)
+                    _add_deleted_tombstone(row)
+        except Exception:
+            pass
+
+    if not deleted:
+        arg_vals = [_extract_arg_val(a) for a in (args or [])]
+        fallback_u = {}
+        for idx, w in enumerate(where_clauses or []):
+            val = arg_vals[idx] if idx < len(arg_vals) else None
+            if '"discord_id" = ?' in w and val:
+                fallback_u["discord_id"] = str(val)
+            elif '"app_id" = ?' in w and val:
+                fallback_u["app_id"] = val
+            elif '"id" = ?' in w and val:
+                fallback_u["id"] = val
+        if fallback_u:
+            deleted.append(fallback_u)
+            _add_deleted_tombstone(fallback_u)
+
+    if deleted and len(remaining) != len(data):
+        try:
+            with open(u_file, "w", encoding="utf-8") as f:
+                json.dump(remaining, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[TURSO LOCAL DB] Error updating users_backup.json: {e}", flush=True)
+
+    return deleted
+
+def _local_insert_user(payload_data):
+    if not payload_data: return
+    u_file = _find_file("users_backup.json")
+    data = []
+    if os.path.exists(u_file):
+        try:
+            with open(u_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            data = []
+    items = payload_data if isinstance(payload_data, list) else [payload_data]
+    for item in items:
+        exists = False
+        for u in data:
+            if item.get("discord_id") and str(u.get("discord_id")) == str(item.get("discord_id")):
+                exists = True; break
+            if item.get("app_id") and str(u.get("app_id")) == str(item.get("app_id")):
+                exists = True; break
+        if not exists:
+            data.append(dict(item))
+    try:
+        with open(u_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
 def _resolve_local_fallback(table_name, columns="*", where_clauses=None, args=None, order_by=None, limit_val=None):
     """
     Bezpečný a robustní lokální fallback pro případ výpadku / vyčerpání Turso.
@@ -289,66 +625,9 @@ def _resolve_local_fallback(table_name, columns="*", where_clauses=None, args=No
     where_clauses = where_clauses or []
     args = args or []
 
-    def _find_file(fn):
-        for d in [_BASE_DIR, os.path.dirname(_BASE_DIR)]:
-            p = os.path.join(d, fn)
-            if os.path.exists(p):
-                return p
-        return None
-
     # ── TABULKA: users ──
     if table_name == "users":
-        u_file = _find_file("users_backup.json")
-        data = []
-        if u_file:
-            try:
-                with open(u_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-            except Exception:
-                data = []
-
-        filtered = []
-        for u in data:
-            match = True
-            for w, a in zip(where_clauses, args):
-                val = a.get("value")
-                val_str = str(val) if val is not None else ""
-                if '"id" = ?' in w and str(u.get("id")) != val_str:
-                    match = False; break
-                elif '"discord_id" = ?' in w and str(u.get("discord_id")) != val_str:
-                    match = False; break
-                elif '"email" = ?' in w and str(u.get("email", "")).lower() != val_str.lower():
-                    match = False; break
-                elif '"app_id" = ?' in w and str(u.get("app_id")) != val_str:
-                    match = False; break
-                elif '"nick" = ?' in w and str(u.get("nick", "")).lower() != val_str.lower():
-                    match = False; break
-                elif '"download_token" = ?' in w and str(u.get("download_token")) != val_str:
-                    match = False; break
-                elif '"login_token" = ?' in w and str(u.get("login_token")) != val_str:
-                    match = False; break
-                elif '"web_session_token" = ?' in w or '"web_session_token" LIKE ?' in w:
-                    wst = str(u.get("web_session_token") or "")
-                    if val_str not in wst:
-                        match = False; break
-                elif 'LOWER("nick") LIKE LOWER(?)' in w:
-                    clean_pat = val_str.strip("%").lower()
-                    if clean_pat not in str(u.get("nick", "")).lower():
-                        match = False; break
-                elif 'LOWER("email") LIKE LOWER(?)' in w:
-                    clean_pat = val_str.strip("%").lower()
-                    if clean_pat not in str(u.get("email", "")).lower():
-                        match = False; break
-            if match:
-                filtered.append(u)
-
-        if limit_val is not None:
-            filtered = filtered[:int(limit_val)]
-
-        if columns and columns != "*":
-            req_cols = [c.strip().strip('"') for c in columns.split(",") if c.strip()]
-            return [{c: item.get(c) for c in req_cols} for item in filtered]
-        return filtered
+        return _merge_users_with_backup([], where_clauses, args, order_by, limit_val, columns)
 
     # ── TABULKA: settings ──
     if table_name == "settings":
@@ -779,6 +1058,11 @@ class TursoQueryBuilder:
                 return TursoResponse(data=fallback_data, count=len(fallback_data))
 
             if not res.error:
+                if self.table_name == "users":
+                    res.data = _merge_users_with_backup(
+                        res.data, self.where_clauses, self.args, self.order_by, self.limit_val, cols
+                    )
+                    res.count = len(res.data)
                 set_query_cache(cache_key, res.data, self.table_name)
             return res
 
@@ -786,6 +1070,12 @@ class TursoQueryBuilder:
         invalidate_query_cache(self.table_name)
 
         if self.action == "INSERT":
+            if self.table_name == "users":
+                _local_insert_user(self.payload_data)
+            if is_turso_write_blocked():
+                ret_data = self.payload_data if isinstance(self.payload_data, list) else [self.payload_data]
+                return TursoResponse(data=ret_data, count=len(ret_data))
+
             if isinstance(self.payload_data, list):
                 if not self.payload_data:
                     return TursoResponse(data=[])
@@ -807,6 +1097,12 @@ class TursoQueryBuilder:
                 return self.client._execute_single(sql, args, returning_data=[self.payload_data])
 
         elif self.action == "UPSERT":
+            if self.table_name == "users":
+                _local_insert_user(self.payload_data)
+            if is_turso_write_blocked():
+                ret_data = self.payload_data if isinstance(self.payload_data, list) else [self.payload_data]
+                return TursoResponse(data=ret_data, count=len(ret_data))
+
             if isinstance(self.payload_data, list):
                 if not self.payload_data:
                     return TursoResponse(data=[])
@@ -835,11 +1131,38 @@ class TursoQueryBuilder:
                 args.append(_py_to_turso_arg(v))
             sql = f"UPDATE \"{self.table_name}\" SET {', '.join(set_clauses)}{where_sql};"
             all_args = args + self.args
-            return self.client._execute_single(sql, all_args, returning_data=[self.payload_data])
+            
+            local_updated = []
+            if self.table_name == "users":
+                local_updated = _local_update_users(self.where_clauses, self.args, self.payload_data)
+
+            if is_turso_write_blocked():
+                ret_data = local_updated if local_updated else [self.payload_data]
+                return TursoResponse(data=ret_data, count=len(ret_data))
+
+            res = self.client._execute_single(sql, all_args, returning_data=local_updated or [self.payload_data])
+            if res.error:
+                ret_data = local_updated if local_updated else [self.payload_data]
+                return TursoResponse(data=ret_data, count=len(ret_data))
+            return res
 
         elif self.action == "DELETE":
             sql = f"DELETE FROM \"{self.table_name}\"{where_sql};"
-            return self.client._execute_single(sql, self.args)
+            
+            local_deleted = []
+            if self.table_name == "users":
+                local_deleted = _local_delete_users(self.where_clauses, self.args)
+
+            if is_turso_write_blocked():
+                return TursoResponse(data=local_deleted, count=len(local_deleted))
+
+            res = self.client._execute_single(sql, self.args, returning_data=local_deleted)
+            if res.error:
+                return TursoResponse(data=local_deleted, count=len(local_deleted))
+            if not res.data and local_deleted:
+                res.data = local_deleted
+                res.count = len(local_deleted)
+            return res
 
         return TursoResponse()
 
