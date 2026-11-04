@@ -682,16 +682,19 @@ async function loadVehicleData() {
     ALL_TRIPS = data.trips || data.data || [];
     ALL_DEPOTS = data.depot_visits || [];
 
-    renderHeader();
-    renderKpi();
-    renderTrips(ALL_TRIPS);
-    renderDepots(ALL_DEPOTS);
+    try { renderHeader(); } catch(e) { console.error('Error renderHeader:', e); }
+    try { renderKpi(); } catch(e) { console.error('Error renderKpi:', e); }
+    try { renderTrips(ALL_TRIPS); } catch(e) { console.error('Error renderTrips:', e); }
+    try { renderDepots(ALL_DEPOTS); } catch(e) { console.error('Error renderDepots:', e); }
 
-    document.getElementById('countTrips').textContent = ALL_TRIPS.length;
-    document.getElementById('countDepots').textContent = ALL_DEPOTS.length;
+    const countTrips = document.getElementById('countTrips');
+    if (countTrips) countTrips.textContent = ALL_TRIPS.length;
+    const countDepots = document.getElementById('countDepots');
+    if (countDepots) countDepots.textContent = ALL_DEPOTS.length;
   } catch(err) {
     console.error('Error loading vehicle:', err);
-    document.getElementById('tripsTableBody').innerHTML = '<tr><td colspan="8" class="empty-box"><i class="fas fa-exclamation-triangle" style="color:var(--amber);"></i>Data pro vůz se nepodařilo načíst.</td></tr>';
+    const tbody = document.getElementById('tripsTableBody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="empty-box"><i class="fas fa-exclamation-triangle" style="color:var(--amber);"></i>Data pro vůz se nepodařilo načíst.</td></tr>';
   }
 }
 
@@ -700,13 +703,19 @@ function renderHeader() {
   if (!v) return;
 
   const spzDisplay = (v.spz || PAGE_SPZ).trim();
-  document.getElementById('plateCode').textContent = spzDisplay;
-  document.getElementById('bcSpz').textContent = 'Vůz ' + spzDisplay;
+  renderCzechPlate(spzDisplay);
+  const pCode = document.getElementById('plateCode');
+  if (pCode) pCode.textContent = spzDisplay;
+  const bcSpz = document.getElementById('bcSpz');
+  if (bcSpz) bcSpz.textContent = 'Vůz ' + spzDisplay;
   document.title = 'Vůz ' + spzDisplay + ' · Historie vozového parku · OIS IDPK';
 
-  document.getElementById('vType').textContent = v.type || 'Autobus IDPK';
-  document.getElementById('vOp').textContent = v.operator || 'Dopravce IDPK';
-  document.getElementById('vBusId').textContent = 'Bus #' + (v.live?.bus_id || spzDisplay.replace(/\s+/g,''));
+  const vType = document.getElementById('vType');
+  if (vType) vType.textContent = v.type || 'Autobus IDPK';
+  const vOp = document.getElementById('vOp');
+  if (vOp) vOp.textContent = v.operator || 'Dopravce IDPK';
+  const vBusId = document.getElementById('vBusId');
+  if (vBusId) vBusId.textContent = 'Bus #' + ((v.live && v.live.bus_id) || spzDisplay.replace(/\s+/g,''));
 
   // Live bar
   const live = v.live || {};
@@ -716,35 +725,37 @@ function renderHeader() {
   const heroMapBtn = document.getElementById('heroMapBtn');
 
   if (live.line) {
-    liveBar.className = 'live-bar is-live';
-    liveDot.className = 'pulse-dot green';
+    if (liveBar) liveBar.className = 'live-bar is-live';
+    if (liveDot) liveDot.className = 'pulse-dot green';
     let lineBadge = `<b style="color:#ffffff;background:${getLineColor(live.line)};padding:2px 8px;border-radius:6px;font-size:0.8rem;margin-right:6px;">Linka ${esc(live.line)}</b>`;
     let dest = live.destination ? ` ➔ ${esc(live.destination)}` : '';
     let stop = live.stop ? ` · Zastávka: <b>${esc(live.stop)}</b>` : '';
-    liveText.innerHTML = `${lineBadge} Na trase${dest}${stop}`;
-    heroMapBtn.href = `/mapa?bus=${encodeURIComponent(spzDisplay)}&track=${encodeURIComponent(live.bus_id || spzDisplay)}`;
+    if (liveText) liveText.innerHTML = `${lineBadge} Na trase${dest}${stop}`;
+    if (heroMapBtn) heroMapBtn.href = `/mapa?bus=${encodeURIComponent(spzDisplay)}&track=${encodeURIComponent(live.bus_id || spzDisplay)}`;
   } else if (live.in_depot || live.depot_name) {
-    liveBar.className = 'live-bar is-depot';
-    liveDot.className = 'pulse-dot amber';
-    liveText.innerHTML = `<b>Zaparkován ve vozovně:</b> ${esc(live.depot_name || 'Vozovna')}`;
-    heroMapBtn.href = `/mapa?bus=${encodeURIComponent(spzDisplay)}`;
+    if (liveBar) liveBar.className = 'live-bar is-depot';
+    if (liveDot) liveDot.className = 'pulse-dot amber';
+    if (liveText) liveText.innerHTML = `<b>Zaparkován ve vozovně:</b> ${esc(live.depot_name || 'Vozovna')}`;
+    if (heroMapBtn) heroMapBtn.href = `/mapa?bus=${encodeURIComponent(spzDisplay)}`;
   } else if (ALL_TRIPS.length > 0) {
     const lastT = ALL_TRIPS[0];
-    liveBar.className = 'live-bar is-offline';
-    liveDot.className = 'pulse-dot gray';
+    if (liveBar) liveBar.className = 'live-bar is-offline';
+    if (liveDot) liveDot.className = 'pulse-dot gray';
     let lastWhen = lastT.end_actual || lastT.start_actual || '';
     let lastWhere = lastT.end_stop || lastT.destination || '';
-    liveText.innerHTML = `Mimo trasu · Poslední spoj linky <b>${esc(lastT.linka || '---')}</b> ${lastWhere ? 'v ' + esc(lastWhere) : ''} (${esc(lastWhen)})`;
-    if (lastT.end_lat && lastT.end_lng) {
-      heroMapBtn.href = `/mapa?lat=${lastT.end_lat}&lng=${lastT.end_lng}&line=${encodeURIComponent(lastT.linka||'')}&spz=${encodeURIComponent(spzDisplay)}&label=${encodeURIComponent(lastWhere)}&zoom=16`;
-    } else {
-      heroMapBtn.href = `/mapa?bus=${encodeURIComponent(spzDisplay)}`;
+    if (liveText) liveText.innerHTML = `Mimo trasu · Poslední spoj linky <b>${esc(lastT.linka || '---')}</b> ${lastWhere ? 'v ' + esc(lastWhere) : ''} (${esc(lastWhen)})`;
+    if (heroMapBtn) {
+      if (lastT.end_lat && lastT.end_lng) {
+        heroMapBtn.href = `/mapa?lat=${lastT.end_lat}&lng=${lastT.end_lng}&line=${encodeURIComponent(lastT.linka||'')}&spz=${encodeURIComponent(spzDisplay)}&label=${encodeURIComponent(lastWhere)}&zoom=16`;
+      } else {
+        heroMapBtn.href = `/mapa?bus=${encodeURIComponent(spzDisplay)}`;
+      }
     }
   } else {
-    liveBar.className = 'live-bar is-offline';
-    liveDot.className = 'pulse-dot gray';
-    liveText.textContent = 'Mimo provoz (zatím žádná zaznamenaná poloha)';
-    heroMapBtn.href = `/mapa?bus=${encodeURIComponent(spzDisplay)}`;
+    if (liveBar) liveBar.className = 'live-bar is-offline';
+    if (liveDot) liveDot.className = 'pulse-dot gray';
+    if (liveText) liveText.textContent = 'Mimo provoz (zatím žádná zaznamenaná poloha)';
+    if (heroMapBtn) heroMapBtn.href = `/mapa?bus=${encodeURIComponent(spzDisplay)}`;
   }
 }
 

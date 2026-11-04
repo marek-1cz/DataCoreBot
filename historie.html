@@ -11,7 +11,7 @@
 <script>
 /* Lehký režim: respektuje výkonnostní profil z hlavního webu (stejný localStorage) a „omezit pohyb“ v systému */
 (function(){var d=document.documentElement,m=null;try{m=localStorage.getItem('ois-perf-mode')}catch(e){}
-if(m==='low'||m==='min'||matchMedia('(prefers-reduced-motion: reduce)').matches)d.classList.add('lite');})();
+if(m==='low'||m==='min'||(typeof matchMedia!=='undefined'&&matchMedia('(prefers-reduced-motion: reduce)').matches))d.classList.add('lite');})();
 </script>
 <style>
 /* =========================================================
