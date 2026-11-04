@@ -12034,13 +12034,22 @@ def _check_and_fire_notifications(db_client, bus_cache):
         rules = _CACHED_NOTIF_RULES
     else:
         if (now_ts - _CACHED_NOTIF_RULES_TS > ttl_rules) or not _CACHED_NOTIF_RULES:
+            merged_rules = []
+            try:
+                from local_db import local_bus_notifications_get_active
+                merged_rules.extend(local_bus_notifications_get_active())
+            except Exception:
+                pass
             try:
                 res = db_client.table("bus_notifications").select("*").eq("is_active", True).execute()
-                _CACHED_NOTIF_RULES = res.data or []
-                _CACHED_NOTIF_RULES_TS = now_ts
+                for r in (res.data or []):
+                    if not any(str(mr.get("id")) == str(r.get("id")) for mr in merged_rules):
+                        merged_rules.append(r)
             except Exception as e:
                 check_supabase_error(e)
-                print(f"[NOTIF] Chyba pri nacitani pravidel: {e}", flush=True)
+                print(f"[NOTIF] Chyba pri nacitani pravidel z DB: {e}", flush=True)
+            _CACHED_NOTIF_RULES = merged_rules
+            _CACHED_NOTIF_RULES_TS = now_ts
         rules = _CACHED_NOTIF_RULES
 
     now = datetime.now(ZoneInfo("Europe/Prague")).replace(tzinfo=None)
@@ -12224,6 +12233,11 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 global _CACHED_NOTIF_RULES, _CACHED_NOTIF_RULES_TS
                 if is_one_time:
                     try:
+                        from local_db import local_bus_notification_delete
+                        local_bus_notification_delete(rule_id)
+                    except Exception:
+                        pass
+                    try:
                         db_client.table("bus_notifications").delete().eq("id", rule_id).execute()
                     except Exception as _del_e:
                         print(f"[NOTIF] Chyba smazani jednorazoveho pravidla {rule_id}: {_del_e}", flush=True)
@@ -12231,10 +12245,18 @@ def _check_and_fire_notifications(db_client, bus_cache):
                     _CACHED_NOTIF_RULES_TS = 0
                     print(f"[NOTIF] Jednorázová notifikace {rule_id[:8]} ZCELA splněna a smazána.", flush=True)
                 else:
-                    db_client.table("bus_notifications").update({
-                        "last_fired_at": now.isoformat(),
-                        "fired_count": (rule.get("fired_count") or 0) + 1
-                    }).eq("id", rule_id).execute()
+                    try:
+                        from local_db import local_bus_notification_update
+                        local_bus_notification_update(rule_id, last_fired_at=now.isoformat(), fired_count=(rule.get("fired_count") or 0) + 1)
+                    except Exception:
+                        pass
+                    try:
+                        db_client.table("bus_notifications").update({
+                            "last_fired_at": now.isoformat(),
+                            "fired_count": (rule.get("fired_count") or 0) + 1
+                        }).eq("id", rule_id).execute()
+                    except Exception:
+                        pass
             except Exception as e_up:
                 print(f"[NOTIF] Chyba aktualizace DB po odpálení pravidla: {e_up}", flush=True)
 
@@ -12705,17 +12727,38 @@ def api_notif_create():
                     queue_tt_fetch(0, str(identifier), _bc)
                     sys_log(f"[PRIORITY] Auto-zarazeni busu {identifier} do prioritni fronty pri vytvoreni notifikace")
 
-        db.table("bus_notifications").insert({
-            "user_session": user_session_val,
-            "identifier": identifier,
-            "identifier_type": identifier_type,
-            "triggers": triggers,
-            "label": label,
-            "delivery_channels": delivery_channels,
-            "is_one_time": is_one_time,
-            "is_active": True,
-            "created_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
-        }).execute()
+        try:
+            from local_db import local_bus_notification_create
+            local_bus_notification_create(
+                user_session=user_session_val,
+                identifier=identifier,
+                identifier_type=identifier_type,
+                triggers=triggers,
+                label=label,
+                delivery_channels=delivery_channels,
+                is_one_time=is_one_time,
+                discord_id=discord_id,
+                email=email
+            )
+        except Exception as _loc_e:
+            print(f"[NOTIF] Chyba SQLite zapisu: {_loc_e}", flush=True)
+
+        try:
+            from turso_db import is_turso_write_blocked
+            if not is_turso_write_blocked():
+                db.table("bus_notifications").insert({
+                    "user_session": user_session_val,
+                    "identifier": identifier,
+                    "identifier_type": identifier_type,
+                    "triggers": triggers,
+                    "label": label,
+                    "delivery_channels": delivery_channels,
+                    "is_one_time": is_one_time,
+                    "is_active": True,
+                    "created_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
+                }).execute()
+        except Exception:
+            pass
         
         # Okamžitá invalidace cache pravidel, aby byla notifikace ihned aktivní
         global _CACHED_NOTIF_RULES_TS, _CACHED_NOTIF_USERS
@@ -12770,17 +12813,35 @@ def api_notif_list():
         if not user_session_val and not is_admin:
             return jsonify({"status": "error", "rules": []})
 
-        select_cols = "id, identifier, identifier_type, triggers, label, is_active, is_one_time, fired_count, last_fired_at, created_at, user_session"
-        user_conds = [f"user_session.eq.{user_db_id}"]
-        if user_app_id and user_app_id != user_db_id:
-            user_conds.append(f"user_session.eq.{user_app_id}")
-        if user_discord_id:
-            user_conds.append(f"user_session.eq.{user_discord_id}")
-        if is_admin:
-            user_conds.append("user_session.like.admin_direct_%")
-            
-        res = db.table("bus_notifications").select(select_cols).or_(",".join(user_conds)).order("created_at", desc=True).limit(50).execute()
-        return jsonify({"status": "success", "rules": res.data or []})
+        keys = [user_db_id]
+        if user_app_id: keys.append(user_app_id)
+        if user_discord_id: keys.append(user_discord_id)
+        if is_admin: keys.append("admin_direct_")
+
+        merged_rules = []
+        try:
+            from local_db import local_bus_notifications_get_for_user
+            merged_rules.extend(local_bus_notifications_get_for_user(keys, discord_id=user_discord_id))
+        except Exception:
+            pass
+
+        try:
+            select_cols = "id, identifier, identifier_type, triggers, label, is_active, is_one_time, fired_count, last_fired_at, created_at, user_session"
+            user_conds = [f"user_session.eq.{user_db_id}"]
+            if user_app_id and user_app_id != user_db_id:
+                user_conds.append(f"user_session.eq.{user_app_id}")
+            if user_discord_id:
+                user_conds.append(f"user_session.eq.{user_discord_id}")
+            if is_admin:
+                user_conds.append("user_session.like.admin_direct_%")
+            res = db.table("bus_notifications").select(select_cols).or_(",".join(user_conds)).order("created_at", desc=True).limit(50).execute()
+            for r in (res.data or []):
+                if not any(str(mr.get("id")) == str(r.get("id")) for mr in merged_rules):
+                    merged_rules.append(r)
+        except Exception:
+            pass
+
+        return jsonify({"status": "success", "rules": merged_rules})
     except Exception as e:
         return jsonify({"status": "error", "rules": [], "message": str(e)})
 
@@ -12825,12 +12886,20 @@ def api_notif_delete():
     if not rule_id:
         return jsonify({"status": "error", "message": "Chybí ID pravidla"}), 400
     try:
-        q = db.table("bus_notifications").delete().eq("id", rule_id)
-        if not is_admin:
-            valid_sessions = [user_session_val]
-            if user_discord_id: valid_sessions.append(user_discord_id)
-            q = q.in_("user_session", valid_sessions)
-        q.execute()
+        try:
+            from local_db import local_bus_notification_delete
+            local_bus_notification_delete(rule_id)
+        except Exception:
+            pass
+        try:
+            q = db.table("bus_notifications").delete().eq("id", rule_id)
+            if not is_admin:
+                valid_sessions = [user_session_val]
+                if user_discord_id: valid_sessions.append(user_discord_id)
+                q = q.in_("user_session", valid_sessions)
+            q.execute()
+        except Exception:
+            pass
         
         global _CACHED_NOTIF_RULES, _CACHED_NOTIF_RULES_TS
         _CACHED_NOTIF_RULES = [r for r in _CACHED_NOTIF_RULES if str(r.get("id")) != rule_id]

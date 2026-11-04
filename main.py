@@ -471,6 +471,48 @@ def _save_user_to_backup(user_dict: dict):
         except Exception as e:
             print(f"[USER BACKUP SAVE ERROR] {e}", flush=True)
 
+_DELETED_TOMBSTONES_FILE = os.path.join(os.path.dirname(__file__), "deleted_users.json")
+
+def _get_deleted_tombstones() -> dict:
+    try:
+        if os.path.exists(_DELETED_TOMBSTONES_FILE):
+            with open(_DELETED_TOMBSTONES_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {"app_ids": [1025, 1028, 2006], "ids": [44, 47, 77], "discord_ids": ["1501257673239433256", "1362792557561511956", "666729775879946253"]}
+
+def _is_tombstoned_user(u: dict) -> bool:
+    if not u or not isinstance(u, dict):
+        return False
+    t = _get_deleted_tombstones()
+    t_app_ids = [str(x) for x in t.get("app_ids", [])]
+    t_ids = [str(x) for x in t.get("ids", [])]
+    t_discord_ids = [str(x) for x in t.get("discord_ids", [])]
+
+    u_aid = str(u.get("app_id") or "").strip()
+    u_id = str(u.get("id") or "").strip()
+    u_did = str(u.get("discord_id") or "").strip()
+
+    if u_aid and u_aid in t_app_ids:
+        return True
+    if u_id and u_id in t_ids:
+        return True
+    if u_did and u_did in t_discord_ids:
+        return True
+    return False
+
+def _clear_tombstone(discord_id=None, email=None):
+    try:
+        t = _get_deleted_tombstones()
+        d_str = str(discord_id).strip() if discord_id else None
+        if d_str and d_str in [str(x) for x in t.get("discord_ids", [])]:
+            t["discord_ids"] = [x for x in t.get("discord_ids", []) if str(x) != d_str]
+            with open(_DELETED_TOMBSTONES_FILE, "w", encoding="utf-8") as f:
+                json.dump(t, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
 def find_user_record(target: str) -> dict | None:
     """
     Univerzální vyhledávač uživatele v DB (Turso) i v lokálním users_backup.json:
@@ -499,20 +541,27 @@ def find_user_record(target: str) -> dict | None:
         try:
             if is_num and len(raw) >= 10:
                 res = db.table("users").select("*").eq("discord_id", raw).execute().data
-                if res: return res[0]
+                if res and not _is_tombstoned_user(res[0]): return res[0]
             if app_id_val is not None:
                 res = db.table("users").select("*").eq("app_id", app_id_val).execute().data
-                if res: return res[0]
+                if res and not _is_tombstoned_user(res[0]): return res[0]
             if is_num:
                 res = db.table("users").select("*").eq("id", int(raw)).execute().data
-                if res: return res[0]
-            res = db.table("users").select("*").or_(f"nick.ilike.{raw},email.ilike.{raw}").execute().data
-            if res: return res[0]
+                if res and not _is_tombstoned_user(res[0]): return res[0]
+            if not is_app_id_format and not (is_num and len(raw) >= 10):
+                res = db.table("users").select("*").or_(f"nick.ilike.{raw},email.ilike.{raw}").execute().data
+                if res and not _is_tombstoned_user(res[0]):
+                    c_nick = str(res[0].get("nick") or "").lower()
+                    c_email = str(res[0].get("email") or "").lower()
+                    if raw.lower() in [c_nick, c_email]:
+                        return res[0]
         except Exception as e:
             pass
 
     # Fallback prohledání users_backup.json
     for u in _get_fallback_users():
+        if _is_tombstoned_user(u):
+            continue
         u_d_id = str(u.get("discord_id") or "").strip()
         u_app_id = u.get("app_id")
         u_id = u.get("id")
@@ -521,9 +570,9 @@ def find_user_record(target: str) -> dict | None:
 
         if is_num and len(raw) >= 10 and u_d_id == raw:
             return u
-        if app_id_val is not None and u_app_id == app_id_val:
+        if app_id_val is not None and (u_app_id == app_id_val or str(u_app_id) == str(app_id_val)):
             return u
-        if is_num and u_id == int(raw):
+        if is_num and (u_id == int(raw) or str(u_id) == raw):
             return u
         if u_nick == raw.lower() or u_email == raw.lower():
             return u
@@ -7094,7 +7143,11 @@ def api_launcher_user_info():
     if not discord_id: return jsonify({"status": "error", "message": "Missing discord_id"}), 400
     user_record = find_user_record(str(discord_id))
     if not user_record:
-        return jsonify({"status": "error", "message": "Účet neexistuje v databázi. Spuštění aplikace není povoleno. Nejprve se zaregistrujte na webu nebo přes Discord."}), 403
+        return jsonify({
+            "status": "error",
+            "can_contact": True,
+            "message": "Účet nebyl v databázi nalezen (byl smazán nebo ještě nebyl vytvořen). Pokud si myslíte, že jde o chybu, zašlete zprávu administrátorům na Discordu nebo přes formulář se svým Discord ID nebo přezdívkou."
+        }), 403
     if user_record.get("is_banned"):
         return jsonify({"status": "banned", "message": "Tento účet má BAN."}), 403
     try:
@@ -7154,7 +7207,11 @@ def api_launcher_versions():
         if discord_id:
             user_rec = find_user_record(str(discord_id))
             if not user_rec:
-                return jsonify({"status": "error", "message": "Účet neexistuje v databázi. Spuštění ani stažení verzí není povoleno."}), 403
+                return jsonify({
+                    "status": "error",
+                    "can_contact": True,
+                    "message": "Účet nebyl v databázi nalezen (byl smazán nebo ještě nebyl vytvořen). Spuštění ani stažení verzí není povoleno. Zašlete své Discord ID nebo přezdívku administrátorům."
+                }), 403
             if user_rec.get("is_banned"):
                 return jsonify({"status": "banned", "message": "Tento účet má BAN."}), 403
             role, is_banned = get_cached_user_role(discord_id)
@@ -7211,6 +7268,75 @@ def api_launcher_versions():
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/launcher/contact_admin', methods=['GET', 'POST'])
+@app.route('/launcher/kontakt', methods=['GET', 'POST'])
+def api_launcher_contact_admin():
+    """
+    Pojistka pro smazane uzivatele:
+    Umoznuje odeslat zpravu primo na Discord administratorum.
+    """
+    if request.method == 'GET' and not request.is_json and 'application/json' not in request.headers.get('Accept', ''):
+        return """<!DOCTYPE html>
+<html lang="cs">
+<head><meta charset="utf-8"><title>Podpora Launcheru</title>
+<style>
+body{font-family:sans-serif;background:#0f172a;color:#f8fafc;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}
+.card{background:#1e293b;padding:32px;border-radius:12px;width:100%;max-width:440px;box-shadow:0 10px 25px rgba(0,0,0,0.5);border:1px solid #334155;}
+h2{margin-top:0;color:#38bdf8;font-size:20px;}
+label{display:block;margin:12px 0 4px;font-size:13px;color:#94a3b8;}
+input,textarea{width:100%;box-sizing:border-box;padding:10px;background:#334155;border:1px solid #475569;border-radius:6px;color:#fff;font-size:14px;}
+button{width:100%;padding:12px;background:#0284c7;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-top:18px;cursor:pointer;font-size:14px;}
+button:hover{background:#0369a1;}
+</style></head>
+<body>
+<div class="card">
+<h2>📩 Zpráva administrátorům</h2>
+<p style="font-size:13px;color:#cbd5e1;line-height:1.5;">Váš účet nebyl v databázi nalezen nebo byl smazán. Zadejte své Discord ID nebo přezdívku a administrátoři vás budou kontaktovat.</p>
+<form method="POST">
+<label>Discord ID nebo přezdívka:</label>
+<input type="text" name="identifier" required placeholder="např. 1528689345739882501 nebo Jmeno">
+<label>Zpráva (volitelné):</label>
+<textarea name="message" rows="3" placeholder="Popište problém s launcherem..."></textarea>
+<button type="submit">Odeslat administrátorům</button>
+</form>
+</div>
+</body></html>"""
+
+    data = request.get_json(silent=True) or request.form or {}
+    discord_id = str(data.get("discord_id") or data.get("identifier") or "").strip()
+    nick = str(data.get("nick") or "").strip()
+    user_msg = str(data.get("message") or "Uživatel hlásí problém se spuštěním launcheru (smazaný/žádný účet).").strip()
+
+    if not discord_id and not nick:
+        return jsonify({"status": "error", "message": "Zadejte své Discord ID nebo přezdívku."}), 400
+
+    async def _send_support_alert():
+        try:
+            embed = discord.Embed(
+                title="🚨 Žádost o přístup / Smazaný účet z launcheru",
+                description=f"**Identifikátor:** {discord_id or nick}\n**Zpráva:**\n{user_msg}",
+                color=0xf59e0b,
+                timestamp=datetime.now(timezone.utc)
+            )
+            clean_id = discord_id.strip("<@!>")
+            if clean_id.isdigit():
+                embed.add_field(name="Uživatel", value=f"<@{clean_id}> (`{clean_id}`)", inline=True)
+            for guild in bot.guilds:
+                channel = discord.utils.find(lambda c: any(k in c.name.lower() for k in ["bot-dm", "admin", "log"]), guild.text_channels)
+                if channel:
+                    await channel.send(embed=embed)
+                    break
+        except Exception as e_snd:
+            print(f"[LAUNCHER CONTACT] Chyba alertu: {e_snd}", flush=True)
+
+    if bot and bot.is_ready():
+        bot.loop.create_task(_send_support_alert())
+
+    if request.is_json:
+        return jsonify({"status": "success", "message": "Zpráva byla úspěšně předána administrátorům. Budeme vás kontaktovat."})
+    else:
+        return "<body style='background:#0f172a;color:#10b981;font-family:sans-serif;padding:50px;text-align:center;'><h2>✅ Zpráva byla úspěšně odeslána administrátorům.</h2><p style='color:#94a3b8;'>Můžete zavřít toto okno.</p></body>"
 
 @app.route('/api/launcher/check_update', methods=['GET', 'POST'])
 def api_launcher_check_update():
@@ -9373,47 +9499,58 @@ async def cmds(ctx):
 
 @bot.group(name="notify", invoke_without_command=True)
 async def notify_group(ctx):
-    await ctx.send("Použití: `!notify list [uživatel]` nebo `!notify clear [uživatel]`", delete_after=15)
+    await ctx.send("Použití: `!notify list [uživatel]` | `!notify add <SPZ/ID vozu> [popis]` | `!notify clear [uživatel]`", delete_after=15)
 
 @notify_group.command(name="list")
 async def notify_list(ctx, target_user: str = None):
     if target_user:
         is_admin = _has_admin_perms(ctx.author, ctx.guild)
         if not is_admin:
-            await ctx.send("❌ K prohlížení notifikací ostatních musíš být administrátor.")
+            await ctx.send("❌ K prohlížení notifikací ostatních musíš býít administrátor.")
             return
-        target_discord_id = target_user.strip("<@!>")
+        target_discord_id = target_user.strip("<@!> ")
     else:
         target_discord_id = str(ctx.author.id)
 
+    u = find_user_record(target_discord_id)
+    search_keys = [str(target_discord_id), f"admin_direct_discord_{target_discord_id}"]
+    if u:
+        if u.get("id"): search_keys.append(str(u["id"]))
+        if u.get("app_id"): search_keys.append(str(u["app_id"]))
+        if u.get("discord_id"): search_keys.append(str(u["discord_id"]))
+
+    all_notifs = []
+    try:
+        from local_db import local_bus_notifications_get_for_user
+        all_notifs.extend(local_bus_notifications_get_for_user(search_keys, discord_id=target_discord_id))
+    except Exception:
+        pass
+
     db = get_db()
-    if not db: return
-    
-    u_res = db.table("users").select("id").eq("discord_id", target_discord_id).execute()
-    if not u_res.data:
-        await ctx.send(f"Uživatel {target_discord_id} není registrován.")
-        return
-    
-    user_session = str(u_res.data[0]["id"])
-    n_res = db.table("bus_notifications").select("*").eq("user_session", user_session).eq("is_active", True).execute()
-    
-    if not n_res.data:
+    if db:
+        try:
+            for k in search_keys:
+                n_res = db.table("bus_notifications").select("*").eq("user_session", k).execute().data or []
+                for nr in n_res:
+                    if not any(str(x.get("id")) == str(nr.get("id")) for x in all_notifs):
+                        all_notifs.append(nr)
+        except Exception:
+            pass
+
+    active_notifs = [n for n in all_notifs if n.get("is_active")]
+    if not active_notifs:
         await ctx.send(f"Uživatel {target_discord_id} nemá žádná aktivní upozornění.")
         return
         
-    embed = discord.Embed(title=f"🔔 Aktivní upozornění", description=f"Pro uživatele: <@{target_discord_id}>", color=0x38bdf8)
-    for n in n_res.data:
+    embed = discord.Embed(title=f"🔔 Aktivní upozornění ({len(active_notifs)})", description=f"Pro uživatele: <@{target_discord_id}>", color=0x38bdf8)
+    for n in active_notifs:
         lbl = n.get("label") or n.get("identifier")
-        active_str = "Aktivní" if n.get("is_active") else "Neaktivní"
-        
+        active_str = "Aktivní ✅"
         t_dict = n.get("triggers") or {}
         if isinstance(t_dict, str):
-            try:
-                t_dict = json.loads(t_dict)
-            except Exception:
-                t_dict = {}
-        if not isinstance(t_dict, dict):
-            t_dict = {}
+            try: t_dict = json.loads(t_dict)
+            except Exception: t_dict = {}
+        if not isinstance(t_dict, dict): t_dict = {}
         t_list = []
         if t_dict.get("terminal"): t_list.append("Konečná")
         if t_dict.get("new_line"): t_list.append("Nová linka")
@@ -9423,11 +9560,9 @@ async def notify_list(ctx, target_user: str = None):
         if t_dict.get("started_moving"): t_list.append("Rozjezd")
         if t_dict.get("stop_near"): t_list.append(f"Zastávka ({t_dict['stop_near']})")
         if t_dict.get("delay_threshold"): t_list.append(f"Zpoždění > {t_dict['delay_threshold']} min")
-        if t_dict.get("delay_change"): t_list.append("Změna zpoždění")
-        t_str = ", ".join(t_list) or "Žádné"
-        
+        t_str = ", ".join(t_list) or "Základní události"
         rule_short_id = str(n.get('id', ''))[:8]
-        embed.add_field(name=f"ID: {rule_short_id} | {lbl}", value=f"Typ: {n.get('identifier_type')} - Cíl: {n.get('identifier')} | Stav: {active_str}\nUdálosti: {t_str}", inline=False)
+        embed.add_field(name=f"ID: #{rule_short_id} | {lbl}", value=f"Typ: {n.get('identifier_type')} - Cíl: `{n.get('identifier')}` | {active_str}\nUdálosti: {t_str}", inline=False)
         
     await ctx.send(embed=embed)
 
@@ -9436,24 +9571,95 @@ async def notify_clear(ctx, target_user: str = None):
     if target_user:
         is_admin = _has_admin_perms(ctx.author, ctx.guild)
         if not is_admin:
-            await ctx.send("❌ Ke smazání notifikací ostatních musíš být administrátor.")
+            await ctx.send("❌ Ke smazání notifikací ostatních musíš býít administrátor.")
             return
-        target_discord_id = target_user.strip("<@!>")
+        target_discord_id = target_user.strip("<@!> ")
     else:
         target_discord_id = str(ctx.author.id)
         
+    u = find_user_record(target_discord_id)
+    search_keys = [str(target_discord_id), f"admin_direct_discord_{target_discord_id}"]
+    if u:
+        if u.get("id"): search_keys.append(str(u["id"]))
+        if u.get("app_id"): search_keys.append(str(u["app_id"]))
+        if u.get("discord_id"): search_keys.append(str(u["discord_id"]))
+
+    try:
+        from local_db import local_bus_notifications_clear_for_user
+        local_bus_notifications_clear_for_user(search_keys)
+    except Exception:
+        pass
+
     db = get_db()
-    if not db: return
-        
-    u_res = db.table("users").select("id").eq("discord_id", target_discord_id).execute()
-    if not u_res.data:
-        await ctx.send(f"Uživatel {target_discord_id} není registrován.")
-        return
-        
-    user_session = str(u_res.data[0]["id"])
-    db.table("bus_notifications").delete().eq("user_session", user_session).execute()
+    if db:
+        try:
+            for k in search_keys:
+                db.table("bus_notifications").delete().eq("user_session", k).execute()
+        except Exception:
+            pass
     
+    import interaktivnimapa
+    interaktivnimapa._CACHED_NOTIF_RULES_TS = 0
     await ctx.send(f"✅ Všechna upozornění pro uživatele <@{target_discord_id}> byla smazána.")
+
+@notify_group.command(name="add", aliases=["vytvorit"])
+async def notify_add(ctx, target_val: str = None, *, label: str = ""):
+    """Přidá nové upozornění na autobus přímo z Discordu (např. !notify add 170 nebo !notify add 8P29797)."""
+    if not target_val:
+        return await ctx.send("Použití: `!notify add <SPZ nebo ID vozu> [poznámka]` (např. `!notify add 170` nebo `!notify add 8P29797`)", delete_after=15)
+    
+    target_clean = target_val.strip().upper()
+    user_id = str(ctx.author.id)
+    u = find_user_record(user_id)
+    user_session_val = str(u.get("app_id") or u.get("id") or user_id) if u else user_id
+    
+    from interaktivnimapa import GLOBAL_BUS_CACHE, safe_bus_cache_items
+    id_type = "bus_id" if target_clean.isdigit() and len(target_clean) <= 4 else "spz"
+    matched_bus = None
+    if id_type == "bus_id":
+        matched_bus = GLOBAL_BUS_CACHE.get(target_clean)
+    else:
+        for bid, bc in safe_bus_cache_items():
+            if (bc.get("spz") or "").replace(" ", "").upper() == target_clean.replace(" ", ""):
+                matched_bus = bc
+                target_clean = bc.get("spz") or target_clean
+                break
+
+    full_label = label or (f"Sledování {target_clean}" if not matched_bus else f"{target_clean} (Linka: {matched_bus.get('linka', '?')})")
+    triggers = {
+        "terminal": True,
+        "new_line": True,
+        "depot_in": True,
+        "depot_out": True,
+        "started_moving": True,
+        "delay_threshold": 5
+    }
+
+    from local_db import local_bus_notification_create
+    local_bus_notification_create(
+        user_session=user_session_val,
+        identifier=target_clean,
+        identifier_type=id_type,
+        triggers=triggers,
+        label=full_label,
+        delivery_channels=["discord"],
+        is_one_time=False,
+        discord_id=user_id
+    )
+
+    import interaktivnimapa
+    interaktivnimapa._CACHED_NOTIF_RULES_TS = 0
+
+    embed = discord.Embed(title="🔔 Sledování vozu nastaveno", description=f"Upozornění pro uživatele {ctx.author.mention}", color=0x10b981)
+    embed.add_field(name="Cíl (Vůz)", value=f"**`{target_clean}`** ({id_type.upper()})", inline=True)
+    embed.add_field(name="Kanál", value="Discord DM", inline=True)
+    embed.add_field(name="Události", value="Konečná, Nová linka, Příjezd/Odjezd z vozovny, Rozjezd, Zpoždění > 5 min", inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command(name="sledovat")
+async def cmd_sledovat(ctx, target_val: str = None, *, label: str = ""):
+    """Zkratka pro !notify add."""
+    await notify_add(ctx, target_val=target_val, label=label)
 
 @bot.command()
 @check_web_sa()
@@ -9532,7 +9738,7 @@ def _clean_discord_id(val, ctx=None):
 
 @bot.command(name="info")
 async def info(ctx, *, target: str = None):
-    """Vyhledá uživatele v databázi dle Discord ID, @zmínky, App ID (#1040, 1040) nebo DB ID."""
+    """Vyhledá uživatele v databázi dle Discord ID, @zmínky, App ID (#1040, 1040) nebo DB ID a vždy zobrazí Discord jméno."""
     if not _has_admin_perms(ctx.author, ctx.guild):
         if target and str(ctx.author.id) not in target:
             return await ctx.send(f"❌ {ctx.author.mention}, prohlížet údaje ostatních uživatelů mohou pouze administrátoři.", delete_after=10)
@@ -9541,9 +9747,38 @@ async def info(ctx, *, target: str = None):
     if not target:
         target = str(ctx.author.id)
 
-    u = find_user_record(target)
-    if not u:
-        return await ctx.send(f"❌ Uživatel `{target}` nebyl v databázi nalezen.")
+    clean_target = target.strip("<@!> ")
+    u = find_user_record(clean_target)
+
+    discord_user = None
+    target_did = None
+    if u and str(u.get("discord_id") or "").isdigit():
+        target_did = int(u.get("discord_id"))
+    elif clean_target.isdigit():
+        target_did = int(clean_target)
+
+    if target_did:
+        try:
+            discord_user = bot.get_user(target_did) or await bot.fetch_user(target_did)
+        except Exception:
+            discord_user = None
+
+    if not u and not discord_user:
+        return await ctx.send(f"❌ Uživatel `{target}` nebyl nalezen v databázi ani na Discordu.")
+
+    if not u and discord_user:
+        tag = f"@{discord_user.name}" if not discord_user.discriminator or discord_user.discriminator == "0" else f"{discord_user.name}#{discord_user.discriminator}"
+        embed = discord.Embed(
+            title=f"👤 Discord profil: {discord_user.display_name}",
+            description=f"Uživatel existuje na Discordu, ale **nemá zatím účet v databázi** (vytvoří se při stažení).",
+            color=0x38bdf8
+        )
+        embed.set_thumbnail(url=discord_user.display_avatar.url)
+        embed.add_field(name="Discord Jméno", value=f"**{discord_user.display_name}** ({tag})", inline=True)
+        embed.add_field(name="Discord ID", value=f"`{discord_user.id}` (<@{discord_user.id}>)", inline=True)
+        embed.add_field(name="Discord účet založen", value=discord_user.created_at.strftime("%d.%m.%Y %H:%M"), inline=True)
+        embed.add_field(name="Stav v DB", value="⚠️ Neregistrován (bude vytvořen při stažení)", inline=True)
+        return await ctx.send(embed=embed)
 
     nick = u.get("nick") or "Neznámý"
     app_id = f"#{u.get('app_id')}" if u.get("app_id") else "Nezadáno"
@@ -9555,13 +9790,22 @@ async def info(ctx, *, target: str = None):
     email = u.get("email") or "-"
     hwid = u.get("hwid") or "-"
 
+    discord_info_str = f"`{discord_id}`"
+    if discord_user:
+        tag = f"@{discord_user.name}" if not discord_user.discriminator or discord_user.discriminator == "0" else f"{discord_user.name}#{discord_user.discriminator}"
+        discord_info_str = f"**{discord_user.display_name}** ({tag})\n`{discord_id}` (<@{discord_id}>)"
+        if nick in ["Neznámý", "None", "", discord_id]:
+            nick = discord_user.display_name
+
     embed = discord.Embed(
         title=f"👤 Informace o uživateli: {nick}",
         color=0xef4444 if u.get("is_banned") else 0x38bdf8
     )
+    if discord_user:
+        embed.set_thumbnail(url=discord_user.display_avatar.url)
     embed.add_field(name="Přezdívka (Jméno)", value=f"**{nick}**", inline=True)
     embed.add_field(name="App ID", value=f"**`{app_id}`**", inline=True)
-    embed.add_field(name="Discord ID", value=f"`{discord_id}`", inline=True)
+    embed.add_field(name="Discord", value=discord_info_str, inline=True)
     embed.add_field(name="Databázové ID", value=f"`{db_id}`", inline=True)
     embed.add_field(name="Role", value=f"`{role}`", inline=True)
     embed.add_field(name="BAN", value=is_banned, inline=True)
@@ -9570,6 +9814,125 @@ async def info(ctx, *, target: str = None):
     embed.add_field(name="Registrován", value=f"`{registered}`", inline=True)
     if hwid != "-":
         embed.add_field(name="HWID", value=f"`{hwid}`", inline=True)
+    await ctx.send(embed=embed)
+
+@bot.command(name="db", aliases=["userdb", "dbinfo"])
+async def cmd_db(ctx, *, target: str = None):
+    """
+    Příkaz pro administrátory: Zjistí kompletní data o uživateli z databáze i Discordu.
+    Použití: !db <ID, nick, app_id, discord_id, @zmínka>
+    """
+    if not _has_admin_perms(ctx.author, ctx.guild):
+        return await ctx.send(f"❌ {ctx.author.mention}, příkaz `!db` mohou používat pouze administrátoři.", delete_after=10)
+
+    if not target:
+        return await ctx.send("Použití: `!db <ID, přezdívka, Discord ID, App ID, e-mail nebo @zmínka>`", delete_after=15)
+
+    clean_target = target.strip("<@!> ")
+    u = find_user_record(clean_target)
+
+    if not u:
+        low_t = clean_target.lower()
+        for cand in _get_fallback_users():
+            if _is_tombstoned_user(cand): continue
+            c_nick = str(cand.get("nick") or "").lower()
+            c_email = str(cand.get("email") or "").lower()
+            c_did = str(cand.get("discord_id") or "")
+            if low_t in c_nick or low_t in c_email or low_t == c_did:
+                u = cand
+                break
+
+    discord_user = None
+    target_did = None
+    if u and str(u.get("discord_id") or "").isdigit():
+        target_did = int(u.get("discord_id"))
+    elif clean_target.isdigit():
+        target_did = int(clean_target)
+
+    if target_did:
+        try:
+            discord_user = bot.get_user(target_did) or await bot.fetch_user(target_did)
+        except Exception:
+            discord_user = None
+
+    if not u and not discord_user:
+        return await ctx.send(f"❌ Uživatel `{target}` nebyl v databázi ani na Discordu nalezen.")
+
+    if not u and discord_user:
+        tag = f"@{discord_user.name}" if not discord_user.discriminator or discord_user.discriminator == "0" else f"{discord_user.name}#{discord_user.discriminator}"
+        embed = discord.Embed(
+            title=f"🔍 DB Vyhledávání: {discord_user.display_name}",
+            description=f"Uživatel existuje na Discordu, ale **nemá záznam v databázi** (není registrován / nestáhl aplikaci).",
+            color=0xf59e0b
+        )
+        embed.set_thumbnail(url=discord_user.display_avatar.url)
+        embed.add_field(name="Discord Účet", value=f"**{discord_user.display_name}** ({tag})\nID: `{discord_user.id}`", inline=False)
+        embed.add_field(name="Založení Discord účtu", value=discord_user.created_at.strftime("%d.%m.%Y %H:%M:%S"), inline=True)
+        embed.add_field(name="Stav", value="Neregistrován v DB", inline=True)
+        return await ctx.send(embed=embed)
+
+    nick = u.get("nick") or "Neznámý"
+    app_id = f"#{u.get('app_id')}" if u.get("app_id") else "Nezadáno"
+    discord_id = str(u.get("discord_id") or "Nezadáno")
+    db_id = str(u.get("id") or "Nezadáno")
+    role = str(u.get("role") or "User")
+    is_banned = "Ano ⛔" if u.get("is_banned") else "Ne ✅"
+    is_deleted = "Ano 🗑️" if u.get("is_deleted") else "Ne ✅"
+    is_online = "🟢 Online" if u.get("is_online") else "⚪ Offline"
+    registered = u.get("registered_at") or "-"
+    last_active = u.get("last_active") or "-"
+    email = u.get("email") or "-"
+    hwid = u.get("hwid") or "-"
+    ip_addr = u.get("ip_address") or "-"
+    launches = u.get("launch_count", 0)
+    total_time = u.get("total_time", 0)
+    dash_access = "Ano 🔑" if u.get("dashboard_access") else "Ne"
+    dash_level = u.get("dashboard_level") or "-"
+
+    notif_count = 0
+    try:
+        from local_db import local_bus_notifications_get_for_user
+        keys = [db_id, str(u.get("app_id")), discord_id]
+        notifs = local_bus_notifications_get_for_user(keys, discord_id=discord_id)
+        notif_count = len([n for n in notifs if n.get("is_active")])
+    except Exception:
+        pass
+
+    discord_str = f"`{discord_id}`"
+    if discord_user:
+        tag = f"@{discord_user.name}" if not discord_user.discriminator or discord_user.discriminator == "0" else f"{discord_user.name}#{discord_user.discriminator}"
+        discord_str = f"**{discord_user.display_name}** ({tag})\n`{discord_id}` (<@{discord_id}>)"
+        if nick in ["Neznámý", "None", "", discord_id]:
+            nick = discord_user.display_name
+
+    embed = discord.Embed(
+        title=f"🗄️ Kompletní DB profil: {nick}",
+        color=0xef4444 if u.get("is_banned") else 0x10b981
+    )
+    if discord_user:
+        embed.set_thumbnail(url=discord_user.display_avatar.url)
+
+    embed.add_field(name="👤 Přezdívka (Nick)", value=f"**{nick}**", inline=True)
+    embed.add_field(name="🆔 App ID", value=f"**`{app_id}`**", inline=True)
+    embed.add_field(name="🗃️ Databázové ID", value=f"`{db_id}`", inline=True)
+
+    embed.add_field(name="💬 Discord", value=discord_str, inline=True)
+    embed.add_field(name="✉️ E-mail", value=f"`{email}`", inline=True)
+    embed.add_field(name="🛡️ Role", value=f"`{role}`", inline=True)
+
+    embed.add_field(name="⛔ BAN / Stav", value=f"{is_banned} | Smazán: {is_deleted}\n{is_online}", inline=True)
+    embed.add_field(name="🔑 Dashboard Přístup", value=f"{dash_access} ({dash_level})", inline=True)
+    embed.add_field(name="🔔 Aktivní Notifikace", value=f"**{notif_count}** pravidel", inline=True)
+
+    embed.add_field(name="📅 Registrován", value=f"`{registered}`", inline=True)
+    embed.add_field(name="⏱️ Poslední aktivita", value=f"`{last_active}`", inline=True)
+    embed.add_field(name="🚀 Spuštění / Herní čas", value=f"{launches}x | {total_time} min ({round(total_time/60, 1)} hod)", inline=True)
+
+    if hwid != "-":
+        embed.add_field(name="💻 HWID", value=f"`{hwid}`", inline=True)
+    if ip_addr != "-":
+        embed.add_field(name="🌐 IP Adresa", value=f"`{ip_addr}`", inline=True)
+
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -9594,7 +9957,7 @@ async def unban(ctx, discord_id: str):
     await send_user_dm(cleaned_id, "🕊️ Účet odblokován", "Váš přístup do aplikace byl obnoven.", 0x10b981)
     await ctx.send(f"🕊️ Uživateli `{cleaned_id}` byl zrušen BAN.")
 
-@bot.command(name="db")
+@bot.command(name="dbtoggle", aliases=["toggleaccess"])
 @check_sm_role()
 async def db_cmd(ctx, discord_id: str):
     cleaned_id = _clean_discord_id(discord_id, ctx)

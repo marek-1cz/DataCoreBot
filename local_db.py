@@ -165,6 +165,30 @@ def init_local_db():
                 )
             """)
             conn.execute("""
+                CREATE TABLE IF NOT EXISTS bus_notifications_local (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_session TEXT,
+                    discord_id TEXT,
+                    email TEXT,
+                    identifier TEXT,
+                    identifier_type TEXT,
+                    triggers TEXT,
+                    label TEXT,
+                    delivery_channels TEXT,
+                    is_one_time INTEGER DEFAULT 1,
+                    is_active INTEGER DEFAULT 1,
+                    fired_count INTEGER DEFAULT 0,
+                    last_fired_at TEXT,
+                    created_at TEXT
+                )
+            """)
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_bus_notif_loc_active ON bus_notifications_local(is_active)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_bus_notif_loc_user ON bus_notifications_local(user_session)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_bus_notif_loc_discord ON bus_notifications_local(discord_id)")
+            except Exception:
+                pass
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS sync_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     event TEXT,
@@ -459,6 +483,164 @@ def local_notif_get_history(user_session: str = None, limit: int = 50) -> list:
     except Exception as e:
         print(f"[LOCAL DB] Chyba cteni historie notifikaci: {e}", flush=True)
         return []
+
+def local_bus_notification_create(user_session: str, identifier: str, identifier_type: str, triggers: dict, label: str = "", delivery_channels: list = None, is_one_time: bool = True, discord_id: str = None, email: str = None) -> dict:
+    """Uloží pravidlo notifikace do lokální SQLite databáze. Zajišťuje fungování i při výpadku/blokaci cloudu."""
+    try:
+        import json
+        if isinstance(triggers, (dict, list)):
+            triggers_str = json.dumps(triggers, ensure_ascii=False)
+        else:
+            triggers_str = str(triggers or "{}")
+            
+        if isinstance(delivery_channels, (list, tuple)):
+            channels_str = json.dumps(list(delivery_channels), ensure_ascii=False)
+        else:
+            channels_str = str(delivery_channels or "[]")
+
+        now_str = datetime.now().isoformat()
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO bus_notifications_local (
+                        user_session, discord_id, email, identifier, identifier_type,
+                        triggers, label, delivery_channels, is_one_time, is_active,
+                        fired_count, last_fired_at, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, NULL, ?)
+                """, (
+                    str(user_session or ""),
+                    str(discord_id or ""),
+                    str(email or ""),
+                    str(identifier or ""),
+                    str(identifier_type or "spz"),
+                    triggers_str,
+                    str(label or ""),
+                    channels_str,
+                    1 if is_one_time else 0,
+                    now_str
+                ))
+                new_id = cur.lastrowid
+                conn.commit()
+                return {
+                    "id": new_id,
+                    "user_session": str(user_session or ""),
+                    "discord_id": str(discord_id or ""),
+                    "email": str(email or ""),
+                    "identifier": str(identifier or ""),
+                    "identifier_type": str(identifier_type or "spz"),
+                    "triggers": triggers,
+                    "label": str(label or ""),
+                    "delivery_channels": delivery_channels or [],
+                    "is_one_time": is_one_time,
+                    "is_active": True,
+                    "fired_count": 0,
+                    "created_at": now_str
+                }
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba vytvoření notifikace v SQLite: {e}", flush=True)
+        return {}
+
+def local_bus_notifications_get_for_user(keys: list = None, discord_id: str = None) -> list:
+    """Načte aktivní i neaktivní notifikace pro daného uživatele podle klíčů (user_session, app_id, id, discord_id)."""
+    try:
+        import json
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                all_rows = conn.execute("SELECT * FROM bus_notifications_local ORDER BY id DESC").fetchall()
+                search_keys = set(str(k).strip() for k in (keys or []) if k)
+                if discord_id:
+                    search_keys.add(str(discord_id).strip())
+                res = []
+                for r in all_rows:
+                    row_dict = dict(r)
+                    u_sess = str(row_dict.get("user_session") or "").strip()
+                    d_id = str(row_dict.get("discord_id") or "").strip()
+                    if not search_keys or u_sess in search_keys or d_id in search_keys or any(k in u_sess for k in search_keys):
+                        for fld in ["triggers", "delivery_channels"]:
+                            raw_val = row_dict.get(fld)
+                            if raw_val and isinstance(raw_val, str):
+                                try:
+                                    row_dict[fld] = json.loads(raw_val)
+                                except Exception:
+                                    pass
+                        row_dict["is_active"] = bool(row_dict.get("is_active"))
+                        row_dict["is_one_time"] = bool(row_dict.get("is_one_time"))
+                        res.append(row_dict)
+                return res
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba čtení notifikací pro uživatele: {e}", flush=True)
+        return []
+
+def local_bus_notifications_get_active() -> list:
+    """Načte všechna aktivní pravidla pro background map workera."""
+    try:
+        import json
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                rows = conn.execute("SELECT * FROM bus_notifications_local WHERE is_active = 1").fetchall()
+                res = []
+                for r in rows:
+                    row_dict = dict(r)
+                    for fld in ["triggers", "delivery_channels"]:
+                        raw_val = row_dict.get(fld)
+                        if raw_val and isinstance(raw_val, str):
+                            try:
+                                row_dict[fld] = json.loads(raw_val)
+                            except Exception:
+                                pass
+                    row_dict["is_active"] = True
+                    row_dict["is_one_time"] = bool(row_dict.get("is_one_time"))
+                    res.append(row_dict)
+                return res
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba čtení aktivních notifikací: {e}", flush=True)
+        return []
+
+def local_bus_notification_update(rule_id, **kwargs):
+    """Aktualizuje pravidlo v lokální SQLite (např. triggers, is_active, fired_count, last_fired_at)."""
+    try:
+        import json
+        if not kwargs: return
+        set_clauses = []
+        args = []
+        for k, v in kwargs.items():
+            if k in ["triggers", "delivery_channels"] and isinstance(v, (dict, list)):
+                v = json.dumps(v, ensure_ascii=False)
+            elif k in ["is_active", "is_one_time"]:
+                v = 1 if v else 0
+            set_clauses.append(f"{k} = ?")
+            args.append(v)
+        args.append(str(rule_id))
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                conn.execute(f"UPDATE bus_notifications_local SET {', '.join(set_clauses)} WHERE id = ?", args)
+                conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba aktualizace pravidla {rule_id}: {e}", flush=True)
+
+def local_bus_notification_delete(rule_id):
+    """Smaže pravidlo dle ID v lokální SQLite."""
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                conn.execute("DELETE FROM bus_notifications_local WHERE id = ?", (str(rule_id),))
+                conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba mazání pravidla {rule_id}: {e}", flush=True)
+
+def local_bus_notifications_clear_for_user(keys: list):
+    """Smaže všechna pravidla daného uživatele."""
+    try:
+        search_keys = [str(k).strip() for k in (keys or []) if k]
+        if not search_keys: return
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                for k in search_keys:
+                    conn.execute("DELETE FROM bus_notifications_local WHERE user_session = ? OR discord_id = ?", (k, k))
+                conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba mazání všech pravidel uživatele: {e}", flush=True)
 
 def local_spz_purge_trains():
     try:

@@ -38,6 +38,9 @@ class D1Client:
         """Vrátí True pokud je aktivní circuit breaker (překročen denní limit kvóty)."""
         return time.time() < self._blocked_until
 
+    def is_read_blocked(self) -> bool:
+        return self.is_blocked()
+
     def _invalidate_cache(self):
         with self._cache_lock:
             self._cache.clear()
