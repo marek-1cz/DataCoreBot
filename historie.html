@@ -1117,6 +1117,13 @@ function renderDetailModal(v, fullData, activeTab){
   }
 
   $('#dbox').innerHTML = '<button class="dx" type="button" data-close aria-label="Zavřít">×</button>' +
+    '<div style="margin-bottom:14px;padding-right:40px;">' +
+      '<a href="/historie/' + encodeURIComponent(v.spz) + '" class="btnx btn-full-card" style="display:inline-flex;align-items:center;gap:10px;padding:9px 18px;border-radius:14px;background:linear-gradient(135deg,#0284c7,#0369a1);color:#ffffff;font-weight:800;font-size:.9rem;text-decoration:none;border:1px solid rgba(56,189,248,.45);box-shadow:0 4px 16px rgba(2,132,199,.35);transition:all .2s ease;">' +
+        '<span>🔍 Otevřít celou kartu vozidla</span>' +
+        '<span style="font-size:12px;color:#e0f2fe;background:rgba(255,255,255,.18);padding:3px 8px;border-radius:6px;font-family:\'JetBrains Mono\',monospace;font-weight:700;">/historie/' + esc(v.spz) + '</span>' +
+        '<span style="font-size:14px;">↗</span>' +
+      '</a>' +
+    '</div>' +
     '<div class="dtop">' +
       '<div class="row">' + plate(v.spz,true) + vz(v) + stB(v.status) +
         (driver ? '<span class="badge-sp" style="background:rgba(56,214,255,.15);color:#38d6ff;">👤 ' + esc(driver) + '</span>' : '') +

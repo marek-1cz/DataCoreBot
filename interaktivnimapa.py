@@ -13336,6 +13336,15 @@ def _full_page(title, body_html, is_map=False):
     return resp
 
 
+def is_admin_bypass_active():
+    """Ověří, zda má přihlášený administrátor aktivní Admin Web Bypass."""
+    try:
+        from main import is_admin_bypass_active as _m_bypass
+        return bool(_m_bypass())
+    except Exception:
+        return bool(session.get('logged_in') or session.get('admin_web_bypass'))
+
+
 _AD_BTN_NORMAL = '<a href="/mapa_admin" class="n-btn n-ad">🔧 AD</a>'
 _AD_BTN_ADMIN  = '<a href="/mapa" class="n-btn n-back">⬅️ Zp\u011bt</a>'
 

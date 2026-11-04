@@ -427,6 +427,60 @@ _SUMMARY_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "summary_backup.j
 _USERS_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "users_backup.json")
 _AUTH_TOKEN_STATUS: dict = {}  # {str(discord_id): "approved" | "rejected" | "timeout" | "waiting"}
 _DASHBOARD_AUTH_TIMEOUTS: dict = {}  # {str(discord_id): float(lockout_until_timestamp)}
+_PENDING_REGISTRATIONS: dict = {}  # {email.lower(): {"email": str, "nick": str, "token": str, "expires_at": int, "intent": str, "created_at": float}}
+_PENDING_DISCORD_AUTH: dict = {}  # {str(discord_id): {"token": str, "created_at": float}}
+
+def validate_nickname(nick: str, db=None) -> tuple[bool, str]:
+    """
+    Validuje zadanou přezdívku uživatele:
+    - Délka 5 až 32 znaků
+    - Bezpečné znaky (česká abeceda, čísla, podtržítka, pomlčky, mezery, tečky)
+    - Žádné HTML / řídící znaky / vícenásobné mezery
+    - Unikátnost v lokální záloze i databázi
+    Vrací: (is_valid: bool, error_message: str)
+    """
+    if not nick or not isinstance(nick, str):
+        return False, "Přezdívka je povinná."
+    
+    n = nick.strip()
+    if len(n) < 5:
+        return False, "Přezdívka musí mít alespoň 5 znaků (povoleno 5 až 32 znaků)."
+    if len(n) > 32:
+        return False, "Přezdívka je příliš dlouhá (maximum je 32 znaků)."
+    
+    import re
+    if not re.match(r"^[a-zA-Z0-9_\-\. áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ]+$", n):
+        return False, "Přezdívka smí obsahovat pouze písmena, číslice, mezeru, tečku, podtržítko nebo pomlčku."
+    
+    if "  " in n:
+        return False, "Přezdívka nesmí obsahovat vícenásobné mezery za sebou."
+    
+    for u in _get_fallback_users():
+        u_nick = str(u.get("nick") or "").strip().lower()
+        if u_nick == n.lower():
+            return False, "Tato přezdívka je již obsazena. Zvolte prosím jinou."
+            
+    if db:
+        try:
+            res = db.table("users").select("id,nick").ilike("nick", n).execute().data
+            if res and len(res) > 0:
+                return False, "Tato přezdívka je již obsazena. Zvolte prosím jinou."
+        except Exception:
+            pass
+
+    return True, ""
+
+
+def validate_email_address(email: str) -> tuple[bool, str]:
+    if not email or not isinstance(email, str):
+        return False, "E-mailová adresa je povinná."
+    e = email.strip().lower()
+    import re
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", e) or len(e) < 6 or len(e) > 120:
+        return False, "Zadejte platnou e-mailovou adresu."
+    return True, ""
+
+
 _SUPPORTERS_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "supporters_backup.json")
 _SUPPORTERS_CACHE = {"ts": 0, "data": []}
 
@@ -4698,10 +4752,14 @@ class WebAuthView(discord.ui.View):
         if str(interaction.user.id) != target_id:
             return await interaction.response.send_message("Toto ověření není pro tebe!", ephemeral=True)
         _AUTH_TOKEN_STATUS[str(target_id)] = "approved"
+        _PENDING_DISCORD_AUTH.pop(str(target_id), None)
         try:
             db = get_db()
             if db:
                 user_nick = interaction.user.display_name or interaction.user.name
+                user = db.table("users").select("id").eq("discord_id", target_id).execute().data
+                if not user:
+                    ensure_user_in_db(discord_id=target_id, nick=user_nick)
                 update_dict = {"login_token": "approved"}
                 if user_nick:
                     update_dict["nick"] = user_nick
@@ -4716,6 +4774,7 @@ class WebAuthView(discord.ui.View):
         if str(interaction.user.id) != target_id:
             return await interaction.response.send_message("Toto ověření není pro tebe!", ephemeral=True)
         _AUTH_TOKEN_STATUS[str(target_id)] = "rejected"
+        _PENDING_DISCORD_AUTH.pop(str(target_id), None)
         try:
             db = get_db()
             if db:
@@ -4788,18 +4847,12 @@ def process_web_auth_discord(discord_id, client_ip):
     
     try:
         user = db.table("users").select("*").eq("discord_id", discord_id_str).execute().data
-        if not user:
-            try:
-                highest = db.table("users").select("app_id").lt("app_id", 2000).order("app_id", desc=True).limit(1).execute().data
-                new_app_id = (int(highest[0]["app_id"]) + 1) if (highest and highest[0].get("app_id")) else 1001
-            except:
-                new_app_id = 1001
-            insert_data = {"discord_id": discord_id_str, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": ""}
-            if new_app_id: insert_data["app_id"] = new_app_id
-            db.table("users").insert(insert_data).execute()
-        
         token = str(uuid.uuid4())
-        db.table("users").update({"login_token": token}).eq("discord_id", discord_id_str).execute()
+        if not user:
+            # Uživatel v DB neexistuje -> nevytváříme ho předem! Vytvoří se až po kliknutí na tlačítko v DM.
+            _PENDING_DISCORD_AUTH[discord_id_str] = {"token": token, "created_at": time.time()}
+        else:
+            db.table("users").update({"login_token": token}).eq("discord_id", discord_id_str).execute()
         
         async def send():
             try:
@@ -4808,7 +4861,7 @@ def process_web_auth_discord(discord_id, client_ip):
                 u = bot.get_user(int(discord_id_str)) or await bot.fetch_user(int(discord_id_str))
                 if u: 
                     d_nick = getattr(u, 'display_name', None) or getattr(u, 'name', None)
-                    if d_nick:
+                    if d_nick and user:
                         try:
                             cur_u = db.table("users").select("nick").eq("discord_id", discord_id_str).execute().data
                             if not cur_u or not cur_u[0].get("nick"):
@@ -4838,37 +4891,53 @@ def process_web_auth_discord(discord_id, client_ip):
 def process_web_auth_email(email, intent, client_ip, nick=None):
     if not _rate_limit_check(f'auth_email:{client_ip}', 6, 120):
         return {'status': 'error', 'message': 'Příliš mnoho pokusů o zaslání e-mailu. Zkuste to za chvíli.'}, 429
-    email_str = str(email or '').strip()
+    email_str = str(email or '').strip().lower()
     nick_str = str(nick or '').strip()
-    if not email_str or '@' not in email_str:
-        return {"status": "error", "message": "Neplatný e-mail."}, 400
+    
+    ok_email, err_email = validate_email_address(email_str)
+    if not ok_email:
+        return {"status": "error", "message": err_email}, 400
     db = get_db()
     if not db:
         return {"status": "error", "message": "Databáze není dostupná."}, 500
     
     try:
         user_rec = find_user_record(email_str)
-        if not user_rec:
-            if not nick_str:
-                return {"status": "error", "message": "Pro registraci přes e-mail je povinné zadat přezdívku."}, 400
-            ok, user_rec, reason = ensure_user_in_db(email=email_str, nick=nick_str)
-            if not ok or not user_rec:
-                return {"status": "error", "message": f"Registrace selhala: {reason}"}, 500
-        else:
-            if nick_str and not user_rec.get("nick"):
-                user_rec["nick"] = nick_str
-                _save_user_to_backup(user_rec)
-                try:
-                    db.table("users").update({"nick": nick_str}).eq("email", email_str).execute()
-                except Exception:
-                    pass
-        
         import time as _t
         import random
         import string
         token = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
         token_expiry = int(_t.time()) + 600
-        db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("email", email_str).execute()
+
+        if not user_rec:
+            # Nová registrace: validace přezdívky povinná
+            if not nick_str:
+                return {"status": "error", "message": "Pro novou registraci přes e-mail je povinné zadat přezdívku (minimálně 5 znaků)."}, 400
+            ok_nick, err_nick = validate_nickname(nick_str, db=db)
+            if not ok_nick:
+                return {"status": "error", "message": err_nick}, 400
+            
+            # Bezpečné: dočasně uložit do in-memory fronty, do DB se zapíše až po úspěšném ověření!
+            _PENDING_REGISTRATIONS[email_str] = {
+                "email": email_str,
+                "nick": nick_str,
+                "token": token,
+                "expires_at": token_expiry,
+                "intent": intent,
+                "created_at": _t.time()
+            }
+        else:
+            # Existující uživatel - přihlašovací kód
+            if nick_str and not user_rec.get("nick"):
+                ok_nick, err_nick = validate_nickname(nick_str, db=db)
+                if ok_nick:
+                    user_rec["nick"] = nick_str
+                    _save_user_to_backup(user_rec)
+                    try:
+                        db.table("users").update({"nick": nick_str}).eq("email", email_str).execute()
+                    except Exception:
+                        pass
+            db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("email", email_str).execute()
         
         if send_magic_link_email(email_str, token, intent=intent):
             return {"status": "success"}, 200
@@ -4907,10 +4976,19 @@ def web_auth_status():
         _AUTH_TOKEN_STATUS.pop(str(discord_id), None)
         perm_token = str(uuid.uuid4())
         user_obj = None
-        for bu in _get_fallback_users():
-            if str(bu.get("discord_id")) == str(discord_id):
-                user_obj = bu
-                break
+        db = get_db()
+        if db and discord_id:
+            try:
+                u_res = db.table("users").select("*").eq("discord_id", str(discord_id)).execute().data
+                if u_res:
+                    user_obj = u_res[0]
+            except Exception:
+                pass
+        if not user_obj:
+            for bu in _get_fallback_users():
+                if str(bu.get("discord_id")) == str(discord_id):
+                    user_obj = bu
+                    break
         if not user_obj:
             user_obj = {"discord_id": discord_id, "role": "User", "nick": str(discord_id)}
         _SESSION_CACHE[perm_token] = (time.time(), user_obj)
@@ -4985,14 +5063,31 @@ def web_auth_finalize():
     db = get_db()
     if db and token and auth_type == "email":
         import time as _t
-        user = db.table("users").select("*").eq("login_token", token).execute().data
-        if user:
-            u = user[0]
-            # Zkontrolovat expiraci tokenu (10 minut)
-            token_exp = int(u.get('login_token_expires_at') or 0)
-            if token_exp > 0 and _t.time() > token_exp:
-                db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+        u = None
+        pending_key = None
+        token_upper = str(token).strip().upper()
+        for k, p in list(_PENDING_REGISTRATIONS.items()):
+            if str(p.get("token", "")).strip().upper() == token_upper:
+                pending_key = k
+                break
+        if pending_key:
+            pending = _PENDING_REGISTRATIONS.pop(pending_key)
+            if _t.time() > pending.get("expires_at", 0):
                 return "Odkaz vypršel (platnost 10 minut). Požádejte o nový odkaz.", 400
+            ok, user_rec, reason = ensure_user_in_db(email=pending["email"], nick=pending["nick"])
+            if not ok or not user_rec:
+                return f"Registrace selhala: {reason}", 500
+            u = user_rec
+        else:
+            user = db.table("users").select("*").eq("login_token", token).execute().data
+            if user:
+                u = user[0]
+                token_exp = int(u.get('login_token_expires_at') or 0)
+                if token_exp > 0 and _t.time() > token_exp:
+                    db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+                    return "Odkaz vypršel (platnost 10 minut). Požádejte o nový odkaz.", 400
+                db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+        if u:
             email = u.get("email")
             if cookie_token and intent == 'link':
                 curr_user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
@@ -5144,17 +5239,33 @@ def api_auth_email_magic():
     if not db:
         return jsonify({"ok": False, "status": "error", "message": "Databáze je nedostupná."}), 500
     try:
-        user = db.table("users").select("*").eq("login_token", token).execute().data
-        if not user:
-            return jsonify({"ok": False, "status": "error", "message": "Odkaz nebo kód vypršel nebo je neplatný."}), 404
-        u = user[0]
         import time as _t
-        exp = int(u.get('login_token_expires_at') or 0)
-        if exp > 0 and _t.time() > exp:
-            db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
-            return jsonify({"ok": False, "status": "error", "message": "Platnost ověření vypršela."}), 410
+        u = None
+        pending_key = None
+        for k, p in list(_PENDING_REGISTRATIONS.items()):
+            if str(p.get("token", "")).strip().upper() == token:
+                pending_key = k
+                break
+        
+        if pending_key:
+            pending = _PENDING_REGISTRATIONS.pop(pending_key)
+            if _t.time() > pending.get("expires_at", 0):
+                return jsonify({"ok": False, "status": "error", "message": "Platnost ověření vypršela."}), 410
+            ok, user_rec, reason = ensure_user_in_db(email=pending["email"], nick=pending["nick"])
+            if not ok or not user_rec:
+                return jsonify({"ok": False, "status": "error", "message": f"Registrace selhala: {reason}"}), 500
+            u = user_rec
+        else:
+            user = db.table("users").select("*").eq("login_token", token).execute().data
+            if not user:
+                return jsonify({"ok": False, "status": "error", "message": "Odkaz nebo kód vypršel nebo je neplatný."}), 404
+            u = user[0]
+            exp = int(u.get('login_token_expires_at') or 0)
+            if exp > 0 and _t.time() > exp:
+                db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+                return jsonify({"ok": False, "status": "error", "message": "Platnost ověření vypršela."}), 410
 
-        db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+            db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
         perm_token = str(uuid.uuid4())
         from session_manager import add_user_session
         add_user_session(db, u, perm_token, request)
@@ -5432,22 +5543,46 @@ def api_auth_email_start():
 @app.route('/api/auth/email/verify', methods=['POST'])
 def api_auth_email_verify():
     data = request.get_json(silent=True) or {}
-    email = str(data.get('email') or '').strip()
+    email = str(data.get('email') or '').strip().lower()
     code = str(data.get('code') or '').strip().upper()
     db = get_db()
     if not db or not email or not code:
         return jsonify({"ok": False, "error": "Neplatný kód nebo e-mail."})
-    user = db.table("users").select("*").eq("email", email).execute().data
-    if not user:
-        return jsonify({"ok": False, "error": "Účet nenalezen."})
-    u = user[0]
-    expected_token = str(u.get("login_token") or "").strip().upper()
+    
     import time as _t
-    exp = u.get("login_token_expires_at") or 0
-    if exp and _t.time() > exp:
-        return jsonify({"ok": False, "error": "Platnost kódu vypršela. Nechte si poslat nový."})
-    if code != expected_token:
-        return jsonify({"ok": False, "error": "Zadaný kód nesouhlasí."})
+    u = None
+
+    # 1. Zkontrolovat čekající registraci nového uživatele
+    pending = _PENDING_REGISTRATIONS.get(email)
+    if pending:
+        if _t.time() > pending.get("expires_at", 0):
+            _PENDING_REGISTRATIONS.pop(email, None)
+            return jsonify({"ok": False, "error": "Platnost kódu vypršela. Zaregistrujte se prosím znovu."})
+        if code != str(pending.get("token", "")).strip().upper():
+            return jsonify({"ok": False, "error": "Zadaný kód nesouhlasí."})
+        
+        # Ověření proběhlo úspěšně -> TEPRVE NYNÍ vytvoříme uživatele v DB!
+        ok, user_rec, reason = ensure_user_in_db(email=pending["email"], nick=pending["nick"])
+        _PENDING_REGISTRATIONS.pop(email, None)
+        if not ok or not user_rec:
+            return jsonify({"ok": False, "error": f"Vytvoření účtu selhalo: {reason}"})
+        u = user_rec
+    else:
+        # 2. Existující uživatel v databázi
+        user = db.table("users").select("*").eq("email", email).execute().data
+        if not user:
+            return jsonify({"ok": False, "error": "Účet nenalezen."})
+        u = user[0]
+        expected_token = str(u.get("login_token") or "").strip().upper()
+        exp = u.get("login_token_expires_at") or 0
+        if exp and _t.time() > exp:
+            return jsonify({"ok": False, "error": "Platnost kódu vypršela. Nechte si poslat nový."})
+        if code != expected_token:
+            return jsonify({"ok": False, "error": "Zadaný kód nesouhlasí."})
+        try:
+            db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+        except Exception:
+            pass
     new_token = str(uuid.uuid4())
     from session_manager import add_user_session
     add_user_session(db, u, new_token, request)

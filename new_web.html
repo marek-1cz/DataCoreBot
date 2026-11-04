@@ -1510,7 +1510,6 @@ body.night .aurora{opacity:.4}
   <a href="/provoz" data-r="provoz">Provoz IDPK</a>
   <a href="/mapa">Interaktivní mapa IDPK</a>
   <a href="/led-panel">LED Panel Simulátor</a>
-  <a href="/historie">Historie vozů</a>
   <a href="/podpora" target="_blank" style="color:var(--cyan);"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-3px;margin-right:4px;display:inline-block;"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l3.54 3.54M15.53 15.53l3.54 3.54M4.93 19.07l3.54-3.54M15.53 8.47l3.54-3.54"/></svg>Podpora / Hlášení</a>
   <a class="cta" href="/demo" data-r="demo">Demo verze</a>
   <span class="nav-arr r" aria-hidden="true"><i>›</i></span>
@@ -2215,8 +2214,8 @@ body.night .aurora{opacity:.4}
       <form id="fEmail" data-t="email" novalidate hidden>
         <label for="inEmail">Váš e-mail</label>
         <input class="inp" id="inEmail" type="email" autocomplete="email" placeholder="jmeno@email.cz">
-        <label for="inNick" style="margin-top:10px">Přezdívka (povinné pro novou registraci)</label>
-        <input class="inp" id="inNick" type="text" autocomplete="nickname" placeholder="např. Franta">
+        <label for="inNick" style="margin-top:10px">Přezdívka (povinné pro novou registraci, min. 5 znaků)</label>
+        <input class="inp" id="inNick" type="text" autocomplete="nickname" placeholder="např. Franta123" minlength="5" maxlength="32">
         <div class="seg small" id="modeSeg" role="radiogroup" aria-label="Způsob ověření" style="margin-top:12px">
           <button type="button" class="on" data-mode="code" role="radio" aria-checked="true">Kód</button>
           <button type="button" data-mode="link" role="radio" aria-checked="false">Magic link</button>
@@ -3319,6 +3318,7 @@ document.querySelectorAll('.avatar img').forEach(img=>{
     const nickEl=document.getElementById('inNick');
     const nickVal=(nickEl ? nickEl.value.trim() : '');
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)){showErr(errEl,'Zadejte platný e-mail.');return}
+    if(nickVal && nickVal.length < 5){showErr(errEl,'Přezdívka musí mít alespoň 5 znaků (povoleno 5 až 32 znaků).');return}
     showErr(errEl,'');setBusy(btn,true);
     try{
       const r=await api('emailStart',{email:em,mode:st.mode,nick:nickVal});
