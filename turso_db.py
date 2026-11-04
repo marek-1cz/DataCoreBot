@@ -90,6 +90,23 @@ def _save_budget_state():
 
 _load_budget_state()
 
+_TURSO_WRITES_BLOCKED_UNTIL = 0.0
+_LAST_WRITE_BLOCK_LOG = 0.0
+
+def is_turso_write_blocked() -> bool:
+    return time.time() < _TURSO_WRITES_BLOCKED_UNTIL
+
+def set_turso_writes_blocked(val: bool, reason: str = ""):
+    global _TURSO_WRITES_BLOCKED_UNTIL, _LAST_WRITE_BLOCK_LOG
+    if val:
+        _TURSO_WRITES_BLOCKED_UNTIL = time.time() + 1800  # 30 minut circuit breaker pro zápisy
+        now = time.time()
+        if now - _LAST_WRITE_BLOCK_LOG > 300:
+            _LAST_WRITE_BLOCK_LOG = now
+            print(f"[TursoClient] Zápisy do Turso jsou blokovány kvótou (writes forbidden). Přepínám na lokální zálohy.", flush=True)
+    else:
+        _TURSO_WRITES_BLOCKED_UNTIL = 0.0
+
 def is_turso_blocked_error(err_str: str) -> bool:
     if not err_str:
         return False
@@ -883,6 +900,8 @@ class TursoClient:
         is_select = str(sql).strip().upper().startswith("SELECT")
         if is_select and not bypass_block_check and is_turso_blocked():
             return TursoResponse(error="Reads blocked by Turso quota")
+        if not is_select and is_turso_write_blocked():
+            return TursoResponse(error="Writes blocked by Turso plan quota", data=returning_data or [])
 
         payload = {
             "requests": [
@@ -896,11 +915,14 @@ class TursoClient:
         r = results[0]
         if r.get("type") == "error":
             err_msg = r.get("error", {}).get("message", "Turso error")
-            if is_turso_blocked_error(err_msg):
+            low = str(err_msg).lower()
+            if "write operations are forbidden" in low or "writes are blocked" in low:
+                set_turso_writes_blocked(True, reason=err_msg)
+            elif is_turso_blocked_error(err_msg):
                 set_turso_blocked(True, reason=err_msg)
             else:
                 print(f"[TursoClient ERROR] SQL: {sql} | Error: {err_msg}", flush=True)
-            return TursoResponse(error=err_msg)
+            return TursoResponse(error=err_msg, data=returning_data or [])
 
         resp = r.get("response", {})
         result = resp.get("result", {})

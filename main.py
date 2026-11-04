@@ -8869,6 +8869,46 @@ async def update_depot_discord_messages():
         print(f"[DEPOT DISCORD] Nelze nacist historii kanalu {channel.name}: {e_hist}", flush=True)
         history = []
 
+    # 1 batch dotaz pro vsechny vozovny najednou (setri D1/Turso kvotu - misto 40 dotazu jen 1)
+    batch_records_by_depot = {}
+    try:
+        from cloudflare_d1 import get_d1_client as _get_d1
+        _d1 = _get_d1()
+        if not _d1.is_read_blocked():
+            d1_rows = _d1.execute(
+                "SELECT * FROM depot_history WHERE (bus_id NOT LIKE 'SYSTEM_%' AND spz != 'BACKUP') ORDER BY arrived_at DESC LIMIT 600"
+            )
+            for r in (d1_rows or []):
+                dname = r.get("depot_name")
+                if dname:
+                    batch_records_by_depot.setdefault(dname, []).append(r)
+    except Exception:
+        pass
+
+    try:
+        from local_db import local_depot_history_get
+        loc_rows = local_depot_history_get(limit=600)
+        for r in (loc_rows or []):
+            dname = r.get("depot_name")
+            if dname:
+                existing_list = batch_records_by_depot.setdefault(dname, [])
+                if len(existing_list) < 50:
+                    existing_list.append(r)
+    except Exception:
+        pass
+
+    if not batch_records_by_depot and db:
+        try:
+            from turso_db import is_turso_blocked
+            if not is_turso_blocked():
+                turso_rows = db.table("depot_history").select("*").neq("spz", "BACKUP").order("arrived_at", desc=True).limit(600).execute().data or []
+                for r in turso_rows:
+                    dname = r.get("depot_name")
+                    if dname:
+                        batch_records_by_depot.setdefault(dname, []).append(r)
+        except Exception:
+            pass
+
     for zone in zones:
         depot_name = zone.get("name")
         if not depot_name:
@@ -8882,29 +8922,13 @@ async def update_depot_discord_messages():
             except Exception:
                 pass
 
-        all_records = []
-        try:
-            from cloudflare_d1 import get_d1_client as _get_d1
-            _d1 = _get_d1()
-            all_records = _d1.execute(
-                "SELECT * FROM depot_history WHERE (depot_name = ? OR depot_name LIKE ?) AND (bus_id NOT LIKE 'SYSTEM_%' AND spz != 'BACKUP') ORDER BY arrived_at DESC LIMIT 50",
-                [depot_name, f"%{depot_name}%"]
-            )
-        except Exception:
-            all_records = []
-
-        if not all_records and db:
-            try:
-                all_records = db.table("depot_history").select("*").eq("depot_name", depot_name).neq("spz", "BACKUP").order("arrived_at", desc=True).limit(50).execute().data or []
-            except Exception:
-                all_records = []
-
+        # Rychly vyber ze zcacheovane pameti pro tuto vozovnu
+        all_records = list(batch_records_by_depot.get(depot_name, []))
         if not all_records:
-            try:
-                from local_db import local_depot_history_get
-                all_records = local_depot_history_get(depot_name=depot_name, limit=50)
-            except Exception:
-                all_records = []
+            for k, recs in batch_records_by_depot.items():
+                if depot_name in k or k in depot_name:
+                    all_records.extend(recs)
+                    break
 
         # Přísná deduplikace: 1 zástupce na vozidlo (žádná duplicita na Discordu)
         active_map = {}
