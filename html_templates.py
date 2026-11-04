@@ -2592,6 +2592,25 @@ const TYPE_CONFIG = {
     success: { label: 'Funkční', color: '#35d07f', icon: 'fa-check-circle', bg: 'rgba(53,208,127,0.12)' }
 };
 
+const KNOWN_PAGES = ['/', '/download', '/stats', '/provoz', '/team', '/supporters', '/demo', '/mapa', '/historie', '/jizdni-rad', '/led-panel', '/podpora', '/pomoc', '/ucet', '/login', '/soukromi'];
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function getCustomPages(targetPages) {
+    if (!targetPages || !Array.isArray(targetPages) || targetPages.includes('all')) return '';
+    return targetPages.filter(p => !KNOWN_PAGES.includes(p)).join(', ');
+}
+
+function pageCheck(index, pagePath, label) {
+    const a = announcements[index];
+    const isChecked = (a && a.target_pages && Array.isArray(a.target_pages) && a.target_pages.includes(pagePath));
+    return `
+    <label style="display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-size:12.5px; color:#cbd5e1; user-select:none;">
+        <input type="checkbox" onchange="togglePageTarget(${index}, '${pagePath}', this.checked)" ${isChecked ? 'checked' : ''} style="width:15px; height:15px; accent-color:#38bdf8; cursor:pointer;">
+        <span>${esc(label)}</span>
+    </label>`;
+}
+
 function renderAnnouncements() {
     const list = document.getElementById('announcement-list');
     list.innerHTML = '';
@@ -2606,6 +2625,15 @@ function renderAnnouncements() {
         const tc = TYPE_CONFIG[typeKey];
         const isActive = !!a.active;
 
+        if (!a.target_pages) {
+            if (a.urls && a.urls !== '/') {
+                a.target_pages = String(a.urls).split(',').map(s=>s.trim()).filter(Boolean);
+            } else {
+                a.target_pages = ['all'];
+            }
+        }
+        const isAllPages = (!a.target_pages || a.target_pages.includes('all') || a.target_pages.length === 0);
+
         list.innerHTML += `
         <div style="background: rgba(30,41,59,0.7); border: 1px solid ${isActive ? tc.color : '#334155'}; border-radius: 16px; padding: 22px; position:relative; box-shadow: 0 4px 20px rgba(0,0,0,0.25);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
@@ -2614,7 +2642,7 @@ function renderAnnouncements() {
                         <i class="fas ${tc.icon}"></i> ${tc.label}
                     </span>
                     <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; color:#f8fafc; font-size:13px; font-weight:600;">
-                        <input type="checkbox" onchange="updateAnnouncement(${index}, 'active', this.checked)" ${isActive ? 'checked' : ''} style="width:16px; height:16px;">
+                        <input type="checkbox" onchange="updateProperty(${index}, 'active', this.checked)" ${isActive ? 'checked' : ''} style="width:16px; height:16px;">
                         Aktivní na webu
                     </label>
                 </div>
@@ -2627,7 +2655,7 @@ function renderAnnouncements() {
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-bottom:14px;">
                 <div>
                     <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Typ oznámení</label>
-                    <select onchange="updateAnnouncement(${index}, 'type', this.value)" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc;">
+                    <select onchange="changeType(${index}, this.value)" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc;">
                         <option value="warning" ${a.type==='warning'?'selected':''}>Upozornění (žluté)</option>
                         <option value="danger" ${a.type==='danger'?'selected':''}>Výpadek (červené)</option>
                         <option value="rebuild" ${a.type==='rebuild'?'selected':''}>Průběh / Předělávání (modré pruhy)</option>
@@ -2638,28 +2666,102 @@ function renderAnnouncements() {
                 </div>
                 <div>
                     <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Nadpis</label>
-                    <input type="text" oninput="updateAnnouncement(${index}, 'title', this.value)" value="${esc(a.title||'')}" placeholder="Např. Probíhá úprava jízdních řádů" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                    <input type="text" oninput="updateField(${index}, 'title', this.value)" value="${esc(a.title||'')}" placeholder="Např. Probíhá úprava jízdních řádů" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
                 </div>
                 <div>
                     <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Vlastní štítek (volitelný, např. DŮLEŽITÉ)</label>
-                    <input type="text" oninput="updateAnnouncement(${index}, 'tag', this.value)" value="${esc(a.tag||'')}" placeholder="${tc.label}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                    <input type="text" oninput="updateField(${index}, 'tag', this.value)" value="${esc(a.tag||'')}" placeholder="${tc.label}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
                 </div>
                 <div>
                     <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Priorita (vyšší číslo = zobrazí se výše)</label>
-                    <input type="number" oninput="updateAnnouncement(${index}, 'priority', parseInt(this.value)||10)" value="${a.priority!=null?a.priority:10}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                    <input type="number" oninput="updateField(${index}, 'priority', parseInt(this.value)||10)" value="${a.priority!=null?a.priority:10}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
                 </div>
             </div>
 
             <div style="margin-bottom:14px;">
                 <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Text oznámení</label>
-                <textarea oninput="updateAnnouncement(${index}, 'text', this.value)" rows="3" placeholder="Popište situaci nebo novinku pro uživatele..." style="width:100%; padding:10px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box; font-family:inherit;">${esc(a.text||'')}</textarea>
+                <textarea oninput="updateField(${index}, 'text', this.value)" rows="3" placeholder="Popište situaci nebo novinku pro uživatele..." style="width:100%; padding:10px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box; font-family:inherit;">${esc(a.text||'')}</textarea>
+            </div>
+
+            <!-- CÍLENÍ NA STRÁNKY / STROM PODSTRÁNEK -->
+            <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                    <label style="color:#38bdf8; font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px;">
+                        <i class="fas fa-sitemap"></i> Kde oznámení zobrazovat (Cílení na stránky)
+                    </label>
+                    <span style="font-size:12px; font-weight:600; color:#94a3b8;" id="target-summary-${index}">
+                        ${isAllPages ? '🌐 Celý web (všechny stránky)' : `🎯 Vybráno ${a.target_pages.length} podstránek`}
+                    </span>
+                </div>
+
+                <div style="display:flex; gap:20px; margin-bottom:12px; flex-wrap:wrap;">
+                    <label style="display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-size:13px; color:#f8fafc;">
+                        <input type="radio" name="target_mode_${index}" value="all" onchange="setTargetMode(${index}, 'all')" ${isAllPages ? 'checked' : ''} style="accent-color:#38bdf8;">
+                        <span><b>Všechny stránky</b> (celá doména datacorebot.koyeb.app/*)</span>
+                    </label>
+                    <label style="display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-size:13px; color:#f8fafc;">
+                        <input type="radio" name="target_mode_${index}" value="specific" onchange="setTargetMode(${index}, 'specific')" ${!isAllPages ? 'checked' : ''} style="accent-color:#38bdf8;">
+                        <span><b>Pouze vybrané podstránky</b> (výběr ze seznamu)</span>
+                    </label>
+                </div>
+
+                <div id="tree-container-${index}" style="display: ${isAllPages ? 'none' : 'block'}; background: rgba(5,7,15,0.7); border:1px solid #334155; border-radius:10px; padding:16px; margin-top:10px;">
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:18px;">
+                        <div>
+                            <div style="font-size:11px; font-weight:800; text-transform:uppercase; color:#38bdf8; letter-spacing:0.05em; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                                <i class="fas fa-home"></i> Hlavní web (Sekce)
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:6px;">
+                                ${pageCheck(index, '/', 'Domů / Hlavní stránka ( / )')}
+                                ${pageCheck(index, '/download', 'Ke stažení launcheru (/download)')}
+                                ${pageCheck(index, '/stats', 'Statistiky provozu (/stats)')}
+                                ${pageCheck(index, '/provoz', 'Provoz IDPK linky (/provoz)')}
+                                ${pageCheck(index, '/team', 'Náš tým (/team)')}
+                                ${pageCheck(index, '/supporters', 'Podporovatelé (/supporters)')}
+                                ${pageCheck(index, '/demo', 'Demo ukázka (/demo)')}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div style="font-size:11px; font-weight:800; text-transform:uppercase; color:#35d07f; letter-spacing:0.05em; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                                <i class="fas fa-map-marked-alt"></i> Interaktivní aplikace
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:6px;">
+                                ${pageCheck(index, '/mapa', 'Interaktivní mapa (/mapa)')}
+                                ${pageCheck(index, '/historie', 'Historie a evidence vozů (/historie)')}
+                                ${pageCheck(index, '/jizdni-rad', 'Jízdní řády (/jizdni-rad)')}
+                                ${pageCheck(index, '/led-panel', 'LED Panel simulátor (/led-panel)')}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div style="font-size:11px; font-weight:800; text-transform:uppercase; color:#fbbf24; letter-spacing:0.05em; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                                <i class="fas fa-user-shield"></i> Servis, Účet & Podpora
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:6px;">
+                                ${pageCheck(index, '/podpora', 'Hlášení chyb & Podpora (/podpora)')}
+                                ${pageCheck(index, '/pomoc', 'Centrum pomoci (/pomoc)')}
+                                ${pageCheck(index, '/ucet', 'Můj účet (/ucet)')}
+                                ${pageCheck(index, '/login', 'Přihlášení (/login)')}
+                                ${pageCheck(index, '/soukromi', 'Ochrana soukromí GDPR (/soukromi)')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:14px; padding-top:12px; border-top:1px dashed rgba(255,255,255,0.12);">
+                        <label style="font-size:12px; color:#94a3b8; font-weight:600; display:block; margin-bottom:4px;">
+                            Vlastní podstránky (volitelně oddělené čárkou, např. <code>/historie/8P2, /overeni</code>):
+                        </label>
+                        <input type="text" oninput="updateCustomPages(${index}, this.value)" value="${esc(getCustomPages(a.target_pages))}" placeholder="/historie/8P2, /overeni" style="width:100%; padding:8px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; font-size:13px; box-sizing:border-box;">
+                    </div>
+                </div>
             </div>
 
             <!-- CHOVÁNÍ ZOBRAZENÍ A ZAVÍRÁNÍ -->
             <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px; margin-bottom:14px; display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:14px;">
                 <div>
                     <label style="color:#38bdf8; font-size:12px; font-weight:700; display:block; margin-bottom:4px;"><i class="fas fa-eye"></i> Kdy a jak často zobrazit</label>
-                    <select onchange="updateAnnouncement(${index}, 'frequency', this.value)" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc;">
+                    <select onchange="updateProperty(${index}, 'frequency', this.value)" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc;">
                         <option value="always" ${(a.frequency||'always')==='always'?'selected':''}>Zobrazit pořád (při každé návštěvě, dokud nezavře)</option>
                         <option value="session" ${(a.frequency)==='session'?'selected':''}>Při každé návštěvě (1× za relaci prohlížeče)</option>
                         <option value="daily" ${(a.frequency)==='daily'?'selected':''}>Jednou za 24 hodin</option>
@@ -2669,7 +2771,7 @@ function renderAnnouncements() {
                 </div>
                 <div>
                     <label style="color:#38bdf8; font-size:12px; font-weight:700; display:block; margin-bottom:4px;"><i class="fas fa-times-circle"></i> Způsob zavření / mizení</label>
-                    <select onchange="updateAnnouncement(${index}, 'dismiss_behavior', this.value)" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc;">
+                    <select onchange="updateProperty(${index}, 'dismiss_behavior', this.value)" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc;">
                         <option value="close_btn" ${(a.dismiss_behavior||(a.dismissible!==false?'close_btn':'permanent'))==='close_btn'?'selected':''}>Lze vypnout křížkem</option>
                         <option value="auto_10s" ${(a.dismiss_behavior)==='auto_10s'?'selected':''}>Samo zmizí za 10s (bez křížku)</option>
                         <option value="both" ${(a.dismiss_behavior)==='both'?'selected':''}>Samo zmizí za 10s + lze vypnout křížkem</option>
@@ -2692,11 +2794,11 @@ function renderAnnouncements() {
                 <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px;">
                     <div>
                         <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Cílová URL (např. /podpora nebo https://...)</label>
-                        <input type="text" oninput="updateAnnouncement(${index}, 'link_url', this.value)" value="${esc(a.link_url||(a.link?a.link.url:'')||'')}" placeholder="/podpora" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                        <input type="text" oninput="updateField(${index}, 'link_url', this.value)" value="${esc(a.link_url||(a.link?a.link.url:'')||'')}" placeholder="/podpora" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
                     </div>
                     <div>
                         <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Text na tlačítku</label>
-                        <input type="text" oninput="updateAnnouncement(${index}, 'link_label', this.value)" value="${esc(a.link_label||(a.link?a.link.label:'')||'Zjistit více')}" placeholder="Zjistit více" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                        <input type="text" oninput="updateField(${index}, 'link_label', this.value)" value="${esc(a.link_label||(a.link?a.link.label:'')||'Zjistit více')}" placeholder="Zjistit více" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
                     </div>
                 </div>`: `<div style="color:#64748b; font-size:12px; font-style:italic;">Tlačítko odkazu je vypnuto. Na kartě se nezobrazí žádné tlačítko.</div>`}
             </div>
@@ -2705,15 +2807,15 @@ function renderAnnouncements() {
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom:14px;">
                 <div>
                     <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Zobrazit od (volitelné)</label>
-                    <input type="datetime-local" onchange="updateAnnouncement(${index}, 'startsAt', this.value)" value="${a.startsAt||a.start_time||''}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                    <input type="datetime-local" onchange="updateProperty(${index}, 'startsAt', this.value)" value="${a.startsAt||a.start_time||''}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
                 </div>
                 <div>
                     <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Zobrazit do (volitelné)</label>
-                    <input type="datetime-local" onchange="updateAnnouncement(${index}, 'endsAt', this.value)" value="${a.endsAt||a.end_time||''}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                    <input type="datetime-local" onchange="updateProperty(${index}, 'endsAt', this.value)" value="${a.endsAt||a.end_time||''}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
                 </div>
                 <div>
                     <label style="color:#94a3b8; font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Verze oznámení (číslo)</label>
-                    <input type="number" oninput="updateAnnouncement(${index}, 'version', parseInt(this.value)||1)" value="${a.version||1}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
+                    <input type="number" oninput="updateField(${index}, 'version', parseInt(this.value)||1)" value="${a.version||1}" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(15,23,42,0.9); border:1px solid #475569; color:#f8fafc; box-sizing:border-box;">
                 </div>
             </div>
 
@@ -2725,28 +2827,28 @@ function renderAnnouncements() {
                     <span id="prog-val-${index}">${a.progress!=null?a.progress+' %':'Neurčitý (animovaný)'}</span>
                 </label>
                 <div style="display:flex; align-items:center; gap:12px; margin-top:6px;">
-                    <input type="range" min="0" max="100" value="${a.progress!=null?a.progress:50}" oninput="updateAnnouncement(${index}, 'progress', parseInt(this.value)); document.getElementById('prog-val-${index}').textContent=this.value+' %'" style="flex:1;">
-                    <button type="button" onclick="updateAnnouncement(${index}, 'progress', null); document.getElementById('prog-val-${index}').textContent='Neurčitý'" class="btn btn-dark" style="padding:4px 8px; font-size:11px;">Neurčitý</button>
+                    <input type="range" min="0" max="100" value="${a.progress!=null?a.progress:50}" oninput="updateField(${index}, 'progress', parseInt(this.value)); document.getElementById('prog-val-${index}').textContent=this.value+' %'" style="flex:1;">
+                    <button type="button" onclick="updateField(${index}, 'progress', null); document.getElementById('prog-val-${index}').textContent='Neurčitý'" class="btn btn-dark" style="padding:4px 8px; font-size:11px;">Neurčitý</button>
                 </div>
             </div>`:''}
 
-            <!-- Živý náhled -->
+            <!-- Živý náhled (aktualizuje se bez reloadu DOM formuláře) -->
             <div class="nt-preview-box">
                 <div style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Živý náhled karty na webu:</div>
-                <div class="card-preview nt-p-${typeKey}" style="background:linear-gradient(135deg, rgba(8,13,34,0.95), rgba(15,23,42,0.95)); border:1px solid ${tc.color}; box-shadow:0 8px 24px rgba(0,0,0,0.5), 0 0 20px ${tc.bg};">
-                    <div class="ic-wrap" style="background:${tc.bg}; color:${tc.color};">
+                <div class="card-preview nt-p-${typeKey}" id="prev-card-${index}" style="background:linear-gradient(135deg, rgba(8,13,34,0.95), rgba(15,23,42,0.95)); border:1px solid ${tc.color}; box-shadow:0 8px 24px rgba(0,0,0,0.5), 0 0 20px ${tc.bg};">
+                    <div class="ic-wrap" id="prev-ic-${index}" style="background:${tc.bg}; color:${tc.color};">
                         <i class="fas ${tc.icon}"></i>
                     </div>
                     <div style="flex:1; min-width:0;">
                         <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
-                            <b style="font-size:14px; color:#f8fafc;">${esc(a.title || tc.label)}</b>
-                            <span class="nt-badge-type" style="background:${tc.bg}; color:${tc.color}; font-size:10px;">${esc(a.tag || tc.label)}</span>
+                            <b id="prev-title-${index}" style="font-size:14px; color:#f8fafc;">${esc(a.title || tc.label)}</b>
+                            <span id="prev-tag-${index}" class="nt-badge-type" style="background:${tc.bg}; color:${tc.color}; font-size:10px;">${esc(a.tag || tc.label)}</span>
                         </div>
-                        <div style="color:#cbd5e1; font-size:13px; line-height:1.4;">${esc(a.text || 'Zde bude text oznámení...')}</div>
+                        <div id="prev-text-${index}" style="color:#cbd5e1; font-size:13px; line-height:1.4;">${esc(a.text || 'Zde bude text oznámení...')}</div>
                     </div>
-                    ${a.has_link !== false && a.link_url && a.link_url.trim() ? `<a href="${esc(a.link_url)}" onclick="return false;" style="background:${tc.color}; color:#030712; padding:6px 14px; border-radius:999px; font-weight:800; font-size:12px; text-decoration:none; white-space:nowrap;">${esc(a.link_label||'Zjistit více')}</a>` : ''}
+                    <a id="prev-link-${index}" href="${esc(a.link_url||'#')}" onclick="return false;" style="background:${tc.color}; color:#030712; padding:6px 14px; border-radius:999px; font-weight:800; font-size:12px; text-decoration:none; white-space:nowrap; ${a.has_link !== false && a.link_url && a.link_url.trim() ? '' : 'display:none;'}">${esc(a.link_label||'Zjistit více')}</a>
                     ${((a.dismiss_behavior==='close_btn'||a.dismiss_behavior==='both'||(!a.dismiss_behavior&&a.dismissible!==false))) ? `<span style="color:#64748b; font-size:16px; margin-left:6px; cursor:pointer;" title="Křížek pro zavření">×</span>` : ''}
-                    ${a.type==='rebuild'?`<div class="bar-ind" style="background:linear-gradient(90deg, #2563eb, #38d6ff); width:${a.progress!=null?a.progress:50}%;"></div>`:''}
+                    ${a.type==='rebuild'?`<div class="bar-ind" id="prev-bar-${index}" style="background:linear-gradient(90deg, #2563eb, #38d6ff); width:${a.progress!=null?a.progress:50}%;"></div>`:''}
                 </div>
             </div>
         </div>
@@ -2754,16 +2856,98 @@ function renderAnnouncements() {
     });
 }
 
-function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Jemná aktualizace jednotlivých polí bez překreslení formuláře (neztrácí focus!)
+function updateField(index, field, value) {
+    if (!announcements[index]) return;
+    announcements[index][field] = value;
 
-function updateAnnouncement(index, field, value) {
+    const a = announcements[index];
+    const tc = TYPE_CONFIG[a.type] || TYPE_CONFIG.info;
+
+    const pTitle = document.getElementById(`prev-title-${index}`);
+    const pTag = document.getElementById(`prev-tag-${index}`);
+    const pText = document.getElementById(`prev-text-${index}`);
+    const pLink = document.getElementById(`prev-link-${index}`);
+    const pBar = document.getElementById(`prev-bar-${index}`);
+
+    if (field === 'title' && pTitle) pTitle.textContent = value || tc.label;
+    if (field === 'tag' && pTag) pTag.textContent = value || tc.label;
+    if (field === 'text' && pText) pText.textContent = value || 'Zde bude text oznámení...';
+    if ((field === 'link_label' || field === 'link_url') && pLink) {
+        pLink.textContent = a.link_label || 'Zjistit více';
+        pLink.style.display = (a.has_link !== false && a.link_url && a.link_url.trim()) ? '' : 'none';
+        if (a.link_url) pLink.setAttribute('href', a.link_url);
+    }
+    if (field === 'progress' && pBar) {
+        pBar.style.width = (value != null ? value : 50) + '%';
+        const progTxt = document.getElementById(`prog-val-${index}`);
+        if (progTxt) progTxt.textContent = value != null ? (value + ' %') : 'Neurčitý (animovaný)';
+    }
+}
+
+function updateProperty(index, field, value) {
     if (announcements[index]) {
         announcements[index][field] = value;
         if (field === 'dismiss_behavior') {
             announcements[index].dismissible = (value === 'close_btn' || value === 'both');
         }
-        if (!announcements[index].urls) announcements[index].urls = '/';
         renderAnnouncements();
+    }
+}
+
+function changeType(index, newType) {
+    if (announcements[index]) {
+        announcements[index].type = newType;
+        renderAnnouncements();
+    }
+}
+
+function setTargetMode(index, mode) {
+    const a = announcements[index];
+    if (!a) return;
+    const tree = document.getElementById(`tree-container-${index}`);
+    const summary = document.getElementById(`target-summary-${index}`);
+    if (mode === 'all') {
+        a.target_pages = ['all'];
+        if (tree) tree.style.display = 'none';
+        if (summary) summary.textContent = '🌐 Celý web (všechny stránky)';
+    } else {
+        if (!a.target_pages || a.target_pages.includes('all') || a.target_pages.length === 0) {
+            a.target_pages = ['/'];
+        }
+        renderAnnouncements();
+    }
+}
+
+function togglePageTarget(index, pagePath, isChecked) {
+    const a = announcements[index];
+    if (!a) return;
+    if (!a.target_pages || a.target_pages.includes('all')) {
+        a.target_pages = [];
+    }
+    if (isChecked) {
+        if (!a.target_pages.includes(pagePath)) a.target_pages.push(pagePath);
+    } else {
+        a.target_pages = a.target_pages.filter(p => p !== pagePath && p !== 'all');
+    }
+    const summary = document.getElementById(`target-summary-${index}`);
+    if (summary) {
+        summary.textContent = (a.target_pages.length > 0) ? `🎯 Vybráno ${a.target_pages.length} podstránek` : '⚠️ Žádná stránka nevybrána (nezobrazí se nikde)';
+    }
+}
+
+function updateCustomPages(index, val) {
+    const a = announcements[index];
+    if (!a) return;
+    if (!a.target_pages || a.target_pages.includes('all')) {
+        a.target_pages = [];
+    }
+    const std = a.target_pages.filter(p => KNOWN_PAGES.includes(p));
+    const customs = val.split(',').map(s => s.trim()).filter(Boolean);
+    a.target_pages = [...std, ...customs];
+    const summary = document.getElementById(`target-summary-${index}`);
+    if (summary) {
+        summary.textContent = (a.target_pages.length > 0) ? `🎯 Vybráno ${a.target_pages.length} podstránek` : '⚠️ Žádná stránka nevybrána';
     }
 }
 
@@ -2796,6 +2980,7 @@ function addAnnouncement() {
         id: Date.now().toString(),
         type: 'info',
         active: true,
+        target_pages: ['all'],
         urls: '/',
         title: '',
         text: '',
@@ -2820,14 +3005,16 @@ function removeAnnouncement(index) {
 }
 
 function saveAnnouncements() {
-    // Sync links
     announcements.forEach(a => {
         if (a.link_url) {
             a.link = { url: a.link_url, label: a.link_label || 'Zjistit více' };
         } else {
             a.link = null;
         }
-        if (!a.urls) a.urls = '/';
+        if (!a.target_pages || a.target_pages.length === 0) {
+            a.target_pages = ['all'];
+        }
+        a.urls = a.target_pages.join(',');
         a.start_time = a.startsAt || '';
         a.end_time = a.endsAt || '';
     });

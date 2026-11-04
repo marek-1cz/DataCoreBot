@@ -3184,7 +3184,8 @@ def api_notices():
                 "text": "Po nasazení nové verze se ještě načítají některá data. Za okamžik se zobrazení ustálí.",
                 "startedAt": SERVER_START_ISO,
                 "priority": 100,
-                "dismissible": False
+                "dismissible": False,
+                "target_pages": ["all"]
             })
 
     # 2. Web announcements from DB settings table
@@ -3238,6 +3239,16 @@ def api_notices():
                             beh = "close_btn" if it.get("dismissible", True) else "permanent"
                         dismissible = (beh in ("close_btn", "both"))
 
+                        t_pages = it.get("target_pages")
+                        if not t_pages:
+                            urls_val = it.get("urls")
+                            if urls_val and str(urls_val).strip() not in ("/", ""):
+                                t_pages = [u.strip() for u in str(urls_val).split(",") if u.strip()]
+                            else:
+                                t_pages = ["all"]
+                        elif isinstance(t_pages, str):
+                            t_pages = [u.strip() for u in t_pages.split(",") if u.strip()]
+
                         notices.append({
                             "id": str(it.get("id")),
                             "type": t,
@@ -3253,7 +3264,8 @@ def api_notices():
                             "version": int(it.get("version", 1)),
                             "progress": it.get("progress"),
                             "startsAt": it.get("startsAt") or it.get("start_time") or None,
-                            "endsAt": it.get("endsAt") or it.get("end_time") or None
+                            "endsAt": it.get("endsAt") or it.get("end_time") or None,
+                            "target_pages": t_pages
                         })
     except Exception as e:
         print(f"[API NOTICES ERROR] {e}", flush=True)

@@ -1406,10 +1406,56 @@ bind();loadAll();
       if(e&&now<e)return 'Probíhá, zbývá '+span(e-now);
       return 'Probíhá';
     }
+    function matchesPage(targets){
+
+      if(!targets||!Array.isArray(targets)||targets.length===0||targets.includes('all')||targets.includes('*'))return true;
+
+      if(typeof CONFIG!=='undefined'&&CONFIG&&CONFIG.DEMO)return true;
+
+      const curPath=(window.location.pathname||'/').toLowerCase().replace(/\/+$/,'')||'/';
+
+      let hashSec=(window.location.hash||'').toLowerCase().replace(/^#\/?/,'').replace(/\/+$/,'');
+
+      if(hashSec==='home')hashSec='';
+
+      const curHash=hashSec?('/'+hashSec):'';
+
+      const eff=[];
+
+      if(curPath==='/'&&curHash){eff.push(curHash)}else{eff.push(curPath);if(curHash&&curHash!==curPath)eff.push(curHash)}
+
+      for(let t of targets){
+
+        if(!t)continue;
+
+        let tn=String(t).trim().toLowerCase();
+
+        if(tn==='all'||tn==='*')return true;
+
+        if(!tn.startsWith('/'))tn='/'+tn;
+
+        tn=tn.replace(/\/+$/,'')||'/';
+
+        for(let ep of eff){
+
+          if(ep===tn)return true;
+
+          if(tn!=='/'&&ep.startsWith(tn+'/'))return true;
+
+        }
+
+      }
+
+      return false;
+
+    }
+
     function visible(){
       const now=Date.now(),d=dismissed();
       const H=host();
       return LIST.filter(n=>{
+
+      if(!matchesPage(n.target_pages))return false;
         if(n.type==='build'){if(!n.startedAt||buildEnd(n)<now)return false;return true}
         if(n.endsAt&&Date.parse(n.endsAt)<now)return false;
         if(n.type!=='maintenance'&&n.startsAt&&Date.parse(n.startsAt)>now)return false;
