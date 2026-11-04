@@ -321,6 +321,7 @@ def init_local_db():
             _restore_spz_metadata_if_empty(conn)
             _restore_depot_zones_if_empty(conn)
             _restore_depot_history_if_empty(conn)
+            _restore_bus_history_if_empty(conn)
             # Automatické pročištění neplatných admin zámků (Neznámá / Aktivní hledání nesmí mít admin zámek)
             try:
                 conn.execute("""
@@ -1636,6 +1637,56 @@ def _restore_depot_history_if_empty(conn):
                 print(f"[LOCAL DB] Obnoveno {len(records)} zaznamu depot_history do lokalni SQLite tabulky depot_history_local", flush=True)
     except Exception as e:
         print(f"[LOCAL DB] Chyba obnoveni depot_history: {e}", flush=True)
+
+
+def _restore_bus_history_if_empty(conn):
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM bus_history_local")
+        cnt = cur.fetchone()[0]
+        if cnt < 50:
+            try:
+                import turso_db
+                tdb = turso_db.get_turso_db()
+                if tdb:
+                    res = tdb.execute_raw("SELECT * FROM bus_history ORDER BY id DESC LIMIT 500")
+                    rows = res.data or []
+                    if rows:
+                        for r in rows:
+                            conn.execute("""
+                                INSERT OR IGNORE INTO bus_history_local (
+                                    trip_id, bus_id, spz, spz_verified, linka, spoj_num, origin, destination,
+                                    jr_link, start_scheduled, start_actual, end_actual, last_lat, last_lng,
+                                    end_lat, end_lng, end_stop, status, created_at, updated_at
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                r.get("trip_id"),
+                                str(r.get("bus_id") or ""),
+                                r.get("spz"),
+                                1 if r.get("spz_verified") else 0,
+                                r.get("linka"),
+                                str(r.get("spoj_num") or (r.get("linka").split("/")[1].strip() if "/" in str(r.get("linka") or "") else "")),
+                                r.get("origin") or "",
+                                r.get("destination") or "",
+                                r.get("jr_link"),
+                                r.get("start_scheduled"),
+                                r.get("start_actual"),
+                                r.get("end_actual"),
+                                r.get("last_lat"),
+                                r.get("last_lng"),
+                                r.get("end_lat"),
+                                r.get("end_lng"),
+                                r.get("end_stop") or "",
+                                r.get("status"),
+                                r.get("created_at"),
+                                r.get("updated_at")
+                            ))
+                        conn.commit()
+                        print(f"[LOCAL DB] Obnoveno {len(rows)} jizd z Turso DB do lokalni SQLite tabulky bus_history_local", flush=True)
+            except Exception as e_t:
+                print(f"[LOCAL DB] Turso sync bus_history error: {e_t}", flush=True)
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba obnoveni bus_history: {e}", flush=True)
 
 
 def _restore_depot_zones_if_empty(conn):

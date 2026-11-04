@@ -94,6 +94,8 @@ DEPOT_ACTIVE_SESSIONS = {}  # {spz: {"id": uuid, "depot_name": str, "arrived_at"
 # Vůz se zapíše do depot_history AŽ tehdy, když je v polygonu nepřetržitě 2+ minuty
 DEPOT_DEBOUNCE: dict = {}
 DEPOT_DEBOUNCE_SEC: int = 120  # 2 minuty
+DEPOT_LEAVE_DEBOUNCE: dict = {}
+DEPOT_LEAVE_DEBOUNCE_SEC: int = 90  # 90 sekund nepřetržitě mimo polygon než se zapíše odjezd (ochrana proti flappingu a duplicitám)
 try:
     SCRIPT_START_TIME = datetime.now(ZoneInfo("Europe/Prague")).replace(tzinfo=None)
 except Exception:
@@ -8687,6 +8689,7 @@ def _process_depot_tracking(bus_id, c, now):
         else:
             # Vůz již je evidován ve vozovně
             DEPOT_DEBOUNCE.pop(bid_str, None)
+            DEPOT_LEAVE_DEBOUNCE.pop(bid_str, None)
             if is_offline and not active_sess.get("pvvd_lost_at"):
                 active_sess["pvvd_lost_at"] = get_prague_iso()
                 c["pvvd_lost_time"] = now.strftime('%d.%m. %H:%M')
@@ -8748,51 +8751,55 @@ def _process_depot_tracking(bus_id, c, now):
         # Pokud je vůz offline (zhasnutý motor na noc ve vozovně), ZŮSTÁVÁ NADÁLE VE VOZOVNĚ!
         DEPOT_DEBOUNCE.pop(bid_str, None)
         
-        # Odjezd se zapíše POUZE tehdy, když se vůz objeví ŽIVĚ s platnou GPS polohou MIMO areál vozovny!
+        # Odjezd se zapíše POUZE tehdy, když se vůz objeví ŽIVĚ s platnou GPS polohou MIMO areál vozovny nepřetržitě 90s!
         if active_sess and not is_offline and lat and lng:
-            session_id = active_sess.get("id")
-            old_depot = active_sess.get("depot_name", "Vozovna")
-            left_time = get_prague_iso()
-            sess_spz = active_sess.get("spz") or db_spz
-            try:
-                from local_db import local_depot_history_upsert
-                local_depot_history_upsert(old_depot, bid_str, sess_spz, active_sess.get("arrived_at", left_time), left_at=left_time, record_id=session_id)
-            except Exception:
-                pass
-            try:
-                from cloudflare_d1 import get_d1_client as get_d1
-                _d1 = get_d1()
-                if session_id:
-                    _d1.update("depot_history", {"left_at": left_time, "status": "LEFT"}, "id", session_id)
-                if True:
+            now_leave = time.time()
+            if bid_str not in DEPOT_LEAVE_DEBOUNCE:
+                DEPOT_LEAVE_DEBOUNCE[bid_str] = now_leave
+            elif now_leave - DEPOT_LEAVE_DEBOUNCE[bid_str] >= DEPOT_LEAVE_DEBOUNCE_SEC:
+                DEPOT_LEAVE_DEBOUNCE.pop(bid_str, None)
+                session_id = active_sess.get("id")
+                old_depot = active_sess.get("depot_name", "Vozovna")
+                left_time = get_prague_iso()
+                sess_spz = active_sess.get("spz") or db_spz
+                try:
+                    from local_db import local_depot_history_upsert
+                    local_depot_history_upsert(old_depot, bid_str, sess_spz, active_sess.get("arrived_at", left_time), left_at=left_time, record_id=session_id)
+                except Exception:
+                    pass
+                try:
+                    from cloudflare_d1 import get_d1_client as get_d1
+                    _d1 = get_d1()
+                    if session_id:
+                        _d1.update("depot_history", {"left_at": left_time, "status": "LEFT"}, "id", session_id)
                     _d1.execute("UPDATE depot_history SET left_at = ?, status = 'LEFT' WHERE (bus_id = ? OR spz = ?) AND left_at IS NULL", [left_time, bid_str, eff_spz or ""])
-            except Exception as e_left:
-                print(f"[D1] Chyba zapisu odjezdu pro {tracking_key}: {e_left}", flush=True)
-            
-            # Smažeme z aktivních session
-            DEPOT_ACTIVE_SESSIONS.pop(tracking_key, None)
-            DEPOT_ACTIVE_SESSIONS.pop(bid_str, None)
-            if eff_spz:
-                DEPOT_ACTIVE_SESSIONS.pop(normalize_spz_key(eff_spz), None)
-            if active_key:
-                DEPOT_ACTIVE_SESSIONS.pop(active_key, None)
-            DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
-            try:
-                log_automation_action(
-                    "depot_out",
-                    bid_str,
-                    f"Vůz {active_sess.get('spz')} (bus_id={bid_str}) opustil vozovnu '{old_depot}'",
-                    f"Linka {c.get('line') or '?'}, SPZ: {active_sess.get('spz')}. Vozidlo vyjelo do provozu.",
-                    spz=active_sess.get("spz"),
-                    line=c.get("line")
-                )
-            except Exception:
-                pass
-            print(f"[DEPOT] Vůz {active_sess.get('spz')} opustil vozovnu '{old_depot}' v {left_time}", flush=True)
-            c["_in_depot"] = False
-            c["in_depot"] = False
-            c.pop("depot_name", None)
-            c.pop("_depot_name", None)
+                except Exception as e_left:
+                    print(f"[D1] Chyba zapisu odjezdu pro {tracking_key}: {e_left}", flush=True)
+                
+                # Smažeme z aktivních session
+                DEPOT_ACTIVE_SESSIONS.pop(tracking_key, None)
+                DEPOT_ACTIVE_SESSIONS.pop(bid_str, None)
+                if eff_spz:
+                    DEPOT_ACTIVE_SESSIONS.pop(normalize_spz_key(eff_spz), None)
+                if active_key:
+                    DEPOT_ACTIVE_SESSIONS.pop(active_key, None)
+                DEPOT_DISCORD_QUEUE.put({"type": "update_all"})
+                try:
+                    log_automation_action(
+                        "depot_out",
+                        bid_str,
+                        f"Vůz {active_sess.get('spz')} (bus_id={bid_str}) opustil vozovnu '{old_depot}'",
+                        f"Linka {c.get('line') or '?'}, SPZ: {active_sess.get('spz')}. Vozidlo vyjelo do provozu.",
+                        spz=active_sess.get("spz"),
+                        line=c.get("line")
+                    )
+                except Exception:
+                    pass
+                print(f"[DEPOT] Vůz {active_sess.get('spz')} opustil vozovnu '{old_depot}' v {left_time}", flush=True)
+                c["_in_depot"] = False
+                c["in_depot"] = False
+                c.pop("depot_name", None)
+                c.pop("_depot_name", None)
         elif not is_offline:
             # Vůz je živý a mimo zónu vozovny -> pokud byl evidován ve vozovně, ukončíme relaci
             was_in_depot = bool(c.get("_in_depot") or c.get("in_depot") or str(c.get("status", "")).startswith("Vozovna:"))
@@ -14837,6 +14844,7 @@ def api_historie_depots():
 
 
 _HISTORIE_RECORDS_CACHE = {"ts": 0, "data": []}
+_HISTORIE_VEHICLES_CACHE = {"ts": 0, "data": []}
 
 @mapa_bp.route('/api/historie/records')
 def api_historie_records():
@@ -14875,9 +14883,20 @@ def api_historie_records():
         except Exception:
             pass
 
-    # Sloučení a deduplikace
+    # Sloučení a inteligentní deduplikace s tolerancí 5 minut a normalizací ISO
+    def _parse_epoch_safe(ts):
+        if not ts: return 0.0
+        try:
+            s = str(ts).strip().replace("T", " ").replace("Z", "")
+            if "+" in s: s = s.split("+")[0]
+            if "." in s: s = s.split(".")[0]
+            from datetime import datetime
+            return datetime.strptime(s[:19], "%Y-%m-%d %H:%M:%S").timestamp()
+        except Exception:
+            return 0.0
+
+    raw_records.sort(key=lambda x: _parse_epoch_safe(x.get("arrived_at")), reverse=True)
     records_out = []
-    seen = set()
     for r in raw_records:
         spz = str(r.get("spz") or "").strip()
         if not spz or spz.upper() == "BACKUP" or spz.startswith("SYSTEM_"):
@@ -14885,34 +14904,55 @@ def api_historie_records():
         clean_s = spz.replace(" ", "").upper()
         if len(clean_s) >= 3 and clean_s[1] == 'T':
             continue
-        arr = str(r.get("arrived_at") or "")
         d_name = resolve_depot_name(r.get("depot_name") or "")
-        dedup_key = (d_name, clean_s, arr[:16] if arr else "")
-        if dedup_key in seen:
+        arr_ts = _parse_epoch_safe(r.get("arrived_at"))
+        if not d_name or arr_ts == 0.0:
             continue
-        seen.add(dedup_key)
-        records_out.append({
-            "depot_name": d_name,
-            "spz": spz,
-            "arrived_at": r.get("arrived_at"),
-            "left_at": r.get("left_at")
-        })
 
-    # Seřazení dle data příjezdu sestupně
-    records_out.sort(key=lambda x: str(x.get("arrived_at") or ""), reverse=True)
+        is_dup = False
+        for ex in records_out:
+            if ex["_clean_spz"] == clean_s and ex["depot_name"] == d_name:
+                ex_arr_ts = _parse_epoch_safe(ex["arrived_at"])
+                if abs(arr_ts - ex_arr_ts) < 300:
+                    is_dup = True
+                    if not ex.get("left_at") and r.get("left_at"):
+                        ex["left_at"] = r.get("left_at")
+                    break
+        if not is_dup:
+            records_out.append({
+                "depot_name": d_name,
+                "spz": spz,
+                "_clean_spz": clean_s,
+                "arrived_at": r.get("arrived_at"),
+                "left_at": r.get("left_at")
+            })
 
     # Doplnění aktivně parkujících z živé paměti DEPOT_ACTIVE_SESSIONS
-    seen_active = set(r["spz"] for r in records_out if not r.get("left_at"))
     for sess in list(DEPOT_ACTIVE_SESSIONS.values()):
         s_spz = sess.get("spz")
-        if s_spz and s_spz not in seen_active and not str(s_spz).startswith("[ID:"):
-            seen_active.add(s_spz)
+        if not s_spz or str(s_spz).startswith("[ID:"):
+            continue
+        clean_s = str(s_spz).replace(" ", "").upper()
+        d_name = resolve_depot_name(sess.get("depot_name") or "")
+        arr_ts = _parse_epoch_safe(sess.get("arrived_at"))
+        already_in = False
+        for ex in records_out:
+            if ex["_clean_spz"] == clean_s and ex["depot_name"] == d_name:
+                if abs(_parse_epoch_safe(ex["arrived_at"]) - arr_ts) < 600 or not ex.get("left_at"):
+                    already_in = True
+                    ex["left_at"] = None
+                    break
+        if not already_in:
             records_out.insert(0, {
-                "depot_name": resolve_depot_name(sess.get("depot_name") or ""),
+                "depot_name": d_name,
                 "spz": s_spz,
+                "_clean_spz": clean_s,
                 "arrived_at": sess.get("arrived_at"),
                 "left_at": None
             })
+
+    for r in records_out:
+        r.pop("_clean_spz", None)
 
     _HISTORIE_RECORDS_CACHE["ts"] = now_t
     _HISTORIE_RECORDS_CACHE["data"] = records_out
@@ -14922,6 +14962,9 @@ def api_historie_records():
 @mapa_bp.route('/api/historie/vehicles')
 def api_historie_vehicles():
     """Vrací seznam unikátních vozidel, jejich aktuální stav, linku a poslední jízdy."""
+    now_t = time.time()
+    if now_t - _HISTORIE_VEHICLES_CACHE["ts"] < 30 and _HISTORIE_VEHICLES_CACHE["data"]:
+        return jsonify(_HISTORIE_VEHICLES_CACHE["data"])
     vehicles_dict = {}
 
     # 1. Nejprve z živé cache mapy
@@ -15061,7 +15104,10 @@ def api_historie_vehicles():
                 "status": stat
             })
 
-    return jsonify(list(vehicles_dict.values()))
+    res_list = list(vehicles_dict.values())
+    _HISTORIE_VEHICLES_CACHE["ts"] = now_t
+    _HISTORIE_VEHICLES_CACHE["data"] = res_list
+    return jsonify(res_list)
 
 
 @mapa_bp.route('/api/priority_spoj/<bus_id>', methods=['POST'])
@@ -16177,31 +16223,64 @@ def api_history_spz(spz):
 
     merged_trips.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
 
-    # 5. Sloučení a deduplikace vozoven
-    merged_depots = []
-    seen_depot_keys = set()
-    for d in (d1_depots + local_depots + cloud_depots):
-        d_key = f"{d.get('depot_name')}_{d.get('arrived_at')}"
-        if d_key in seen_depot_keys:
-            continue
-        seen_depot_keys.add(d_key)
-        merged_depots.append({
-            "depot_name": resolve_depot_name(d.get("depot_name") or ""),
-            "spz": d.get("spz"),
-            "arrived_at": d.get("arrived_at"),
-            "left_at": d.get("left_at")
-        })
+    # 5. Sloučení a inteligentní deduplikace vozoven (5 minut tolerance, normalizace jmen)
+    def _parse_epoch_safe(ts):
+        if not ts: return 0.0
+        try:
+            s = str(ts).strip().replace("T", " ").replace("Z", "")
+            if "+" in s: s = s.split("+")[0]
+            if "." in s: s = s.split(".")[0]
+            from datetime import datetime
+            return datetime.strptime(s[:19], "%Y-%m-%d %H:%M:%S").timestamp()
+        except Exception:
+            return 0.0
 
-    # Doplnění aktivní relace vozovny, pokud vůz právě parkuje
+    raw_depots = d1_depots + local_depots + cloud_depots
+    raw_depots.sort(key=lambda d: _parse_epoch_safe(d.get("arrived_at")), reverse=True)
+    merged_depots = []
+
+    for d in raw_depots:
+        d_name = resolve_depot_name(d.get("depot_name") or "")
+        arr_ts = _parse_epoch_safe(d.get("arrived_at"))
+        if not d_name or arr_ts == 0.0:
+            continue
+
+        is_dup = False
+        for ex in merged_depots:
+            if ex["depot_name"] == d_name:
+                ex_arr_ts = _parse_epoch_safe(ex["arrived_at"])
+                if abs(arr_ts - ex_arr_ts) < 300:
+                    is_dup = True
+                    if not ex.get("left_at") and d.get("left_at"):
+                        ex["left_at"] = d.get("left_at")
+                    break
+        if not is_dup:
+            merged_depots.append({
+                "depot_name": d_name,
+                "spz": d.get("spz") or clean_spz,
+                "arrived_at": d.get("arrived_at"),
+                "left_at": d.get("left_at")
+            })
+
+    # Doplnění aktivní relace vozovny (pouze pokud již není evidována)
     for s_key, sess in list(DEPOT_ACTIVE_SESSIONS.items()):
         s_spz = sess.get("spz") or ""
         if normalize_spz_key(s_spz) == norm_key:
-            merged_depots.insert(0, {
-                "depot_name": resolve_depot_name(sess.get("depot_name") or ""),
-                "spz": s_spz,
-                "arrived_at": sess.get("arrived_at"),
-                "left_at": None
-            })
+            act_depot = resolve_depot_name(sess.get("depot_name") or "")
+            act_arr_ts = _parse_epoch_safe(sess.get("arrived_at"))
+            already_there = False
+            for ex in merged_depots:
+                if ex["depot_name"] == act_depot and (abs(_parse_epoch_safe(ex["arrived_at"]) - act_arr_ts) < 600 or not ex.get("left_at")):
+                    already_there = True
+                    ex["left_at"] = None
+                    break
+            if not already_there:
+                merged_depots.insert(0, {
+                    "depot_name": act_depot,
+                    "spz": s_spz,
+                    "arrived_at": sess.get("arrived_at"),
+                    "left_at": None
+                })
             break
 
     merged_depots.sort(key=lambda x: str(x.get("arrived_at") or ""), reverse=True)

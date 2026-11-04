@@ -48,31 +48,53 @@ body{
   flex-direction:column;
 }
 
-/* NAVBAR */
+/* AURORA POZADÍ (STEJNÉ JAKO NA HLAVNÍM WEBU A V HISTORII) */
+.aurora{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.aurora span{position:absolute;border-radius:50%;filter:blur(120px)}
+.aurora .a{width:60vw;height:60vw;left:-15vw;top:-15vw;background:rgba(47,107,255,.28);animation:drift 40s ease-in-out infinite alternate}
+.aurora .b{width:55vw;height:55vw;right:-20vw;top:25vh;background:rgba(14,36,140,.4);animation:drift 50s ease-in-out infinite alternate-reverse}
+.aurora .c{width:45vw;height:45vw;left:20vw;bottom:-25vw;background:rgba(47,107,255,.16)}
+@keyframes drift{to{transform:translate(6vw,4vh)}}
+
+/* HORNÍ PLOVOUCÍ SKLENĚNÝ PANEL (GLASS PILL NAVBAR) */
 .ois-nav{
-  position:sticky;top:0;z-index:90;
-  background:rgba(7,10,18,0.85);
-  backdrop-filter:blur(18px);
-  border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 24px;height:66px;gap:16px;
+  position:fixed;top:16px;left:0;right:0;margin-left:auto;margin-right:auto;width:fit-content;width:-moz-fit-content;transform:none;z-index:100;box-sizing:border-box;
+  display:flex;gap:4px;align-items:center;padding:7px;border-radius:999px;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);
+  -webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);
+  box-shadow:0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12);
+  max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none;
+  transition:background .5s, box-shadow .5s;
 }
-.brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);}
-.brand img{width:36px;height:36px;border-radius:10px;object-fit:cover;box-shadow:0 0 16px var(--cyan-glow);}
-.brand-name{font-size:1.05rem;font-weight:800;letter-spacing:-0.02em;background:linear-gradient(135deg,#ffffff 40%,#38bdf8 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
-.brand-tag{font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--cyan);background:rgba(56,189,248,0.12);padding:2px 8px;border-radius:6px;border:1px solid rgba(56,189,248,0.25);}
-
-.nav-links{display:flex;align-items:center;gap:4px;list-style:none;}
-.nav-link{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;color:var(--muted);text-decoration:none;font-size:0.875rem;font-weight:600;border-radius:10px;transition:all .18s var(--ease);}
-.nav-link:hover{color:#fff;background:rgba(255,255,255,0.06);}
-.nav-link.active{color:var(--cyan);background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.22);}
-
-.nav-right{display:flex;align-items:center;gap:12px;}
-.back-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.86rem;font-weight:600;text-decoration:none;transition:all .2s;}
-.back-btn:hover{background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.2);transform:translateX(-2px);}
+.ois-nav::-webkit-scrollbar{display:none}
+.ois-nav a{position:relative;z-index:1;padding:10px 17px;border-radius:999px;white-space:nowrap;font-size:.9rem;font-weight:600;transition:background .3s, color .3s;color:#eaf0ff;text-decoration:none}
+.ois-nav a:not(.active):not(.cta):hover{background:rgba(255,255,255,.1)}
+.ois-nav a.active{background:transparent;color:#38d6ff}
+.ois-nav a.logo{display:inline-flex;align-items:center;gap:10px;padding:6px 16px 6px 8px;font-weight:800;letter-spacing:-.01em}
+.ois-nav a.logo img{width:32px;height:32px;object-fit:contain;border-radius:0;filter:drop-shadow(0 0 10px rgba(56,214,255,.45));transition:transform .3s cubic-bezier(.2,.7,.2,1)}
+.ois-nav a.logo:hover img{transform:scale(1.08)}
+.ois-nav a.cta{background:rgba(255,255,255,.08);color:#94a3b8;border:1px solid rgba(255,255,255,.14);box-shadow:none;transition:background .3s,color .3s,border-color .3s}
+.ois-nav a.cta:hover{background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.24)}
+.nav-pill{position:absolute;left:0;top:0;z-index:0;border-radius:999px;pointer-events:none;opacity:0;background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,.1));border:1px solid rgba(255,255,255,.3);box-shadow:0 4px 18px rgba(47,107,255,.3), inset 0 1px 0 rgba(255,255,255,.35);transition:transform .6s cubic-bezier(.3,1.25,.4,1), width .6s cubic-bezier(.3,1.25,.4,1), height .6s cubic-bezier(.3,1.25,.4,1), opacity .4s}
+.nav-pill.ready{opacity:1}
+.nav-arr{position:sticky;flex:none;width:0;z-index:5;pointer-events:none;align-self:stretch}
+.nav-arr i{position:absolute;top:-7px;bottom:-7px;width:34px;display:flex;align-items:center;font-style:normal;font-size:1.5rem;font-weight:700;color:var(--cyan);opacity:0;transition:opacity .35s}
+.nav-arr.l{left:0}.nav-arr.l i{left:-7px;padding-left:10px;border-radius:999px 0 0 999px;background:linear-gradient(90deg,#0a1230 30%,transparent)}
+.nav-arr.r{right:0}.nav-arr.r i{right:-7px;justify-content:flex-end;padding-right:10px;border-radius:0 999px 999px 0;background:linear-gradient(270deg,#0a1230 30%,transparent)}
+.gearbtn{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#eaf0ff;cursor:pointer;transition:transform .3s,background .3s;margin-left:4px}
+.gearbtn:hover{background:rgba(255,255,255,.15);transform:rotate(45deg)}
+.gearbtn svg{width:18px;height:18px}
+.acct{display:flex;align-items:center;gap:9px;margin-left:4px;padding:3px;border-radius:999px;border:0;background:transparent;color:#eaf0ff;cursor:pointer;transition:transform .3s}
+.acct .av{display:flex;align-items:center;justify-content:center;flex:none;width:34px;height:34px;border-radius:50%;overflow:hidden;background:#3a4252;color:#8e97a8;}
+.nav-burger{display:none}
+@media(max-width:1180px){
+  .ois-nav{left:12px;right:12px;margin-left:0;margin-right:0;max-width:none;width:auto;justify-content:space-between;padding:6px}
+  .ois-nav a:not(.logo),.nav-arr,.nav-pill{display:none!important}
+  .nav-burger{display:flex;align-items:center;gap:12px;margin-left:auto;padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.09);color:#eaf0ff;font-weight:700;font-size:.9rem;cursor:pointer}
+}
 
 /* WRAPPER */
-.wrap{max-width:1380px;width:100%;margin:0 auto;padding:28px 24px 60px;}
+.wrap{max-width:1380px;width:100%;margin:0 auto;padding:100px 24px 60px;}
 
 /* BREADCRUMB */
 .breadcrumb{display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--dim);margin-bottom:20px;font-weight:500;}
@@ -101,40 +123,93 @@ body{
   background:linear-gradient(90deg,transparent,#38bdf8 40%,#a855f7 70%,transparent);
 }
 
-/* CZECH EU LICENSE PLATE */
+/* CZECH EU LICENSE PLATE (REALISTICKÁ SPZ DLE VZORU ČR / IDPK) */
 .spz-plate{
   display:inline-flex;
-  align-items:center;
-  height:60px;
-  background:#f8fafc;
-  color:#0f172a;
-  border-radius:8px;
-  border:3px solid #0f172a;
-  box-shadow:0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.9);
+  align-items:stretch;
+  height:64px;
+  background:#ffffff;
+  color:#090d16;
+  border-radius:10px;
+  border:2.5px solid #090d16;
+  box-shadow:0 12px 32px rgba(0,0,0,0.5), inset 0 0 0 1.5px #ffffff;
   overflow:hidden;
   font-family:'JetBrains Mono','Inter',monospace;
   user-select:none;
+  position:relative;
+}
+.spz-plate::after{
+  /* Vnitřní jemný rámeček po obvodu SPZ */
+  content:'';
+  position:absolute;
+  inset:2px;
+  border:1px solid rgba(0,0,0,0.22);
+  border-radius:7px;
+  pointer-events:none;
 }
 .spz-eu{
-  width:32px;height:100%;
+  width:38px;
   background:#003399;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:4px 0;gap:2px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:5px 3px 4px;
+  gap:3px;
+  flex-shrink:0;
+  position:relative;
+  z-index:2;
 }
-.spz-stars{width:18px;height:18px;position:relative;}
-.spz-stars svg{width:100%;height:100%;fill:#ffcc00;}
-.spz-cz{color:#ffffff;font-size:11px;font-weight:900;letter-spacing:0.5px;}
-.spz-code{
-  padding:0 18px;
-  font-size:1.85rem;
-  font-weight:800;
-  letter-spacing:3px;
+.spz-stars-svg{
+  width:22px;
+  height:22px;
+  display:block;
+}
+.spz-cz{
+  color:#ffffff;
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:0.8px;
+  line-height:1;
+  font-family:'Inter',system-ui,sans-serif;
+}
+.spz-body{
+  display:flex;
+  align-items:center;
+  padding:0 18px 0 14px;
+  gap:10px;
+  position:relative;
+  z-index:2;
+}
+.spz-part{
+  font-size:2.1rem;
+  font-weight:900;
+  letter-spacing:2px;
   color:#090d16;
+  line-height:1;
 }
-.spz-stk{
-  width:14px;height:14px;border-radius:50%;
-  border:1.5px solid #cbd5e1;background:#e2e8f0;
-  margin-right:12px;
+.spz-stk-stack{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  padding:0 2px;
+}
+.spz-stk-ring{
+  width:15px;
+  height:15px;
+  border-radius:50%;
+  border:1.5px dashed #94a3b8;
+  background:rgba(226,232,240,0.6);
+  position:relative;
+}
+.spz-stk-ring::after{
+  content:'';
+  position:absolute;
+  inset:3px;
+  border-radius:50%;
+  border:1px solid #cbd5e1;
 }
 
 .hero-info{display:flex;flex-direction:column;gap:8px;}
@@ -250,6 +325,41 @@ table.ois-table td{
 table.ois-table tr:hover td{background:rgba(255,255,255,0.03);}
 table.ois-table tr:last-child td{border-bottom:none;}
 
+
+/* ENHANCED TRIP TABLE TIMELINE & SPOJ PILL */
+.trip-time-cell{display:flex;flex-direction:column;gap:5px;}
+.trip-date{font-size:0.86rem;font-weight:800;color:#ffffff;display:flex;align-items:center;gap:6px;}
+.trip-date i{color:var(--cyan);font-size:0.8rem;}
+.trip-time-flow{display:inline-flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;margin-top:2px;}
+.t-badge-time{font-family:'JetBrains Mono',monospace;font-size:0.84rem;font-weight:700;padding:2px 7px;border-radius:6px;}
+.t-badge-time.start{background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.25);}
+.t-badge-time.end{background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.25);}
+.t-arrow{color:var(--dim);font-size:0.8rem;}
+.trip-dur-badge{font-size:0.73rem;color:var(--amber);background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.22);padding:1px 7px;border-radius:5px;width:fit-content;display:inline-flex;align-items:center;gap:4px;margin-top:2px;}
+
+.line-spoj-cell{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.line-badge-lg{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:5px 12px;border-radius:8px;
+  font-weight:900;font-size:0.95rem;color:#ffffff;
+  font-family:'JetBrains Mono',monospace;
+  box-shadow:0 3px 10px rgba(0,0,0,0.45);
+  letter-spacing:0.5px;
+}
+.spoj-pill{
+  display:inline-flex;align-items:center;padding:3px 8px;border-radius:6px;
+  background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);
+  color:var(--text);font-size:0.8rem;font-weight:700;
+  font-family:'JetBrains Mono',monospace;
+}
+
+.route-cell{display:flex;flex-direction:column;gap:3px;}
+.route-station{font-size:0.88rem;display:flex;align-items:center;}
+.route-station.from{color:#e2e8f0;font-weight:600;}
+.route-station.to{color:#ffffff;font-weight:800;}
+.route-arrow-down{line-height:0.8;}
+.end-stop-cell{font-size:0.88rem;}
+
 /* LINE BADGE */
 .line-badge{
   display:inline-flex;align-items:center;justify-content:center;
@@ -320,29 +430,28 @@ table.ois-table tr:last-child td{border-bottom:none;}
 </head>
 <body>
 
-<header class="ois-nav">
-  <div style="display:flex;align-items:center;gap:16px;">
-    <a href="/#/" class="brand">
-      <img src="/static/img/datacorebot_n.png" alt="OIS IDPK Logo">
-      <span class="brand-name">OIS IDPK</span>
-      <span class="brand-tag">Evidence vozů</span>
-    </a>
-    <nav>
-      <ul class="nav-links">
-        <li><a href="/#/" class="nav-link">Domů</a></li>
-        <li><a href="/#/stats" class="nav-link">Statistiky</a></li>
-        <li><a href="/#/provoz" class="nav-link">Provoz IDPK</a></li>
-        <li><a href="/mapa" class="nav-link">Interaktivní mapa</a></li>
-        <li><a href="/jizdni-rad" class="nav-link">Jízdní řády</a></li>
-        <li><a href="/historie" class="nav-link active">Historie vozového parku</a></li>
-        <li><a href="/podpora" class="nav-link">Podpora</a></li>
-      </ul>
-    </nav>
-  </div>
-  <div class="nav-right">
-    <a href="/historie" class="back-btn"><i class="fas fa-arrow-left"></i> Všechny vozy</a>
-  </div>
-</header>
+<!-- AURORA POZADÍ -->
+<div class="aurora" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span></div>
+
+<!-- HORNÍ PLOVOUCÍ SKLENĚNÝ PANEL (STEJNÝ DESIGN JAKO NA CELÉM WEBU) -->
+<div class="ois-nav" role="navigation" aria-label="Hlavní navigace"><span class="nav-pill" aria-hidden="true"></span><span class="nav-arr l" aria-hidden="true"><i>‹</i></span>
+  <a class="logo" href="/"><img src="/static/img/datacorebot_pf-lepsi.png" alt="">OIS IDPK</a>
+  <a href="/#/" data-r="home">Domů</a>
+  <a href="/#/download" data-r="download">Download</a>
+  <a href="/#/team" data-r="team">Náš tým</a>
+  <a href="/#/stats" data-r="stats">Statistiky</a>
+  <a href="/#/supporters" data-r="supporters">Podporovatelé</a>
+  <a href="/#/provoz" data-r="provoz">Provoz IDPK</a>
+  <a href="/mapa">Interaktivní mapa IDPK</a>
+  <a href="/led-panel">LED Panel Simulátor</a>
+  <a href="/historie" class="active" data-r="historie">Historie vozů</a>
+  <a href="/podpora" data-r="podpora" style="color:var(--cyan);"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-3px;margin-right:4px;display:inline-block;"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l3.54 3.54M15.53 15.53l3.54 3.54M4.93 19.07l3.54-3.54M15.53 8.47l3.54-3.54"/></svg>Podpora / Hlášení</a>
+  <a class="cta" href="/#/demo" data-r="demo">Demo verze</a>
+  <span class="nav-arr r" aria-hidden="true"><i>›</i></span>
+  <button class="gearbtn" id="setBtn" type="button" aria-label="Nastavení" onclick="window.location.href='/#/'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M10.39 4.78 L10.68 1.89 L13.32 1.89 L13.61 4.78 L15.96 5.75 L18.22 3.91 L20.09 5.78 L18.25 8.04 L19.22 10.39 L22.11 10.68 L22.11 13.32 L19.22 13.61 L18.25 15.96 L20.09 18.22 L18.22 20.09 L15.96 18.25 L13.61 19.22 L13.32 22.11 L10.68 22.11 L10.39 19.22 L8.04 18.25 L5.78 20.09 L3.91 18.22 L5.75 15.96 L4.78 13.61 L1.89 13.32 L1.89 10.68 L4.78 10.39 L5.75 8.04 L3.91 5.78 L5.78 3.91 L8.04 5.75Z"/><circle cx="12" cy="12" r="3.1"/></svg></button>
+  <button class="acct" id="acctBtn" type="button" aria-label="Účet" onclick="window.location.href='/ucet'"><span class="av" id="acctAv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span class="an" id="acctName" hidden></span></button>
+  <button class="nav-burger" id="navBurger" type="button" aria-expanded="false" onclick="window.location.href='/historie'"><span id="navLabel">Všechny vozy</span><span class="nb-ico" aria-hidden="true"><i class="fas fa-arrow-left"></i></span></button>
+</div>
 
 <main class="wrap">
   <div class="breadcrumb">
@@ -355,15 +464,29 @@ table.ois-table tr:last-child td{border-bottom:none;}
 
   <!-- HERO SECTION VOZIDLA -->
   <section class="hero-card" id="heroCard">
-    <div class="spz-plate">
+    <div class="spz-plate" id="spzPlateContainer">
       <div class="spz-eu">
-        <div class="spz-stars">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none"/><path d="M12 2l1 3h3l-2.5 2 1 3-2.5-2-2.5 2 1-3-2.5-2h3z" fill="#ffcc00"/></svg>
-        </div>
+        <svg class="spz-stars-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <g fill="#ffcc00">
+            <polygon points="12,1.2 12.6,2.9 14.4,2.9 13,3.9 13.5,5.6 12,4.6 10.5,5.6 11,3.9 9.6,2.9 11.4,2.9"/>
+            <polygon points="16.2,2.3 16.8,4 18.6,4 17.2,5 17.7,6.7 16.2,5.7 14.7,6.7 15.2,5 13.8,4 15.6,4"/>
+            <polygon points="19.4,5.5 20,7.2 21.8,7.2 20.4,8.2 20.9,9.9 19.4,8.9 17.9,9.9 18.4,8.2 17,7.2 18.8,7.2"/>
+            <polygon points="20.5,9.7 21.1,11.4 22.9,11.4 21.5,12.4 22,14.1 20.5,13.1 19,14.1 19.5,12.4 18.1,11.4 19.9,11.4"/>
+            <polygon points="19.4,13.9 20,15.6 21.8,15.6 20.4,16.6 20.9,18.3 19.4,17.3 17.9,18.3 18.4,16.6 17,15.6 18.8,15.6"/>
+            <polygon points="16.2,17.1 16.8,18.8 18.6,18.8 17.2,19.8 17.7,21.5 16.2,20.5 14.7,21.5 15.2,19.8 13.8,18.8 15.6,18.8"/>
+            <polygon points="12,18.2 12.6,19.9 14.4,19.9 13,20.9 13.5,22.6 12,21.6 10.5,22.6 11,20.9 9.6,19.9 11.4,19.9"/>
+            <polygon points="7.8,17.1 8.4,18.8 10.2,18.8 8.8,19.8 9.3,21.5 7.8,20.5 6.3,21.5 6.8,19.8 5.4,18.8 7.2,18.8"/>
+            <polygon points="4.6,13.9 5.2,15.6 7,15.6 5.6,16.6 6.1,18.3 4.6,17.3 3.1,18.3 3.6,16.6 2.2,15.6 4,15.6"/>
+            <polygon points="3.5,9.7 4.1,11.4 5.9,11.4 4.5,12.4 5,14.1 3.5,13.1 2,14.1 2.5,12.4 1.1,11.4 2.9,11.4"/>
+            <polygon points="4.6,5.5 5.2,7.2 7,7.2 5.6,8.2 6.1,9.9 4.6,8.9 3.1,9.9 3.6,8.2 2.2,7.2 4,7.2"/>
+            <polygon points="7.8,2.3 8.4,4 10.2,4 8.8,5 9.3,6.7 7.8,5.7 6.3,6.7 6.8,5 5.4,4 7.2,4"/>
+          </g>
+        </svg>
         <span class="spz-cz">CZ</span>
       </div>
-      <div class="spz-code" id="plateCode">__PAGE_SPZ__</div>
-      <div class="spz-stk"></div>
+      <div class="spz-body" id="plateBody">
+        <span class="spz-part" id="plateCode">__PAGE_SPZ__</span>
+      </div>
     </div>
 
     <div class="hero-info">
@@ -445,14 +568,12 @@ table.ois-table tr:last-child td{border-bottom:none;}
         <table class="ois-table">
           <thead>
             <tr>
-              <th>Datum & Odjezd</th>
-              <th>Linka & Spoj</th>
-              <th>Trasa (Odkud ➔ Kam)</th>
-              <th>Kde začal linku</th>
-              <th>Kde linku ukončil</th>
-              <th>Čas dojezdu</th>
-              <th>Stav / Dojezd</th>
-              <th style="text-align:right;">Mapa</th>
+              <th style="min-width:180px;">Datum & Čas jízdy</th>
+              <th style="min-width:140px;">Linka & Spoj</th>
+              <th style="min-width:240px;">Trasa dle JŘ (Odkud ➔ Kam)</th>
+              <th style="min-width:180px;">Místo ukončení</th>
+              <th style="min-width:130px;">Stav / Dojezd</th>
+              <th style="text-align:right;min-width:110px;">Mapa</th>
             </tr>
           </thead>
           <tbody id="tripsTableBody">
@@ -735,25 +856,35 @@ function renderTrips(trips) {
 
     html += `<tr>
       <td>
-        <b style="color:#ffffff;">${dateStr}</b><br>
-        <span style="color:var(--muted);font-size:0.78rem;"><i class="far fa-clock"></i> ${startStr}</span>
-      </td>
-      <td>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="line-badge" style="background:${lineColor};">${esc(line)}</span>
-          <span style="color:var(--dim);font-size:0.78rem;">${esc(spoj)}</span>
+        <div class="trip-time-cell">
+          <div class="trip-date"><i class="far fa-calendar-alt"></i> ${dateStr}</div>
+          <div class="trip-time-flow">
+            <span class="t-badge-time start" title="Čas zahájení/odjezdu"><i class="far fa-play-circle"></i> ${esc(startStr)}</span>
+            <span class="t-arrow">➔</span>
+            <span class="t-badge-time end" title="Čas ukončení/dojezdu"><i class="far fa-stop-circle"></i> ${esc(endStr)}</span>
+          </div>
+          ${durStr ? `<div class="trip-dur-badge"><i class="fas fa-hourglass-half"></i> Jízda: ${durStr}</div>` : ''}
         </div>
       </td>
       <td>
-        <b style="color:#ffffff;">${esc(origin)}</b><br>
-        <span style="color:var(--muted);font-size:0.8rem;">➔ ${esc(dest)}</span>
+        <div class="line-spoj-cell">
+          <span class="line-badge-lg" style="background:${lineColor};">${esc(line)}</span>
+          <span class="spoj-pill">${esc(spoj || 'Spoj')}</span>
+        </div>
       </td>
-      <td><span style="color:#cbd5e1;">${esc(origin)}</span></td>
       <td>
-        <b style="color:#ffffff;">${esc(endStop)}</b>
-        ${durStr ? `<br><span style="color:var(--cyan);font-size:0.75rem;">Jízda: ${durStr}</span>` : ''}
+        <div class="route-cell">
+          <div class="route-station from"><i class="fas fa-circle" style="font-size:7px;color:var(--green);margin-right:7px;"></i>${esc(origin)}</div>
+          <div class="route-arrow-down"><i class="fas fa-arrow-down" style="font-size:10px;color:var(--dim);margin-left:14px;"></i></div>
+          <div class="route-station to"><i class="fas fa-map-marker-alt" style="font-size:10px;color:var(--cyan);margin-right:7px;"></i>${esc(dest)}</div>
+        </div>
       </td>
-      <td><b style="color:#ffffff;">${endStr}</b></td>
+      <td>
+        <div class="end-stop-cell">
+          <b style="color:#ffffff;">${esc(endStop)}</b>
+          <small style="display:block;color:var(--muted);font-size:0.75rem;margin-top:2px;">Ukončení trasy</small>
+        </div>
+      </td>
       <td>${statusPill}</td>
       <td style="text-align:right;">${mapBtn}</td>
     </tr>`;
@@ -864,6 +995,59 @@ document.getElementById('switchSpzInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') jumpToSpz();
 });
 
+
+function renderCzechPlate(spzText) {
+  const clean = String(spzText || PAGE_SPZ || '').trim().replace(/\s+/g, '').toUpperCase();
+  const el = document.getElementById('plateBody');
+  if (!el) return;
+  if (clean.length >= 6) {
+    const p1 = clean.substring(0, 3);
+    const p2 = clean.substring(3);
+    el.innerHTML = `<span class="spz-part">${esc(p1)}</span>
+      <div class="spz-stk-stack">
+        <span class="spz-stk-ring top"></span>
+        <span class="spz-stk-ring btm"></span>
+      </div>
+      <span class="spz-part">${esc(p2)}</span>`;
+  } else {
+    el.innerHTML = `<span class="spz-part">${esc(clean)}</span>`;
+  }
+}
+
+// Plovoucí skleněná pilulka v horní navigaci
+(function(){
+  const nav = document.querySelector('.ois-nav');
+  const pill = document.querySelector('.nav-pill');
+  if(!nav) return;
+
+  function movePill(target){
+    if(!pill || !target) return;
+    const nRect = nav.getBoundingClientRect();
+    const tRect = target.getBoundingClientRect();
+    pill.style.width = tRect.width + 'px';
+    pill.style.height = tRect.height + 'px';
+    pill.style.transform = `translate(${tRect.left - nRect.left}px, ${tRect.top - nRect.top}px)`;
+    pill.classList.add('ready');
+  }
+
+  const activeLink = nav.querySelector('a.active') || nav.querySelector('a[href="/historie"]');
+  if(activeLink){
+    setTimeout(() => movePill(activeLink), 80);
+  }
+
+  nav.querySelectorAll('a').forEach(a => {
+    a.addEventListener('mouseenter', () => movePill(a));
+  });
+  nav.addEventListener('mouseleave', () => {
+    if(activeLink) movePill(activeLink);
+    else if(pill) pill.classList.remove('ready');
+  });
+  window.addEventListener('resize', () => {
+    if(activeLink) movePill(activeLink);
+  });
+})();
+
+renderCzechPlate(PAGE_SPZ);
 loadVehicleData();
 </script>
 </body>

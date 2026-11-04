@@ -1,5 +1,29 @@
 [
   {
+    "id": 42,
+    "ip": "127.0.0.1",
+    "country": "cz|Lokální síť|Vývoj|Localhost|/",
+    "visited_at": "04.11.2026 18:12"
+  },
+  {
+    "id": 41,
+    "ip": "127.0.0.1",
+    "country": "cz|Lokální síť|Vývoj|Localhost|/nonexistent-404-test",
+    "visited_at": "04.11.2026 18:10"
+  },
+  {
+    "id": 40,
+    "ip": "127.0.0.1",
+    "country": "cz|Lokální síť|Vývoj|Localhost|/nonexistent-404-test",
+    "visited_at": "04.11.2026 18:02"
+  },
+  {
+    "id": 39,
+    "ip": "127.0.0.1",
+    "country": "cz|Lokální síť|Vývoj|Localhost|/",
+    "visited_at": "04.11.2026 18:02"
+  },
+  {
     "id": 27,
     "ip": "127.0.0.1",
     "country": "cz|Lokální síť|Vývoj|Localhost|/",

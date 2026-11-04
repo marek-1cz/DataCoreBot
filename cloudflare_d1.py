@@ -41,9 +41,24 @@ class D1Client:
     def is_read_blocked(self) -> bool:
         return self.is_blocked()
 
-    def _invalidate_cache(self):
+    def _invalidate_cache(self, table: str = None):
         with self._cache_lock:
-            self._cache.clear()
+            if not table:
+                self._cache.clear()
+            else:
+                tbl_low = table.lower()
+                to_del = [k for k in self._cache if tbl_low in k[0].lower()]
+                for k in to_del:
+                    self._cache.pop(k, None)
+
+    def _calc_utc_midnight_pause(self) -> int:
+        try:
+            from datetime import datetime, timezone, timedelta
+            now_utc = datetime.now(timezone.utc)
+            tomorrow_utc = (now_utc + timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
+            return max(1800, int((tomorrow_utc - now_utc).total_seconds()))
+        except Exception:
+            return 3600
 
     def _request(self, payload: dict) -> list:
         """Pošle jeden POST požadavek na D1 endpoint. Vrátí list výsledků (list dictů) nebo []."""
@@ -73,9 +88,13 @@ class D1Client:
                 err_body = e.read().decode("utf-8")
             except Exception:
                 err_body = str(e)
-            if "7500" in err_body or "row read limit" in err_body.lower() or e.code == 429:
-                self._blocked_until = time.time() + 300  # 5 minut circuit breaker
-                print(f"[D1] Aktivován circuit breaker (kód 7500 - denní limit čtení D1 vyčerpán). Pauza 5 min.", flush=True)
+            if "7500" in err_body or "row read limit" in err_body.lower():
+                sec_left = self._calc_utc_midnight_pause()
+                self._blocked_until = time.time() + sec_left
+                print(f"[D1] Aktivován circuit breaker (kód 7500 - denní limit 5M řádků D1 vyčerpán). Pauza do resetu ({sec_left//60} min, 00:05 UTC). Používám Turso/lokální DB.", flush=True)
+            elif e.code == 429:
+                self._blocked_until = time.time() + 180
+                print(f"[D1] Rate limit 429. Pauza 3 min.", flush=True)
             else:
                 print(f"[D1] HTTP error {e.code}: {err_body}", flush=True)
             return []
@@ -87,8 +106,9 @@ class D1Client:
             errors = parsed.get("errors") or parsed.get("messages") or []
             err_str = str(errors)
             if "7500" in err_str or "row read limit" in err_str.lower():
-                self._blocked_until = time.time() + 300
-                print(f"[D1] Aktivován circuit breaker z API erroru (kód 7500).", flush=True)
+                sec_left = self._calc_utc_midnight_pause()
+                self._blocked_until = time.time() + sec_left
+                print(f"[D1] Aktivován circuit breaker z API erroru (kód 7500). Pauza {sec_left//60} min.", flush=True)
             else:
                 print(f"[D1] API error: {errors}", flush=True)
             return []
@@ -123,10 +143,27 @@ class D1Client:
 
         if is_select:
             if res:
+                sql_up = sql_clean.upper()
+                if "SPZ_REGISTRY" in sql_up:
+                    ttl = 300
+                elif "BUS_TRIPS" in sql_up:
+                    ttl = 120
+                elif "DEPOT_HISTORY" in sql_up:
+                    ttl = 60
+                elif "DEPOT_ZONES" in sql_up:
+                    ttl = 300
+                else:
+                    ttl = 45
                 with self._cache_lock:
-                    self._cache[cache_key] = (time.time() + 30, list(res))
+                    self._cache[cache_key] = (time.time() + ttl, list(res))
         else:
-            self._invalidate_cache()
+            tbl = None
+            sql_low = sql_clean.lower()
+            for candidate in ["bus_trips", "depot_history", "spz_registry", "depot_zones", "user_stats", "users"]:
+                if candidate in sql_low:
+                    tbl = candidate
+                    break
+            self._invalidate_cache(tbl)
 
         return res
 
