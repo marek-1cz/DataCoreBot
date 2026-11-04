@@ -29,9 +29,28 @@ class D1Client:
 
     def __init__(self):
         self._lock = threading.Lock()
+        self._blocked_until = 0.0
+        self._last_block_log = 0.0
+        self._cache = {}
+        self._cache_lock = threading.Lock()
+
+    def is_blocked(self) -> bool:
+        """Vrátí True pokud je aktivní circuit breaker (překročen denní limit kvóty)."""
+        return time.time() < self._blocked_until
+
+    def _invalidate_cache(self):
+        with self._cache_lock:
+            self._cache.clear()
 
     def _request(self, payload: dict) -> list:
         """Pošle jeden POST požadavek na D1 endpoint. Vrátí list výsledků (list dictů) nebo []."""
+        now = time.time()
+        if now < self._blocked_until:
+            if now - self._last_block_log > 120:
+                self._last_block_log = now
+                print(f"[D1] Circuit breaker aktivní (limit kvóty D1). Přeskakuji síťový dotaz.", flush=True)
+            return []
+
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
             _D1_ENDPOINT,
@@ -43,7 +62,7 @@ class D1Client:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=10) as resp:
                 body = resp.read().decode("utf-8")
                 parsed = json.loads(body)
         except urllib.error.HTTPError as e:
@@ -51,7 +70,11 @@ class D1Client:
                 err_body = e.read().decode("utf-8")
             except Exception:
                 err_body = str(e)
-            print(f"[D1] HTTP error {e.code}: {err_body}", flush=True)
+            if "7500" in err_body or "row read limit" in err_body.lower() or e.code == 429:
+                self._blocked_until = time.time() + 300  # 5 minut circuit breaker
+                print(f"[D1] Aktivován circuit breaker (kód 7500 - denní limit čtení D1 vyčerpán). Pauza 5 min.", flush=True)
+            else:
+                print(f"[D1] HTTP error {e.code}: {err_body}", flush=True)
             return []
         except Exception as e:
             print(f"[D1] Request error: {e}", flush=True)
@@ -59,7 +82,12 @@ class D1Client:
 
         if not parsed.get("success"):
             errors = parsed.get("errors") or parsed.get("messages") or []
-            print(f"[D1] API error: {errors}", flush=True)
+            err_str = str(errors)
+            if "7500" in err_str or "row read limit" in err_str.lower():
+                self._blocked_until = time.time() + 300
+                print(f"[D1] Aktivován circuit breaker z API erroru (kód 7500).", flush=True)
+            else:
+                print(f"[D1] API error: {errors}", flush=True)
             return []
 
         # result je list (jeden výsledek na statement)
@@ -73,10 +101,31 @@ class D1Client:
         return rows
 
     def execute(self, sql: str, params=None) -> list:
-        """Spustí jeden SQL dotaz, vrátí list dictů."""
-        payload = {"sql": sql, "params": list(params) if params else []}
+        """Spustí jeden SQL dotaz s cache pro SELECT a circuit breakerem."""
+        sql_clean = sql.strip()
+        is_select = sql_clean.upper().startswith("SELECT")
+        p_list = list(params) if params else []
+
+        if is_select:
+            cache_key = (sql_clean, tuple(p_list))
+            now = time.time()
+            with self._cache_lock:
+                entry = self._cache.get(cache_key)
+                if entry and now < entry[0]:
+                    return list(entry[1])
+
+        payload = {"sql": sql, "params": p_list}
         with self._lock:
-            return self._request(payload)
+            res = self._request(payload)
+
+        if is_select:
+            if res:
+                with self._cache_lock:
+                    self._cache[cache_key] = (time.time() + 30, list(res))
+        else:
+            self._invalidate_cache()
+
+        return res
 
     def execute_many(self, statements: list) -> list:
         """Batchové spuštění více statements najednou.

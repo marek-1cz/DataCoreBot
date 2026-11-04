@@ -8794,8 +8794,9 @@ def _process_depot_tracking(bus_id, c, now):
             c.pop("depot_name", None)
             c.pop("_depot_name", None)
         elif not is_offline:
-            # Vůz je živý a mimo zónu vozovny -> nesmí zůstat viset stav 'Vozovna' ani relace v D1/paměti
-            if (c.get("line") or (lat and lng)) and not active_sess:
+            # Vůz je živý a mimo zónu vozovny -> pokud byl evidován ve vozovně, ukončíme relaci
+            was_in_depot = bool(c.get("_in_depot") or c.get("in_depot") or str(c.get("status", "")).startswith("Vozovna:"))
+            if was_in_depot:
                 try:
                     from cloudflare_d1 import get_d1_client as _get_d1
                     _get_d1().execute("UPDATE depot_history SET left_at = ?, status = 'LEFT' WHERE (bus_id = ? OR spz = ?) AND left_at IS NULL", [get_prague_iso(), bid_str, eff_spz or ""])
@@ -14768,51 +14769,66 @@ _HISTORIE_RECORDS_CACHE = {"ts": 0, "data": []}
 
 @mapa_bp.route('/api/historie/records')
 def api_historie_records():
-    """Vrací historii vjezdů a výjezdů vozoven (depot_history) pro nový web s cache a lokálním fallbackem."""
+    """Vrací historii vjezdů a výjezdů vozoven (depot_history) spojenou ze všech zdrojů (Local DB, D1, Turso)."""
     now_t = time.time()
     if now_t - _HISTORIE_RECORDS_CACHE["ts"] < 30 and _HISTORIE_RECORDS_CACHE["data"]:
         return jsonify(_HISTORIE_RECORDS_CACHE["data"])
 
+    raw_records = []
+
+    # 1. Lokální SQLite tabulka (nejaktuálnější zápisy)
+    try:
+        from local_db import local_depot_history_get
+        raw_records.extend(local_depot_history_get(limit=1000))
+    except Exception as e_loc:
+        pass
+
+    # 2. Cloudflare D1 (hlavní cloudová DB)
+    try:
+        from cloudflare_d1 import get_d1_client as _get_d1
+        _d1 = _get_d1()
+        if not _d1.is_blocked():
+            d1_rows = _d1.execute("SELECT depot_name, spz, arrived_at, left_at FROM depot_history WHERE bus_id NOT LIKE 'SYSTEM_%' AND spz != 'BACKUP' ORDER BY arrived_at DESC LIMIT 1000")
+            if d1_rows:
+                raw_records.extend(d1_rows)
+    except Exception:
+        pass
+
+    # 3. Turso DB (historické záznamy)
     db = get_db_client()
-    records_out = []
     if db:
         try:
             res = db.table("depot_history").select("depot_name, spz, arrived_at, left_at").order("arrived_at", desc=True).limit(1000).execute()
-            for r in (res.data or []):
-                spz = str(r.get("spz") or "").strip()
-                if not spz or spz.upper() == "BACKUP" or spz.startswith("SYSTEM_"):
-                    continue
-                clean_s = spz.replace(" ", "").upper()
-                if len(clean_s) >= 3 and clean_s[1] == 'T':
-                    continue
-                records_out.append({
-                    "depot_name": resolve_depot_name(r.get("depot_name") or ""),
-                    "spz": spz,
-                    "arrived_at": r.get("arrived_at"),
-                    "left_at": r.get("left_at")
-                })
-        except Exception as e:
-            print(f"[API HISTORIE RECORDS ERROR] {e}", flush=True)
-
-    # Lokální SQLite fallback pokud Turso nevrátilo záznamy (např. při výpadku/blokaci čtení)
-    if not records_out:
-        try:
-            from local_db import local_depot_history_get
-            for r in local_depot_history_get(limit=1000):
-                spz = str(r.get("spz") or "").strip()
-                if not spz or spz.upper() == "BACKUP" or spz.startswith("SYSTEM_"):
-                    continue
-                clean_s = spz.replace(" ", "").upper()
-                if len(clean_s) >= 3 and clean_s[1] == 'T':
-                    continue
-                records_out.append({
-                    "depot_name": resolve_depot_name(r.get("depot_name") or ""),
-                    "spz": spz,
-                    "arrived_at": r.get("arrived_at"),
-                    "left_at": r.get("left_at")
-                })
+            if res.data:
+                raw_records.extend(res.data)
         except Exception:
             pass
+
+    # Sloučení a deduplikace
+    records_out = []
+    seen = set()
+    for r in raw_records:
+        spz = str(r.get("spz") or "").strip()
+        if not spz or spz.upper() == "BACKUP" or spz.startswith("SYSTEM_"):
+            continue
+        clean_s = spz.replace(" ", "").upper()
+        if len(clean_s) >= 3 and clean_s[1] == 'T':
+            continue
+        arr = str(r.get("arrived_at") or "")
+        d_name = resolve_depot_name(r.get("depot_name") or "")
+        dedup_key = (d_name, clean_s, arr[:16] if arr else "")
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+        records_out.append({
+            "depot_name": d_name,
+            "spz": spz,
+            "arrived_at": r.get("arrived_at"),
+            "left_at": r.get("left_at")
+        })
+
+    # Seřazení dle data příjezdu sestupně
+    records_out.sort(key=lambda x: str(x.get("arrived_at") or ""), reverse=True)
 
     # Doplnění aktivně parkujících z živé paměti DEPOT_ACTIVE_SESSIONS
     seen_active = set(r["spz"] for r in records_out if not r.get("left_at"))
@@ -14890,11 +14906,30 @@ def api_historie_vehicles():
             "trips": []
         }
 
-    # 3. Z bus_history (Cloud + Local DB) vytáhneme poslední jízdy a další SPZ
+    # 3. Z bus_history (Local DB + Cloudflare D1 + Turso) vytáhneme poslední jízdy a další SPZ
     all_recent_trips = []
     try:
         from local_db import local_bus_history_get
         all_recent_trips.extend(local_bus_history_get(limit=500))
+    except Exception:
+        pass
+
+    try:
+        from cloudflare_d1 import get_d1_client as _get_d1
+        _d1 = _get_d1()
+        if not _d1.is_blocked():
+            d1_trips_raw = _d1.execute("SELECT * FROM bus_trips ORDER BY created_at DESC LIMIT 500")
+            for t in (d1_trips_raw or []):
+                all_recent_trips.append({
+                    "trip_id": t.get("trip_id"),
+                    "spz": t.get("spz"),
+                    "linka": t.get("linka"),
+                    "destination": t.get("last_stop") or "",
+                    "start_actual": t.get("first_stop_time"),
+                    "end_actual": t.get("last_stop_time"),
+                    "status": t.get("status"),
+                    "created_at": t.get("created_at")
+                })
     except Exception:
         pass
 
@@ -16496,13 +16531,20 @@ def api_depot_history():
     except Exception as e_d1_api:
         data = []
 
-    # Fallback na lokální SQLite tabulku, pokud DB selže nebo je prázdná
-    if not data:
-        try:
-            from local_db import local_depot_history_get
-            data = local_depot_history_get(depot_name=None if is_all_depots else (resolved_name or depot_name), spz=search_q if search_q else None, limit=500, sort_desc=is_desc)
-        except Exception:
-            pass
+    # Spojení s lokální SQLite tabulkou (zajišťuje data i při výpadku D1 a čerstvé záznamy)
+    try:
+        from local_db import local_depot_history_get
+        loc_rows = local_depot_history_get(depot_name=None if is_all_depots else (resolved_name or depot_name), spz=search_q if search_q else None, limit=500, sort_desc=is_desc)
+        if loc_rows:
+            seen_keys = set((str(r.get('spz')), str(r.get('arrived_at'))[:16]) for r in data)
+            for lr in loc_rows:
+                k = (str(lr.get('spz')), str(lr.get('arrived_at'))[:16])
+                if k not in seen_keys:
+                    seen_keys.add(k)
+                    data.append(lr)
+            data.sort(key=lambda x: str(x.get('arrived_at') or ''), reverse=is_desc)
+    except Exception:
+        pass
 
     # Doplnění aktivně parkujících z paměti DEPOT_ACTIVE_SESSIONS
     active_in_depot = []

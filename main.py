@@ -427,6 +427,219 @@ def _get_fallback_users():
         print(f"[FALLBACK] Chyba cteni users_backup.json: {e}", flush=True)
     return []
 
+_USERS_FILE_LOCK = threading.Lock()
+
+def _save_user_to_backup(user_dict: dict):
+    """Bezpečně a atomicky uloží nebo aktualizuje uživatele v users_backup.json."""
+    if not user_dict:
+        return
+    with _USERS_FILE_LOCK:
+        try:
+            users = _get_fallback_users()
+            u_id = user_dict.get("id")
+            d_id = str(user_dict.get("discord_id") or "").strip()
+            app_id = user_dict.get("app_id")
+            email = str(user_dict.get("email") or "").strip().lower()
+
+            found_idx = -1
+            for idx, existing in enumerate(users):
+                if u_id and existing.get("id") == u_id:
+                    found_idx = idx
+                    break
+                if d_id and d_id not in ("None", "", "čeká na odpověd") and str(existing.get("discord_id")) == d_id:
+                    found_idx = idx
+                    break
+                if app_id and existing.get("app_id") == app_id:
+                    found_idx = idx
+                    break
+                if email and str(existing.get("email", "")).lower() == email:
+                    found_idx = idx
+                    break
+
+            if found_idx >= 0:
+                users[found_idx].update(user_dict)
+            else:
+                users.append(user_dict)
+
+            temp_p = _USERS_BACKUP_FILE + ".tmp"
+            with open(temp_p, "w", encoding="utf-8") as f:
+                json.dump(users, f, ensure_ascii=False, indent=2)
+            if os.path.exists(_USERS_BACKUP_FILE):
+                os.replace(temp_p, _USERS_BACKUP_FILE)
+            else:
+                os.rename(temp_p, _USERS_BACKUP_FILE)
+        except Exception as e:
+            print(f"[USER BACKUP SAVE ERROR] {e}", flush=True)
+
+def find_user_record(target: str) -> dict | None:
+    """
+    Univerzální vyhledávač uživatele v DB (Turso) i v lokálním users_backup.json:
+    - Podporuje @mention (<@123...>, <@!123...>)
+    - Discord ID (např. 18-19 číslic)
+    - App ID (#1040, 1040)
+    - DB ID (12 nebo id=12)
+    - Přezdívku (nick)
+    - E-mail
+    """
+    if not target:
+        return None
+    raw = str(target).strip()
+    if not raw:
+        return None
+
+    if (raw.startswith("<@") or raw.startswith("<@!")) and raw.endswith(">"):
+        raw = raw.lstrip("<@!").rstrip(">").strip()
+
+    is_num = raw.isdigit()
+    is_app_id_format = raw.startswith("#") and raw[1:].isdigit()
+    app_id_val = int(raw[1:]) if is_app_id_format else (int(raw) if is_num and len(raw) <= 5 else None)
+
+    db = get_db()
+    if db:
+        try:
+            if is_num and len(raw) >= 10:
+                res = db.table("users").select("*").eq("discord_id", raw).execute().data
+                if res: return res[0]
+            if app_id_val is not None:
+                res = db.table("users").select("*").eq("app_id", app_id_val).execute().data
+                if res: return res[0]
+            if is_num:
+                res = db.table("users").select("*").eq("id", int(raw)).execute().data
+                if res: return res[0]
+            res = db.table("users").select("*").or_(f"nick.ilike.{raw},email.ilike.{raw}").execute().data
+            if res: return res[0]
+        except Exception as e:
+            pass
+
+    # Fallback prohledání users_backup.json
+    for u in _get_fallback_users():
+        u_d_id = str(u.get("discord_id") or "").strip()
+        u_app_id = u.get("app_id")
+        u_id = u.get("id")
+        u_nick = str(u.get("nick") or "").lower()
+        u_email = str(u.get("email") or "").lower()
+
+        if is_num and len(raw) >= 10 and u_d_id == raw:
+            return u
+        if app_id_val is not None and u_app_id == app_id_val:
+            return u
+        if is_num and u_id == int(raw):
+            return u
+        if u_nick == raw.lower() or u_email == raw.lower():
+            return u
+
+    return None
+
+def ensure_user_in_db(discord_id=None, email=None, nick=None, token=None):
+    """
+    Zaručuje vytvoření a validaci uživatele v databázi (Turso + users_backup.json):
+    - Přidělí správné app_id (Discord < 2000 od 1001, Email >= 2000 od 2001)
+    - Uloží do Turso a současně do trvalé users_backup.json
+    - Ověří existenci záznamu
+    Vrací: (success: bool, user_obj: dict | None, reason: str)
+    """
+    db = get_db()
+    d_id_str = str(discord_id).strip() if discord_id else None
+    email_str = str(email).strip().lower() if email else None
+    nick_str = str(nick).strip() if nick else ("Uživatel" if d_id_str else email_str)
+
+    existing = None
+    if d_id_str:
+        existing = find_user_record(d_id_str)
+    elif email_str:
+        existing = find_user_record(email_str)
+
+    if existing:
+        if token:
+            existing["download_token"] = token
+            if db:
+                try:
+                    if d_id_str:
+                        db.table("users").update({"download_token": token}).eq("discord_id", d_id_str).execute()
+                    elif existing.get("id"):
+                        db.table("users").update({"download_token": token}).eq("id", existing["id"]).execute()
+                except Exception:
+                    pass
+            _save_user_to_backup(existing)
+        return True, existing, "exists"
+
+    all_fallback = _get_fallback_users()
+    new_app_id = 1001 if d_id_str else 2001
+
+    if d_id_str:
+        highest = 1000
+        if db:
+            try:
+                h_res = db.table("users").select("app_id").lt("app_id", 2000).order("app_id", desc=True).limit(1).execute().data
+                if h_res and h_res[0].get("app_id"):
+                    highest = max(highest, int(h_res[0]["app_id"]))
+            except Exception:
+                pass
+        for fb in all_fallback:
+            aid = fb.get("app_id")
+            if aid and isinstance(aid, int) and aid < 2000:
+                highest = max(highest, aid)
+        new_app_id = highest + 1
+    else:
+        highest = 2000
+        if db:
+            try:
+                h_res = db.table("users").select("app_id").gte("app_id", 2000).order("app_id", desc=True).limit(1).execute().data
+                if h_res and h_res[0].get("app_id"):
+                    highest = max(highest, int(h_res[0]["app_id"]))
+            except Exception:
+                pass
+        for fb in all_fallback:
+            aid = fb.get("app_id")
+            if aid and isinstance(aid, int) and aid >= 2000:
+                highest = max(highest, aid)
+        new_app_id = highest + 1
+
+    max_db_id = max([u.get("id", 0) for u in all_fallback] + [100])
+    new_user = {
+        "id": max_db_id + 1,
+        "app_id": new_app_id,
+        "discord_id": d_id_str if d_id_str else "čeká na odpověd",
+        "nick": nick_str,
+        "role": "User",
+        "hwid": "",
+        "ip_address": "",
+        "is_banned": False,
+        "is_deleted": False,
+        "deleted_at": "",
+        "dashboard_access": False,
+        "login_token": "",
+        "download_token": token or "",
+        "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M"),
+        "last_active": None,
+        "is_online": 0,
+        "launch_count": 0,
+        "total_time": 0,
+        "admin_bypass": 0,
+        "email": email_str,
+        "web_session_token": None,
+        "avatar_url": None,
+        "web_login_at": None,
+        "notify": None,
+        "dashboard_level": "",
+        "login_token_expires_at": "0"
+    }
+
+    if db:
+        try:
+            ins = db.table("users").insert(new_user).execute()
+            if ins and ins.data:
+                new_user = ins.data[0]
+        except Exception as e_ins:
+            print(f"[ENSURE USER DB INSERT] {e_ins}", flush=True)
+
+    _save_user_to_backup(new_user)
+
+    verify = find_user_record(d_id_str or email_str)
+    if verify:
+        return True, verify, "created"
+    return False, None, "Nepodařilo se ověřit zápis uživatele v databázi."
+
 _VERSIONS_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "versions_backup.json")
 
 def _get_fallback_versions():
@@ -2182,7 +2395,7 @@ class DynamicDownloadView(discord.ui.View):
                             except: pass
                             if self.values[0] == "none": return await i3.followup.send("Pro vaše role nejsou dostupné žádné verze.", ephemeral=True)
                             t = str(uuid.uuid4())
-                            get_db().table("users").update({"download_token": t}).eq("discord_id", str(i3.user.id)).execute()
+                            ensure_user_in_db(discord_id=str(i3.user.id), nick=i3.user.display_name or i3.user.name, token=t)
                             link = f"https://datacorebot.koyeb.app/download/{t}?v={self.values[0]}"
                             await i3.followup.send(content=f"**Odkaz připraven:**\n🔗 {link}\n*Platí jen pro Vás.*", ephemeral=True)
 
@@ -2390,11 +2603,14 @@ def get_launcher_user(token):
         return None
     token = str(token).strip()
 
-    # 1. Kontrola v paměťové cache
+    # 1. Kontrola v paměťové cache s ověřením v DB
     entry = LAUNCHER_TOKENS.get(token)
     if entry:
         if time.time() <= entry.get("expires_at", 0):
-            return entry
+            d_id = entry.get("discord_id")
+            verified = find_user_record(d_id)
+            if verified:
+                return verified
         else:
             LAUNCHER_TOKENS.pop(token, None)
 
@@ -2415,6 +2631,11 @@ def get_launcher_user(token):
                 return u
         except Exception as e_lk:
             print(f"[LAUNCHER TOKEN DB LOOKUP ERR] {e_lk}", flush=True)
+
+    # 2b. Kontrola v users_backup.json
+    for u in _get_fallback_users():
+        if u.get("download_token") == token:
+            return u
 
     # 3. Fallback na přihlášeného uživatele v prohlížeči
     try:
@@ -4474,24 +4695,17 @@ def process_web_auth_email(email, intent, client_ip, nick=None):
         return {"status": "error", "message": "Databáze není dostupná."}, 500
     
     try:
-        user = db.table("users").select("*").eq("email", email_str).execute().data
-        if not user:
+        user_rec = find_user_record(email_str)
+        if not user_rec:
             if not nick_str:
                 return {"status": "error", "message": "Pro registraci přes e-mail je povinné zadat přezdívku."}, 400
-            try:
-                highest = db.table("users").select("app_id").gte("app_id", 2000).order("app_id", desc=True).limit(1).execute().data
-                if highest and highest[0].get("app_id"):
-                    highest_val = int(highest[0]["app_id"])
-                    new_app_id = 2001 if highest_val < 2001 else highest_val + 1
-                else:
-                    new_app_id = 2001
-            except:
-                new_app_id = 2001
-            insert_data = {"email": email_str, "nick": nick_str, "registered_at": datetime.now().strftime("%d.%m.%Y %H:%M"), "is_banned": False, "is_deleted": False, "role": "User", "login_token": "", "discord_id": "čeká na odpověd"}
-            if new_app_id: insert_data["app_id"] = new_app_id
-            db.table("users").insert(insert_data).execute()
+            ok, user_rec, reason = ensure_user_in_db(email=email_str, nick=nick_str)
+            if not ok or not user_rec:
+                return {"status": "error", "message": f"Registrace selhala: {reason}"}, 500
         else:
-            if nick_str and not user[0].get("nick"):
+            if nick_str and not user_rec.get("nick"):
+                user_rec["nick"] = nick_str
+                _save_user_to_backup(user_rec)
                 try:
                     db.table("users").update({"nick": nick_str}).eq("email", email_str).execute()
                 except Exception:
@@ -6877,7 +7091,12 @@ def api_launcher_email_verify():
 @app.route('/api/launcher/user_info', methods=['POST'])
 def api_launcher_user_info():
     discord_id = request.json.get('discord_id') if request.is_json else None
-    if not discord_id: return jsonify({"status": "error", "message": "Missing discord_id"})
+    if not discord_id: return jsonify({"status": "error", "message": "Missing discord_id"}), 400
+    user_record = find_user_record(str(discord_id))
+    if not user_record:
+        return jsonify({"status": "error", "message": "Účet neexistuje v databázi. Spuštění aplikace není povoleno. Nejprve se zaregistrujte na webu nebo přes Discord."}), 403
+    if user_record.get("is_banned"):
+        return jsonify({"status": "banned", "message": "Tento účet má BAN."}), 403
     try:
         role, is_banned = get_cached_user_role(discord_id)
         avatar_url = ""
@@ -6933,9 +7152,12 @@ def api_launcher_versions():
     try:
         db = get_db()
         if discord_id:
+            user_rec = find_user_record(str(discord_id))
+            if not user_rec:
+                return jsonify({"status": "error", "message": "Účet neexistuje v databázi. Spuštění ani stažení verzí není povoleno."}), 403
+            if user_rec.get("is_banned"):
+                return jsonify({"status": "banned", "message": "Tento účet má BAN."}), 403
             role, is_banned = get_cached_user_role(discord_id)
-            if is_banned:
-                return jsonify({"status": "banned", "message": "Tento účet má BAN."})
             user_role = role
         
         user_role = normalize_role_string(user_role)
@@ -9239,14 +9461,18 @@ async def dashremove(ctx, target_id: str):
         else: await ctx.send(f"✅ Dashboard přístup odebrán pro `{clean_id}`.")
 
 
-@bot.command()
-async def id(ctx, user: discord.User = None):
-    """Zobrazí Discord ID uživatele. Pokud není zadán uživatel, zobrazí tvé ID."""
-    target = user or ctx.author
-    if target == ctx.author:
-        await ctx.send(f"🆔 Tvoje Discord ID je: `{target.id}`")
+@bot.command(name="id")
+async def cmd_id(ctx, *, user_arg: str = None):
+    """Zobrazí Discord ID a App ID v databázi."""
+    target_str = user_arg.strip() if user_arg else str(ctx.author.id)
+    u = find_user_record(target_str)
+    app_id_str = f"#{u.get('app_id')}" if (u and u.get('app_id')) else "Není v databázi"
+    nick_str = f" ({u.get('nick')})" if (u and u.get('nick')) else ""
+    if user_arg and (user_arg.startswith("<@") or user_arg.isdigit()):
+        d_id = target_str.lstrip("<@!").rstrip(">").strip()
+        await ctx.send(f"🆔 **Údaje uživatele <@{d_id}>{nick_str}:**\n• Discord ID: `{d_id}`\n• App ID v DB: **`{app_id_str}`**")
     else:
-        await ctx.send(f"🆔 Discord ID uživatele {target.mention} je: `{target.id}`")
+        await ctx.send(f"🆔 **Tvoje údaje{nick_str}:**\n• Discord ID: `{ctx.author.id}`\n• App ID v DB: **`{app_id_str}`**")
 
 @bot.command()
 async def auth(ctx):
@@ -9280,21 +9506,46 @@ def _clean_discord_id(val, ctx=None):
     if m: return m.group(0)
     return str(val).strip().lstrip("<@!").lstrip("<@").rstrip(">").strip()
 
-@bot.command()
-@check_sm_role()
-async def info(ctx, discord_id: str = None):
-    """Zobrazí info o uživateli. Vyžaduje roli SM."""
-    cleaned_id = _clean_discord_id(discord_id, ctx)
-    if not cleaned_id: return await ctx.send("❌ Zadejte ID nebo označte uživatele.")
-    db = get_db()
-    if not db: return
-    u = db.table("users").select("*").eq("discord_id", cleaned_id).execute().data
-    if not u: return await ctx.send("❌ Uživatel nenalezen.")
-    embed = discord.Embed(title=f"Uživatel: {u[0].get('nick')}", color=0x38bdf8)
-    embed.add_field(name="App ID", value=f"#{u[0].get('app_id')}", inline=True)
-    embed.add_field(name="Discord ID", value=u[0].get('discord_id'), inline=True)
-    embed.add_field(name="Role", value=u[0].get('role'), inline=True)
-    embed.add_field(name="Banned", value="Ano" if u[0].get('is_banned') else "Ne", inline=True)
+@bot.command(name="info")
+async def info(ctx, *, target: str = None):
+    """Vyhledá uživatele v databázi dle Discord ID, @zmínky, App ID (#1040, 1040) nebo DB ID."""
+    if not _has_admin_perms(ctx.author, ctx.guild):
+        if target and str(ctx.author.id) not in target:
+            return await ctx.send(f"❌ {ctx.author.mention}, prohlížet údaje ostatních uživatelů mohou pouze administrátoři.", delete_after=10)
+        target = str(ctx.author.id)
+
+    if not target:
+        target = str(ctx.author.id)
+
+    u = find_user_record(target)
+    if not u:
+        return await ctx.send(f"❌ Uživatel `{target}` nebyl v databázi nalezen.")
+
+    nick = u.get("nick") or "Neznámý"
+    app_id = f"#{u.get('app_id')}" if u.get("app_id") else "Nezadáno"
+    discord_id = str(u.get("discord_id") or "Nezadáno")
+    db_id = str(u.get("id") or "Nezadáno")
+    role = str(u.get("role") or "User")
+    is_banned = "Ano ⛔" if u.get("is_banned") else "Ne ✅"
+    registered = u.get("registered_at") or "-"
+    email = u.get("email") or "-"
+    hwid = u.get("hwid") or "-"
+
+    embed = discord.Embed(
+        title=f"👤 Informace o uživateli: {nick}",
+        color=0xef4444 if u.get("is_banned") else 0x38bdf8
+    )
+    embed.add_field(name="Přezdívka (Jméno)", value=f"**{nick}**", inline=True)
+    embed.add_field(name="App ID", value=f"**`{app_id}`**", inline=True)
+    embed.add_field(name="Discord ID", value=f"`{discord_id}`", inline=True)
+    embed.add_field(name="Databázové ID", value=f"`{db_id}`", inline=True)
+    embed.add_field(name="Role", value=f"`{role}`", inline=True)
+    embed.add_field(name="BAN", value=is_banned, inline=True)
+    if email != "-":
+        embed.add_field(name="E-mail", value=f"`{email}`", inline=True)
+    embed.add_field(name="Registrován", value=f"`{registered}`", inline=True)
+    if hwid != "-":
+        embed.add_field(name="HWID", value=f"`{hwid}`", inline=True)
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -9603,40 +9854,20 @@ class LauncherRulesView(discord.ui.View):
             "expires_at": time.time() + 7200
         }
 
-        # Zápis do databáze a kontrola banu
-        db = get_db()
-        if db:
-            try:
-                chk = db.table("users").select("*").eq("discord_id", d_id).execute()
-                if chk.data:
-                    if chk.data[0].get("is_banned"):
-                        LAUNCHER_TOKENS.pop(token, None)
-                        return await interaction.followup.send(
-                            "**⛔ Přístup zamítnut:** Váš účet má aktivní BAN. Stažení Launcheru není povoleno.",
-                            ephemeral=True
-                        )
-                    db.table("users").update({"download_token": token}).eq("discord_id", d_id).execute()
-                else:
-                    # Uživatel dosud v DB neexistuje – zaregistrovat ho a uložit download_token
-                    hid = db.table("users").select("app_id").order("app_id", desc=True).limit(1).execute()
-                    nid = hid.data[0]["app_id"] + 1 if (hid.data and hid.data[0].get("app_id")) else 1000
-                    db.table("users").insert({
-                        "app_id": nid,
-                        "discord_id": d_id,
-                        "nick": user_nick,
-                        "role": "User",
-                        "hwid": "",
-                        "ip_address": "",
-                        "is_banned": False,
-                        "is_deleted": False,
-                        "deleted_at": "",
-                        "dashboard_access": False,
-                        "login_token": "",
-                        "download_token": token,
-                        "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M")
-                    }).execute()
-            except Exception as e_tok:
-                print(f"[LAUNCHER AGREE DB ERROR] {e_tok}", flush=True)
+        # Zápis a validace uživatele v databázi (musí existovat před stažením!)
+        success, u_data, reason = ensure_user_in_db(discord_id=d_id, nick=user_nick, token=token)
+        if not success or not u_data:
+            LAUNCHER_TOKENS.pop(token, None)
+            return await interaction.followup.send(
+                f"❌ **Chyba registrace v databázi:** {reason}\nStažení Launcheru nemohlo být zahájeno. Zkuste to prosím znovu.",
+                ephemeral=True
+            )
+        if u_data.get("is_banned"):
+            LAUNCHER_TOKENS.pop(token, None)
+            return await interaction.followup.send(
+                "**⛔ Přístup zamítnut:** Váš účet má aktivní BAN. Stažení Launcheru není povoleno.",
+                ephemeral=True
+            )
 
         await interaction.followup.send(
             content=(
