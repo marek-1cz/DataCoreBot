@@ -1887,7 +1887,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
       <span><i class="fas fa-spinner fa-spin"></i> Mapa se startuje</span>
       <button onclick="document.getElementById('sw').style.display='none'" style="background:rgba(255,255,255,0.1);color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer;">Vypnout</button>
     </div>
-    <div style="font-size:12px;font-weight:normal;opacity:.9;">Probiha nacitani dat - vyckejte prosim.</div>
+    <div style="font-size:12px;font-weight:normal;opacity:.9;">Probíhá načítání dat — vyčkejte prosím…</div>
     <div id="sw-cd" style="margin-top:5px;font-size:11px;opacity:.8;"></div>
   </div>
   <div id="ttm"><div id="ttb">
@@ -2073,7 +2073,7 @@ body.nav-static #nav-pin-btn, body.nav-glass:not(.nav-glass-hide) #nav-pin-btn {
       <div id="h-trip" class="ht">Spoj: -</div>
       <div id="h-dest" class="hd">Načítám…</div>
       <div class="hr"><span style="color:#94a3b8;">SPZ:</span><span id="h-spz">-</span></div>
-      <div class="hr"><span style="color:#94a3b8;">Zpozdeni:</span><span id="h-delay">-</span></div>
+      <div class="hr"><span style="color:#94a3b8;">Zpoždění:</span><span id="h-delay">-</span></div>
       <div class="hr"><span style="color:#94a3b8;">Status:</span><span id="h-status" style="color:#94a3b8;font-size:11px;">-</span></div>
       <div class="hac"><button class="hb hb-jr" id="h-jr"><i class="fas fa-list"></i> JR</button><button class="hb hb-route" id="h-route" onclick="_hudShowRoute()" style="background:#1e3a8a;color:#93c5fd;" title="Zobrazit trasu"><i class="fas fa-route"></i></button><button class="hb" id="h-pin" onclick="togglePin()" style="background:#f59e0b;color:#0f172a;" title="Připnout kameru"><i class="fas fa-thumbtack"></i></button><button class="hb hb-st" onclick="stopFollow()"><i class="fas fa-times"></i></button></div>
     </div>
@@ -13290,7 +13290,15 @@ def _full_page(title, body_html, is_map=False):
 }
 </style>"""
     canonical_tag = '<link rel="canonical" href="https://datacorebot.koyeb.app/mapa">' if is_map else ''
-    meta_desc = '<meta name="description" content="Živá interaktivní mapa autobusů IDPK v reálném čase od DataCoreBot (marekk_czz). GPS poloha vozidel, zpoždění, linky a vozovny v Plzeňském kraji.">' if is_map else ''
+    meta_desc = '<meta name="description" content="Živá interaktivní mapa autobusů IDPK v reálném čase od DataCoreBot. GPS poloha vozidel, zpoždění, linky a vozovny v Plzeňském kraji.">' if is_map else ''
+    og_tags = (
+        '<meta property="og:title" content="Živá Interaktivní Mapa Autobusů IDPK | DataCoreBot">\n'
+        '<meta property="og:description" content="Sledujte autobusy IDPK v reálném čase na interaktivní mapě s GPS polohou, zpožděním a trasami spojů.">\n'
+        '<meta property="og:type" content="website">\n'
+        '<meta property="og:url" content="https://datacorebot.koyeb.app/mapa">\n'
+        '<meta property="og:image" content="https://datacorebot.koyeb.app/static/img/datacorebot_pf-lepsi.png">\n'
+        '<meta name="twitter:card" content="summary_large_image">'
+    ) if is_map else ''
     json_ld = '''<script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -13316,6 +13324,7 @@ def _full_page(title, body_html, is_map=False):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {canonical_tag}
 {meta_desc}
+{og_tags}
 {json_ld}
 {map_head}
 </head>
@@ -13429,7 +13438,7 @@ def _get_avatar_html(req):
             pass
             
     return """
-    <a href="/register" class="user-avatar-wrap" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
+    <a href="/login" class="user-avatar-wrap" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
       <div class="user-avatar-circle" style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:1px solid #94a3b8; display:flex; align-items:center; justify-content:center; overflow:hidden; transition:0.3s; flex-shrink:0;">
         <i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>
       </div>
@@ -13437,8 +13446,13 @@ def _get_avatar_html(req):
     </a>
     """
 
-@mapa_bp.route('/mapa')
 @mapa_bp.route('/old/mapa')
+def stranka_old_mapa():
+    if not session.get('logged_in') and not is_admin_bypass_active():
+        return redirect('/', code=302)
+    return stranka_mapa()
+
+@mapa_bp.route('/mapa')
 def stranka_mapa():
     try:
         from main import get_db
@@ -13452,7 +13466,9 @@ def stranka_mapa():
         pass
 
     avatar_html = _get_avatar_html(request)
-    html = HTML_MAPA.replace('__ADMIN_BANNER__', '').replace('__IS_ADMIN__', 'false').replace('__AD_BTN__', _AD_BTN_NORMAL).replace('__AVATAR__', avatar_html)
+    is_admin_logged = bool(session.get('logged_in') or is_admin_bypass_active())
+    ad_btn = _AD_BTN_NORMAL if is_admin_logged else ''
+    html = HTML_MAPA.replace('__ADMIN_BANNER__', '').replace('__IS_ADMIN__', 'false').replace('__AD_BTN__', ad_btn).replace('__AVATAR__', avatar_html)
     return _full_page("Mapa", html, is_map=True)
 
 
@@ -14827,11 +14843,16 @@ def stranka_historie_index(spz=None):
 
 @mapa_bp.route('/old/historie')
 def stranka_historie_old():
+    if not session.get('logged_in') and not is_admin_bypass_active():
+        return redirect('/', code=302)
     return _full_page("Historie", HTML_HISTORIE_INDEX)
 
-@mapa_bp.route('/soukromi')
 @mapa_bp.route('/gdpr')
 @mapa_bp.route('/privacy')
+def redirect_gdpr_privacy_bp():
+    return redirect('/soukromi', code=301)
+
+@mapa_bp.route('/soukromi')
 def stranka_soukromi_bp():
     try:
         curr_dir = os.path.dirname(os.path.abspath(__file__))
@@ -14856,6 +14877,8 @@ def stranka_soukromi_bp():
 
 @mapa_bp.route('/old/historie/<spz>')
 def stranka_historie_detail_old(spz):
+    if not session.get('logged_in') and not is_admin_bypass_active():
+        return redirect('/', code=302)
     return _full_page(f"V\u016fz {spz}", HTML_HISTORIE_DETAIL.replace('__SPZ__', spz))
 
 

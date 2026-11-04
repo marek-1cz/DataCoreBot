@@ -130,8 +130,8 @@ select option{background:#0a1230;color:var(--text)}
 .plate.lg .p-wrap{padding:6px 16px;font-size:1.6rem;gap:10px}
 .plate.lg b{padding:5px 9px 4px;min-width:36px}.plate.lg b svg{width:24px;height:24px}.plate.lg b i{font-size:.78rem}.plate.lg{border-radius:10px}
 .plate .p-stk{display:inline-flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;margin:0 1px}
-.plate .stk-r{display:block;width:7px;height:7px;border-radius:50%;border:1px dashed #94a3b8;background:rgba(203,213,225,0.4)}
-.plate.lg .stk-r{width:11px;height:11px;border-width:1.5px}
+.plate .stk-r{display:block;width:8px;height:8px;border-radius:50%;border:1.5px solid #cbd5e1;background:transparent;box-shadow:inset 0 0 0 1px #94a3b8}
+.plate.lg .stk-r{width:14px;height:14px;border:1.5px solid #cbd5e1;box-shadow:inset 0 0 0 1.5px #94a3b8}
 .line{display:inline-block;min-width:44px;text-align:center;padding:3px 10px;border-radius:8px;background:#0b0b0b;color:var(--yellow);border:1px solid rgba(255,201,51,.5);
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:800;text-shadow:0 0 8px rgba(255,201,51,.55);font-size:.92rem}
 .st{display:inline-flex;align-items:center;gap:7px;padding:4px 12px 4px 10px;border-radius:999px;font-size:.8rem;font-weight:700;white-space:nowrap;border:1px solid transparent}
@@ -700,7 +700,7 @@ const norm=s=>String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-�
 const safeColor=c=>/^#[0-9a-f]{6}$/i.test(c||'')?c:'#2f6bff';
 /* vlajka EU: 12 zlatých hvězd v kruhu */
 const EU=(()=>{
-  const star=(cx,cy,R,r)=>{let p=[];for(let k=0;k<10;k++){const a=k*Math.PI/5,rr=k%2?r:R;p.push((cx+rr*Math.sin(a)).toFixed(2)+','+(cy-rr*Math.cos(a)).toFixed(2))}return '<polygon points="'+p.join(' ')+'" fill="#ffd617"/>'};
+  const star=(cx,cy,R,r)=>{let p=[];for(let k=0;k<10;k++){const a=k*Math.PI/5,rr=k%2?r:R;p.push((cx+rr*Math.sin(a)).toFixed(2)+','+(cy-rr*Math.cos(a)).toFixed(2))}return '<polygon points="'+p.join(' ')+'" fill="#ffffff"/>'};
   let s='<svg viewBox="0 0 24 24" aria-hidden="true">';
   for(let i=0;i<12;i++){const a=i*Math.PI/6;s+=star(12+8.4*Math.sin(a),12-8.4*Math.cos(a),2.2,.95)}
   return s+'</svg>';

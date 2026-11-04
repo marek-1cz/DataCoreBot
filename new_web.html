@@ -16,12 +16,15 @@
 if(t)document.documentElement.classList.add('ios');})();
 </script>
 <title>Projekt OIS IDPK & Živá Mapa Autobusů | DataCoreBot</title>
-<meta name="description" content="Oficiální portál Projektu OIS IDPK a živé interaktivní mapy autobusů IDPK od tvůrce DataCoreBot (marekk_czz). Sledování reálné polohy autobusů v Plzeňském kraji, simulátor palubních počítačů a hlášení zastávek.">
+<meta name="description" content="Oficiální portál Projektu OIS IDPK a živé interaktivní mapy autobusů IDPK od DataCoreBot. Sledování reálné polohy autobusů v Plzeňském kraji, simulátor palubních počítačů a hlášení zastávek.">
 <link rel="canonical" href="https://datacorebot.koyeb.app/">
 <meta property="og:title" content="Projekt OIS IDPK & Živá Mapa Autobusů | DataCoreBot">
-<meta property="og:description" content="Oficiální portál Projektu OIS IDPK a živé interaktivní mapy autobusů IDPK od DataCoreBot (marekk_czz).">
+<meta property="og:description" content="Oficiální portál Projektu OIS IDPK a živé interaktivní mapy autobusů IDPK od DataCoreBot.">
 <meta property="og:url" content="https://datacorebot.koyeb.app/">
 <meta property="og:type" content="website"><meta property="og:locale" content="cs_CZ">
+<meta property="og:image" content="https://datacorebot.koyeb.app/static/img/datacorebot_pf-lepsi.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://datacorebot.koyeb.app/static/img/datacorebot_pf-lepsi.png">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -39,7 +42,6 @@ if(t)document.documentElement.classList.add('ios');})();
   "description": "Nezávislý fanouškovský projekt OIS IDPK (palubní počítače) a živé sledování autobusů IDPK v reálném čase. Nezávislý projekt na doméně datacorebot.koyeb.app."
 }
 </script>
-<meta name="twitter:card" content="summary">
 <link rel="icon" type="image/png" href="/static/img/datacorebot_pf-lepsi.png">
 <script>
 /* ===== Výkonnostní profil: při prvním načtení odhadne sílu zařízení a připojení ===== */
@@ -1501,16 +1503,16 @@ body.night .aurora{opacity:.4}
 <div class="ois-nav" role="navigation" aria-label="Hlavní navigace"><span class="nav-pill" aria-hidden="true"></span><span class="nav-arr l" aria-hidden="true"><i>‹</i></span>
   <a class="logo" href="#/" data-r="home"><img src="/static/img/datacorebot_pf-lepsi.png" alt="">OIS IDPK</a>
   <a href="#/" data-r="home">Domů</a>
-  <a href="#/download" data-r="download">Download</a>
-  <a href="#/team" data-r="team">Náš tým</a>
-  <a href="#/stats" data-r="stats">Statistiky</a>
-  <a href="#/supporters" data-r="supporters">Podporovatelé</a>
-  <a href="#/provoz" data-r="provoz">Provoz IDPK</a>
+  <a href="/download" data-r="download">Download</a>
+  <a href="/team" data-r="team">Náš tým</a>
+  <a href="/stats" data-r="stats">Statistiky</a>
+  <a href="/supporters" data-r="supporters">Podporovatelé</a>
+  <a href="/provoz" data-r="provoz">Provoz IDPK</a>
   <a href="/mapa">Interaktivní mapa IDPK</a>
   <a href="/led-panel">LED Panel Simulátor</a>
   <a href="/historie">Historie vozů</a>
   <a href="/podpora" target="_blank" style="color:var(--cyan);"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-3px;margin-right:4px;display:inline-block;"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l3.54 3.54M15.53 15.53l3.54 3.54M4.93 19.07l3.54-3.54M15.53 8.47l3.54-3.54"/></svg>Podpora / Hlášení</a>
-  <a class="cta" href="#/demo" data-r="demo">Demo verze</a>
+  <a class="cta" href="/demo" data-r="demo">Demo verze</a>
   <span class="nav-arr r" aria-hidden="true"><i>›</i></span>
   <button class="gearbtn" id="setBtn" type="button" aria-label="Nastavení" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M10.39 4.78 L10.68 1.89 L13.32 1.89 L13.61 4.78 L15.96 5.75 L18.22 3.91 L20.09 5.78 L18.25 8.04 L19.22 10.39 L22.11 10.68 L22.11 13.32 L19.22 13.61 L18.25 15.96 L20.09 18.22 L18.22 20.09 L15.96 18.25 L13.61 19.22 L13.32 22.11 L10.68 22.11 L10.39 19.22 L8.04 18.25 L5.78 20.09 L3.91 18.22 L5.75 15.96 L4.78 13.61 L1.89 13.32 L1.89 10.68 L4.78 10.39 L5.75 8.04 L3.91 5.78 L5.78 3.91 L8.04 5.75Z"/><circle cx="12" cy="12" r="3.1"/></svg></button>
   <button class="acct" id="acctBtn" type="button" aria-label="Účet" aria-haspopup="true" aria-expanded="false"><span class="av" id="acctAv"><svg viewBox="0 0 48 48"><use href="#ic-user" width="48" height="48"/></svg></span><span class="an" id="acctName" hidden></span></button>
@@ -1529,25 +1531,25 @@ body.night .aurora{opacity:.4}
 </div>
 <div class="swipehint l" id="shL" aria-hidden="true"><span>‹</span><b></b></div><div class="swipehint r" id="shR" aria-hidden="true"><b></b><span>›</span></div>
 <div class="msheet" id="menuSheet" aria-hidden="true"><div class="mstack">
-    <a class="mx lead" style="--i:0" href="#/download" data-r="download" aria-label="Download">
+    <a class="mx lead" style="--i:0" href="/download" data-r="download" aria-label="Download">
       <span class="mtx"><small>Software</small><b>Download</b></span>
       <span class="go"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-arrow" width="48" height="48"/></svg></span>
     </a>
     <div class="mrow2">
-      <a class="mx mid" style="--i:1" href="#/" data-r="home" aria-label="Domů"><span class="mi"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-home" width="48" height="48"/></svg></span><b>Domů</b></a>
-      <a class="mx mid" style="--i:2" href="#/supporters" data-r="supporters" aria-label="Podporovatelé"><span class="mi"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-star" width="48" height="48"/></svg></span><b>Podporovatelé</b></a>
+      <a class="mx mid" style="--i:1" href="/" data-r="home" aria-label="Domů"><span class="mi"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-home" width="48" height="48"/></svg></span><b>Domů</b></a>
+      <a class="mx mid" style="--i:2" href="/supporters" data-r="supporters" aria-label="Podporovatelé"><span class="mi"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-star" width="48" height="48"/></svg></span><b>Podporovatelé</b></a>
     </div>
     <div class="mrow2">
-      <a class="mx mid" style="--i:3" href="#/provoz" data-r="provoz" aria-label="Provoz IDPK"><span class="mi"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-light" width="48" height="48"/></svg></span><b>Provoz IDPK</b></a>
+      <a class="mx mid" style="--i:3" href="/provoz" data-r="provoz" aria-label="Provoz IDPK"><span class="mi"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-light" width="48" height="48"/></svg></span><b>Provoz IDPK</b></a>
       <a class="mx mid" style="--i:4" href="/mapa" aria-label="Interaktivní mapa IDPK"><span class="mi"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-map" width="48" height="48"/></svg></span><b>Interaktivní mapa</b></a>
     </div>
     <div class="mrow3">
-      <a class="mx sm" style="--i:4" href="#/team" data-r="team" aria-label="Náš tým"><span class="mi"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-team" width="48" height="48"/></svg></span><b>Tým</b></a>
-      <a class="mx sm" style="--i:5" href="#/stats" data-r="stats" aria-label="Statistiky"><span class="mi"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-stats" width="48" height="48"/></svg></span><b>Statistiky</b></a>
+      <a class="mx sm" style="--i:4" href="/team" data-r="team" aria-label="Náš tým"><span class="mi"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-team" width="48" height="48"/></svg></span><b>Tým</b></a>
+      <a class="mx sm" style="--i:5" href="/stats" data-r="stats" aria-label="Statistiky"><span class="mi"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-stats" width="48" height="48"/></svg></span><b>Statistiky</b></a>
       <a class="mx sm" style="--i:6" href="/led-panel" aria-label="LED Panel Simulátor"><span class="mi"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-led" width="48" height="48"/></svg></span><b>LED panel</b></a>
       <button class="mx sm" style="--i:7" id="setBtnM" type="button" aria-haspopup="dialog" aria-label="Nastavení"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M10.39 4.78 L10.68 1.89 L13.32 1.89 L13.61 4.78 L15.96 5.75 L18.22 3.91 L20.09 5.78 L18.25 8.04 L19.22 10.39 L22.11 10.68 L22.11 13.32 L19.22 13.61 L18.25 15.96 L20.09 18.22 L18.22 20.09 L15.96 18.25 L13.61 19.22 L13.32 22.11 L10.68 22.11 L10.39 19.22 L8.04 18.25 L5.78 20.09 L3.91 18.22 L5.75 15.96 L4.78 13.61 L1.89 13.32 L1.89 10.68 L4.78 10.39 L5.75 8.04 L3.91 5.78 L5.78 3.91 L8.04 5.75Z"/><circle cx="12" cy="12" r="3.1"/></svg></span><b>Nastavení</b></button>
     </div>
-    <a class="mx demo" style="--i:8" href="#/demo" data-r="demo" aria-label="Demo verze"><span class="dot"></span><b>Demo verze</b><span class="go s"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-arrow" width="48" height="48"/></svg></span></a>
+    <a class="mx demo" style="--i:8" href="/demo" data-r="demo" aria-label="Demo verze"><span class="dot"></span><b>Demo verze</b><span class="go s"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-arrow" width="48" height="48"/></svg></span></a>
     <a class="mx lead" style="--i:9; background: rgba(56,189,248,0.12); border-color: rgba(56,189,248,0.35); margin-top: 6px;" href="/podpora" target="_blank" aria-label="Podpora a hlášení chyb">
       <span class="mtx"><small style="color:var(--cyan);">Centrální podpora</small><b style="color:white;"><svg viewBox="0 0 24 24" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;display:inline-block;stroke:currentColor;fill:none;stroke-width:2;"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l3.54 3.54M15.53 15.53l3.54 3.54M4.93 19.07l3.54-3.54M15.53 8.47l3.54-3.54"/></svg>Nahlásit chybu / Dotaz</b></span>
       <span class="go"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-arrow" width="48" height="48"/></svg></span>
@@ -1813,7 +1815,7 @@ body.night .aurora{opacity:.4}
 
     <a class="sbanner reveal" href="#/supporters">
       <span class="sb-ico" aria-hidden="true">⭐</span>
-      <span class="sb-txt"><b>Podporovatelé mají lepší verzi softwaru</b><small>Dřívější přístup k novým verzím, nevěřejné buildy a vlastní žádost o linku. Jednorázově od 65 Kč.</small></span>
+      <span class="sb-txt"><b>Podporovatelé mají lepší verzi softwaru</b><small>Dřívější přístup k novým verzím, neveřejné buildy a vlastní žádost o linku. Jednorázově od 65 Kč.</small></span>
       <span class="sb-go">Zobrazit výhody →</span>
     </a>
 
@@ -2121,12 +2123,12 @@ body.night .aurora{opacity:.4}
           <div class="ft-soc"><a href="https://discord.gg/vmTagbC9mF" target="_blank" rel="noopener">Discord</a><a href="https://buymeacoffee.com/marekk_czz" target="_blank" rel="noopener">☕ Podpořit</a></div>
         </div>
       </div>
-      <nav class="ft-col" aria-label="Stránky"><h4>Stránky</h4><a href="#/">Domů</a><a href="#/download">Download</a><a href="#/team">Náš tým</a><a href="#/stats">Statistiky</a><a href="#/supporters">Podporovatelé</a></nav>
-      <nav class="ft-col" aria-label="Provoz"><h4>Provoz</h4><a href="#/provoz">Provoz IDPK</a><a href="/mapa">Interaktivní mapa</a><a href="/led-panel">LED Panel Simulátor</a><a href="#/demo">Demo verze</a></nav>
+      <nav class="ft-col" aria-label="Stránky"><h4>Stránky</h4><a href="/">Domů</a><a href="/download">Download</a><a href="/team">Náš tým</a><a href="/stats">Statistiky</a><a href="/supporters">Podporovatelé</a><a href="/soukromi">Ochrana soukromí (GDPR)</a></nav>
+      <nav class="ft-col" aria-label="Provoz"><h4>Provoz</h4><a href="/provoz">Provoz IDPK</a><a href="/mapa">Interaktivní mapa</a><a href="/led-panel">LED Panel Simulátor</a><a href="/historie">Historie vozů</a><a href="/podpora">Podpora a hlášení</a><a href="/demo">Demo verze</a></nav>
     </div>
     <div class="ft-bar">
       <div class="ft-credit" id="ftCredit"><svg viewBox="0 0 24 24" fill="none" stroke="#3b9bff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg><span>Vytvořeno vývojářem <b>marekk_czz</b></span></div>
-      <span class="ft-keys">Rychlé hledání <kbd>Ctrl</kbd><kbd>K</kbd></span>
+      <span class="ft-keys">Rychlé hledání <kbd>Ctrl</kbd> + <kbd>K</kbd></span>
       <button class="ft-share" id="ftShare" type="button">Sdílet web ↗</button>
     </div>
   </div>
@@ -2194,7 +2196,7 @@ body.night .aurora{opacity:.4}
       <h3 id="mtitle">Přihlášení</h3>
       <p>Pro stažení se nejprve přihlaste.</p>
     </div>
-    <div class="demo-note" id="demoNote">Demo režim: nic se doopravdy neodesílá. E-mailový kód je <b>123456</b>. Potvrzení v DM nebo odkazu simulujte tlačítkem.</div>
+    
 
     <!-- 1) výběr způsobu -->
     <section data-v="choose">
@@ -2213,7 +2215,9 @@ body.night .aurora{opacity:.4}
       <form id="fEmail" data-t="email" novalidate hidden>
         <label for="inEmail">Váš e-mail</label>
         <input class="inp" id="inEmail" type="email" autocomplete="email" placeholder="jmeno@email.cz">
-        <div class="seg small" id="modeSeg" role="radiogroup" aria-label="Způsob ověření">
+        <label for="inNick" style="margin-top:10px">Přezdívka (povinné pro novou registraci)</label>
+        <input class="inp" id="inNick" type="text" autocomplete="nickname" placeholder="např. Franta">
+        <div class="seg small" id="modeSeg" role="radiogroup" aria-label="Způsob ověření" style="margin-top:12px">
           <button type="button" class="on" data-mode="code" role="radio" aria-checked="true">Kód</button>
           <button type="button" data-mode="link" role="radio" aria-checked="false">Magic link</button>
         </div>
@@ -2228,7 +2232,7 @@ body.night .aurora{opacity:.4}
       <div class="spin"></div>
       <h4>Zkontrolujte Discord</h4>
       <p>Poslali jsme vám zprávu do DM. Potvrďte v ní přihlášení a zde se dokončí automaticky.</p>
-      <button class="btn ghost wide demo-only" type="button" data-demo="confirm">Simulovat potvrzení v DM</button>
+      
       <button class="link resend" type="button" data-resend="discord">Poslat znovu</button>
       <button class="link back" type="button">← Zpět</button>
     </section>
@@ -2255,7 +2259,7 @@ body.night .aurora{opacity:.4}
       <div class="spin"></div>
       <h4>Otevřete odkaz v e-mailu</h4>
       <p id="linkTo">Poslali jsme vám přihlašovací odkaz.</p>
-      <button class="btn ghost wide demo-only" type="button" data-demo="confirm">Simulovat otevření odkazu</button>
+      
       <button class="link resend" type="button" data-resend="email">Poslat znovu</button>
       <button class="link back" type="button">← Zpět</button>
     </section>
@@ -3227,14 +3231,8 @@ document.querySelectorAll('.avatar img').forEach(img=>{
 
   /* ---- volání serveru (v DEMO režimu jen předstírá odpověď) ---- */
   async function api(name,body){
-    if(CONFIG.DEMO){
-      await new Promise(r=>setTimeout(r,650));
-      if(name==='emailVerify')return body.code==='123456'?{ok:true,name:body.email}:{ok:false,error:'Neplatný kód. Zkuste to prosím znovu.'};
-      if(name==='discordStatus')return{confirmed:st.confirmed,name:'Discord '+body.discordId};
-      if(name==='emailStatus')return{confirmed:st.confirmed,name:body.email};
-      return{ok:true};
-    }
-    const r=await fetch(CONFIG.api[name],{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)});
+    const endpoint = (CONFIG.api && CONFIG.api[name]) ? CONFIG.api[name] : ('/api/auth/' + name);
+    const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)});
     const data=await r.json().catch(()=>({}));
     if(!r.ok){
       return {ok: false, error: data.error || data.message || ('Chyba serveru HTTP ' + r.status)};
@@ -3318,10 +3316,12 @@ document.querySelectorAll('.avatar img').forEach(img=>{
   document.getElementById('fEmail').addEventListener('submit',async e=>{
     e.preventDefault();
     const em=document.getElementById('inEmail').value.trim(),btn=e.target.querySelector('button[type=submit]');
+    const nickEl=document.getElementById('inNick');
+    const nickVal=(nickEl ? nickEl.value.trim() : '');
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)){showErr(errEl,'Zadejte platný e-mail.');return}
     showErr(errEl,'');setBusy(btn,true);
     try{
-      const r=await api('emailStart',{email:em,mode:st.mode});
+      const r=await api('emailStart',{email:em,mode:st.mode,nick:nickVal});
       if(!r || !r.ok){
         showErr(errEl, (r && r.error) || 'Nepodařilo se odeslat e-mail. Zkuste to prosím znovu nebo použijte přihlášení přes Discord.');
         setBusy(btn,false);
@@ -3508,8 +3508,16 @@ function showPage(h){
   currentPage=id;
   document.dispatchEvent(new CustomEvent('ois:page',{detail:id}));
 }
-const fromHash=()=>location.hash.replace(/^#\/?/,'')||'home';
-/* každý odkaz začínající #/ přepne stránku hned po kliknutí */
+function getPageFromUrl(){
+  const p = window.location.pathname.replace(/^\/+/, '').split('/')[0];
+  if(PAGE_IDS.includes(p)) return p;
+  if(p === 'demo') return 'demo';
+  const h = window.location.hash.replace(/^#\/?/, '').split('/')[0];
+  if(PAGE_IDS.includes(h)) return h;
+  if(h === 'demo') return 'demo';
+  return 'home';
+}
+
 function openDemoWip(e){
   if(e&&e.preventDefault)e.preventDefault();
   const m=document.getElementById('demoWipModal');
@@ -3526,21 +3534,25 @@ const demoWipModal=document.getElementById('demoWipModal');
 if(demoWipModal)demoWipModal.addEventListener('click',e=>{if(e.target===demoWipModal)closeDemoWip()});
 
 document.addEventListener('click',e=>{
-  const a=e.target.closest&&e.target.closest('a[href^="#/"]');
+  const a=e.target.closest&&e.target.closest('a[data-r], a[href^="#/"], a[href^="/download"], a[href^="/team"], a[href^="/stats"], a[href^="/supporters"], a[href^="/provoz"], a[href^="/demo"]');
   if(!a)return;
-  const href=a.getAttribute('href');
-  if(href==='#/demo'||a.dataset.r==='demo'){
+  const href=a.getAttribute('href')||'';
+  const r=a.dataset.r || href.replace(/^#\/?/, '').replace(/^\//, '');
+  if(r==='demo'||href==='#/demo'||href==='/demo'){
     e.preventDefault();
     openDemoWip(e);
     return;
   }
-  e.preventDefault();
-  showPage(href.replace(/^#\/?/,'')||'home');
-  try{history.pushState(null,'',href)}catch(_){}
+  if(PAGE_IDS.includes(r)||r==='home'){
+    e.preventDefault();
+    const targetPath = (r==='home' ? '/' : '/' + r);
+    try{history.pushState(null,'',targetPath)}catch(_){}
+    showPage(r);
+  }
 });
-window.addEventListener('hashchange',()=>showPage(fromHash()));
-window.addEventListener('popstate',()=>showPage(fromHash()));
-showPage(fromHash());
+window.addEventListener('hashchange',()=>showPage(getPageFromUrl()));
+window.addEventListener('popstate',()=>showPage(getPageFromUrl()));
+showPage(getPageFromUrl());
 
 /* ===== v9: tlačítko do Síně slávy, šipky v menu, scroll animace ===== */
 document.getElementById('toHall').addEventListener('click',()=>{

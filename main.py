@@ -148,14 +148,16 @@ def add_security_headers(response):
         response.headers['Vary'] = 'Origin'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Range'
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
-    # Bezpečnostní hlavicky
+    # Bezpečnostní hlavičky
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     response.headers['Permissions-Policy'] = 'geolocation=(), camera=(), microphone=()'
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['Content-Security-Policy'] = "default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval';"
+    if request.path.startswith(('/dashboard', '/admin', '/debug', '/old', '/mapa_admin', '/blocked', '/login_blocked', '/ucet', '/overeni')):
+        response.headers['X-Robots-Tag'] = 'noindex, nofollow'
     return response
 
 @app.after_request
@@ -424,6 +426,7 @@ _STATS_SUMMARY_CACHE = {"ts": 0, "data": None}
 _SUMMARY_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "summary_backup.json")
 _USERS_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "users_backup.json")
 _AUTH_TOKEN_STATUS: dict = {}  # {str(discord_id): "approved" | "rejected" | "timeout" | "waiting"}
+_DASHBOARD_AUTH_TIMEOUTS: dict = {}  # {str(discord_id): float(lockout_until_timestamp)}
 _SUPPORTERS_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "supporters_backup.json")
 _SUPPORTERS_CACHE = {"ts": 0, "data": []}
 
@@ -1574,9 +1577,14 @@ class AppAuthView(discord.ui.View):
 
 class DashboardAuthView(discord.ui.View):
     def __init__(self, token="", discord_id=""):
-        super().__init__(timeout=None)
+        super().__init__(timeout=300)
         self.token = token
         self.discord_id = str(discord_id)
+
+    async def on_timeout(self):
+        target_id = self.discord_id
+        if target_id:
+            _AUTH_TOKEN_STATUS[str(target_id)] = "timeout"
 
     @discord.ui.button(label="Schválit přístup", style=discord.ButtonStyle.success, emoji="✅", custom_id="dash_auth_approve")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1584,6 +1592,7 @@ class DashboardAuthView(discord.ui.View):
         if str(interaction.user.id) != target_id:
             return await interaction.response.send_message("Toto ověření není pro tebe!", ephemeral=True)
         _AUTH_TOKEN_STATUS[str(target_id)] = "approved"
+        _DASHBOARD_AUTH_TIMEOUTS.pop(str(target_id), None)
         try:
             db = get_db()
             if db:
@@ -1601,6 +1610,8 @@ class DashboardAuthView(discord.ui.View):
         target_id = self.discord_id if self.discord_id else str(interaction.user.id)
         if str(interaction.user.id) != target_id:
             return await interaction.response.send_message("Toto ověření není pro tebe!", ephemeral=True)
+        import time as _t
+        _DASHBOARD_AUTH_TIMEOUTS[str(target_id)] = _t.time() + 300
         _AUTH_TOKEN_STATUS[str(target_id)] = "rejected"
         try:
             db = get_db()
@@ -1608,7 +1619,7 @@ class DashboardAuthView(discord.ui.View):
                 db.table("users").update({"login_token": "rejected"}).eq("discord_id", target_id).execute()
         except Exception:
             pass
-        await interaction.response.edit_message(content="❌ **Přístup na Dashboard zamítnut.**", embed=None, view=None)
+        await interaction.response.edit_message(content="❌ **Přístup na Dashboard zamítnut.** Žádosti pro toto ID jsou na 5 minut zablokovány.", embed=None, view=None)
 
 
 intents = discord.Intents.default()
@@ -2157,7 +2168,7 @@ def _get_avatar_html(req):
                 """
         except: pass
     return """
-    <a href="/register" class="user-avatar-wrap" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
+    <a href="/login" class="user-avatar-wrap" style="margin-left:15px; text-decoration:none; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
       <div class="user-avatar-circle" style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); border:1px solid #94a3b8; display:flex; align-items:center; justify-content:center; overflow:hidden; transition:0.3s; flex-shrink:0;">
         <i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>
       </div>
@@ -3000,28 +3011,20 @@ def dashboard_toggle_web_bypass():
     return redirect('/old')
 
 @app.route('/download')
-def redirect_download():
-    return redirect('/#/download')
-
 @app.route('/team')
-def redirect_team():
-    return redirect('/#/team')
-
 @app.route('/supporters')
-def redirect_supporters():
-    return redirect('/#/supporters')
-
 @app.route('/stats', methods=['GET'])
-def redirect_stats():
-    return redirect('/#/stats')
-
 @app.route('/provoz')
 @app.route('/provoz-idpk')
-def redirect_provoz_idpk():
-    return redirect('/#/provoz')
+@app.route('/demo')
+def real_web_subpages():
+    return home()
+
+@app.route('/jizni-rad')
+def redirect_jizni_rad():
+    return redirect('/jizdni-rad', code=301)
 
 @app.route('/jizdni-rad')
-@app.route('/jizni-rad')
 def stranka_jizdni_rad():
     try:
         curr_dir = os.path.dirname(os.path.abspath(__file__))
@@ -3048,9 +3051,12 @@ def stranka_pomoc():
     except Exception as e:
         return render_error_page(500, "Chyba", str(e)), 500
 
-@app.route('/soukromi')
 @app.route('/gdpr')
 @app.route('/privacy')
+def redirect_gdpr_soukromi():
+    return redirect('/soukromi', code=301)
+
+@app.route('/soukromi')
 def stranka_soukromi():
     try:
         curr_dir = os.path.dirname(os.path.abspath(__file__))
@@ -3070,26 +3076,20 @@ def robots_txt():
     content = (
         "User-agent: *\n"
         "Allow: /\n"
-        "Allow: /mapa\n"
-        "Allow: /jizdni-rad\n"
-        "Allow: /jizni-rad\n"
-        "Allow: /historie\n"
-        "Allow: /pomoc\n"
-        "Allow: /podpora\n"
-        "Allow: /soukromi\n"
-        "Allow: /gdpr\n"
-        "Disallow: /api/\n"
-        "Disallow: /dashboard/\n"
-        "Disallow: /mapa_admin\n"
-        "Disallow: /admin\n"
-        "Disallow: /debug\n"
-        "Disallow: /login\n"
-        "Disallow: /register\n"
-        "Disallow: /blocked\n"
-        "Disallow: /login_blocked\n"
-        "Disallow: /ucet\n"
-        "Disallow: /overeni\n\n"
+        "Disallow: /api/\n\n"
         "Sitemap: https://datacorebot.koyeb.app/sitemap.xml\n"
+    )
+    return Response(content, mimetype="text/plain; charset=utf-8")
+
+@app.route('/.well-known/security.txt')
+def security_txt():
+    content = (
+        "Contact: https://datacorebot.koyeb.app/podpora\n"
+        "Contact: discord://user/719896287301992449\n"
+        "Preferred-Languages: cs, en\n"
+        "Canonical: https://datacorebot.koyeb.app/.well-known/security.txt\n"
+        "Policy: https://datacorebot.koyeb.app/soukromi\n"
+        "Expires: 2027-12-31T23:59:59.000Z\n"
     )
     return Response(content, mimetype="text/plain; charset=utf-8")
 
@@ -3107,13 +3107,19 @@ def sitemap_xml():
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        f'  <url><loc>{base}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
-        f'  <url><loc>{base}/mapa</loc><changefreq>always</changefreq><priority>0.9</priority></url>\n'
-        f'  <url><loc>{base}/jizdni-rad</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
-        f'  <url><loc>{base}/historie</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>\n'
-        f'  <url><loc>{base}/pomoc</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>\n'
-        f'  <url><loc>{base}/podpora</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>\n'
-        f'  <url><loc>{base}/soukromi</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>\n'
+        f'  <url><loc>{base}/</loc><lastmod>2026-11-04</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
+        f'  <url><loc>{base}/download</loc><lastmod>2026-11-04</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>\n'
+        f'  <url><loc>{base}/mapa</loc><lastmod>2026-11-04</lastmod><changefreq>always</changefreq><priority>0.9</priority></url>\n'
+        f'  <url><loc>{base}/stats</loc><lastmod>2026-11-04</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>\n'
+        f'  <url><loc>{base}/team</loc><lastmod>2026-11-04</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>\n'
+        f'  <url><loc>{base}/supporters</loc><lastmod>2026-11-04</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>\n'
+        f'  <url><loc>{base}/provoz</loc><lastmod>2026-11-04</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
+        f'  <url><loc>{base}/jizdni-rad</loc><lastmod>2026-11-04</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
+        f'  <url><loc>{base}/historie</loc><lastmod>2026-11-04</lastmod><changefreq>hourly</changefreq><priority>0.8</priority></url>\n'
+        f'  <url><loc>{base}/led-panel</loc><lastmod>2026-11-04</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>\n'
+        f'  <url><loc>{base}/pomoc</loc><lastmod>2026-11-04</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>\n'
+        f'  <url><loc>{base}/podpora</loc><lastmod>2026-11-04</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>\n'
+        f'  <url><loc>{base}/soukromi</loc><lastmod>2026-11-04</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>\n'
         '</urlset>'
     )
     return Response(xml, mimetype="application/xml; charset=utf-8")
@@ -3286,26 +3292,40 @@ def redirect_led_panel_view():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STARÝ WEB (URL: https://datacorebot.koyeb.app/old/"názvy slidů")
+# STARÝ WEB (URL: https://datacorebot.koyeb.app/old/"názvy slidů") - POUZE PRO PŘIHLÁŠENÉ ADMINY
 # ═══════════════════════════════════════════════════════════════════════════════
+
+def _require_admin_for_old():
+    check_persistent_admin_session()
+    if not session.get('logged_in') and not is_admin_bypass_active():
+        return redirect('/', code=302)
+    return None
 
 @app.route('/old')
 @app.route('/old/')
 def old_home():
+    g = _require_admin_for_old()
+    if g: return g
     return render_public(HTML_HOME)
 
 @app.route('/old/download')
 def old_download_home():
+    g = _require_admin_for_old()
+    if g: return g
     return render_public(HTML_DOWNLOADS_MAIN)
 
 @app.route('/old/team')
 def old_team():
+    g = _require_admin_for_old()
+    if g: return g
     try: team_members = get_db().table("team").select("*").execute().data or [] if get_db() else []
     except: team_members = []
     return render_public(HTML_TEAM, team=team_members)
 
 @app.route('/old/supporters')
 def old_supporters():
+    g = _require_admin_for_old()
+    if g: return g
     support_data = []
     try:
         db = get_db()
@@ -3318,26 +3338,36 @@ def old_supporters():
 @app.route('/old/provoz-idpk')
 def old_provoz_idpk():
     """Rozcestník Provoz IDPK — Interaktivní mapa & Databáze autobusů"""
+    g = _require_admin_for_old()
+    if g: return g
     return render_public(HTML_PROVOZ_IDPK)
 
 @app.route('/old/jizdni-rad')
 def old_jizdni_rad():
     """Veřejný jízdní řád IDPK z GTFS dat"""
+    g = _require_admin_for_old()
+    if g: return g
     from jizdni_rad import HTML_JIZDNI_RAD
     return HTML_JIZDNI_RAD
 
 @app.route('/old/led-panel')
 def old_led_panel_landing():
+    g = _require_admin_for_old()
+    if g: return g
     from led_panel_html import HTML_LED_PANEL
     return HTML_LED_PANEL
 
 @app.route('/old/led-panel/app')
 def old_led_panel_app():
+    g = _require_admin_for_old()
+    if g: return g
     from led_panel_html import HTML_LED_PANEL
     return HTML_LED_PANEL
 
 @app.route('/old/led-panel/view')
 def old_led_panel_view():
+    g = _require_admin_for_old()
+    if g: return g
     from led_panel_view import HTML_LED_PANEL_VIEW
     return HTML_LED_PANEL_VIEW
 
@@ -3540,6 +3570,8 @@ def public_stats():
 
 @app.route('/old/<path:subpath>')
 def old_catchall(subpath):
+    g = _require_admin_for_old()
+    if g: return g
     return redirect('/old', code=302)
 
 @app.route('/api/supporters', methods=['GET', 'OPTIONS'])
@@ -4353,6 +4385,7 @@ def api_submit_feedback():
 
 @app.route('/login_request', methods=['POST'])
 def login_request():
+    import time as _t
     is_json = request.is_json or bool(request.get_json(silent=True))
     json_data = request.get_json(silent=True) or {}
     
@@ -4364,59 +4397,80 @@ def login_request():
         return redirect(url_for('dashboard_main'))
         
     discord_id = (json_data.get('discord_id') or request.form.get('discord_id', '')).strip()
-    # Validace – Discord ID musí být číselne
+    # Validace – Discord ID musí být číselné
     if not discord_id.isdigit():
         if is_json: return jsonify({"status": "error", "message": "Neplatné Discord ID (musí obsahovat pouze čísla)."}), 400
         flash('Neplatné Discord ID.', 'error')
+        return redirect(url_for('dashboard_main'))
+
+    # Kontrola timeoutu zamítnutí pro dané ID (ochrana proti spamu po zamítnutí adminem)
+    timeout_until = _DASHBOARD_AUTH_TIMEOUTS.get(str(discord_id), 0)
+    if _t.time() < timeout_until:
+        remaining = int(timeout_until - _t.time())
+        msg = f"Přihlašování pro toto ID je dočasně uzamčeno po zamítnutí administrátorem. Zkuste to za {remaining} s."
+        if is_json: return jsonify({"status": "error", "message": msg}), 429
+        flash(msg, 'error')
+        return redirect(url_for('dashboard_main'))
+
+    # Rate limit na posílání DM zpráv na jedno ID (max 2 pokusy za minutu)
+    if not _rate_limit_check(f'dash_dm:{discord_id}', 2, 60):
+        msg = "Příliš mnoho pokusů o zaslání ověřovací zprávy. Zkuste to za minutu."
+        if is_json: return jsonify({"status": "error", "message": msg}), 429
+        flash(msg, 'error')
         return redirect(url_for('dashboard_main'))
         
     db = get_db()
     if db and discord_id:
         try:
             user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
-            if not user:
-                msg = 'Účet s tímto Discord ID neexistuje v databázi.'
-                if is_json: return jsonify({"status": "error", "message": msg}), 404
-                flash(msg, 'error')
-            else:
+            has_access = False
+            user_data = None
+            if user:
                 user_data = user[0]
-                if user_data.get("is_deleted"):
-                    msg = 'Tento účet byl smazán.'
-                    if is_json: return jsonify({"status": "error", "message": msg}), 403
-                    flash(msg, 'error')
-                elif user_data.get("is_banned"):
-                    msg = 'Tento účet byl zablokován (banned).'
-                    if is_json: return jsonify({"status": "error", "message": msg}), 403
-                    flash(msg, 'error')
-                else:
-                    # ── Přístup POUZE dle záznamu v DB, bez Discord role check ──
-                    has_access = (user_data.get("dashboard_access") == True)
+                if (not user_data.get("is_deleted")
+                    and not user_data.get("is_banned")
+                    and user_data.get("dashboard_access") == True):
+                    has_access = True
 
-                    if not has_access:
-                        msg = 'Přístup zamítnut. Dashboard přístup musí být povolen ručně administrátorem.'
-                        if is_json: return jsonify({"status": "error", "message": msg}), 403
-                        flash(msg, 'error')
-                    else:
-                        import time as _t
-                        token = _secrets.token_hex(32)  # Kryptograficky bezpečný token
-                        token_expiry = int(_t.time()) + 600  # 10 minut expiry
-                        db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("discord_id", discord_id).execute()
-                        async def send():
-                            try:
-                                u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
-                                if u: await u.send(embed=discord.Embed(title="🔐 Bezpečnostní ověření", description="Byl zaznamenán pokus o přihlášení do administračního panelu.", color=0x38bdf8), view=DashboardAuthView(token, discord_id))
-                            except: pass
-                        try:
-                            b_loop = get_bot_loop()
-                            if b_loop:
-                                asyncio.run_coroutine_threadsafe(send(), b_loop)
-                            else:
-                                print(f"[AUTH] Admin DM: bot loop neběží.")
-                        except Exception as e:
-                            print(f"[AUTH] Chyba v login_request DM: {e}")
-                        if is_json:
-                            return jsonify({"status": "ok", "discord_id": discord_id})
-                        return redirect(url_for('wait_auth', discord_id=discord_id))
+            # Bezpečnost: Pokud účet neexistuje, je smazán, blokován nebo nemá přístup do dashboardu,
+            # NEPOSÍLÁME žádné DM a neprozrazujeme stav účtu útočníkovi (S2 zpráva).
+            if not has_access:
+                msg = "Přístup do administrátorského rozhraní byl zamítnut nebo zadané ID nemá oprávnění."
+                if is_json: return jsonify({"status": "error", "message": msg}), 403
+                flash(msg, 'error')
+                return redirect(url_for('dashboard_main'))
+
+            token = _secrets.token_hex(32)  # Kryptograficky bezpečný token
+            token_expiry = int(_t.time()) + 300  # 5 minut expiry
+            db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("discord_id", discord_id).execute()
+            async def send():
+                try:
+                    u = bot.get_user(int(discord_id)) or await bot.fetch_user(int(discord_id))
+                    if u:
+                        embed = discord.Embed(
+                            title="🔐 Žádost o přihlášení do Administrace",
+                            description=(
+                                "Byl zaznamenán pokus o přihlášení do administračního panelu OIS IDPK.\n\n"
+                                f"**IP adresa žadatele:** `{client_ip}`\n"
+                                f"**Čas žádosti:** <t:{int(_t.time())}:R>\n\n"
+                                "Pokud jste se nepřihlašovali vy, klikněte na **Zamítnout** (žádosti pro vaše ID budou na 5 minut zablokovány)."
+                            ),
+                            color=0x38bdf8
+                        )
+                        await u.send(embed=embed, view=DashboardAuthView(token, discord_id))
+                except Exception as ex:
+                    print(f"[AUTH] DM admin send error: {ex}")
+            try:
+                b_loop = get_bot_loop()
+                if b_loop:
+                    asyncio.run_coroutine_threadsafe(send(), b_loop)
+                else:
+                    print(f"[AUTH] Admin DM: bot loop neběží.")
+            except Exception as e:
+                print(f"[AUTH] Chyba v login_request DM: {e}")
+            if is_json:
+                return jsonify({"status": "ok", "discord_id": discord_id})
+            return redirect(url_for('wait_auth', discord_id=discord_id))
         except Exception as e:
             err_str = str(e)
             if "402" in err_str or "egress" in err_str:
@@ -4675,6 +4729,9 @@ class WebAuthView(discord.ui.View):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @app.route('/register')
+def redirect_register_page():
+    return redirect('/login', code=301)
+
 @app.route('/login')
 def auth_pages():
     if session.get('logged_in'):
@@ -5715,7 +5772,7 @@ def _legacy_stranka_ucet():
                         break
 
         if not u:
-            resp = redirect('/register')
+            resp = redirect('/login')
             if cookie_token:
                 resp.delete_cookie('web_session_token')
             return resp

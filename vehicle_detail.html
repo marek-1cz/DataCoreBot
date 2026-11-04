@@ -197,19 +197,21 @@ body{
   padding:0 2px;
 }
 .spz-stk-ring{
-  width:15px;
-  height:15px;
+  width:16px;
+  height:16px;
   border-radius:50%;
-  border:1.5px dashed #94a3b8;
-  background:rgba(226,232,240,0.6);
+  border:1.5px solid #cbd5e1;
+  background:transparent;
   position:relative;
+  box-shadow:inset 0 0 0 1.5px #f1f5f9;
 }
 .spz-stk-ring::after{
   content:'';
   position:absolute;
   inset:3px;
   border-radius:50%;
-  border:1px solid #cbd5e1;
+  border:1px solid #94a3b8;
+  background:transparent;
 }
 
 .hero-info{display:flex;flex-direction:column;gap:8px;}
@@ -467,7 +469,7 @@ table.ois-table tr:last-child td{border-bottom:none;}
     <div class="spz-plate" id="spzPlateContainer">
       <div class="spz-eu">
         <svg class="spz-stars-svg" viewBox="0 0 24 24" aria-hidden="true">
-          <g fill="#ffcc00">
+          <g fill="#ffffff">
             <polygon points="12,1.2 12.6,2.9 14.4,2.9 13,3.9 13.5,5.6 12,4.6 10.5,5.6 11,3.9 9.6,2.9 11.4,2.9"/>
             <polygon points="16.2,2.3 16.8,4 18.6,4 17.2,5 17.7,6.7 16.2,5.7 14.7,6.7 15.2,5 13.8,4 15.6,4"/>
             <polygon points="19.4,5.5 20,7.2 21.8,7.2 20.4,8.2 20.9,9.9 19.4,8.9 17.9,9.9 18.4,8.2 17,7.2 18.8,7.2"/>
