@@ -1,0 +1,130 @@
+<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Náhled Discord upozornění | OIS IDPK</title>
+<style>
+:root{--bg:#05070f;--text:#eaf0ff;--muted:#9fb0d6;--cyan:#38d6ff;--yellow:#ffc933}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh;padding:28px 16px 60px}
+.w{max-width:760px;margin:0 auto}h1{font-size:1.5rem;margin:0 0 6px}p.l{color:var(--muted);margin:0 0 18px;line-height:1.6}
+.vz{display:inline-block;font-size:.7rem;font-weight:800;letter-spacing:.1em;color:var(--yellow);border:1px dashed var(--yellow);border-radius:6px;padding:2px 8px;margin-right:8px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}.tabs button{cursor:pointer;border:1px solid #26366b;background:#0e1738;color:var(--muted);padding:8px 14px;border-radius:999px;font-weight:700;font-size:.85rem}
+.tabs button[aria-pressed=true]{background:var(--cyan);color:#06101f;border-color:transparent}
+.dc{background:#313338;border-radius:14px;padding:18px 16px;font-family:"gg sans","Noto Sans","Segoe UI",sans-serif;color:#dbdee1}
+.msg{display:flex;gap:14px}.av{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#2f6bff,#38d6ff);flex:none;display:grid;place-items:center;color:#fff;font-weight:800}
+.hd{display:flex;align-items:center;gap:8px;margin-bottom:4px}.hd b{color:#fff;font-size:1rem}.bot{background:#5865f2;color:#fff;font-size:.65rem;font-weight:700;border-radius:4px;padding:1px 5px}.hd small{color:#949ba4;font-size:.75rem}
+.em{border-left:4px solid var(--c);background:#2b2d31;border-radius:4px;padding:8px 16px 14px 12px;max-width:520px;animation:in .5s ease both}
+@keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.au{font-size:.8rem;font-weight:600;color:#fff;margin:4px 0 6px}.ti{font-weight:700;color:#fff;font-size:1rem;margin:2px 0 6px}.de{font-size:.92rem;line-height:1.4;margin-bottom:8px}
+.fs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.f{grid-column:span 1}.f.w{grid-column:1/-1}.f b{display:block;font-size:.78rem;color:#fff;margin-bottom:2px}.f span{font-size:.88rem}
+code{background:#1e1f22;border-radius:4px;padding:1px 5px;font-size:.85rem}a{color:#00a8fc;text-decoration:none}
+.ft{margin-top:10px;font-size:.72rem;color:#949ba4}
+.bt{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.bt span{background:#4e5058;color:#fff;border-radius:4px;padding:6px 12px;font-size:.84rem;font-weight:500}
+@media(max-width:560px){.fs{grid-template-columns:1fr 1fr}.f.w{grid-column:1/-1}}
+</style></head><body><div class="w">
+<h1><span class="vz">NÁHLED</span>Discord upozornění</h1>
+<p class="l">Přibližná podoba zprávy v soukromé konverzaci. Vzory generuje <code>discord_embed.py</code>, takže se náhled shoduje s tím, co bot pošle.</p>
+<div class="tabs" id="t"></div><div class="dc" id="o"></div></div>
+<script>
+const D={
+ "arrival": {
+  "title": "🚌 Linka 722 přijíždí k zastávce Plasy",
+  "color": 3526783,
+  "description": "Sledovaný spoj právě **přijíždí** k zastávce.",
+  "fields": [
+   {
+    "name": "Linka",
+    "value": "`722`",
+    "inline": true
+   },
+   {
+    "name": "SPZ",
+    "value": "`2P5 1234`",
+    "inline": true
+   },
+   {
+    "name": "Zpoždění",
+    "value": "🟢 včas",
+    "inline": true
+   },
+   {
+    "name": "Příjezd",
+    "value": "14:32",
+    "inline": true
+   },
+   {
+    "name": "Zastávka",
+    "value": "Plasy, nám.",
+    "inline": true
+   },
+   {
+    "name": "Mapa",
+    "value": "[Zobrazit na mapě](https://datacorebot.koyeb.app/mapa)",
+    "inline": false
+   }
+  ],
+  "footer": {
+   "text": "Pravidlo č. 12 • OIS IDPK"
+  },
+  "author": {
+   "name": "Sledování spojů • OIS IDPK • Centrální systém"
+  },
+  "timestamp": "2026-10-31T14:45:45.133214+00:00"
+ },
+ "delay": {
+  "title": "⏱️ Linka 722 má zpoždění",
+  "color": 16763187,
+  "description": "Spoj **14:20 Plzeň → Plasy** jede se zpožděním.",
+  "fields": [
+   {
+    "name": "Linka",
+    "value": "`722`",
+    "inline": true
+   },
+   {
+    "name": "SPZ",
+    "value": "`2P5 1234`",
+    "inline": true
+   },
+   {
+    "name": "Zpoždění",
+    "value": "🔴 +12 min",
+    "inline": true
+   },
+   {
+    "name": "Nový příjezd",
+    "value": "14:44",
+    "inline": true
+   }
+  ],
+  "footer": {
+   "text": "Pravidlo č. 12 • OIS IDPK"
+  },
+  "author": {
+   "name": "Sledování spojů • OIS IDPK • Centrální systém"
+  },
+  "timestamp": "2026-10-31T14:45:45.133242+00:00"
+ },
+ "admin": {
+  "title": "Plánovaná údržba dnes večer",
+  "color": 3107839,
+  "description": "Dnes od **22:00** do 23:00 bude web krátce nedostupný. Děkujeme za trpělivost.",
+  "fields": [],
+  "author": {
+   "name": "Zpráva od administrátora • OIS IDPK • Centrální systém"
+  },
+  "footer": {
+   "text": "OIS IDPK"
+  },
+  "timestamp": "2026-10-31T14:45:45.133248+00:00"
+ }
+};const N={arrival:'Příjezd',delay:'Zpoždění',admin:'Zpráva administrátora'};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const md=s=>esc(s).replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g,'<a href="#">$1</a>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>');
+function show(k){const e=D[k],adm=k==='admin';
+document.querySelectorAll('#t button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.k===k));
+const c='#'+('000000'+e.color.toString(16)).slice(-6);
+const fs=e.fields.map(f=>'<div class="f'+(f.inline?'':' w')+'"><b>'+esc(f.name)+'</b><span>'+md(f.value)+'</span></div>').join('');
+const bt=(adm?[]:['🔕 Vypnout notifikace']).concat(['ℹ️ Proč mi chodí upozornění?','💬 Podpora']).map(x=>'<span>'+x+' ↗</span>').join('');
+document.getElementById('o').innerHTML='<div class="msg"><div class="av">OI</div><div><div class="hd"><b>DataCore Bot</b><span class="bot">APP</span><small>Dnes v 14:32</small></div>'+
+'<div class="em" style="--c:'+c+'"><div class="au">'+esc(e.author.name)+'</div><div class="ti">'+esc(e.title)+'</div><div class="de">'+md(e.description)+'</div>'+(fs?'<div class="fs">'+fs+'</div>':'')+'<div class="ft">'+esc(e.footer.text)+' • dnes v 14:32</div></div><div class="bt">'+bt+'</div></div></div>'}
+document.getElementById('t').innerHTML=Object.keys(D).map(k=>'<button data-k="'+k+'" aria-pressed="false">'+N[k]+'</button>').join('');
+document.getElementById('t').onclick=e=>{const b=e.target.closest('button');if(b)show(b.dataset.k)};show('arrival');
+</script></body></html>

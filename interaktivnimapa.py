@@ -14752,9 +14752,11 @@ def stranka_historie_index(spz=None):
             if not os.path.exists(template_path):
                 template_path = os.path.join(os.path.dirname(curr_dir), "vehicle_detail.html")
         else:
-            template_path = os.path.join(curr_dir, "new_web_historie.html")
+            template_path = os.path.join(curr_dir, "historie.html")
             if not os.path.exists(template_path):
-                template_path = os.path.join(os.path.dirname(curr_dir), "new_web_historie.html")
+                template_path = os.path.join(curr_dir, "new_web_historie.html")
+            if not os.path.exists(template_path):
+                template_path = os.path.join(os.path.dirname(curr_dir), "historie.html")
         with open(template_path, "r", encoding="utf-8") as f:
             content = f.read()
         if spz:

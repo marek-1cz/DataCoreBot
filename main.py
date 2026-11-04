@@ -174,7 +174,26 @@ DEPLOY_TIME = get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
 SERVER_START_ISO = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 def render_error_page(code: int, title: str, summary: str, icon: str = "fa-triangle-exclamation"):
-    """Vykreslí moderní chybovou stránku v designu nového webu s hardware-aware animacemi."""
+    """Vykreslí moderní chybovou stránku v designu nového webu podle šablony chyba-404.html."""
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(curr_dir, "chyba-404.html")
+        if not os.path.exists(path):
+            path = os.path.join(os.path.dirname(curr_dir), "chyba-404.html")
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            content = content.replace("window.OIS_ERROR||", f"window.OIS_ERROR||{code}||")
+            content = content.replace('<html lang="cs">', f'<html lang="cs" data-error="{code}">')
+            try:
+                if "is_admin_bypass_active" in globals() and is_admin_bypass_active() and "ADMIN_BYPASS_BAR" in globals() and ADMIN_BYPASS_BAR and "</body>" in content:
+                    content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+            except Exception:
+                pass
+            return content
+    except Exception as err:
+        print(f"[RENDER-ERROR-PAGE-ERR] {err}", flush=True)
+
     return f"""<!DOCTYPE html>
 <html lang="cs">
 <head>
@@ -3053,6 +3072,8 @@ def robots_txt():
         "Allow: /jizdni-rad\n"
         "Allow: /jizni-rad\n"
         "Allow: /historie\n"
+        "Allow: /pomoc\n"
+        "Allow: /podpora\n"
         "Allow: /soukromi\n"
         "Allow: /gdpr\n"
         "Disallow: /api/\n"
@@ -3072,14 +3093,25 @@ def robots_txt():
 
 @app.route('/sitemap.xml')
 def sitemap_xml():
+    # Urcit verejnou zakladni URL podle pozadavku (mapaidpk.net / datacorebot.koyeb.app)
+    host = request.headers.get('X-Forwarded-Host') or request.host or ''
+    proto = request.headers.get('X-Forwarded-Proto') or ('https' if request.is_secure else 'http')
+    if 'mapaidpk' in host.lower():
+        base = 'https://mapaidpk.net'
+    elif host:
+        base = f'{proto}://{host}'
+    else:
+        base = 'https://datacorebot.koyeb.app'
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        '  <url><loc>https://datacorebot.koyeb.app/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
-        '  <url><loc>https://datacorebot.koyeb.app/mapa</loc><changefreq>always</changefreq><priority>0.9</priority></url>\n'
-        '  <url><loc>https://datacorebot.koyeb.app/jizdni-rad</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
-        '  <url><loc>https://datacorebot.koyeb.app/historie</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>\n'
-        '  <url><loc>https://datacorebot.koyeb.app/soukromi</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>\n'
+        f'  <url><loc>{base}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
+        f'  <url><loc>{base}/mapa</loc><changefreq>always</changefreq><priority>0.9</priority></url>\n'
+        f'  <url><loc>{base}/jizdni-rad</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
+        f'  <url><loc>{base}/historie</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>\n'
+        f'  <url><loc>{base}/pomoc</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>\n'
+        f'  <url><loc>{base}/podpora</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>\n'
+        f'  <url><loc>{base}/soukromi</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>\n'
         '</urlset>'
     )
     return Response(xml, mimetype="application/xml; charset=utf-8")
