@@ -192,13 +192,14 @@ def build_notification_email(embed_data, dm_text="", rule_id=None, is_one_time=F
     intro = '<div style="font-size:16px;line-height:1.65;color:%s;">%s</div>' % (C_TEXT, _rich(desc)) if desc else ""
 
     buttons, links = [], []
-    why = base_url + "/proc-notifikace"
+    why = (base_url + "/proc-notifikace?typ=admin") if is_admin else (base_url + "/proc-notifikace")
+    why_label = "Proč mi přišla zpráva od administrátora?" if is_admin else "Proč mi chodí upozornění?"
     if not is_one_time and rule_id and not is_admin:
         unsub = "%s/api/notifications/unsubscribe?id=%s" % (base_url, _h.escape(str(rule_id), quote=True))
         links.append(("Vypnout pravidelné notifikace", unsub))
-    links.append(("Proč mi chodí upozornění?", why))
+    links.append((why_label, why))
     links.append(("Podpora", base_url + "/podpora"))
-    buttons.append(("Proč mi chodí upozornění?", why, False))
+    buttons.append((why_label, why, False))
     if not is_one_time and rule_id and not is_admin:
         buttons.insert(0, ("Vypnout pravidelné notifikace", unsub, True))
 

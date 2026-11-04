@@ -1475,7 +1475,7 @@ def send_magic_link_email(to_email, token, intent='login'):
 
         to_email = str(to_email or "").strip()
         msg = MIMEMultipart("related")
-        msg["Subject"] = "Přihlášení do aplikace OIS IDPK"
+        # Subject set via build_magic_link_email below
         msg["From"] = f"DataCore Bot <{SMTP_EMAIL}>"
         msg["To"] = to_email
 
@@ -1504,6 +1504,8 @@ def send_magic_link_email(to_email, token, intent='login'):
         login_url = f"{base_url}/overeni?token={token}"
         from ois_email import build_magic_link_email
         subject, html, text = build_magic_link_email(login_url, token)
+        if "Subject" in msg:
+            del msg["Subject"]
         msg["Subject"] = subject
         msg_alt.attach(MIMEText(text, "plain", "utf-8"))
         msg_alt.attach(MIMEText(html, "html", "utf-8"))
@@ -2026,7 +2028,7 @@ def get_current_admin_name():
             try:
                 db = get_db()
                 if db:
-                    u_res = db.table("users").select("nick, email, username").eq("discord_id", str(did)).execute().data
+                    u_res = db.table("users").select("nick, email").eq("discord_id", str(did)).execute().data
                     if u_res:
                         found_name = u_res[0].get("nick") or u_res[0].get("username") or u_res[0].get("email")
                         if found_name:
@@ -8281,7 +8283,7 @@ def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is
         import os
         
         msg = MIMEMultipart("related")
-        msg["Subject"] = embed_data.get("title", "🔔 Upozornění na autobus") if embed_data else "🔔 Upozornění na autobus"
+        # Subject set via build_notification_email below
         msg["From"] = f"DataCore Bot <{SMTP_EMAIL}>"
         msg["To"] = to_email
 
@@ -8340,6 +8342,8 @@ def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is
 
         from ois_email import build_notification_email
         subject, html, text = build_notification_email(embed_data, dm_text, rule_id=rule_id, is_one_time=is_one_time)
+        if "Subject" in msg:
+            del msg["Subject"]
         msg["Subject"] = subject
         msg_alt.attach(MIMEText(text, "plain", "utf-8"))
         msg_alt.attach(MIMEText(html, "html", "utf-8"))

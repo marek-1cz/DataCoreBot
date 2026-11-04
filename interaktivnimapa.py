@@ -11281,7 +11281,7 @@ def background_map_worker():
                         display_line = clean_last or ""
 
                         # Zaznamenat zmizení vozu z PVVD mapy do lokální persistentní DB
-                        if not was_offline and not in_depot_zone:
+                        if not was_offline and not in_depot_zone and not (str(bid).startswith('-') and not (spz or c.get('spz'))):
                             try:
                                 from local_db import local_log_pvvd_disappearance
                                 local_log_pvvd_disappearance(
@@ -16847,7 +16847,7 @@ def _check_admin_request():
             try:
                 db = get_db_client()
                 if db:
-                    u_res = db.table("users").select("nick, email, username").eq("discord_id", did).execute().data
+                    u_res = db.table("users").select("nick, email").eq("discord_id", did).execute().data
                     if u_res:
                         admin_name = u_res[0].get("nick") or u_res[0].get("username") or u_res[0].get("email")
             except Exception: pass
@@ -16859,7 +16859,7 @@ def _check_admin_request():
             try:
                 db = get_db_client()
                 if db:
-                    u_res = db.table("users").select("nick, email, username").eq("discord_id", did).execute().data
+                    u_res = db.table("users").select("nick, email").eq("discord_id", did).execute().data
                     if u_res:
                         admin_name = u_res[0].get("nick") or u_res[0].get("username") or u_res[0].get("email")
             except Exception: pass
