@@ -9246,25 +9246,32 @@ async def update_depot_discord_messages():
         print(f"[DEPOT DISCORD] Nelze nacist historii kanalu {channel.name}: {e_hist}", flush=True)
         history = []
 
-    # 1 batch dotaz pro vsechny vozovny najednou (setri D1/Turso kvotu - misto 40 dotazu jen 1)
+    # 1. Z paměti DEPOT_ACTIVE_SESSIONS načteme aktuálně parkující vozy (0 cloudových dotazů, 0ms latence)
     batch_records_by_depot = {}
     try:
-        from cloudflare_d1 import get_d1_client as _get_d1
-        _d1 = _get_d1()
-        if not _d1.is_read_blocked():
-            d1_rows = _d1.execute(
-                "SELECT * FROM depot_history WHERE (bus_id NOT LIKE 'SYSTEM_%' AND spz != 'BACKUP') ORDER BY arrived_at DESC LIMIT 600"
-            )
-            for r in (d1_rows or []):
-                dname = r.get("depot_name")
-                if dname:
-                    batch_records_by_depot.setdefault(dname, []).append(r)
+        from interaktivnimapa import DEPOT_ACTIVE_SESSIONS, resolve_depot_name
+        seen_sess_objs = set()
+        for sess in list(DEPOT_ACTIVE_SESSIONS.values()):
+            if id(sess) in seen_sess_objs:
+                continue
+            seen_sess_objs.add(id(sess))
+            dname = resolve_depot_name(sess.get("depot_name") or "")
+            if dname:
+                batch_records_by_depot.setdefault(dname, []).append({
+                    "id": sess.get("id"),
+                    "depot_name": dname,
+                    "spz": sess.get("spz"),
+                    "bus_id": sess.get("bus_id"),
+                    "arrived_at": sess.get("arrived_at"),
+                    "left_at": None
+                })
     except Exception:
         pass
 
+    # 2. Z lokální SQLite databáze načteme nedávné odjezdy i historii (0 cloudových dotazů)
     try:
         from local_db import local_depot_history_get
-        loc_rows = local_depot_history_get(limit=600)
+        loc_rows = local_depot_history_get(limit=300)
         for r in (loc_rows or []):
             dname = r.get("depot_name")
             if dname:
@@ -9274,12 +9281,16 @@ async def update_depot_discord_messages():
     except Exception:
         pass
 
-    if not batch_records_by_depot and db:
+    # 3. Pouze pokud je paměť i lokální DB zcela prázdná, a D1 není blokováno čtení, zkusíme D1
+    if not batch_records_by_depot:
         try:
-            from turso_db import is_turso_blocked
-            if not is_turso_blocked():
-                turso_rows = db.table("depot_history").select("*").neq("spz", "BACKUP").order("arrived_at", desc=True).limit(600).execute().data or []
-                for r in turso_rows:
+            from cloudflare_d1 import get_d1_client as _get_d1
+            _d1 = _get_d1()
+            if not _d1.is_read_blocked():
+                d1_rows = _d1.execute(
+                    "SELECT * FROM depot_history WHERE (bus_id NOT LIKE 'SYSTEM_%' AND spz != 'BACKUP') ORDER BY arrived_at DESC LIMIT 200"
+                )
+                for r in (d1_rows or []):
                     dname = r.get("depot_name")
                     if dname:
                         batch_records_by_depot.setdefault(dname, []).append(r)

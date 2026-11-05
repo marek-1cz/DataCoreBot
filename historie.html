@@ -700,7 +700,7 @@ const norm=s=>String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-�
 const safeColor=c=>/^#[0-9a-f]{6}$/i.test(c||'')?c:'#2f6bff';
 /* vlajka EU: 12 zlatých hvězd v kruhu */
 const EU=(()=>{
-  const star=(cx,cy,R,r)=>{let p=[];for(let k=0;k<10;k++){const a=k*Math.PI/5,rr=k%2?r:R;p.push((cx+rr*Math.sin(a)).toFixed(2)+','+(cy-rr*Math.cos(a)).toFixed(2))}return '<polygon points="'+p.join(' ')+'" fill="#ffffff"/>'};
+  const star=(cx,cy,R,r)=>{let p=[];for(let k=0;k<10;k++){const a=k*Math.PI/5,rr=k%2?r:R;p.push((cx+rr*Math.sin(a)).toFixed(2)+','+(cy-rr*Math.cos(a)).toFixed(2))}return '<polygon points="'+p.join(' ')+'" fill="#ffcc00"/>'};
   let s='<svg viewBox="0 0 24 24" aria-hidden="true">';
   for(let i=0;i<12;i++){const a=i*Math.PI/6;s+=star(12+8.4*Math.sin(a),12-8.4*Math.cos(a),2.2,.95)}
   return s+'</svg>';
@@ -1092,7 +1092,7 @@ function renderDetailModal(v, fullData, activeTab){
           '</div>' +
           '<div class="trip-times">🕒 Vyjel: <b>' + tFrom + '</b> ➜ 🏁 Dojel: <b>' + tTo + '</b></div>' +
         '</div>' +
-        '<div class="trip-route"><b>' + tOrigin + '</b> ➔ <b>' + tDest + '</b></div>' +
+        '<div class="trip-route"><span style="color:var(--muted);font-weight:600;">Směr linky dle JŘ:</span> <b style="color:#ffffff;">' + tDest + '</b></div>' +
         '<div class="trip-loc">📍 <b>Kde dojel:</b> <span>' + tStop + '</span> ' + mapBtn + '</div>' +
         (t.status ? '<div style="margin-top:6px;"><span class="trip-stat">Stav: ' + esc(t.status) + '</span></div>' : '') +
       '</div>';

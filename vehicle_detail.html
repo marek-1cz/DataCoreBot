@@ -197,18 +197,18 @@ body{
   padding:0 2px;
 }
 .spz-stk-ring{
-  width:16px;
-  height:16px;
+  width:15px;
+  height:15px;
   border-radius:50%;
-  border:1.5px solid #cbd5e1;
+  border:1.5px dashed #cbd5e1;
   background:transparent;
   position:relative;
-  box-shadow:inset 0 0 0 1.5px #f1f5f9;
+  box-shadow:inset 0 0 0 1px #f1f5f9;
 }
 .spz-stk-ring::after{
   content:'';
   position:absolute;
-  inset:3px;
+  inset:2px;
   border-radius:50%;
   border:1px solid #94a3b8;
   background:transparent;
@@ -332,14 +332,14 @@ table.ois-table tr:last-child td{border-bottom:none;}
 .trip-time-cell{display:flex;flex-direction:column;gap:5px;}
 .trip-date{font-size:0.86rem;font-weight:800;color:#ffffff;display:flex;align-items:center;gap:6px;}
 .trip-date i{color:var(--cyan);font-size:0.8rem;}
-.trip-time-flow{display:inline-flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;margin-top:2px;}
-.t-badge-time{font-family:'JetBrains Mono',monospace;font-size:0.84rem;font-weight:700;padding:2px 7px;border-radius:6px;}
-.t-badge-time.start{background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.25);}
-.t-badge-time.end{background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.25);}
-.t-arrow{color:var(--dim);font-size:0.8rem;}
-.trip-dur-badge{font-size:0.73rem;color:var(--amber);background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.22);padding:1px 7px;border-radius:5px;width:fit-content;display:inline-flex;align-items:center;gap:4px;margin-top:2px;}
+.trip-time-flow{display:inline-flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums;margin-top:2px;flex-wrap:wrap;}
+.t-badge-time{font-family:'JetBrains Mono',monospace;font-size:0.84rem;font-weight:700;padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:5px;}
+.t-badge-time.start{background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);}
+.t-badge-time.end{background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);}
+.t-arrow{color:var(--dim);font-size:0.85rem;}
+.trip-dur-badge{font-size:0.75rem;color:var(--amber);background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.22);padding:2px 8px;border-radius:5px;width:fit-content;display:inline-flex;align-items:center;gap:5px;margin-top:2px;font-weight:600;}
 
-.line-spoj-cell{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.line-spoj-cell{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .line-badge-lg{
   display:inline-flex;align-items:center;justify-content:center;
   padding:5px 12px;border-radius:8px;
@@ -348,18 +348,17 @@ table.ois-table tr:last-child td{border-bottom:none;}
   box-shadow:0 3px 10px rgba(0,0,0,0.45);
   letter-spacing:0.5px;
 }
-.spoj-pill{
-  display:inline-flex;align-items:center;padding:3px 8px;border-radius:6px;
-  background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);
-  color:var(--text);font-size:0.8rem;font-weight:700;
+.spoj-pill-prominent{
+  display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;
+  background:rgba(56,189,248,0.14);border:1px solid rgba(56,189,248,0.38);
+  color:#e0f2fe;font-size:0.82rem;font-weight:800;
   font-family:'JetBrains Mono',monospace;
+  letter-spacing:0.3px;
 }
 
 .route-cell{display:flex;flex-direction:column;gap:3px;}
-.route-station{font-size:0.88rem;display:flex;align-items:center;}
-.route-station.from{color:#e2e8f0;font-weight:600;}
-.route-station.to{color:#ffffff;font-weight:800;}
-.route-arrow-down{line-height:0.8;}
+.route-direction-label{font-size:0.75rem;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:5px;}
+.route-dest-name{font-size:0.95rem;color:#ffffff;font-weight:800;}
 .end-stop-cell{font-size:0.88rem;}
 
 /* LINE BADGE */
@@ -469,7 +468,7 @@ table.ois-table tr:last-child td{border-bottom:none;}
     <div class="spz-plate" id="spzPlateContainer">
       <div class="spz-eu">
         <svg class="spz-stars-svg" viewBox="0 0 24 24" aria-hidden="true">
-          <g fill="#ffffff">
+          <g fill="#ffcc00">
             <polygon points="12,1.2 12.6,2.9 14.4,2.9 13,3.9 13.5,5.6 12,4.6 10.5,5.6 11,3.9 9.6,2.9 11.4,2.9"/>
             <polygon points="16.2,2.3 16.8,4 18.6,4 17.2,5 17.7,6.7 16.2,5.7 14.7,6.7 15.2,5 13.8,4 15.6,4"/>
             <polygon points="19.4,5.5 20,7.2 21.8,7.2 20.4,8.2 20.9,9.9 19.4,8.9 17.9,9.9 18.4,8.2 17,7.2 18.8,7.2"/>
@@ -572,7 +571,7 @@ table.ois-table tr:last-child td{border-bottom:none;}
             <tr>
               <th style="min-width:180px;">Datum & Čas jízdy</th>
               <th style="min-width:140px;">Linka & Spoj</th>
-              <th style="min-width:240px;">Trasa dle JŘ (Odkud ➔ Kam)</th>
+              <th style="min-width:220px;">Směr linky (kam jede vůz dle JŘ)</th>
               <th style="min-width:180px;">Místo ukončení</th>
               <th style="min-width:130px;">Stav / Dojezd</th>
               <th style="text-align:right;min-width:110px;">Mapa</th>
@@ -872,24 +871,23 @@ function renderTrips(trips) {
         <div class="trip-time-cell">
           <div class="trip-date"><i class="far fa-calendar-alt"></i> ${dateStr}</div>
           <div class="trip-time-flow">
-            <span class="t-badge-time start" title="Čas zahájení/odjezdu"><i class="far fa-play-circle"></i> ${esc(startStr)}</span>
+            <span class="t-badge-time start" title="Čas zahájení jízdy dle JŘ / vypravení"><i class="fas fa-play" style="font-size:8px;"></i> Odjezd: <b>${esc(startStr)}</b></span>
             <span class="t-arrow">➔</span>
-            <span class="t-badge-time end" title="Čas ukončení/dojezdu"><i class="far fa-stop-circle"></i> ${esc(endStr)}</span>
+            <span class="t-badge-time end" title="Čas dojezdu do cílové stanice"><i class="fas fa-flag-checkered" style="font-size:9px;"></i> Příjezd: <b>${esc(endStr)}</b></span>
           </div>
-          ${durStr ? `<div class="trip-dur-badge"><i class="fas fa-hourglass-half"></i> Jízda: ${durStr}</div>` : ''}
+          ${durStr ? `<div class="trip-dur-badge"><i class="fas fa-hourglass-half"></i> Doba jízdy: ${durStr}</div>` : ''}
         </div>
       </td>
       <td>
         <div class="line-spoj-cell">
           <span class="line-badge-lg" style="background:${lineColor};">${esc(line)}</span>
-          <span class="spoj-pill">${esc(spoj || 'Spoj')}</span>
+          <span class="spoj-pill-prominent"><i class="fas fa-hashtag" style="font-size:9px;color:var(--cyan);"></i> ${esc(spoj || 'Spoj')}</span>
         </div>
       </td>
       <td>
         <div class="route-cell">
-          <div class="route-station from"><i class="fas fa-circle" style="font-size:7px;color:var(--green);margin-right:7px;"></i>${esc(origin)}</div>
-          <div class="route-arrow-down"><i class="fas fa-arrow-down" style="font-size:10px;color:var(--dim);margin-left:14px;"></i></div>
-          <div class="route-station to"><i class="fas fa-map-marker-alt" style="font-size:10px;color:var(--cyan);margin-right:7px;"></i>${esc(dest)}</div>
+          <div class="route-direction-label"><i class="fas fa-compass" style="color:var(--cyan);font-size:11px;"></i> Cíl dle JŘ:</div>
+          <div class="route-dest-name">${esc(dest)}</div>
         </div>
       </td>
       <td>

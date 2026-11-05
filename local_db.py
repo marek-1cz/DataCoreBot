@@ -314,6 +314,23 @@ def init_local_db():
                     updated_at TEXT
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS d1_sync_queue (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    table_name TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    retry_count INTEGER DEFAULT 0
+                )
+            """)
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_depot_loc_arr_desc ON depot_history_local(arrived_at DESC)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_depot_loc_left_at ON depot_history_local(left_at)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_bus_hist_cr_desc ON bus_history_local(created_at DESC)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_d1_sync_q_id ON d1_sync_queue(id ASC)")
+            except Exception:
+                pass
             conn.commit()
             _restore_stats_backup_if_empty(conn)
             _restore_web_visits_if_empty(conn)
@@ -1506,20 +1523,23 @@ def local_get_pvvd_disappearances(limit: int = 100) -> list:
 # ═══════════════════════════════════════════════════════════════════════════════
 # DEPOT HISTORY & SETTINGS LOKÁLNÍ OCHRANNÉ FUNKCE
 # ═══════════════════════════════════════════════════════════════════════════════
-def local_depot_history_upsert(depot_name: str, bus_id: str, spz: str, arrived_at: str, left_at: str = None, record_id: int = None):
+def local_depot_history_upsert(depot_name: str, bus_id: str, spz: str, arrived_at: str, left_at: str = None, record_id: int = None, local_id: int = None) -> int:
     try:
         with _get_local_conn() as conn:
             cur = conn.cursor()
-            if record_id:
-                cur.execute(
-                    "UPDATE depot_history_local SET depot_name=?, bus_id=?, spz=?, arrived_at=?, left_at=? WHERE id=?",
-                    (depot_name, str(bus_id), spz, arrived_at, left_at, record_id)
-                )
-            elif left_at:
+            res_id = local_id or record_id
+
+            if left_at:
                 # Odjezd vozu z vozovny
-                # Pravidlo pro stejnou SPZ: najdeme a aktualizujeme otevřený záznam pro tuto SPZ
                 updated = False
-                if spz and spz not in ("Neznámá", "Neznama", "?", "", "None"):
+                if res_id:
+                    cur.execute(
+                        "UPDATE depot_history_local SET left_at=coalesce(?, left_at), depot_name=coalesce(?, depot_name) WHERE id=?",
+                        (left_at, depot_name, res_id)
+                    )
+                    if cur.rowcount > 0:
+                        updated = True
+                if not updated and spz and spz not in ("Neznámá", "Neznama", "?", "", "None"):
                     cur.execute(
                         "UPDATE depot_history_local SET left_at=? WHERE spz=? AND left_at IS NULL",
                         (left_at, spz)
@@ -1527,7 +1547,6 @@ def local_depot_history_upsert(depot_name: str, bus_id: str, spz: str, arrived_a
                     if cur.rowcount > 0:
                         updated = True
                     else:
-                        # Pokud otevřený záznam chyběl, aktualizujeme poslední záznam dané SPZ
                         cur.execute(
                             "UPDATE depot_history_local SET left_at=? WHERE id = (SELECT id FROM depot_history_local WHERE spz=? ORDER BY arrived_at DESC LIMIT 1)",
                             (left_at, spz)
@@ -1539,21 +1558,47 @@ def local_depot_history_upsert(depot_name: str, bus_id: str, spz: str, arrived_a
                         "UPDATE depot_history_local SET left_at=? WHERE bus_id=? AND left_at IS NULL",
                         (left_at, str(bus_id))
                     )
+                    if cur.rowcount > 0:
+                        updated = True
+                if not updated:
+                    cur.execute(
+                        "INSERT INTO depot_history_local (depot_name, bus_id, spz, arrived_at, left_at) VALUES (?, ?, ?, ?, ?)",
+                        (depot_name, str(bus_id), spz, arrived_at, left_at)
+                    )
+                    res_id = cur.lastrowid
+                conn.commit()
+                return res_id
             else:
                 # Příjezd vozu do vozovny
-                # Pravidlo pro stejnou SPZ: pokud již existuje neuzavřený záznam pro tuto SPZ, nejprve jej uzavřeme
+                if res_id:
+                    cur.execute(
+                        "UPDATE depot_history_local SET depot_name=?, bus_id=?, spz=?, arrived_at=?, left_at=? WHERE id=?",
+                        (depot_name, str(bus_id), spz, arrived_at, left_at, res_id)
+                    )
+                    if cur.rowcount > 0:
+                        conn.commit()
+                        return res_id
+
                 if spz and spz not in ("Neznámá", "Neznama", "?", "", "None"):
                     cur.execute(
                         "UPDATE depot_history_local SET left_at=? WHERE spz=? AND left_at IS NULL",
                         (arrived_at, spz)
                     )
+                elif bus_id:
+                    cur.execute(
+                        "UPDATE depot_history_local SET left_at=? WHERE bus_id=? AND left_at IS NULL",
+                        (arrived_at, str(bus_id))
+                    )
+
                 cur.execute(
                     "INSERT INTO depot_history_local (depot_name, bus_id, spz, arrived_at, left_at) VALUES (?, ?, ?, ?, ?)",
                     (depot_name, str(bus_id), spz, arrived_at, left_at)
                 )
-            conn.commit()
+                conn.commit()
+                return cur.lastrowid
     except Exception as e:
         print(f"[LOCAL DB] Chyba zapisu depot_history_local: {e}", flush=True)
+        return None
 
 def local_depot_history_get(depot_name: str = None, spz: str = None, limit: int = 1000, sort_desc: bool = True) -> list:
     try:
@@ -1861,6 +1906,17 @@ def local_bus_history_close(trip_id: str, end_actual: str, end_lat: float = None
                     updated_at=CURRENT_TIMESTAMP
                 WHERE trip_id=? AND (end_actual IS NULL OR end_actual = '')
             """, (end_actual, end_lat, end_lng, end_stop, status, trip_id))
+            if cur.rowcount == 0:
+                cur.execute("""
+                    UPDATE bus_history_local
+                    SET end_actual=coalesce(?, end_actual),
+                        end_lat=coalesce(?, end_lat, last_lat),
+                        end_lng=coalesce(?, end_lng, last_lng),
+                        end_stop=coalesce(?, end_stop),
+                        status=coalesce(?, status),
+                        updated_at=CURRENT_TIMESTAMP
+                    WHERE trip_id=?
+                """, (end_actual, end_lat, end_lng, end_stop, status, trip_id))
             conn.commit()
     except Exception as e:
         print(f"[LOCAL DB] Chyba local_bus_history_close: {e}", flush=True)
@@ -1901,3 +1957,89 @@ def local_bus_history_get(spz: str = None, limit: int = 100) -> list:
     except Exception as e:
         print(f"[LOCAL DB] Chyba local_bus_history_get: {e}", flush=True)
         return []
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# D1 ASYNCHRONOUS SYNC QUEUE (Vyrovnávací paměť pro zápisy do Cloudflare D1)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def local_d1_queue_push(table_name: str, action: str, payload: dict) -> int:
+    """Uloží zápisovou operaci do vyrovnávací fronty SQLite pro pozdější odeslání do Cloudflare D1."""
+    try:
+        with _get_local_conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO d1_sync_queue (table_name, action, payload, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                (table_name, action, json.dumps(payload, ensure_ascii=False))
+            )
+            conn.commit()
+            return cur.lastrowid
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba local_d1_queue_push: {e}", flush=True)
+        return 0
+
+def local_d1_queue_pop(limit: int = 20) -> list:
+    """Vrátí dávku čekajících zápisů z fronty d1_sync_queue seřazenou podle id vzestupně."""
+    try:
+        with _get_local_conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT id, table_name, action, payload, retry_count, created_at FROM d1_sync_queue ORDER BY id ASC LIMIT ?",
+                (int(limit),)
+            )
+            rows = []
+            for r in cur.fetchall():
+                try:
+                    p = json.loads(r[3])
+                except Exception:
+                    p = {}
+                rows.append({
+                    "id": r[0],
+                    "table_name": r[1],
+                    "action": r[2],
+                    "payload": p,
+                    "retry_count": r[4],
+                    "created_at": r[5]
+                })
+            return rows
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba local_d1_queue_pop: {e}", flush=True)
+        return []
+
+def local_d1_queue_delete(ids: list):
+    """Odstraní úspěšně zpracované položky z d1_sync_queue."""
+    if not ids:
+        return
+    try:
+        with _get_local_conn() as conn:
+            cur = conn.cursor()
+            placeholders = ",".join(["?" for _ in ids])
+            cur.execute(f"DELETE FROM d1_sync_queue WHERE id IN ({placeholders})", [int(x) for x in ids])
+            conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba local_d1_queue_delete: {e}", flush=True)
+
+def local_d1_queue_inc_retry(ids: list):
+    """Zvýší retry_count položek, pokud se odeslání nezdařilo."""
+    if not ids:
+        return
+    try:
+        with _get_local_conn() as conn:
+            cur = conn.cursor()
+            placeholders = ",".join(["?" for _ in ids])
+            cur.execute(f"UPDATE d1_sync_queue SET retry_count = retry_count + 1 WHERE id IN ({placeholders})", [int(x) for x in ids])
+            conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba local_d1_queue_inc_retry: {e}", flush=True)
+
+def local_d1_queue_count() -> int:
+    """Vrátí počet čekajících operací ve frontě d1_sync_queue."""
+    try:
+        with _get_local_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM d1_sync_queue")
+            row = cur.fetchone()
+            return row[0] if row else 0
+    except Exception:
+        return 0
+

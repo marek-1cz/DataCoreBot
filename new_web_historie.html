@@ -1075,7 +1075,7 @@ function renderDetailModal(v, fullData, activeTab){
           '</div>' +
           '<div class="trip-times">🕒 Vyjel: <b>' + tFrom + '</b> ➜ 🏁 Dojel: <b>' + tTo + '</b></div>' +
         '</div>' +
-        '<div class="trip-route"><b>' + tOrigin + '</b> ➔ <b>' + tDest + '</b></div>' +
+        '<div class="trip-route"><span style="color:var(--muted);font-weight:600;">Směr linky dle JŘ:</span> <b style="color:#ffffff;">' + tDest + '</b></div>' +
         '<div class="trip-loc">📍 <b>Kde dojel:</b> <span>' + tStop + '</span> ' + mapBtn + '</div>' +
         (t.status ? '<div style="margin-top:6px;"><span class="trip-stat">Stav: ' + esc(t.status) + '</span></div>' : '') +
       '</div>';
