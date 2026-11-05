@@ -8588,6 +8588,8 @@ def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is
 
 @app.route('/proc-notifikace')
 def stranka_proc_notifikace():
+    typ = str(request.args.get('typ', '')).strip().lower()
+    is_admin = (typ == 'admin')
     try:
         curr_dir = os.path.dirname(os.path.abspath(__file__))
         path = os.path.join(curr_dir, "proc-notifikace.html")
@@ -11378,4 +11380,3 @@ if __name__ == "__main__":
     else:
         print("KRITICKÁ CHYBA: DISCORD_TOKEN chybí! (Web běží dál bez Bota)")
     run_web()
-

@@ -12602,8 +12602,9 @@ def api_notif_create():
     """Vytvoří nové pravidlo notifikace. Vyžaduje přihlášení."""
     cookie_token = request.cookies.get('web_session_token')
     admin_discord_id = session.get('discord_id') if session.get('logged_in') else None
+    is_admin_check, admin_uname = _check_admin_request()
     
-    if not cookie_token and not admin_discord_id:
+    if not cookie_token and not admin_discord_id and not is_admin_check:
         return jsonify({"status": "error", "message": "Musíš být přihlášen/a"}), 401
         
     db = get_db_client()
@@ -12613,7 +12614,7 @@ def api_notif_create():
     user_session_val = None
     discord_id = None
     email = None
-    is_admin = False
+    is_admin = bool(is_admin_check)
 
     try:
         if admin_discord_id:
@@ -12621,7 +12622,7 @@ def api_notif_create():
             if adm_res.data:
                 a_u = adm_res.data[0]
                 role = a_u.get("role") or ""
-                if 'SA' in role or 'DEV' in role:
+                if 'SA' in role or 'DEV' in role or 'ADMIN' in role:
                     is_admin = True
                 if not cookie_token:
                     user_session_val = str(a_u.get("app_id") or a_u["id"])
@@ -12635,7 +12636,7 @@ def api_notif_create():
                 discord_id = u.get("discord_id")
                 email = u.get("email")
                 role = u.get("role") or ""
-                if 'SA' in role or 'DEV' in role:
+                if 'SA' in role or 'DEV' in role or 'ADMIN' in role:
                     is_admin = True
     except Exception as e:
         pass
@@ -12660,7 +12661,16 @@ def api_notif_create():
                 discord_id = None
                 email = target_user
             else:
-                return jsonify({"status": "error", "message": f"Cílový uživatel '{target_user}' nebyl nalezen v databázi a není to platné Discord ID (číslo) ani e-mail."}), 400
+                user_session_val = f"admin_target_{target_user}"
+
+    # Podpora přímého předání kanálů a ID z dashboardu
+    if is_admin:
+        if data.get("discord_id"):
+            discord_id = str(data.get("discord_id")).strip()
+        if data.get("email"):
+            email = str(data.get("email")).strip()
+        if not user_session_val:
+            user_session_val = str(data.get("user_session") or target_user or (admin_discord_id or "admin_session"))
 
     if not user_session_val:
         return jsonify({"status": "error", "message": "Neplatná session pro vytváření notifikací."}), 401
@@ -12668,7 +12678,7 @@ def api_notif_create():
     if not discord_id and not email:
         return jsonify({"status": "error", "message": "Nemáme kam notifikaci poslat – zadejte Discord ID nebo e-mail uživatele."}), 400
 
-    identifier = str(data.get("identifier", "")).strip()
+    identifier = str(data.get("identifier") or data.get("spz") or data.get("bus_id") or "").strip()
     identifier_type = data.get("identifier_type", "spz")
     triggers = data.get("triggers", {})
     label = str(data.get("label", "")).strip()[:80]
@@ -18109,6 +18119,100 @@ def api_admin_users_search():
             pass
 
     return jsonify({"status": "success", "users": users})
+
+
+@mapa_bp.route('/api/admin/buses/search')
+def api_admin_buses_search():
+    """Hledá autobusy podle SPZ, ID vozu nebo linky pro admin našeptávač."""
+    is_admin, _ = _check_admin_request()
+    if not is_admin:
+        return jsonify({"status": "error", "buses": []}), 401
+
+    q = str(request.args.get("q", "")).strip().upper()
+    q_clean = q.replace(" ", "")
+    results = []
+    seen = set()
+
+    # 1. Hledání v živých vozech (GLOBAL_BUS_CACHE)
+    for bid, bc in safe_bus_cache_items():
+        if bc.get("is_train") or bc.get("color_class") == "bg-bug":
+            continue
+        spz = str(bc.get("spz") or "").strip()
+        bid_str = str(bid).strip()
+        line = str(bc.get("line") or "").strip()
+        if not spz or spz in ("Neznámá", "Neznama", "?", "", "None") or spz.startswith("[ID:"):
+            continue
+        key = spz.replace(" ", "").upper()
+        if key in seen:
+            continue
+
+        spz_clean = spz.replace(" ", "").upper()
+        if not q_clean or q_clean in spz_clean or q in bid_str or q_clean in bid_str or (line and q_clean == line.replace(" ", "").upper()):
+            seen.add(key)
+            dest = bc.get("destination") or "Neznámý cíl"
+            stat = resolve_depot_name(bc.get("status") or "V provozu")
+            results.append({
+                "spz": spz,
+                "bus_id": bid_str,
+                "line": line,
+                "destination": dest,
+                "status": stat,
+                "is_live": True,
+                "type": bc.get("vehicle_type") or "Autobus IDPK"
+            })
+            if len(results) >= 25:
+                break
+
+    # 2. Hledání v paměti SPZ_MEMORY pokud je málo výsledků
+    if len(results) < 25:
+        for spz, mem in SPZ_MEMORY.items():
+            if not spz or spz in ("Neznámá", "Neznama", "?", "", "None") or spz.startswith("[ID:"):
+                continue
+            key = spz.replace(" ", "").upper()
+            if key in seen:
+                continue
+            if not q_clean or q_clean in key or (mem.get("line") and q_clean == str(mem.get("line")).replace(" ", "").upper()):
+                seen.add(key)
+                results.append({
+                    "spz": spz,
+                    "bus_id": str(mem.get("bus_id") or ""),
+                    "line": str(mem.get("line") or ""),
+                    "destination": mem.get("destination") or "",
+                    "status": "V paměti",
+                    "is_live": False,
+                    "type": mem.get("vehicle_type") or "Autobus IDPK"
+                })
+                if len(results) >= 25:
+                    break
+
+    # 3. Hledání v lokální databázi spz_cache_local
+    if len(results) < 25:
+        try:
+            from local_db import local_spz_get_all
+            for r in local_spz_get_all():
+                spz = str(r.get("spz") or "").strip()
+                if not spz or spz in ("Neznámá", "Neznama", "?", "", "None") or spz.startswith("[ID:"):
+                    continue
+                key = spz.replace(" ", "").upper()
+                if key in seen:
+                    continue
+                if not q_clean or q_clean in key or (r.get("linka") and q_clean == str(r.get("linka")).replace(" ", "").upper()):
+                    seen.add(key)
+                    results.append({
+                        "spz": spz,
+                        "bus_id": str(r.get("bus_id") or ""),
+                        "line": str(r.get("linka") or ""),
+                        "destination": "",
+                        "status": "V databázi",
+                        "is_live": False,
+                        "type": "Autobus IDPK"
+                    })
+                    if len(results) >= 25:
+                        break
+        except Exception:
+            pass
+
+    return jsonify({"status": "success", "buses": results})
 
 
 @mapa_bp.route('/api/admin/notifications/all_rules')

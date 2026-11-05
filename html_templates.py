@@ -4412,19 +4412,182 @@ HTML_DASHBOARD_NOTIFICATIONS_MGMT = """
 
 <!-- Záložky -->
 <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 12px; flex-wrap: wrap;">
-  <button type="button" id="tab-btn-direct" onclick="switchDashTab('direct')" class="btn" style="background: #7c3aed; color: white; font-weight: bold; font-size: 13px; padding: 8px 18px;">
+  <button type="button" id="tab-btn-map" onclick="switchDashTab('map')" class="btn" style="background: #0284c7; color: white; font-weight: bold; font-size: 13px; padding: 8px 18px; display: inline-flex; align-items: center; gap: 8px;">
+    <i class="fas fa-bell"></i> Upozornění z mapy (Vůz / SPZ)
+  </button>
+  <button type="button" id="tab-btn-direct" onclick="switchDashTab('direct')" class="btn btn-dark" style="color: var(--text-muted); font-size: 13px; padding: 8px 18px; display: inline-flex; align-items: center; gap: 8px;">
     <i class="fas fa-paper-plane"></i> Přímá zpráva na ID / E-mail
   </button>
-  <button type="button" id="tab-btn-rules" onclick="switchDashTab('rules')" class="btn btn-dark" style="color: var(--text-muted); font-size: 13px; padding: 8px 18px;">
+  <button type="button" id="tab-btn-rules" onclick="switchDashTab('rules')" class="btn btn-dark" style="color: var(--text-muted); font-size: 13px; padding: 8px 18px; display: inline-flex; align-items: center; gap: 8px;">
     <i class="fas fa-list-ul"></i> Aktivní pravidla (<span id="d-rules-cnt">0</span>)
   </button>
-  <button type="button" id="tab-btn-hist" onclick="switchDashTab('hist')" class="btn btn-dark" style="color: var(--text-muted); font-size: 13px; padding: 8px 18px;">
+  <button type="button" id="tab-btn-hist" onclick="switchDashTab('hist')" class="btn btn-dark" style="color: var(--text-muted); font-size: 13px; padding: 8px 18px; display: inline-flex; align-items: center; gap: 8px;">
     <i class="fas fa-history"></i> Historie odeslaných (<span id="d-hist-cnt">0</span>)
   </button>
 </div>
 
+<!-- SEKVENCE TAB 0: UPOZORNĚNÍ Z MAPY -->
+<div id="tab-content-map" style="display: block;">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px;">
+    <div style="background-color: var(--bg-panel); padding: 25px; border-radius: 12px; border-top: 4px solid #0284c7; border-left: 1px solid #334155; border-right: 1px solid #334155; border-bottom: 1px solid #334155;">
+      <h3 style="margin-top: 0; color: #38bdf8; font-size: 17px; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-bell"></i> Nastavit sledování vozu z mapy
+      </h3>
+      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px;">
+        Vytvořte pravidlo pro automatické sledování autobusu z mapy pro vybraného uživatele (nebo pro sebe). Nemusíte chodit na mapu a rozklikávat jednotlivé vozy.
+      </p>
+
+      <form onsubmit="handleCreateMapNotif(event)">
+        <!-- 1. Cílový uživatel -->
+        <div style="margin-bottom: 16px; position: relative;" id="map-target-wrapper">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="color: var(--text-main); font-size: 13px; font-weight: 600;">
+              Pro koho nastavit (Nick, App ID, Discord ID nebo E-mail): <span style="color:#ef4444;">*</span>
+            </label>
+            <button type="button" onclick="setMapTargetForMe()" style="background: none; border: none; color: #38bdf8; font-size: 11px; cursor: pointer; text-decoration: underline; padding: 0;">
+              <i class="fas fa-user"></i> Nastavit pro mě ({{ admin_nick }})
+            </button>
+          </div>
+          <div style="position: relative;">
+            <input type="text" id="map-target" autocomplete="off" placeholder="Napište nick (např. marekk_czz), #AppID nebo vložte Discord ID..." required style="margin: 0; padding: 11px 14px; padding-right: 36px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px; width: 100%; box-sizing: border-box;">
+            <span id="map-target-spinner" style="position: absolute; right: 12px; top: 12px; color: #94a3b8; display: none;"><i class="fas fa-spinner fa-spin"></i></span>
+          </div>
+          <div id="map-users-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: #0f172a; border: 1px solid #475569; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.6); max-height: 260px; overflow-y: auto; z-index: 100; margin-top: 4px;"></div>
+          <div id="map-selected-info" style="display: none; margin-top: 8px; padding: 8px 12px; border-radius: 6px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); font-size: 12px; color: #bae6fd;"></div>
+          <div style="color: #64748b; font-size: 11px; margin-top: 4px;">⚡ Našeptávač: Pište nick, #AppID nebo vložte Discord ID / email. Kliknutím uživatele vyberete.</div>
+        </div>
+
+        <!-- 2. Kam zprávu odeslat -->
+        <div style="margin-bottom: 18px;">
+          <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">
+            Způsob doručení notifikace: <span style="color:#ef4444;">*</span>
+          </label>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc;">
+              <input type="radio" name="map-channel" value="both" checked style="accent-color: #38bdf8;">
+              <span><strong>🌐 Obojí</strong> <span style="color: #94a3b8; font-size: 11px; display: block;">Discord + E-mail</span></span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc;">
+              <input type="radio" name="map-channel" value="discord" style="accent-color: #818cf8;">
+              <span><i class="fab fa-discord" style="color: #818cf8;"></i> <strong>Pouze Discord</strong> <span style="color: #94a3b8; font-size: 11px; display: block;">Do soukromé DM</span></span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc;">
+              <input type="radio" name="map-channel" value="email" style="accent-color: #38bdf8;">
+              <span><i class="fas fa-envelope" style="color: #38bdf8;"></i> <strong>Pouze E-mail</strong> <span style="color: #94a3b8; font-size: 11px; display: block;">Do e-mailu</span></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 3. Sledovaný vůz / SPZ -->
+        <div style="margin-bottom: 18px; position: relative;" id="map-bus-wrapper">
+          <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">
+            Sledovaný autobus (SPZ nebo číslo vozu): <span style="color:#ef4444;">*</span>
+          </label>
+          <div style="position: relative;">
+            <input type="text" id="map-bus-input" autocomplete="off" placeholder="Zadejte SPZ (např. 3P9 0451), Bus ID nebo číslo linky..." required style="margin: 0; padding: 11px 14px; padding-right: 36px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px; width: 100%; box-sizing: border-box;">
+            <span id="map-bus-spinner" style="position: absolute; right: 12px; top: 12px; color: #94a3b8; display: none;"><i class="fas fa-spinner fa-spin"></i></span>
+          </div>
+          <div id="map-bus-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: #0f172a; border: 1px solid #475569; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.6); max-height: 260px; overflow-y: auto; z-index: 100; margin-top: 4px;"></div>
+          <div id="map-bus-selected-info" style="display: none; margin-top: 8px; padding: 8px 12px; border-radius: 6px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); font-size: 12px; color: #bae6fd;"></div>
+          <div style="color: #64748b; font-size: 11px; margin-top: 4px;">💡 Našeptávač nabízí vozy živě z mapy i z databáze. Můžete zadat i libovolnou SPZ ručně.</div>
+        </div>
+
+        <!-- 4. Co za akci (Sledované události) -->
+        <div style="margin-bottom: 18px;">
+          <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">
+            Co za akci sledovat: <span style="color:#ef4444;">*</span>
+          </label>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc;">
+              <input type="checkbox" id="m-trig-depot-out" checked style="accent-color: #38bdf8;">
+              <span>🚪 <strong>Výjezd z depa</strong></span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc;">
+              <input type="checkbox" id="m-trig-depot-in" checked style="accent-color: #38bdf8;">
+              <span>🏠 <strong>Zájezd do depa</strong></span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc;">
+              <input type="checkbox" id="m-trig-moving" checked style="accent-color: #38bdf8;">
+              <span>🚦 <strong>Rozjezd vozu</strong></span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc;">
+              <input type="checkbox" id="m-trig-line" style="accent-color: #38bdf8;">
+              <span>🔀 <strong>Nová linka / spoj</strong></span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc;">
+              <input type="checkbox" id="m-trig-stopped" style="accent-color: #38bdf8;">
+              <span>🚏 <strong>Vůz zastavil / konečná</strong></span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc;">
+              <input type="checkbox" id="m-trig-delay" style="accent-color: #38bdf8;" onchange="toggleDelayInput(this.checked)">
+              <span>⏱️ <strong>Zpoždění nad limit</strong></span>
+            </label>
+          </div>
+          <div id="map-delay-val-wrap" style="display: none; margin-top: 8px; padding: 10px 14px; background: rgba(56, 189, 248, 0.05); border: 1px solid #334155; border-radius: 8px;">
+            <label style="font-size: 12px; color: #bae6fd; display: block; margin-bottom: 4px;">Minimální zpoždění pro upozornění (v minutách):</label>
+            <input type="number" id="m-delay-min" min="1" max="120" value="5" style="width: 100px; padding: 6px 10px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 6px; font-size: 13px; color: white;">
+          </div>
+        </div>
+
+        <!-- 5. Režim sledování (Jednorázově vs. Pravidelně) -->
+        <div style="margin-bottom: 18px;">
+          <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">
+            Typ / Opakování:
+          </label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc;">
+              <input type="radio" name="map-frequency" value="once" checked style="accent-color: #38bdf8;">
+              <span>⚡ <strong>Jednorázově</strong> <span style="color: #94a3b8; font-size: 11px; display: block;">Po 1. doručení se pravidlo smaže</span></span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; cursor: pointer; font-size: 13px; color: #f8fafc;">
+              <input type="radio" name="map-frequency" value="repeat" style="accent-color: #38bdf8;">
+              <span>🔁 <strong>Pravidelně</strong> <span style="color: #94a3b8; font-size: 11px; display: block;">Hlídá při každé události</span></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 6. Vlastní štítek -->
+        <div style="margin-bottom: 20px;">
+          <label style="color: var(--text-main); font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">
+            Poznámka / Vlastní název pravidla (nepovinné):
+          </label>
+          <input type="text" id="map-notif-label" placeholder="např. Ranní linka 21, Vůz Karosa..." style="margin: 0; padding: 10px 14px; background: rgba(0,0,0,0.3); border: 1px solid #334155; border-radius: 8px; font-size: 14px; width: 100%; box-sizing: border-box;">
+        </div>
+
+        <button type="button" onclick="handleCreateMapNotif(event)" id="btn-submit-map-notif" class="btn" style="width: 100%; background: linear-gradient(135deg, #0284c7, #2563eb); color: white; padding: 12px; font-size: 14px; font-weight: 700; border-radius: 8px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35); cursor: pointer;">
+          <i class="fas fa-bell"></i> Uložit a aktivovat sledování vozu
+        </button>
+      </form>
+
+      <div id="map-notif-status" style="margin-top: 15px; display: none;"></div>
+    </div>
+
+    <!-- Nápověda vpravo -->
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <div style="background-color: var(--bg-panel); padding: 25px; border-radius: 12px; border: 1px solid #334155;">
+        <h4 style="margin-top: 0; color: #38bdf8; font-size: 15px;"><i class="fas fa-info-circle"></i> Jak funguje sledování z dashboardu?</h4>
+        <ul style="color: var(--text-muted); font-size: 13px; line-height: 1.7; padding-left: 20px; margin: 0;">
+          <li><strong>Pohodlí pro administrátora:</strong> Už nemusíte otevírat interaktivní mapu a složitě hledat vůz. Zde zadáte uživatele, SPZ a události na jednom místě.</li>
+          <li><strong>Propojení s účtem:</strong> Jakmile vyberete uživatele, pravidlo se automaticky propojí s jeho účtem a doručí se přes kanál, který jste zvolili (Discord DM i e-mail).</li>
+          <li><strong>Okamžitá aktivace:</strong> Pravidlo je ihned aktivní v reálném čase. Až vůz vyjede z depa nebo se rozjede, bot odešle zprávu s náhledem na mapu.</li>
+        </ul>
+      </div>
+
+      <div style="background-color: var(--bg-panel); padding: 25px; border-radius: 12px; border: 1px solid #334155;">
+        <h4 style="margin-top: 0; color: #a78bfa; font-size: 15px;"><i class="fas fa-list-check"></i> Rychlý přehled pravidel</h4>
+        <p style="color: var(--text-muted); font-size: 13px; line-height: 1.6; margin: 0 0 12px 0;">
+          Všechna nastavená pravidla si můžete kdykoliv prohlédnout a spravovat v záložce <strong>Aktivní pravidla</strong>.
+        </p>
+        <button type="button" onclick="switchDashTab('rules')" class="btn btn-dark" style="font-size: 12px; padding: 8px 14px; width: 100%;">
+          <i class="fas fa-list-ul"></i> Zobrazit aktivní pravidla (<span id="d-rules-cnt-side">0</span>)
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- SEKVENCE TAB 1: PŘÍMÁ ZPRÁVA -->
-<div id="tab-content-direct" style="display: block;">
+<div id="tab-content-direct" style="display: none;">
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
     <div style="background-color: var(--bg-panel); padding: 25px; border-radius: 12px; border-top: 4px solid #7c3aed; border-left: 1px solid #334155; border-right: 1px solid #334155; border-bottom: 1px solid #334155;">
       <h3 style="margin-top: 0; color: #c084fc; font-size: 17px; display: flex; align-items: center; gap: 8px;">
@@ -4619,22 +4782,37 @@ let _dashRules = [];
 let _dashHist = [];
 
 function switchDashTab(tab) {
-  document.getElementById('tab-content-direct').style.display = tab === 'direct' ? 'block' : 'none';
-  document.getElementById('tab-content-rules').style.display = tab === 'rules' ? 'block' : 'none';
-  document.getElementById('tab-content-hist').style.display = tab === 'hist' ? 'block' : 'none';
+  const cMap = document.getElementById('tab-content-map');
+  const cDir = document.getElementById('tab-content-direct');
+  const cRul = document.getElementById('tab-content-rules');
+  const cHis = document.getElementById('tab-content-hist');
 
+  if (cMap) cMap.style.display = tab === 'map' ? 'block' : 'none';
+  if (cDir) cDir.style.display = tab === 'direct' ? 'block' : 'none';
+  if (cRul) cRul.style.display = tab === 'rules' ? 'block' : 'none';
+  if (cHis) cHis.style.display = tab === 'hist' ? 'block' : 'none';
+
+  const btnMap = document.getElementById('tab-btn-map');
   const btnDirect = document.getElementById('tab-btn-direct');
   const btnRules = document.getElementById('tab-btn-rules');
   const btnHist = document.getElementById('tab-btn-hist');
 
-  btnDirect.style.background = tab === 'direct' ? '#7c3aed' : '#334155';
-  btnDirect.style.color = tab === 'direct' ? 'white' : 'var(--text-muted)';
-
-  btnRules.style.background = tab === 'rules' ? '#7c3aed' : '#334155';
-  btnRules.style.color = tab === 'rules' ? 'white' : 'var(--text-muted)';
-
-  btnHist.style.background = tab === 'hist' ? '#7c3aed' : '#334155';
-  btnHist.style.color = tab === 'hist' ? 'white' : 'var(--text-muted)';
+  if (btnMap) {
+    btnMap.style.background = tab === 'map' ? '#0284c7' : '#334155';
+    btnMap.style.color = tab === 'map' ? 'white' : 'var(--text-muted)';
+  }
+  if (btnDirect) {
+    btnDirect.style.background = tab === 'direct' ? '#7c3aed' : '#334155';
+    btnDirect.style.color = tab === 'direct' ? 'white' : 'var(--text-muted)';
+  }
+  if (btnRules) {
+    btnRules.style.background = tab === 'rules' ? '#7c3aed' : '#334155';
+    btnRules.style.color = tab === 'rules' ? 'white' : 'var(--text-muted)';
+  }
+  if (btnHist) {
+    btnHist.style.background = tab === 'hist' ? '#7c3aed' : '#334155';
+    btnHist.style.color = tab === 'hist' ? 'white' : 'var(--text-muted)';
+  }
 
   if (tab === 'rules' && _dashRules.length === 0) loadDashRules();
   if (tab === 'hist' && _dashHist.length === 0) loadDashHist();
@@ -5046,13 +5224,12 @@ function filterDashHist() {
   renderDashHist(filtered);
 }
 
-let _userSearchDebounce = null;
-function initUserAutocomplete() {
-  const input = document.getElementById('direct-target');
-  const dropdown = document.getElementById('users-search-dropdown');
-  const spinner = document.getElementById('direct-target-spinner');
-  const infoEl = document.getElementById('direct-selected-info');
+let _directSelectedUser = null;
+let _mapSelectedUser = null;
+
+function attachUserAutocomplete(input, dropdown, spinner, infoEl, onSelectCallback) {
   if (!input || !dropdown) return;
+  let debounceTimer = null;
 
   async function doSearch(query) {
     if (spinner) spinner.style.display = 'inline-block';
@@ -5120,6 +5297,7 @@ function initUserAutocomplete() {
             </div>
           `;
         }
+        if (onSelectCallback) onSelectCallback(u);
       };
 
       dropdown.appendChild(row);
@@ -5130,27 +5308,298 @@ function initUserAutocomplete() {
 
   input.addEventListener('input', () => {
     const q = input.value.trim();
-    clearTimeout(_userSearchDebounce);
+    clearTimeout(debounceTimer);
     if (infoEl) infoEl.style.display = 'none';
-    _userSearchDebounce = setTimeout(() => doSearch(q), 250);
+    debounceTimer = setTimeout(() => doSearch(q), 250);
   });
 
   input.addEventListener('focus', () => {
     doSearch(input.value.trim());
   });
+}
 
-  document.addEventListener('click', (e) => {
-    const wrap = document.getElementById('direct-target-wrapper');
-    if (wrap && !wrap.contains(e.target)) {
-      dropdown.style.display = 'none';
+function setupBusAutocomplete() {
+  const inputEl = document.getElementById('map-bus-input');
+  const dropdownEl = document.getElementById('map-bus-dropdown');
+  const spinnerEl = document.getElementById('map-bus-spinner');
+  const infoEl = document.getElementById('map-bus-selected-info');
+  if (!inputEl || !dropdownEl) return;
+
+  let debounce = null;
+  async function doSearch(q) {
+    if (spinnerEl) spinnerEl.style.display = 'inline-block';
+    try {
+      const res = await fetch('/api/admin/buses/search?q=' + encodeURIComponent(q));
+      const data = await res.json();
+      renderBuses(data.buses || []);
+    } catch (e) {
+      console.error('Chyba hledání busů:', e);
+    } finally {
+      if (spinnerEl) spinnerEl.style.display = 'none';
     }
+  }
+
+  function renderBuses(buses) {
+    dropdownEl.innerHTML = '';
+    if (!buses || buses.length === 0) {
+      dropdownEl.innerHTML = '<div style="padding: 12px; color: #94a3b8; font-size: 13px; text-align: center;"><i class="fas fa-bus" style="margin-right: 6px;"></i>Žádný odpovídající vůz. Můžete zadat vlastní SPZ.</div>';
+      dropdownEl.style.display = 'block';
+      return;
+    }
+
+    buses.forEach(b => {
+      const row = document.createElement('div');
+      row.style.cssText = 'padding: 9px 14px; border-bottom: 1px solid #1e293b; cursor: pointer; transition: background 0.15s; display: flex; align-items: center; justify-content: space-between; gap: 8px;';
+      row.onmouseenter = () => row.style.background = '#1e293b';
+      row.onmouseleave = () => row.style.background = 'transparent';
+
+      const spz = b.spz || 'Neznámá';
+      const line = b.line ? `Linka ${b.line}` : '';
+      const dest = b.destination || '';
+      const stat = b.status || '';
+      const isLive = b.is_live;
+
+      row.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-weight: 800; font-family: monospace; background: #fff; color: #000; padding: 2px 7px; border-radius: 4px; border: 1px solid #94a3b8; font-size: 13px;">${spz}</span>
+          <div>
+            <div style="color: #f8fafc; font-size: 13px; font-weight: 600;">
+              ${line ? `<span style="background: #0284c7; color: white; padding: 1px 6px; border-radius: 4px; font-size: 11px; margin-right: 6px;">${line}</span>` : ''}
+              ${dest ? dest : 'Vůz IDPK'}
+            </div>
+            <div style="color: #94a3b8; font-size: 11px;">${b.type || 'Autobus'} ${b.bus_id ? '· #' + b.bus_id : ''}</div>
+          </div>
+        </div>
+        <div>
+          ${isLive ? '<span style="font-size: 11px; color: #10b981; background: rgba(16,185,129,0.15); padding: 2px 7px; border-radius: 4px; font-weight: 600;">● Živě na mapě</span>' : '<span style="font-size: 11px; color: #94a3b8; background: #1e293b; padding: 2px 6px; border-radius: 4px;">V evidenci</span>'}
+        </div>
+      `;
+
+      row.onclick = () => {
+        inputEl.value = spz;
+        dropdownEl.style.display = 'none';
+        if (infoEl) {
+          infoEl.style.display = 'block';
+          infoEl.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <i class="fas fa-check-circle" style="color: #10b981; margin-right: 6px;"></i>
+                Vybrán vůz: <strong style="color: #fff; font-family: monospace;">${spz}</strong>
+                ${line ? `<span style="margin-left: 6px; color: #38bdf8;">(${line})</span>` : ''}
+              </div>
+              <div style="font-size: 11px; color: #94a3b8;">
+                Stav: <span style="color: ${isLive ? '#10b981' : '#94a3b8'};">${stat || (isLive ? 'Živě na mapě' : 'V evidenci')}</span>
+              </div>
+            </div>
+          `;
+        }
+      };
+
+      dropdownEl.appendChild(row);
+    });
+    dropdownEl.style.display = 'block';
+  }
+
+  inputEl.addEventListener('input', () => {
+    const q = inputEl.value.trim();
+    clearTimeout(debounce);
+    if (infoEl) infoEl.style.display = 'none';
+    debounce = setTimeout(() => doSearch(q), 250);
+  });
+
+  inputEl.addEventListener('focus', () => {
+    doSearch(inputEl.value.trim());
   });
 }
 
-// Inicializace počtů a našeptávače při načtení
+function setMapTargetForMe() {
+  const input = document.getElementById('map-target');
+  const infoEl = document.getElementById('map-selected-info');
+  input.value = "{{ admin_nick }}";
+  _mapSelectedUser = { nick: "{{ admin_nick }}" };
+  if (infoEl) {
+    infoEl.style.display = 'block';
+    infoEl.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div><i class="fas fa-user-check" style="color: #38bdf8; margin-right: 6px;"></i> Nastaveno pro administrátora: <strong style="color: #fff;">{{ admin_nick }}</strong></div>
+        <div style="font-size: 11px; color: #94a3b8;">Upozornění bude doručeno vám</div>
+      </div>
+    `;
+  }
+}
+
+function toggleDelayInput(checked) {
+  const wrap = document.getElementById('map-delay-val-wrap');
+  if (wrap) wrap.style.display = checked ? 'block' : 'none';
+}
+
+async function handleCreateMapNotif(e) {
+  if (e) e.preventDefault();
+  const statusEl = document.getElementById('map-notif-status');
+  const btn = document.getElementById('btn-submit-map-notif');
+
+  const targetInput = document.getElementById('map-target').value.trim();
+  const busInput = document.getElementById('map-bus-input').value.trim();
+
+  if (!targetInput) {
+    alert('Zadejte prosím cílového uživatele.');
+    return;
+  }
+  if (!busInput) {
+    alert('Zadejte prosím SPZ nebo číslo vozu.');
+    return;
+  }
+
+  // Kanály
+  const chChoice = document.querySelector('input[name="map-channel"]:checked').value;
+  let channels = ['discord', 'email'];
+  if (chChoice === 'discord') channels = ['discord'];
+  else if (chChoice === 'email') channels = ['email'];
+
+  // Události
+  const trigDepotOut = document.getElementById('m-trig-depot-out').checked;
+  const trigDepotIn = document.getElementById('m-trig-depot-in').checked;
+  const trigMoving = document.getElementById('m-trig-moving').checked;
+  const trigLine = document.getElementById('m-trig-line').checked;
+  const trigStopped = document.getElementById('m-trig-stopped').checked;
+  const trigDelay = document.getElementById('m-trig-delay').checked;
+  const delayMin = parseInt(document.getElementById('m-delay-min').value) || 5;
+
+  if (!trigDepotOut && !trigDepotIn && !trigMoving && !trigLine && !trigStopped && !trigDelay) {
+    alert('Zaškrtněte alespoň jednu událost, kterou chcete sledovat.');
+    return;
+  }
+
+  const triggers = {
+    depot_out: trigDepotOut,
+    depot_in: trigDepotIn,
+    started_moving: trigMoving,
+    new_line: trigLine,
+    trip_change: trigLine,
+    stopped: trigStopped,
+    delay: trigDelay,
+    delay_val: delayMin,
+    delay_normal: trigDelay
+  };
+
+  const isOneTime = document.querySelector('input[name="map-frequency"]:checked').value === 'once';
+  const label = document.getElementById('map-notif-label').value.trim();
+
+  const payload = {
+    target_user: _mapSelectedUser ? (_mapSelectedUser.discord_id || _mapSelectedUser.app_id || _mapSelectedUser.nick || targetInput) : targetInput,
+    discord_id: _mapSelectedUser ? _mapSelectedUser.discord_id : (targetInput.match(/^[0-9]{15,20}$/) ? targetInput : null),
+    email: _mapSelectedUser ? _mapSelectedUser.email : (targetInput.includes('@') ? targetInput : null),
+    identifier: busInput,
+    identifier_type: 'spz',
+    delivery_channels: channels,
+    triggers: triggers,
+    is_one_time: isOneTime,
+    label: label || `Sledování vozu ${busInput}`
+  };
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Vytvářím upozornění...';
+  statusEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/notifications/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok || data.status === 'error') {
+      throw new Error(data.message || 'Chyba serveru');
+    }
+
+    statusEl.className = 'alert alert-success';
+    statusEl.style.cssText = 'display:block; padding:14px; border-radius:8px; background:rgba(16,185,129,0.15); border:1px solid #10b981; color:#6ee7b7; font-size:13px; margin-top:15px;';
+    statusEl.innerHTML = `
+      <div style="font-weight:bold; margin-bottom:4px;"><i class="fas fa-check-circle"></i> Upozornění bylo úspěšně vytvořeno a aktivováno!</div>
+      <div>${data.message || 'Pravidlo je aktivní v systému a čeká na vybrané události vozu.'}</div>
+      <div style="margin-top:10px;">
+        <button type="button" onclick="switchDashTab('rules')" style="background:#0284c7; color:white; border:none; padding:6px 14px; border-radius:6px; font-size:12px; cursor:pointer; font-weight:600;">
+          <i class="fas fa-list-ul"></i> Přejít do seznamu Aktivních pravidel
+        </button>
+      </div>
+    `;
+
+    // Aktualizovat počty pravidel
+    loadDashRules();
+  } catch (err) {
+    statusEl.className = 'alert alert-danger';
+    statusEl.style.cssText = 'display:block; padding:14px; border-radius:8px; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#fca5a5; font-size:13px; margin-top:15px;';
+    statusEl.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Chyba při ukládání: <strong>${err.message}</strong>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-bell"></i> Uložit a aktivovat sledování vozu';
+  }
+}
+
+// Zavírání našeptávačů při kliku mimo
+document.addEventListener('click', (e) => {
+  const directWrap = document.getElementById('direct-target-wrapper');
+  const directDrop = document.getElementById('users-search-dropdown');
+  if (directWrap && directDrop && !directWrap.contains(e.target)) {
+    directDrop.style.display = 'none';
+  }
+
+  const mapTargetWrap = document.getElementById('map-target-wrapper');
+  const mapTargetDrop = document.getElementById('map-users-dropdown');
+  if (mapTargetWrap && mapTargetDrop && !mapTargetWrap.contains(e.target)) {
+    mapTargetDrop.style.display = 'none';
+  }
+
+  const mapBusWrap = document.getElementById('map-bus-wrapper');
+  const mapBusDrop = document.getElementById('map-bus-dropdown');
+  if (mapBusWrap && mapBusDrop && !mapBusWrap.contains(e.target)) {
+    mapBusDrop.style.display = 'none';
+  }
+});
+
+// Inicializace
 loadDashRules();
 loadDashHist();
-initUserAutocomplete();
+
+// Našeptávač pro Přímou zprávu
+attachUserAutocomplete(
+  document.getElementById('direct-target'),
+  document.getElementById('users-search-dropdown'),
+  document.getElementById('direct-target-spinner'),
+  document.getElementById('direct-selected-info'),
+  (u) => { _directSelectedUser = u; }
+);
+
+// Našeptávač pro Upozornění z mapy
+attachUserAutocomplete(
+  document.getElementById('map-target'),
+  document.getElementById('map-users-dropdown'),
+  document.getElementById('map-target-spinner'),
+  document.getElementById('map-selected-info'),
+  (u) => {
+    _mapSelectedUser = u;
+    // Automatické přizpůsobení kanálů podle toho, co uživatel má vyplněno
+    const radioDiscord = document.querySelector('input[name="map-channel"][value="discord"]');
+    const radioEmail = document.querySelector('input[name="map-channel"][value="email"]');
+    const radioBoth = document.querySelector('input[name="map-channel"][value="both"]');
+    if (u.discord_id && u.email && radioBoth) radioBoth.checked = true;
+    else if (u.discord_id && radioDiscord) radioDiscord.checked = true;
+    else if (u.email && radioEmail) radioEmail.checked = true;
+  }
+);
+
+// Našeptávač pro výběr autobusu / SPZ
+setupBusAutocomplete();
+
+// Výchozí záložka podle URL parametru ?tab=... nebo hash #...
+const _urlParams = new URLSearchParams(window.location.search);
+const _initialTab = _urlParams.get('tab') || window.location.hash.replace('#', '') || 'map';
+if (['map', 'direct', 'rules', 'hist'].includes(_initialTab)) {
+  switchDashTab(_initialTab);
+} else {
+  switchDashTab('map');
+}
 </script>
 """
 
