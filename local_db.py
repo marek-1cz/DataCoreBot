@@ -497,12 +497,33 @@ def local_notif_get_history(user_session: str = None, limit: int = 50) -> list:
                         FROM bus_notifications_history
                         ORDER BY id DESC LIMIT ?
                     """, (limit,)).fetchall()
-                return [dict(r) for r in rows]
+                res = []
+                for r in rows:
+                    item = dict(r)
+                    f_at = item.get("fired_at") or ""
+                    # Zajištění klíčů time a target pro frontend dashboardu
+                    item["time"] = f_at
+                    item["target"] = item.get("user_session") or ""
+                    res.append(item)
+                return res
     except Exception as e:
         print(f"[LOCAL DB] Chyba cteni historie notifikaci: {e}", flush=True)
         return []
 
-def local_bus_notification_create(user_session: str, identifier: str, identifier_type: str, triggers: dict, label: str = "", delivery_channels: list = None, is_one_time: bool = True, discord_id: str = None, email: str = None) -> dict:
+def local_bus_notification_delete_existing(user_session: str, identifier: str):
+    """Deaktivuje nebo smaže předchozí aktivní pravidla pro stejného uživatele a vůz (ochrana proti duplicitám)."""
+    try:
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                conn.execute(
+                    "DELETE FROM bus_notifications_local WHERE user_session = ? AND identifier = ?",
+                    (str(user_session or ""), str(identifier or ""))
+                )
+                conn.commit()
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba mazání duplicitního pravidla: {e}", flush=True)
+
+def local_bus_notification_create(user_session: str, identifier: str, identifier_type: str, triggers: dict, label: str = "", delivery_channels: list = None, is_one_time: bool = True, discord_id: str = None, email: str = None, rule_id = None) -> dict:
     """Uloží pravidlo notifikace do lokální SQLite databáze. Zajišťuje fungování i při výpadku/blokaci cloudu."""
     try:
         import json
@@ -520,25 +541,47 @@ def local_bus_notification_create(user_session: str, identifier: str, identifier
         with _local_db_lock:
             with _get_local_conn() as conn:
                 cur = conn.cursor()
-                cur.execute("""
-                    INSERT INTO bus_notifications_local (
-                        user_session, discord_id, email, identifier, identifier_type,
-                        triggers, label, delivery_channels, is_one_time, is_active,
-                        fired_count, last_fired_at, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, NULL, ?)
-                """, (
-                    str(user_session or ""),
-                    str(discord_id or ""),
-                    str(email or ""),
-                    str(identifier or ""),
-                    str(identifier_type or "spz"),
-                    triggers_str,
-                    str(label or ""),
-                    channels_str,
-                    1 if is_one_time else 0,
-                    now_str
-                ))
-                new_id = cur.lastrowid
+                if rule_id is not None:
+                    cur.execute("""
+                        INSERT OR REPLACE INTO bus_notifications_local (
+                            id, user_session, discord_id, email, identifier, identifier_type,
+                            triggers, label, delivery_channels, is_one_time, is_active,
+                            fired_count, last_fired_at, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, NULL, ?)
+                    """, (
+                        int(rule_id) if str(rule_id).isdigit() else None,
+                        str(user_session or ""),
+                        str(discord_id or ""),
+                        str(email or ""),
+                        str(identifier or ""),
+                        str(identifier_type or "spz"),
+                        triggers_str,
+                        str(label or ""),
+                        channels_str,
+                        1 if is_one_time else 0,
+                        now_str
+                    ))
+                    new_id = cur.lastrowid or rule_id
+                else:
+                    cur.execute("""
+                        INSERT INTO bus_notifications_local (
+                            user_session, discord_id, email, identifier, identifier_type,
+                            triggers, label, delivery_channels, is_one_time, is_active,
+                            fired_count, last_fired_at, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, NULL, ?)
+                    """, (
+                        str(user_session or ""),
+                        str(discord_id or ""),
+                        str(email or ""),
+                        str(identifier or ""),
+                        str(identifier_type or "spz"),
+                        triggers_str,
+                        str(label or ""),
+                        channels_str,
+                        1 if is_one_time else 0,
+                        now_str
+                    ))
+                    new_id = cur.lastrowid
                 conn.commit()
                 return {
                     "id": new_id,

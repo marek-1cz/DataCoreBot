@@ -8304,6 +8304,8 @@ async def check_depot_queue():
     except Exception as e:
         print(f"[DEPOT DISCORD] Chyba: {e}", flush=True)
 
+_RECENT_QUEUE_SENT = {}
+
 @tasks.loop(seconds=5)
 async def check_notification_queue():
     """Zpracuje frontu notifikací a pošle DM přes Discord bota."""
@@ -8317,6 +8319,18 @@ async def check_notification_queue():
             rule_id = item.get("rule_id")
             queue_id = item.get("queue_id")
             is_one_time = bool(item.get("is_one_time"))
+
+            # Deduplikace zpráv pro stejného uživatele (ochrana proti vícenásobnému odeslání 5x najednou)
+            if discord_id:
+                msg_sig = f"{discord_id}:{rule_id}:{item.get('event_type') or item.get('trigger') or ''}:{dm_text[:80]}"
+                now_ts = time.time()
+                for k in list(_RECENT_QUEUE_SENT.keys()):
+                    if now_ts - _RECENT_QUEUE_SENT[k] > 120:
+                        _RECENT_QUEUE_SENT.pop(k, None)
+                if msg_sig in _RECENT_QUEUE_SENT and (now_ts - _RECENT_QUEUE_SENT[msg_sig] < 60):
+                    print(f"[NOTIF DM DEDUP] Ignorována duplicitní zpráva pro {discord_id} během 60s", flush=True)
+                    continue
+                _RECENT_QUEUE_SENT[msg_sig] = now_ts
 
             # Pošli Discord DM
             if discord_id:
@@ -8574,127 +8588,19 @@ def send_notification_email_sync(to_email, embed_data, dm_text, rule_id=None, is
 
 @app.route('/proc-notifikace')
 def stranka_proc_notifikace():
-    typ = str(request.args.get('typ', '')).strip().lower()
-    is_admin = (typ == 'admin')
-
-    if is_admin:
-        html_content = """
-        <div style="max-width: 720px; margin: 40px auto; padding: 24px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);">
-          <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px; border-bottom:1px solid #334155; padding-bottom:16px;">
-            <div style="width:54px; height:54px; border-radius:14px; background:rgba(168,85,247,0.15); border:1px solid #a855f7; display:flex; align-items:center; justify-content:center; font-size:26px; color:#c084fc;">
-              <i class="fas fa-user-shield"></i>
-            </div>
-            <div>
-              <h1 style="color:#c084fc; font-size:22px; margin:0 0 4px 0; font-weight:bold;">Proč mi přišla zpráva od administrátora?</h1>
-              <p style="color:#94a3b8; font-size:13px; margin:0;">Oficiální sdělení vedení projektu DataCore / OIS IDPK</p>
-            </div>
-          </div>
-
-          <div style="color:#e2e8f0; font-size:14px; line-height:1.7;">
-            <div style="background:rgba(168,85,247,0.12); border-left:4px solid #a855f7; padding:16px 18px; border-radius:0 8px 8px 0; margin:16px 0;">
-              <strong style="color:#d8b4fe; font-size:15px;">✉️ Osobní zpráva od administrace</strong><br>
-              Tuto zprávu vám zaslal <strong>přímo administrátor systému</strong> (např. <code>marekk_czz</code>).
-              <div style="margin-top:6px; color:#cbd5e1;">
-                <strong>Nejedná se o automatické sledování autobusů z mapy</strong>, ale o individuální komunikaci vedení projektu DataCore / OIS IDPK.
-              </div>
-            </div>
-
-            <h3 style="color:#f8fafc; font-size:16px; margin:22px 0 10px 0;">Nejčastější důvody odeslání:</h3>
-            <ul style="padding-left:20px; margin:0 0 20px 0; color:#cbd5e1;">
-              <li style="margin-bottom:8px;"><strong>Odpověď na vaši žádost nebo dotaz:</strong> Reakce administrátora na vámi nahlášenou chybu, dotaz či požadavek na podporu.</li>
-              <li style="margin-bottom:8px;"><strong>Informace k vašemu účtu:</strong> Oznámení o schválení přístupu, resetu HWID zámku nebo důležité provozní upozornění k aplikaci.</li>
-              <li style="margin-bottom:8px;"><strong>Provozní a organizační sdělení:</strong> Důležitá zpráva určená přímo vám jako uživateli, řidiči či podporovateli projektu.</li>
-            </ul>
-
-            <div style="background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.25); border-radius:10px; padding:16px; margin:20px 0;">
-              <h4 style="color:#38bdf8; margin:0 0 6px 0; font-size:15px; display:flex; align-items:center; gap:8px;">
-                <i class="fas fa-reply"></i> Jak můžete odpovědět?
-              </h4>
-              <p style="margin:0; font-size:13px; color:#bae6fd;">
-                Pokud potřebujete na zprávu reagovat, můžete využít náš kontaktní formulář na stránce podpory nebo napsat přímo na náš oficiální Discord server.
-              </p>
-            </div>
-
-            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:24px; justify-content:center;">
-              <a href="/podpora" style="background:#7c3aed; color:white; padding:10px 18px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:8px; box-shadow: 0 4px 12px rgba(124,58,237,0.35);">
-                <i class="fas fa-headset"></i> Napsat na podporu / Odpovědět
-              </a>
-              <a href="/ucet" style="background:#1e293b; border:1px solid #334155; color:#38bdf8; padding:10px 18px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:8px;">
-                <i class="fas fa-user"></i> Můj účet
-              </a>
-              <a href="/proc-notifikace" style="background:#1e293b; border:1px solid #334155; color:#94a3b8; padding:10px 18px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:8px;">
-                <i class="fas fa-bell"></i> Informace o notifikacích z mapy
-              </a>
-            </div>
-          </div>
-        </div>
-        """
-        return render_public(html_content)
-
-    html_content = """
-    <div style="max-width: 720px; margin: 40px auto; padding: 24px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);">
-      <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px; border-bottom:1px solid #334155; padding-bottom:16px;">
-        <div style="width:54px; height:54px; border-radius:14px; background:rgba(56,189,248,0.15); border:1px solid #38bdf8; display:flex; align-items:center; justify-content:center; font-size:26px; color:#38bdf8;">
-          <i class="fas fa-bell"></i>
-        </div>
-        <div>
-          <h1 style="color:#38bdf8; font-size:22px; margin:0 0 4px 0; font-weight:bold;">Proč mi chodí upozornění?</h1>
-          <p style="color:#94a3b8; font-size:13px; margin:0;">Vysvětlení notifikací systému OIS IDPK</p>
-        </div>
-      </div>
-
-      <div style="color:#e2e8f0; font-size:14px; line-height:1.7;">
-        <p>
-          Tato zpráva vám dorazila, protože je na váš účet, e-mail nebo Discord navázáno aktivní sledování autobusu či linky.
-        </p>
-
-        <div style="background:rgba(56,189,248,0.08); border-left:4px solid #38bdf8; padding:14px 18px; border-radius:0 8px 8px 0; margin:18px 0;">
-          <strong style="color:#38bdf8;">📍 Kde se notifikace vzala?</strong><br>
-          S největší pravděpodobností jste si toto upozornění <strong>sami zaklikli na naší interaktivní mapě</strong>.
-          Při prohlížení autobusu, spoje nebo zastávky stačí kliknout na ikonu zvonečku 🔔 a vybrat si sledované události (např. příjezd k zastávce, konečná stanice, výjezd z vozovny, zpoždění apod.).
-        </div>
-
-        <h3 style="color:#f8fafc; font-size:16px; margin:22px 0 10px 0;">Co můžete udělat, pokud už upozornění nechcete?</h3>
-        <ul style="padding-left:20px; margin:0 0 20px 0; color:#cbd5e1;">
-          <li style="margin-bottom:8px;"><strong>Vypnout jedním kliknutím:</strong> V každé pravidelné notifikaci (v e-mailu i na Discordu) je přímé tlačítko <em>🔕 Vypnout notifikace</em>. Kliknutím na něj se pravidlo ihned zruší.</li>
-          <li style="margin-bottom:8px;"><strong>Správa v účtu:</strong> Všechna vaše aktivní pravidla i proběhlá upozornění můžete kdykoliv spravovat a mazat ve svém <a href="/ucet#notifikace" style="color:#38bdf8; text-decoration:none; font-weight:bold;">Uživatelském účtu</a>.</li>
-          <li style="margin-bottom:8px;"><strong>Jednorázová upozornění:</strong> Pokud šlo o jednorázovou notifikaci (např. „upozorni mě, až spoj dorazí do zastávky“), tato notifikace se po doručení sama automaticky smaže.</li>
-        </ul>
-
-        <!-- Sekce pro přímé zprávy administrátora -->
-        <div style="background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.3); border-radius:10px; padding:16px; margin:20px 0;">
-          <h4 style="color:#c084fc; margin:0 0 6px 0; font-size:15px; display:flex; align-items:center; gap:8px;">
-            <i class="fas fa-shield-alt"></i> Přišla vám přímá zpráva od administrátora?
-          </h4>
-          <p style="margin:0; font-size:13px; color:#e2e8f0;">
-            Pokud jste obdrželi zprávu přímo od správce systému (např. marekk_czz), nejedná se o sledování autobusu z mapy, ale o oficiální sdělení administrátora. <a href="/proc-notifikace?typ=admin" style="color:#d8b4fe; font-weight:bold; text-decoration:underline;">Zobrazit podrobnosti k administrátorským zprávám &raquo;</a>
-          </p>
-        </div>
-
-        <div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:10px; padding:16px; margin:20px 0;">
-          <h4 style="color:#f87171; margin:0 0 6px 0; font-size:15px; display:flex; align-items:center; gap:8px;">
-            <i class="fas fa-question-circle"></i> Myslíte si, že jste si notifikaci nenastavili?
-          </h4>
-          <p style="margin:0; font-size:13px; color:#fca5a5;">
-            Pokud jste si jistí, že jste notifikaci nezadali (např. někdo mohl omylem uvést váš kontakt), nebo pokud se domníváte, že došlo k chybě v systému, obraťte se na nás prostřednictvím stránky pro dotazy a hlášení chyb. Rádi to prověříme a kontakt odhlásíme.
-          </p>
-        </div>
-
-        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:24px; justify-content:center;">
-          <a href="/mapa" style="background:#1e293b; border:1px solid #334155; color:#38bdf8; padding:10px 18px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:8px;">
-            <i class="fas fa-map-marked-alt"></i> Interaktivní mapa
-          </a>
-          <a href="/ucet#notifikace" style="background:#1e293b; border:1px solid #334155; color:#a78bfa; padding:10px 18px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:8px;">
-            <i class="fas fa-user-cog"></i> Správa mých upozornění
-          </a>
-          <a href="/podpora" style="background:#0284c7; color:white; padding:10px 18px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:8px;">
-            <i class="fas fa-headset"></i> Nahlásit chybu / Dotazy
-          </a>
-        </div>
-      </div>
-    </div>
-    """
-    return render_public(html_content)
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(curr_dir, "proc-notifikace.html")
+        if not os.path.exists(path):
+            path = os.path.join(os.path.dirname(curr_dir), "new-web", "proc-notifikace.html")
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
+            content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+        return Response(content, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        print(f"[PROC-NOTIFIKACE ERROR] {e}", flush=True)
+        return render_error_page(500, "Chyba stránky", str(e)), 500
 
 @app.route('/podpora')
 @app.route('/hlaseni-chyb')

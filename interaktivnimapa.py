@@ -12078,13 +12078,23 @@ def _check_and_fire_notifications(db_client, bus_cache):
             merged_rules = []
             try:
                 from local_db import local_bus_notifications_get_active
-                merged_rules.extend(local_bus_notifications_get_active())
+                merged_rules.extend(local_bus_notifications_get_active() or [])
             except Exception:
                 pass
             try:
                 res = db_client.table("bus_notifications").select("*").eq("is_active", True).execute()
                 for r in (res.data or []):
-                    if not any(str(mr.get("id")) == str(r.get("id")) for mr in merged_rules):
+                    r_id = str(r.get("id"))
+                    r_us = str(r.get("user_session") or "").strip()
+                    r_ident = str(r.get("identifier") or "").strip()
+                    match_idx = None
+                    for idx, mr in enumerate(merged_rules):
+                        if str(mr.get("id")) == r_id or (r_us and r_ident and str(mr.get("user_session") or "").strip() == r_us and str(mr.get("identifier") or "").strip() == r_ident):
+                            match_idx = idx
+                            break
+                    if match_idx is not None:
+                        merged_rules[match_idx] = r
+                    else:
                         merged_rules.append(r)
             except Exception as e:
                 check_supabase_error(e)
@@ -12229,19 +12239,6 @@ def _check_and_fire_notifications(db_client, bus_cache):
             continue
 
         def _fire(trigger_key, new_state, context_text=""):
-            old = state.get(trigger_key)
-            if old == new_state:
-                return False
-
-            # Anti-spam ochrana: cooldown per trigger_key (různé události se neblokují navzájem!)
-            trigger_last_fired = state.get(f"_lf_{trigger_key}")
-            if trigger_last_fired:
-                try:
-                    if (now - trigger_last_fired).total_seconds() < 30:
-                        return False
-                except Exception:
-                    pass
-
             embed, dm_text = _build_notification_message(rule, trigger_key, bus_data, context_text)
             # Odpal do fronty pro Discord bot (DM) a e-mail
             NOTIFICATION_DM_QUEUE.put({
@@ -12255,6 +12252,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
             })
             state[trigger_key] = new_state
             state[f"_lf_{trigger_key}"] = now
+            state["_lf_rule"] = now
             if is_one_time:
                 state["_fired_once"] = True
 
@@ -12263,7 +12261,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
                     "notification_fired",
                     bus_data.get("id"),
                     f"Odeslána notifikace: {context_text or trigger_key}",
-                    f"Pravidlo #{rule_id[:8]} ({trigger_key}) | Příjemce: {u_info.get('nick') or u_info.get('email') or discord_id or 'Uživatel'}",
+                    f"Pravidlo #{str(rule_id)[:8]} ({trigger_key}) | Příjemce: {u_info.get('nick') or u_info.get('email') or discord_id or 'Uživatel'}",
                     spz=bus_data.get("spz"),
                     line=bus_data.get("line")
                 )
@@ -12281,10 +12279,9 @@ def _check_and_fire_notifications(db_client, bus_cache):
                     try:
                         db_client.table("bus_notifications").delete().eq("id", rule_id).execute()
                     except Exception as _del_e:
-                        print(f"[NOTIF] Chyba smazani jednorazoveho pravidla {rule_id}: {_del_e}", flush=True)
-                    _CACHED_NOTIF_RULES = [r for r in _CACHED_NOTIF_RULES if str(r.get("id")) != rule_id]
-                    _CACHED_NOTIF_RULES_TS = 0
-                    print(f"[NOTIF] Jednorázová notifikace {rule_id[:8]} ZCELA splněna a smazána.", flush=True)
+                        pass
+                    _CACHED_NOTIF_RULES = [r for r in _CACHED_NOTIF_RULES if str(r.get("id")) != str(rule_id)]
+                    print(f"[NOTIF] Jednorázová notifikace {str(rule_id)[:8]} splněna a smazána.", flush=True)
                 else:
                     try:
                         from local_db import local_bus_notification_update
@@ -12301,17 +12298,18 @@ def _check_and_fire_notifications(db_client, bus_cache):
             except Exception as e_up:
                 print(f"[NOTIF] Chyba aktualizace DB po odpálení pravidla: {e_up}", flush=True)
 
-            # Zápis do lokální historie notifikací
+            # Zápis do historie notifikací s čitelným jménem cíle (nick / discord / email)
             try:
                 from local_db import local_notif_log_history
-                local_notif_log_history(user_session, rule_id, identifier, trigger_key, "/".join(deliv_channels), dm_text or context_text)
+                target_desc = u_info.get("nick") or (f"Discord #{discord_id}" if discord_id else (email or user_session))
+                local_notif_log_history(str(target_desc), str(rule_id), str(identifier), trigger_key, "/".join(deliv_channels), dm_text or context_text)
             except Exception:
                 pass
 
-            print(f"[NOTIF] Odpaleno pravidlo {rule_id[:8]} trigger={trigger_key} discord={discord_id}", flush=True)
+            print(f"[NOTIF] Odpaleno pravidlo {str(rule_id)[:8]} trigger={trigger_key} discord={discord_id}", flush=True)
             return True
 
-        # --- Vyhodnocení triggerů ---
+        # --- Extrakce telemetrie vozu ---
         status_text = str(bus_data.get("status", ""))
         color_class = str(bus_data.get("color_class", ""))
         line = str(bus_data.get("line", ""))
@@ -12326,6 +12324,14 @@ def _check_and_fire_notifications(db_client, bus_cache):
         if "BUG" in status_text.upper():
             continue
 
+        def _clean_l(l_str):
+            s = str(l_str or "").strip()
+            for pfx in ("490", "440", "430"):
+                if s.startswith(pfx) and len(s) > len(pfx):
+                    s = s[len(pfx):]
+            return s
+        cl_now = _clean_l(line)
+
         # Sledujeme zda byl bus v průběhu sledování na trase
         now_in_depot = "bg-depot" in color_class or "bg-yellow" in color_class or "Vozovna" in status_text or bool(bus_data.get("in_depot"))
         was_on_route = state.get("_was_on_route", False)
@@ -12333,7 +12339,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
             state["_was_on_route"] = True
             was_on_route = True
 
-        # 1. Trigger: Konečná (dojezd na konečnou / ukončení linky / vozovna)
+        # Vyhodnocení konečné
         now_terminal = False
         term_name = ""
         if "konečná" in status_text.lower() or "konecna" in status_text.lower() or "cíl" in status_text.lower():
@@ -12352,55 +12358,64 @@ def _check_and_fire_notifications(db_client, bus_cache):
                 now_terminal = True
                 term_name = status_text
 
+        b_speed = 0.0
+        try:
+            b_speed = float(bus_data.get("speed", 0) or 0)
+        except:
+            b_speed = 0.0
+
+        now_stopped = (
+            b_speed < 4.0 or
+            now_in_depot or
+            "stojí" in status_text.lower() or
+            "stoji" in status_text.lower() or
+            "čeká" in status_text.lower() or
+            "konečná" in status_text.lower() or
+            "konecna" in status_text.lower() or
+            "odstaven" in status_text.lower() or
+            "bg-gray" in color_class
+        )
+
+        # Tichá inicializace výchozího stavu při prvním načtení pravidla (neodpalovat hned při vytvoření stav, který trvá!)
+        if not state.get("_initialized"):
+            state["_initialized"] = True
+            state["_line"] = cl_now
+            state["_dest"] = str(bus_data.get("destination", "")).strip()
+            state["_in_depot"] = now_in_depot
+            if now_in_depot: state["_depot_name_text"] = status_text
+            state["_stopped"] = now_stopped
+            state["_terminal"] = now_terminal
+            state["_delay_thresh_val"] = delay_val
+            state["_delay_change_val"] = delay_val
+            state["_was_on_route"] = was_on_route
+            stop_init = triggers.get("stop_near", "")
+            if stop_init:
+                state[f"_stop_near:{stop_init}"] = False
+            continue
+
+        pending_events = []
+        is_inactive_for_delay = "odstaven" in status_text.lower() or "bug" in status_text.lower() or "bg-gray" in color_class or "neznám" in status_text.lower()
+
+        # 1. Trigger: Konečná
         was_terminal = state.get("_terminal", False)
         if triggers.get("terminal"):
             if now_terminal and not was_terminal:
                 ctx_text = f"SPZ: {bus_data.get('spz')} | Příjezd na konečnou v {now_time_str}" + (f" ({term_name})" if term_name else "")
-                if _fire("terminal", status_text or "konečná", ctx_text):
-                    state["_terminal"] = True
+                pending_events.append((10, "terminal", status_text or "konečná", ctx_text))
             elif not now_terminal:
                 state["_terminal"] = False
 
-            # Auto cleanup pro delay_change
-            if now_terminal and rule.get("is_one_time", True) and triggers.get("delay_change"):
-                try:
-                    current_triggers = dict(rule.get("triggers", {}))
-                    if current_triggers.get("delay_change"):
-                        current_triggers["delay_change"] = False
-                        rule["triggers"] = current_triggers
-                        has_active = any(bool(v) and v != "none" and v != "" for v in current_triggers.values())
-                        if has_active:
-                            db_client.table("bus_notifications").update({"triggers": current_triggers}).eq("id", rule_id).execute()
-                        else:
-                            db_client.table("bus_notifications").delete().eq("id", rule_id).execute()
-                            _CACHED_NOTIF_RULES_TS = 0
-                except Exception:
-                    pass
-
-        # 2. Trigger: Nová linka (změna čísla linky nebo výjezd z depa na linku)
+        # 2. Trigger: Nová linka
         if triggers.get("new_line"):
-            def _clean_l(l_str):
-                s = str(l_str or "").strip()
-                for pfx in ("490", "440", "430"):
-                    if s.startswith(pfx) and len(s) > len(pfx):
-                        s = s[len(pfx):]
-                return s
-
-            cl_now = _clean_l(line)
             prev_line = state.get("_line")
             cl_prev = _clean_l(prev_line) if prev_line is not None else None
             is_real_line = cl_now and cl_now not in ("", "0", "None", "Manipulace", "Manipulační jízda")
-
             if cl_prev and is_real_line and cl_prev != cl_now:
-                if _fire("new_line", cl_now, f"SPZ: {bus_data.get('spz')} změnil linku: {cl_prev} ➡️ {cl_now}"):
-                    state["_line"] = cl_now
-            elif (cl_prev in (None, "", "0", "Manipulace", "Manipulační jízda")) and is_real_line:
-                if _fire("new_line", cl_now, f"SPZ: {bus_data.get('spz')} vyjel na linku {cl_now} v {now_time_str}"):
-                    state["_line"] = cl_now
-            elif cl_now:
-                state["_line"] = cl_now
+                pending_events.append((8, "new_line", cl_now, f"SPZ: {bus_data.get('spz')} změnil linku: {cl_prev} ➡️ {cl_now}"))
+            elif (cl_prev in (None, "", "0", "Manipulace", "Manipulační jízda")) and is_real_line and was_on_route:
+                pending_events.append((8, "new_line", cl_now, f"SPZ: {bus_data.get('spz')} vyjel na linku {cl_now} v {now_time_str}"))
 
-        # 3. Trigger: Příjezd / blížení k zastávce (telemetrie + přesná GPS kontrola proti GTFS)
+        # 3. Trigger: Příjezd / blížení k zastávce (telemetrie + GPS)
         stop_name = triggers.get("stop_near", "")
         if stop_name:
             now_near_stop = False
@@ -12408,8 +12423,6 @@ def _check_and_fire_notifications(db_client, bus_cache):
             status_val = ""
             norm_target = _norm_txt(stop_name)
             target_tokens = _tokenize(stop_name)
-            
-            # A) Zkontroluj telemetrické hlášení zastávky (last_stop_name, nearest_stop, real_zastavka, offline_stop)
             matched_stop_name = ""
             for s_candidate in [bus_data.get("last_stop_name"), bus_data.get("nearest_stop"), bus_data.get("real_zastavka"), bus_data.get("offline_stop")]:
                 if s_candidate:
@@ -12427,13 +12440,11 @@ def _check_and_fire_notifications(db_client, bus_cache):
                     if any(_norm_txt(tp) in cand_norm for tp in t_parts if len(_norm_txt(tp)) >= 4):
                         matched_stop_name = cand_str
                         break
-                    
             if matched_stop_name:
                 now_near_stop = True
                 status_val = f"{status_text} ({matched_stop_name})"
                 ctx_text = f"SPZ: {bus_data.get('spz')} | Zastávka: {matched_stop_name} (v {now_time_str})"
             else:
-                # B) GPS kontrola přímo vůči souřadnicím cílové zastávky z GTFS (rádius 950 m pro spolehlivé včasné zachycení blížícího se autobusu)
                 b_lat = bus_data.get("lat", 0)
                 b_lon = bus_data.get("lng", 0)
                 if b_lat and b_lon and GTFS_LOADED and GTFS_STOPS:
@@ -12454,16 +12465,14 @@ def _check_and_fire_notifications(db_client, bus_cache):
                                     found_stop_label = st_name
                         except Exception:
                             continue
-                    
                     if min_dist <= 950.0:
                         now_near_stop = True
                         status_val = f"{status_text} ({found_stop_label or stop_name})"
                         ctx_text = f"SPZ: {bus_data.get('spz')} | Blíží se k zastávce: {found_stop_label or stop_name} ({int(min_dist)} m v {now_time_str})"
-            
+
             was_near_stop = state.get(f"_stop_near:{stop_name}", False)
             if now_near_stop and not was_near_stop:
-                if _fire(f"stop_near:{stop_name}", status_val, ctx_text):
-                    state[f"_stop_near:{stop_name}"] = True
+                pending_events.append((12, f"stop_near:{stop_name}", status_val, ctx_text))
             elif not now_near_stop:
                 state[f"_stop_near:{stop_name}"] = False
 
@@ -12473,8 +12482,7 @@ def _check_and_fire_notifications(db_client, bus_cache):
         if depot_name and depot_name != "none":
             if was_in_depot is False and now_in_depot:
                 if depot_name in ("all", True, "true") or str(depot_name).lower() in status_text.lower():
-                    if _fire("depot_in", "in", f"SPZ: {bus_data.get('spz')} přijel do vozovny v {now_time_str}"):
-                        state["_in_depot"] = True
+                    pending_events.append((7, "depot_in", "in", f"SPZ: {bus_data.get('spz')} přijel do vozovny v {now_time_str}"))
             elif not now_in_depot:
                 state["_in_depot"] = False
 
@@ -12483,76 +12491,62 @@ def _check_and_fire_notifications(db_client, bus_cache):
         if depot_out_name and depot_out_name != "none":
             if was_in_depot is True and not now_in_depot:
                 last_depot = state.get("_depot_name_text", "")
-                if depot_out_name in ("all", True, "true") or str(depot_out_name).lower() in last_depot.lower():
-                    if _fire("depot_out", "out", f"SPZ: {bus_data.get('spz')} vyjel z vozovny ({last_depot}) v {now_time_str}"):
-                        state["_in_depot"] = False
+                if depot_out_name in ("all", True, "true") or str(depot_out_name).lower() in str(last_depot).lower():
+                    pending_events.append((7, "depot_out", "out", f"SPZ: {bus_data.get('spz')} vyjel z vozovny ({last_depot or 'Vozovna'}) v {now_time_str}"))
 
-        state["_in_depot"] = now_in_depot
-        if now_in_depot:
-            state["_depot_name_text"] = status_text
-
-        # 6. Trigger: Změna cíle / linkospoje
+        # 6. Trigger: Změna cíle
         if triggers.get("trip_change"):
             prev_dest = state.get("_dest")
-            dest = bus_data.get("destination", "")
-            if prev_dest and prev_dest != dest:
-                if _fire("trip_change", dest, f"SPZ: {bus_data.get('spz')} změnil cíl: {prev_dest} ➡️ {dest}"):
-                    state["_dest"] = dest
-            else:
-                state["_dest"] = dest
+            dest = str(bus_data.get("destination", "")).strip()
+            if prev_dest and dest and prev_dest != dest:
+                pending_events.append((6, "trip_change", dest, f"SPZ: {bus_data.get('spz')} změnil cíl: {prev_dest} ➡️ {dest}"))
 
         # 7. Trigger: Rozjetí autobusu
         if triggers.get("started_moving"):
             was_stopped = state.get("_stopped", None)
-            b_speed = 0
-            try:
-                b_speed = float(bus_data.get("speed", 0) or 0)
-            except:
-                pass
-            now_stopped = (
-                b_speed < 4.0 or
-                now_in_depot or
-                "stojí" in status_text.lower() or
-                "stoji" in status_text.lower() or
-                "čeká" in status_text.lower() or
-                "konečná" in status_text.lower() or
-                "konecna" in status_text.lower() or
-                "odstaven" in status_text.lower() or
-                "bg-gray" in color_class
-            )
-            if was_stopped is None:
-                state["_stopped"] = now_stopped
-            elif was_stopped and not now_stopped and (b_speed >= 5.0 or "jízda" in status_text.lower()):
-                if _fire("started_moving", status_text, f"SPZ: {bus_data.get('spz')} se rozjel (rychlost {int(b_speed)} km/h v {now_time_str})"):
-                    state["_stopped"] = False
-            elif now_stopped:
-                state["_stopped"] = True
+            if was_stopped and not now_stopped and (b_speed >= 5.0 or "jízda" in status_text.lower()):
+                pending_events.append((5, "started_moving", status_text, f"SPZ: {bus_data.get('spz')} se rozjel (rychlost {int(b_speed)} km/h v {now_time_str})"))
 
         # 8. Trigger: Zpoždění přesahuje limit
-        is_inactive_for_delay = "odstaven" in status_text.lower() or "bug" in status_text.lower() or "bg-gray" in color_class or "neznám" in status_text.lower()
-
         delay_thresh = triggers.get("delay_threshold")
         if delay_thresh:
             try:
                 dt = int(delay_thresh)
                 prev_delay = state.get("_delay_thresh_val", -1)
                 if not is_inactive_for_delay and delay_val >= dt and prev_delay < dt:
-                    if _fire(f"delay_threshold:{dt}", str(delay_val), f"SPZ: {bus_data.get('spz')} dosáhl zpoždění {delay_val} min (limit {dt} min)"):
-                        state["_delay_thresh_val"] = delay_val
-                elif delay_val < dt:
-                    state["_delay_thresh_val"] = delay_val
-            except Exception as e:
+                    pending_events.append((4, f"delay_threshold:{dt}", str(delay_val), f"SPZ: {bus_data.get('spz')} dosáhl zpoždění {delay_val} min (limit {dt} min)"))
+            except Exception:
                 pass
 
         # 9. Trigger: Skokové zpoždění
-        delay_change = triggers.get("delay_change")
-        if delay_change:
+        if triggers.get("delay_change"):
             prev_d = state.get("_delay_change_val", None)
             if not is_inactive_for_delay and prev_d is not None and abs(delay_val - prev_d) >= 3:
-                if _fire(f"delay_change", str(delay_val), f"SPZ: {bus_data.get('spz')} | Zpoždění se změnilo: {prev_d} min ➡️ {delay_val} min"):
-                    state["_delay_change_val"] = delay_val
-            elif prev_d is None:
-                state["_delay_change_val"] = delay_val
+                pending_events.append((3, "delay_change", str(delay_val), f"SPZ: {bus_data.get('spz')} | Zpoždění se změnilo: {prev_d} min ➡️ {delay_val} min"))
+
+        # Aktualizovat stavové proměnné
+        if cl_now: state["_line"] = cl_now
+        if str(bus_data.get("destination", "")).strip(): state["_dest"] = str(bus_data.get("destination", "")).strip()
+        state["_in_depot"] = now_in_depot
+        if now_in_depot: state["_depot_name_text"] = status_text
+        state["_stopped"] = now_stopped
+        if now_terminal: state["_terminal"] = True
+        state["_delay_thresh_val"] = delay_val
+        state["_delay_change_val"] = delay_val
+        if stop_name: state[f"_stop_near:{stop_name}"] = now_near_stop
+
+        # Odpálení s per-rule cooldownem (ochrana proti spamu a 5x notifikaci najednou)
+        if pending_events:
+            last_rule_fired = state.get("_lf_rule")
+            if not (last_rule_fired and (now - last_rule_fired).total_seconds() < 90):
+                pending_events.sort(key=lambda x: x[0], reverse=True)
+                top_prio, top_trigger, top_state, top_ctx = pending_events[0]
+                if len(pending_events) > 1:
+                    extra_details = [e[3].split('|')[-1].strip() for e in pending_events[1:] if e[3]]
+                    if extra_details:
+                        top_ctx += " (" + ", ".join(extra_details) + ")"
+                if _fire(top_trigger, top_state, top_ctx):
+                    state["_lf_rule"] = now
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -12768,26 +12762,16 @@ def api_notif_create():
                     queue_tt_fetch(0, str(identifier), _bc)
                     sys_log(f"[PRIORITY] Auto-zarazeni busu {identifier} do prioritni fronty pri vytvoreni notifikace")
 
-        try:
-            from local_db import local_bus_notification_create
-            local_bus_notification_create(
-                user_session=user_session_val,
-                identifier=identifier,
-                identifier_type=identifier_type,
-                triggers=triggers,
-                label=label,
-                delivery_channels=delivery_channels,
-                is_one_time=is_one_time,
-                discord_id=discord_id,
-                email=email
-            )
-        except Exception as _loc_e:
-            print(f"[NOTIF] Chyba SQLite zapisu: {_loc_e}", flush=True)
-
+        remote_rule_id = None
         try:
             from turso_db import is_turso_write_blocked
             if not is_turso_write_blocked():
-                db.table("bus_notifications").insert({
+                # Smazat předchozí pravidlo pro stejného uživatele a stejný vůz v cloudu
+                try:
+                    db.table("bus_notifications").delete().eq("user_session", user_session_val).eq("identifier", identifier).execute()
+                except Exception:
+                    pass
+                ins_res = db.table("bus_notifications").insert({
                     "user_session": user_session_val,
                     "identifier": identifier,
                     "identifier_type": identifier_type,
@@ -12798,8 +12782,28 @@ def api_notif_create():
                     "is_active": True,
                     "created_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
                 }).execute()
-        except Exception:
-            pass
+                if ins_res and getattr(ins_res, "data", None) and len(ins_res.data) > 0:
+                    remote_rule_id = ins_res.data[0].get("id")
+        except Exception as _turso_e:
+            print(f"[NOTIF] Vzdálený zápis selhal, použije se lokální DB: {_turso_e}", flush=True)
+
+        try:
+            from local_db import local_bus_notification_create, local_bus_notification_delete_existing
+            local_bus_notification_delete_existing(user_session_val, identifier)
+            local_bus_notification_create(
+                user_session=user_session_val,
+                identifier=identifier,
+                identifier_type=identifier_type,
+                triggers=triggers,
+                label=label,
+                delivery_channels=delivery_channels,
+                is_one_time=is_one_time,
+                discord_id=discord_id,
+                email=email,
+                rule_id=remote_rule_id
+            )
+        except Exception as _loc_e:
+            print(f"[NOTIF] Chyba SQLite zapisu: {_loc_e}", flush=True)
         
         # Okamžitá invalidace cache pravidel, aby byla notifikace ihned aktivní
         global _CACHED_NOTIF_RULES_TS, _CACHED_NOTIF_USERS
@@ -18114,16 +18118,38 @@ def api_admin_notif_all_rules():
     if not is_admin:
         return jsonify({"status": "error", "rules": []}), 401
 
+    merged_rules = []
+    try:
+        from local_db import local_bus_notifications_get_for_user
+        merged_rules.extend(local_bus_notifications_get_for_user() or [])
+    except Exception as _e_loc:
+        print(f"[ADMIN NOTIF] SQLite fetch selhal: {_e_loc}", flush=True)
+
     db = get_db_client()
-    if not db:
-        return jsonify({"status": "error", "rules": [], "message": "DB nedostupná"})
+    if db:
+        try:
+            try:
+                res = db.table("bus_notifications").select("*").order("created_at", desc=True).execute()
+            except Exception:
+                res = db.table("bus_notifications").select("*").execute()
+            for r in (res.data or []):
+                r_id = str(r.get("id"))
+                r_us = str(r.get("user_session") or "").strip()
+                r_ident = str(r.get("identifier") or "").strip()
+                match_idx = None
+                for idx, mr in enumerate(merged_rules):
+                    if str(mr.get("id")) == r_id or (r_us and r_ident and str(mr.get("user_session") or "").strip() == r_us and str(mr.get("identifier") or "").strip() == r_ident):
+                        match_idx = idx
+                        break
+                if match_idx is not None:
+                    merged_rules[match_idx] = r
+                else:
+                    merged_rules.append(r)
+        except Exception as _e_rem:
+            print(f"[ADMIN NOTIF] Vzdálený fetch pravidel selhal: {_e_rem}", flush=True)
 
     try:
-        try:
-            res = db.table("bus_notifications").select("*").order("created_at", desc=True).execute()
-        except Exception:
-            res = db.table("bus_notifications").select("*").execute()
-        rules = res.data or []
+        rules = merged_rules
 
         user_ids = []
         for r in rules:
@@ -18241,16 +18267,23 @@ def api_admin_notif_delete_rule():
     if not rule_id:
         return jsonify({"status": "error", "message": "Chybí ID pravidla"}), 400
 
-    db = get_db_client()
-    if not db:
-        return jsonify({"status": "error", "message": "DB nedostupná"}), 500
-
     try:
-        db.table("bus_notifications").delete().eq("id", rule_id).execute()
-        sys_log(f"[ADMIN NOTIF] Pravidlo {rule_id} smazáno administrátorem")
-        return jsonify({"status": "success", "message": "Pravidlo bylo smazáno"})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        from local_db import local_bus_notification_delete
+        local_bus_notification_delete(rule_id)
+    except Exception as _e_loc:
+        print(f"[ADMIN NOTIF] Chyba mazání v SQLite: {_e_loc}", flush=True)
+
+    db = get_db_client()
+    if db:
+        try:
+            db.table("bus_notifications").delete().eq("id", rule_id).execute()
+        except Exception as _e_rem:
+            print(f"[ADMIN NOTIF] Chyba mazání v cloudu: {_e_rem}", flush=True)
+
+    global _CACHED_NOTIF_RULES_TS
+    _CACHED_NOTIF_RULES_TS = 0
+    sys_log(f"[ADMIN NOTIF] Pravidlo {rule_id} smazáno administrátorem")
+    return jsonify({"status": "success", "message": "Pravidlo bylo smazáno"})
 
 
 @mapa_bp.route('/api/admin/notifications/history')
@@ -18263,6 +18296,47 @@ def api_admin_notif_full_history():
     try:
         from local_db import local_notif_get_history
         hist = local_notif_get_history(user_session=None, limit=100)
+
+        # Česky přeložené spouštěče pro přehlednost v dashboardu
+        TRIGGER_LABELS = {
+            "depot_out": "Výjezd z depa",
+            "depot_in": "Zájezd do depa",
+            "started_moving": "Rozjezd vozu",
+            "new_line": "Nová linka",
+            "stopped": "Vůz zastavil",
+            "delay": "Zpoždění",
+            "delay_normal": "Snížení zpoždění",
+            "custom_status": "Změna stavu",
+            "trip_change": "Změna spoje"
+        }
+
+        # Pokus o namapování uživatelských jmen pro cíle
+        db = get_db_client()
+        users_map = {}
+        if db:
+            try:
+                u_res = db.table("users").select("id, app_id, nick, discord_id, email").execute()
+                for u in (u_res.data or []):
+                    if u.get("id"): users_map[str(u.get("id"))] = u
+                    if u.get("app_id"): users_map[str(u.get("app_id"))] = u
+                    if u.get("discord_id"): users_map[str(u.get("discord_id"))] = u
+            except Exception:
+                pass
+
+        for h in hist:
+            t_key = str(h.get("trigger") or "").strip()
+            if t_key in TRIGGER_LABELS:
+                h["trigger"] = TRIGGER_LABELS[t_key]
+            
+            target_val = str(h.get("target") or h.get("user_session") or "").strip()
+            if target_val in users_map:
+                u_item = users_map[target_val]
+                h["target"] = u_item.get("nick") or f"Hráč #{u_item.get('app_id')}" or target_val
+            elif target_val.startswith("admin_direct_discord_"):
+                h["target"] = f"Discord #{target_val.replace('admin_direct_discord_', '')}"
+            elif target_val.startswith("admin_direct_email_"):
+                h["target"] = target_val.replace('admin_direct_email_', '')
+
         return jsonify({"status": "success", "history": hist})
     except Exception as e:
         return jsonify({"status": "error", "history": [], "message": str(e)})
