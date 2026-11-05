@@ -9409,6 +9409,12 @@ async def on_ready():
         
     start_msg = f"**BUILD:** {commit_msg}\nBot byl úspěšně restartován a běží."
     send_log("🔄 Systém Online", start_msg, 0x10b981)
+
+    try:
+        from cloudflare_d1 import get_d1_client
+        get_d1_client().budget.check_initial_cb_alert()
+    except Exception as e_d1_cb:
+        print(f"[D1 ON_READY CHECK ERR] {e_d1_cb}", flush=True)
     
     # DM Notifikace uživatelům se zapnutým !aktualizace / !aktulizace
     async def send_startup_dms():

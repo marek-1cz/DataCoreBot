@@ -31,23 +31,34 @@ MAX_DAILY_READS = 4_000_000 # 80% kvóty čtení
 BUDGET_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "d1_budget.json")
 
 _last_alerts = {
-    "hourly_90": None,        # (date_utc, hour_utc)
-    "hourly_exceeded": None,  # (date_utc, hour_utc)
-    "daily_90": None,         # date_utc
-    "daily_exceeded": None    # date_utc
+    "hourly_write_90": None,        # (date_utc, hour_utc)
+    "hourly_write_exceeded": None,  # (date_utc, hour_utc)
+    "daily_write_90": None,         # date_utc
+    "daily_write_exceeded": None,   # date_utc
+    "hourly_read_90": None,         # (date_utc, hour_utc)
+    "hourly_read_exceeded": None,   # (date_utc, hour_utc)
+    "daily_read_90": None,          # date_utc
+    "daily_read_exceeded": None,    # date_utc
+    "circuit_breaker_read": None,   # (date_utc, hour_utc)
+    "circuit_breaker_write": None   # (date_utc, hour_utc)
 }
 
 def _send_budget_alert(level: str, title: str, description: str, color=0xf59e0b):
     """Zaznamená alert o budgetu do datacorebot systémového logu i na Discord."""
+    import sys
     try:
-        from interaktivnimapa import sys_log
-        sys_log(f"[D1 BUDGET {level.upper()}] {title} - {description}")
+        im = sys.modules.get("interaktivnimapa")
+        if im and hasattr(im, "sys_log"):
+            im.sys_log(f"[D1 BUDGET {level.upper()}] {title} - {description}")
+        else:
+            print(f"[D1 BUDGET {level.upper()}] {title} - {description}", flush=True)
     except Exception:
         print(f"[D1 BUDGET {level.upper()}] {title} - {description}", flush=True)
 
     try:
-        from main import send_log
-        send_log(f"📊 Databáze D1: {title}", description, color=color, channel_name="🖥️・datacore-logs")
+        main_mod = sys.modules.get("main") or sys.modules.get("__main__")
+        if main_mod and hasattr(main_mod, "send_log"):
+            main_mod.send_log(f"📊 Databáze D1: {title}", description, color=color, channel_name="🖥️・datacore-logs")
     except Exception as e_ds:
         print(f"[D1 BUDGET DISCORD ERR] {e_ds}", flush=True)
 
@@ -76,6 +87,12 @@ class D1BudgetTracker:
                     saved = json.load(f)
                 if saved.get("date_utc") == self._today_utc():
                     self.data.update(saved)
+                    now_ts = time.time()
+                    # Pokud je aktivní blokace čtení (např. kód 7500), zajistíme že i zápisy jsou pozastaveny do lokální SQLite fronty
+                    if self.data.get("read_blocked_until", 0.0) > now_ts:
+                        if self.data.get("write_blocked_until", 0.0) < self.data["read_blocked_until"]:
+                            self.data["write_blocked_until"] = self.data["read_blocked_until"]
+                            self._save_unlocked()
                 else:
                     self._reset()
             else:
@@ -111,9 +128,69 @@ class D1BudgetTracker:
         with self._lock:
             if now < self.data.get("read_blocked_until", 0.0):
                 return False
-            if self.data.get("rows_read", 0) >= MAX_DAILY_READS:
+            reads = self.data.get("rows_read", 0)
+            self._check_read_budget_alerts(reads)
+            if reads >= MAX_DAILY_READS:
+                return False
+
+            # Hourly pacing: rozvržení povoleného budgetu čtení (max 4M denně)
+            hour_utc = datetime.now(timezone.utc).hour
+            hourly_budget = MAX_DAILY_READS / 24.0
+            allowed_now = min(MAX_DAILY_READS, int((hour_utc + 1) * hourly_budget * 1.5) + 50_000)
+            if reads >= allowed_now:
                 return False
             return True
+
+    def _check_read_budget_alerts(self, reads: int):
+        hour_utc = datetime.now(timezone.utc).hour
+        date_today = self._today_utc()
+        hourly_budget = MAX_DAILY_READS / 24.0
+        allowed_now = min(MAX_DAILY_READS, int((hour_utc + 1) * hourly_budget * 1.5) + 50_000)
+
+        # 1. Varování na 90 % hodinové pojistky čtení
+        if reads >= int(allowed_now * 0.9) and reads < allowed_now:
+            if _last_alerts.get("hourly_read_90") != (date_today, hour_utc):
+                _last_alerts["hourly_read_90"] = (date_today, hour_utc)
+                pct = int((reads / allowed_now) * 100) if allowed_now > 0 else 90
+                _send_budget_alert(
+                    "warning",
+                    f"Blíží se hodinový limit čtení D1 ({pct} %)",
+                    f"Přečteno **{reads:,}** z povolených **{allowed_now:,}** řádků pro hodinu {hour_utc}:00 UTC. Zbývá méně než 10 % do dočasného přepnutí na lokální SQLite DB.",
+                    color=0xf59e0b
+                )
+
+        # 2. Překročení 100 % hodinové pojistky čtení
+        if reads >= allowed_now:
+            if _last_alerts.get("hourly_read_exceeded") != (date_today, hour_utc):
+                _last_alerts["hourly_read_exceeded"] = (date_today, hour_utc)
+                _send_budget_alert(
+                    "exceeded",
+                    "Překročena hodinová pojistka čtení D1",
+                    f"Dosaženo **{reads:,}** / **{allowed_now:,}** řádků pro hodinu {hour_utc}:00 UTC. Další čtení je do konce hodiny pozastaveno a obsluhováno z lokální SQLite DB a mezipaměti, aby se ušetřila denní kvóta 5M.",
+                    color=0xef4444
+                )
+
+        # 3. Varování na 90 % celkového denního bezpečného limitu čtení (4M)
+        if reads >= int(MAX_DAILY_READS * 0.9) and reads < MAX_DAILY_READS:
+            if _last_alerts.get("daily_read_90") != date_today:
+                _last_alerts["daily_read_90"] = date_today
+                _send_budget_alert(
+                    "warning",
+                    "Dosaženo 90 % celodenní kvóty čtení D1",
+                    f"Dnes přečteno **{reads:,}** / **{MAX_DAILY_READS:,}** řádků. Do nočního resetu (00:00 UTC) zbývá málo operací.",
+                    color=0xf59e0b
+                )
+
+        # 4. Celodenní limit čtení vyčerpán (100 %)
+        if reads >= MAX_DAILY_READS:
+            if _last_alerts.get("daily_read_exceeded") != date_today:
+                _last_alerts["daily_read_exceeded"] = date_today
+                _send_budget_alert(
+                    "critical",
+                    "Vyčerpán bezpečný denní limit čtení D1 (100 %)",
+                    f"Dnes přečteno **{reads:,}** řádků. Čtení z D1 je zcela pozastaveno a přepnuto na lokální SQLite.",
+                    color=0xdc2626
+                )
 
     def _check_budget_alerts(self, written: int):
         hour_utc = datetime.now(timezone.utc).hour
@@ -121,22 +198,22 @@ class D1BudgetTracker:
         hourly_budget = MAX_DAILY_WRITES / 24.0
         allowed_now = min(MAX_DAILY_WRITES, int((hour_utc + 1) * hourly_budget * 1.5) + 3000)
 
-        # 1. Varování na 90 % hodinové pojistky
+        # 1. Varování na 90 % hodinové pojistky zápisů
         if written >= int(allowed_now * 0.9) and written < allowed_now:
-            if _last_alerts["hourly_90"] != (date_today, hour_utc):
-                _last_alerts["hourly_90"] = (date_today, hour_utc)
+            if _last_alerts.get("hourly_write_90") != (date_today, hour_utc):
+                _last_alerts["hourly_write_90"] = (date_today, hour_utc)
                 pct = int((written / allowed_now) * 100) if allowed_now > 0 else 90
                 _send_budget_alert(
                     "warning",
-                    f"Blíží se hodinový limit zápisů ({pct} %)",
+                    f"Blíží se hodinový limit zápisů D1 ({pct} %)",
                     f"Využito **{written:,}** z povolených **{allowed_now:,}** řádků pro hodinu {hour_utc}:00 UTC. Zbývá méně než 10 % do aktivace úsporné SQLite fronty.",
                     color=0xf59e0b
                 )
 
-        # 2. Překročení 100 % hodinové pojistky (odkládání do SQLite fronty)
+        # 2. Překročení 100 % hodinové pojistky zápisů (odkládání do SQLite fronty)
         if written >= allowed_now:
-            if _last_alerts["hourly_exceeded"] != (date_today, hour_utc):
-                _last_alerts["hourly_exceeded"] = (date_today, hour_utc)
+            if _last_alerts.get("hourly_write_exceeded") != (date_today, hour_utc):
+                _last_alerts["hourly_write_exceeded"] = (date_today, hour_utc)
                 _send_budget_alert(
                     "exceeded",
                     "Překročena hodinová pojistka zápisů D1",
@@ -144,10 +221,10 @@ class D1BudgetTracker:
                     color=0xef4444
                 )
 
-        # 3. Varování na 90 % celkového denního bezpečného limitu (85k)
+        # 3. Varování na 90 % celkového denního bezpečného limitu zápisů (85k)
         if written >= int(MAX_DAILY_WRITES * 0.9) and written < MAX_DAILY_WRITES:
-            if _last_alerts["daily_90"] != date_today:
-                _last_alerts["daily_90"] = date_today
+            if _last_alerts.get("daily_write_90") != date_today:
+                _last_alerts["daily_write_90"] = date_today
                 _send_budget_alert(
                     "warning",
                     "Dosaženo 90 % celodenní kvóty zápisů D1",
@@ -155,10 +232,10 @@ class D1BudgetTracker:
                     color=0xf59e0b
                 )
 
-        # 4. Celodenní limit vyčerpán (100 %)
+        # 4. Celodenní limit zápisů vyčerpán (100 %)
         if written >= MAX_DAILY_WRITES:
-            if _last_alerts["daily_exceeded"] != date_today:
-                _last_alerts["daily_exceeded"] = date_today
+            if _last_alerts.get("daily_write_exceeded") != date_today:
+                _last_alerts["daily_write_exceeded"] = date_today
                 _send_budget_alert(
                     "critical",
                     "Vyčerpán bezpečný denní limit zápisů D1 (100 %)",
@@ -180,10 +257,8 @@ class D1BudgetTracker:
             # Hourly pacing: rozvržení povoleného budgetu napříč 24 hodinami dne
             hour_utc = datetime.now(timezone.utc).hour
             hourly_budget = MAX_DAILY_WRITES / 24.0
-            # Povolujeme 1.5x flexibilitu pro špičky + základní limit pro začátek dne
             allowed_now = min(MAX_DAILY_WRITES, int((hour_utc + 1) * hourly_budget * 1.5) + 3000)
             if written >= allowed_now:
-                # Šetříme kvótu na zbytek dne – zápis se odloží do SQLite fronty
                 return False
             return True
 
@@ -199,22 +274,56 @@ class D1BudgetTracker:
         with self._lock:
             self.data["rows_read"] = self.data.get("rows_read", 0) + max(1, count)
             self._save_unlocked()
+            self._check_read_budget_alerts(self.data["rows_read"])
 
-    def block_read_until(self, ts: float):
+    def block_read_until(self, ts: float, reason: str = "vyčerpán limit čtení"):
         with self._lock:
             self.data["read_blocked_until"] = ts
             self._save_unlocked()
+        hour_utc = datetime.now(timezone.utc).hour
+        date_today = self._today_utc()
+        if _last_alerts.get("circuit_breaker_read") != (date_today, hour_utc):
+            _last_alerts["circuit_breaker_read"] = (date_today, hour_utc)
+            until_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime('%H:%M:%S UTC')
+            _send_budget_alert(
+                "circuit_breaker",
+                "Aktivován circuit breaker čtení D1",
+                f"Čtení z D1 blokováno do **{until_str}** (Důvod: {reason}). Veškeré dotazy obsluhuje lokální SQLite DB.",
+                color=0xef4444
+            )
 
     def block_write_until(self, ts: float, reason: str = "vyčerpán limit zápisů"):
         with self._lock:
             self.data["write_blocked_until"] = ts
             self._save_unlocked()
-        _send_budget_alert(
-            "circuit_breaker",
-            "Aktivován circuit breaker zápisů D1",
-            f"Zápisy blokovány do {datetime.fromtimestamp(ts, tz=timezone.utc).strftime('%H:%M:%S UTC')} (Důvod: {reason}).",
-            color=0xef4444
-        )
+        hour_utc = datetime.now(timezone.utc).hour
+        date_today = self._today_utc()
+        if _last_alerts.get("circuit_breaker_write") != (date_today, hour_utc):
+            _last_alerts["circuit_breaker_write"] = (date_today, hour_utc)
+            until_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime('%H:%M:%S UTC')
+            _send_budget_alert(
+                "circuit_breaker",
+                "Aktivován circuit breaker zápisů D1",
+                f"Zápisy blokovány do **{until_str}** (Důvod: {reason}). Zápisy se ukládají do lokální fronty d1_sync_queue.",
+                color=0xef4444
+            )
+
+    def check_initial_cb_alert(self):
+        """Zkontroluje při inicializaci, zda nebyl aktivní circuit breaker bez odeslaného alertu."""
+        now = time.time()
+        with self._lock:
+            rb = self.data.get("read_blocked_until", 0.0)
+            hour_utc = datetime.now(timezone.utc).hour
+            date_today = self._today_utc()
+            if rb > now and _last_alerts.get("circuit_breaker_read") != (date_today, hour_utc):
+                _last_alerts["circuit_breaker_read"] = (date_today, hour_utc)
+                until_str = datetime.fromtimestamp(rb, tz=timezone.utc).strftime('%H:%M:%S UTC')
+                _send_budget_alert(
+                    "circuit_breaker",
+                    "Aktivní circuit breaker D1 (kód 7500)",
+                    f"Čtení z Cloudflare D1 je pozastaveno do **{until_str}** z důvodu vyčerpání limitu 5M čtení. Veškeré čtení i zápisy jsou přesměrovány na lokální SQLite databázi.",
+                    color=0xef4444
+                )
 
     def get_stats(self) -> dict:
         self.check_reset()
@@ -232,8 +341,10 @@ class D1Client:
         self._cache_lock = threading.Lock()
         self._last_read_block_log = 0.0
         self._last_write_block_log = 0.0
+        self._last_cb_log = 0.0
         self._queue_worker_started = False
         self._start_queue_worker()
+        self.budget.check_initial_cb_alert()
 
     def _start_queue_worker(self):
         if self._queue_worker_started:
@@ -284,21 +395,38 @@ class D1Client:
 
             if "7500" in err_body or "row read limit" in err_body.lower():
                 sec_left = self._calc_utc_midnight_pause()
-                self.budget.block_read_until(time.time() + sec_left)
-                print(f"[D1] Aktivován read circuit breaker (kód 7500 - vyčerpáno 5M čtení). Blokuji D1 čtení do 00:05 UTC ({sec_left//60} min). Čtení běží z lokální SQLite DB.", flush=True)
+                now_ts = time.time()
+                until_ts = now_ts + sec_left
+                self.budget.block_read_until(until_ts, reason="kód 7500 - vyčerpáno 5M čtení na Cloudflare")
+                self.budget.block_write_until(until_ts, reason="kód 7500 (Cloudflare D1 blokováno do 00:05 UTC)")
+                if now_ts - self._last_cb_log > 600:
+                    self._last_cb_log = now_ts
+                    print(f"[D1] Aktivován circuit breaker (kód 7500 - vyčerpáno 5M čtení). Blokuji D1 do 00:05 UTC ({sec_left//60} min). Čtení i zápisy běží z lokální SQLite DB.", flush=True)
             elif "row write limit" in err_body.lower() or "limit exceeded" in err_body.lower():
                 sec_left = self._calc_utc_midnight_pause()
-                self.budget.block_write_until(time.time() + sec_left, reason="Cloudflare API limit exceeded")
-                print(f"[D1] Aktivován write circuit breaker (vyčerpán limit zápisů). Ukládám zápisy do lokální d1_sync_queue.", flush=True)
+                now_ts = time.time()
+                until_ts = now_ts + sec_left
+                self.budget.block_write_until(until_ts, reason="Cloudflare API limit zápisů vyčerpán")
+                if now_ts - self._last_cb_log > 600:
+                    self._last_cb_log = now_ts
+                    print(f"[D1] Aktivován write circuit breaker (vyčerpán limit zápisů). Ukládám zápisy do lokální d1_sync_queue.", flush=True)
             elif e.code == 429:
-                self.budget.block_read_until(time.time() + 120)
-                self.budget.block_write_until(time.time() + 120, reason="HTTP 429 Rate limit")
-                print(f"[D1] Rate limit 429. Pauza 2 min.", flush=True)
+                now_ts = time.time()
+                until_ts = now_ts + 120
+                self.budget.block_read_until(until_ts, reason="HTTP 429 Rate limit")
+                self.budget.block_write_until(until_ts, reason="HTTP 429 Rate limit")
+                if now_ts - self._last_cb_log > 120:
+                    self._last_cb_log = now_ts
+                    print(f"[D1] Rate limit 429. Pauza 2 min.", flush=True)
             else:
-                print(f"[D1] HTTP error {e.code}: {err_body}", flush=True)
+                if time.time() - self._last_cb_log > 60:
+                    self._last_cb_log = time.time()
+                    print(f"[D1] HTTP error {e.code}: {err_body}", flush=True)
             return []
         except Exception as e:
-            print(f"[D1] Request error: {e}", flush=True)
+            if time.time() - self._last_cb_log > 60:
+                self._last_cb_log = time.time()
+                print(f"[D1] Request error: {e}", flush=True)
             return []
 
         if not parsed.get("success"):
@@ -306,10 +434,17 @@ class D1Client:
             err_str = str(errors)
             if "7500" in err_str or "row read limit" in err_str.lower():
                 sec_left = self._calc_utc_midnight_pause()
-                self.budget.block_read_until(time.time() + sec_left)
-                print(f"[D1] API limit 7500 - blokace čtení do 00:05 UTC.", flush=True)
+                now_ts = time.time()
+                until_ts = now_ts + sec_left
+                self.budget.block_read_until(until_ts, reason="kód 7500 - vyčerpáno 5M čtení na Cloudflare")
+                self.budget.block_write_until(until_ts, reason="kód 7500 (Cloudflare D1 blokováno do 00:05 UTC)")
+                if now_ts - self._last_cb_log > 600:
+                    self._last_cb_log = now_ts
+                    print(f"[D1] API limit 7500 - blokace D1 do 00:05 UTC.", flush=True)
             else:
-                print(f"[D1] API error: {errors}", flush=True)
+                if time.time() - self._last_cb_log > 60:
+                    self._last_cb_log = time.time()
+                    print(f"[D1] API error: {errors}", flush=True)
             return []
 
         results = parsed.get("result") or []
@@ -348,7 +483,7 @@ class D1Client:
 
             # 2. Kontrola circuit breaku pro čtení
             if not self.budget.can_read():
-                if now - self._last_read_block_log > 180:
+                if now - self._last_read_block_log > 600:
                     self._last_read_block_log = now
                     print(f"[D1] Čtení z D1 je pozastaveno (šetří se limit kvóty). Dotaz přeskakuji.", flush=True)
                 return []
