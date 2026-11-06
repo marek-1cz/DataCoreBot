@@ -3228,7 +3228,8 @@ def api_jr_trips():
     line_id = request.args.get('line', '').strip()
     dir_idx = int(request.args.get('dir', 0))
     day = request.args.get('day', 'weekday').strip()
-    return jsonify(jr_api.get_trips(line_id, dir_idx, day))
+    variant = request.args.get('variant', '').strip() or None
+    return jsonify(jr_api.get_trips(line_id, dir_idx, day, variant))
 
 @app.route('/api/notices')
 def api_notices():

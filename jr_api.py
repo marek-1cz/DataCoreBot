@@ -10,6 +10,7 @@ Poskytuje endpointy:
 import os
 import sqlite3
 import unicodedata
+import threading
 from datetime import datetime
 from collections import defaultdict
 
@@ -18,6 +19,31 @@ _CACHE_ROUTES = None
 _CACHE_STOPS = None
 _LINE_CACHE = {}
 _TRIPS_CACHE = {}
+
+def ensure_db_indexes(conn=None):
+    """Vytvoří chybějící indexy v GTFS SQLite databázi pro zrychlení dotazů z minut na milisekundy."""
+    close_at_end = False
+    if conn is None:
+        db_path = _get_db_path()
+        if not os.path.exists(db_path):
+            return
+        conn = sqlite3.connect(db_path)
+        close_at_end = True
+    try:
+        cur = conn.cursor()
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_trips_route_id ON trips(route_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_trips_service_id ON trips(service_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_trips_trip_id ON trips(trip_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_stops_stop_id ON stops(stop_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_stops_name ON stops(name)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_routes_route_id ON routes(route_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_routes_short ON routes(route_short_name)")
+        conn.commit()
+    except Exception as e:
+        print(f"[JR DB INDEX ERROR] {e}", flush=True)
+    finally:
+        if close_at_end:
+            conn.close()
 
 def align_trip_times(trip_stops, target_stops):
     """
@@ -117,6 +143,7 @@ def _init_caches():
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
+        ensure_db_indexes(conn)
         cur = conn.cursor()
 
         # Collect trip counts per route_id
@@ -204,7 +231,7 @@ def _init_caches():
 def get_featured(count=6):
     _init_caches()
     if not _CACHE_ROUTES:
-        return {"lines": []}
+        return {"lines": [], "all_lines": []}
     import random
     candidates = [r for r in _CACHE_ROUTES if len(r["short"]) <= 3 and r["name"] and r["trip_count"] > 10]
     sample = random.sample(candidates, min(len(candidates), count)) if candidates else _CACHE_ROUTES[:count]
@@ -214,7 +241,13 @@ def get_featured(count=6):
         "name": r["name"],
         "color": r["color"]
     } for r in sample]
-    return {"lines": lines}
+    all_lines = [{
+        "id": r["id"],
+        "short": r["short"],
+        "name": r["name"],
+        "color": r["color"]
+    } for r in _CACHE_ROUTES]
+    return {"lines": lines, "all_lines": all_lines}
 
 def search(q):
     _init_caches()
@@ -314,6 +347,7 @@ def get_line(line_id):
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
+        ensure_db_indexes(conn)
         cur = conn.cursor()
 
         raw_sn, sn, route_long_name, all_rids = _resolve_line_route_ids(cur, line_id)
@@ -324,102 +358,108 @@ def get_line(line_id):
         color = _get_color(sn)
         q_marks = ','.join('?' for _ in all_rids)
 
-        today_str = datetime.now().strftime("%Y%m%d")
+        cur.execute(f"""
+            SELECT (spoj_cislo % 2) as parity, count(*) as cnt
+            FROM trips
+            WHERE route_id IN ({q_marks})
+            GROUP BY parity
+            ORDER BY parity DESC
+        """, all_rids)
+        parity_counts = {r["parity"]: r["cnt"] for r in cur.fetchall()}
+
+        target_parities = []
+        if parity_counts.get(1, 0) > 0: target_parities.append(1)
+        if parity_counts.get(0, 0) > 0: target_parities.append(0)
+        if not target_parities and parity_counts: target_parities = list(parity_counts.keys())
 
         directions = []
-        for dir_idx, parity in enumerate([1, 0]):
-            # 1. Zjistit aktivní trips v tomto směru
+        for dir_idx, parity in enumerate(target_parities):
             cur.execute(f"""
-                SELECT t.trip_id, t.spoj_cislo
-                FROM trips t
-                JOIN calendar c ON t.service_id = c.service_id
-                WHERE t.route_id IN ({q_marks})
-                  AND c.start_date <= ? AND c.end_date >= ?
-                  AND (t.spoj_cislo % 2) = ?
-                ORDER BY t.spoj_cislo
-            """, all_rids + [today_str, today_str, parity])
-            active_trips = cur.fetchall()
-            tids = [row["trip_id"] for row in active_trips]
-
-            if not tids:
-                # Fallback: vzít nejnovější období kalendáře
-                cur.execute(f"""
-                    SELECT t.trip_id, t.spoj_cislo, c.end_date
-                    FROM trips t
-                    JOIN calendar c ON t.service_id = c.service_id
-                    WHERE t.route_id IN ({q_marks}) AND (t.spoj_cislo % 2) = ?
-                    ORDER BY c.end_date DESC
-                """, all_rids + [parity])
-                rows = cur.fetchall()
-                if rows:
-                    max_e = rows[0]["end_date"]
-                    tids = [r["trip_id"] for r in rows if r["end_date"] == max_e]
-
-            if not tids:
-                cur.execute(f"SELECT trip_id FROM trips WHERE route_id IN ({q_marks}) AND (spoj_cislo % 2) = ?", all_rids + [parity])
-                tids = [row["trip_id"] for row in cur.fetchall()]
-
-            if not tids:
-                continue
-
-            # 2. Zjistit reálně obsluhované zastávky v tomto směru (pickup_type != '1' a čas není prázdný)
-            cur.execute(f"""
-                SELECT s.name as stop_name, st.pickup_type
-                FROM stop_times st
-                JOIN stops s ON st.stop_id = s.stop_id
-                WHERE st.trip_id IN ({','.join('?' for _ in tids[:100])})
-                  AND st.arrival_time != '' AND st.arrival_time IS NOT NULL AND st.pickup_type != '1'
-                GROUP BY s.name
-            """, tids[:100])
-            valid_rows = cur.fetchall()
-            valid_stop_names = {row["stop_name"]: (row["pickup_type"] in ('2', '3')) for row in valid_rows}
-
-            # 3. Nalezení nejúplnější trasy (master sequence)
-            # Vybrat spoje s největším počtem zastávek
-            cur.execute(f"""
-                SELECT t.trip_id, count(st.stop_sequence) as cnt
+                SELECT t.trip_id, t.spoj_cislo,
+                       (SELECT s.name FROM stop_times st JOIN stops s ON st.stop_id = s.stop_id WHERE st.trip_id = t.trip_id ORDER BY st.stop_sequence ASC LIMIT 1) as first_stop,
+                       (SELECT s.name FROM stop_times st JOIN stops s ON st.stop_id = s.stop_id WHERE st.trip_id = t.trip_id ORDER BY st.stop_sequence DESC LIMIT 1) as last_stop,
+                       count(st.stop_sequence) as stop_count
                 FROM trips t
                 JOIN stop_times st ON t.trip_id = st.trip_id
-                WHERE t.trip_id IN ({','.join('?' for _ in tids[:200])})
+                WHERE t.route_id IN ({q_marks}) AND (t.spoj_cislo % 2) = ?
                 GROUP BY t.trip_id
-                ORDER BY cnt DESC
-                LIMIT 25
-            """, tids[:200])
-            best_candidate_tids = [r["trip_id"] for r in cur.fetchall()] or tids[:10]
+            """, all_rids + [parity])
+            trips_info = cur.fetchall()
+            if not trips_info:
+                continue
 
-            best_seq = []
-            for tid in best_candidate_tids[:6]:
+            var_groups = {}
+            trip_stop_counts = {}
+            for r in trips_info:
+                f, l = r["first_stop"], r["last_stop"]
+                if not f or not l:
+                    continue
+                k = (f, l)
+                if k not in var_groups:
+                    var_groups[k] = []
+                var_groups[k].append(r["trip_id"])
+                trip_stop_counts[r["trip_id"]] = r["stop_count"]
+
+            variants = []
+            for (f, l), tids in sorted(var_groups.items(), key=lambda x: -len(x[1])):
+                best_tid = max(tids, key=lambda tid: trip_stop_counts.get(tid, 0))
                 cur.execute("""
-                    SELECT s.name as stop_name, st.pickup_type, st.arrival_time
+                    SELECT s.name as stop_name, st.pickup_type
                     FROM stop_times st
                     JOIN stops s ON st.stop_id = s.stop_id
                     WHERE st.trip_id = ?
                     ORDER BY st.stop_sequence
-                """, (tid,))
-                rows = cur.fetchall()
-                seq = [
-                    (row["stop_name"], row["pickup_type"] in ('2', '3') or valid_stop_names.get(row["stop_name"], False))
-                    for row in rows
-                    if row["stop_name"] in valid_stop_names
-                ]
-                if len(seq) > len(best_seq):
-                    best_seq = seq
-
-            if best_seq:
-                stops = [{
-                    "id": s_name,
-                    "name": s_name,
-                    "request": is_req
-                } for s_name, is_req in best_seq]
-                directions.append({
-                    "id": dir_idx,
-                    "stops": stops
+                """, (best_tid,))
+                v_stops = [{
+                    "id": row["stop_name"],
+                    "name": row["stop_name"],
+                    "request": row["pickup_type"] in ('2', '3')
+                } for row in cur.fetchall()]
+                variants.append({
+                    "id": f"v{len(variants)}",
+                    "name": f"{f} ➜ {l}",
+                    "from": f,
+                    "to": l,
+                    "trip_count": len(tids),
+                    "stops": v_stops
                 })
+
+            if not variants:
+                continue
+
+            main_from = variants[0]["from"]
+            main_to = variants[0]["to"]
+            dir_name = f"{main_from} ➜ {main_to}"
+            main_stops = variants[0]["stops"]
+
+            directions.append({
+                "id": dir_idx,
+                "name": dir_name,
+                "parity": parity,
+                "main_from": main_from,
+                "main_to": main_to,
+                "variants": variants,
+                "stops": main_stops
+            })
 
         if len(directions) == 1 and len(directions[0]["stops"]) > 1:
             rev_stops = list(reversed(directions[0]["stops"]))
+            rev_from = directions[0]["main_to"]
+            rev_to = directions[0]["main_from"]
             directions.append({
                 "id": 1,
+                "name": f"{rev_from} ➜ {rev_to}",
+                "parity": 0 if directions[0].get("parity") == 1 else 1,
+                "main_from": rev_from,
+                "main_to": rev_to,
+                "variants": [{
+                    "id": "v0",
+                    "name": f"{rev_from} ➜ {rev_to}",
+                    "from": rev_from,
+                    "to": rev_to,
+                    "trip_count": directions[0]["variants"][0]["trip_count"],
+                    "stops": rev_stops
+                }],
                 "stops": rev_stops
             })
 
@@ -438,13 +478,13 @@ def get_line(line_id):
         print(f"[JR API LINE ERROR] {e}", flush=True)
         return None
 
-def get_trips(line_id, dir_idx=0, day="weekday"):
+def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
     try:
         dir_idx = int(dir_idx)
     except (TypeError, ValueError):
         dir_idx = 0
 
-    cache_key = (str(line_id), dir_idx, str(day))
+    cache_key = (str(line_id), dir_idx, str(day), str(variant_id or ''))
     if cache_key in _TRIPS_CACHE:
         return _TRIPS_CACHE[cache_key]
 
@@ -455,14 +495,20 @@ def get_trips(line_id, dir_idx=0, day="weekday"):
     if dir_idx >= len(line_info["directions"]):
         dir_idx = 0
 
-    target_stops = [s["name"] for s in line_info["directions"][dir_idx]["stops"]]
-    if not target_stops:
-        return {"trips": []}
+    dir_obj = line_info["directions"][dir_idx]
+    target_stops = [s["name"] for s in dir_obj.get("stops", [])]
+
+    if variant_id:
+        for v in dir_obj.get("variants", []):
+            if v.get("id") == variant_id:
+                target_stops = [s["name"] for s in v.get("stops", [])]
+                break
 
     db_path = _get_db_path()
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
+        ensure_db_indexes(conn)
         cur = conn.cursor()
 
         raw_sn, sn, _, all_rids = _resolve_line_route_ids(cur, line_id)
@@ -485,7 +531,6 @@ def get_trips(line_id, dir_idx=0, day="weekday"):
         allowed_services = set(r["service_id"] for r in cur.fetchall())
 
         if not allowed_services:
-            # Fallback: nejnovější kalendář pro tento den
             cur.execute(f"""
                 SELECT c.service_id, c.end_date
                 FROM trips t
@@ -502,8 +547,7 @@ def get_trips(line_id, dir_idx=0, day="weekday"):
             cur.execute(f"SELECT service_id FROM calendar WHERE {col} = 1")
             allowed_services = set(r["service_id"] for r in cur.fetchall())
 
-        # Vybrat spoje v daném směru
-        target_parity = 1 if dir_idx == 0 else 0
+        target_parity = dir_obj.get("parity", 1 if dir_idx == 0 else 0)
         cur.execute(f"""
             SELECT trip_id, service_id, spoj_cislo 
             FROM trips 
@@ -521,47 +565,66 @@ def get_trips(line_id, dir_idx=0, day="weekday"):
             sc = r["spoj_cislo"]
             if sc not in seen_spoj:
                 seen_spoj.add(sc)
-                matching_trips.append(r["trip_id"])
+                matching_trips.append((r["trip_id"], sc))
 
         res_trips = []
         if matching_trips:
-            q_marks_trips = ','.join('?' for _ in matching_trips)
+            tids = [m[0] for m in matching_trips]
+            q_marks_trips = ','.join('?' for _ in tids)
             cur.execute(f"""
-                SELECT st.trip_id, s.name as stop_name, st.arrival_time, st.pickup_type
+                SELECT st.trip_id, s.name as stop_name, st.arrival_time, st.departure_time, st.pickup_type, st.stop_sequence
                 FROM stop_times st
                 JOIN stops s ON st.stop_id = s.stop_id
                 WHERE st.trip_id IN ({q_marks_trips})
                 ORDER BY st.trip_id, st.stop_sequence
-            """, matching_trips)
+            """, tids)
             trip_rows_map = defaultdict(list)
             for r in cur.fetchall():
                 trip_rows_map[r["trip_id"]].append(r)
 
-            for tid in matching_trips:
+            for tid, sc in matching_trips:
                 rows = trip_rows_map.get(tid, [])
                 if not rows:
                     continue
 
-                trip_stops = []
+                served_stops = []
+                stop_time_map = {}
                 for r in rows:
-                    arr = (r["arrival_time"] or "").strip()
-                    if arr and r["pickup_type"] != '1':
-                        trip_stops.append((r["stop_name"], arr[:5]))
+                    t_str = (r["departure_time"] or r["arrival_time"] or "").strip()[:5]
+                    if t_str and r["pickup_type"] != '1':
+                        s_name = r["stop_name"]
+                        served_stops.append({
+                            "name": s_name,
+                            "time": t_str,
+                            "request": r["pickup_type"] in ('2', '3')
+                        })
+                        if s_name not in stop_time_map:
+                            stop_time_map[s_name] = t_str
 
-                times = align_trip_times(trip_stops, target_stops)
-                non_null = [t for t in times if t]
-                if len(non_null) < 2:
+                if not served_stops:
                     continue
 
-                first_t = non_null[0]
+                first_stop = served_stops[0]["name"]
+                last_stop = served_stops[-1]["name"]
+                dep_t = served_stops[0]["time"]
+                arr_t = served_stops[-1]["time"]
+
+                aligned_times = [stop_time_map.get(s_name, None) for s_name in target_stops]
+
                 res_trips.append({
                     "id": str(tid),
+                    "spoj_cislo": sc,
+                    "first_stop": first_stop,
+                    "last_stop": last_stop,
+                    "dep_time": dep_t,
+                    "arr_time": arr_t,
+                    "first_time": dep_t,
                     "flags": ["low"],
-                    "first_time": first_t,
-                    "times": times
+                    "stops": served_stops,
+                    "times": aligned_times
                 })
 
-        res_trips.sort(key=lambda x: x["first_time"])
+        res_trips.sort(key=lambda x: x["dep_time"])
         conn.close()
         out = {"trips": res_trips}
         _TRIPS_CACHE[cache_key] = out
