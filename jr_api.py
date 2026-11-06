@@ -695,12 +695,15 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
             """, used_sids)
             cal_info_map = {r["service_id"]: r for r in cur.fetchall()}
 
+            # Detekce školních spojů: služby s výlukou na školní prázdniny (např. 29.10. podzimní prázdniny)
             cur.execute(f"""
                 SELECT DISTINCT service_id 
                 FROM calendar_dates 
-                WHERE service_id IN ({q_s}) AND exception_type = 2
+                WHERE service_id IN ({q_s}) 
+                  AND date IN ('20261029', '20260130', '20260402', '20261223', '20270130')
+                  AND exception_type = 2
             """, used_sids)
-            services_with_exclusions = set(r[0] for r in cur.fetchall())
+            school_services = set(r[0] for r in cur.fetchall())
 
             tids = [m[0] for m in matching_trips]
             q_marks_trips = ','.join('?' for _ in tids)
@@ -769,7 +772,7 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
                     is_we = (scal["saturday"] == 1 or scal["sunday"] == 1) and (
                         scal["monday"] + scal["tuesday"] + scal["wednesday"] + scal["thursday"] + scal["friday"] == 0
                     )
-                    is_sch = (scal["monday"] == 1 and scal["friday"] == 1 and sid in services_with_exclusions)
+                    is_sch = (sid in school_services)
                     is_hol = (scal["monday"] + scal["tuesday"] + scal["wednesday"] + scal["thursday"] + scal["friday"] + scal["saturday"] + scal["sunday"] == 0)
 
                     if is_we:

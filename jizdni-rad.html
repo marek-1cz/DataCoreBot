@@ -557,9 +557,130 @@ html.lite .jr-m.next,html.lite .jr-next .in{box-shadow:none}
   .nt-go{order:5;flex:1 1 100%;text-align:center}
 }
 
+/* ================= CELOSTRÁNKOVÝ LOADING SCREEN S PROGRESS BAREM ================= */
+.jr-loader-overlay{
+  position:fixed;inset:0;z-index:99999;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(3,6,16,0.88);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  padding:20px;
+  opacity:1;visibility:visible;
+  transition:opacity .28s ease, visibility .28s ease;
+}
+.jr-loader-overlay[hidden]{
+  display:none;opacity:0;visibility:hidden;pointer-events:none;
+}
+.jr-loader-card{
+  background:linear-gradient(145deg, rgba(13,20,40,0.95), rgba(7,11,24,0.98));
+  border:1px solid rgba(56,214,255,0.28);
+  box-shadow:0 24px 60px rgba(0,0,0,0.7), 0 0 35px rgba(56,214,255,0.18);
+  border-radius:24px;
+  max-width:440px;width:100%;
+  padding:32px 28px;
+  text-align:center;
+  animation:jrPop .32s cubic-bezier(.16,1,.3,1);
+  position:relative;overflow:hidden;
+}
+@keyframes jrPop{from{opacity:0;transform:scale(.92) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.jr-loader-bus-box{
+  width:72px;height:72px;margin:0 auto 16px;
+  background:rgba(56,214,255,0.08);border:1px solid rgba(56,214,255,0.22);
+  border-radius:20px;display:flex;align-items:center;justify-content:center;
+  position:relative;
+}
+.jr-loader-bus-svg{
+  width:44px;height:44px;color:var(--cyan);
+  animation:jrBusBounce 1.2s ease-in-out infinite alternate;
+}
+@keyframes jrBusBounce{0%{transform:translateY(2px)}100%{transform:translateY(-3px)}}
+.jr-loader-glow{
+  position:absolute;inset:0;border-radius:20px;
+  box-shadow:0 0 22px rgba(56,214,255,0.35);
+  animation:jrGlowPulse 1.8s ease-in-out infinite alternate;
+  pointer-events:none;
+}
+@keyframes jrGlowPulse{0%{opacity:.3}100%{opacity:.85}}
+.jr-loader-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(56,214,255,0.12);border:1px solid rgba(56,214,255,0.25);
+  color:var(--cyan);font-size:.72rem;font-weight:700;letter-spacing:.08em;
+  padding:4px 10px;border-radius:20px;text-transform:uppercase;margin-bottom:12px;
+}
+.jr-loader-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 8px var(--cyan);animation:jrDotPulse 1.2s infinite;
+}
+@keyframes jrDotPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.5);opacity:.4}}
+.jr-loader-title{
+  font-size:1.45rem;font-weight:800;letter-spacing:-.02em;
+  margin:0 0 6px;color:#fff;
+}
+.jr-loader-sub{
+  font-size:.88rem;color:var(--muted);margin:0 0 22px;line-height:1.4;
+}
+.jr-prog-track{
+  width:100%;height:10px;background:rgba(255,255,255,0.08);
+  border-radius:999px;overflow:hidden;position:relative;
+  margin-bottom:10px;border:1px solid rgba(255,255,255,0.06);
+}
+.jr-prog-bar{
+  height:100%;
+  background:linear-gradient(90deg, var(--blue), var(--cyan), var(--green));
+  border-radius:999px;
+  position:relative;
+  transition:width .26s cubic-bezier(.22,1,.36,1);
+  box-shadow:0 0 12px rgba(56,214,255,0.6);
+}
+.jr-prog-glint{
+  position:absolute;inset:0;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+  animation:jrProgGlint 1.4s infinite;
+}
+@keyframes jrProgGlint{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.jr-loader-meta{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:.78rem;font-weight:600;color:var(--muted);
+}
+#jrLoadPct{color:var(--cyan);font-variant-numeric:tabular-nums;font-weight:700}
+@media(max-width:540px){
+  .jr-loader-card{padding:24px 18px;max-width:92vw}
+  .jr-loader-title{font-size:1.25rem}
+}
+
 </style>
 </head>
 <body data-page="jr">
+
+<!-- Celostránkový loading screen s animovaným autobusem a progress barem -->
+<div id="jrLoadingOverlay" class="jr-loader-overlay" aria-live="assertive" role="alert">
+  <div class="jr-loader-card">
+    <div class="jr-loader-bus-box">
+      <svg class="jr-loader-bus-svg" viewBox="0 0 48 48" fill="none" stroke="currentColor">
+        <rect x="7" y="10" width="34" height="25" rx="5" stroke-width="2.6" stroke="var(--cyan)"/>
+        <line x1="7" y1="21" x2="41" y2="21" stroke-width="2.4" stroke="rgba(255,255,255,0.4)"/>
+        <line x1="18" y1="10" x2="18" y2="21" stroke-width="2.2" stroke="rgba(255,255,255,0.4)"/>
+        <line x1="30" y1="10" x2="30" y2="21" stroke-width="2.2" stroke="rgba(255,255,255,0.4)"/>
+        <circle cx="15" cy="35" r="4.2" fill="#030610" stroke="var(--cyan)" stroke-width="3"/>
+        <circle cx="33" cy="35" r="4.2" fill="#030610" stroke="var(--cyan)" stroke-width="3"/>
+        <line x1="11" y1="40" x2="11" y2="44" stroke-width="2.6" stroke-linecap="round" stroke="var(--muted)"/>
+        <line x1="37" y1="40" x2="37" y2="44" stroke-width="2.6" stroke-linecap="round" stroke="var(--muted)"/>
+      </svg>
+      <span class="jr-loader-glow"></span>
+    </div>
+    <div class="jr-loader-badge"><span class="jr-loader-dot"></span> NAČÍTÁM DATA JÍZDNÍHO ŘÁDU</div>
+    <h2 id="jrLoadTitle" class="jr-loader-title">Načítám jízdní řády IDPK</h2>
+    <p id="jrLoadSub" class="jr-loader-sub">Ověřuji zastávky, trasy a platné kalendáře spojů…</p>
+    <div class="jr-prog-track" role="progressbar" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
+      <div id="jrLoadBar" class="jr-prog-bar" style="width:25%">
+        <span class="jr-prog-glint"></span>
+      </div>
+    </div>
+    <div class="jr-loader-meta">
+      <span id="jrLoadPct">25 %</span>
+      <span id="jrLoadStatus">Připojuji se k lokální GTFS databázi…</span>
+    </div>
+  </div>
+</div>
 <div class="aurora" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span><span class="e"></span></div>
 
 <!-- ================= HORNÍ SKLENĚNÝ PANEL ================= -->
@@ -782,6 +903,63 @@ function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clea
 function hl(text,q){const n=norm(text),k=norm(q).trim();if(!k)return esc(text);const i=n.indexOf(k);if(i<0)return esc(text);return esc(text.slice(0,i))+'<mark>'+esc(text.slice(i,i+k.length))+'</mark>'+esc(text.slice(i+k.length))}
 const badge=(l,cls)=>'<span class="jr-badge'+(cls?' '+cls:'')+'" style="--c:'+esc(l.color||'#2f6bff')+'">'+esc(l.short)+'</span>';
 
+/* ---------- celostránkový loader s progress barem ---------- */
+const LOADER = {
+  _timer: null,
+  _pct: 25,
+  show(title, sub, startPct) {
+    const ov = $('#jrLoadingOverlay');
+    if (!ov) return;
+    if (this._timer) clearInterval(this._timer);
+    ov.hidden = false;
+    ov.style.opacity = '1';
+    ov.style.visibility = 'visible';
+    if (title) $('#jrLoadTitle').textContent = title;
+    if (sub) $('#jrLoadSub').textContent = sub;
+    this.setPct(startPct != null ? startPct : 25, 'Připravuji spojení s databází…');
+    const steps = [
+      { p: 45, s: 'Načítám trasu a seznam zastávek…' },
+      { p: 70, s: 'Zpracovávám kalendář a výluky spojů…' },
+      { p: 88, s: 'Počítám odjezdy a návaznosti…' },
+      { p: 95, s: 'Dokončuji vykreslení…' }
+    ];
+    let stepIdx = 0;
+    this._timer = setInterval(() => {
+      if (stepIdx < steps.length) {
+        this.setPct(steps[stepIdx].p, steps[stepIdx].s);
+        stepIdx++;
+      } else {
+        clearInterval(this._timer);
+        this._timer = null;
+      }
+    }, 220);
+  },
+  setPct(val, status) {
+    this._pct = Math.min(100, Math.max(0, val));
+    const bar = $('#jrLoadBar');
+    const pct = $('#jrLoadPct');
+    const st = $('#jrLoadStatus');
+    if (bar) bar.style.width = this._pct + '%';
+    if (pct) pct.textContent = Math.round(this._pct) + ' %';
+    if (st && status) st.textContent = status;
+  },
+  hide() {
+    if (this._timer) {
+      clearInterval(this._timer);
+      this._timer = null;
+    }
+    this.setPct(100, 'Dokončeno');
+    setTimeout(() => {
+      const ov = $('#jrLoadingOverlay');
+      if (!ov) return;
+      ov.style.opacity = '0';
+      setTimeout(() => {
+        ov.hidden = true;
+      }, 260);
+    }, 180);
+  }
+};
+
 /* ================= VZOROVÁ DATA (jen když DEMO:false) ================= */
 const DEMO_LINES=[
  {id:'L21',short:'21',color:'#2f6bff',hw:[20,40,60],stops:[['Plzeň, CAN',0],['Plzeň, Anglické nábřeží',4],['Plzeň, Slovany',9],['Plzeň, Skvrňany',15,1],['Plzeň, Křimice',22],['Chotěšov, náměstí',31],['Dobřany, náměstí',38]]},
@@ -941,6 +1119,8 @@ let selectLineTimer = null;
 async function selectLine(id,o){
   o = o || {};
   const my=++S.run;
+  const lCached = lineCache[id];
+  LOADER.show('Načítám linku ' + (lCached ? (lCached.short || lCached.name) : '…'), 'Získávám kompletní trasu, odjezdy a varianty spojů…', 25);
   clearTimeout(selectLineTimer);
   selectLineTimer = setTimeout(() => {
     toast('⏳ Načítám jízdní řád… (chvilku strpení)');
@@ -950,6 +1130,7 @@ async function selectLine(id,o){
     clearTimeout(selectLineTimer);
     if(my!==S.run)return;
     if(!l || !l.directions || !l.directions.length){
+      LOADER.hide();
       toast('Pro tuto linku nebyla nalezena trasa.');
       return;
     }
@@ -971,18 +1152,23 @@ async function selectLine(id,o){
     S.from=o.from||'';
     S.to=o.to||'';
     if(o.day)S.day=o.day;
-    renderLine();
-    loadTrips();
     const P=$('#lineP');
     P.hidden=false;
     P.style.animation='none';
     void P.offsetWidth;
     P.style.animation='';
+    renderLine();
+    await loadTrips();
+    requestAnimationFrame(() => {
+      autoReset();
+    });
     P.scrollIntoView({behavior:'smooth',block:'nearest'});
   }catch(e){
     clearTimeout(selectLineTimer);
     console.error("selectLine error:", e);
     toast('Linku se nepodařilo načíst.');
+  }finally{
+    LOADER.hide();
   }
 }
 
@@ -1121,7 +1307,7 @@ function renderRoute(){
 
 
 /* ---------- posouvání trasy ---------- */
-const AUTO={pos:0,min:0,max:0,dir:1,until:0,hover:false,sync:true,last:0,speed:22,drag:null};
+const AUTO={pos:0,min:0,max:0,dir:1,until:0,hover:false,sync:true,last:0,speed:28,drag:null};
 function autoReset(){
   const r=$('#route');
   if(!r) return;
@@ -1129,8 +1315,10 @@ function autoReset(){
   let minScroll = 0;
   let maxScroll = fullMax;
 
+  const allCols = r.querySelectorAll('.jr-col');
   const cols = r.querySelectorAll('.jr-col:not(.dim)');
-  if (cols.length) {
+  // Pouze pokud je vybrán částečný úsek (alespoň jedna zastávka je zašedlá)
+  if (cols.length && allCols.length && cols.length < allCols.length) {
     const first = cols[0];
     const last = cols[cols.length - 1];
     const firstLeft = first.offsetLeft;
@@ -1148,6 +1336,10 @@ function autoReset(){
       minScroll = centered;
       maxScroll = centered;
     }
+  } else {
+    // Celá linka: plynulý scroll zleva doprava a zpět
+    minScroll = 0;
+    maxScroll = fullMax;
   }
 
   AUTO.min = minScroll;
@@ -1155,7 +1347,7 @@ function autoReset(){
   AUTO.pos = minScroll;
   r.scrollLeft = minScroll;
   AUTO.dir = 1;
-  AUTO.until = performance.now() + 2500;
+  AUTO.until = performance.now() + 1800;
   AUTO.sync = true;
 
   const need = maxScroll > minScroll + 8;
@@ -1168,16 +1360,22 @@ function autoReset(){
   }
   if (h) {
     h.hidden = !need;
-    h.textContent = 'Trasa se posouvá ve vybraném úseku. Myší nebo prstem můžete volně projíždět i ostatní zastávky.';
+    h.textContent = 'Trasa se automaticky posouvá. Kdykoli můžete prstem či myší posouvat i celou trasu.';
   }
 }
 function autoTick(ts){
   requestAnimationFrame(autoTick);
-  const r=$('#route'), dt=Math.min(.1, (ts - (AUTO.last || ts)) / 1000);
-  AUTO.last = ts;
+  const r=$('#route');
   if (!r || $('#lineP').hidden || lite()) return;
+  const dt=Math.min(.1, (ts - (AUTO.last || ts)) / 1000);
+  AUTO.last = ts;
   const fullMax = Math.max(0, r.scrollWidth - r.clientWidth);
   if (fullMax < 8) return;
+
+  // Pokud byl autoReset volán v době, kdy byl kontejner skrytý (fullMax byl 0), přepočítej
+  if (AUTO.max <= AUTO.min && fullMax > 8) {
+    autoReset();
+  }
 
   const min = AUTO.min != null ? AUTO.min : 0;
   const max = AUTO.max != null ? AUTO.max : fullMax;
@@ -1197,29 +1395,30 @@ function autoTick(ts){
   if (AUTO.pos >= max) {
     AUTO.pos = max;
     AUTO.dir = -1;
-    AUTO.until = ts + 2200;
+    AUTO.until = ts + 2000;
   } else if (AUTO.pos <= min) {
     AUTO.pos = min;
     AUTO.dir = 1;
-    AUTO.until = ts + 2200;
+    AUTO.until = ts + 2000;
   }
   r.scrollLeft = AUTO.pos;
 }
 function autoBind(){
-  const r=$('#route'),hold=(ms)=>{AUTO.until=performance.now()+(ms||4000);AUTO.sync=true};
+  const r=$('#route'),hold=(ms)=>{AUTO.until=performance.now()+(ms||3500);AUTO.sync=true};
   if(!r) return;
   r.addEventListener('mouseenter',()=>{AUTO.hover=true});
   r.addEventListener('mouseleave',()=>{AUTO.hover=false;hold(1200)});
   r.addEventListener('wheel',e=>{
-    const max=r.scrollWidth-r.clientWidth;if(max<8)return;hold(4000);
+    const max=r.scrollWidth-r.clientWidth;if(max<8)return;hold(3500);
     const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY,b=r.scrollLeft;
     r.scrollLeft=b+d;if(r.scrollLeft!==b)e.preventDefault()},{passive:false});
-  r.addEventListener('touchstart',()=>hold(6000),{passive:true});
-  r.addEventListener('touchmove',()=>hold(6000),{passive:true});
-  r.addEventListener('touchend',()=>hold(4500),{passive:true});
+  r.addEventListener('touchstart',()=>hold(4500),{passive:true});
+  r.addEventListener('touchmove',()=>hold(4500),{passive:true});
+  r.addEventListener('touchend',()=>hold(3000),{passive:true});
   r.addEventListener('pointerdown',e=>{if(e.pointerType!=='mouse')return;AUTO.drag={x:e.clientX,s:r.scrollLeft};r.classList.add('drag')});
   window.addEventListener('pointermove',e=>{if(!AUTO.drag)return;r.scrollLeft=AUTO.drag.s-(e.clientX-AUTO.drag.x)});
-  window.addEventListener('pointerup',()=>{if(AUTO.drag){AUTO.drag=null;r.classList.remove('drag');hold(3000)}});
+  window.addEventListener('pointerup',()=>{if(AUTO.drag){AUTO.drag=null;r.classList.remove('drag');hold(2500)}});
+  window.addEventListener('resize', () => { autoReset(); });
   requestAnimationFrame(autoTick);
 }
 function swapDir(){
@@ -1579,6 +1778,7 @@ function renderStopBoard(){
 /* ---------- úvod, návrat ---------- */
 function showHome(on){$('#home').hidden=!on}
 async function loadHome(){
+  LOADER.show('Načítám jízdní řády IDPK', 'Inicializuji lokální GTFS data a ověřuji linky…', 25);
   const g=$('#homeG');
   const skel = '<div class="jr-lc jr-skel-card" style="opacity:0.4;pointer-events:none;"><span class="jr-badge" style="--c:#1e293b;color:transparent;">---</span><span class="t"><b style="background:rgba(255,255,255,0.08);height:16px;border-radius:6px;width:75%;margin-bottom:6px;display:block;"></b><small style="background:rgba(255,255,255,0.05);height:12px;border-radius:4px;width:45%;display:block;"></small></span></div>';
   g.innerHTML=skel.repeat(9);
@@ -1589,6 +1789,12 @@ async function loadHome(){
     g.innerHTML=L.map((l,i)=>'<button class="jr-lc" type="button" data-l="'+esc(l.id)+'" style="--i:'+i+'">'+badge(l)+'<span class="t"><b>'+esc(l.name)+'</b><small>Zobrazit jízdní řád →'+(CONFIG.DEMO?' <span class="vzor">VZOR</span>':'')+'</small></span></button>').join('')
   }
   catch(e){g.innerHTML='<p style="color:var(--muted)">Linky se nepodařilo načíst. Použijte prosím hledání výše.</p>'}
+  finally {
+    const hashP=new URLSearchParams(location.hash.slice(1));
+    const queryP=new URLSearchParams(location.search);
+    const line=hashP.get('line')||queryP.get('line')||queryP.get('l')||queryP.get('id');
+    if(!line) LOADER.hide();
+  }
 }
 
 function resetAll(){
