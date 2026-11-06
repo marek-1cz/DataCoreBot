@@ -16378,9 +16378,6 @@ def api_history_spz(spz):
             "updated_at": t.get("updated_at"),
         })
 
-    merged_trips.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
-
-    # 5. Sloučení a inteligentní deduplikace vozoven (5 minut tolerance, normalizace jmen)
     def _parse_epoch_safe(ts):
         if not ts: return 0.0
         try:
@@ -16391,6 +16388,30 @@ def api_history_spz(spz):
             return datetime.strptime(s[:19], "%Y-%m-%d %H:%M:%S").timestamp()
         except Exception:
             return 0.0
+
+    def _get_trip_epoch(x):
+        tid = str(x.get("trip_id") or "")
+        if "-" in tid:
+            last = tid.split("-")[-1]
+            if last.isdigit() and len(last) in (9, 10, 11):
+                try:
+                    val = float(last)
+                    if 1000000000 < val < 2500000000:
+                        return val
+                except Exception:
+                    pass
+        ep = _parse_epoch_safe(x.get("created_at"))
+        if ep > 0.0:
+            return ep
+        for k in ("start_actual", "start_scheduled", "end_actual", "updated_at"):
+            val = _parse_epoch_safe(x.get(k))
+            if val > 0.0:
+                return val
+        return 0.0
+
+    merged_trips.sort(key=_get_trip_epoch, reverse=True)
+
+    # 5. Sloučení a inteligentní deduplikace vozoven (5 minut tolerance, normalizace jmen)
 
     raw_depots = d1_depots + local_depots + cloud_depots
     raw_depots.sort(key=lambda d: _parse_epoch_safe(d.get("arrived_at")), reverse=True)

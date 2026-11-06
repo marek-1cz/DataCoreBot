@@ -289,7 +289,54 @@ html.lite .acard,html.lite .dcard,html.lite .tile,html.lite .rows>*,html.lite .a
 .trip-card{padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);margin-bottom:12px;transition:border-color .2s}
 .trip-card:hover{border-color:rgba(56,214,255,.3)}
 .trip-card-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.trip-date-pill{display:inline-flex;align-items:center;padding:3px 9px;border-radius:6px;background:rgba(56,214,255,.12);border:1px solid rgba(56,214,255,.3);color:var(--cyan);font-size:.78rem;font-weight:700}
 .badge-l{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;background:rgba(56,214,255,.15);color:#38d6ff;font-weight:700;font-size:.85rem;border:1px solid rgba(56,214,255,.3)}
+
+/* HISTORIE LOADING OVERLAY */
+.hist-loading-overlay{
+  position:fixed;inset:0;z-index:95;display:flex;align-items:center;justify-content:center;
+  background:rgba(5,7,15,0.78);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  opacity:0;pointer-events:none;transition:opacity 0.35s ease;
+}
+.hist-loading-overlay.on{opacity:1;pointer-events:auto}
+.hist-loading-box{
+  background:linear-gradient(135deg,rgba(15,23,55,0.95),rgba(8,16,40,0.98));
+  border:1px solid rgba(56,214,255,0.35);box-shadow:0 20px 60px rgba(0,0,0,0.65),0 0 35px rgba(47,107,255,0.25);
+  padding:32px 36px;border-radius:26px;text-align:center;max-width:440px;width:92%;
+  animation:pop 0.35s cubic-bezier(.2,.7,.2,1);
+}
+.hist-spinner{
+  width:44px;height:44px;border-radius:50%;margin:0 auto 16px;
+  border:3px solid rgba(56,214,255,0.18);border-top-color:var(--cyan);
+  animation:histSpin 0.85s linear infinite;
+}
+@keyframes histSpin{to{transform:rotate(360deg)}}
+.hist-loading-title{font-size:1.25rem;font-weight:800;color:#fff;margin-bottom:6px;letter-spacing:-.01em}
+.hist-loading-sub{font-size:0.88rem;color:var(--muted);line-height:1.45}
+.num-spin{display:inline-block;letter-spacing:2px;opacity:0.6;animation:numPulse 1.2s ease-in-out infinite alternate}
+@keyframes numPulse{from{opacity:0.3}to{opacity:0.85}}
+
+/* MOBILE ADJUSTMENTS (<= 768px) */
+@media(max-width:768px){
+  dialog{width:96vw;max-height:94vh;margin:auto}
+  .dbox{padding:18px 14px;border-radius:22px}
+  .dtop{padding-right:36px}
+  .dx{top:12px;right:12px;width:34px;height:34px;font-size:1.1rem}
+  .trip-card{padding:12px 14px}
+  .trip-card-head{flex-direction:column;align-items:flex-start;gap:6px}
+  .trip-times{font-size:0.82rem}
+  .trip-loc{flex-direction:column;align-items:flex-start;gap:4px}
+  .tiles{grid-template-columns:1fr 1fr;gap:8px}
+  .tile{padding:14px 10px;border-radius:18px}
+  .tile .num{font-size:1.75rem}
+  .tr.te{display:flex;flex-direction:column;gap:6px;padding:14px}
+}
+@media(max-width:440px){
+  .tiles{grid-template-columns:1fr 1fr;gap:6px}
+  .tile{padding:12px 6px}
+  .tile .num{font-size:1.5rem}
+  .tile small{font-size:0.75rem}
+}
 .badge-sp{padding:4px 8px;border-radius:8px;background:rgba(255,255,255,.1);color:#e2e8f0;font-weight:600;font-size:.8rem}
 .trip-times{font-size:.88rem;color:#cbd5e1}
 .trip-times b{color:#fff}
@@ -480,6 +527,13 @@ html.lite .acard,html.lite .dcard,html.lite .tile,html.lite .rows>*,html.lite .a
 </div>
 <div id="ois-notices" aria-live="polite" role="region" aria-label="Oznámení"></div>
 
+<div id="hist-loading-overlay" class="hist-loading-overlay on" aria-live="polite">
+  <div class="hist-loading-box">
+    <div class="hist-spinner"></div>
+    <div class="hist-loading-title" id="histLoadingTitle">Načítám data z historie…</div>
+    <div class="hist-loading-sub" id="histLoadingSub">Stahuji záznamy vozidel, tras a vozoven…</div>
+  </div>
+</div>
 
 <main>
 <!-- ================= HLAVIČKA ================= -->
@@ -490,10 +544,10 @@ html.lite .acard,html.lite .dcard,html.lite .tile,html.lite .rows>*,html.lite .a
   <p class="lead">Dvě propojené sekce: databáze všech vozidel a přehled vozoven s evidencí. Z vozidla se dostanete do jeho vozovny a z vozovny zpět na vozidla.</p>
 
   <div class="tiles" aria-live="polite">
-    <button class="tile" type="button" data-go="vozidla"><span class="num" id="tV" data-to="0">0</span><small>Vozidel v databázi</small></button>
-    <button class="tile" type="button" data-go="parking"><span class="num c" id="tP" data-to="0">0</span><small>Právě ve vozovnách</small></button>
-    <button class="tile" type="button" data-go="today"><span class="num g" id="tA" data-to="0">0</span><small>Příjezdů dnes</small></button>
-    <button class="tile" type="button" data-go="vozovny"><span class="num y" id="tD" data-to="0">0</span><small>Vozoven</small></button>
+    <button class="tile" type="button" data-go="vozidla"><span class="num" id="tV" data-to="0"><span class="num-spin">···</span></span><small>Vozidel v databázi</small></button>
+    <button class="tile" type="button" data-go="parking"><span class="num c" id="tP" data-to="0"><span class="num-spin">···</span></span><small>Právě ve vozovnách</small></button>
+    <button class="tile" type="button" data-go="today"><span class="num g" id="tA" data-to="0"><span class="num-spin">···</span></span><small>Příjezdů dnes</small></button>
+    <button class="tile" type="button" data-go="vozovny"><span class="num y" id="tD" data-to="0"><span class="num-spin">···</span></span><small>Vozoven</small></button>
   </div>
 
   <!-- ===== VYHLEDÁVÁNÍ s našeptávačem ===== -->
@@ -962,6 +1016,7 @@ function renderD(){
 }
 
 function renderTiles(){
+  if(S.loading && !S.vehicles.length && !S.records.length) return;
   const act=S.records.filter(x=>x.active).length,k=dayKey(Date.now()),today=S.records.filter(x=>dayKey(x.arr)===k).length;
   const set=(id,v)=>{const e=$(id);if(CONFIG.DEMO){e.textContent='–';return}e.dataset.to=v;countUp(e,v)};
   set('#tV',S.vehicles.length);set('#tP',act);set('#tA',today);set('#tD',S.depots.length);
@@ -1065,7 +1120,43 @@ function renderDetailModal(v, fullData, activeTab){
   const driver = (fullData && fullData.driver) || v.driver || '';
   const note = (fullData && fullData.note) || v.note || '';
 
-  const trips = (fullData && fullData.trips && fullData.trips.length) ? fullData.trips : (v.trips || []);
+  function getTripEpochSafe(t) {
+    if(!t) return 0;
+    if(t.trip_id) {
+      const parts = String(t.trip_id).split('-');
+      const last = parts[parts.length - 1];
+      if(/^\d{9,11}$/.test(last)) {
+        const v = parseInt(last, 10);
+        if(v > 1000000000 && v < 2500000000) return v * 1000;
+      }
+    }
+    if(t.from) return t.from;
+    if(t.created_at) {
+      const p = Date.parse(t.created_at);
+      if(!isNaN(p)) return p;
+    }
+    if(t.updated_at) {
+      const p = Date.parse(t.updated_at);
+      if(!isNaN(p)) return p;
+    }
+    if(t.start_actual && (t.start_actual.includes('-') || t.start_actual.includes('.'))) {
+      const p = Date.parse(t.start_actual);
+      if(!isNaN(p)) return p;
+    }
+    return 0;
+  }
+
+  function getTripDateFormatted(t) {
+    const ep = getTripEpochSafe(t);
+    if(ep > 0){
+      const d = new Date(ep);
+      return d.toLocaleDateString('cs-CZ', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+    return '';
+  }
+
+  const rawTrips = (fullData && fullData.trips && fullData.trips.length) ? fullData.trips : (v.trips || []);
+  const trips = rawTrips.slice().sort((a, b) => getTripEpochSafe(b) - getTripEpochSafe(a));
   const depots = (fullData && fullData.depot_visits && fullData.depot_visits.length) ? fullData.depot_visits : rs;
 
   let tripsHtml = '';
@@ -1075,6 +1166,8 @@ function renderDetailModal(v, fullData, activeTab){
     tripsHtml = trips.map(t => {
       const lineNum = esc(t.linka || t.line || '?');
       const spojNum = esc(t.spoj_num || t.spoj || '–');
+      const tripDate = getTripDateFormatted(t);
+      const datePill = tripDate ? ('<span class="trip-date-pill"><svg viewBox="0 0 24 24" style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;display:inline-block;vertical-align:-1px;margin-right:4px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' + esc(tripDate) + '</span>') : '';
       const tFrom = esc(t.start_actual || t.rawFrom || (t.from ? dt(t.from) : '–'));
       const tTo = esc(t.end_actual || t.rawTo || (t.to ? dt(t.to) : 'V jízdě'));
       const tOrigin = esc(t.origin || 'Výchozí zastávka');
@@ -1086,9 +1179,10 @@ function renderDetailModal(v, fullData, activeTab){
 
       return '<div class="trip-card">' +
         '<div class="trip-card-head">' +
-          '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
             '<span class="badge-l">Linka ' + lineNum + '</span>' +
             '<span class="badge-sp">Spoj ' + spojNum + '</span>' +
+            datePill +
           '</div>' +
           '<div class="trip-times">🕒 Vyjel: <b>' + tFrom + '</b> ➜ 🏁 Dojel: <b>' + tTo + '</b></div>' +
         '</div>' +
@@ -1340,11 +1434,29 @@ function exportCSV(){
 /* =====================================================================
    NAČÍTÁNÍ
    ===================================================================== */
-let timer=null,first=true;
+let timer=null,first=true,loadingTimer=null;
 async function load(silent){
-  if(!silent){S.loading=true;$('#err').classList.remove('on');renderV();renderE();renderD()}
+  const ov = document.getElementById('hist-loading-overlay');
+  const sub = document.getElementById('histLoadingSub');
+  if(!silent){
+    S.loading=true;
+    $('#err').classList.remove('on');
+    renderV();renderE();renderD();
+    if(ov){ ov.style.display = 'flex'; ov.classList.add('on'); }
+    if(sub){ sub.textContent = 'Stahuji záznamy vozidel, tras a vozoven…'; }
+    clearTimeout(loadingTimer);
+    loadingTimer = setTimeout(() => {
+      if(S.loading && sub){
+        sub.innerHTML = '<span style="color:var(--yellow);font-weight:700;">⏳ Načítám data z databáze…</span> (větší objem spojů a záznamů, chvilku strpení)';
+      }
+    }, 3000);
+  }
   try{
-    build(await fetchAll());S.loading=false;fillSelects();renderAll();
+    build(await fetchAll());
+    S.loading=false;
+    clearTimeout(loadingTimer);
+    if(ov){ ov.classList.remove('on'); setTimeout(() => { if(!S.loading) ov.style.display = 'none'; }, 400); }
+    fillSelects();renderAll();
     $('#liveDot').className=CONFIG.DEMO?'y':'';$('#liveTxt').textContent=CONFIG.DEMO?'Vzorová data':'Živá data · aktualizováno '+fT.format(Date.now());
     if(first){
       first=false;
@@ -1375,6 +1487,8 @@ async function load(silent){
     }
   }catch(err){
     console.warn(err);
+    clearTimeout(loadingTimer);
+    if(ov){ ov.classList.remove('on'); ov.style.display = 'none'; }
     if(!silent){S.loading=false;S.vehicles=[];S.records=[];S.depots=[];renderAll();
       $('#errTxt').textContent='Data se nepodařilo načíst. Zkontrolujte připojení a zkuste to znovu.';$('#err').classList.add('on')}
   }

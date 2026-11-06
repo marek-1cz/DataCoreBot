@@ -197,12 +197,41 @@ dialog::backdrop{background:rgba(3,6,16,.72);backdrop-filter:blur(6px)}
 html.lite *{animation:none!important}
 html.lite .jr-m.next,html.lite .jr-next .in{box-shadow:none}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.jr-lc.jr-loading{
+  opacity:0.75;
+  border-color:var(--cyan);
+  pointer-events:none;
+  animation:jrPulse 1s infinite alternate;
+}
+@media(max-width:768px){
+  .wrap{padding:0 4vw}
+  .hero{padding:var(--nav-offset,100px) 0 20px}
+  .jr-homeg{grid-template-columns:1fr;gap:10px}
+  .jr-lc{padding:14px;border-radius:18px}
+  .jr-linehead{flex-direction:column;align-items:flex-start;gap:12px}
+  .jr-linehead .t{width:100%}
+  .jr-swap{width:100%;justify-content:center}
+  .jr-sel{grid-template-columns:1fr;gap:10px}
+  .jr-days{flex-wrap:wrap;gap:6px}
+  .jr-days button{flex:1 1 auto;font-size:0.82rem;padding:8px 12px;justify-content:center}
+  .jr-bar{flex-direction:column;align-items:flex-start;gap:10px}
+  .jr-tr{grid-template-columns:60px 60px 1fr 18px;padding:10px 12px;gap:8px}
+  .jr-tr b{font-size:0.95rem}
+  .jr-th>div{grid-template-columns:60px 60px 1fr 18px;gap:8px}
+  dialog{width:96vw;max-height:92vh}
+  .jr-dlg{padding:18px 14px;border-radius:22px}
+  .jr-tl::before{left:72px}
+  .jr-tl li{grid-template-columns:52px 24px 1fr;gap:6px}
+  .jr-tl time{font-size:0.85rem}
+  .jr-col{min-width:44px;height:180px}
+  .jr-col .lb{font-size:0.75rem}
+}
 @media(max-width:620px){
   .card{padding:18px 14px;border-radius:24px}
   .jr-sel{grid-template-columns:1fr}
   .jr-hr{grid-template-columns:46px 1fr;gap:8px;padding:8px}
   .jr-hr .h{font-size:1.2rem}
-  .jr-tr,.jr-th>div{grid-template-columns:64px 64px 1fr 18px;gap:8px}
+  .jr-tr,.jr-th>div{grid-template-columns:60px 60px 1fr 18px;gap:6px}
   .jr-box{padding-left:16px}
   .jr-linehead{gap:12px}
 }
@@ -751,28 +780,66 @@ async function selectStop(s){
 
 /* ---------- linka ---------- */
 async function getLine(id){if(lineCache[id])return lineCache[id];const l=await api('line',{id:id});lineCache[id]=l;return l}
+let selectLineTimer = null;
 async function selectLine(id,o){
+  o = o || {};
   const my=++S.run;
+  clearTimeout(selectLineTimer);
+  selectLineTimer = setTimeout(() => {
+    toast('⏳ Načítám jízdní řád… (chvilku strpení)');
+  }, 3000);
   try{
-    const l=await getLine(id);if(my!==S.run)return;
-    S.line=l;S.viaStop=!!o.fromStop;showHome(false);$('#stopP').hidden=!o.fromStop;$('#back').textContent=o.fromStop?'← Zpět na zastávku':'← Nové hledání';
+    const l=await getLine(id);
+    clearTimeout(selectLineTimer);
+    if(my!==S.run)return;
+    if(!l || !l.directions || !l.directions.length){
+      toast('Pro tuto linku nebyla nalezena trasa.');
+      return;
+    }
+    S.line=l;
+    S.viaStop=!!o.fromStop;
+    showHome(false);
+    $('#stopP').hidden=!o.fromStop;
+    $('#back').textContent=o.fromStop?'← Zpět na zastávku':'← Nové hledání';
     let dir=o.dir!=null?+o.dir:0;
-    if(o.from){const di=l.directions.findIndex(d=>{const k=d.stops.findIndex(s=>s.id===o.from);return k>=0&&k<d.stops.length-1});if(di>=0&&o.dir==null)dir=di}
-    S.dir=Math.min(dir,l.directions.length-1);
-    const st=l.directions[S.dir].stops;
+    if(o.from){
+      const di=l.directions.findIndex(d=>{
+        const k=(d.stops||[]).findIndex(s=>s.id===o.from);
+        return k>=0&&k<d.stops.length-1;
+      });
+      if(di>=0&&o.dir==null)dir=di;
+    }
+    S.dir=Math.min(dir, Math.max(0, l.directions.length-1));
+    const st=(l.directions[S.dir] && l.directions[S.dir].stops) || [];
+    if(!st.length){
+      toast('Linka nemá dostupné zastávky.');
+      return;
+    }
     S.from=(o.from&&st.slice(0,-1).some(s=>s.id===o.from))?o.from:st[0].id;
     S.to=(o.to&&st.some(s=>s.id===o.to))?o.to:'';
     if(o.day)S.day=o.day;
-    renderLine();loadTrips();
-    const P=$('#lineP');P.hidden=false;P.style.animation='none';void P.offsetWidth;P.style.animation='';
+    renderLine();
+    loadTrips();
+    const P=$('#lineP');
+    P.hidden=false;
+    P.style.animation='none';
+    void P.offsetWidth;
+    P.style.animation='';
     P.scrollIntoView({behavior:'smooth',block:'nearest'});
-  }catch(e){toast('Linku se nepodařilo načíst.')}
+  }catch(e){
+    clearTimeout(selectLineTimer);
+    console.error("selectLine error:", e);
+    toast('Linku se nepodařilo načíst.');
+  }
 }
-const curStops=()=>S.line.directions[S.dir].stops;
+const curStops=()=>(S.line && S.line.directions && S.line.directions[S.dir] && S.line.directions[S.dir].stops) || [];
 function renderLine(){
   const l=S.line,st=curStops();
+  if(!l || !st.length) return;
   const b=$('#lBadge');b.textContent=l.short;b.style.setProperty('--c',l.color||'#2f6bff');b.style.animation='none';void b.offsetWidth;b.style.animation='';
-  $('#lName').textContent=l.name;$('#lDir').textContent='Směr: '+st[st.length-1].name;
+  $('#lName').textContent=l.name;
+  const lastStop = st[st.length-1] || {name: 'Konečná'};
+  $('#lDir').textContent='Směr: '+lastStop.name;
   $('#swap').hidden=l.directions.length<2;
   let fi=st.findIndex(s=>s.id===S.from);
   if(fi<0){fi=0;if(st[0])S.from=st[0].id;}
@@ -785,10 +852,11 @@ function renderLine(){
 const BELL='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 003.4 0"/></svg>';
 function renderRoute(){
   const st=curStops(),fi=st.findIndex(s=>s.id===S.from),ti=S.to?st.findIndex(s=>s.id===S.to):st.length-1;
+  if(!st.length){ $('#route').innerHTML=''; $('#reqBox').innerHTML=''; return; }
   $('#route').innerHTML='<div class="jr-cols" style="--n:'+st.length+'">'+st.map((s,i)=>{
     const inr=i>=fi&&i<=ti,k=(i===fi?' beg':i===ti?' end':inr?' on':'')+(s.request?' rq':'')+(inr?'':' dim');
     return '<div class="jr-col'+k+(i>fi&&i<=ti?' l':'')+(i>=fi&&i<ti?' r':'')+'" style="--i:'+i+'" title="'+esc(s.name)+(s.request?' (na znamení)':'')+'"><i class="d">'+(s.request?BELL:'')+'</i><span class="lb">'+esc(s.name)+'</span></div>'}).join('')+'</div>';
-  const rq=st.filter(s=>s.request).length,f=st[fi],t=st[ti];
+  const rq=st.filter(s=>s.request).length,f=st[fi]||st[0]||{},t=st[ti]||st[st.length-1]||{};
   let h='';
   if(f.request)h+='<div class="jr-alert"><i>'+BELL+'</i><div><b>Nástup na znamení</b>Zastávka <b>'+esc(f.name)+'</b> je na znamení. Řidiči dejte včas znamení rukou.</div></div>';
   if(S.to&&t.request)h+='<div class="jr-alert"><i>'+BELL+'</i><div><b>Výstup na znamení</b>Zastávka <b>'+esc(t.name)+'</b> je na znamení. Včas stiskněte tlačítko STOP.</div></div>';
@@ -852,16 +920,33 @@ async function loadTrips(){
     $('#nextBox').innerHTML='';
     $('#resBox').innerHTML='<div class="jr-load"><div class="jr-track"><svg viewBox="0 0 36 24"><rect x="1" y="2" width="34" height="16" rx="5" fill="#2f6bff"/><rect x="5" y="5" width="7" height="6" rx="1.5" fill="#cfe6ff"/><rect x="14" y="5" width="7" height="6" rx="1.5" fill="#cfe6ff"/><rect x="23" y="5" width="9" height="6" rx="1.5" fill="#cfe6ff"/><rect x="1" y="13" width="34" height="2.5" fill="#ffc933"/><circle cx="9" cy="19" r="3.2" fill="#05070f" stroke="#eaf0ff" stroke-width="1.5"/><circle cx="27" cy="19" r="3.2" fill="#05070f" stroke="#eaf0ff" stroke-width="1.5"/></svg></div>Načítáme jízdní řád…</div>';
     $('#legend').textContent='';
-    try{const r=await api('trips',{line:l.id,dir:S.dir,day:S.day});if(my!==S.run)return;S.cache[key]=r.trips||[]}
-    catch(e){if(my!==S.run)return;$('#resBox').innerHTML='<div class="jr-empty"><b>Jízdní řád se nepodařilo načíst</b>Zkontrolujte připojení.<br><br><button class="btn-main" id="retry" type="button">Zkusit znovu</button></div>';return}
+    const tripsTimer = setTimeout(() => {
+      toast('⏳ Načítám spoje z databáze… (chvilku strpení)');
+    }, 3000);
+    try{
+      const r=await api('trips',{line:l.id,dir:S.dir,day:S.day});
+      clearTimeout(tripsTimer);
+      if(my!==S.run)return;
+      S.cache[key]=r.trips||[];
+    }
+    catch(e){
+      clearTimeout(tripsTimer);
+      if(my!==S.run)return;
+      $('#resBox').innerHTML='<div class="jr-empty"><b>Jízdní řád se nepodařilo načíst</b>Zkontrolujte připojení.<br><br><button class="btn-main" id="retry" type="button">Zkusit znovu</button></div>';
+      return;
+    }
   }
   S.trips=S.cache[key];renderResults();
 }
 function computeRows(){
-  const st=curStops(); let fi=st.findIndex(s=>s.id===S.from); if(fi<0){fi=0;if(st[0])S.from=st[0].id;} const ti=S.to?st.findIndex(s=>s.id===S.to):-1;
+  const st=curStops();
+  if(!st || !st.length) return [];
+  let fi=st.findIndex(s=>s.id===S.from);
+  if(fi<0){fi=0;if(st[0])S.from=st[0].id;}
+  const ti=S.to?st.findIndex(s=>s.id===S.to):-1;
   const rows=[];
   (S.trips||[]).forEach(t=>{
-    if(!t.times[fi])return;
+    if(!t || !t.times || !t.times[fi])return;
     let arr=null,endI=ti;
     if(ti>=0){if(!t.times[ti])return;arr=t.times[ti]}
     else{endI=t.times.length-1;while(endI>fi&&!t.times[endI])endI--;if(endI>fi)arr=t.times[endI]}
@@ -929,6 +1014,8 @@ function openTrip(i){
 function showHome(on){$('#home').hidden=!on}
 async function loadHome(){
   const g=$('#homeG');
+  const skel = '<div class="jr-lc jr-skel-card" style="opacity:0.4;pointer-events:none;"><span class="jr-badge" style="--c:#1e293b;color:transparent;">---</span><span class="t"><b style="background:rgba(255,255,255,0.08);height:16px;border-radius:6px;width:75%;margin-bottom:6px;display:block;"></b><small style="background:rgba(255,255,255,0.05);height:12px;border-radius:4px;width:45%;display:block;"></small></span></div>';
+  g.innerHTML=skel.repeat(6);
   try{const r=await api('featured',{count:6});const L=r.lines||[];
     g.innerHTML=L.map((l,i)=>'<button class="jr-lc" type="button" data-l="'+esc(l.id)+'" style="--i:'+i+'">'+badge(l)+'<span class="t"><b>'+esc(l.name)+'</b><small>Zobrazit jízdní řád →'+(CONFIG.DEMO?' <span class="vzor">VZOR</span>':'')+'</small></span></button>').join('')}
   catch(e){g.innerHTML='<p style="color:var(--muted)">Linky se nepodařilo načíst. Použijte prosím hledání výše.</p>'}
@@ -980,12 +1067,28 @@ function bind(){
     if(x.t==='line'){q.value=x.label;$('#qx').hidden=false;selectLine(x.id,{})}
     else if(x.data){q.value=x.label;$('#qx').hidden=false;selectStop(x.data)}
     else{q.value=x.label;$('#qx').hidden=false;doSearch();q.focus()}});
-  $('#stopP').addEventListener('click',e=>{if(e.target.closest('[data-act=home]'))return resetAll();const b=e.target.closest('[data-l]');if(b)selectLine(b.dataset.l,{from:S.stop.id,fromStop:true})});
+  $('#stopP').addEventListener('click',e=>{
+    if(e.target.closest('[data-act=home]'))return resetAll();
+    const b=e.target.closest('[data-l]');
+    if(b && S.stop){
+      if(b.classList.contains('jr-loading')) return;
+      b.classList.add('jr-loading');
+      selectLine(b.dataset.l,{from:S.stop.id,fromStop:true}).finally(()=>{ b.classList.remove('jr-loading'); });
+    }
+  });
   $('#selFrom').addEventListener('change',e=>{S.from=e.target.value;const st=curStops();if(S.to&&st.findIndex(s=>s.id===S.to)<=st.findIndex(s=>s.id===S.from))S.to='';renderLine();renderResults()});
   $('#selTo').addEventListener('change',e=>{S.to=e.target.value;renderRoute();syncHash();renderResults()});
   autoBind();
   $('#back').addEventListener('click',goBack);
-  $('#homeG').addEventListener('click',e=>{const b=e.target.closest('[data-l]');if(b){$('#q').value='';selectLine(b.dataset.l,{})}});
+  $('#homeG').addEventListener('click',e=>{
+    const b=e.target.closest('[data-l]');
+    if(b){
+      if(b.classList.contains('jr-loading')) return;
+      b.classList.add('jr-loading');
+      $('#q').value='';
+      selectLine(b.dataset.l,{}).finally(()=>{ b.classList.remove('jr-loading'); });
+    }
+  });
   $('#shuf').addEventListener('click',()=>{const s=$('#shuf');s.classList.remove('rot');void s.offsetWidth;s.classList.add('rot');loadHome()});
   /* trasa je vždy celá vidět, žádné klikání nepotřebuje */
   $('#onlyT').addEventListener('click',()=>{S.onlyToday=!S.onlyToday;if(S.trips)renderResults()});

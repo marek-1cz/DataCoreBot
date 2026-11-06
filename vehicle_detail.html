@@ -418,6 +418,19 @@ table.ois-table tr:last-child td{border-bottom:none;}
 }
 .btn-switch:hover{background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);}
 
+/* SORT BUTTONS */
+.sort-group{
+  display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);
+  padding:4px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);
+}
+.btn-sort-pill{
+  background:none;border:none;color:var(--muted);font-size:0.8rem;font-weight:700;
+  padding:6px 12px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  transition:all 0.2s ease;
+}
+.btn-sort-pill:hover{color:#fff;background:rgba(255,255,255,0.06);}
+.btn-sort-pill.active{color:#fff;background:linear-gradient(135deg,#2563eb,#0284c7);box-shadow:0 2px 8px rgba(37,99,235,0.35);}
+
 @media(max-width:960px){
   .hero-card{grid-template-columns:1fr;gap:20px;}
   .hero-actions{align-items:flex-start;}
@@ -426,6 +439,17 @@ table.ois-table tr:last-child td{border-bottom:none;}
   .ois-nav{padding:0 16px;}
   .nav-links{display:none;}
   .wrap{padding:16px 14px 40px;}
+}
+@media(max-width:768px){
+  .kpi-grid{grid-template-columns:1fr 1fr;gap:10px;}
+  .filter-row{flex-direction:column;align-items:stretch;gap:12px;}
+  .sort-group{justify-content:center;width:100%;}
+  .btn-sort-pill{flex:1;justify-content:center;}
+  .search-box{max-width:none;width:100%;}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+}
+@media(max-width:480px){
+  .kpi-grid{grid-template-columns:1fr;}
 }
 </style>
 </head>
@@ -562,6 +586,14 @@ table.ois-table tr:last-child td{border-bottom:none;}
           <i class="fas fa-search"></i>
           <input type="text" id="tripFilter" placeholder="Filtrovat podle linky, trasy nebo zastávky…" oninput="filterTrips()">
         </div>
+        <div class="sort-group" aria-label="Řazení spojů">
+          <button type="button" class="btn-sort-pill active" id="sortDescBtn" onclick="setTripSort('desc')">
+            <i class="fas fa-sort-amount-down"></i> Nejnovější první
+          </button>
+          <button type="button" class="btn-sort-pill" id="sortAscBtn" onclick="setTripSort('asc')">
+            <i class="fas fa-sort-amount-up-alt"></i> Nejstarší první
+          </button>
+        </div>
         <div style="font-size:0.82rem;color:var(--muted);" id="tripFilteredCount">Zobrazuji všechny jízdy</div>
       </div>
 
@@ -674,13 +706,74 @@ function calcDuration(startStr, endStr) {
   return '';
 }
 
+let TRIP_SORT_ORDER = 'desc';
+
+function getTripEpoch(t) {
+  if (!t) return 0;
+  if (t.trip_id) {
+    const parts = String(t.trip_id).split('-');
+    const last = parts[parts.length - 1];
+    if (/^\d{9,11}$/.test(last)) {
+      const v = parseInt(last, 10);
+      if (v > 1000000000 && v < 2500000000) return v * 1000;
+    }
+  }
+  let baseMs = 0;
+  if (t.created_at) {
+    const p = Date.parse(t.created_at);
+    if (!isNaN(p)) baseMs = p;
+  }
+  if (!baseMs && t.updated_at) {
+    const p = Date.parse(t.updated_at);
+    if (!isNaN(p)) baseMs = p;
+  }
+  if (t.start_actual && (t.start_actual.includes('-') || t.start_actual.includes('T'))) {
+    const p = Date.parse(t.start_actual);
+    if (!isNaN(p)) return p;
+  }
+  if (baseMs && t.start_actual && /^\d{1,2}:\d{2}/.test(t.start_actual)) {
+    const parts = t.start_actual.split(':').map(Number);
+    const d = new Date(baseMs);
+    d.setHours(parts[0], parts[1], 0, 0);
+    return d.getTime();
+  }
+  if (baseMs) return baseMs;
+  if (t.start_scheduled && (t.start_scheduled.includes('-') || t.start_scheduled.includes('T'))) {
+    const p = Date.parse(t.start_scheduled);
+    if (!isNaN(p)) return p;
+  }
+  return 0;
+}
+
+function sortTrips(arr, order) {
+  const o = order || TRIP_SORT_ORDER;
+  return arr.slice().sort((a, b) => {
+    const ea = getTripEpoch(a);
+    const eb = getTripEpoch(b);
+    if (ea !== eb) {
+      return o === 'asc' ? (ea - eb) : (eb - ea);
+    }
+    return o === 'asc' ? String(a.trip_id||'').localeCompare(String(b.trip_id||'')) : String(b.trip_id||'').localeCompare(String(a.trip_id||''));
+  });
+}
+
+function setTripSort(order) {
+  TRIP_SORT_ORDER = order;
+  const btnDesc = document.getElementById('sortDescBtn');
+  const btnAsc = document.getElementById('sortAscBtn');
+  if (btnDesc) btnDesc.classList.toggle('active', order === 'desc');
+  if (btnAsc) btnAsc.classList.toggle('active', order === 'asc');
+  ALL_TRIPS = sortTrips(ALL_TRIPS, TRIP_SORT_ORDER);
+  filterTrips();
+}
+
 async function loadVehicleData() {
   try {
     const res = await fetch('/api/history_spz/' + encodeURIComponent(PAGE_SPZ), { credentials: 'include' });
     if (!res.ok) throw new Error('Chyba serveru ' + res.status);
     const data = await res.json();
     VEHICLE_INFO = data;
-    ALL_TRIPS = data.trips || data.data || [];
+    ALL_TRIPS = sortTrips(data.trips || data.data || [], TRIP_SORT_ORDER);
     ALL_DEPOTS = data.depot_visits || [];
 
     try { renderHeader(); } catch(e) { console.error('Error renderHeader:', e); }
@@ -832,8 +925,9 @@ function renderTrips(trips) {
 
   let html = '';
   trips.forEach((t, idx) => {
-    const cd = new Date(t.created_at || t.start_actual);
-    const dateStr = !isNaN(cd) ? cd.toLocaleDateString('cs-CZ', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }) : '---';
+    const ep = getTripEpoch(t);
+    const cd = ep > 0 ? new Date(ep) : (t.created_at ? new Date(t.created_at) : null);
+    const dateStr = (cd && !isNaN(cd.getTime())) ? cd.toLocaleDateString('cs-CZ', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }) : '---';
     const startStr = t.start_actual || t.start_scheduled || '---';
     const endStr = t.end_actual || '---';
     const durStr = calcDuration(t.start_actual || t.start_scheduled, t.end_actual);

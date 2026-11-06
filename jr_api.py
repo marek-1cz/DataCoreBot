@@ -17,6 +17,7 @@ _CACHE_FEATURED = None
 _CACHE_ROUTES = None
 _CACHE_STOPS = None
 _LINE_CACHE = {}
+_TRIPS_CACHE = {}
 
 def align_trip_times(trip_stops, target_stops):
     """
@@ -384,10 +385,10 @@ def get_line(line_id):
                 ORDER BY cnt DESC
                 LIMIT 25
             """, tids[:200])
-            best_candidate_tids = [r["trip_id"] for r in cur.fetchall()] or tids[:25]
+            best_candidate_tids = [r["trip_id"] for r in cur.fetchall()] or tids[:10]
 
             best_seq = []
-            for tid in best_candidate_tids:
+            for tid in best_candidate_tids[:6]:
                 cur.execute("""
                     SELECT s.name as stop_name, st.pickup_type, st.arrival_time
                     FROM stop_times st
@@ -438,14 +439,18 @@ def get_line(line_id):
         return None
 
 def get_trips(line_id, dir_idx=0, day="weekday"):
-    line_info = get_line(line_id)
-    if not line_info or not line_info.get("directions"):
-        return {"trips": []}
-
     try:
         dir_idx = int(dir_idx)
     except (TypeError, ValueError):
         dir_idx = 0
+
+    cache_key = (str(line_id), dir_idx, str(day))
+    if cache_key in _TRIPS_CACHE:
+        return _TRIPS_CACHE[cache_key]
+
+    line_info = get_line(line_id)
+    if not line_info or not line_info.get("directions"):
+        return {"trips": []}
 
     if dir_idx >= len(line_info["directions"]):
         dir_idx = 0
@@ -519,40 +524,48 @@ def get_trips(line_id, dir_idx=0, day="weekday"):
                 matching_trips.append(r["trip_id"])
 
         res_trips = []
-        for tid in matching_trips:
-            cur.execute("""
-                SELECT s.name as stop_name, st.arrival_time, st.pickup_type
+        if matching_trips:
+            q_marks_trips = ','.join('?' for _ in matching_trips)
+            cur.execute(f"""
+                SELECT st.trip_id, s.name as stop_name, st.arrival_time, st.pickup_type
                 FROM stop_times st
                 JOIN stops s ON st.stop_id = s.stop_id
-                WHERE st.trip_id = ?
-                ORDER BY st.stop_sequence
-            """, (tid,))
-            rows = cur.fetchall()
-            if not rows:
-                continue
+                WHERE st.trip_id IN ({q_marks_trips})
+                ORDER BY st.trip_id, st.stop_sequence
+            """, matching_trips)
+            trip_rows_map = defaultdict(list)
+            for r in cur.fetchall():
+                trip_rows_map[r["trip_id"]].append(r)
 
-            trip_stops = []
-            for r in rows:
-                arr = (r["arrival_time"] or "").strip()
-                if arr and r["pickup_type"] != '1':
-                    trip_stops.append((r["stop_name"], arr[:5]))
+            for tid in matching_trips:
+                rows = trip_rows_map.get(tid, [])
+                if not rows:
+                    continue
 
-            times = align_trip_times(trip_stops, target_stops)
-            non_null = [t for t in times if t]
-            if len(non_null) < 2:
-                continue
+                trip_stops = []
+                for r in rows:
+                    arr = (r["arrival_time"] or "").strip()
+                    if arr and r["pickup_type"] != '1':
+                        trip_stops.append((r["stop_name"], arr[:5]))
 
-            first_t = non_null[0]
-            res_trips.append({
-                "id": str(tid),
-                "flags": ["low"],
-                "first_time": first_t,
-                "times": times
-            })
+                times = align_trip_times(trip_stops, target_stops)
+                non_null = [t for t in times if t]
+                if len(non_null) < 2:
+                    continue
+
+                first_t = non_null[0]
+                res_trips.append({
+                    "id": str(tid),
+                    "flags": ["low"],
+                    "first_time": first_t,
+                    "times": times
+                })
 
         res_trips.sort(key=lambda x: x["first_time"])
         conn.close()
-        return {"trips": res_trips}
+        out = {"trips": res_trips}
+        _TRIPS_CACHE[cache_key] = out
+        return out
     except Exception as e:
         print(f"[JR API TRIPS ERROR] {e}", flush=True)
         return {"trips": []}
