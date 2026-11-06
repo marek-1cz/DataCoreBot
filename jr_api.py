@@ -11,6 +11,7 @@ import os
 import sqlite3
 import unicodedata
 import threading
+import json
 from datetime import datetime
 from collections import defaultdict
 
@@ -19,6 +20,26 @@ _CACHE_ROUTES = None
 _CACHE_STOPS = None
 _LINE_CACHE = {}
 _TRIPS_CACHE = {}
+_LINE_MAPPING = None
+_REV_LINE_MAPPING = None
+
+def _get_line_mapping():
+    global _LINE_MAPPING, _REV_LINE_MAPPING
+    if _LINE_MAPPING is None:
+        try:
+            curr_dir = os.path.dirname(os.path.abspath(__file__))
+            p = os.path.join(curr_dir, "gtfs_line_mapping.json")
+            if not os.path.exists(p):
+                p = os.path.join(os.path.dirname(curr_dir), "gtfs_line_mapping.json")
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    _LINE_MAPPING = json.load(f)
+                    _REV_LINE_MAPPING = {v: k for k, v in _LINE_MAPPING.items()}
+        except Exception as e:
+            print(f"[JR API MAPPING ERROR] {e}", flush=True)
+            _LINE_MAPPING = {}
+            _REV_LINE_MAPPING = {}
+    return _LINE_MAPPING or {}, _REV_LINE_MAPPING or {}
 
 def ensure_db_indexes(conn=None):
     """Vytvoří chybějící indexy v GTFS SQLite databázi pro zrychlení dotazů z minut na milisekundy."""
@@ -111,6 +132,9 @@ def _norm(s):
 
 def _short_name(sn):
     sn = str(sn).strip()
+    _, rev_map = _get_line_mapping()
+    if sn in rev_map:
+        return rev_map[sn]
     if len(sn) == 6 and sn.isdigit():
         return str(int(sn[3:]))
     return sn
@@ -315,8 +339,12 @@ def search(q):
     return {"lines": matched_lines, "stops": matched_stops}
 
 def _resolve_line_route_ids(cur, line_id):
-    """Vrací (raw_short, sn, [route_ids]) pro danou linku."""
-    cur.execute("SELECT route_id, route_short_name, route_long_name FROM routes WHERE route_id = ?", (line_id,))
+    """Vrací (raw_short, sn, route_long_name, [route_ids]) pro danou linku."""
+    mapping, _ = _get_line_mapping()
+    line_id_str = str(line_id).strip()
+
+    # 1. Přímé ID route_id (např. R4837)
+    cur.execute("SELECT route_id, route_short_name, route_long_name FROM routes WHERE route_id = ?", (line_id_str,))
     r = cur.fetchone()
     if r:
         raw_sn = r["route_short_name"]
@@ -325,8 +353,19 @@ def _resolve_line_route_ids(cur, line_id):
         all_rids = [row["route_id"] for row in cur.fetchall()]
         return raw_sn, sn, r["route_long_name"] or "", all_rids
 
-    # Pokud line_id byl zadán jako číslo linky (např. 722 nebo 424)
-    cur.execute("SELECT route_id, route_short_name, route_long_name FROM routes WHERE route_short_name LIKE ? OR route_short_name = ?", (f"%{line_id}", line_id))
+    # 2. V mapování z gtfs_line_mapping.json (např. "1" -> "436001", "722" -> "490722")
+    if line_id_str in mapping:
+        target_raw = mapping[line_id_str]
+        cur.execute("SELECT route_id, route_short_name, route_long_name FROM routes WHERE route_short_name = ?", (target_raw,))
+        rows = cur.fetchall()
+        if rows:
+            raw_sn = rows[0]["route_short_name"]
+            sn = _short_name(raw_sn)
+            all_rids = [row["route_id"] for row in rows]
+            return raw_sn, sn, rows[0]["route_long_name"] or "", all_rids
+
+    # 3. Přesný název raw linky (např. 490722)
+    cur.execute("SELECT route_id, route_short_name, route_long_name FROM routes WHERE route_short_name = ?", (line_id_str,))
     rows = cur.fetchall()
     if rows:
         raw_sn = rows[0]["route_short_name"]
@@ -334,7 +373,99 @@ def _resolve_line_route_ids(cur, line_id):
         all_rids = [row["route_id"] for row in rows]
         return raw_sn, sn, rows[0]["route_long_name"] or "", all_rids
 
+    # 4. Hledání podle zkratky linky (např. sn == "722")
+    cur.execute("SELECT route_id, route_short_name, route_long_name FROM routes")
+    for row in cur.fetchall():
+        if _short_name(row["route_short_name"]) == line_id_str:
+            raw_sn = row["route_short_name"]
+            sn = line_id_str
+            cur.execute("SELECT route_id FROM routes WHERE route_short_name = ?", (raw_sn,))
+            all_rids = [x["route_id"] for x in cur.fetchall()]
+            return raw_sn, sn, row["route_long_name"] or "", all_rids
+
     return None, None, "", []
+
+def resolve_services_for_route(cur, all_rids, day, today_str=None):
+    """
+    Vybere platná service_id pro dané linky a typ dne.
+    Pokrývá standardní týdenní kalendář (vč. všech pracovních dnů po-pá),
+    výjimky v calendar_dates a automatický fallback pro sezónní či specifické linky,
+    aby uživatel nikdy neviděl falešné 'žádné spoje'.
+    """
+    if not today_str:
+        today_str = datetime.now().strftime("%Y%m%d")
+
+    q_marks = ','.join('?' for _ in all_rids)
+
+    if day == 'weekday':
+        cal_day_cond = "(c.monday = 1 OR c.tuesday = 1 OR c.wednesday = 1 OR c.thursday = 1 OR c.friday = 1)"
+        cd_dow_cond = "strftime('%w', substr(cd.date, 1, 4) || '-' || substr(cd.date, 5, 2) || '-' || substr(cd.date, 7, 2)) IN ('1', '2', '3', '4', '5')"
+    elif day == 'saturday':
+        cal_day_cond = "(c.saturday = 1)"
+        cd_dow_cond = "strftime('%w', substr(cd.date, 1, 4) || '-' || substr(cd.date, 5, 2) || '-' || substr(cd.date, 7, 2)) = '6'"
+    else:  # sunday / svátky
+        cal_day_cond = "(c.sunday = 1)"
+        cd_dow_cond = "strftime('%w', substr(cd.date, 1, 4) || '-' || substr(cd.date, 5, 2) || '-' || substr(cd.date, 7, 2)) = '0'"
+
+    # 1. Běžný kalendář v aktuálním provozním období
+    cur.execute(f"""
+        SELECT c.service_id
+        FROM trips t
+        JOIN calendar c ON t.service_id = c.service_id
+        WHERE t.route_id IN ({q_marks})
+          AND c.start_date <= ? AND c.end_date >= ?
+          AND {cal_day_cond}
+    """, all_rids + [today_str, today_str])
+    active_services = set(r[0] for r in cur.fetchall())
+
+    # Přidat aktivní služby z calendar_dates (přidané dny exception_type = 1 pro daný den v týdnu)
+    cur.execute(f"""
+        SELECT cd.service_id
+        FROM trips t
+        JOIN calendar_dates cd ON t.service_id = cd.service_id
+        WHERE t.route_id IN ({q_marks})
+          AND cd.exception_type = 1
+          AND {cd_dow_cond}
+          AND cd.date >= ?
+    """, all_rids + [today_str[:6] + '01'])
+    active_services.update(r[0] for r in cur.fetchall())
+
+    if active_services:
+        return active_services
+
+    # 2. Fallback: Nejbližší / nejnovější platné provozní období pro tuto linku
+    cur.execute(f"""
+        SELECT c.service_id, c.end_date
+        FROM trips t
+        JOIN calendar c ON t.service_id = c.service_id
+        WHERE t.route_id IN ({q_marks})
+          AND {cal_day_cond}
+        ORDER BY c.end_date DESC
+    """, all_rids)
+    rows = cur.fetchall()
+    if rows:
+        max_end = rows[0][1]
+        fallback_services = set(r[0] for r in rows if r[1] == max_end)
+        if fallback_services:
+            return fallback_services
+
+    # 3. Fallback: Všechny záznamy v calendar_dates (např. linky s nulovým calendar)
+    cur.execute(f"""
+        SELECT cd.service_id
+        FROM trips t
+        JOIN calendar_dates cd ON t.service_id = cd.service_id
+        WHERE t.route_id IN ({q_marks})
+          AND cd.exception_type = 1
+          AND {cd_dow_cond}
+    """, all_rids)
+    cd_services = set(r[0] for r in cur.fetchall())
+    if cd_services:
+        return cd_services
+
+    # 4. Poslední záchrana: všechny service_id pro tuto linku
+    cur.execute(f"SELECT DISTINCT service_id FROM trips WHERE route_id IN ({q_marks})", all_rids)
+    return set(r[0] for r in cur.fetchall())
+
 
 def get_line(line_id):
     if line_id in _LINE_CACHE:
@@ -442,26 +573,8 @@ def get_line(line_id):
                 "stops": main_stops
             })
 
-        if len(directions) == 1 and len(directions[0]["stops"]) > 1:
-            rev_stops = list(reversed(directions[0]["stops"]))
-            rev_from = directions[0]["main_to"]
-            rev_to = directions[0]["main_from"]
-            directions.append({
-                "id": 1,
-                "name": f"{rev_from} ➜ {rev_to}",
-                "parity": 0 if directions[0].get("parity") == 1 else 1,
-                "main_from": rev_from,
-                "main_to": rev_to,
-                "variants": [{
-                    "id": "v0",
-                    "name": f"{rev_from} ➜ {rev_to}",
-                    "from": rev_from,
-                    "to": rev_to,
-                    "trip_count": directions[0]["variants"][0]["trip_count"],
-                    "stops": rev_stops
-                }],
-                "stops": rev_stops
-            })
+        # Pokud linka reálně jezdí jen v jednom směru (např. okružní linka), nesyntetizujeme
+        # fiktivní opačný směr, který by v databázi neměl žádné spoje.
 
         conn.close()
         res = {
@@ -516,36 +629,12 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
             all_rids = [line_id]
 
         q_marks = ','.join('?' for _ in all_rids)
-        today_str = datetime.now().strftime("%Y%m%d")
-        col = "monday" if day == "weekday" else ("saturday" if day == "saturday" else "sunday")
+        now_dt = datetime.now()
+        today_str = now_dt.strftime("%Y%m%d")
+        dow_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        today_col = dow_names[now_dt.weekday()]
 
-        # Najít platné service_id pro tento den a linku
-        cur.execute(f"""
-            SELECT c.service_id 
-            FROM trips t
-            JOIN calendar c ON t.service_id = c.service_id
-            WHERE t.route_id IN ({q_marks})
-              AND c.start_date <= ? AND c.end_date >= ?
-              AND c.{col} = 1
-        """, all_rids + [today_str, today_str])
-        allowed_services = set(r["service_id"] for r in cur.fetchall())
-
-        if not allowed_services:
-            cur.execute(f"""
-                SELECT c.service_id, c.end_date
-                FROM trips t
-                JOIN calendar c ON t.service_id = c.service_id
-                WHERE t.route_id IN ({q_marks}) AND c.{col} = 1
-                ORDER BY c.end_date DESC
-            """, all_rids)
-            rows = cur.fetchall()
-            if rows:
-                max_e = rows[0]["end_date"]
-                allowed_services = set(r["service_id"] for r in rows if r["end_date"] == max_e)
-
-        if not allowed_services:
-            cur.execute(f"SELECT service_id FROM calendar WHERE {col} = 1")
-            allowed_services = set(r["service_id"] for r in cur.fetchall())
+        allowed_services = resolve_services_for_route(cur, all_rids, day, today_str)
 
         target_parity = dir_obj.get("parity", 1 if dir_idx == 0 else 0)
         cur.execute(f"""
@@ -553,22 +642,41 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
             FROM trips 
             WHERE route_id IN ({q_marks}) AND (spoj_cislo % 2) = ?
         """, all_rids + [target_parity])
-        
-        matching_rows = [
-            r for r in cur.fetchall() 
-            if r["service_id"] in allowed_services
-        ]
+        trip_candidates = cur.fetchall()
 
+        if not trip_candidates:
+            cur.execute(f"""
+                SELECT trip_id, service_id, spoj_cislo 
+                FROM trips 
+                WHERE route_id IN ({q_marks})
+            """, all_rids)
+            trip_candidates = cur.fetchall()
+
+        matching_rows = [r for r in trip_candidates if r["service_id"] in allowed_services]
+        if not matching_rows and trip_candidates:
+            matching_rows = trip_candidates
+
+        # Deduplikace podle spoj_cislo
         seen_spoj = set()
         matching_trips = []
+        trip_services = {}
         for r in matching_rows:
             sc = r["spoj_cislo"]
             if sc not in seen_spoj:
                 seen_spoj.add(sc)
                 matching_trips.append((r["trip_id"], sc))
+                trip_services[r["trip_id"]] = r["service_id"]
 
         res_trips = []
         if matching_trips:
+            used_sids = list(set(trip_services.values()))
+            q_s = ','.join('?' for _ in used_sids)
+            cur.execute(f"SELECT service_id, exception_type FROM calendar_dates WHERE date = ? AND service_id IN ({q_s})", [today_str] + used_sids)
+            today_exceptions = dict(cur.fetchall())
+
+            cur.execute(f"SELECT service_id, start_date, end_date, {today_col} FROM calendar WHERE service_id IN ({q_s})", used_sids)
+            today_cal = {r["service_id"]: (r["start_date"], r["end_date"], r[today_col]) for r in cur.fetchall()}
+
             tids = [m[0] for m in matching_trips]
             q_marks_trips = ','.join('?' for _ in tids)
             cur.execute(f"""
@@ -611,6 +719,19 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
 
                 aligned_times = [stop_time_map.get(s_name, None) for s_name in target_stops]
 
+                # Výpočet příznaku zda spoj jede DNES
+                sid = trip_services.get(tid)
+                runs_today = True
+                if sid:
+                    ex = today_exceptions.get(sid)
+                    if ex == 1:
+                        runs_today = True
+                    elif ex == 2:
+                        runs_today = False
+                    elif sid in today_cal:
+                        c_start, c_end, c_dow = today_cal[sid]
+                        runs_today = bool(c_start <= today_str <= c_end and c_dow == 1)
+
                 res_trips.append({
                     "id": str(tid),
                     "spoj_cislo": sc,
@@ -619,6 +740,7 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
                     "dep_time": dep_t,
                     "arr_time": arr_t,
                     "first_time": dep_t,
+                    "today": runs_today,
                     "flags": ["low"],
                     "stops": served_stops,
                     "times": aligned_times
@@ -632,3 +754,4 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
     except Exception as e:
         print(f"[JR API TRIPS ERROR] {e}", flush=True)
         return {"trips": []}
+

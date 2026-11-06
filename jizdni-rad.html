@@ -320,6 +320,34 @@ html.lite .jr-m.next,html.lite .jr-next .in{box-shadow:none}
 .jr-col.rq .d svg{width:15px;height:15px;stroke:#2a1d00;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .jr-col.rq .lb{color:var(--yellow);font-weight:800}
 .jr-col.rq.dim .lb{opacity:.8}
+
+/* Trasy a varianty linky - moderní redesign */
+.jr-variants-wrap{margin-top:14px;padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);box-shadow:0 4px 20px rgba(0,0,0,.25)}
+.jr-variants-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.jr-variants-title{display:inline-flex;align-items:center;gap:8px;font-size:0.76rem;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:var(--cyan)}
+.jr-variants-title svg{width:15px;height:15px;fill:none;stroke:var(--cyan);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.jr-variants-list{display:flex;flex-wrap:wrap;gap:8px}
+.jr-var-btn{display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:var(--text);font-family:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;transition:all .2s cubic-bezier(.16,1,.3,1);white-space:nowrap}
+.jr-var-btn:hover{background:rgba(255,255,255,.08);border-color:rgba(56,214,255,.4);transform:translateY(-1px)}
+.jr-var-btn[aria-pressed="true"]{background:linear-gradient(135deg,rgba(56,214,255,.18),rgba(47,107,255,.12));border-color:var(--cyan);color:#ffffff;box-shadow:0 0 16px rgba(56,214,255,.25),inset 0 0 10px rgba(56,214,255,.08);font-weight:700}
+.jr-var-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:0.72rem;font-weight:700;background:rgba(255,255,255,.08);color:var(--muted);border:1px solid rgba(255,255,255,.06);transition:all .2s}
+.jr-var-btn:hover .jr-var-badge{background:rgba(56,214,255,.15);color:var(--cyan)}
+.jr-var-btn[aria-pressed="true"] .jr-var-badge{background:var(--cyan);color:#05070f;font-weight:800;border-color:var(--cyan)}
+
+/* Plánek trasy - ztmavení neaktivního úseku */
+.jr-col.dim{opacity:0.25 !important;filter:grayscale(1) !important}
+.jr-col.dim .d{background:#0d121f !important;border-color:rgba(255,255,255,.14) !important;box-shadow:none !important}
+.jr-col.dim::before,.jr-col.dim::after{background:rgba(255,255,255,.08) !important;box-shadow:none !important}
+.jr-col.dim .lb{color:#64748b !important;opacity:0.5 !important;font-weight:500 !important}
+.jr-col.dim.rq .d{background:#1e1b12 !important;border-color:rgba(255,201,51,.25) !important;box-shadow:none !important;animation:none !important}
+.jr-col.dim.rq .d svg{stroke:rgba(255,201,51,.35) !important}
+.jr-col.on .d{border-color:var(--cyan);background:var(--cyan);box-shadow:0 0 12px var(--cyan)}
+.jr-col.beg .d{border-color:var(--green);background:var(--green);box-shadow:0 0 16px var(--green)}
+.jr-col.end .d{border-color:var(--yellow);background:var(--yellow);box-shadow:0 0 16px var(--yellow)}
+.jr-col.beg .lb{color:var(--green);font-weight:800;text-shadow:0 0 8px rgba(34,197,94,.35)}
+.jr-col.end .lb{color:var(--yellow);font-weight:800;text-shadow:0 0 8px rgba(255,201,51,.35)}
+.jr-col.l::before,.jr-col.r::after{background:var(--cyan) !important;box-shadow:0 0 8px rgba(56,214,255,.5) !important}
+
 /* znamení: upozornění */
 .jr-alert{display:flex;gap:14px;align-items:center;margin-top:16px;padding:14px 18px;border-radius:20px;background:linear-gradient(135deg,rgba(255,201,51,.22),rgba(255,201,51,.08));border:2px solid var(--yellow);box-shadow:0 0 30px rgba(255,201,51,.18);animation:jrUp .5s var(--ease) both;line-height:1.4}
 .jr-alert i{flex:none;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:var(--yellow);animation:jrPulse 2s infinite}
@@ -592,9 +620,14 @@ html.lite .jr-m.next,html.lite .jr-next .in{box-shadow:none}
       <div class="t"><h2 id="lName">–</h2><p id="lDir">–</p></div>
       <button class="jr-swap" id="swap" type="button"><svg aria-hidden="true"><use href="#i-swap"/></svg><span id="swapTxt">Opačný směr</span></button>
     </div>
-    <div class="jr-variants-wrap" id="variantsWrap" style="margin-top:16px;" hidden>
-      <div style="font-size:0.75rem;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:var(--cyan);margin-bottom:8px;">Možné trasy linky:</div>
-      <div class="jr-days" id="lineVariants" role="group" aria-label="Trasy linky"></div>
+    <div class="jr-variants-wrap" id="variantsWrap" hidden>
+      <div class="jr-variants-head">
+        <span class="jr-variants-title">
+          <svg viewBox="0 0 24 24"><path d="M4 17l6-6 4 4 6-6M16 5h4v4"/></svg>
+          Varianty trasy linky:
+        </span>
+      </div>
+      <div class="jr-variants-list" id="lineVariants" role="group" aria-label="Trasy linky"></div>
     </div>
     <div class="jr-sel">
       <div class="jr-f"><label for="selFrom">Zastávka (odkud jedete)</label><select id="selFrom"></select></div>
@@ -912,10 +945,10 @@ function renderVariants(){
   }
   if (wrap) wrap.hidden = false;
   let totalTrips = dir.variants.reduce((acc, v) => acc + (v.trip_count || 0), 0);
-  let h = '<button class="pillb" type="button" data-var="" aria-pressed="' + (!S.variant ? 'true' : 'false') + '">Všechny trasy (' + totalTrips + ')</button>';
+  let h = '<button class="jr-var-btn" type="button" data-var="" aria-pressed="' + (!S.variant ? 'true' : 'false') + '"><span>Všechny trasy</span><span class="jr-var-badge">' + totalTrips + ' spojů</span></button>';
   dir.variants.forEach((v, i) => {
     const isAct = S.variant && S.variant.id === v.id;
-    h += '<button class="pillb" type="button" data-var="' + esc(v.id) + '" aria-pressed="' + (isAct ? 'true' : 'false') + '">' + esc(v.name) + ' (' + v.trip_count + ')</button>';
+    h += '<button class="jr-var-btn" type="button" data-var="' + esc(v.id) + '" aria-pressed="' + (isAct ? 'true' : 'false') + '"><span>' + esc(v.name) + '</span><span class="jr-var-badge">' + v.trip_count + '</span></button>';
   });
   box.innerHTML = h;
 }
@@ -956,19 +989,67 @@ function renderLine(){
 
 const BELL='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 003.4 0"/></svg>';
 function renderRoute(){
-  const st=curStops(),fi=S.from ? st.findIndex(s=>s.id===S.from) : -1,ti=S.to?st.findIndex(s=>s.id===S.to):st.length-1;
+  const st=curStops();
   if(!st.length){ $('#route').innerHTML=''; $('#reqBox').innerHTML=''; return; }
-  $('#route').innerHTML='<div class="jr-cols" style="--n:'+st.length+'">'+st.map((s,i)=>{
-    const inr=(fi<0)||(i>=fi&&i<=ti),k=(i===fi?' beg':i===ti?' end':inr?' on':'')+(s.request?' rq':'')+(inr?'':' dim');
-    return '<div class="jr-col'+k+(fi>=0&&i>fi&&i<=ti?' l':'')+(fi>=0&&i>=fi&&i<ti?' r':'')+'" style="--i:'+i+';cursor:pointer;" data-sid="'+esc(s.id)+'" title="'+esc(s.name)+(s.request?' (na znamení)':'')+' - kliknutím vybrat"><i class="d">'+(s.request?BELL:'')+'</i><span class="lb">'+esc(s.name)+'</span></div>'}).join('')+'</div>';
-  const rq=st.filter(s=>s.request).length,f=fi>=0?(st[fi]||{}):{},t=(ti>=0&&ti<st.length)?st[ti]:(st[st.length-1]||{});
-  let h='';
-  if(f.request)h+='<div class="jr-alert"><i>'+BELL+'</i><div><b>Nástup na znamení</b>Zastávka <b>'+esc(f.name)+'</b> je na znamení. Řidiči dejte včas znamení rukou.</div></div>';
-  if(S.to&&t.request)h+='<div class="jr-alert"><i>'+BELL+'</i><div><b>Výstup na znamení</b>Zastávka <b>'+esc(t.name)+'</b> je na znamení. Včas stiskněte tlačítko STOP.</div></div>';
-  if(!h&&rq)h='<p class="jr-rqinfo"><i>'+BELL+'</i>Na trase je '+rq+' '+(rq===1?'zastávka':rq<5?'zastávky':'zastávek')+' na znamení (označené žlutým zvonkem). Kliknutím na zastávku ji vyberete.</p>';
-  $('#reqBox').innerHTML=h;
+
+  const fi = S.from ? st.findIndex(s => s.id === S.from) : -1;
+  const ti = S.to ? st.findIndex(s => s.id === S.to) : -1;
+
+  let activeStart = 0;
+  let activeEnd = st.length - 1;
+  let hasSelection = false;
+
+  if (fi >= 0 && ti >= 0) {
+    activeStart = Math.min(fi, ti);
+    activeEnd = Math.max(fi, ti);
+    hasSelection = true;
+  } else if (fi >= 0) {
+    activeStart = fi;
+    activeEnd = st.length - 1;
+    hasSelection = true;
+  } else if (ti >= 0) {
+    activeStart = 0;
+    activeEnd = ti;
+    hasSelection = true;
+  } else {
+    activeStart = 0;
+    activeEnd = st.length - 1;
+    hasSelection = false;
+  }
+
+  $('#route').innerHTML = '<div class="jr-cols" style="--n:' + st.length + '">' + st.map((s, i) => {
+    const isBeg = hasSelection && (i === activeStart);
+    const isEnd = hasSelection && (i === activeEnd);
+    const inRange = (i >= activeStart && i <= activeEnd);
+    const isDim = !inRange;
+
+    const hasL = inRange && (i > activeStart);
+    const hasR = inRange && (i < activeEnd);
+
+    let k = '';
+    if (isBeg) k += ' beg';
+    else if (isEnd) k += ' end';
+    else if (inRange) k += ' on';
+
+    if (isDim) k += ' dim';
+    if (s.request) k += ' rq';
+    if (hasL) k += ' l';
+    if (hasR) k += ' r';
+
+    return '<div class="jr-col' + k + '" style="--i:' + i + ';" data-sid="' + esc(s.id) + '" title="' + esc(s.name) + (s.request ? ' (na znamení)' : '') + '"><i class="d">' + (s.request ? BELL : '') + '</i><span class="lb">' + esc(s.name) + '</span></div>';
+  }).join('') + '</div>';
+
+  const rq = st.filter(s => s.request).length;
+  const f = fi >= 0 ? (st[fi] || {}) : {};
+  const t = (ti >= 0 && ti < st.length) ? st[ti] : (st[st.length - 1] || {});
+  let h = '';
+  if (f.request) h += '<div class="jr-alert"><i>' + BELL + '</i><div><b>Nástup na znamení</b>Zastávka <b>' + esc(f.name) + '</b> je na znamení. Řidiči dejte včas znamení rukou.</div></div>';
+  if (S.to && t.request) h += '<div class="jr-alert"><i>' + BELL + '</i><div><b>Výstup na znamení</b>Zastávka <b>' + esc(t.name) + '</b> je na znamení. Včas stiskněte tlačítko STOP.</div></div>';
+  if (!h && rq) h = '<p class="jr-rqinfo"><i>' + BELL + '</i>Na trase je ' + rq + ' ' + (rq === 1 ? 'zastávka' : rq < 5 ? 'zastávky' : 'zastávek') + ' na znamení (označené žlutým zvonkem). Nástupní zastávku a cíl vyberte v polích výše.</p>';
+  $('#reqBox').innerHTML = h;
   autoReset();
 }
+
 
 /* ---------- posouvání trasy ---------- */
 const AUTO={pos:0,dir:1,until:0,hover:false,sync:true,last:0,speed:22,drag:null};
@@ -1334,14 +1415,6 @@ function bind(){
     if (!dir) return;
     S.variant = vid ? (dir.variants || []).find(v => v.id === vid) || null : null;
     $$('#lineVariants button').forEach(x => x.setAttribute('aria-pressed', x === b));
-    renderLine();
-    renderResults();
-  });
-  $('#route').addEventListener('click', e => {
-    const col = e.target.closest('[data-sid]');
-    if (!col) return;
-    const sid = col.dataset.sid;
-    S.from = (S.from === sid ? '' : sid);
     renderLine();
     renderResults();
   });
