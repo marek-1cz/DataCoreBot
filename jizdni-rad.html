@@ -265,7 +265,9 @@ html.lite .jr-m.next,html.lite .jr-next .in{box-shadow:none}
 .jr-shuf:hover{background:rgba(255,255,255,.14);border-color:rgba(56,214,255,.5)}
 .jr-shuf svg{width:18px;height:18px;stroke:var(--cyan);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .5s var(--ease)}
 .jr-shuf.rot svg{transform:rotate(360deg)}
-.jr-homeg{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.jr-homeg{display:grid;grid-template-columns:repeat(3, 1fr);gap:14px}
+@media(max-width:860px){.jr-homeg{grid-template-columns:repeat(2, 1fr);gap:10px}}
+@media(max-width:560px){.jr-homeg{grid-template-columns:1fr;gap:10px}}
 .jr-lc{display:flex;align-items:center;gap:14px;padding:16px;border-radius:22px;background:var(--glass);border:1px solid var(--glass-border);text-align:left;animation:jrUp .5s var(--ease) both;animation-delay:calc(var(--i,0)*70ms);transition:transform .35s var(--ease),border-color .3s,background .3s,box-shadow .3s}
 .jr-lc:hover{transform:translateY(-4px);border-color:rgba(56,214,255,.5);background:rgba(47,107,255,.14);box-shadow:0 16px 40px rgba(47,107,255,.2)}
 .jr-lc .t{flex:1;min-width:0}.jr-lc b{display:block;font-size:.95rem;line-height:1.3;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
@@ -315,11 +317,39 @@ html.lite .jr-m.next,html.lite .jr-next .in{box-shadow:none}
 .jr-col .lb{margin-top:10px;writing-mode:vertical-rl;max-height:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.76rem;line-height:1.2;font-weight:600;color:var(--text);padding-bottom:4px}
 .jr-col.dim .lb{color:var(--muted);opacity:.6}
 .jr-col.beg .lb{color:var(--green);font-weight:800}.jr-col.end .lb{color:var(--yellow);font-weight:800}
-.jr-col.rq .d{width:26px;height:26px;margin-top:1px;margin-bottom:0;background:var(--yellow);border-color:#fff1bd;box-shadow:0 0 0 4px rgba(255,201,51,.22),0 0 18px rgba(255,201,51,.7);animation:jrPulse 2.4s infinite}
+.jr-col.rq .d{width:16px;height:16px;margin-top:6px;margin-bottom:0;background:var(--bg);border:2px solid var(--yellow);box-shadow:0 0 6px rgba(255,201,51,.25)}
 .jr-col.rq::before,.jr-col.rq::after{top:14px}
-.jr-col.rq .d svg{width:15px;height:15px;stroke:#2a1d00;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-.jr-col.rq .lb{color:var(--yellow);font-weight:800}
-.jr-col.rq.dim .lb{opacity:.8}
+.jr-col.rq .d svg{width:10px;height:10px;stroke:var(--yellow);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.jr-col.rq .lb{color:var(--text);font-weight:600}
+.jr-col.rq.dim .lb{opacity:.45}
+.jr-col.on.rq .d{background:#0e1320;border-color:var(--yellow);box-shadow:0 0 8px rgba(255,201,51,.35)}
+.jr-col.beg.rq .d{background:var(--green);border-color:var(--green)}
+.jr-col.end.rq .d{background:var(--yellow);border-color:var(--yellow)}
+
+/* Velké tlačítko otočit směr */
+.jr-swap-large{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;padding:14px 18px;margin-bottom:16px;border-radius:16px;background:linear-gradient(135deg,rgba(47,107,255,.16),rgba(56,214,255,.08));border:1.5px solid rgba(56,214,255,.35);box-shadow:0 4px 20px rgba(0,0,0,.25),0 0 16px rgba(56,214,255,.1);color:var(--text);font-family:inherit;cursor:pointer;text-align:left;transition:all .25s cubic-bezier(.16,1,.3,1)}
+.jr-swap-large:hover{background:linear-gradient(135deg,rgba(47,107,255,.26),rgba(56,214,255,.18));border-color:var(--cyan);box-shadow:0 6px 24px rgba(56,214,255,.3);transform:translateY(-2px)}
+.jr-swap-large-info small{display:block;font-size:0.74rem;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:var(--cyan);margin-bottom:4px}
+.jr-swap-large-cur{font-size:1.05rem;font-weight:800;color:#ffffff}
+.jr-swap-large-action{display:inline-flex;align-items:center;gap:10px;padding:8px 14px;border-radius:12px;background:rgba(56,214,255,.15);border:1px solid rgba(56,214,255,.4);font-size:0.85rem;font-weight:700;color:#ffffff;white-space:nowrap}
+.jr-swap-large:hover .jr-swap-large-action{background:var(--cyan);color:#05070f}
+.jr-swap-large:hover .jr-swap-icon{transform:rotate(180deg)}
+.jr-swap-icon{width:18px;height:18px;transition:transform .4s var(--ease)}
+@media(max-width:620px){.jr-swap-large{flex-direction:column;align-items:stretch;gap:10px}.jr-swap-large-action{justify-content:center}}
+
+/* Odjezdy ze zastávky na trase */
+.jr-stopboard-wrap{padding:18px 20px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);box-shadow:0 4px 24px rgba(0,0,0,.25)}
+.jr-stopboard-heading{display:flex;align-items:center;gap:10px}
+.jr-stopboard-heading svg{width:22px;height:22px;fill:var(--cyan)}
+.jr-stopboard-heading h3{font-size:1.15rem;font-weight:800;color:#ffffff;margin:0}
+.jr-stopboard-sub{font-size:0.82rem;color:var(--muted);margin-top:4px}
+.jr-stopboard-select{width:100%;padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:#0f172a;color:#ffffff;font-family:inherit;font-size:0.95rem;font-weight:600;cursor:pointer}
+.jr-stopboard-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+.jr-sb-card{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);cursor:pointer;text-align:left;transition:all .2s cubic-bezier(.16,1,.3,1);color:inherit;font-family:inherit}
+.jr-sb-card:hover{background:rgba(56,214,255,.08);border-color:rgba(56,214,255,.35);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.jr-sb-time{font-size:1.35rem;font-weight:800;color:#ffffff;letter-spacing:-0.02em}
+.jr-sb-dest{font-size:0.85rem;font-weight:700;color:var(--text);margin-top:2px}
+
 
 /* Trasy a varianty linky - moderní redesign */
 .jr-variants-wrap{margin-top:14px;padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);box-shadow:0 4px 20px rgba(0,0,0,.25)}
@@ -644,6 +674,16 @@ html.lite .jr-m.next,html.lite .jr-next .in{box-shadow:none}
 
   <!-- VÝSLEDEK -->
   <section class="jr-panel" id="resP" hidden aria-live="polite">
+    <button class="jr-swap-large" id="swapLarge" type="button" title="Klepnutím otočíte směr jízdy">
+      <div class="jr-swap-large-info">
+        <small>Směr jízdy (kliknutím otočíte)</small>
+        <div class="jr-swap-large-cur" id="swapLargeCur">Směr: –</div>
+      </div>
+      <div class="jr-swap-large-action">
+        <svg class="jr-swap-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+        <span id="swapLargeNext">Otočit směr</span>
+      </div>
+    </button>
     <div id="nextBox"></div>
     <div class="jr-bar">
       <h3 id="resT">Odjezdy</h3>
@@ -655,6 +695,19 @@ html.lite .jr-m.next,html.lite .jr-next .in{box-shadow:none}
     </div>
     <div class="card" id="resBox"></div>
     <p class="jr-legend" id="legend"></p>
+    <div class="jr-stopboard-wrap" id="stopBoardWrap" style="margin-top:20px;">
+      <div class="jr-stopboard-heading">
+        <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+        <div>
+          <h3>Odjezdy ze zastávky na trase linky</h3>
+          <p class="jr-stopboard-sub">Vyberte zastávku na lince pro přehled všech jejích odjezdů a cílů</p>
+        </div>
+      </div>
+      <div style="margin:12px 0 16px;">
+        <select class="jr-stopboard-select" id="stopBoardSel" aria-label="Vyberte zastávku pro zobrazení odjezdů"></select>
+      </div>
+      <div class="jr-stopboard-grid" id="stopBoardList"></div>
+    </div>
   </section>
 </div></div>
 </main>
@@ -970,6 +1023,15 @@ function renderLine(){
     swapTxt.textContent = 'Otočit ➜ ' + (oppDir.main_to || oppDir.name || 'Opačný směr');
   }
 
+  const swapLarge = $('#swapLarge');
+  if (swapLarge) {
+    swapLarge.hidden = l.directions.length < 2;
+    const curEl = $('#swapLargeCur');
+    const nextEl = $('#swapLargeNext');
+    if (curEl) curEl.textContent = 'Směr: ' + dName;
+    if (nextEl && oppDir) nextEl.textContent = 'Otočit ➜ ' + (oppDir.main_to || oppDir.name || 'Opačný směr');
+  }
+
   renderVariants();
 
   let opts = '<option value="">Celá linka (všechny odjezdy)</option>';
@@ -1052,21 +1114,89 @@ function renderRoute(){
 
 
 /* ---------- posouvání trasy ---------- */
-const AUTO={pos:0,dir:1,until:0,hover:false,sync:true,last:0,speed:22,drag:null};
-function autoReset(){const r=$('#route');if(r)r.scrollLeft=0;AUTO.pos=0;AUTO.dir=1;AUTO.until=performance.now()+2500;AUTO.sync=true;
-  const need=r&&r.scrollWidth>r.clientWidth+8;let h=$('#rtHint');if(r&&!h){h=document.createElement('p');h.id='rtHint';h.className='jr-hint';r.after(h)}
-  if(h){h.hidden=!need;h.textContent='Trasa se pomalu posouvá. Najetím myší ji zastavíte, tažením nebo kolečkem ji posunete sami.'}}
+const AUTO={pos:0,min:0,max:0,dir:1,until:0,hover:false,sync:true,last:0,speed:22,drag:null};
+function autoReset(){
+  const r=$('#route');
+  if(!r) return;
+  const fullMax = Math.max(0, r.scrollWidth - r.clientWidth);
+  let minScroll = 0;
+  let maxScroll = fullMax;
+
+  const cols = r.querySelectorAll('.jr-col:not(.dim)');
+  if (cols.length) {
+    const first = cols[0];
+    const last = cols[cols.length - 1];
+    const firstLeft = first.offsetLeft;
+    const lastRight = last.offsetLeft + last.offsetWidth;
+    const pad = 36;
+
+    const targetMin = Math.max(0, firstLeft - pad);
+    const targetMax = Math.min(fullMax, Math.max(0, lastRight - r.clientWidth + pad));
+
+    if (targetMax > targetMin) {
+      minScroll = targetMin;
+      maxScroll = targetMax;
+    } else {
+      const centered = Math.max(0, Math.min(fullMax, firstLeft - Math.max(0, (r.clientWidth - (lastRight - firstLeft)) / 2)));
+      minScroll = centered;
+      maxScroll = centered;
+    }
+  }
+
+  AUTO.min = minScroll;
+  AUTO.max = maxScroll;
+  AUTO.pos = minScroll;
+  r.scrollLeft = minScroll;
+  AUTO.dir = 1;
+  AUTO.until = performance.now() + 2500;
+  AUTO.sync = true;
+
+  const need = maxScroll > minScroll + 8;
+  let h = $('#rtHint');
+  if (!h && r) {
+    h = document.createElement('p');
+    h.id = 'rtHint';
+    h.className = 'jr-hint';
+    r.after(h);
+  }
+  if (h) {
+    h.hidden = !need;
+    h.textContent = 'Trasa se posouvá ve vybraném úseku. Myší nebo prstem můžete volně projíždět i ostatní zastávky.';
+  }
+}
 function autoTick(ts){
   requestAnimationFrame(autoTick);
-  const r=$('#route'),dt=Math.min(.1,(ts-(AUTO.last||ts))/1000);AUTO.last=ts;
-  if(!r||$('#lineP').hidden||lite())return;
-  const max=r.scrollWidth-r.clientWidth;if(max<8)return;
-  if(AUTO.hover||AUTO.drag||ts<AUTO.until){AUTO.sync=true;return}
-  if(AUTO.sync){AUTO.pos=r.scrollLeft;AUTO.sync=false}
-  AUTO.pos+=AUTO.dir*AUTO.speed*dt;
-  if(AUTO.pos>=max){AUTO.pos=max;AUTO.dir=-1;AUTO.until=ts+2200}
-  else if(AUTO.pos<=0){AUTO.pos=0;AUTO.dir=1;AUTO.until=ts+2200}
-  r.scrollLeft=AUTO.pos;
+  const r=$('#route'), dt=Math.min(.1, (ts - (AUTO.last || ts)) / 1000);
+  AUTO.last = ts;
+  if (!r || $('#lineP').hidden || lite()) return;
+  const fullMax = Math.max(0, r.scrollWidth - r.clientWidth);
+  if (fullMax < 8) return;
+
+  const min = AUTO.min != null ? AUTO.min : 0;
+  const max = AUTO.max != null ? AUTO.max : fullMax;
+  if (max <= min) return;
+
+  if (AUTO.hover || AUTO.drag || ts < AUTO.until) {
+    AUTO.sync = true;
+    return;
+  }
+  if (AUTO.sync) {
+    AUTO.pos = r.scrollLeft;
+    AUTO.sync = false;
+    if (AUTO.pos <= min) AUTO.dir = 1;
+    else if (AUTO.pos >= max) AUTO.dir = -1;
+  }
+  AUTO.pos += AUTO.dir * AUTO.speed * dt;
+  if (AUTO.pos >= max) {
+    AUTO.pos = max;
+    AUTO.dir = -1;
+    AUTO.until = ts + 2200;
+  } else if (AUTO.pos <= min) {
+    AUTO.pos = min;
+    AUTO.dir = 1;
+    AUTO.until = ts + 2200;
+  }
+  r.scrollLeft = AUTO.pos;
 }
 function autoBind(){
   const r=$('#route'),hold=(ms)=>{AUTO.until=performance.now()+(ms||4000);AUTO.sync=true};
@@ -1144,13 +1274,16 @@ function computeRows(){
 
     let dep = null;
     let arr = null;
+    let actualFrom = t.first_stop;
+    let actualTo = t.last_stop;
 
     if (S.from) {
       if (t.stops && t.stops.length) {
         const sm = t.stops.find(s => s.name === S.from);
-        if (sm) dep = sm.time;
+        if (sm) { dep = sm.time; actualFrom = sm.name; }
       } else if (t.times && fi >= 0) {
         dep = t.times[fi];
+        if (st[fi]) actualFrom = st[fi].name;
       }
       if (!dep) return; // Trip does not serve this stop
     } else {
@@ -1160,9 +1293,10 @@ function computeRows(){
     if (S.to) {
       if (t.stops && t.stops.length) {
         const smTo = t.stops.find(s => s.name === S.to);
-        if (smTo) arr = smTo.time;
+        if (smTo) { arr = smTo.time; actualTo = smTo.name; }
       } else if (t.times && ti >= 0) {
         arr = t.times[ti];
+        if (st[ti]) actualTo = st[ti].name;
       }
       if (!arr) return; // Trip does not reach destination
     } else {
@@ -1181,8 +1315,12 @@ function computeRows(){
       arr: arr,
       d: dMin,
       a: aMin,
+      trip_dep: t.dep_time || dep,
+      trip_arr: t.arr_time || arr,
       first_stop: t.first_stop || (st[0] ? st[0].name : ''),
       last_stop: t.last_stop || (st[st.length - 1] ? st[st.length - 1].name : ''),
+      actualFrom: actualFrom || t.first_stop || (st[0] ? st[0].name : ''),
+      actualTo: actualTo || t.last_stop || (st[st.length - 1] ? st[st.length - 1].name : ''),
       spoj_cislo: t.spoj_cislo,
       low: (t.flags || []).indexOf('low') >= 0,
       school: (t.flags || []).indexOf('school') >= 0,
@@ -1257,23 +1395,27 @@ function renderResults(){
       const dur = (r.a != null && r.d != null) ? (r.a >= r.d ? r.a - r.d : r.a + 1440 - r.d) : null;
       const durStr = dur != null ? '<small style="color:var(--cyan);font-weight:700;display:block;">' + (dur >= 60 ? Math.floor(dur/60) + ' h ' + (dur%60) + ' min' : dur + ' min') + '</small>' : '';
       const scBadge = r.spoj_cislo ? '<span style="font-size:0.75rem;padding:2px 6px;border-radius:6px;background:rgba(255,255,255,0.07);color:var(--muted);margin-right:6px;">spoj ' + r.spoj_cislo + '</span>' : '';
-      return '<button class="jr-tr' + (i === ni ? ' next' : pastC(i)) + (r.noToday ? ' no' : '') + '" type="button" data-t="' + i + '" style="--i:' + Math.min(i, 24) + '"><b>' + r.dep + '</b><span><b>' + (r.arr || '–') + '</b>' + durStr + '</span><div><div style="font-weight:700;color:var(--text);font-size:0.95rem;">' + esc(r.first_stop) + ' <span style="color:var(--cyan)">➜</span> ' + esc(r.last_stop) + '</div><div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">' + scBadge + tagsOf(r).map(y => '<em class="jr-tag ' + y.c + '">' + esc(y.t) + '</em>').join('') + (r.note ? '<small class="jr-note">' + esc(r.note) + '</small>' : '') + '</div></div><span>›</span></button>';
+      const isFilteredRoute = (r.actualFrom !== r.first_stop || r.actualTo !== r.last_stop);
+      const subRouteInfo = isFilteredRoute ? '<small style="color:var(--muted);font-size:0.75rem;display:block;margin-top:2px;">Celý spoj: ' + esc(r.first_stop) + ' (' + r.trip_dep + ') ➜ ' + esc(r.last_stop) + ' (' + r.trip_arr + ')</small>' : '';
+      return '<button class="jr-tr' + (i === ni ? ' next' : pastC(i)) + (r.noToday ? ' no' : '') + '" type="button" data-t="' + i + '" style="--i:' + Math.min(i, 24) + '"><b>' + r.dep + '</b><span><b>' + (r.arr || '–') + '</b>' + durStr + '</span><div><div style="font-weight:700;color:var(--text);font-size:0.95rem;">' + esc(r.actualFrom) + ' <span style="color:var(--cyan)">➜</span> ' + esc(r.actualTo) + '</div>' + subRouteInfo + '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">' + scBadge + tagsOf(r).map(y => '<em class="jr-tag ' + y.c + '">' + esc(y.t) + '</em>').join('') + (r.note ? '<small class="jr-note">' + esc(r.note) + '</small>' : '') + '</div></div><span>›</span></button>';
     }).join('') + '</div>';
   }
   $('#resBox').innerHTML = h;
   $('#legend').innerHTML = rows.length ? '<sup>×</sup> dnes nejede &nbsp;·&nbsp; <sup>š</sup> školní spoj &nbsp;·&nbsp; <sup>6,7</sup> jede pouze o víkendu a svátcích &nbsp;·&nbsp; <sup>♿</sup> nízkopodlažní vozidlo. Kliknutím na čas nebo spoj zobrazíte kompletní detail zastávek a časů.' : '';
+  renderStopBoard();
 }
 
 /* ---------- detail spoje ---------- */
-function openTrip(i){
-  const r = S.rows[i]; if (!r) return;
+function openTrip(rOrI){
+  const r = (typeof rOrI === 'object') ? rOrI : S.rows[rOrI];
+  if (!r) return;
   const l = S.line;
   const b = $('#dBadge');
   b.textContent = l.short;
   b.style.setProperty('--c', l.color || '#2f6bff');
 
-  const fName = r.first_stop || 'Výchozí';
-  const lName = r.last_stop || 'Konečná';
+  const fName = r.actualFrom || r.first_stop || 'Výchozí';
+  const lName = r.actualTo || r.last_stop || 'Konečná';
   $('#dT').textContent = fName + ' ➜ ' + lName;
 
   let durTxt = '';
@@ -1299,15 +1441,25 @@ function openTrip(i){
   }
 
   $('#dL').innerHTML = stopsToRender.map((s, k) => {
-    const isSel = S.from && (s.name === S.from);
+    const isSelFrom = (r.actualFrom && s.name === r.actualFrom) || (S.from && s.name === S.from);
+    const isSelTo = (r.actualTo && s.name === r.actualTo) || (S.to && s.name === S.to);
     const isStart = k === 0;
     const isEnd = k === stopsToRender.length - 1;
-    const cls = isSel ? 'on beg' : (isStart ? 'beg' : (isEnd ? 'end' : ''));
+    let cls = '';
+    if (isSelFrom) cls = 'on beg';
+    else if (isSelTo) cls = 'on end';
+    else if (isStart) cls = 'beg';
+    else if (isEnd) cls = 'end';
+
+    let extraTag = '';
+    if (isSelFrom) extraTag = ' <small style="color:var(--green);font-weight:700;">(nástupní zastávka)</small>';
+    else if (isSelTo) extraTag = ' <small style="color:var(--yellow);font-weight:700;">(cílová zastávka)</small>';
+
     return '<li class="' + cls + (s.request ? ' rq' : '') + '" style="--i:' + k + '">' +
-      '<time style="font-weight:800;color:' + (isSel ? 'var(--yellow)' : 'inherit') + ';">' + (s.time || '–') + '</time>' +
-      '<span style="' + (isSel ? 'color:var(--yellow);font-weight:800;' : '') + '">' + esc(s.name) + 
+      '<time style="font-weight:800;color:' + (isSelFrom ? 'var(--green)' : (isSelTo ? 'var(--yellow)' : 'inherit')) + ';">' + (s.time || '–') + '</time>' +
+      '<span style="' + (isSelFrom ? 'color:var(--green);font-weight:800;' : (isSelTo ? 'color:var(--yellow);font-weight:800;' : '')) + '">' + esc(s.name) + 
       (s.request ? '<em class="jr-rq">' + BELL + 'Na znamení</em>' : '') + 
-      (isSel ? ' <small style="color:var(--yellow);font-weight:700;">(vybraná zastávka)</small>' : '') + 
+      extraTag +
       '</span></li>';
   }).join('');
 
@@ -1315,14 +1467,102 @@ function openTrip(i){
   if (d.showModal) d.showModal(); else d.setAttribute('open', '');
 }
 
+/* ---------- odjezdy ze zastávky na trase ---------- */
+function renderStopBoard(){
+  const wrap = $('#stopBoardWrap');
+  const sel = $('#stopBoardSel');
+  const list = $('#stopBoardList');
+  if (!wrap || !sel || !list) return;
+
+  const st = curStops();
+  if (!st || !st.length || !S.trips || !S.trips.length) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+
+  let activeStopName = sel.value;
+  const stopNames = st.map(s => s.name);
+  if (!activeStopName || !stopNames.includes(activeStopName)) {
+    const fObj = S.from ? st.find(s => s.id === S.from) : null;
+    activeStopName = fObj ? fObj.name : st[0].name;
+  }
+
+  sel.innerHTML = st.map(s => '<option value="' + esc(s.name) + '"' + (s.name === activeStopName ? ' selected' : '') + '>' + esc(s.name) + (s.request ? ' (na znamení)' : '') + '</option>').join('');
+
+  const departures = [];
+  const fi = st.findIndex(s => s.name === activeStopName);
+
+  S.trips.forEach((t, origIdx) => {
+    let depTime = null;
+    if (t.stops && t.stops.length) {
+      const sm = t.stops.find(s => s.name === activeStopName);
+      if (sm) depTime = sm.time;
+    } else if (t.times && fi >= 0) {
+      depTime = t.times[fi];
+    }
+    if (!depTime) return;
+
+    const noToday = S.day === todayType() && t.today === false;
+    if (S.onlyToday && noToday) return;
+
+    const dMin = toMin(depTime);
+    departures.push({
+      trip: t,
+      origIdx: origIdx,
+      depTime: depTime,
+      dMin: dMin,
+      dest: t.last_stop || (st[st.length - 1] ? st[st.length - 1].name : ''),
+      spoj: t.spoj_cislo,
+      low: (t.flags || []).indexOf('low') >= 0,
+      noToday: noToday
+    });
+  });
+
+  departures.sort((a, b) => a.dMin - b.dMin);
+
+  if (!departures.length) {
+    list.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--muted);font-size:0.9rem;">Ze zastávky ' + esc(activeStopName) + ' v ' + DAYN[S.day] + ' žádné spoje této linky neodjíždějí.</div>';
+    return;
+  }
+
+  const nm = nowMin();
+  const isToday = S.day === todayType();
+
+  list.innerHTML = departures.map(d => {
+    const isPast = isToday && d.dMin < nm;
+    const diff = d.dMin - nm;
+    let badgeTxt = '';
+    if (isToday) {
+      if (diff >= 0 && diff <= 45) badgeTxt = '<span style="font-size:0.75rem;font-weight:700;color:var(--cyan);background:rgba(56,214,255,0.12);padding:2px 8px;border-radius:10px;">za ' + diff + ' min</span>';
+      else if (isPast) badgeTxt = '<span style="font-size:0.72rem;color:var(--muted);opacity:0.6;">odjel</span>';
+    }
+    const spojBadge = d.spoj ? '<span style="font-size:0.75rem;padding:2px 6px;border-radius:6px;background:rgba(255,255,255,0.07);color:var(--muted);margin-right:6px;">spoj ' + d.spoj + '</span>' : '';
+    const lowBadge = d.low ? '<span style="color:var(--cyan);font-size:0.85rem;" title="Nízkopodlažní">♿</span>' : '';
+    const opacityStyle = isPast ? 'opacity:0.55;' : '';
+
+    return '<button class="jr-sb-card" type="button" data-torig="' + d.origIdx + '" data-depstop="' + esc(activeStopName) + '" style="' + opacityStyle + '" title="Kliknutím zobrazíte detailní plánek a trasu spoje">' +
+      '<div>' +
+        '<div class="jr-sb-time">' + d.depTime + '</div>' +
+        '<div class="jr-sb-dest">➜ ' + esc(d.dest) + '</div>' +
+        '<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">' + spojBadge + lowBadge + '</div>' +
+      '</div>' +
+      '<div style="text-align:right;">' +
+        badgeTxt +
+        '<div style="margin-top:6px;font-size:0.78rem;font-weight:700;color:var(--cyan);">Zobrazit plánek →</div>' +
+      '</div>' +
+    '</button>';
+  }).join('');
+}
+
 /* ---------- úvod, návrat ---------- */
 function showHome(on){$('#home').hidden=!on}
 async function loadHome(){
   const g=$('#homeG');
   const skel = '<div class="jr-lc jr-skel-card" style="opacity:0.4;pointer-events:none;"><span class="jr-badge" style="--c:#1e293b;color:transparent;">---</span><span class="t"><b style="background:rgba(255,255,255,0.08);height:16px;border-radius:6px;width:75%;margin-bottom:6px;display:block;"></b><small style="background:rgba(255,255,255,0.05);height:12px;border-radius:4px;width:45%;display:block;"></small></span></div>';
-  g.innerHTML=skel.repeat(6);
+  g.innerHTML=skel.repeat(9);
   try{
-    const r=await api('featured',{count:8});
+    const r=await api('featured',{count:9});
     if(r.all_lines && r.all_lines.length) ALL_LINES = r.all_lines;
     const L=r.lines||[];
     g.innerHTML=L.map((l,i)=>'<button class="jr-lc" type="button" data-l="'+esc(l.id)+'" style="--i:'+i+'">'+badge(l)+'<span class="t"><b>'+esc(l.name)+'</b><small>Zobrazit jízdní řád →'+(CONFIG.DEMO?' <span class="vzor">VZOR</span>':'')+'</small></span></button>').join('')
@@ -1432,6 +1672,43 @@ function bind(){
   $('#shuf').addEventListener('click',()=>{const s=$('#shuf');s.classList.remove('rot');void s.offsetWidth;s.classList.add('rot');loadHome()});
   $('#onlyT').addEventListener('click',()=>{S.onlyToday=!S.onlyToday;if(S.trips)renderResults()});
   $('#swap').addEventListener('click',swapDir);
+  const sl = $('#swapLarge');
+  if (sl) sl.addEventListener('click', swapDir);
+
+  const sbSel = $('#stopBoardSel');
+  if (sbSel) sbSel.addEventListener('change', () => renderStopBoard());
+
+  const sbList = $('#stopBoardList');
+  if (sbList) {
+    sbList.addEventListener('click', e => {
+      const b = e.target.closest('[data-torig]');
+      if (!b) return;
+      const origIdx = +b.dataset.torig;
+      const t = S.trips && S.trips[origIdx];
+      if (!t) return;
+      const r = (S.rows && S.rows.find(row => row.t === t)) || {
+        t: t,
+        dep: t.dep_time || (t.times ? t.times.find(x => x) : '00:00'),
+        arr: t.arr_time || (t.times ? [...t.times].reverse().find(x => x) : null),
+        d: toMin(t.dep_time || '00:00'),
+        a: t.arr_time ? toMin(t.arr_time) : null,
+        trip_dep: t.dep_time,
+        trip_arr: t.arr_time,
+        first_stop: t.first_stop,
+        last_stop: t.last_stop,
+        actualFrom: b.dataset.depstop || t.first_stop,
+        actualTo: t.last_stop,
+        spoj_cislo: t.spoj_cislo,
+        low: (t.flags || []).indexOf('low') >= 0,
+        school: (t.flags || []).indexOf('school') >= 0,
+        weekend: (t.flags || []).indexOf('weekend') >= 0,
+        holiday: (t.flags || []).indexOf('holiday') >= 0,
+        noToday: S.day === todayType() && t.today === false,
+        note: t.note || ''
+      };
+      openTrip(r);
+    });
+  }
   $('#days').addEventListener('click',e=>{const b=e.target.closest('[data-d]');if(!b)return;S.day=b.dataset.d;$$('#days button').forEach(x=>x.setAttribute('aria-pressed',x===b));syncHash();loadTrips()});
   $('#views').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(!b)return;S.view=b.dataset.v;$$('#views button').forEach(x=>x.setAttribute('aria-pressed',x===b));if(S.trips)renderResults()});
   $('#resP').addEventListener('click',e=>{const t=e.target.closest('[data-t]');if(t)openTrip(+t.dataset.t);if(e.target.id==='retry')loadTrips()});

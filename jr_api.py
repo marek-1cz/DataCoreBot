@@ -252,7 +252,7 @@ def _init_caches():
         _CACHE_ROUTES = _CACHE_ROUTES or []
         _CACHE_STOPS = _CACHE_STOPS or []
 
-def get_featured(count=6):
+def get_featured(count=9):
     _init_caches()
     if not _CACHE_ROUTES:
         return {"lines": [], "all_lines": []}
@@ -272,6 +272,7 @@ def get_featured(count=6):
         "color": r["color"]
     } for r in _CACHE_ROUTES]
     return {"lines": lines, "all_lines": all_lines}
+
 
 def search(q):
     _init_caches()
@@ -390,7 +391,7 @@ def resolve_services_for_route(cur, all_rids, day, today_str=None):
     Vybere platná service_id pro dané linky a typ dne.
     Pokrývá standardní týdenní kalendář (vč. všech pracovních dnů po-pá),
     výjimky v calendar_dates a automatický fallback pro sezónní či specifické linky,
-    aby uživatel nikdy neviděl falešné 'žádné spoje'.
+    aby uživatel nikdy neviděl falešné 'žádné spoje' a zároveň se nepletly pracovní dny do neděle.
     """
     if not today_str:
         today_str = datetime.now().strftime("%Y%m%d")
@@ -418,12 +419,15 @@ def resolve_services_for_route(cur, all_rids, day, today_str=None):
     """, all_rids + [today_str, today_str])
     active_services = set(r[0] for r in cur.fetchall())
 
-    # Přidat aktivní služby z calendar_dates (přidané dny exception_type = 1 pro daný den v týdnu)
+    # Přidat aktivní služby z calendar_dates POUZE pro linky s nulovým kalendářem (např. nepravidelné/prázdninové),
+    # aby se běžné pracovní linky (které měly jednorázovou výjimku na svátek) nepřidaly do nedělního řádu!
     cur.execute(f"""
         SELECT cd.service_id
         FROM trips t
+        JOIN calendar c ON t.service_id = c.service_id
         JOIN calendar_dates cd ON t.service_id = cd.service_id
         WHERE t.route_id IN ({q_marks})
+          AND (c.monday + c.tuesday + c.wednesday + c.thursday + c.friday + c.saturday + c.sunday) = 0
           AND cd.exception_type = 1
           AND {cd_dow_cond}
           AND cd.date >= ?
@@ -433,7 +437,7 @@ def resolve_services_for_route(cur, all_rids, day, today_str=None):
     if active_services:
         return active_services
 
-    # 2. Fallback: Nejbližší / nejnovější platné provozní období pro tuto linku
+    # 2. Fallback: Nejbližší / nejnovější platné provozní období pro tuto linku se stejným dnem
     cur.execute(f"""
         SELECT c.service_id, c.end_date
         FROM trips t
@@ -449,12 +453,14 @@ def resolve_services_for_route(cur, all_rids, day, today_str=None):
         if fallback_services:
             return fallback_services
 
-    # 3. Fallback: Všechny záznamy v calendar_dates (např. linky s nulovým calendar)
+    # 3. Fallback: Záznamy v calendar_dates pro linky s nulovým calendar
     cur.execute(f"""
         SELECT cd.service_id
         FROM trips t
+        JOIN calendar c ON t.service_id = c.service_id
         JOIN calendar_dates cd ON t.service_id = cd.service_id
         WHERE t.route_id IN ({q_marks})
+          AND (c.monday + c.tuesday + c.wednesday + c.thursday + c.friday + c.saturday + c.sunday) = 0
           AND cd.exception_type = 1
           AND {cd_dow_cond}
     """, all_rids)
@@ -462,9 +468,8 @@ def resolve_services_for_route(cur, all_rids, day, today_str=None):
     if cd_services:
         return cd_services
 
-    # 4. Poslední záchrana: všechny service_id pro tuto linku
-    cur.execute(f"SELECT DISTINCT service_id FROM trips WHERE route_id IN ({q_marks})", all_rids)
-    return set(r[0] for r in cur.fetchall())
+    return set()
+
 
 
 def get_line(line_id):
@@ -653,8 +658,8 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
             trip_candidates = cur.fetchall()
 
         matching_rows = [r for r in trip_candidates if r["service_id"] in allowed_services]
-        if not matching_rows and trip_candidates:
-            matching_rows = trip_candidates
+        if not matching_rows:
+            return {"trips": []}
 
         # Deduplikace podle spoj_cislo
         seen_spoj = set()
@@ -697,14 +702,21 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
 
                 served_stops = []
                 stop_time_map = {}
-                for r in rows:
-                    t_str = (r["departure_time"] or r["arrival_time"] or "").strip()[:5]
-                    if t_str and r["pickup_type"] != '1':
+                for idx, r in enumerate(rows):
+                    is_last = (idx == len(rows) - 1)
+                    # Pro konečnou preferujeme arrival_time, pro ostatní departure_time
+                    if is_last:
+                        t_str = (r["arrival_time"] or r["departure_time"] or "").strip()[:5]
+                    else:
+                        t_str = (r["departure_time"] or r["arrival_time"] or "").strip()[:5]
+
+                    if t_str:
                         s_name = r["stop_name"]
                         served_stops.append({
                             "name": s_name,
                             "time": t_str,
-                            "request": r["pickup_type"] in ('2', '3')
+                            "request": r["pickup_type"] in ('2', '3'),
+                            "exit_only": r["pickup_type"] == '1'
                         })
                         if s_name not in stop_time_map:
                             stop_time_map[s_name] = t_str
@@ -715,9 +727,11 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
                 first_stop = served_stops[0]["name"]
                 last_stop = served_stops[-1]["name"]
                 dep_t = served_stops[0]["time"]
-                arr_t = served_stops[-1]["time"]
+                # Příjezd na konečnou: přesný čas příjezdu z posledního záznamu
+                arr_t = (rows[-1]["arrival_time"] or rows[-1]["departure_time"] or served_stops[-1]["time"]).strip()[:5]
 
                 aligned_times = [stop_time_map.get(s_name, None) for s_name in target_stops]
+
 
                 # Výpočet příznaku zda spoj jede DNES
                 sid = trip_services.get(tid)
