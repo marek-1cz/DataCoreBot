@@ -536,8 +536,8 @@ def get_line(line_id):
                 var_groups[k].append(r["trip_id"])
                 trip_stop_counts[r["trip_id"]] = r["stop_count"]
 
-            variants = []
-            for (f, l), tids in sorted(var_groups.items(), key=lambda x: -len(x[1])):
+            raw_variants = []
+            for (f, l), tids in var_groups.items():
                 best_tid = max(tids, key=lambda tid: trip_stop_counts.get(tid, 0))
                 cur.execute("""
                     SELECT s.name as stop_name, st.pickup_type
@@ -551,8 +551,7 @@ def get_line(line_id):
                     "name": row["stop_name"],
                     "request": row["pickup_type"] in ('2', '3')
                 } for row in cur.fetchall()]
-                variants.append({
-                    "id": f"v{len(variants)}",
+                raw_variants.append({
                     "name": f"{f} ➜ {l}",
                     "from": f,
                     "to": l,
@@ -560,8 +559,18 @@ def get_line(line_id):
                     "stops": v_stops
                 })
 
-            if not variants:
+            if not raw_variants:
                 continue
+
+            # Hlavní variantu určíme kombinací pokrytí zastávek (délka trasy) a počtu spojů,
+            # aby se výchozí trasou nestala zkrácená lokální kyvadlová varianta o 4 zastávkách!
+            raw_variants.sort(key=lambda v: -(len(v["stops"]) * 12 + v["trip_count"]))
+
+            variants = []
+            for idx, v in enumerate(raw_variants):
+                v["id"] = f"v{idx}"
+                v["is_main"] = (idx == 0)
+                variants.append(v)
 
             main_from = variants[0]["from"]
             main_to = variants[0]["to"]
@@ -679,8 +688,19 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
             cur.execute(f"SELECT service_id, exception_type FROM calendar_dates WHERE date = ? AND service_id IN ({q_s})", [today_str] + used_sids)
             today_exceptions = dict(cur.fetchall())
 
-            cur.execute(f"SELECT service_id, start_date, end_date, {today_col} FROM calendar WHERE service_id IN ({q_s})", used_sids)
-            today_cal = {r["service_id"]: (r["start_date"], r["end_date"], r[today_col]) for r in cur.fetchall()}
+            cur.execute(f"""
+                SELECT service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date
+                FROM calendar 
+                WHERE service_id IN ({q_s})
+            """, used_sids)
+            cal_info_map = {r["service_id"]: r for r in cur.fetchall()}
+
+            cur.execute(f"""
+                SELECT DISTINCT service_id 
+                FROM calendar_dates 
+                WHERE service_id IN ({q_s}) AND exception_type = 2
+            """, used_sids)
+            services_with_exclusions = set(r[0] for r in cur.fetchall())
 
             tids = [m[0] for m in matching_trips]
             q_marks_trips = ','.join('?' for _ in tids)
@@ -694,6 +714,10 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
             trip_rows_map = defaultdict(list)
             for r in cur.fetchall():
                 trip_rows_map[r["trip_id"]].append(r)
+
+            is_today_weekday = (now_dt.weekday() < 5)
+            is_today_saturday = (now_dt.weekday() == 5)
+            is_today_sunday = (now_dt.weekday() == 6)
 
             for tid, sc in matching_trips:
                 rows = trip_rows_map.get(tid, [])
@@ -732,19 +756,53 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
 
                 aligned_times = [stop_time_map.get(s_name, None) for s_name in target_stops]
 
-
-                # Výpočet příznaku zda spoj jede DNES
                 sid = trip_services.get(tid)
-                runs_today = True
-                if sid:
-                    ex = today_exceptions.get(sid)
-                    if ex == 1:
-                        runs_today = True
-                    elif ex == 2:
-                        runs_today = False
-                    elif sid in today_cal:
-                        c_start, c_end, c_dow = today_cal[sid]
-                        runs_today = bool(c_start <= today_str <= c_end and c_dow == 1)
+                scal = cal_info_map.get(sid)
+
+                # Flags & Notes z GTFS kalendáře
+                flags = ["low"]
+                is_we = False
+                is_sch = False
+                is_hol = False
+
+                if scal:
+                    is_we = (scal["saturday"] == 1 or scal["sunday"] == 1) and (
+                        scal["monday"] + scal["tuesday"] + scal["wednesday"] + scal["thursday"] + scal["friday"] == 0
+                    )
+                    is_sch = (scal["monday"] == 1 and scal["friday"] == 1 and sid in services_with_exclusions)
+                    is_hol = (scal["monday"] + scal["tuesday"] + scal["wednesday"] + scal["thursday"] + scal["friday"] + scal["saturday"] + scal["sunday"] == 0)
+
+                    if is_we:
+                        flags.append("weekend")
+                    if is_sch:
+                        flags.append("school")
+                    if is_hol:
+                        flags.append("holiday")
+
+                note_parts = []
+                if is_sch:
+                    note_parts.append("Školní spoj (nejede o prázdninách)")
+                elif is_we:
+                    note_parts.append("Jede o víkendu a svátcích")
+                elif is_hol:
+                    note_parts.append("Jede pouze o svátcích")
+                else:
+                    note_parts.append("Jede v pracovní dny (po–pá)")
+
+                if scal and scal["start_date"] and scal["end_date"]:
+                    sd, ed = scal["start_date"], scal["end_date"]
+                    if len(sd) == 8 and len(ed) == 8:
+                        note_parts.append(f"Platí {sd[6:8]}.{sd[4:6]}. – {ed[6:8]}.{ed[4:6]}.{ed[:4]}")
+
+                # Příznak zda spoj jede DNES podle reálného dne v týdnu
+                if day == "weekday":
+                    runs_today = is_today_weekday
+                elif day == "saturday":
+                    runs_today = is_today_saturday
+                elif day == "sunday":
+                    runs_today = is_today_sunday
+                else:
+                    runs_today = True
 
                 res_trips.append({
                     "id": str(tid),
@@ -755,7 +813,8 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
                     "arr_time": arr_t,
                     "first_time": dep_t,
                     "today": runs_today,
-                    "flags": ["low"],
+                    "flags": flags,
+                    "note": " · ".join(note_parts),
                     "stops": served_stops,
                     "times": aligned_times
                 })
