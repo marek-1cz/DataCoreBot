@@ -779,27 +779,11 @@ def _get_fallback_versions():
         print(f"[FALLBACK] Chyba cteni versions_backup.json: {e}", flush=True)
     return [
         {
-            "id": 6,
-            "version_name": "OIS IDPK V1.6.3",
-            "db_version": "V1.6.3",
-            "file_url": "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/V1.6.3/OIS-IDPK-V1.6.3.zip",
-            "release_url": "",
-            "notes": json.dumps({"build": "V1.6.3.00", "patch_url": "", "changelog": "Úvodní sestavení verze V1.6.3.00"}, ensure_ascii=False),
-            "target_role": "BT",
-            "is_active": 1,
-            "eol_date": "",
-            "show_in_launcher": 1,
-            "can_download": 1,
-            "can_launch": 1
-        },
-        {
             "id": 1,
             "version_name": "OIS IDPK V1.6.2",
             "db_version": "V1.6.2",
             "file_url": "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/V1.6.2I/OIS-IDPK-V1.6.2.zip",
-            "release_url": "",
-            "notes": json.dumps({"build": "V1.6.2.00", "patch_url": "", "changelog": "Veřejná stabilní verze"}, ensure_ascii=False),
-            "target_role": "User",
+            "target_role": "BT",
             "is_active": 1,
             "eol_date": "",
             "show_in_launcher": 1,
