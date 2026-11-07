@@ -103,11 +103,14 @@ from collections import defaultdict
 
 def set_setting_db(db, key, value):
     try:
-        res = db.table("settings").select("*").eq("setting_key", key).execute()
-        if res.data:
-            db.table("settings").update({"setting_value": value}).eq("setting_key", key).execute()
-        else:
-            db.table("settings").insert({"setting_key": key, "setting_value": value}).execute()
+        if db:
+            res = db.table("settings").select("*").eq("setting_key", key).execute()
+            if res.data:
+                db.table("settings").update({"setting_value": value}).eq("setting_key", key).execute()
+            else:
+                db.table("settings").insert({"setting_key": key, "setting_value": value}).execute()
+        if "_SETTINGS_CACHE" in globals():
+            _SETTINGS_CACHE[key] = (time.time(), value)
         return True
     except Exception as e:
         print(f"Error updating setting {key}: {e}")
@@ -7369,6 +7372,9 @@ def dashboard_downloads():
             
             ver_resp = db.table("settings").select("setting_value").eq("setting_key", "launcher_version").execute().data or []
             if ver_resp: launcher_version = ver_resp[0].get("setting_value", "1.0.0")
+
+            launcher_url = get_cached_setting("launcher_download_url", launcher_url)
+            launcher_version = get_cached_setting("launcher_version", launcher_version)
             
             raw_versions = db.table("software_versions").select("*").order("id", desc=True).execute().data or []
             if not raw_versions:
@@ -7399,6 +7405,9 @@ def dashboard_update_launcher_url():
             db.table("settings").update({"setting_value": new_ver}).eq("setting_key", "launcher_version").execute()
         else:
             db.table("settings").insert({"setting_key": "launcher_version", "setting_value": new_ver}).execute()
+
+        _SETTINGS_CACHE["launcher_download_url"] = (time.time(), new_url)
+        _SETTINGS_CACHE["launcher_version"] = (time.time(), new_ver)
 
         flash('Odkaz a verze Launcheru byly úspěšně aktualizovány.', 'success')
         adm = get_current_admin_name()
@@ -7719,6 +7728,8 @@ def api_launcher_versions():
             url_s = db.table("settings").select("setting_value").eq("setting_key", "launcher_download_url").execute().data
             if url_s and url_s[0].get('setting_value'):
                 launcher_url = str(url_s[0]['setting_value']).strip()
+            launcher_version = get_cached_setting("launcher_version", launcher_version)
+            launcher_url = get_cached_setting("launcher_download_url", launcher_url)
         except:
             pass
 
@@ -7821,6 +7832,8 @@ def api_launcher_check_update():
             url_s = db.table("settings").select("setting_value").eq("setting_key", "launcher_download_url").execute().data
             if url_s and url_s[0].get('setting_value'):
                 launcher_url = str(url_s[0]['setting_value']).strip()
+            launcher_ver = get_cached_setting("launcher_version", launcher_ver)
+            launcher_url = get_cached_setting("launcher_download_url", launcher_url)
     except Exception:
         pass
         

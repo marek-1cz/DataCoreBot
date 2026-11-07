@@ -617,6 +617,284 @@ def _local_insert_user(payload_data):
     except Exception:
         pass
 
+# ── LOKÁLNÍ PERZISTENCE A SLUČOVÁNÍ NASTAVENÍ (SETTINGS) ──
+def _local_upsert_setting(setting_key: str, setting_value: str):
+    """
+    Uloží nastavení do SQLite tabulky settings_local i souboru settings_backup.json.
+    Zajišťuje okamžité a trvalé uchování i při překročení limitů / výpadku Turso.
+    """
+    if not setting_key:
+        return
+    setting_key = str(setting_key).strip()
+    setting_value = str(setting_value) if setting_value is not None else ""
+
+    # 1. Lokální SQLite
+    db_path = _find_file("datacore_local.db")
+    if db_path:
+        try:
+            con = sqlite3.connect(db_path, timeout=5)
+            cur = con.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS settings_local (
+                    setting_key TEXT PRIMARY KEY,
+                    setting_value TEXT
+                )
+            """)
+            cur.execute("""
+                INSERT OR REPLACE INTO settings_local (setting_key, setting_value)
+                VALUES (?, ?)
+            """, (setting_key, setting_value))
+            con.commit()
+            con.close()
+        except Exception as e:
+            print(f"[TURSO LOCAL DB] Error updating settings_local SQLite: {e}", flush=True)
+
+    # 2. JSON záloha settings_backup.json
+    s_file = _find_file("settings_backup.json")
+    if not s_file:
+        s_file = os.path.join(os.path.dirname(__file__), "settings_backup.json")
+    settings_dict = {}
+    if os.path.exists(s_file):
+        try:
+            with open(s_file, "r", encoding="utf-8") as f:
+                settings_dict = json.load(f)
+                if not isinstance(settings_dict, dict):
+                    settings_dict = {}
+        except Exception:
+            settings_dict = {}
+
+    settings_dict[setting_key] = setting_value
+    try:
+        with open(s_file, "w", encoding="utf-8") as f:
+            json.dump(settings_dict, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[TURSO LOCAL DB] Error saving settings_backup.json: {e}", flush=True)
+
+    invalidate_query_cache("settings")
+
+def _get_local_settings_dict() -> dict:
+    """Vrátí sloučený slovník všech lokálně známých nastavení (SQLite + JSON)."""
+    settings_map = {}
+    s_file = _find_file("settings_backup.json")
+    if s_file and os.path.exists(s_file):
+        try:
+            with open(s_file, "r", encoding="utf-8") as f:
+                d = json.load(f)
+                if isinstance(d, dict):
+                    settings_map.update(d)
+        except Exception:
+            pass
+
+    db_path = _find_file("datacore_local.db")
+    if db_path and os.path.exists(db_path):
+        try:
+            con = sqlite3.connect(db_path, timeout=5)
+            cur = con.cursor()
+            cur.execute("SELECT setting_key, setting_value FROM settings_local")
+            for k, v in cur.fetchall():
+                if k:
+                    settings_map[str(k).strip()] = str(v)
+            con.close()
+        except Exception:
+            pass
+
+    return settings_map
+
+def _local_insert_settings(payload_data):
+    if not payload_data: return
+    items = payload_data if isinstance(payload_data, list) else [payload_data]
+    for it in items:
+        if isinstance(it, dict) and "setting_key" in it:
+            _local_upsert_setting(it["setting_key"], it.get("setting_value", ""))
+
+def _local_update_settings(where_clauses, args, payload_data):
+    target_key = None
+    if where_clauses and args:
+        arg_vals = [_extract_arg_val(a) for a in args]
+        for idx, w in enumerate(where_clauses):
+            val = arg_vals[idx] if idx < len(arg_vals) else None
+            if '"setting_key" = ?' in w or 'setting_key = ?' in w:
+                target_key = str(val).strip() if val is not None else None
+                break
+
+    val = payload_data.get("setting_value") if isinstance(payload_data, dict) else None
+    if target_key and val is not None:
+        _local_upsert_setting(target_key, val)
+        return [{"setting_key": target_key, "setting_value": str(val)}]
+    elif isinstance(payload_data, dict) and "setting_key" in payload_data and val is not None:
+        _local_upsert_setting(payload_data["setting_key"], val)
+        return [payload_data]
+    return [payload_data] if isinstance(payload_data, dict) else payload_data
+
+def _merge_settings_with_local(res_rows, where_clauses=None, args=None):
+    """
+    Sloučí řádky vrácené z Turso s lokálními nastaveními.
+    Lokální nastavení mají vždy přednost při výpadku zápisů na cloudu.
+    """
+    local_map = _get_local_settings_dict()
+    if not local_map:
+        return res_rows or []
+
+    target_key = None
+    if where_clauses and args:
+        arg_vals = [_extract_arg_val(a) for a in args]
+        for idx, w in enumerate(where_clauses):
+            val = arg_vals[idx] if idx < len(arg_vals) else None
+            if '"setting_key" = ?' in w or 'setting_key = ?' in w:
+                target_key = str(val).strip() if val is not None else None
+                break
+
+    if target_key:
+        if target_key in local_map:
+            loc_val = local_map[target_key]
+            if res_rows:
+                out = []
+                for r in res_rows:
+                    item = dict(r)
+                    item["setting_value"] = loc_val
+                    out.append(item)
+                return out
+            else:
+                return [{"setting_key": target_key, "setting_value": loc_val}]
+        return res_rows or []
+
+    seen_keys = set()
+    merged = []
+    for r in (res_rows or []):
+        item = dict(r)
+        k = str(item.get("setting_key", "")).strip()
+        if k in local_map:
+            item["setting_value"] = local_map[k]
+        if k:
+            seen_keys.add(k)
+        merged.append(item)
+
+    for k, v in local_map.items():
+        if k not in seen_keys:
+            merged.append({"setting_key": k, "setting_value": v})
+
+    return merged
+
+# ── LOKÁLNÍ PERZISTENCE A SLUČOVÁNÍ SOFTWARE_VERSIONS ──
+def _local_upsert_software_version(action, payload_data, where_clauses=None, args=None):
+    v_file = _find_file("versions_backup.json")
+    if not v_file:
+        v_file = os.path.join(os.path.dirname(__file__), "versions_backup.json")
+    
+    versions = []
+    if os.path.exists(v_file):
+        try:
+            with open(v_file, "r", encoding="utf-8") as f:
+                versions = json.load(f)
+                if not isinstance(versions, list):
+                    versions = []
+        except Exception:
+            versions = []
+
+    items = payload_data if isinstance(payload_data, list) else [payload_data]
+
+    if action in ("add", "insert", "upsert"):
+        for item in items:
+            if not isinstance(item, dict): continue
+            item_copy = dict(item)
+            existing_idx = None
+            for idx, v in enumerate(versions):
+                if item_copy.get("id") and str(v.get("id")) == str(item_copy.get("id")):
+                    existing_idx = idx
+                    break
+                if item_copy.get("db_version") and str(v.get("db_version")) == str(item_copy.get("db_version")):
+                    existing_idx = idx
+                    break
+            if existing_idx is not None:
+                versions[existing_idx].update(item_copy)
+            else:
+                if not item_copy.get("id"):
+                    existing_ids = [int(v.get("id", 0)) for v in versions if str(v.get("id", "")).isdigit()]
+                    item_copy["id"] = max(existing_ids, default=0) + 1
+                versions.append(item_copy)
+
+    elif action == "edit":
+        target_id = None
+        target_vname = None
+        if where_clauses and args:
+            arg_vals = [_extract_arg_val(a) for a in args]
+            for idx, w in enumerate(where_clauses):
+                val = arg_vals[idx] if idx < len(arg_vals) else None
+                if '"id" = ?' in w or 'id = ?' in w:
+                    target_id = str(val).strip() if val is not None else None
+                elif '"db_version" = ?' in w or 'db_version = ?' in w:
+                    target_vname = str(val).strip() if val is not None else None
+
+        updated_any = False
+        for v in versions:
+            match = False
+            if target_id and str(v.get("id")) == str(target_id):
+                match = True
+            elif target_vname and str(v.get("db_version")) == str(target_vname):
+                match = True
+            if match:
+                v.update(items[0] if items else {})
+                updated_any = True
+                break
+
+        if not updated_any and (target_id or target_vname):
+            new_item = dict(items[0] if items else {})
+            if target_id:
+                new_item["id"] = int(target_id) if target_id.isdigit() else target_id
+            if target_vname:
+                new_item["db_version"] = target_vname
+            versions.append(new_item)
+
+    try:
+        with open(v_file, "w", encoding="utf-8") as f:
+            json.dump(versions, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[TURSO LOCAL DB] Error saving versions_backup.json: {e}", flush=True)
+
+    invalidate_query_cache("software_versions")
+    return items
+
+def _merge_versions_with_backup(res_rows, where_clauses=None, args=None, order_by=None, limit_val=None):
+    v_file = _find_file("versions_backup.json")
+    backup_versions = []
+    if v_file and os.path.exists(v_file):
+        try:
+            with open(v_file, "r", encoding="utf-8") as f:
+                backup_versions = json.load(f)
+                if not isinstance(backup_versions, list):
+                    backup_versions = []
+        except Exception:
+            backup_versions = []
+
+    if not backup_versions:
+        return res_rows or []
+
+    backup_by_id = {str(v.get("id")): v for v in backup_versions if v.get("id")}
+    backup_by_dbver = {str(v.get("db_version")): v for v in backup_versions if v.get("db_version")}
+
+    merged = []
+    seen_ids = set()
+    for r in (res_rows or []):
+        item = dict(r)
+        vid = str(item.get("id") or "")
+        vdb = str(item.get("db_version") or "")
+        
+        backup_item = backup_by_id.get(vid) or backup_by_dbver.get(vdb)
+        if backup_item:
+            item.update(backup_item)
+        
+        if vid:
+            seen_ids.add(vid)
+        merged.append(item)
+
+    for bv in backup_versions:
+        b_id = str(bv.get("id") or "")
+        if b_id and b_id not in seen_ids:
+            merged.append(dict(bv))
+            seen_ids.add(b_id)
+
+    return merged
+
 def _resolve_local_fallback(table_name, columns="*", where_clauses=None, args=None, order_by=None, limit_val=None):
     """
     Bezpečný a robustní lokální fallback pro případ výpadku / vyčerpání Turso.
@@ -631,27 +909,15 @@ def _resolve_local_fallback(table_name, columns="*", where_clauses=None, args=No
 
     # ── TABULKA: settings ──
     if table_name == "settings":
-        # Hledáme konkrétní klíč
+        local_map = _get_local_settings_dict()
         target_key = None
         for w, a in zip(where_clauses, args):
-            if '"setting_key" = ?' in w:
-                target_key = str(a.get("value") or "")
+            val = a.get("value") if isinstance(a, dict) else a
+            if '"setting_key" = ?' in w or 'setting_key = ?' in w:
+                target_key = str(val or "")
                 break
 
-        val = None
-        # Zkus načíst z lokální SQLite
-        db_path = _find_file("datacore_local.db")
-        if db_path and target_key:
-            try:
-                con = sqlite3.connect(db_path, timeout=5)
-                cur = con.cursor()
-                cur.execute("SELECT setting_value FROM settings_local WHERE setting_key = ?", (target_key,))
-                row = cur.fetchone()
-                if row:
-                    val = row[0]
-                con.close()
-            except Exception:
-                pass
+        val = local_map.get(target_key) if target_key else None
 
         # Fallback na spz_settings.json pokud jde o spz_metadata
         if val is None and target_key == "spz_metadata":
@@ -666,13 +932,20 @@ def _resolve_local_fallback(table_name, columns="*", where_clauses=None, args=No
                     pass
 
         if val is None and target_key == "launcher_version":
-            val = "1.0.0"
+            val = "1.0.2"
         elif val is None and target_key == "launcher_download_url":
-            val = "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/V1.6.2B/IDPK.Launcher.Setup.1.6.2.exe"
+            val = "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/Launcher/IDPK.Launcher.Setup.1.0.2.exe"
 
-        if val is not None:
-            return [{"setting_key": target_key, "setting_value": val}]
-        return []
+        if target_key:
+            if val is not None:
+                return [{"setting_key": target_key, "setting_value": val}]
+            return []
+
+        # Pokud dotaz neomezoval konkrétní klíč (např. SELECT * FROM settings)
+        res = []
+        for k, v in local_map.items():
+            res.append({"setting_key": k, "setting_value": v})
+        return res
 
     # ── TABULKA: supporters ──
     if table_name == "supporters":
@@ -1063,6 +1336,16 @@ class TursoQueryBuilder:
                         res.data, self.where_clauses, self.args, self.order_by, self.limit_val, cols
                     )
                     res.count = len(res.data)
+                elif self.table_name == "settings":
+                    res.data = _merge_settings_with_local(
+                        res.data, self.where_clauses, self.args
+                    )
+                    res.count = len(res.data)
+                elif self.table_name == "software_versions":
+                    res.data = _merge_versions_with_backup(
+                        res.data, self.where_clauses, self.args, self.order_by, self.limit_val
+                    )
+                    res.count = len(res.data)
                 set_query_cache(cache_key, res.data, self.table_name)
             return res
 
@@ -1072,6 +1355,10 @@ class TursoQueryBuilder:
         if self.action == "INSERT":
             if self.table_name == "users":
                 _local_insert_user(self.payload_data)
+            elif self.table_name == "settings":
+                _local_insert_settings(self.payload_data)
+            elif self.table_name == "software_versions":
+                _local_upsert_software_version("add", self.payload_data)
             if is_turso_write_blocked():
                 ret_data = self.payload_data if isinstance(self.payload_data, list) else [self.payload_data]
                 return TursoResponse(data=ret_data, count=len(ret_data))
@@ -1099,6 +1386,10 @@ class TursoQueryBuilder:
         elif self.action == "UPSERT":
             if self.table_name == "users":
                 _local_insert_user(self.payload_data)
+            elif self.table_name == "settings":
+                _local_insert_settings(self.payload_data)
+            elif self.table_name == "software_versions":
+                _local_upsert_software_version("upsert", self.payload_data)
             if is_turso_write_blocked():
                 ret_data = self.payload_data if isinstance(self.payload_data, list) else [self.payload_data]
                 return TursoResponse(data=ret_data, count=len(ret_data))
@@ -1135,6 +1426,10 @@ class TursoQueryBuilder:
             local_updated = []
             if self.table_name == "users":
                 local_updated = _local_update_users(self.where_clauses, self.args, self.payload_data)
+            elif self.table_name == "settings":
+                local_updated = _local_update_settings(self.where_clauses, self.args, self.payload_data)
+            elif self.table_name == "software_versions":
+                local_updated = _local_upsert_software_version("edit", self.payload_data, self.where_clauses, self.args)
 
             if is_turso_write_blocked():
                 ret_data = local_updated if local_updated else [self.payload_data]

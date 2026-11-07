@@ -24,6 +24,7 @@ daily_metrics.json
 !depot_zones_backup.json
 !depot_history_backup.json
 !versions_backup.json
+!settings_backup.json
 *.db
 idpk_vehicles_state.json
 vehicle_state.json

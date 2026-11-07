@@ -1,7 +1,7 @@
 {
   "month": "2026-11",
-  "row_reads": 3434,
-  "queries_count": 77,
+  "row_reads": 3464,
+  "queries_count": 92,
   "blocked": false,
   "blocked_reason": "",
   "last_blocked_ts": 0.0,
