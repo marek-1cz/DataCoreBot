@@ -10328,6 +10328,21 @@ def upsert_to_history(db, c):
             except Exception:
                 pass
 
+    # Debounce: zapisovat do lokální DB při startu, při změně zastávky/statusu, nebo max jednou za 20 sekund
+    now_ts = time.time()
+    last_up = c.get("_last_history_upsert_ts", 0)
+    is_start = not c.get("_history_written")
+    curr_stop = c.get("nearest_stop") or c.get("real_zastavka") or c.get("destination") or ""
+    stop_changed = (curr_stop != c.get("_last_logged_stop", ""))
+    status_changed = (status_to_save != c.get("_last_logged_status", ""))
+
+    if not is_start and not stop_changed and not status_changed and (now_ts - last_up < 20):
+        return
+
+    c["_last_history_upsert_ts"] = now_ts
+    c["_last_logged_stop"] = curr_stop
+    c["_last_logged_status"] = status_to_save
+
     # Unikátní trip_id: Každá jízda má své vlastní jednoznačné trip_id
     curr_trip_id = c.get("trip_id")
     if not curr_trip_id or not str(curr_trip_id).startswith(f"TRIP-{spz}"):
@@ -10957,13 +10972,24 @@ def background_map_worker():
 
                 # C) Změna cílové stanice (nový spoj v opačném směru)
                 dest_switched = False
+                prev_feed_dest = c.get("feed_destination")
                 if dest and dest not in ("Neznámý", "Neznama", "-1", "", "None"):
-                    old_dest = c.get("destination") or c.get("tt_destination")
-                    if old_dest and old_dest not in ("Neznámý", "Neznama", "-1", "", "None") and dest != old_dest:
-                        dest_switched = True
+                    if prev_feed_dest and prev_feed_dest not in ("Neznámý", "Neznama", "-1", "", "None"):
+                        norm_d1 = re.sub(r'[\s,.-]+', '', dest.lower())
+                        norm_d2 = re.sub(r'[\s,.-]+', '', prev_feed_dest.lower())
+                        if norm_d1 != norm_d2 and not (norm_d1 in norm_d2 or norm_d2 in norm_d1):
+                            dest_switched = True
+                    c["feed_destination"] = dest
 
                 # D) Odjezd ze stavu konečné po ukončení spoje
-                terminal_departed = bool(c.get("_terminal_reached") and (is_moving or dm >= 25.0))
+                now_epoch = time.time()
+                terminal_departed = bool(c.get("_terminal_reached") and (now_epoch - c.get("_terminal_reached_epoch", 0) >= 60) and dm >= 200.0)
+
+                # Anti-churn: jízda musí trvat alespoň 90s před změnou destinace na stejné lince
+                last_trip_started = c.get("_trip_started_epoch", 0)
+                if dest_switched and not line_switched:
+                    if (now_epoch - last_trip_started) < 90:
+                        dest_switched = False
 
                 # Pokud nastala jakákoliv změna trasy/spoje, nejprve bezpečně uzavři a ulož předchozí jízdu do historie:
                 if (line_switched or dest_switched or terminal_departed) and c.get("actual_start_time") and not c.get("_trip_closed"):
@@ -10983,6 +11009,7 @@ def background_map_worker():
                     clean_l = normalize_line(curr_norm_line or raw_line) or raw_line or ""
                     clean_n = re.sub(r'\D', '', str(clean_l).split('/')[0]) or "L"
                     c["trip_id"] = f"TRIP-{spz or bid}-{clean_n}-1-{int(time.time())}"
+                    c["_trip_started_epoch"] = now_epoch
                     c["real_linka_spoj"] = None
                     c["spoj_num"] = None
                     c["last_known_spoj"] = None
@@ -10994,6 +11021,7 @@ def background_map_worker():
                     c["actual_start_time"] = None
                     c["actual_end_time"] = None
                     c["_terminal_reached"] = False
+                    c["_terminal_reached_epoch"] = None
                     c["_trip_closed"] = False
                     c["_history_written"] = False
                     c["locked_arrival_delay"] = False
@@ -11088,6 +11116,8 @@ def background_map_worker():
                             c["color_class"] = "bg-yellow"
                             c["status"] = f"Vozovna: {depot_zone_name}"
                         elif has_route:
+                            if not c.get("actual_start_time"):
+                                c["actual_start_time"] = now.strftime('%H:%M')
                             if delay >= 10:
                                 c["color_class"] = "bg-red"
                                 c["status"] = f"Jízda (+{delay} min)" if is_moving else f"Stojí (+{delay} min)"
@@ -11189,6 +11219,8 @@ def background_map_worker():
                                 c["arrival_delay"] = locked_d
                                 c["locked_arrival_delay"] = True
                                 c["_terminal_reached"] = True
+                                if not c.get("_terminal_reached_epoch"):
+                                    c["_terminal_reached_epoch"] = time.time()
                                 c["spz_frozen"] = True
                                 if not c.get("actual_end_time"):
                                     c["actual_end_time"] = now.strftime('%H:%M')
@@ -11239,6 +11271,8 @@ def background_map_worker():
                             c["color_class"] = "bg-purple"
                         # E) Jízda / stání s aktivní linkou (< 10 min)
                         elif has_route:
+                            if not c.get("actual_start_time"):
+                                c["actual_start_time"] = now.strftime('%H:%M')
                             if delay >= 10:
                                 c["color_class"] = "bg-red"
                                 c["status"] = f"Jízda (+{delay} min)" if is_moving else f"Stojí (+{delay} min)"
@@ -16345,20 +16379,22 @@ def api_history_spz(spz):
             except Exception:
                 pass
 
-    # 4. Sloučení a deduplikace jízd (podle trip_id)
-    merged_trips = []
-    seen_trip_ids = set()
+    # 4. Sloučení a deduplikace jízd (podle trip_id + smart collapsing)
+    raw_candidates = []
+    seen_raw_tids = set()
     for t in (d1_trips + local_trips):
         tid = t.get("trip_id")
-        if tid: seen_trip_ids.add(tid)
-        merged_trips.append(t)
+        if tid and tid in seen_raw_tids:
+            continue
+        if tid: seen_raw_tids.add(tid)
+        raw_candidates.append(t)
 
     for t in cloud_trips:
         tid = t.get("trip_id")
-        if tid and tid in seen_trip_ids:
+        if tid and tid in seen_raw_tids:
             continue
-        if tid: seen_trip_ids.add(tid)
-        merged_trips.append({
+        if tid: seen_raw_tids.add(tid)
+        raw_candidates.append({
             "trip_id": t.get("trip_id"),
             "spz": t.get("spz"),
             "linka": t.get("linka"),
@@ -16408,6 +16444,65 @@ def api_history_spz(spz):
             if val > 0.0:
                 return val
         return 0.0
+
+    # Smart collapsing: odstraní duplicity a spojí identické/přečíslované jízdy
+    merged_trips = []
+    for t in raw_candidates:
+        linka = str(t.get("linka") or "").strip()
+        start = str(t.get("start_actual") or t.get("start_scheduled") or "").strip()
+        end = str(t.get("end_actual") or "").strip()
+        date_str = str(t.get("created_at") or "")[:10]
+        ep = _get_trip_epoch(t)
+        
+        matched = False
+        for ex in merged_trips:
+            ex_linka = str(ex.get("linka") or "").strip()
+            ex_date = str(ex.get("created_at") or "")[:10]
+            ex_start = str(ex.get("start_actual") or ex.get("start_scheduled") or "").strip()
+            ex_end = str(ex.get("end_actual") or "").strip()
+            ex_ep = _get_trip_epoch(ex)
+            
+            # Shodná linka a stejné datum
+            if linka and ex_linka and (linka == ex_linka or linka.split('/')[0].strip() == ex_linka.split('/')[0].strip()) and date_str and ex_date == date_str:
+                # 1. Shoda času startu v rozmezí 15 minut
+                if ":" in start and ":" in ex_start:
+                    try:
+                        sh1, sm1 = map(int, start.split(":")[:2])
+                        sh2, sm2 = map(int, ex_start.split(":")[:2])
+                        if abs((sh1 * 60 + sm1) - (sh2 * 60 + sm2)) <= 15:
+                            matched = True
+                    except Exception:
+                        pass
+                # 2. Shoda času dojezdu v rozmezí 15 minut
+                if not matched and ":" in end and ":" in ex_end:
+                    try:
+                        eh1, em1 = map(int, end.split(":")[:2])
+                        eh2, em2 = map(int, ex_end.split(":")[:2])
+                        if abs((eh1 * 60 + em1) - (eh2 * 60 + em2)) <= 15:
+                            matched = True
+                    except Exception:
+                        pass
+                # 3. Epochy v rozmezí 900 sekund (15 minut)
+                if not matched and ep > 0 and ex_ep > 0 and abs(ep - ex_ep) <= 900:
+                    matched = True
+
+                if matched:
+                    if not ex.get("end_actual") and t.get("end_actual"):
+                        ex["end_actual"] = t.get("end_actual")
+                    if not ex.get("start_actual") and t.get("start_actual"):
+                        ex["start_actual"] = t.get("start_actual")
+                    if not ex.get("destination") and t.get("destination"):
+                        ex["destination"] = t.get("destination")
+                    if not ex.get("end_stop") and t.get("end_stop"):
+                        ex["end_stop"] = t.get("end_stop")
+                    if not ex.get("origin") and t.get("origin"):
+                        ex["origin"] = t.get("origin")
+                    if not ex.get("end_lat") and t.get("end_lat"):
+                        ex["end_lat"] = t.get("end_lat")
+                        ex["end_lng"] = t.get("end_lng")
+                    break
+        if not matched:
+            merged_trips.append(dict(t))
 
     merged_trips.sort(key=_get_trip_epoch, reverse=True)
 

@@ -527,7 +527,7 @@ class D1Client:
         except Exception as e_q:
             print(f"[D1 QUEUE] Nelze zařadit do fronty: {e_q}", flush=True)
 
-    def insert(self, table: str, row_dict: dict):
+    def insert(self, table: str, row_dict: dict, return_id: bool = False):
         """Vloží jeden řádek do D1 nebo zařadí do SQLite fronty."""
         if not self.budget.can_write():
             self._enqueue_write(table, "insert", {"data": row_dict})
@@ -543,8 +543,8 @@ class D1Client:
             rows = self.execute(sql, params)
             if rows and isinstance(rows, list) and len(rows) > 0 and isinstance(rows[0], dict):
                 return rows[0].get("id")
-            # Pokud se nevrátilo id přímo, zkusíme last_insert_rowid
-            if self.budget.can_read():
+            # Pokud se nevrátilo id přímo a volající ho výslovně požaduje, zkusíme last_insert_rowid
+            if return_id and self.budget.can_read():
                 last = self.execute("SELECT last_insert_rowid() AS id")
                 if last and isinstance(last, list) and len(last) > 0 and isinstance(last[0], dict):
                     return last[0].get("id")

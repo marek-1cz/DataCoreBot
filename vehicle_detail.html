@@ -48,7 +48,7 @@ body{
   flex-direction:column;
 }
 
-/* AURORA POZADÍ (STEJNÉ JAKO NA HLAVNÍM WEBU A V HISTORII) */
+/* AURORA POZADÍ */
 .aurora{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
 .aurora span{position:absolute;border-radius:50%;filter:blur(120px)}
 .aurora .a{width:60vw;height:60vw;left:-15vw;top:-15vw;background:rgba(47,107,255,.28);animation:drift 40s ease-in-out infinite alternate}
@@ -108,11 +108,11 @@ body{
   backdrop-filter:blur(24px);
   border:1px solid var(--border);
   border-radius:var(--radius);
-  padding:30px 36px;
+  padding:28px 32px;
   box-shadow:var(--shadow);
   display:grid;
   grid-template-columns:auto 1fr auto;
-  gap:32px;
+  gap:28px;
   align-items:center;
   margin-bottom:28px;
   position:relative;
@@ -137,9 +137,9 @@ body{
   font-family:'JetBrains Mono','Inter',monospace;
   user-select:none;
   position:relative;
+  max-width:100%;
 }
 .spz-plate::after{
-  /* Vnitřní jemný rámeček po obvodu SPZ */
   content:'';
   position:absolute;
   inset:2px;
@@ -224,13 +224,13 @@ body{
   display:flex;align-items:center;gap:10px;padding:8px 14px;
   border-radius:10px;font-size:0.88rem;margin-top:4px;
   background:rgba(255,255,255,0.03);border:1px solid var(--border);
-  width:fit-content;
+  width:fit-content;flex-wrap:wrap;
 }
 .live-bar.is-live{background:rgba(52,211,153,0.08);border-color:rgba(52,211,153,0.3);color:#6ee7b7;}
 .live-bar.is-depot{background:rgba(251,191,36,0.08);border-color:rgba(251,191,36,0.3);color:#fde68a;}
 .live-bar.is-offline{background:rgba(148,163,184,0.06);border-color:rgba(148,163,184,0.2);color:var(--muted);}
 
-.pulse-dot{width:9px;height:9px;border-radius:50%;position:relative;}
+.pulse-dot{width:9px;height:9px;border-radius:50%;position:relative;flex-shrink:0;}
 .pulse-dot.green{background:#34d399;box-shadow:0 0 10px #34d399;}
 .pulse-dot.amber{background:#fbbf24;box-shadow:0 0 10px #fbbf24;}
 .pulse-dot.gray{background:#94a3b8;}
@@ -241,33 +241,33 @@ body{
 .hero-actions{display:flex;flex-direction:column;gap:10px;align-items:flex-end;}
 .btn-map-live{
   display:inline-flex;align-items:center;gap:10px;
-  padding:14px 22px;border-radius:12px;
+  padding:12px 22px;border-radius:12px;
   background:linear-gradient(135deg,#0284c7,#0369a1);
-  color:#ffffff;font-size:0.95rem;font-weight:700;
+  color:#ffffff;font-size:0.92rem;font-weight:700;
   text-decoration:none;border:1px solid rgba(56,189,248,0.4);
   box-shadow:0 8px 24px rgba(2,132,199,0.35);
   transition:all .2s var(--ease);
-  cursor:pointer;
+  cursor:pointer;white-space:nowrap;
 }
 .btn-map-live:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(2,132,199,0.5);border-color:#38bdf8;}
 
 /* KPI GRID */
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:32px;}
+.kpi-grid{display:grid;grid-template-columns:repeat(5, 1fr);gap:14px;margin-bottom:28px;}
 .kpi-card{
   background:var(--bg-card);
   backdrop-filter:blur(20px);
   border:1px solid var(--border);
   border-radius:var(--radius-sm);
-  padding:20px 22px;
+  padding:18px 20px;
   box-shadow:var(--shadow);
   display:flex;flex-direction:column;gap:6px;
   transition:border-color .2s;
 }
 .kpi-card:hover{border-color:rgba(56,189,248,0.35);}
-.kpi-head{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;}
-.kpi-head i{font-size:0.95rem;color:var(--cyan);}
-.kpi-val{font-size:1.65rem;font-weight:800;letter-spacing:-0.02em;color:#ffffff;}
-.kpi-sub{font-size:0.82rem;color:var(--dim);font-weight:500;}
+.kpi-head{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;}
+.kpi-head i{font-size:0.9rem;color:var(--cyan);}
+.kpi-val{font-size:1.55rem;font-weight:800;letter-spacing:-0.02em;color:#ffffff;line-height:1.2;}
+.kpi-sub{font-size:0.78rem;color:var(--dim);font-weight:500;}
 
 /* TABS */
 .tab-container{margin-bottom:24px;}
@@ -287,19 +287,163 @@ body{
 .tab-btn.active{color:#fff;background:rgba(56,189,248,0.18);border:1px solid rgba(56,189,248,0.35);box-shadow:0 0 16px var(--cyan-glow);}
 .tab-count{padding:2px 8px;border-radius:99px;font-size:0.75rem;background:rgba(255,255,255,0.1);color:#fff;}
 
-/* SEARCH/FILTER ROW */
-.filter-row{
-  display:flex;align-items:center;justify-content:space-between;gap:16px;
-  margin-bottom:18px;flex-wrap:wrap;
+/* ADVANCED FILTER SYSTEM */
+.filter-card{
+  background:var(--bg-card);
+  backdrop-filter:blur(24px);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:18px 22px;
+  margin-bottom:20px;
+  box-shadow:var(--shadow);
+  display:flex;
+  flex-direction:column;
+  gap:14px;
 }
-.search-box{position:relative;flex:1;max-width:400px;}
-.search-box input{
-  width:100%;padding:10px 14px 10px 38px;border-radius:10px;
-  background:rgba(15,23,42,0.8);border:1px solid var(--border);
-  color:#fff;font-size:0.88rem;outline:none;transition:border-color .15s;
+.filter-row-main{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
 }
-.search-box input:focus{border-color:var(--cyan);}
-.search-box i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:0.85rem;}
+.filter-group{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  flex:1;
+  min-width:180px;
+}
+.filter-group.f-grow{flex:2;min-width:240px;}
+.filter-group.f-sort{flex:none;}
+.f-label{
+  font-size:0.75rem;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+  color:var(--muted);
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.f-label i{color:var(--cyan);font-size:0.8rem;}
+
+/* SELECT WRAPPER */
+.f-select-wrap{position:relative;width:100%;}
+.filter-select{
+  width:100%;
+  appearance:none;
+  -webkit-appearance:none;
+  padding:10px 34px 10px 14px;
+  border-radius:10px;
+  background:rgba(15,23,42,0.9);
+  border:1px solid var(--border);
+  color:#ffffff;
+  font-size:0.88rem;
+  font-weight:600;
+  outline:none;
+  cursor:pointer;
+  transition:border-color .15s, box-shadow .15s;
+}
+.filter-select:focus{border-color:var(--cyan);box-shadow:0 0 0 2px rgba(56,189,248,0.2);}
+.f-select-arrow{
+  position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  color:var(--dim);pointer-events:none;font-size:0.78rem;
+}
+
+/* INPUT SEARCH WRAPPER */
+.f-input-wrap{position:relative;width:100%;}
+.filter-input{
+  width:100%;
+  padding:10px 36px 10px 36px;
+  border-radius:10px;
+  background:rgba(15,23,42,0.9);
+  border:1px solid var(--border);
+  color:#ffffff;
+  font-size:0.88rem;
+  outline:none;
+  transition:border-color .15s, box-shadow .15s;
+}
+.filter-input:focus{border-color:var(--cyan);box-shadow:0 0 0 2px rgba(56,189,248,0.2);}
+.f-ico{
+  position:absolute;left:13px;top:50%;transform:translateY(-50%);
+  color:var(--dim);font-size:0.82rem;pointer-events:none;
+}
+.f-clear-btn{
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:var(--dim);
+  cursor:pointer;font-size:0.85rem;padding:4px 6px;
+  border-radius:4px;transition:color .15s;
+}
+.f-clear-btn:hover{color:#ffffff;}
+
+/* SORT PILL BUTTONS */
+.sort-group{
+  display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.04);
+  padding:4px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);
+}
+.btn-sort-pill{
+  background:none;border:none;color:var(--muted);font-size:0.8rem;font-weight:700;
+  padding:7px 12px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  transition:all 0.2s ease;white-space:nowrap;
+}
+.btn-sort-pill:hover{color:#fff;background:rgba(255,255,255,0.06);}
+.btn-sort-pill.active{color:#fff;background:linear-gradient(135deg,#2563eb,#0284c7);box-shadow:0 2px 8px rgba(37,99,235,0.35);}
+
+/* QUICK LINE CHIPS */
+.line-chips-bar{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+  padding-top:6px;
+  border-top:1px solid rgba(255,255,255,0.05);
+}
+.line-chip-label{font-size:0.75rem;color:var(--dim);font-weight:600;margin-right:4px;}
+.line-chip{
+  padding:4px 10px;
+  border-radius:7px;
+  font-size:0.78rem;
+  font-weight:700;
+  font-family:'JetBrains Mono',monospace;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.08);
+  color:var(--muted);
+  cursor:pointer;
+  transition:all .15s ease;
+}
+.line-chip:hover{color:#fff;background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);}
+.line-chip.active{
+  color:#fff;
+  background:rgba(56,189,248,0.2);
+  border-color:var(--cyan);
+  box-shadow:0 0 10px var(--cyan-glow);
+}
+
+/* FILTER STATS ROW */
+.filter-status-bar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  font-size:0.82rem;
+  color:var(--muted);
+  flex-wrap:wrap;
+}
+.btn-reset-filters{
+  background:rgba(248,113,113,0.12);
+  border:1px solid rgba(248,113,113,0.3);
+  color:#fca5a5;
+  font-size:0.78rem;
+  font-weight:700;
+  padding:4px 12px;
+  border-radius:6px;
+  cursor:pointer;
+  transition:all .15s;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+}
+.btn-reset-filters:hover{background:rgba(248,113,113,0.25);border-color:var(--red);color:#ffffff;}
 
 /* TABLE SYSTEM */
 .table-wrap{
@@ -327,8 +471,7 @@ table.ois-table td{
 table.ois-table tr:hover td{background:rgba(255,255,255,0.03);}
 table.ois-table tr:last-child td{border-bottom:none;}
 
-
-/* ENHANCED TRIP TABLE TIMELINE & SPOJ PILL */
+/* TRIP TIMELINE & SPOJ PILL */
 .trip-time-cell{display:flex;flex-direction:column;gap:5px;}
 .trip-date{font-size:0.86rem;font-weight:800;color:#ffffff;display:flex;align-items:center;gap:6px;}
 .trip-date i{color:var(--cyan);font-size:0.8rem;}
@@ -418,38 +561,101 @@ table.ois-table tr:last-child td{border-bottom:none;}
 }
 .btn-switch:hover{background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);}
 
-/* SORT BUTTONS */
-.sort-group{
-  display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);
-  padding:4px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);
+/* ═══════════════════════════════════════════════════════════════════════════════
+   RESPONSIVNÍ DESIGN PRO MOBILNÍ TELEFONY A TABLETY
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media(max-width:1080px){
+  .kpi-grid{grid-template-columns:repeat(3, 1fr);}
 }
-.btn-sort-pill{
-  background:none;border:none;color:var(--muted);font-size:0.8rem;font-weight:700;
-  padding:6px 12px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
-  transition:all 0.2s ease;
-}
-.btn-sort-pill:hover{color:#fff;background:rgba(255,255,255,0.06);}
-.btn-sort-pill.active{color:#fff;background:linear-gradient(135deg,#2563eb,#0284c7);box-shadow:0 2px 8px rgba(37,99,235,0.35);}
-
 @media(max-width:960px){
   .hero-card{grid-template-columns:1fr;gap:20px;}
   .hero-actions{align-items:flex-start;}
-  .spz-plate{height:52px;}
-  .spz-code{font-size:1.5rem;}
-  .ois-nav{padding:0 16px;}
-  .nav-links{display:none;}
-  .wrap{padding:16px 14px 40px;}
+  .spz-plate{height:54px;}
+  .spz-part{font-size:1.75rem;}
+  .wrap{padding:80px 16px 40px;}
 }
 @media(max-width:768px){
-  .kpi-grid{grid-template-columns:1fr 1fr;gap:10px;}
-  .filter-row{flex-direction:column;align-items:stretch;gap:12px;}
-  .sort-group{justify-content:center;width:100%;}
+  .wrap{padding:75px 12px 30px;}
+  .hero-card{padding:20px 16px;}
+  .spz-plate{height:48px;}
+  .spz-eu{width:30px;padding:3px 2px;}
+  .spz-stars-svg{width:16px;height:16px;}
+  .spz-cz{font-size:9px;}
+  .spz-body{padding:0 10px;gap:6px;}
+  .spz-part{font-size:1.45rem;letter-spacing:1px;}
+  .spz-stk-ring{width:11px;height:11px;}
+  .vehicle-model{font-size:1.2rem;}
+  .btn-map-live{width:100%;justify-content:center;}
+  .hero-actions{width:100%;}
+  
+  .kpi-grid{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;}
+  .kpi-card{padding:14px 14px;}
+  .kpi-val{font-size:1.25rem;}
+  .kpi-sub{font-size:0.72rem;}
+
+  .filter-card{padding:14px;}
+  .filter-row-main{flex-direction:column;align-items:stretch;gap:10px;}
+  .filter-group{min-width:100%;width:100%;}
+  .filter-group.f-grow{min-width:100%;width:100%;}
+  .sort-group{width:100%;justify-content:center;}
   .btn-sort-pill{flex:1;justify-content:center;}
-  .search-box{max-width:none;width:100%;}
-  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+
+  /* MOBILNÍ ROZVRŽENÍ KARET MÍSTO NEPŘEHLEDNÉ TABULKY */
+  .table-wrap{background:transparent;border:none;box-shadow:none;border-radius:0;}
+  table.ois-table{display:block;width:100%;}
+  table.ois-table thead{display:none;}
+  table.ois-table tbody{display:flex;flex-direction:column;gap:12px;width:100%;}
+  table.ois-table tr{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    padding:16px;
+    background:var(--bg-card);
+    border:1px solid var(--border);
+    border-radius:14px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.4);
+    box-sizing:border-box;
+    width:100%;
+  }
+  table.ois-table td{
+    display:block;
+    padding:0;
+    border:none;
+    width:100%;
+  }
+  table.ois-table tr:hover td{background:transparent;}
+
+  .m-row-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    padding-bottom:10px;
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    flex-wrap:wrap;
+  }
+  .m-row-middle{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:4px 0;
+    flex-wrap:wrap;
+  }
+  .m-row-bottom{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    padding-top:10px;
+    border-top:1px solid rgba(255,255,255,0.06);
+    flex-wrap:wrap;
+  }
 }
 @media(max-width:480px){
-  .kpi-grid{grid-template-columns:1fr;}
+  .kpi-grid{grid-template-columns:1fr 1fr;}
+  .tabs-bar{width:100%;justify-content:stretch;}
+  .tab-btn{flex:1;justify-content:center;padding:10px 10px;font-size:0.82rem;}
 }
 </style>
 </head>
@@ -458,7 +664,7 @@ table.ois-table tr:last-child td{border-bottom:none;}
 <!-- AURORA POZADÍ -->
 <div class="aurora" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span></div>
 
-<!-- HORNÍ PLOVOUCÍ SKLENĚNÝ PANEL (STEJNÝ DESIGN JAKO NA CELÉM WEBU) -->
+<!-- HORNÍ PLOVOUCÍ SKLENĚNÝ PANEL -->
 <div class="ois-nav" role="navigation" aria-label="Hlavní navigace"><span class="nav-pill" aria-hidden="true"></span><span class="nav-arr l" aria-hidden="true"><i>‹</i></span>
   <a class="logo" href="/"><img src="/static/img/datacorebot_pf-lepsi.png" alt="">OIS IDPK</a>
   <a href="/#/" data-r="home">Domů</a>
@@ -468,10 +674,9 @@ table.ois-table tr:last-child td{border-bottom:none;}
   <a href="/#/supporters" data-r="supporters">Podporovatelé</a>
   <a href="/#/provoz" data-r="provoz">Provoz IDPK</a>
   <a href="/mapa">Interaktivní mapa IDPK</a>
-  <a href="/led-panel">LED Panel Simulátor</a>
+  <a href="/jizdni-rad">Jízdní řády</a>
   <a href="/historie" class="active" data-r="historie">Historie vozů</a>
   <a href="/podpora" data-r="podpora" style="color:var(--cyan);"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-3px;margin-right:4px;display:inline-block;"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l3.54 3.54M15.53 15.53l3.54 3.54M4.93 19.07l3.54-3.54M15.53 8.47l3.54-3.54"/></svg>Podpora / Hlášení</a>
-  <a class="cta" href="/#/demo" data-r="demo">Demo verze</a>
   <span class="nav-arr r" aria-hidden="true"><i>›</i></span>
   <button class="gearbtn" id="setBtn" type="button" aria-label="Nastavení" onclick="window.location.href='/#/'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M10.39 4.78 L10.68 1.89 L13.32 1.89 L13.61 4.78 L15.96 5.75 L18.22 3.91 L20.09 5.78 L18.25 8.04 L19.22 10.39 L22.11 10.68 L22.11 13.32 L19.22 13.61 L18.25 15.96 L20.09 18.22 L18.22 20.09 L15.96 18.25 L13.61 19.22 L13.32 22.11 L10.68 22.11 L10.39 19.22 L8.04 18.25 L5.78 20.09 L3.91 18.22 L5.75 15.96 L4.78 13.61 L1.89 13.32 L1.89 10.68 L4.78 10.39 L5.75 8.04 L3.91 5.78 L5.78 3.91 L8.04 5.75Z"/><circle cx="12" cy="12" r="3.1"/></svg></button>
   <button class="acct" id="acctBtn" type="button" aria-label="Účet" onclick="window.location.href='/ucet'"><span class="av" id="acctAv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span class="an" id="acctName" hidden></span></button>
@@ -510,7 +715,7 @@ table.ois-table tr:last-child td{border-bottom:none;}
         <span class="spz-cz">CZ</span>
       </div>
       <div class="spz-body" id="plateBody">
-        <span class="spz-part" id="plateCode">__PAGE_SPZ__</span>
+        <span class="spz-part">__PAGE_SPZ__</span>
       </div>
     </div>
 
@@ -581,36 +786,84 @@ table.ois-table tr:last-child td{border-bottom:none;}
 
     <!-- PANEL 1: JÍZDY A SPOJE -->
     <div id="panelTrips">
-      <div class="filter-row">
-        <div class="search-box">
-          <i class="fas fa-search"></i>
-          <input type="text" id="tripFilter" placeholder="Filtrovat podle linky, trasy nebo zastávky…" oninput="filterTrips()">
+      <!-- POKROČILÝ FILTRAČNÍ PANEL (LINKY, MĚSTA, SPOJE, ŘAZENÍ) -->
+      <div class="filter-card">
+        <div class="filter-row-main">
+          <!-- 1. FILTR PODLE LINKY -->
+          <div class="filter-group">
+            <label class="f-label" for="lineFilter"><i class="fas fa-bus"></i> Filtr na linku</label>
+            <div class="f-select-wrap">
+              <select id="lineFilter" class="filter-select" onchange="filterTrips()">
+                <option value="">🚌 Všechny linky</option>
+              </select>
+              <i class="fas fa-chevron-down f-select-arrow"></i>
+            </div>
+          </div>
+
+          <!-- 2. VYHLEDÁVÁNÍ MĚST A ZASTÁVEK -->
+          <div class="filter-group f-grow">
+            <label class="f-label" for="cityFilter"><i class="fas fa-city"></i> Vyhledávání měst & zastávek</label>
+            <div class="f-input-wrap">
+              <i class="fas fa-map-marker-alt f-ico"></i>
+              <input type="search" id="cityFilter" class="filter-input" placeholder="Např. Plzeň, Bor, Stříbro, Tachov, Planá…" oninput="filterTrips()">
+              <button type="button" class="f-clear-btn" id="clearCityBtn" onclick="clearCityFilter()" style="display:none;" title="Vymazat město"><i class="fas fa-times"></i></button>
+            </div>
+          </div>
+
+          <!-- 3. HLEDÁNÍ SPOJE / TEXTU -->
+          <div class="filter-group">
+            <label class="f-label" for="tripFilter"><i class="fas fa-hashtag"></i> Číslo spoje / Text</label>
+            <div class="f-input-wrap">
+              <i class="fas fa-search f-ico"></i>
+              <input type="search" id="tripFilter" class="filter-input" placeholder="Spoj č., čas, status…" oninput="filterTrips()">
+              <button type="button" class="f-clear-btn" id="clearTripBtn" onclick="clearTripFilter()" style="display:none;" title="Vymazat"><i class="fas fa-times"></i></button>
+            </div>
+          </div>
+
+          <!-- 4. ŘAZENÍ -->
+          <div class="filter-group f-sort">
+            <label class="f-label"><i class="fas fa-sort"></i> Řazení</label>
+            <div class="sort-group" aria-label="Řazení spojů">
+              <button type="button" class="btn-sort-pill active" id="sortDescBtn" onclick="setTripSort('desc')">
+                <i class="fas fa-sort-amount-down"></i> Nejnovější
+              </button>
+              <button type="button" class="btn-sort-pill" id="sortAscBtn" onclick="setTripSort('asc')">
+                <i class="fas fa-sort-amount-up-alt"></i> Nejstarší
+              </button>
+            </div>
+          </div>
         </div>
-        <div class="sort-group" aria-label="Řazení spojů">
-          <button type="button" class="btn-sort-pill active" id="sortDescBtn" onclick="setTripSort('desc')">
-            <i class="fas fa-sort-amount-down"></i> Nejnovější první
-          </button>
-          <button type="button" class="btn-sort-pill" id="sortAscBtn" onclick="setTripSort('asc')">
-            <i class="fas fa-sort-amount-up-alt"></i> Nejstarší první
+
+        <!-- RYCHLÉ PŘEPÍNAČE LINEK (CHIPS) -->
+        <div class="line-chips-bar" id="lineChipsBar" style="display:none;">
+          <span class="line-chip-label">Rychlý výběr linky:</span>
+          <div id="lineChipsList" style="display:inline-flex;gap:6px;flex-wrap:wrap;"></div>
+        </div>
+
+        <!-- STAV A POČÍTADLO VÝSLEDKŮ -->
+        <div class="filter-status-bar">
+          <span id="tripFilteredCount">Načítám jízdy…</span>
+          <button type="button" class="btn-reset-filters" id="btnResetFilters" onclick="resetAllFilters()" style="display:none;">
+            <i class="fas fa-times-circle"></i> Zrušit filtry
           </button>
         </div>
-        <div style="font-size:0.82rem;color:var(--muted);" id="tripFilteredCount">Zobrazuji všechny jízdy</div>
       </div>
 
+      <!-- TABULKA JÍZD (NA PC TABULKA, NA MOBILU RESPONZIVNÍ SKLENĚNÉ KARTY) -->
       <div class="table-wrap">
         <table class="ois-table">
           <thead>
             <tr>
               <th style="min-width:180px;">Datum & Čas jízdy</th>
               <th style="min-width:140px;">Linka & Spoj</th>
-              <th style="min-width:220px;">Směr linky (kam jede vůz dle JŘ)</th>
+              <th style="min-width:220px;">Trasa & Cíl dle JŘ</th>
               <th style="min-width:180px;">Místo ukončení</th>
               <th style="min-width:130px;">Stav / Dojezd</th>
               <th style="text-align:right;min-width:110px;">Mapa</th>
             </tr>
           </thead>
           <tbody id="tripsTableBody">
-            <tr><td colspan="8" class="empty-box"><i class="fas fa-spinner fa-spin"></i>Načítám kompletní historii jízd…</td></tr>
+            <tr><td colspan="6" class="empty-box"><i class="fas fa-spinner fa-spin"></i>Načítám kompletní historii jízd…</td></tr>
           </tbody>
         </table>
       </div>
@@ -618,12 +871,17 @@ table.ois-table tr:last-child td{border-bottom:none;}
 
     <!-- PANEL 2: VOZOVNY -->
     <div id="panelDepots" style="display:none;">
-      <div class="filter-row">
-        <div class="search-box">
-          <i class="fas fa-search"></i>
-          <input type="text" id="depotFilter" placeholder="Filtrovat podle názvu vozovny…" oninput="filterDepots()">
+      <div class="filter-card">
+        <div class="filter-row-main">
+          <div class="filter-group f-grow">
+            <label class="f-label" for="depotFilter"><i class="fas fa-warehouse"></i> Hledat vozovnu</label>
+            <div class="f-input-wrap">
+              <i class="fas fa-search f-ico"></i>
+              <input type="search" id="depotFilter" class="filter-input" placeholder="Filtrovat podle názvu vozovny…" oninput="filterDepots()">
+            </div>
+          </div>
+          <div style="font-size:0.85rem;color:var(--muted);align-self:flex-end;padding-bottom:10px;" id="depotFilteredCount">Zobrazuji všechny návštěvy</div>
         </div>
-        <div style="font-size:0.82rem;color:var(--muted);" id="depotFilteredCount">Zobrazuji všechny návštěvy</div>
       </div>
 
       <div class="table-wrap">
@@ -664,12 +922,14 @@ const PAGE_SPZ = "__PAGE_SPZ__";
 let ALL_TRIPS = [];
 let ALL_DEPOTS = [];
 let VEHICLE_INFO = null;
+let SELECTED_LINE_FILTER = "";
+let TRIP_SORT_ORDER = 'desc';
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function getLineColor(line) {
   let s = String(line || '').trim();
-  let num = parseInt(s, 10);
+  let num = parseInt(s.replace(/\D/g, ''), 10);
   if (!isNaN(num)) {
     if (num <= 19) return '#e11d48';
     if (num <= 99) return '#2563eb';
@@ -689,7 +949,6 @@ function calcDuration(startStr, endStr) {
       let m = mins % 60;
       return h > 0 ? `${h}h ${m}m` : `${m} min`;
     }
-    // Zkus formát "HH:MM"
     if (startStr.includes(':') && endStr.includes(':')) {
       let [sh, sm] = startStr.split(':').map(Number);
       let [eh, em] = endStr.split(':').map(Number);
@@ -705,8 +964,6 @@ function calcDuration(startStr, endStr) {
   } catch(_) {}
   return '';
 }
-
-let TRIP_SORT_ORDER = 'desc';
 
 function getTripEpoch(t) {
   if (!t) return 0;
@@ -767,17 +1024,84 @@ function setTripSort(order) {
   filterTrips();
 }
 
+// Client-side deduplication guarantee
+function deduplicateTrips(trips) {
+  if (!Array.isArray(trips)) return [];
+  const result = [];
+  const seenIds = new Set();
+  
+  trips.forEach(t => {
+    if (!t) return;
+    const tid = String(t.trip_id || '').trim();
+    if (tid && seenIds.has(tid)) return;
+    
+    // Check if matches an existing trip in result (same line, date, start/end)
+    const line = String(t.linka || '').trim();
+    const start = String(t.start_actual || t.start_scheduled || '').trim();
+    const end = String(t.end_actual || '').trim();
+    const dateStr = String(t.created_at || '').substring(0, 10);
+    const ep = getTripEpoch(t);
+    
+    let isDup = false;
+    for (let ex of result) {
+      const exLine = String(ex.linka || '').trim();
+      const exDate = String(ex.created_at || '').substring(0, 10);
+      const exStart = String(ex.start_actual || ex.start_scheduled || '').trim();
+      const exEnd = String(ex.end_actual || '').trim();
+      const exEp = getTripEpoch(ex);
+      
+      if (line && exLine && (line === exLine || line.split('/')[0].trim() === exLine.split('/')[0].trim()) && dateStr && exDate === dateStr) {
+        if (start && exStart && start.includes(':') && exStart.includes(':')) {
+          const [h1, m1] = start.split(':').map(Number);
+          const [h2, m2] = exStart.split(':').map(Number);
+          if (Math.abs((h1 * 60 + m1) - (h2 * 60 + m2)) <= 15) {
+            isDup = true;
+          }
+        } else if (end && exEnd && end.includes(':') && exEnd.includes(':')) {
+          const [h1, m1] = end.split(':').map(Number);
+          const [h2, m2] = exEnd.split(':').map(Number);
+          if (Math.abs((h1 * 60 + m1) - (h2 * 60 + m2)) <= 15) {
+            isDup = true;
+          }
+        } else if (ep > 0 && exEp > 0 && Math.abs(ep - exEp) <= 900000) {
+          isDup = true;
+        }
+        
+        if (isDup) {
+          if (!ex.end_actual && t.end_actual) ex.end_actual = t.end_actual;
+          if (!ex.destination && t.destination) ex.destination = t.destination;
+          if (!ex.end_stop && t.end_stop) ex.end_stop = t.end_stop;
+          if (!ex.origin && t.origin) ex.origin = t.origin;
+          if (!ex.end_lat && t.end_lat) { ex.end_lat = t.end_lat; ex.end_lng = t.end_lng; }
+          break;
+        }
+      }
+    }
+    
+    if (!isDup) {
+      if (tid) seenIds.add(tid);
+      result.push(Object.assign({}, t));
+    }
+  });
+  return result;
+}
+
 async function loadVehicleData() {
   try {
     const res = await fetch('/api/history_spz/' + encodeURIComponent(PAGE_SPZ), { credentials: 'include' });
     if (!res.ok) throw new Error('Chyba serveru ' + res.status);
     const data = await res.json();
     VEHICLE_INFO = data;
-    ALL_TRIPS = sortTrips(data.trips || data.data || [], TRIP_SORT_ORDER);
+    
+    // Deduplicate and sort
+    const rawList = data.trips || data.data || [];
+    const deduped = deduplicateTrips(rawList);
+    ALL_TRIPS = sortTrips(deduped, TRIP_SORT_ORDER);
     ALL_DEPOTS = data.depot_visits || [];
 
     try { renderHeader(); } catch(e) { console.error('Error renderHeader:', e); }
     try { renderKpi(); } catch(e) { console.error('Error renderKpi:', e); }
+    try { populateLineFilterOptions(); } catch(e) { console.error('Error populateLineFilterOptions:', e); }
     try { renderTrips(ALL_TRIPS); } catch(e) { console.error('Error renderTrips:', e); }
     try { renderDepots(ALL_DEPOTS); } catch(e) { console.error('Error renderDepots:', e); }
 
@@ -788,7 +1112,7 @@ async function loadVehicleData() {
   } catch(err) {
     console.error('Error loading vehicle:', err);
     const tbody = document.getElementById('tripsTableBody');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="empty-box"><i class="fas fa-exclamation-triangle" style="color:var(--amber);"></i>Data pro vůz se nepodařilo načíst.</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty-box"><i class="fas fa-exclamation-triangle" style="color:var(--amber);"></i>Data pro vůz se nepodařilo načíst.</td></tr>';
   }
 }
 
@@ -798,8 +1122,6 @@ function renderHeader() {
 
   const spzDisplay = (v.spz || PAGE_SPZ).trim();
   renderCzechPlate(spzDisplay);
-  const pCode = document.getElementById('plateCode');
-  if (pCode) pCode.textContent = spzDisplay;
   const bcSpz = document.getElementById('bcSpz');
   if (bcSpz) bcSpz.textContent = 'Vůz ' + spzDisplay;
   document.title = 'Vůz ' + spzDisplay + ' · Historie vozového parku · OIS IDPK';
@@ -916,15 +1238,114 @@ function renderKpi() {
   document.getElementById('kpiDepotVisits').textContent = ALL_DEPOTS.length;
 }
 
+function cleanLineCode(raw) {
+  let s = String(raw || '').trim();
+  if (s.includes('/')) s = s.split('/')[0].trim();
+  let digits = s.replace(/\D/g, '');
+  if (digits.length === 6) return String(parseInt(digits.substring(3), 10));
+  return s || '---';
+}
+
+function populateLineFilterOptions() {
+  const lineCounts = {};
+  ALL_TRIPS.forEach(t => {
+    const cl = cleanLineCode(t.linka);
+    if (cl && cl !== '---') {
+      lineCounts[cl] = (lineCounts[cl] || 0) + 1;
+    }
+  });
+
+  const select = document.getElementById('lineFilter');
+  if (!select) return;
+
+  const sortedLines = Object.keys(lineCounts).sort((a, b) => {
+    const na = parseInt(a, 10), nb = parseInt(b, 10);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return a.localeCompare(b);
+  });
+
+  let optionsHtml = '<option value="">🚌 Všechny linky</option>';
+  sortedLines.forEach(l => {
+    optionsHtml += `<option value="${esc(l)}">Linka ${esc(l)} (${lineCounts[l]}×)</option>`;
+  });
+  select.innerHTML = optionsHtml;
+
+  // Render quick chips for up to 8 most frequent lines
+  const chipsBar = document.getElementById('lineChipsBar');
+  const chipsList = document.getElementById('lineChipsList');
+  if (chipsBar && chipsList && sortedLines.length > 1) {
+    chipsBar.style.display = 'flex';
+    let chipsHtml = `<button type="button" class="line-chip active" onclick="setLineChip('')">Všechny (${ALL_TRIPS.length})</button>`;
+    sortedLines.slice(0, 10).forEach(l => {
+      chipsHtml += `<button type="button" class="line-chip" data-line="${esc(l)}" onclick="setLineChip('${esc(l)}')">L-${esc(l)} (${lineCounts[l]})</button>`;
+    });
+    chipsList.innerHTML = chipsHtml;
+  }
+}
+
+function setLineChip(line) {
+  SELECTED_LINE_FILTER = line;
+  const select = document.getElementById('lineFilter');
+  if (select) select.value = line;
+
+  const chips = document.querySelectorAll('.line-chip');
+  chips.forEach(c => {
+    if (!line && !c.dataset.line) c.classList.add('active');
+    else if (c.dataset.line === line) c.classList.add('active');
+    else c.classList.remove('active');
+  });
+  filterTrips();
+}
+
+function clearCityFilter() {
+  const inp = document.getElementById('cityFilter');
+  if (inp) inp.value = '';
+  const btn = document.getElementById('clearCityBtn');
+  if (btn) btn.style.display = 'none';
+  filterTrips();
+}
+
+function clearTripFilter() {
+  const inp = document.getElementById('tripFilter');
+  if (inp) inp.value = '';
+  const btn = document.getElementById('clearTripBtn');
+  if (btn) btn.style.display = 'none';
+  filterTrips();
+}
+
+function resetAllFilters() {
+  const sel = document.getElementById('lineFilter');
+  if (sel) sel.value = '';
+  SELECTED_LINE_FILTER = '';
+  
+  const cInp = document.getElementById('cityFilter');
+  if (cInp) cInp.value = '';
+  const cBtn = document.getElementById('clearCityBtn');
+  if (cBtn) cBtn.style.display = 'none';
+
+  const tInp = document.getElementById('tripFilter');
+  if (tInp) tInp.value = '';
+  const tBtn = document.getElementById('clearTripBtn');
+  if (tBtn) tBtn.style.display = 'none';
+
+  const chips = document.querySelectorAll('.line-chip');
+  chips.forEach(c => {
+    if (!c.dataset.line) c.classList.add('active');
+    else c.classList.remove('active');
+  });
+
+  filterTrips();
+}
+
 function renderTrips(trips) {
   const tbody = document.getElementById('tripsTableBody');
   if (!trips || trips.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty-box"><i class="fas fa-route"></i>Pro tento vůz nebyly nalezeny žádné zaznamenané jízdy.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-box"><i class="fas fa-route"></i>Pro zvolený filtr nebyly nalezeny žádné jízdy.</td></tr>';
     return;
   }
 
   let html = '';
-  trips.forEach((t, idx) => {
+  trips.forEach((t) => {
     const ep = getTripEpoch(t);
     const cd = ep > 0 ? new Date(ep) : (t.created_at ? new Date(t.created_at) : null);
     const dateStr = (cd && !isNaN(cd.getTime())) ? cd.toLocaleDateString('cs-CZ', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }) : '---';
@@ -932,7 +1353,8 @@ function renderTrips(trips) {
     const endStr = t.end_actual || '---';
     const durStr = calcDuration(t.start_actual || t.start_scheduled, t.end_actual);
 
-    const line = t.linka || '---';
+    const line = cleanLineCode(t.linka);
+    const rawLine = t.linka || '---';
     const spoj = t.spoj_num ? `Spoj ${t.spoj_num}` : (t.trip_id ? `ID ${String(t.trip_id).substring(0,8)}` : '');
     const lineColor = getLineColor(line);
 
@@ -960,28 +1382,32 @@ function renderTrips(trips) {
       mapBtn = `<a href="${url}" target="_blank" class="btn-point" title="Zobrazit místo ukončení trasy na mapě"><i class="fas fa-crosshairs"></i> Konec na mapě</a>`;
     }
 
+    // HTML ROW - obsahuje desktopovou tabulku i mobilní card strukturu
     html += `<tr>
       <td>
-        <div class="trip-time-cell">
+        <div class="m-row-top">
           <div class="trip-date"><i class="far fa-calendar-alt"></i> ${dateStr}</div>
-          <div class="trip-time-flow">
-            <span class="t-badge-time start" title="Čas zahájení jízdy dle JŘ / vypravení"><i class="fas fa-play" style="font-size:8px;"></i> Odjezd: <b>${esc(startStr)}</b></span>
-            <span class="t-arrow">➔</span>
-            <span class="t-badge-time end" title="Čas dojezdu do cílové stanice"><i class="fas fa-flag-checkered" style="font-size:9px;"></i> Příjezd: <b>${esc(endStr)}</b></span>
-          </div>
-          ${durStr ? `<div class="trip-dur-badge"><i class="fas fa-hourglass-half"></i> Doba jízdy: ${durStr}</div>` : ''}
+          <div style="display:inline-flex;">${statusPill}</div>
         </div>
+        <div class="trip-time-flow">
+          <span class="t-badge-time start" title="Čas zahájení"><i class="fas fa-play" style="font-size:8px;"></i> Odjezd: <b>${esc(startStr)}</b></span>
+          <span class="t-arrow">➔</span>
+          <span class="t-badge-time end" title="Čas ukončení"><i class="fas fa-flag-checkered" style="font-size:9px;"></i> Příjezd: <b>${esc(endStr)}</b></span>
+        </div>
+        ${durStr ? `<div class="trip-dur-badge"><i class="fas fa-hourglass-half"></i> Doba jízdy: ${durStr}</div>` : ''}
       </td>
       <td>
         <div class="line-spoj-cell">
           <span class="line-badge-lg" style="background:${lineColor};">${esc(line)}</span>
           <span class="spoj-pill-prominent"><i class="fas fa-hashtag" style="font-size:9px;color:var(--cyan);"></i> ${esc(spoj || 'Spoj')}</span>
         </div>
+        ${rawLine !== line && rawLine !== '---' ? `<small style="color:var(--dim);font-size:0.72rem;display:block;margin-top:2px;">(Kód: ${esc(rawLine)})</small>` : ''}
       </td>
       <td>
         <div class="route-cell">
-          <div class="route-direction-label"><i class="fas fa-compass" style="color:var(--cyan);font-size:11px;"></i> Cíl dle JŘ:</div>
+          <div class="route-direction-label"><i class="fas fa-compass" style="color:var(--cyan);font-size:11px;"></i> Trasa & Cíl:</div>
           <div class="route-dest-name">${esc(dest)}</div>
+          ${origin && origin !== 'Výchozí stanice' ? `<small style="color:var(--muted);font-size:0.75rem;">Z: ${esc(origin)}</small>` : ''}
         </div>
       </td>
       <td>
@@ -990,8 +1416,13 @@ function renderTrips(trips) {
           <small style="display:block;color:var(--muted);font-size:0.75rem;margin-top:2px;">Ukončení trasy</small>
         </div>
       </td>
-      <td>${statusPill}</td>
-      <td style="text-align:right;">${mapBtn}</td>
+      <td class="desktop-only-cell">${statusPill}</td>
+      <td style="text-align:right;">
+        <div class="m-row-bottom">
+          <span style="font-size:0.75rem;color:var(--dim);">Poloha cíle:</span>
+          <div>${mapBtn}</div>
+        </div>
+      </td>
     </tr>`;
   });
 
@@ -1044,18 +1475,76 @@ function renderDepots(depots) {
 }
 
 function filterTrips() {
-  const q = document.getElementById('tripFilter').value.toLowerCase().trim();
-  if (!q) {
-    renderTrips(ALL_TRIPS);
-    document.getElementById('tripFilteredCount').textContent = `Zobrazuji všech ${ALL_TRIPS.length} jízd`;
-    return;
-  }
+  const lineSel = (document.getElementById('lineFilter')?.value || SELECTED_LINE_FILTER || '').toLowerCase().trim();
+  const cityQ = (document.getElementById('cityFilter')?.value || '').toLowerCase().trim();
+  const tripQ = (document.getElementById('tripFilter')?.value || '').toLowerCase().trim();
+
+  // Clear buttons toggle
+  const cBtn = document.getElementById('clearCityBtn');
+  if (cBtn) cBtn.style.display = cityQ ? 'block' : 'none';
+  const tBtn = document.getElementById('clearTripBtn');
+  if (tBtn) tBtn.style.display = tripQ ? 'block' : 'none';
+
+  // Active filters reset button toggle
+  const rBtn = document.getElementById('btnResetFilters');
+  const isAnyFilterActive = Boolean(lineSel || cityQ || tripQ);
+  if (rBtn) rBtn.style.display = isAnyFilterActive ? 'inline-flex' : 'none';
+
+  // Filter items
   const filtered = ALL_TRIPS.filter(t => {
-    let s = (String(t.linka || '') + ' ' + String(t.origin || '') + ' ' + String(t.destination || '') + ' ' + String(t.end_stop || '') + ' ' + String(t.status || '')).toLowerCase();
-    return s.includes(q);
+    // 1. Line filter
+    if (lineSel) {
+      const cLine = cleanLineCode(t.linka).toLowerCase();
+      const rawLine = String(t.linka || '').toLowerCase();
+      if (cLine !== lineSel && !rawLine.includes(lineSel)) {
+        return false;
+      }
+    }
+
+    // 2. City / Stop filter
+    if (cityQ) {
+      const cityHaystack = (
+        String(t.origin || '') + ' ' +
+        String(t.destination || '') + ' ' +
+        String(t.end_stop || '')
+      ).toLowerCase();
+      if (!cityHaystack.includes(cityQ)) {
+        return false;
+      }
+    }
+
+    // 3. Spoj number / text filter
+    if (tripQ) {
+      const textHaystack = (
+        String(t.spoj_num || '') + ' ' +
+        String(t.trip_id || '') + ' ' +
+        String(t.status || '') + ' ' +
+        String(t.start_actual || '') + ' ' +
+        String(t.end_actual || '')
+      ).toLowerCase();
+      if (!textHaystack.includes(tripQ)) {
+        return false;
+      }
+    }
+
+    return true;
   });
+
   renderTrips(filtered);
-  document.getElementById('tripFilteredCount').textContent = `Nalezeno ${filtered.length} z ${ALL_TRIPS.length} jízd`;
+
+  // Update status summary text
+  const countEl = document.getElementById('tripFilteredCount');
+  if (countEl) {
+    if (!isAnyFilterActive) {
+      countEl.textContent = `Zobrazuji všech ${ALL_TRIPS.length} jízd`;
+    } else {
+      let filterDetails = [];
+      if (lineSel) filterDetails.push(`Linka ${lineSel}`);
+      if (cityQ) filterDetails.push(`"${cityQ}"`);
+      if (tripQ) filterDetails.push(`Spoj "${tripQ}"`);
+      countEl.innerHTML = `Nalezeno <b>${filtered.length}</b> z ${ALL_TRIPS.length} jízd (${filterDetails.join(' · ')})`;
+    }
+  }
 }
 
 function filterDepots() {
@@ -1099,7 +1588,6 @@ function jumpToSpz() {
 document.getElementById('switchSpzInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') jumpToSpz();
 });
-
 
 function renderCzechPlate(spzText) {
   const clean = String(spzText || PAGE_SPZ || '').trim().replace(/\s+/g, '').toUpperCase();
