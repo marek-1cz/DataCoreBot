@@ -1791,8 +1791,8 @@ body.night .aurora{opacity:.4}
         <h1 class="dl-title">Stáhni si <span class="grad">OIS IDPK</span></h1>
         <p class="lead" style="margin-top:18px">Software je ke stažení přímo na těchto stránkách. Před stažením je nutné se přihlásit, aby byl přístup pod kontrolou a projekt chráněn před zneužitím.</p>
         <div class="dl-actions">
-          <button class="btn main big" id="dlBtn" type="button">Stáhnout</button>
-          <span class="dl-note" id="dlNote">Vyžaduje přihlášení přes Discord nebo e-mail</span>
+          <button class="btn big disabled" id="dlBtn" type="button" disabled style="opacity:0.6; cursor:not-allowed; background:rgba(255,255,255,0.08); color:var(--muted); border:1px solid rgba(255,255,255,0.15); box-shadow:none;">Nedostupné</button>
+          <span class="dl-note" id="dlNote" style="color:var(--amber); font-weight:500;">⚠️ Připravujeme pro vás nový systém stahování softwaru.</span>
           <button class="link" id="dlLogout" type="button" hidden>Odhlásit se</button>
         </div>
       </div>
@@ -3381,7 +3381,7 @@ document.querySelectorAll('.avatar img').forEach(img=>{
     document.getElementById('dlLogout').hidden=!st.user;
     document.dispatchEvent(new CustomEvent('ois:user',{detail:{name:st.user,avatar:st.avatar||null}}));
     try{if(st.user)localStorage.setItem('ois-session',JSON.stringify({name:st.user,avatar:st.avatar||null,ts:Date.now()}));else localStorage.removeItem('ois-session')}catch(_){}
-    document.getElementById('dlNote').textContent=st.user?'Stažení je odemčené':'Vyžaduje přihlášení přes Discord nebo e-mail';
+    document.getElementById('dlNote').textContent='⚠️ Připravujeme pro vás nový systém stahování softwaru.';
   }
   function success(name,avatar){
     stopPoll();st.user=name;st.avatar=avatar||null;updateDone();updateState();setView('done');
@@ -3422,7 +3422,7 @@ document.querySelectorAll('.avatar img').forEach(img=>{
   const doLogout=()=>{st.user=null;st.avatar=null;updateState();reset();toast('Odhlášeno')};
   document.getElementById('logout').addEventListener('click',()=>{doLogout();close()});
   document.getElementById('dlLogout').addEventListener('click',doLogout);
-  dlBtn.addEventListener('click',()=>{st.user?startDownload():open()});
+  dlBtn.addEventListener('click',()=>{ toast('Stahování je dočasně nedostupné. Připravujeme pro vás nový systém stahování softwaru.'); });
   document.addEventListener('ois:auth-open',()=>open());
   document.addEventListener('ois:auth-logout',doLogout);
   /* ---- jeden společný účet: stránka Download, tlačítko účtu vpravo nahoře, statistiky ---- */
