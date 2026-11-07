@@ -708,7 +708,7 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
             tids = [m[0] for m in matching_trips]
             q_marks_trips = ','.join('?' for _ in tids)
             cur.execute(f"""
-                SELECT st.trip_id, s.name as stop_name, st.arrival_time, st.departure_time, st.pickup_type, st.stop_sequence
+                SELECT st.trip_id, st.stop_id, s.name as stop_name, st.arrival_time, st.departure_time, st.pickup_type, st.stop_sequence
                 FROM stop_times st
                 JOIN stops s ON st.stop_id = s.stop_id
                 WHERE st.trip_id IN ({q_marks_trips})
@@ -717,6 +717,70 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
             trip_rows_map = defaultdict(list)
             for r in cur.fetchall():
                 trip_rows_map[r["trip_id"]].append(r)
+
+            # Návaznosti (čekání na spoj a garantované přestupy z GTFS)
+            waiting_map = defaultdict(lambda: defaultdict(list))
+            transfer_map = defaultdict(lambda: defaultdict(list))
+            try:
+                # 1. to_trip_id je náš spoj -> NÁŠ SPOJ ČEKÁ na spoj from_line / from_spoj (trojúhelník)
+                cur.execute(f"""
+                    SELECT to_trip_id, from_line, from_spoj, stop_name, max_waiting_time, transfer_type
+                    FROM transfers
+                    WHERE to_trip_id IN ({q_marks_trips})
+                """, tids)
+                for r in cur.fetchall():
+                    t_id = str(r[0])
+                    from_l = _short_name(r[1])
+                    from_sp = str(r[2] or "")
+                    s_name = r[3]
+                    wait_m = r[4]
+                    wait_str = f" nejvýše {wait_m} min" if wait_m else ""
+                    txt = f"V této zastávce vyčká příjezdu spoje {from_sp} linky {from_l}{wait_str}."
+                    info = {
+                        "type": "wait",
+                        "line": from_l,
+                        "spoj": from_sp,
+                        "wait_min": wait_m,
+                        "text": txt
+                    }
+                    if s_name:
+                        waiting_map[t_id][s_name].append(info)
+
+                # 2. from_trip_id je náš spoj -> GARANTOVANÝ PŘESTUP / PŘESTUP z našeho spoje
+                cur.execute(f"""
+                    SELECT from_trip_id, to_line, to_spoj, to_headsign, stop_name, max_waiting_time, transfer_type
+                    FROM transfers
+                    WHERE from_trip_id IN ({q_marks_trips})
+                """, tids)
+                for r in cur.fetchall():
+                    t_id = str(r[0])
+                    to_l = _short_name(r[1])
+                    to_sp = str(r[2] or "")
+                    to_head = str(r[3] or "")
+                    s_name = r[4]
+                    wait_m = r[5]
+                    tt = r[6]
+                    is_guar = (tt == '1' or (wait_m and wait_m > 0))
+                    dest_str = f" do směru {to_head}" if to_head else ""
+                    wait_str = f" (spoj vyčká až {wait_m} min)" if wait_m else ""
+                    if is_guar:
+                        txt = f"Garantovaný přestup na spoj {to_sp} linky {to_l}{dest_str}{wait_str}."
+                        itype = "guaranteed"
+                    else:
+                        txt = f"Možnost přestupu na spoj {to_sp} linky {to_l}{dest_str}."
+                        itype = "transfer"
+                    info = {
+                        "type": itype,
+                        "line": to_l,
+                        "spoj": to_sp,
+                        "headsign": to_head,
+                        "wait_min": wait_m,
+                        "text": txt
+                    }
+                    if s_name:
+                        transfer_map[t_id][s_name].append(info)
+            except Exception as e_trans:
+                print(f"[JR TRANSFERS WARN] {e_trans}", flush=True)
 
             is_today_weekday = (now_dt.weekday() < 5)
             is_today_saturday = (now_dt.weekday() == 5)
@@ -729,6 +793,7 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
 
                 served_stops = []
                 stop_time_map = {}
+                tid_str = str(tid)
                 for idx, r in enumerate(rows):
                     is_last = (idx == len(rows) - 1)
                     # Pro konečnou preferujeme arrival_time, pro ostatní departure_time
@@ -739,11 +804,27 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
 
                     if t_str:
                         s_name = r["stop_name"]
+                        s_id = r["stop_id"]
+                        
+                        stop_conns = []
+                        seen_c = set()
+                        for c in waiting_map.get(tid_str, {}).get(s_name, []):
+                            ck = (c["type"], c["line"], c["spoj"])
+                            if ck not in seen_c:
+                                seen_c.add(ck)
+                                stop_conns.append(c)
+                        for c in transfer_map.get(tid_str, {}).get(s_name, []):
+                            ck = (c["type"], c["line"], c["spoj"])
+                            if ck not in seen_c:
+                                seen_c.add(ck)
+                                stop_conns.append(c)
+
                         served_stops.append({
                             "name": s_name,
                             "time": t_str,
                             "request": r["pickup_type"] in ('2', '3'),
-                            "exit_only": r["pickup_type"] == '1'
+                            "exit_only": r["pickup_type"] == '1',
+                            "transfers": stop_conns
                         })
                         if s_name not in stop_time_map:
                             stop_time_map[s_name] = t_str

@@ -9269,33 +9269,58 @@ async def update_depot_discord_messages():
         
         embed = discord.Embed(title=f"🅿️ Vozovna: {depot_name}", color=color_val)
         
-        active_str = ""
         if active:
+            lines_act = []
             for a in active:
                 spz = a.get("spz", "Neznámá")
                 arr_raw = a.get("arrived_at", "")
                 arr = format_prague_time(arr_raw) if arr_raw else ""
                 rel = format_relative_time_cz(arr_raw, mode="standing")
                 rel_str = f" *({rel})*" if rel else ""
-                active_str += f"**{spz}** - Přijel: `{arr}`{rel_str}\n"
-        else:
-            active_str = "*Prázdno*"
+                lines_act.append(f"**{spz}** - Přijel: `{arr}`{rel_str}\n")
             
-        embed.add_field(name=f"🟢 Aktuálně parkuje ({len(active)})", value=active_str, inline=False)
+            chunk = ""
+            chunk_idx = 1
+            for l in lines_act:
+                if len(chunk) + len(l) > 1000:
+                    fname = f"🟢 Aktuálně parkuje ({len(active)})" if chunk_idx == 1 else f"🟢 Aktuálně parkuje (pokračování {chunk_idx})"
+                    embed.add_field(name=fname, value=chunk.strip(), inline=False)
+                    chunk = l
+                    chunk_idx += 1
+                else:
+                    chunk += l
+            if chunk:
+                fname = f"🟢 Aktuálně parkuje ({len(active)})" if chunk_idx == 1 else f"🟢 Aktuálně parkuje (pokračování {chunk_idx})"
+                embed.add_field(name=fname, value=chunk.strip(), inline=False)
+        else:
+            embed.add_field(name="🟢 Aktuálně parkuje (0)", value="*Prázdno*", inline=False)
         
-        recent_str = ""
         if recent:
+            lines_rec = []
             for r in recent:
                 spz = r.get("spz", "Neznámá")
                 left_raw = r.get("left_at", "")
                 left = format_prague_time(left_raw) if left_raw else ""
                 rel = format_relative_time_cz(left_raw, mode="left")
                 rel_str = f" *({rel})*" if rel else ""
-                recent_str += f"**{spz}** - Odjel: `{left}`{rel_str}\n"
-        else:
-            recent_str = "*Žádné nedávné odjezdy*"
+                lines_rec.append(f"**{spz}** - Odjel: `{left}`{rel_str}\n")
             
-        embed.add_field(name="🔴 Nedávné odjezdy", value=recent_str, inline=False)
+            chunk_r = ""
+            rec_idx = 1
+            for l in lines_rec:
+                if len(chunk_r) + len(l) > 1000:
+                    fname = "🔴 Nedávné odjezdy" if rec_idx == 1 else f"🔴 Nedávné odjezdy (pokračování {rec_idx})"
+                    embed.add_field(name=fname, value=chunk_r.strip(), inline=False)
+                    chunk_r = l
+                    rec_idx += 1
+                else:
+                    chunk_r += l
+            if chunk_r:
+                fname = "🔴 Nedávné odjezdy" if rec_idx == 1 else f"🔴 Nedávné odjezdy (pokračování {rec_idx})"
+                embed.add_field(name=fname, value=chunk_r.strip(), inline=False)
+        else:
+            embed.add_field(name="🔴 Nedávné odjezdy", value="*Žádné nedávné odjezdy*", inline=False)
+
         embed.set_footer(text=f"Automaticky aktualizováno • {get_prague_time().strftime('%d.%m.%Y %H:%M:%S')}")
         
         target_msg = None
