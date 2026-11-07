@@ -776,11 +776,27 @@ def _get_fallback_versions():
         print(f"[FALLBACK] Chyba cteni versions_backup.json: {e}", flush=True)
     return [
         {
+            "id": 6,
+            "version_name": "OIS IDPK V1.6.3",
+            "db_version": "V1.6.3",
+            "file_url": "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/V1.6.3/OIS-IDPK-V1.6.3.zip",
+            "release_url": "",
+            "notes": json.dumps({"build": "V1.6.3.00", "patch_url": "", "changelog": "Úvodní sestavení verze V1.6.3.00"}, ensure_ascii=False),
+            "target_role": "BT",
+            "is_active": 1,
+            "eol_date": "",
+            "show_in_launcher": 1,
+            "can_download": 1,
+            "can_launch": 1
+        },
+        {
             "id": 1,
             "version_name": "OIS IDPK V1.6.2",
             "db_version": "V1.6.2",
             "file_url": "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/V1.6.2I/OIS-IDPK-V1.6.2.zip",
-            "target_role": "BT",
+            "release_url": "",
+            "notes": json.dumps({"build": "V1.6.2.00", "patch_url": "", "changelog": "Veřejná stabilní verze"}, ensure_ascii=False),
+            "target_role": "User",
             "is_active": 1,
             "eol_date": "",
             "show_in_launcher": 1,
@@ -792,6 +808,8 @@ def _get_fallback_versions():
             "version_name": "OIS IDPK V1.6.1",
             "db_version": "v1.6.1",
             "file_url": "https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/v1.6.1/OIS_IDPK_V1.6.1.zip",
+            "release_url": "",
+            "notes": "",
             "target_role": "User",
             "is_active": 1,
             "eol_date": "",
@@ -807,6 +825,34 @@ def normalize_version_item(v):
         if str(val).lower() in ('0', 'false', 'no'): return 0
         if str(val).lower() in ('1', 'true', 'yes'): return 1
         return default
+
+    raw_notes = v.get("notes") or ""
+    current_build = v.get("current_build") or ""
+    patch_url = v.get("patch_url") or v.get("release_url") or ""
+    changelog = ""
+
+    if raw_notes and isinstance(raw_notes, str):
+        trimmed = raw_notes.strip()
+        if trimmed.startswith("{") and trimmed.endswith("}"):
+            try:
+                ndata = json.loads(trimmed)
+                if isinstance(ndata, dict):
+                    if not current_build:
+                        current_build = ndata.get("build") or ndata.get("current_build") or ""
+                    if not patch_url:
+                        patch_url = ndata.get("patch_url") or ndata.get("release_url") or ""
+                    changelog = ndata.get("changelog") or ""
+            except Exception:
+                changelog = raw_notes
+        else:
+            if not current_build and (trimmed.startswith("V") or trimmed.startswith("v") or "." in trimmed):
+                current_build = trimmed
+            else:
+                changelog = raw_notes
+
+    if not current_build:
+        current_build = v.get("db_version", "")
+
     return {
         "id": v.get("id"),
         "version_name": v.get("version_name", ""),
@@ -818,6 +864,11 @@ def normalize_version_item(v):
         "show_in_launcher": to_int_bool(v.get("show_in_launcher"), 1),
         "can_download": to_int_bool(v.get("can_download"), 1),
         "can_launch": to_int_bool(v.get("can_launch"), 1),
+        "current_build": current_build,
+        "patch_url": patch_url,
+        "release_url": patch_url,
+        "changelog": changelog,
+        "notes": raw_notes
     }
 
 def sync_version_to_backup(action, row, vid=None):
@@ -2075,6 +2126,67 @@ def send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacor
             asyncio.run_coroutine_threadsafe(async_send_log(title, description, color, channel_name, pings, image_url=image_url), b_loop)
     except Exception:
         pass
+
+async def async_send_discord_update_announcement(version_name, current_build, changelog="", target_role="User", patch_url=""):
+    if not bot.is_ready():
+        print("[ANNOUNCEMENT ERR] Discord bot neni online!", flush=True)
+        return False
+    target_channel = None
+    for guild in bot.guilds:
+        for ch in guild.text_channels:
+            ch_name_clean = ch.name.lower().replace(" ", "").replace("-", "").replace("_", "")
+            if "aktulizace" in ch_name_clean or "aktualizace" in ch_name_clean:
+                target_channel = ch
+                break
+        if target_channel:
+            break
+
+    if not target_channel:
+        print("[ANNOUNCEMENT ERR] Kanal 👷‍♂️・aktulizace nebyl na Discordu nalezen!", flush=True)
+        return False
+
+    is_supporter = str(target_role).upper() in ("BT", "DEV", "SA")
+    embed_color = 0xf59e0b if is_supporter else 0x10b981
+
+    embed = discord.Embed(
+        title=f"🚀 Nová aktualizace OIS IDPK – {version_name}",
+        description=f"Právě byl vydán nový build: **`{current_build}`**",
+        color=embed_color,
+        timestamp=get_prague_time()
+    )
+
+    if changelog and changelog.strip():
+        embed.add_field(name="📋 Přehled změn a novinek:", value=changelog.strip()[:1024], inline=False)
+
+    role_desc = "🌍 Všichni uživatelé" if not is_supporter else f"⭐ **{target_role}** (Předplatitelé / Beta Testeři)"
+    embed.add_field(name="🎯 Určeno pro", value=role_desc, inline=True)
+    embed.add_field(name="⚡ Jak aktualizovat", value="Spusťte Launcher OIS IDPK, zvolte verzi a klikněte na **Aktualizovat**.", inline=False)
+
+    if patch_url and patch_url.strip():
+        embed.add_field(name="📦 Patch balíček", value=f"[Přímý odkaz ke stažení ZIPu]({patch_url.strip()})", inline=False)
+
+    embed.set_footer(text="IDPK Palubní Počítač • Automatický aktualizační systém")
+
+    try:
+        await target_channel.send(embed=embed)
+        print(f"[ANNOUNCEMENT SUCCESS] Zprava o buildu {current_build} odeslana do #{target_channel.name}", flush=True)
+        return True
+    except Exception as e_send:
+        print(f"[ANNOUNCEMENT SEND ERR] {e_send}", flush=True)
+        return False
+
+def send_discord_update_announcement(version_name, current_build, changelog="", target_role="User", patch_url=""):
+    try:
+        b_loop = get_bot_loop()
+        if bot.is_ready() and b_loop and b_loop.is_running():
+            asyncio.run_coroutine_threadsafe(
+                async_send_discord_update_announcement(version_name, current_build, changelog, target_role, patch_url),
+                b_loop
+            )
+            return True
+    except Exception as e:
+        print(f"[send_discord_update_announcement err] {e}", flush=True)
+    return False
 
 
 def get_current_admin_name():
@@ -7298,10 +7410,20 @@ def dashboard_update_launcher_url():
 def add_version():
     try:
         db = get_db()
+        build_val = request.form.get("current_build", "").strip() or request.form.get("db_version", "").strip()
+        patch_val = request.form.get("patch_url", "").strip()
+        changelog_val = request.form.get("changelog", "").strip()
+        notes_dict = {
+            "build": build_val,
+            "patch_url": patch_val,
+            "changelog": changelog_val
+        }
         row = {
             "version_name": request.form.get("version_name", "").strip(),
             "db_version": request.form.get("db_version", "").strip(),
             "file_url": request.form.get("file_url", "").strip(),
+            "release_url": patch_val,
+            "notes": json.dumps(notes_dict, ensure_ascii=False),
             "target_role": request.form.get("target_role", "User").strip(),
             "is_active": 1 if request.form.get("is_active") else 0,
             "eol_date": "",
@@ -7315,7 +7437,7 @@ def add_version():
         sync_version_to_backup("add", row)
         flash('Nová verze vydána!', 'success')
         adm = get_current_admin_name()
-        send_log("🚀 Vydána nová verze", f"**Uživatel:** {adm}\n**Název:** {row['version_name']}\n**Role:** {row['target_role']}", 0x10b981)
+        send_log("🚀 Vydána nová verze", f"**Uživatel:** {adm}\n**Název:** {row['version_name']}\n**Build:** `{build_val}`\n**Role:** {row['target_role']}", 0x10b981)
         trigger_setup_messages_update()
     except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
@@ -7326,10 +7448,26 @@ def edit_version():
     try:
         db = get_db()
         vid = request.form.get("version_id")
+        build_val = request.form.get("current_build", "").strip()
+        patch_val = request.form.get("patch_url", "").strip()
+        notes_dict = {}
+        if vid and db:
+            try:
+                ex = db.table("software_versions").select("notes, release_url").eq("id", int(vid) if str(vid).isdigit() else vid).execute().data
+                if ex and ex[0].get("notes"):
+                    try: notes_dict = json.loads(ex[0]["notes"])
+                    except: notes_dict = {"changelog": ex[0]["notes"]}
+            except: pass
+        if build_val: notes_dict["build"] = build_val
+        if patch_val: notes_dict["patch_url"] = patch_val
+        if request.form.get("changelog"): notes_dict["changelog"] = request.form.get("changelog").strip()
+
         row = {
             "version_name": request.form.get("version_name", "").strip(),
             "db_version": request.form.get("db_version", "").strip(),
             "file_url": request.form.get("file_url", "").strip(),
+            "release_url": patch_val or notes_dict.get("patch_url", ""),
+            "notes": json.dumps(notes_dict, ensure_ascii=False),
             "target_role": request.form.get("target_role", "User").strip(),
             "is_active": 1 if request.form.get("is_active") else 0,
             "eol_date": request.form.get("eol_date", "").strip(),
@@ -7346,6 +7484,77 @@ def edit_version():
         send_log("✏️ Úprava verze", f"**Uživatel:** {adm}\n**Název:** {row['version_name']}\n**Stahovat:** {'Ano' if row['can_download'] else 'Ne'}\n**Spustit:** {'Ano' if row['can_launch'] else 'Ne'}", 0xf59e0b)
         trigger_setup_messages_update()
     except Exception as e: flash(f'Chyba: {e}', 'error')
+    return redirect(url_for('dashboard_downloads'))
+
+@app.route('/dashboard/publish_patch', methods=['POST'])
+@require_dash_level('superadmin')
+def dashboard_publish_patch():
+    try:
+        db = get_db()
+        vid = request.form.get("version_id")
+        current_build = request.form.get("current_build", "").strip()
+        patch_url = request.form.get("patch_url", "").strip()
+        changelog = request.form.get("changelog", "").strip()
+        send_discord = bool(request.form.get("send_discord"))
+
+        existing_version = None
+        if db and vid:
+            try:
+                v_data = db.table("software_versions").select("*").eq("id", int(vid) if str(vid).isdigit() else vid).execute().data
+                if v_data: existing_version = v_data[0]
+            except Exception as e:
+                print(f"[publish_patch read err] {e}", flush=True)
+
+        if not existing_version:
+            for fv in _get_fallback_versions():
+                if str(fv.get("id")) == str(vid):
+                    existing_version = fv
+                    break
+
+        if not existing_version:
+            flash("Chyba: Verze nebyla nalezena.", "error")
+            return redirect(url_for('dashboard_downloads'))
+
+        v_name = existing_version.get("version_name", "")
+        t_role = existing_version.get("target_role", "User")
+
+        notes_dict = {
+            "build": current_build or existing_version.get("db_version", ""),
+            "patch_url": patch_url,
+            "changelog": changelog,
+            "updated_at": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")
+        }
+        notes_str = json.dumps(notes_dict, ensure_ascii=False)
+        update_data = {
+            "release_url": patch_url,
+            "notes": notes_str
+        }
+
+        if db and vid:
+            try:
+                db.table("software_versions").update(update_data).eq("id", int(vid) if str(vid).isdigit() else vid).execute()
+            except Exception as e:
+                print(f"[publish_patch update err] {e}", flush=True)
+
+        sync_version_to_backup("edit", update_data, vid)
+
+        adm = get_current_admin_name()
+        send_log("🚀 Vydán nový build / patch", f"**Uživatel:** {adm}\n**Verze:** {v_name}\n**Build:** `{current_build}`\n**Patch:** {patch_url or 'Nezadáno'}", 0x10b981)
+
+        # Odeslání do Discord kanálu 👷‍♂️・aktulizace
+        if send_discord:
+            sent = send_discord_update_announcement(v_name, current_build, changelog, t_role, patch_url)
+            if sent:
+                flash(f"Build {current_build} byl úspěšně nastaven a oznámení bylo odesláno na Discord do kanálu 👷‍♂️・aktulizace!", "success")
+            else:
+                flash(f"Build {current_build} byl nastaven. Oznámení na Discord se nepodařilo odeslat (bot není připojen nebo kanál nebyl nalezen).", "warning")
+        else:
+            flash(f"Build {current_build} byl úspěšně nastaven!", "success")
+
+        trigger_setup_messages_update()
+    except Exception as e:
+        flash(f"Chyba při vydávání buildu: {e}", "error")
+
     return redirect(url_for('dashboard_downloads'))
 
 
@@ -7484,10 +7693,13 @@ def api_launcher_versions():
             is_show = bool(show_l) and str(show_l).lower() not in ('0', 'false')
             can_dl = bool(v.get('can_download', 1)) and str(v.get('can_download', 1)).lower() not in ('0', 'false') and has_access
             can_ln = bool(v.get('can_launch', 1)) and str(v.get('can_launch', 1)).lower() not in ('0', 'false') and has_access
+            v_norm_item = normalize_version_item(v)
             result.append({
                 'id': v.get('id'),
                 'version_name': v.get('version_name'),
                 'db_version': v.get('db_version'),
+                'current_build': v_norm_item.get('current_build', v.get('db_version', '')),
+                'patch_url': v_norm_item.get('patch_url') if has_access else None,
                 'file_url': v.get('file_url') if has_access else None,
                 'target_role': v_role,
                 'show_in_launcher': is_show,
@@ -7495,6 +7707,7 @@ def api_launcher_versions():
                 'can_launch': can_ln,
                 'has_access': has_access,
                 'eol_date': v.get('eol_date', ''),
+                'changelog': v_norm_item.get('changelog', '')
             })
         # Informace o nejnovejsi verzi Launcheru
         launcher_version = "1.0.0"

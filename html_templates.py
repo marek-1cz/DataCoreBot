@@ -3076,6 +3076,7 @@ HTML_DOWNLOADS_MGMT = """
       <tr style="background:rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.08);">
         <th style="padding:14px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Verze</th>
         <th style="padding:14px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">DB verze</th>
+        <th style="padding:14px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Aktuální Build</th>
         <th style="padding:14px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Role</th>
         <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);" title="Aktivní = verze existuje. Vypnuto = nikdo ji nevidí.">Aktivní</th>
         <th style="padding:14px 8px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);" title="Viditelné v Launcheru">Viditelné</th>
@@ -3090,6 +3091,9 @@ HTML_DOWNLOADS_MGMT = """
           data-vid="{{ v.get('id','') }}"
           data-vname="{{ v.get('version_name','') | e }}"
           data-dbver="{{ v.get('db_version','') | e }}"
+          data-build="{{ v.get('current_build','') | e }}"
+          data-patchurl="{{ v.get('patch_url','') | e }}"
+          data-changelog="{{ v.get('changelog','') | e }}"
           data-furl="{{ v.get('file_url','') | e }}"
           data-role="{{ v.get('target_role','User') | e }}"
           data-active="{{ '1' if v.get('is_active') else '0' }}"
@@ -3101,6 +3105,9 @@ HTML_DOWNLOADS_MGMT = """
         </td>
         <td style="padding:14px 16px;">
           <span style="font-size:13px;color:var(--text-muted);font-family:monospace;">{{ v.get('db_version','—') }}</span>
+        </td>
+        <td style="padding:14px 16px;">
+          <span style="font-size:12px;color:#38bdf8;font-family:monospace;font-weight:600;background:rgba(56,189,248,0.1);padding:3px 8px;border-radius:4px;border:1px solid rgba(56,189,248,0.2);">{{ v.get('current_build') or v.get('db_version','—') }}</span>
         </td>
         <td style="padding:14px 16px;">
           <span style="background:rgba(96,165,250,0.15);color:#60a5fa;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;">
@@ -3136,6 +3143,10 @@ HTML_DOWNLOADS_MGMT = """
           {% endif %}
         </td>
         <td style="padding:14px 16px;text-align:right;">
+          <button class="btn-patch-version"
+            style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;margin-right:6px;font-weight:600;">
+            <i class="fas fa-rocket"></i> Vydat Build
+          </button>
           <button class="btn-edit-version"
             style="background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;margin-right:6px;">
             <i class="fas fa-edit"></i> Upravit
@@ -3150,7 +3161,7 @@ HTML_DOWNLOADS_MGMT = """
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-muted);">
+      <tr><td colspan="9" style="padding:40px;text-align:center;color:var(--text-muted);">
         <i class="fas fa-inbox" style="font-size:32px;opacity:0.3;display:block;margin-bottom:10px;"></i>
         Zatím nebyly přidány žádné verze. Klikni na <b>Přidat verzi</b> výše.
       </td></tr>
@@ -3259,6 +3270,18 @@ HTML_DOWNLOADS_MGMT = """
           <input name="file_url" id="edit-file-url" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
         </div>
         <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Aktuální Build <span style="color:#38bdf8;">(např. V1.6.3.00 nebo V1.6.2.01)</span></label>
+          <input name="current_build" id="edit-current-build" placeholder="V1.6.3.00" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">URL ke stažení Patch ZIPu <span style="color:var(--text-muted);">(odkaz z GitHub Releases)</span></label>
+          <input name="patch_url" id="edit-patch-url" placeholder="https://github.com/.../releases/download/.../patch.zip" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Popis změn (Changelog)</label>
+          <textarea name="changelog" id="edit-changelog" rows="2" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;resize:vertical;"></textarea>
+        </div>
+        <div>
           <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Minimální role</label>
           <select name="target_role" id="edit-target-role" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
             <option value="User" style="background:#0f172a; color:#fff;">User (všichni)</option>
@@ -3300,8 +3323,59 @@ HTML_DOWNLOADS_MGMT = """
   </div>
 </div>
 
+<!-- MODAL: Vydat Build / Patch -->
+<div id="modal-patch-version" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;justify-content:center;align-items:center;">
+  <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:32px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;">
+    <h3 style="margin:0 0 12px;color:var(--text-main);display:flex;align-items:center;gap:10px;">
+      <i class="fas fa-rocket" style="color:#10b981;"></i> Vydat nový Build / Opravný Patch
+    </h3>
+    <p style="color:var(--text-muted);font-size:13px;margin:0 0 20px;line-height:1.5;">
+      Zadejte označení buildu a odkaz na stažení patch ZIPu. Hráčům v Launcheru se místo plného stahování nabídne rychlé tlačítko <b>Aktualizovat</b>.
+    </p>
+    <form method="POST" action="/dashboard/publish_patch">
+      <input type="hidden" name="version_id" id="patch-version-id">
+      <div style="display:grid;gap:16px;">
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Verze</label>
+          <input type="text" id="patch-version-name" readonly style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 14px;color:#94a3b8;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Označení nového buildu * <span style="color:#38bdf8;">(např. V1.6.3.00 nebo V1.6.2.01)</span></label>
+          <input name="current_build" id="patch-current-build" required placeholder="V1.6.3.00" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">URL ke stažení Patch ZIPu * <span style="color:var(--text-muted);">(odkaz z GitHub Releases)</span></label>
+          <input name="patch_url" id="patch-url" required placeholder="https://github.com/.../releases/download/.../patch.zip" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Co se změnilo (Changelog pro Discord) *</label>
+          <textarea name="changelog" id="patch-changelog" rows="4" placeholder="- Oprava hlášení zastávek&#10;- Přidána linka 911&#10;- Úprava rozhraní ovladače" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;resize:vertical;"></textarea>
+        </div>
+        <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:14px;">
+          <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;">
+            <input type="checkbox" name="send_discord" value="1" checked style="width:20px;height:20px;accent-color:var(--blue-main);cursor:pointer;flex-shrink:0;margin-top:2px;">
+            <div>
+              <div style="color:#fff;font-weight:600;font-size:14px;">Odeslat oznámení do Discord kanálu 👷‍♂️・aktulizace</div>
+              <div style="color:var(--text-muted);font-size:12px;margin-top:2px;">Bot automaticky pošle přehledný Discord embed s changelogem, označením buildu a návodem na aktualizaci.</div>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:24px;">
+        <button type="submit" style="flex:1;background:#10b981;color:#000;border:none;padding:12px;border-radius:8px;cursor:pointer;font-weight:bold;font-size:15px;">
+          <i class="fas fa-paper-plane"></i> Publikovat a odeslat na Discord
+        </button>
+        <button type="button" onclick="document.getElementById('modal-patch-version').style.display='none'"
+          style="padding:12px 24px;background:rgba(255,255,255,0.06);color:var(--text-muted);border:1px solid rgba(255,255,255,0.1);border-radius:8px;cursor:pointer;">
+          Zrušit
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
-// Edit button – reads data-* attrs from the <tr> row
+// Edit & Patch buttons – reads data-* attrs from the <tr> row
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.btn-edit-version').forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -3309,6 +3383,9 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('edit-version-id').value = tr.dataset.vid || '';
       document.getElementById('edit-version-name').value = tr.dataset.vname || '';
       document.getElementById('edit-db-version').value = tr.dataset.dbver || '';
+      document.getElementById('edit-current-build').value = tr.dataset.build || '';
+      document.getElementById('edit-patch-url').value = tr.dataset.patchurl || '';
+      document.getElementById('edit-changelog').value = tr.dataset.changelog || '';
       document.getElementById('edit-file-url').value = tr.dataset.furl || '';
       var roleEl = document.getElementById('edit-target-role');
       for (var i = 0; i < roleEl.options.length; i++) {
@@ -3321,8 +3398,21 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('modal-edit-version').style.display = 'flex';
     });
   });
+
+  document.querySelectorAll('.btn-patch-version').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var tr = this.closest('tr');
+      document.getElementById('patch-version-id').value = tr.dataset.vid || '';
+      document.getElementById('patch-version-name').value = (tr.dataset.vname || '') + ' [' + (tr.dataset.dbver || '') + ']';
+      document.getElementById('patch-current-build').value = tr.dataset.build || tr.dataset.dbver || '';
+      document.getElementById('patch-url').value = tr.dataset.patchurl || '';
+      document.getElementById('patch-changelog').value = tr.dataset.changelog || '';
+      document.getElementById('modal-patch-version').style.display = 'flex';
+    });
+  });
+
   // Close modals on backdrop click
-  ['modal-add-version','modal-edit-version'].forEach(function(id) {
+  ['modal-add-version','modal-edit-version','modal-patch-version'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('click', function(e) { if (e.target === this) this.style.display = 'none'; });
   });
