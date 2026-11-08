@@ -618,17 +618,34 @@ def _local_insert_user(payload_data):
         pass
 
 # ── LOKÁLNÍ PERZISTENCE A SLUČOVÁNÍ NASTAVENÍ (SETTINGS) ──
+_D1_SETTINGS_CACHE = {}
+_D1_SETTINGS_CACHE_TS = 0.0
+
 def _local_upsert_setting(setting_key: str, setting_value: str):
     """
-    Uloží nastavení do SQLite tabulky settings_local i souboru settings_backup.json.
-    Zajišťuje okamžité a trvalé uchování i při překročení limitů / výpadku Turso.
+    Uloží nastavení do Cloudflare D1, SQLite tabulky settings_local i souboru settings_backup.json.
+    Zajišťuje okamžité a trvalé uchování i při překročení limitů / výpadku Turso (přežije Koyeb redeploy).
     """
     if not setting_key:
         return
     setting_key = str(setting_key).strip()
     setting_value = str(setting_value) if setting_value is not None else ""
 
-    # 1. Lokální SQLite
+    global _D1_SETTINGS_CACHE, _D1_SETTINGS_CACHE_TS
+    _D1_SETTINGS_CACHE[setting_key] = setting_value
+    _D1_SETTINGS_CACHE_TS = time.time()
+
+    # 1. Cloudflare D1 (hlavní cloudová perzistence)
+    try:
+        from cloudflare_d1 import get_d1_client
+        get_d1_client().execute(
+            "INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value;",
+            [setting_key, setting_value]
+        )
+    except Exception as e_d1:
+        print(f"[TURSO D1 DB] Error updating settings in D1: {e_d1}", flush=True)
+
+    # 2. Lokální SQLite
     db_path = _find_file("datacore_local.db")
     if db_path:
         try:
@@ -649,7 +666,7 @@ def _local_upsert_setting(setting_key: str, setting_value: str):
         except Exception as e:
             print(f"[TURSO LOCAL DB] Error updating settings_local SQLite: {e}", flush=True)
 
-    # 2. JSON záloha settings_backup.json
+    # 3. JSON záloha settings_backup.json
     s_file = _find_file("settings_backup.json")
     if not s_file:
         s_file = os.path.join(os.path.dirname(__file__), "settings_backup.json")
@@ -673,8 +690,24 @@ def _local_upsert_setting(setting_key: str, setting_value: str):
     invalidate_query_cache("settings")
 
 def _get_local_settings_dict() -> dict:
-    """Vrátí sloučený slovník všech lokálně známých nastavení (SQLite + JSON)."""
+    """Vrátí sloučený slovník všech lokálně známých nastavení (Cloudflare D1 + SQLite + JSON)."""
+    global _D1_SETTINGS_CACHE, _D1_SETTINGS_CACHE_TS
     settings_map = {}
+
+    # 1. Cloudflare D1
+    now = time.time()
+    if now - _D1_SETTINGS_CACHE_TS > 10:
+        try:
+            from cloudflare_d1 import get_d1_client
+            d1_rows = get_d1_client().execute("SELECT setting_key, setting_value FROM settings;")
+            if d1_rows:
+                _D1_SETTINGS_CACHE = {str(r.get("setting_key")).strip(): str(r.get("setting_value", "")) for r in d1_rows if r.get("setting_key")}
+                _D1_SETTINGS_CACHE_TS = now
+        except Exception:
+            pass
+    if _D1_SETTINGS_CACHE:
+        settings_map.update(_D1_SETTINGS_CACHE)
+
     s_file = _find_file("settings_backup.json")
     if s_file and os.path.exists(s_file):
         try:
@@ -855,6 +888,30 @@ def _local_upsert_software_version(action, payload_data, where_clauses=None, arg
     except Exception as e:
         print(f"[TURSO LOCAL DB] Error saving versions_backup.json: {e}", flush=True)
 
+    # Cloudflare D1 perzistence verzí
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        for it in items:
+            if isinstance(it, dict):
+                d1.execute("""
+                    INSERT INTO software_versions (id, version_name, db_version, file_url, release_url, notes, target_role, is_active, eol_date, show_in_launcher, can_download, can_launch)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        version_name = excluded.version_name, db_version = excluded.db_version,
+                        file_url = excluded.file_url, release_url = excluded.release_url, notes = excluded.notes,
+                        target_role = excluded.target_role, is_active = excluded.is_active,
+                        eol_date = excluded.eol_date, show_in_launcher = excluded.show_in_launcher,
+                        can_download = excluded.can_download, can_launch = excluded.can_launch;
+                """, [
+                    it.get("id"), it.get("version_name"), it.get("db_version"), it.get("file_url"),
+                    it.get("release_url"), it.get("notes"), it.get("target_role", "User"),
+                    it.get("is_active", 1), it.get("eol_date", ""), it.get("show_in_launcher", 1),
+                    it.get("can_download", 1), it.get("can_launch", 1)
+                ])
+    except Exception as e_d1_v:
+        print(f"[TURSO D1 DB] Error updating software_version in D1: {e_d1_v}", flush=True)
+
     invalidate_query_cache("software_versions")
     return items
 
@@ -872,6 +929,19 @@ def _merge_versions_with_backup(res_rows, where_clauses=None, args=None, order_b
 
     def _norm_k(val):
         return str(val or "").strip().lower()
+
+    # Načtení verzí z Cloudflare D1
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1_v = get_d1_client().execute("SELECT * FROM software_versions ORDER BY id DESC;")
+        if d1_v:
+            existing_d1_ids = {str(b.get("id")) for b in backup_versions if b.get("id")}
+            for dv in d1_v:
+                if str(dv.get("id")) not in existing_d1_ids:
+                    backup_versions.append(dv)
+                    existing_d1_ids.add(str(dv.get("id")))
+    except Exception:
+        pass
 
     if not backup_versions:
         # Deduplikace řádků přímo z DB (ochrana proti duplicitám z Turso)
@@ -972,6 +1042,24 @@ def _local_upsert_app_session(payload_data):
         except Exception as e:
             print(f"[TURSO LOCAL DB] Error saving app_sessions_backup.json: {e}", flush=True)
 
+        # Cloudflare D1 perzistence relací
+        try:
+            from cloudflare_d1 import get_d1_client
+            d1 = get_d1_client()
+            for it in items:
+                if isinstance(it, dict) and it.get("session_id"):
+                    d1.execute("""
+                        INSERT INTO app_sessions (session_id, discord_id, start_time, end_time, version, nick, role, ip, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(session_id) DO UPDATE SET end_time = excluded.end_time;
+                    """, [
+                        str(it.get("session_id")), str(it.get("discord_id") or ""), str(it.get("start_time") or ""),
+                        str(it.get("end_time") or ""), str(it.get("version") or ""), str(it.get("nick") or ""),
+                        str(it.get("role") or ""), str(it.get("ip") or ""), str(it.get("created_at") or "")
+                    ])
+        except Exception as e_d1_sess:
+            print(f"[TURSO D1 DB] Error upserting session in D1: {e_d1_sess}", flush=True)
+
         invalidate_query_cache("app_sessions")
         return items
 
@@ -1025,6 +1113,15 @@ def _local_update_app_session(where_clauses, args, payload_data):
         except Exception as e:
             print(f"[TURSO LOCAL DB] Error updating app_sessions_backup.json: {e}", flush=True)
 
+        # Cloudflare D1 aktualizace relace
+        try:
+            from cloudflare_d1 import get_d1_client
+            d1 = get_d1_client()
+            if target_sid and "end_time" in payload_data:
+                d1.execute("UPDATE app_sessions SET end_time = ? WHERE session_id = ?;", [str(payload_data["end_time"]), str(target_sid)])
+        except Exception as e_d1_usess:
+            print(f"[TURSO D1 DB] Error updating session in D1: {e_d1_usess}", flush=True)
+
         invalidate_query_cache("app_sessions")
         return updated_items
 
@@ -1038,6 +1135,20 @@ def _merge_app_sessions_with_backup(res_rows, where_clauses=None, args=None, ord
                     backup_sessions = []
         except Exception:
             backup_sessions = []
+
+    # Načtení relací z Cloudflare D1
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1_s = get_d1_client().execute("SELECT * FROM app_sessions ORDER BY id DESC LIMIT 500;")
+        if d1_s:
+            existing_sids = {str(b.get("session_id")) for b in backup_sessions if b.get("session_id")}
+            for ds in d1_s:
+                sid = str(ds.get("session_id") or "")
+                if sid and sid not in existing_sids:
+                    backup_sessions.append(ds)
+                    existing_sids.add(sid)
+    except Exception:
+        pass
 
     if not backup_sessions:
         return res_rows or []

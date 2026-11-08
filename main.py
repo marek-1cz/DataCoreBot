@@ -903,6 +903,32 @@ def sync_version_to_backup(action, row, vid=None):
             json.dump(versions, f, indent=2, ensure_ascii=False)
             
         try:
+            from cloudflare_d1 import get_d1_client
+            d1 = get_d1_client()
+            if action in ("add", "edit"):
+                target_vid = row.get("id") or vid
+                d1.execute("""
+                    INSERT INTO software_versions (id, version_name, db_version, file_url, release_url, notes, target_role, is_active, eol_date, show_in_launcher, can_download, can_launch)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        version_name = excluded.version_name, db_version = excluded.db_version,
+                        file_url = excluded.file_url, release_url = excluded.release_url, notes = excluded.notes,
+                        target_role = excluded.target_role, is_active = excluded.is_active,
+                        eol_date = excluded.eol_date, show_in_launcher = excluded.show_in_launcher,
+                        can_download = excluded.can_download, can_launch = excluded.can_launch;
+                """, [
+                    int(target_vid) if str(target_vid).isdigit() else target_vid,
+                    row.get("version_name"), row.get("db_version"), row.get("file_url"),
+                    row.get("release_url"), row.get("notes"), row.get("target_role", "User"),
+                    row.get("is_active", 1), row.get("eol_date", ""), row.get("show_in_launcher", 1),
+                    row.get("can_download", 1), row.get("can_launch", 1)
+                ])
+            elif action == "delete" and vid is not None:
+                d1.execute("DELETE FROM software_versions WHERE id = ?;", [int(vid) if str(vid).isdigit() else vid])
+        except Exception as e_d1_sb:
+            print(f"[sync_version_to_backup D1 err] {e_d1_sb}", flush=True)
+
+        try:
             from turso_db import invalidate_query_cache
             invalidate_query_cache("software_versions")
         except Exception:
