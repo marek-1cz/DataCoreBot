@@ -8784,14 +8784,31 @@ def api_community_routes_list():
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
-        routes = d1.execute(
-            "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at FROM community_routes WHERE status = 'approved' AND is_deleted_by_author = 0 ORDER BY id DESC"
-        ) or []
+        tag = request.args.get('tag', '').strip()
+        search = request.args.get('search', '').strip()
+
+        sql = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag FROM community_routes WHERE status = 'approved' AND is_deleted_by_author = 0"
+        params = []
+
+        if tag and tag.upper() not in ('ALL', 'VŠECHNY', 'VSECHNY', ''):
+            sql += " AND UPPER(COALESCE(system_tag, 'IDPK')) = UPPER(?)"
+            params.append(tag)
+
+        if search:
+            sql += " AND (route_number LIKE ? OR route_name LIKE ? OR author_name LIKE ? OR description LIKE ?)"
+            s_param = f"%{search}%"
+            params.extend([s_param, s_param, s_param, s_param])
+
+        sql += " ORDER BY id DESC"
+
+        routes = d1.execute(sql, params) if params else d1.execute(sql) or []
         for r in routes:
             try:
                 r['stops'] = json.loads(r.get('stops_json', '[]'))
             except:
                 r['stops'] = []
+            if not r.get('system_tag'):
+                r['system_tag'] = 'IDPK'
         return _cors_jsonify({"success": True, "routes": routes})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
@@ -8807,9 +8824,12 @@ def api_community_routes_my():
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
         routes = d1.execute(
-            "SELECT id, route_number, route_name, route_type, description, status, reject_reason, is_deleted_by_author, created_at, updated_at FROM community_routes WHERE author_id = ? ORDER BY id DESC",
+            "SELECT id, route_number, route_name, route_type, description, status, reject_reason, is_deleted_by_author, created_at, updated_at, system_tag FROM community_routes WHERE author_id = ? ORDER BY id DESC",
             [str(discord_id)]
         ) or []
+        for r in routes:
+            if not r.get('system_tag'):
+                r['system_tag'] = 'IDPK'
         return _cors_jsonify({"success": True, "routes": routes})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
@@ -8853,6 +8873,7 @@ def api_community_routes_submit():
     route_number = request.form.get('route_number', '').strip()
     route_name = request.form.get('route_name', '').strip()
     route_type = request.form.get('route_type', 'gtfs').strip()
+    system_tag = request.form.get('system_tag', 'IDPK').strip() or 'IDPK'
     description = request.form.get('description', '').strip()
     author_id = request.form.get('author_id', '').strip()
     author_name = request.form.get('author_name', '').strip() or 'Hráč'
@@ -8900,6 +8921,7 @@ def api_community_routes_submit():
             txt_lines.append(f"Linka: {route_number}")
             txt_lines.append(f"Trasa: {route_name}")
             txt_lines.append(f"Autor: {author_name}")
+            txt_lines.append(f"Tag: {system_tag}")
             txt_lines.append("GTFS-DATA")
             for s in stops_list:
                 s_name = s.get('name', '')
@@ -8915,6 +8937,7 @@ def api_community_routes_submit():
                 "spoj": 1,
                 "linka": route_number,
                 "nazev": route_name,
+                "tag": system_tag,
                 "zastavky": stops_list
             }]
             zf.writestr(f"data/{route_number}.json", json.dumps(route_json_payload, indent=4, ensure_ascii=False).encode('utf-8'))
@@ -8931,17 +8954,19 @@ def api_community_routes_submit():
         d1.execute(
             """INSERT INTO community_routes (
                 route_number, route_name, route_type, description, author_id, author_name,
-                stops_json, audio_package_url, audio_files_json, status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))""",
+                stops_json, audio_package_url, audio_files_json, status, created_at, updated_at, system_tag
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'), ?)""",
             [
                 route_number, route_name, route_type, description, str(author_id), str(author_name),
                 json.dumps(stops_list, ensure_ascii=False), package_url, json.dumps(uploaded_keys),
+                system_tag
             ]
         )
 
         send_log(
             "📢 Nová komunitní linka ke schválení",
             f"**Linka:** `{route_number}` ({route_name})\n"
+            f"**Systém / Tag:** `{system_tag}`\n"
             f"**Autor:** <@{author_id}> ({author_name})\n"
             f"**Počet zastávek:** {len(stops_list)}\n"
             f"**Typ:** {'Fiktivní' if route_type == 'custom' else 'Z GTFS'}\n"

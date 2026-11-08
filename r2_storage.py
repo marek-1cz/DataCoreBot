@@ -171,3 +171,4 @@ def delete_file_from_storage(object_key: str) -> bool:
         except Exception as e:
             print(f"[R2_STORAGE] Chyba při mazání z R2: {e}")
     return True
+
