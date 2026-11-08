@@ -7440,6 +7440,13 @@ def dashboard_update_launcher_url():
         else:
             db.table("settings").insert({"setting_key": "launcher_version", "setting_value": new_ver}).execute()
 
+        try:
+            from turso_db import _local_upsert_setting
+            if new_url: _local_upsert_setting("launcher_download_url", new_url)
+            if new_ver: _local_upsert_setting("launcher_version", new_ver)
+        except Exception:
+            pass
+
         _SETTINGS_CACHE["launcher_download_url"] = (time.time(), new_url)
         _SETTINGS_CACHE["launcher_version"] = (time.time(), new_ver)
 
