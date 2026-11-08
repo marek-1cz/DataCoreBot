@@ -1741,6 +1741,65 @@ bot = commands.Bot(
 )
 bot.invites_cache = {}
 
+_github_url_cache = {}
+
+def resolve_github_release_url(url, timeout=5):
+    """
+    Pokud je URL odkaz na GitHub Release download (https://github.com/.../releases/download/...),
+    dotáže se GitHub API na asset a vrátí přímou Azure CDN URL s tokenem, čímž eliminuje
+    504 Gateway Time-out a pomalé stahování přes webový edge GitHubu.
+    Výsledek je cachován na 180 sekund.
+    """
+    if not url or 'github.com' not in str(url) or '/releases/download/' not in str(url):
+        return url
+    
+    url_str = str(url).strip()
+    now = time.time()
+    cached = _github_url_cache.get(url_str)
+    if cached and (now - cached['time'] < 180):
+        return cached['resolved']
+        
+    match = re.search(r'github\.com/([^/]+)/([^/]+)/releases/download/([^/]+)/([^/]+)', url_str)
+    if not match:
+        return url_str
+        
+    owner, repo, tag, raw_filename = match.groups()
+    import urllib.parse
+    filename = urllib.parse.unquote(raw_filename)
+    api_url = f'https://api.github.com/repos/{owner}/{repo}/releases/tags/{tag}'
+    try:
+        req = urllib.request.Request(api_url, headers={
+            'User-Agent': 'IDPK-Launcher-Updater/1.0',
+            'Accept': 'application/vnd.github.v3+json'
+        })
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            for asset in data.get('assets', []):
+                a_name = asset.get('name')
+                if a_name in (filename, raw_filename):
+                    asset_api_url = asset.get('url')
+                    if asset_api_url:
+                        class NoRedirect(urllib.request.HTTPRedirectHandler):
+                            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                                return None
+                        opener = urllib.request.build_opener(NoRedirect)
+                        areq = urllib.request.Request(asset_api_url, headers={
+                            'User-Agent': 'IDPK-Launcher-Updater/1.0',
+                            'Accept': 'application/octet-stream'
+                        })
+                        try:
+                            opener.open(areq)
+                        except urllib.error.HTTPError as he:
+                            if he.code in (301, 302, 307, 308):
+                                loc = he.headers.get('Location')
+                                if loc:
+                                    _github_url_cache[url_str] = {'resolved': loc, 'time': now}
+                                    return loc
+    except Exception as e:
+        print(f"[resolve_github_release_url] Error resolving {url_str}: {e}", flush=True)
+        
+    return url_str
+
 def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
     urls = [u.strip() for u in file_url_raw.split(',') if u.strip()]
     file_url = random.choice(urls) if urls else file_url_raw
@@ -1781,6 +1840,8 @@ def stream_proxy_file(file_url_raw, version_name, discord_id, nick):
             if "dropbox.com" in file_url:
                 file_url = file_url.replace("dl=0", "dl=1")
                 if "dl=1" not in file_url: file_url += "?dl=1" if "?" not in file_url else "&dl=1"
+            elif "github.com" in file_url and "/releases/download/" in file_url:
+                file_url = resolve_github_release_url(file_url)
             req = urllib.request.Request(file_url, headers=headers)
             resp = opener.open(req, timeout=15)
         if 'text/html' in resp.headers.get('Content-Type', '').lower():
@@ -7774,8 +7835,8 @@ def api_launcher_versions():
                 'version_name': v.get('version_name'),
                 'db_version': v.get('db_version'),
                 'current_build': v_norm_item.get('current_build', v.get('db_version', '')),
-                'patch_url': v_norm_item.get('patch_url') if has_access else None,
-                'file_url': v.get('file_url') if has_access else None,
+                'patch_url': resolve_github_release_url(v_norm_item.get('patch_url')) if has_access and v_norm_item.get('patch_url') else None,
+                'file_url': resolve_github_release_url(v.get('file_url')) if has_access and v.get('file_url') else None,
                 'target_role': v_role,
                 'show_in_launcher': is_show,
                 'can_download': can_dl,
@@ -7804,7 +7865,7 @@ def api_launcher_versions():
             'versions': result,
             'user_role': user_role,
             'launcher_version': launcher_version,
-            'launcher_download_url': launcher_url
+            'launcher_download_url': resolve_github_release_url(launcher_url)
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -7918,7 +7979,7 @@ def api_launcher_check_update():
         "has_update": has_update,
         "latest_version": launcher_ver,
         "current_version": current_ver,
-        "download_url": launcher_url
+        "download_url": resolve_github_release_url(launcher_url)
     })
 
 @app.route('/dashboard/delete_version', methods=['POST'])
