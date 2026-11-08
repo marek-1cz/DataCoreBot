@@ -8618,6 +8618,344 @@ _DASH_ADMINS_HTML = '''
 </div>
 '''
 # ─────────────────────────────────────────────────────────────────────────────
+# KOMUNITNÍ LINKY & MODERACE HLÁŠENÍ (CLOUDFLARE D1 + R2 + DISCORD DM)
+# ─────────────────────────────────────────────────────────────────────────────
+import r2_storage
+import zipfile
+import io
+
+def _notify_user_dm_safe(discord_id, title, description, color=0x38bdf8):
+    """Bezpečné odeslání Discord DM autorovi linky přes běžící event loop bota."""
+    try:
+        if not discord_id or not bot.is_ready():
+            return
+        b_loop = get_bot_loop()
+        if b_loop and b_loop.is_running():
+            asyncio.run_coroutine_threadsafe(
+                send_user_dm(str(discord_id), title, description, color),
+                b_loop
+            )
+    except Exception as e:
+        print(f"[COMMUNITY_NOTIFY] Chyba při odesílání DM uživateli {discord_id}: {e}")
+
+@app.route('/dashboard/community_routes', methods=['GET'], strict_slashes=False)
+@require_dash_level('admin')
+def dashboard_community_routes():
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        raw_pending = d1.execute("SELECT * FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0 ORDER BY id DESC") or []
+        raw_approved = d1.execute("SELECT * FROM community_routes WHERE status = 'approved' AND is_deleted_by_author = 0 ORDER BY id DESC") or []
+        raw_deleted = d1.execute("SELECT * FROM community_routes WHERE is_deleted_by_author = 1 OR status IN ('rejected', 'deleted_by_user') ORDER BY id DESC") or []
+
+        def _enrich_routes(route_list):
+            enriched = []
+            for r in route_list:
+                item = dict(r)
+                stops_raw = item.get('stops_json') or '[]'
+                try:
+                    item['stops'] = json.loads(stops_raw) if isinstance(stops_raw, str) else stops_raw
+                except:
+                    item['stops'] = []
+                enriched.append(item)
+            return enriched
+
+        pending_routes = _enrich_routes(raw_pending)
+        approved_routes = _enrich_routes(raw_approved)
+        deleted_routes = _enrich_routes(raw_deleted)
+
+        return render_dashboard(
+            HTML_COMMUNITY_ROUTES,
+            pending_routes=pending_routes,
+            approved_routes=approved_routes,
+            deleted_routes=deleted_routes
+        )
+    except Exception as e:
+        flash(f"Chyba při načítání komunitních linek: {e}", "error")
+        return redirect(url_for('dashboard_main'))
+
+@app.route('/dashboard/community_routes/approve', methods=['POST'])
+@require_dash_level('admin')
+def dashboard_community_routes_approve():
+    route_id = request.form.get('route_id')
+    if not route_id:
+        flash("Chybí ID linky.", "error")
+        return redirect(url_for('dashboard_community_routes'))
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        row = d1.execute("SELECT * FROM community_routes WHERE id = ?", [int(route_id)])
+        if not row:
+            flash("Linka nenalezena.", "error")
+            return redirect(url_for('dashboard_community_routes'))
+        
+        r = row[0]
+        d1.execute("UPDATE community_routes SET status = 'approved', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
+        
+        # Odeslání DM autorovi
+        author_id = r.get('author_id')
+        route_num = r.get('route_number', '')
+        route_name = r.get('route_name', '')
+        _notify_user_dm_safe(
+            author_id,
+            "🎉 Tvoje komunitní linka byla schválena!",
+            f"Tvá linka **{route_num} ({route_name})** úspěšně prošla kontrolou hlášení a je nyní dostupná v OIS aplikaci pro všechny hráče!\n\nDěkujeme za obohacení herní komunity OIS IDPK.",
+            0x10b981
+        )
+        send_log("✅ Komunitní linka schválena", f"**Správce:** {get_current_admin_name()}\n**Linka:** {route_num} ({route_name})\n**Autor:** <@{author_id}>", color=0x10b981)
+        flash(f"Linka {route_num} byla úspěšně schválena a publikována.", "success")
+    except Exception as e:
+        flash(f"Chyba při schvalování linky: {e}", "error")
+    return redirect(url_for('dashboard_community_routes'))
+
+@app.route('/dashboard/community_routes/reject', methods=['POST'])
+@require_dash_level('admin')
+def dashboard_community_routes_reject():
+    route_id = request.form.get('route_id')
+    reject_reason = request.form.get('reject_reason', '').strip() or 'Nespecifikováno administrátorem'
+    if not route_id:
+        flash("Chybí ID linky.", "error")
+        return redirect(url_for('dashboard_community_routes'))
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        row = d1.execute("SELECT * FROM community_routes WHERE id = ?", [int(route_id)])
+        if not row:
+            flash("Linka nenalezena.", "error")
+            return redirect(url_for('dashboard_community_routes'))
+        
+        r = row[0]
+        d1.execute("UPDATE community_routes SET status = 'rejected', reject_reason = ?, updated_at = datetime('now') WHERE id = ?", [reject_reason, int(route_id)])
+        
+        # Odeslání DM autorovi
+        author_id = r.get('author_id')
+        route_num = r.get('route_number', '')
+        route_name = r.get('route_name', '')
+        _notify_user_dm_safe(
+            author_id,
+            "❌ Tvoje komunitní linka nebyla schválena",
+            f"Tvá linka **{route_num} ({route_name})** nebyla schválena administrátorem.\n\n**Důvod zamítnutí:**\n> {reject_reason}\n\nMůžeš hlášení či trasu v editoru opravit a odeslat linku ke schválení znovu.",
+            0xef4444
+        )
+        send_log("⚠️ Komunitní linka zamítnuta", f"**Správce:** {get_current_admin_name()}\n**Linka:** {route_num} ({route_name})\n**Autor:** <@{author_id}>\n**Důvod:** {reject_reason}", color=0xef4444)
+        flash(f"Linka {route_num} byla zamítnuta a autor byl informován přes Discord DM.", "info")
+    except Exception as e:
+        flash(f"Chyba při zamítání linky: {e}", "error")
+    return redirect(url_for('dashboard_community_routes'))
+
+@app.route('/dashboard/community_routes/purge', methods=['POST'])
+@require_dash_level('admin')
+def dashboard_community_routes_purge():
+    route_id = request.form.get('route_id')
+    if not route_id:
+        flash("Chybí ID linky.", "error")
+        return redirect(url_for('dashboard_community_routes'))
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        row = d1.execute("SELECT * FROM community_routes WHERE id = ?", [int(route_id)])
+        if row:
+            r = row[0]
+            # Smazání audio souborů ze storage
+            audio_files_raw = r.get('audio_files_json') or '[]'
+            try:
+                files_to_delete = json.loads(audio_files_raw) if isinstance(audio_files_raw, str) else audio_files_raw
+                for fkey in files_to_delete:
+                    r2_storage.delete_file_from_storage(fkey)
+            except:
+                pass
+            if r.get('audio_package_url'):
+                pkg_key = r.get('audio_package_url').split('/')[-1]
+                r2_storage.delete_file_from_storage(f"community_routes/{pkg_key}")
+            
+            d1.execute("DELETE FROM community_routes WHERE id = ?", [int(route_id)])
+            flash("Linka a veškeré audio nahrávky byly trvale smazány.", "success")
+            send_log("🗑️ Komunitní linka trvale smazána", f"**Správce:** {get_current_admin_name()}\nLinka ID: {route_id}", color=0x64748b)
+    except Exception as e:
+        flash(f"Chyba při mazání linky: {e}", "error")
+    return redirect(url_for('dashboard_community_routes'))
+
+# ── API ENDPOINTY PRO HRÁČE (OIS & LAUNCHER) ───────────────────────────────────
+
+@app.route('/api/community-routes', methods=['GET', 'OPTIONS'], strict_slashes=False)
+def api_community_routes_list():
+    if request.method == 'OPTIONS':
+        return _cors_jsonify({})
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        routes = d1.execute(
+            "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at FROM community_routes WHERE status = 'approved' AND is_deleted_by_author = 0 ORDER BY id DESC"
+        ) or []
+        for r in routes:
+            try:
+                r['stops'] = json.loads(r.get('stops_json', '[]'))
+            except:
+                r['stops'] = []
+        return _cors_jsonify({"success": True, "routes": routes})
+    except Exception as e:
+        return _cors_jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/community-routes/my', methods=['GET', 'OPTIONS'], strict_slashes=False)
+def api_community_routes_my():
+    if request.method == 'OPTIONS':
+        return _cors_jsonify({})
+    discord_id = request.args.get('discord_id', '').strip()
+    if not discord_id:
+        return _cors_jsonify({"success": False, "error": "Chybí discord_id"}), 400
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        routes = d1.execute(
+            "SELECT id, route_number, route_name, route_type, description, status, reject_reason, is_deleted_by_author, created_at, updated_at FROM community_routes WHERE author_id = ? ORDER BY id DESC",
+            [str(discord_id)]
+        ) or []
+        return _cors_jsonify({"success": True, "routes": routes})
+    except Exception as e:
+        return _cors_jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/community-routes/delete', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_community_routes_delete():
+    if request.method == 'OPTIONS':
+        return _cors_jsonify({})
+    data = request.get_json(silent=True) or request.form
+    route_id = data.get('route_id')
+    discord_id = data.get('discord_id')
+    if not route_id or not discord_id:
+        return _cors_jsonify({"success": False, "error": "Chybí route_id nebo discord_id"}), 400
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        row = d1.execute("SELECT * FROM community_routes WHERE id = ? AND author_id = ?", [int(route_id), str(discord_id)])
+        if not row:
+            return _cors_jsonify({"success": False, "error": "Linka nenalezena nebo k ní nemáte oprávnění."}), 404
+        
+        # Soft delete: označit smazáno autorem, zvuky zůstávají v DB pro moderaci/archiv
+        d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
+        send_log("🗑️ Linka stažena autorem", f"Uživatel <@{discord_id}> stáhl svou linku ID {route_id} z veřejné nabídky.", color=0xf59e0b)
+        return _cors_jsonify({"success": True, "message": "Linka byla stažena z veřejné nabídky."})
+    except Exception as e:
+        return _cors_jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/community-routes/submit', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_community_routes_submit():
+    if request.method == 'OPTIONS':
+        return _cors_jsonify({})
+    
+    # Kontrola právního potvrzení (Legal requirement)
+    legal_confirmed = request.form.get('legal_confirmed')
+    if str(legal_confirmed).lower() not in ('true', '1', 'yes'):
+        return _cors_jsonify({
+            "success": False,
+            "error": "Musíte potvrdit, že jste autorem nahrávek nebo k nim máte práva, a že neobsahují vulgarismy ani neporušují autorská práva."
+        }), 400
+
+    route_number = request.form.get('route_number', '').strip()
+    route_name = request.form.get('route_name', '').strip()
+    route_type = request.form.get('route_type', 'gtfs').strip()
+    description = request.form.get('description', '').strip()
+    author_id = request.form.get('author_id', '').strip()
+    author_name = request.form.get('author_name', '').strip() or 'Hráč'
+    stops_json_str = request.form.get('stops_json', '[]').strip()
+
+    if not route_number or not route_name or not author_id:
+        return _cors_jsonify({"success": False, "error": "Chybí povinné údaje linky (číslo, název nebo autor)."}), 400
+
+    try:
+        stops_list = json.loads(stops_json_str)
+    except Exception as e:
+        return _cors_jsonify({"success": False, "error": f"Neplatný formát zastávek (JSON): {e}"}), 400
+
+    if not stops_list or len(stops_list) < 2:
+        return _cors_jsonify({"success": False, "error": "Linka musí obsahovat alespoň 2 zastávky."}), 400
+
+    try:
+        timestamp_slug = int(time.time())
+        upload_prefix = f"community_routes/{route_number}_{timestamp_slug}"
+        uploaded_keys = []
+        
+        # In-memory ZIP buffer pro balíček linky
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+            # 1. Uložit zvukové soubory
+            for idx, stop in enumerate(stops_list):
+                file_field = f"audio_{idx}"
+                file_obj = request.files.get(file_field)
+                if file_obj and file_obj.filename:
+                    ext = os.path.splitext(file_obj.filename)[1].lower()
+                    if ext in ('.mp3', '.wav', '.ogg', '.aac'):
+                        content = file_obj.read()
+                        safe_filename = f"{idx + 1:02d}_{stop.get('name', 'zastavka').replace(' ', '_').replace('/', '_')}{ext}"
+                        object_key = f"{upload_prefix}/{safe_filename}"
+                        audio_url = r2_storage.upload_file_to_r2(content, object_key, content_type="audio/mpeg" if ext == '.mp3' else "audio/wav")
+                        stop['audio_url'] = audio_url
+                        stop['audio_file'] = safe_filename
+                        uploaded_keys.append(object_key)
+                        
+                        # Přidat do ZIP balíčku do složky zvuky/
+                        zf.writestr(f"zvuky/{safe_filename}", content)
+
+            # 2. Vytvořit .txt soubor pro OIS linky
+            txt_lines = []
+            txt_lines.append(f"Linka: {route_number}")
+            txt_lines.append(f"Trasa: {route_name}")
+            txt_lines.append(f"Autor: {author_name}")
+            txt_lines.append("GTFS-DATA")
+            for s in stops_list:
+                s_name = s.get('name', '')
+                audio_ref = s.get('audio_file', '')
+                line_entry = f"{s_name}={s_name}"
+                if audio_ref:
+                    line_entry += f"|{audio_ref}"
+                txt_lines.append(line_entry)
+            zf.writestr(f"linky/{route_number}.txt", "\r\n".join(txt_lines).encode('utf-8'))
+
+            # 3. Vytvořit .json soubor pro OIS data
+            route_json_payload = [{
+                "spoj": 1,
+                "linka": route_number,
+                "nazev": route_name,
+                "zastavky": stops_list
+            }]
+            zf.writestr(f"data/{route_number}.json", json.dumps(route_json_payload, indent=4, ensure_ascii=False).encode('utf-8'))
+
+        # Nahrát finální ZIP balíček
+        zip_bytes = zip_buffer.getvalue()
+        package_key = f"{upload_prefix}/balicek_linka_{route_number}.zip"
+        package_url = r2_storage.upload_file_to_r2(zip_bytes, package_key, content_type="application/zip")
+        uploaded_keys.append(package_key)
+
+        # Uložit do Cloudflare D1
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        d1.execute(
+            """INSERT INTO community_routes (
+                route_number, route_name, route_type, description, author_id, author_name,
+                stops_json, audio_package_url, audio_files_json, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))""",
+            [
+                route_number, route_name, route_type, description, str(author_id), str(author_name),
+                json.dumps(stops_list, ensure_ascii=False), package_url, json.dumps(uploaded_keys),
+            ]
+        )
+
+        send_log(
+            "📢 Nová komunitní linka ke schválení",
+            f"**Linka:** `{route_number}` ({route_name})\n"
+            f"**Autor:** <@{author_id}> ({author_name})\n"
+            f"**Počet zastávek:** {len(stops_list)}\n"
+            f"**Typ:** {'Fiktivní' if route_type == 'custom' else 'Z GTFS'}\n"
+            f"**Dashboard:** https://datacorebot.koyeb.app/dashboard/community_routes",
+            color=0xf59e0b
+        )
+
+        return _cors_jsonify({
+            "success": True,
+            "message": "Linka byla úspěšně odeslána ke schválení. Jakmile ji administrátor zkontroluje, obdržíte zprávu do Discord DM."
+        })
+    except Exception as e:
+        print(f"[COMMUNITY_SUBMIT] Chyba: {e}")
+        return _cors_jsonify({"success": False, "error": f"Chyba při zpracování linky: {e}"}), 500
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DISCORD BOT

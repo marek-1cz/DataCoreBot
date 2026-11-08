@@ -280,6 +280,7 @@ DASHBOARD_LAYOUT = """
 <a href="/dashboard/interaktivni-mapa" class="sidebar-link" style="color: #38bdf8; font-weight: 600;"><i class="fas fa-map-marked-alt"></i> Interaktivní mapa</a>
 <a href="/dashboard/stats" class="sidebar-link"><i class="fas fa-chart-line"></i> Statistiky Webu & Aplikace</a>
 <a href="/dashboard/app_management" class="sidebar-link"><i class="fas fa-desktop"></i> Správa Aplikace</a>
+<a href="/dashboard/community_routes" class="sidebar-link" style="color: #38bdf8; font-weight: 600;"><i class="fas fa-route"></i> Komunitní linky</a>
 <a href="/dashboard/sprava-notifikaci" class="sidebar-link" style="color: #a78bfa; font-weight: 600;"><i class="fas fa-paper-plane"></i> Správa Notifikací & Zprávy</a>
 <a href="/dashboard/notifications" class="sidebar-link" style="color: #f59e0b;"><i class="fas fa-bell"></i> Oznámení</a>
 <a href="/dashboard/downloads" class="sidebar-link"><i class="fas fa-code-branch"></i> Správa Verzí a Přístupů</a>
@@ -7377,4 +7378,280 @@ setInterval(() => {
 }, 20000);
 </script>
 """
+
+HTML_COMMUNITY_ROUTES = """
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
+  <div>
+    <h2 style="margin:0; color:var(--text-main); display:flex; align-items:center; gap:10px;">
+      <i class="fas fa-route" style="color:#38bdf8;"></i> Správa komunitních linek
+    </h2>
+    <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">
+      Kontrola hlášení, schvalování komunitních tras a moderace uživatelského obsahu
+    </div>
+  </div>
+  <div style="display:flex; gap:10px;">
+    <span class="badge" style="background:rgba(245, 158, 11, 0.2); color:#f59e0b; border:1px solid rgba(245, 158, 11, 0.4); padding:6px 12px; border-radius:6px; font-weight:bold;">
+      <i class="fas fa-hourglass-half"></i> Čeká na schválení: {{ pending_routes|length }}
+    </span>
+    <span class="badge" style="background:rgba(16, 185, 129, 0.2); color:#10b981; border:1px solid rgba(16, 185, 129, 0.4); padding:6px 12px; border-radius:6px; font-weight:bold;">
+      <i class="fas fa-check-circle"></i> Schváleno: {{ approved_routes|length }}
+    </span>
+    <span class="badge" style="background:rgba(148, 163, 184, 0.2); color:#94a3b8; border:1px solid rgba(148, 163, 184, 0.4); padding:6px 12px; border-radius:6px; font-weight:bold;">
+      <i class="fas fa-archive"></i> Archiv / Smazané: {{ deleted_routes|length }}
+    </span>
+  </div>
+</div>
+
+<!-- SEKCE 1: ČEKAJÍCÍ NA SCHVÁLENÍ -->
+<div style="background-color: var(--bg-panel); padding: 22px; border-radius: 12px; border-top: 4px solid var(--warning); margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+    <h3 style="color: var(--warning); margin:0; display:flex; align-items:center; gap:8px;">
+      <i class="fas fa-clock"></i> Nové linky čekající na poslech a schválení ({{ pending_routes|length }})
+    </h3>
+  </div>
+
+  {% if pending_routes %}
+    <div style="display:grid; grid-template-columns:1fr; gap:16px;">
+      {% for r in pending_routes %}
+        <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px; border-bottom:1px solid #1e293b; padding-bottom:12px; margin-bottom:12px;">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="background:var(--blue-main); color:#000; font-weight:bold; font-size:14px; padding:3px 8px; border-radius:6px;">{{ r.get('route_number') }}</span>
+                <span style="font-size:16px; font-weight:bold; color:#fff;">{{ r.get('route_name') }}</span>
+                <span style="font-size:11px; padding:2px 6px; border-radius:4px; background:#1e293b; color:#94a3b8;">
+                  {% if r.get('route_type') == 'custom' %}<i class="fas fa-magic"></i> Fiktivní{% else %}<i class="fas fa-database"></i> Z GTFS dat{% endif %}
+                </span>
+              </div>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:5px;">
+                Autor: <b style="color:#e2e8f0;">{{ r.get('author_name', 'Hráč') }}</b> (Discord ID: <code>{{ r.get('author_id') }}</code>) • Odesláno: {{ r.get('created_at') }}
+              </div>
+              {% if r.get('description') %}
+                <div style="font-size:12px; color:#cbd5e1; margin-top:5px; font-style:italic;">
+                  "{{ r.get('description') }}"
+                </div>
+              {% endif %}
+            </div>
+
+            <!-- Tlačítka Schválit / Zamítnout -->
+            <div style="display:flex; gap:8px; align-items:center;">
+              <form action="/dashboard/community_routes/approve" method="POST" style="margin:0;">
+                <input type="hidden" name="route_id" value="{{ r.get('id') }}">
+                <button type="submit" class="btn btn-success" style="padding:7px 14px; font-size:12px; font-weight:bold; display:flex; align-items:center; gap:6px;" onclick="return confirm('Opravdu schválit tuto linku pro všechny hráče?')">
+                  <i class="fas fa-check"></i> Schválit linku
+                </button>
+              </form>
+              <button type="button" class="btn btn-danger" style="padding:7px 14px; font-size:12px; font-weight:bold; display:flex; align-items:center; gap:6px;" onclick="openRejectModal('{{ r.get('id') }}', '{{ r.get('route_number') }}', '{{ r.get('route_name') }}')">
+                <i class="fas fa-times"></i> Zamítnout
+              </button>
+            </div>
+          </div>
+
+          <!-- Seznam zastávek s audio přehrávači -->
+          <div>
+            <div style="font-size:12px; font-weight:bold; color:var(--blue-main); margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+              <i class="fas fa-headphones"></i> Zastávky a nahraná hlášení k poslechu:
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:10px; max-height:300px; overflow-y:auto; padding-right:5px;">
+              {% for s in r.get('stops', []) %}
+                <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; gap:4px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="color:#f8fafc; font-weight:bold; font-size:12px;">{{ loop.index }}. {{ s.get('name') }}</span>
+                    {% if s.get('na_znameni') %}<span style="font-size:10px; color:#f59e0b; font-weight:bold;">(x) Znamení</span>{% endif %}
+                  </div>
+                  <div style="display:flex; justify-content:space-between; font-size:11px; color:#94a3b8;">
+                    <span>Čas: {{ s.get('time') or '--:--' }}</span>
+                    <span>Zóna: {{ s.get('zone') or 'P' }}</span>
+                  </div>
+                  {% if s.get('audio_url') %}
+                    <div style="margin-top:4px;">
+                      <audio controls preload="none" style="width:100%; height:28px;">
+                        <source src="{{ s.get('audio_url') }}" type="audio/mpeg">
+                        <source src="{{ s.get('audio_url') }}" type="audio/wav">
+                        Váš prohlížeč nepodporuje přehrávání audia.
+                      </audio>
+                    </div>
+                  {% else %}
+                    <div style="font-size:10px; color:#ef4444; font-style:italic; margin-top:2px;">
+                      <i class="fas fa-volume-mute"></i> Chybí audio soubor
+                    </div>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div style="text-align:center; padding:30px; color:var(--text-muted);">
+      <i class="fas fa-check-double" style="font-size:28px; color:#10b981; margin-bottom:10px; display:block;"></i>
+      Žádné linky nečekají na schválení. Vše je zkontrolováno!
+    </div>
+  {% endif %}
+</div>
+
+<!-- SEKCE 2: SCHVÁLENÉ LINKY -->
+<div style="background-color: var(--bg-panel); padding: 22px; border-radius: 12px; border-top: 4px solid var(--success); margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+    <h3 style="color: var(--success); margin:0; display:flex; align-items:center; gap:8px;">
+      <i class="fas fa-check-circle"></i> Aktivní komunitní linky dostupné hráčům ({{ approved_routes|length }})
+    </h3>
+  </div>
+
+  {% if approved_routes %}
+    <table style="width:100%; border-collapse:collapse;">
+      <thead>
+        <tr style="border-bottom:2px solid #334155; text-align:left;">
+          <th style="padding:10px; color:#94a3b8; font-size:12px;">Linka</th>
+          <th style="padding:10px; color:#94a3b8; font-size:12px;">Trasa</th>
+          <th style="padding:10px; color:#94a3b8; font-size:12px;">Autor</th>
+          <th style="padding:10px; color:#94a3b8; font-size:12px;">Zastávek</th>
+          <th style="padding:10px; color:#94a3b8; font-size:12px;">Datum</th>
+          <th style="padding:10px; color:#94a3b8; font-size:12px; text-align:right;">Akce</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in approved_routes %}
+          <tr style="border-bottom:1px solid #1e293b;">
+            <td style="padding:10px;">
+              <span style="background:var(--blue-main); color:#000; font-weight:bold; font-size:12px; padding:2px 7px; border-radius:4px;">{{ r.get('route_number') }}</span>
+            </td>
+            <td style="padding:10px; font-weight:bold; color:#fff;">
+              {{ r.get('route_name') }}
+              <div style="font-size:11px; color:#94a3b8; font-weight:normal;">{{ r.get('description') or '' }}</div>
+            </td>
+            <td style="padding:10px; color:#cbd5e1; font-size:12px;">
+              {{ r.get('author_name', 'Hráč') }}
+            </td>
+            <td style="padding:10px; color:#94a3b8; font-size:12px;">
+              {{ r.get('stops', [])|length }} zastávek
+            </td>
+            <td style="padding:10px; color:#94a3b8; font-size:11px;">
+              {{ r.get('created_at') }}
+            </td>
+            <td style="padding:10px; text-align:right;">
+              <div style="display:flex; justify-content:flex-end; gap:6px;">
+                {% if r.get('audio_package_url') %}
+                  <a href="{{ r.get('audio_package_url') }}" target="_blank" class="btn" style="background:#334155; color:#38bdf8; padding:5px 9px; font-size:11px;" title="Stáhnout ZIP balíček">
+                    <i class="fas fa-download"></i> Balíček
+                  </a>
+                {% endif %}
+                <form action="/dashboard/community_routes/reject" method="POST" style="margin:0; display:inline;">
+                  <input type="hidden" name="route_id" value="{{ r.get('id') }}">
+                  <input type="hidden" name="reject_reason" value="Pozastaveno administrátorem pro kontrolu">
+                  <button type="submit" class="btn btn-warning" style="padding:5px 9px; font-size:11px;" title="Pozastavit / zrušit schválení" onclick="return confirm('Pozastavit tuto linku?')">
+                    <i class="fas fa-pause"></i> Pozastavit
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div style="text-align:center; padding:20px; color:var(--text-muted);">
+      Zatím nejsou schváleny žádné komunitní linky.
+    </div>
+  {% endif %}
+</div>
+
+<!-- SEKCE 3: ARCHIV / SMAZANÉ AUTOREM -->
+<div style="background-color: var(--bg-panel); padding: 22px; border-radius: 12px; border-top: 4px solid var(--danger); margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+    <div>
+      <h3 style="color: var(--danger); margin:0; display:flex; align-items:center; gap:8px;">
+        <i class="fas fa-trash-alt"></i> Smazané linky autorem / Zamítnuté (Zvuky zachovány)
+      </h3>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:3px;">
+        Data a nahrávky jsou drženy v databázi. Zde můžete definitivně vyčistit soubory nebo je ponechat archivované.
+      </div>
+    </div>
+  </div>
+
+  {% if deleted_routes %}
+    <table style="width:100%; border-collapse:collapse;">
+      <thead>
+        <tr style="border-bottom:2px solid #334155; text-align:left;">
+          <th style="padding:10px; color:#94a3b8; font-size:12px;">Stav</th>
+          <th style="padding:10px; color:#94a3b8; font-size:12px;">Linka</th>
+          <th style="padding:10px; color:#94a3b8; font-size:12px;">Autor</th>
+          <th style="padding:10px; color:#94a3b8; font-size:12px;">Důvod / Poznámka</th>
+          <th style="padding:10px; color:#94a3b8; font-size:12px; text-align:right;">Správa</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in deleted_routes %}
+          <tr style="border-bottom:1px solid #1e293b;">
+            <td style="padding:10px;">
+              {% if r.get('is_deleted_by_author') %}
+                <span style="background:rgba(239, 68, 68, 0.2); color:#ef4444; border:1px solid rgba(239, 68, 68, 0.4); padding:2px 6px; border-radius:4px; font-size:10px; font-weight:bold;">Smazáno autorem</span>
+              {% else %}
+                <span style="background:rgba(245, 158, 11, 0.2); color:#f59e0b; border:1px solid rgba(245, 158, 11, 0.4); padding:2px 6px; border-radius:4px; font-size:10px; font-weight:bold;">Zamítnuto</span>
+              {% endif %}
+            </td>
+            <td style="padding:10px; font-weight:bold; color:#cbd5e1;">
+              {{ r.get('route_number') }} • {{ r.get('route_name') }}
+            </td>
+            <td style="padding:10px; color:#94a3b8; font-size:12px;">
+              {{ r.get('author_name', 'Hráč') }} (<code>{{ r.get('author_id') }}</code>)
+            </td>
+            <td style="padding:10px; color:#f87171; font-size:11px; font-style:italic;">
+              {{ r.get('reject_reason') or 'Smazáno na žádost uživatele' }}
+            </td>
+            <td style="padding:10px; text-align:right;">
+              <div style="display:flex; justify-content:flex-end; gap:6px;">
+                <form action="/dashboard/community_routes/purge" method="POST" style="margin:0; display:inline;">
+                  <input type="hidden" name="route_id" value="{{ r.get('id') }}">
+                  <button type="submit" class="btn btn-danger" style="padding:5px 9px; font-size:11px;" title="Definitivně vymazat z DB i úložiště" onclick="return confirm('Opravdu chcete tuto linku a VŠECHNY její zvukové soubory trvale smazat?')">
+                    <i class="fas fa-skull"></i> Smazat navždy
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div style="text-align:center; padding:20px; color:var(--text-muted);">
+      Žádné smazané ani archivované linky.
+    </div>
+  {% endif %}
+</div>
+
+<!-- MODAL: ZAMÍTNUTÍ LINKY S DŮVODEM -->
+<div class="modal-overlay" id="rejectRouteModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:9999; justify-content:center; align-items:center;">
+  <div style="background:#0f172a; border:1px solid #334155; border-radius:12px; padding:24px; max-width:480px; width:90%; box-shadow:0 10px 35px rgba(0,0,0,0.6);">
+    <h3 style="color:#ef4444; margin-top:0; display:flex; align-items:center; gap:8px;">
+      <i class="fas fa-times-circle"></i> Zamítnutí komunitní linky
+    </h3>
+    <div id="rejectRouteInfo" style="font-size:13px; color:#cbd5e1; margin-bottom:15px;"></div>
+    <form action="/dashboard/community_routes/reject" method="POST">
+      <input type="hidden" name="route_id" id="rejectRouteId">
+      <div style="margin-bottom:15px;">
+        <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:5px;">Důvod zamítnutí (bude odeslán autorovi do Discord DM):</label>
+        <textarea name="reject_reason" id="rejectReasonText" rows="4" style="width:100%; box-sizing:border-box; background:#1e293b; border:1px solid #334155; color:#fff; padding:10px; border-radius:6px; font-size:13px;" required placeholder="Např. Zvuky obsahují nevhodný / vulgární jazyk, nebo nahrávky jsou nekvalitní..."></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button type="button" class="btn" style="background:#334155; color:#cbd5e1;" onclick="closeRejectModal()">Zrušit</button>
+        <button type="submit" class="btn btn-danger" style="font-weight:bold;">Odeslat zamítnutí</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openRejectModal(id, num, name) {
+  document.getElementById('rejectRouteId').value = id;
+  document.getElementById('rejectRouteInfo').innerText = 'Linka ' + num + ' - ' + name;
+  document.getElementById('rejectRouteModal').style.display = 'flex';
+}
+function closeRejectModal() {
+  document.getElementById('rejectRouteModal').style.display = 'none';
+}
+</script>
+"""
+
 
