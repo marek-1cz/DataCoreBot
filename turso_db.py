@@ -798,11 +798,15 @@ def _local_upsert_software_version(action, payload_data, where_clauses=None, arg
             if not isinstance(item, dict): continue
             item_copy = dict(item)
             existing_idx = None
+            item_vdb = str(item_copy.get("db_version") or "").strip().lower()
+            item_vnm = str(item_copy.get("version_name") or "").strip().lower()
             for idx, v in enumerate(versions):
                 if item_copy.get("id") and str(v.get("id")) == str(item_copy.get("id")):
                     existing_idx = idx
                     break
-                if item_copy.get("db_version") and str(v.get("db_version")) == str(item_copy.get("db_version")):
+                v_db = str(v.get("db_version") or "").strip().lower()
+                v_nm = str(v.get("version_name") or "").strip().lower()
+                if (item_vdb and v_db == item_vdb) or (item_vnm and v_nm == item_vnm):
                     existing_idx = idx
                     break
             if existing_idx is not None:
@@ -830,7 +834,7 @@ def _local_upsert_software_version(action, payload_data, where_clauses=None, arg
             match = False
             if target_id and str(v.get("id")) == str(target_id):
                 match = True
-            elif target_vname and str(v.get("db_version")) == str(target_vname):
+            elif target_vname and str(v.get("db_version")).strip().lower() == str(target_vname).strip().lower():
                 match = True
             if match:
                 v.update(items[0] if items else {})
@@ -866,33 +870,229 @@ def _merge_versions_with_backup(res_rows, where_clauses=None, args=None, order_b
         except Exception:
             backup_versions = []
 
-    if not backup_versions:
-        return res_rows or []
+    def _norm_k(val):
+        return str(val or "").strip().lower()
 
-    backup_by_id = {str(v.get("id")): v for v in backup_versions if v.get("id")}
-    backup_by_dbver = {str(v.get("db_version")): v for v in backup_versions if v.get("db_version")}
+    if not backup_versions:
+        # Deduplikace řádků přímo z DB (ochrana proti duplicitám z Turso)
+        merged_raw = []
+        seen_keys = set()
+        for r in (res_rows or []):
+            k = (_norm_k(r.get("db_version")), _norm_k(r.get("version_name")))
+            if k != ("", "") and k in seen_keys:
+                continue
+            seen_keys.add(k)
+            merged_raw.append(r)
+        return merged_raw
+
+    backup_by_dbver = {_norm_k(v.get("db_version")): v for v in backup_versions if v.get("db_version")}
+    backup_by_vname = {_norm_k(v.get("version_name")): v for v in backup_versions if v.get("version_name")}
 
     merged = []
-    seen_ids = set()
+    seen_dbvers = set()
+
     for r in (res_rows or []):
         item = dict(r)
-        vid = str(item.get("id") or "")
-        vdb = str(item.get("db_version") or "")
-        
-        backup_item = backup_by_id.get(vid) or backup_by_dbver.get(vdb)
+        vdb = _norm_k(item.get("db_version"))
+        vname = _norm_k(item.get("version_name"))
+
+        # Pokud už jsme verzi se stejným db_version viděli, přeskočíme duplikát
+        if (vdb and vdb in seen_dbvers):
+            continue
+
+        backup_item = backup_by_dbver.get(vdb) or backup_by_vname.get(vname)
         if backup_item:
+            db_id = item.get("id")
             item.update(backup_item)
-        
-        if vid:
-            seen_ids.add(vid)
+            if db_id is not None:
+                item["id"] = db_id
+
+        if vdb:
+            seen_dbvers.add(vdb)
         merged.append(item)
 
     for bv in backup_versions:
-        b_id = str(bv.get("id") or "")
-        if b_id and b_id not in seen_ids:
-            merged.append(dict(bv))
+        b_db = _norm_k(bv.get("db_version"))
+        b_vn = _norm_k(bv.get("version_name"))
+
+        if b_db and b_db in seen_dbvers:
+            continue
+
+        merged.append(dict(bv))
+        if b_db:
+            seen_dbvers.add(b_db)
+
+    return merged
+
+# ── LOKÁLNÍ PERZISTENCE A SLUČOVÁNÍ PRO TABULKU: app_sessions ──
+_SESSIONS_BACKUP_FILE = os.path.join(_BASE_DIR, "app_sessions_backup.json")
+_SESSIONS_LOCK = threading.RLock()
+
+def _local_upsert_app_session(payload_data):
+    if not payload_data:
+        return
+    items = payload_data if isinstance(payload_data, list) else [payload_data]
+    with _SESSIONS_LOCK:
+        sessions = []
+        if os.path.exists(_SESSIONS_BACKUP_FILE):
+            try:
+                with open(_SESSIONS_BACKUP_FILE, "r", encoding="utf-8") as f:
+                    sessions = json.load(f)
+                    if not isinstance(sessions, list):
+                        sessions = []
+            except Exception:
+                sessions = []
+
+        existing_by_sid = {str(s.get("session_id")): idx for idx, s in enumerate(sessions) if s.get("session_id")}
+        existing_ids = [int(s.get("id", 0)) for s in sessions if str(s.get("id", "")).isdigit()]
+        max_id = max(existing_ids, default=0)
+
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            item_copy = dict(it)
+            sid = str(item_copy.get("session_id") or "")
+            if sid and sid in existing_by_sid:
+                idx = existing_by_sid[sid]
+                sessions[idx].update(item_copy)
+            else:
+                if not item_copy.get("id"):
+                    max_id += 1
+                    item_copy["id"] = max_id
+                sessions.insert(0, item_copy)
+                if sid:
+                    existing_by_sid[sid] = 0
+
+        if len(sessions) > 1000:
+            sessions = sessions[:1000]
+
+        try:
+            with open(_SESSIONS_BACKUP_FILE, "w", encoding="utf-8") as f:
+                json.dump(sessions, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[TURSO LOCAL DB] Error saving app_sessions_backup.json: {e}", flush=True)
+
+        invalidate_query_cache("app_sessions")
+        return items
+
+def _local_update_app_session(where_clauses, args, payload_data):
+    if not payload_data:
+        return []
+    target_sid = None
+    target_id = None
+    if where_clauses and args:
+        arg_vals = [_extract_arg_val(a) for a in args]
+        for idx, w in enumerate(where_clauses):
+            val = arg_vals[idx] if idx < len(arg_vals) else None
+            if '"session_id" = ?' in w or 'session_id = ?' in w:
+                target_sid = str(val).strip() if val is not None else None
+            elif '"id" = ?' in w or 'id = ?' in w:
+                target_id = str(val).strip() if val is not None else None
+
+    with _SESSIONS_LOCK:
+        sessions = []
+        if os.path.exists(_SESSIONS_BACKUP_FILE):
+            try:
+                with open(_SESSIONS_BACKUP_FILE, "r", encoding="utf-8") as f:
+                    sessions = json.load(f)
+                    if not isinstance(sessions, list):
+                        sessions = []
+            except Exception:
+                sessions = []
+
+        updated_items = []
+        for s in sessions:
+            match = False
+            if target_sid and str(s.get("session_id")) == str(target_sid):
+                match = True
+            elif target_id and str(s.get("id")) == str(target_id):
+                match = True
+            if match:
+                s.update(payload_data)
+                updated_items.append(s)
+
+        if not updated_items and target_sid:
+            new_item = dict(payload_data)
+            new_item["session_id"] = target_sid
+            existing_ids = [int(s.get("id", 0)) for s in sessions if str(s.get("id", "")).isdigit()]
+            new_item["id"] = max(existing_ids, default=0) + 1
+            sessions.insert(0, new_item)
+            updated_items.append(new_item)
+
+        try:
+            with open(_SESSIONS_BACKUP_FILE, "w", encoding="utf-8") as f:
+                json.dump(sessions, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[TURSO LOCAL DB] Error updating app_sessions_backup.json: {e}", flush=True)
+
+        invalidate_query_cache("app_sessions")
+        return updated_items
+
+def _merge_app_sessions_with_backup(res_rows, where_clauses=None, args=None, order_by=None, limit_val=None):
+    backup_sessions = []
+    if os.path.exists(_SESSIONS_BACKUP_FILE):
+        try:
+            with open(_SESSIONS_BACKUP_FILE, "r", encoding="utf-8") as f:
+                backup_sessions = json.load(f)
+                if not isinstance(backup_sessions, list):
+                    backup_sessions = []
+        except Exception:
+            backup_sessions = []
+
+    if not backup_sessions:
+        return res_rows or []
+
+    backup_by_sid = {str(s.get("session_id")): s for s in backup_sessions if s.get("session_id")}
+    backup_by_id = {str(s.get("id")): s for s in backup_sessions if s.get("id")}
+
+    merged = []
+    seen_sids = set()
+    seen_ids = set()
+
+    for r in (res_rows or []):
+        item = dict(r)
+        sid = str(item.get("session_id") or "")
+        rid = str(item.get("id") or "")
+
+        backup_item = backup_by_sid.get(sid) or backup_by_id.get(rid)
+        if backup_item:
+            if backup_item.get("end_time"):
+                item["end_time"] = backup_item["end_time"]
+            item.update(backup_item)
+
+        if sid:
+            seen_sids.add(sid)
+        if rid:
+            seen_ids.add(rid)
+        merged.append(item)
+
+    for bs in backup_sessions:
+        b_sid = str(bs.get("session_id") or "")
+        b_id = str(bs.get("id") or "")
+        if b_sid and b_sid in seen_sids:
+            continue
+        if b_id and b_id in seen_ids:
+            continue
+        merged.append(dict(bs))
+        if b_sid:
+            seen_sids.add(b_sid)
+        if b_id:
             seen_ids.add(b_id)
 
+    def _parse_time_sort(item):
+        st = item.get("start_time") or ""
+        try:
+            fmt = "%d.%m.%Y %H:%M:%S" if st.count(':') == 2 else "%d.%m.%Y %H:%M"
+            return datetime.strptime(st, fmt)
+        except Exception:
+            try:
+                return datetime.fromisoformat(st)
+            except Exception:
+                return datetime.min
+
+    merged.sort(key=_parse_time_sort, reverse=True)
+    if limit_val and isinstance(limit_val, int) and limit_val > 0:
+        merged = merged[:limit_val]
     return merged
 
 def _resolve_local_fallback(table_name, columns="*", where_clauses=None, args=None, order_by=None, limit_val=None):
@@ -906,6 +1106,10 @@ def _resolve_local_fallback(table_name, columns="*", where_clauses=None, args=No
     # ── TABULKA: users ──
     if table_name == "users":
         return _merge_users_with_backup([], where_clauses, args, order_by, limit_val, columns)
+
+    # ── TABULKA: app_sessions ──
+    if table_name == "app_sessions":
+        return _merge_app_sessions_with_backup([], where_clauses, args, order_by, limit_val)
 
     # ── TABULKA: settings ──
     if table_name == "settings":
@@ -1346,6 +1550,11 @@ class TursoQueryBuilder:
                         res.data, self.where_clauses, self.args, self.order_by, self.limit_val
                     )
                     res.count = len(res.data)
+                elif self.table_name == "app_sessions":
+                    res.data = _merge_app_sessions_with_backup(
+                        res.data, self.where_clauses, self.args, self.order_by, self.limit_val
+                    )
+                    res.count = len(res.data)
                 set_query_cache(cache_key, res.data, self.table_name)
             return res
 
@@ -1359,6 +1568,8 @@ class TursoQueryBuilder:
                 _local_insert_settings(self.payload_data)
             elif self.table_name == "software_versions":
                 _local_upsert_software_version("add", self.payload_data)
+            elif self.table_name == "app_sessions":
+                _local_upsert_app_session(self.payload_data)
             if is_turso_write_blocked():
                 ret_data = self.payload_data if isinstance(self.payload_data, list) else [self.payload_data]
                 return TursoResponse(data=ret_data, count=len(ret_data))
@@ -1390,6 +1601,8 @@ class TursoQueryBuilder:
                 _local_insert_settings(self.payload_data)
             elif self.table_name == "software_versions":
                 _local_upsert_software_version("upsert", self.payload_data)
+            elif self.table_name == "app_sessions":
+                _local_upsert_app_session(self.payload_data)
             if is_turso_write_blocked():
                 ret_data = self.payload_data if isinstance(self.payload_data, list) else [self.payload_data]
                 return TursoResponse(data=ret_data, count=len(ret_data))
@@ -1430,6 +1643,8 @@ class TursoQueryBuilder:
                 local_updated = _local_update_settings(self.where_clauses, self.args, self.payload_data)
             elif self.table_name == "software_versions":
                 local_updated = _local_upsert_software_version("edit", self.payload_data, self.where_clauses, self.args)
+            elif self.table_name == "app_sessions":
+                local_updated = _local_update_app_session(self.where_clauses, self.args, self.payload_data)
 
             if is_turso_write_blocked():
                 ret_data = local_updated if local_updated else [self.payload_data]

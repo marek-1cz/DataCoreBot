@@ -864,11 +864,16 @@ def sync_version_to_backup(action, row, vid=None):
         if os.path.exists(_VERSIONS_BACKUP_FILE):
             with open(_VERSIONS_BACKUP_FILE, "r", encoding="utf-8") as f:
                 versions = json.load(f)
+                if not isinstance(versions, list):
+                    versions = []
         
+        row_vdb = str(row.get("db_version") or "").strip().lower()
+        row_vn = str(row.get("version_name") or "").strip().lower()
+
         if action == "edit" and vid is not None:
             updated = False
             for v in versions:
-                if str(v.get("id")) == str(vid):
+                if str(v.get("id")) == str(vid) or (row_vdb and str(v.get("db_version") or "").strip().lower() == row_vdb):
                     v.update(row)
                     updated = True
                     break
@@ -877,10 +882,20 @@ def sync_version_to_backup(action, row, vid=None):
                 row_copy["id"] = int(vid) if str(vid).isdigit() else vid
                 versions.append(row_copy)
         elif action == "add":
-            new_id = max([int(v.get("id", 0)) for v in versions if str(v.get("id", "")).isdigit()] or [0]) + 1
-            row_copy = dict(row)
-            row_copy["id"] = new_id
-            versions.insert(0, row_copy)
+            matched_idx = None
+            for idx, v in enumerate(versions):
+                v_db = str(v.get("db_version") or "").strip().lower()
+                v_nm = str(v.get("version_name") or "").strip().lower()
+                if (row_vdb and v_db == row_vdb) or (row_vn and v_nm == row_vn):
+                    matched_idx = idx
+                    break
+            if matched_idx is not None:
+                versions[matched_idx].update(row)
+            else:
+                new_id = max([int(v.get("id", 0)) for v in versions if str(v.get("id", "")).isdigit()] or [0]) + 1
+                row_copy = dict(row)
+                row_copy["id"] = new_id
+                versions.insert(0, row_copy)
         elif action == "delete" and vid is not None:
             versions = [v for v in versions if str(v.get("id")) != str(vid)]
             
@@ -4183,9 +4198,10 @@ def api_silent_check():
 def api_app_ping():
     if request.method == 'OPTIONS': return _cors_jsonify({})
     data = request.get_json(silent=True) or {}
-    discord_id = str(data.get("discord_id", ""))
+    discord_id = str(data.get("discord_id", "")).strip()
     action = data.get("action", "ping")
-    session_id = data.get("session_id", "")
+    session_id = str(data.get("session_id", "")).strip()
+    app_ver = str(data.get("app_version", "")).strip()
     db = get_db()
     if not db: return _cors_jsonify({"status": "error"})
     try:
@@ -4201,7 +4217,13 @@ def api_app_ping():
         if action == "start":
             updates["launch_count"] = (user_resp.data[0].get("launch_count") or 0) + 1
             new_session_id = str(uuid.uuid4())
-            db.table("app_sessions").insert({"session_id": new_session_id, "discord_id": discord_id, "start_time": now_str, "end_time": now_str}).execute()
+            db.table("app_sessions").insert({
+                "session_id": new_session_id,
+                "discord_id": discord_id,
+                "start_time": now_str,
+                "end_time": now_str,
+                "version": app_ver
+            }).execute()
             if discord_id.startswith("email-"):
                 db.table("users").update(updates).eq("id", user_id).execute()
             else:
@@ -4209,11 +4231,22 @@ def api_app_ping():
             return _cors_jsonify({"status": "ok", "session_id": new_session_id, "roles": [user_resp.data[0].get("role", "User")]})
         elif action == "ping":
             updates["total_time"] = (user_resp.data[0].get("total_time") or 0) + 1
-            if session_id: db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
+            if session_id:
+                db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
+            else:
+                session_id = str(uuid.uuid4())
+                db.table("app_sessions").insert({
+                    "session_id": session_id,
+                    "discord_id": discord_id,
+                    "start_time": now_str,
+                    "end_time": now_str,
+                    "version": app_ver
+                }).execute()
         elif action == "stop":
             updates["is_online"] = False
             updates["admin_bypass"] = False
-            if session_id: db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
+            if session_id:
+                db.table("app_sessions").update({"end_time": now_str}).eq("session_id", session_id).execute()
         
         if discord_id.startswith("email-"):
             db.table("users").update(updates).eq("id", user_id).execute()
@@ -6799,7 +6832,7 @@ def dashboard_stats():
 
         # Relace aplikace z app_sessions
         app_sessions_raw = []
-        if db and not is_supabase_restricted():
+        if db:
             try:
                 app_sessions_raw = db.table("app_sessions").select("*").order("id", desc=True).limit(1000).execute().data or []
             except Exception as e_sess:
@@ -6830,22 +6863,31 @@ def dashboard_stats():
 
             duration_str = "Neznámá"
             is_active_session = False
-            if st_str and et_str:
+            if st_str:
                 try:
                     fmt_s = "%d.%m.%Y %H:%M:%S" if st_str.count(':') == 2 else "%d.%m.%Y %H:%M"
-                    fmt_e = "%d.%m.%Y %H:%M:%S" if et_str.count(':') == 2 else "%d.%m.%Y %H:%M"
                     s_dt = datetime.strptime(st_str, fmt_s)
-                    e_dt = datetime.strptime(et_str, fmt_e)
-                    dur_sec = max(0, int((e_dt - s_dt).total_seconds()))
+                    
+                    e_dt = None
+                    if et_str:
+                        fmt_e = "%d.%m.%Y %H:%M:%S" if et_str.count(':') == 2 else "%d.%m.%Y %H:%M"
+                        e_dt = datetime.strptime(et_str, fmt_e)
+                    
+                    # Kontrola, zda relace právě probíhá
+                    ref_dt = e_dt or s_dt
+                    if (now_dt - ref_dt).total_seconds() < 180 and u_obj.get("is_online"):
+                        is_active_session = True
+                        calc_e_dt = now_dt
+                    else:
+                        calc_e_dt = e_dt or s_dt
+
+                    dur_sec = max(0, int((calc_e_dt - s_dt).total_seconds()))
                     if dur_sec < 60:
                         duration_str = f"{dur_sec}s"
                     elif dur_sec < 3600:
                         duration_str = f"{dur_sec // 60}m"
                     else:
                         duration_str = f"{dur_sec // 3600}h {(dur_sec % 3600) // 60}m"
-
-                    if (now_dt - e_dt).total_seconds() < 90 and u_obj.get("is_online"):
-                        is_active_session = True
                 except Exception:
                     pass
 
@@ -7363,7 +7405,15 @@ def dashboard_downloads():
             raw_versions = db.table("software_versions").select("*").order("id", desc=True).execute().data or []
             if not raw_versions:
                 raw_versions = _get_fallback_versions()
-            versions = [normalize_version_item(v) for v in raw_versions]
+            dedup_versions = []
+            seen_v = set()
+            for v in raw_versions:
+                k = (str(v.get("db_version") or "").strip().lower(), str(v.get("version_name") or "").strip().lower())
+                if k != ("", "") and k in seen_v:
+                    continue
+                seen_v.add(k)
+                dedup_versions.append(v)
+            versions = [normalize_version_item(v) for v in dedup_versions]
     except Exception as e:
         flash(f"Chyba DB: {e}", "error")
         versions = [normalize_version_item(v) for v in _get_fallback_versions()]
@@ -7425,9 +7475,23 @@ def add_version():
             "can_launch": 1 if request.form.get("can_launch") else 0,
         }
         if db:
-            try: db.table("software_versions").insert(row).execute()
-            except Exception as e: print(f"[add_version DB err] {e}", flush=True)
-        sync_version_to_backup("add", row)
+            try:
+                # Kontrola existence verze před vložením (ochrana proti duplikaci)
+                existing = db.table("software_versions").select("id").eq("db_version", row["db_version"]).execute().data or []
+                if not existing and row["version_name"]:
+                    existing = db.table("software_versions").select("id").eq("version_name", row["version_name"]).execute().data or []
+                if existing:
+                    existing_id = existing[0].get("id")
+                    db.table("software_versions").update(row).eq("id", existing_id).execute()
+                    sync_version_to_backup("edit", row, vid=existing_id)
+                else:
+                    db.table("software_versions").insert(row).execute()
+                    sync_version_to_backup("add", row)
+            except Exception as e:
+                print(f"[add_version DB err] {e}", flush=True)
+                sync_version_to_backup("add", row)
+        else:
+            sync_version_to_backup("add", row)
         flash('Nová verze vydána!', 'success')
         adm = get_current_admin_name()
         send_log("🚀 Vydána nová verze", f"**Uživatel:** {adm}\n**Název:** {row['version_name']}\n**Build:** `{build_val}`\n**Role:** {row['target_role']}", 0x10b981)
@@ -7673,6 +7737,17 @@ def api_launcher_versions():
         all_versions = db.table('software_versions').select('*').eq('is_active', True).order('id', desc=True).execute().data or []
         if not all_versions:
             all_versions = [v for v in _get_fallback_versions() if v.get('is_active')]
+        
+        # Deduplikace verzí pro launcher
+        dedup_launcher_versions = []
+        seen_lv = set()
+        for v in all_versions:
+            k = (str(v.get("db_version") or "").strip().lower(), str(v.get("version_name") or "").strip().lower())
+            if k != ("", "") and k in seen_lv:
+                continue
+            seen_lv.add(k)
+            dedup_launcher_versions.append(v)
+        all_versions = dedup_launcher_versions
         
         ROLE_HIERARCHY = {'User': 1, 'BT': 2, 'DEV': 3, 'SA': 4}
         u_level = ROLE_HIERARCHY.get(user_role, 1)
