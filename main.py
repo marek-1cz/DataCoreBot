@@ -431,6 +431,7 @@ _USERS_BACKUP_FILE = os.path.join(os.path.dirname(__file__), "users_backup.json"
 _AUTH_TOKEN_STATUS: dict = {}  # {str(discord_id): "approved" | "rejected" | "timeout" | "waiting"}
 _DASHBOARD_AUTH_TIMEOUTS: dict = {}  # {str(discord_id): float(lockout_until_timestamp)}
 _PENDING_REGISTRATIONS: dict = {}  # {email.lower(): {"email": str, "nick": str, "token": str, "expires_at": int, "intent": str, "created_at": float}}
+_EMAIL_AUTH_STATUS: dict = {}  # {email.lower(): {"status": "waiting"|"approved", "token": str, "user": dict, "expires_at": int}}
 _PENDING_DISCORD_AUTH: dict = {}  # {str(discord_id): {"token": str, "created_at": float}}
 
 def validate_nickname(nick: str, db=None) -> tuple[bool, str]:
@@ -610,6 +611,21 @@ def find_user_record(target: str) -> dict | None:
 
     if (raw.startswith("<@") or raw.startswith("<@!")) and raw.endswith(">"):
         raw = raw.lstrip("<@!").rstrip(">").strip()
+
+    if raw.startswith("email-"):
+        email_sub = raw.split("email-", 1)[1].strip()
+        if email_sub.isdigit():
+            db_inst = get_db()
+            if db_inst:
+                try:
+                    res_em = db_inst.table("users").select("*").eq("id", int(email_sub)).execute().data
+                    if res_em and not _is_tombstoned_user(res_em[0]): return res_em[0]
+                except Exception: pass
+            for u in _get_fallback_users():
+                if not _is_tombstoned_user(u) and (u.get("id") == int(email_sub) or str(u.get("id")) == email_sub):
+                    return u
+        else:
+            raw = email_sub
 
     is_num = raw.isdigit()
     is_app_id_format = raw.startswith("#") and raw[1:].isdigit()
@@ -1572,16 +1588,6 @@ def get_cached_user_role(discord_id):
                     break
         except Exception:
             pass
-
-    # Živá synchronizace s rolemi na Discord serveru
-    disc_role = resolve_member_discord_role(discord_id)
-    if disc_role:
-        ROLE_HIERARCHY = {'User': 1, 'BT': 2, 'DEV': 3, 'SA': 4}
-        cur_lvl = ROLE_HIERARCHY.get(normalize_role_string(role), 1)
-        disc_lvl = ROLE_HIERARCHY.get(disc_role, 1)
-        if disc_lvl > cur_lvl:
-            role = disc_role
-            _sync_user_role_to_storage(discord_id, disc_role)
 
     norm_role = normalize_role_string(role)
     _AUTH_CACHE[discord_id] = (now, norm_role, is_banned)
@@ -4102,9 +4108,11 @@ def api_app_login():
         if user.get("is_deleted"):
             return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."})
         user['role'] = effective_role
-        version_check = check_version_access(db, app_version, user)
-        if not version_check["allowed"]:
-            return _cors_jsonify({"status": "error", "message": version_check["msg"]})
+        is_launcher_client = bool(data.get("is_launcher")) or str(data.get("client_type", "")).lower() == "launcher" or str(app_version).lower() in ("launcher", "")
+        if not is_launcher_client and app_version:
+            version_check = check_version_access(db, app_version, user)
+            if not version_check["allowed"]:
+                return _cors_jsonify({"status": "error", "message": version_check["msg"]})
         db_hwid = user.get("hwid")
         db_ip = user.get("ip_address")
         if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
@@ -5159,6 +5167,14 @@ def process_web_auth_email(email, intent, client_ip, nick=None):
                         pass
             db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("email", email_str).execute()
         
+        _EMAIL_AUTH_STATUS[email_str] = {
+            "status": "waiting",
+            "token": token.upper(),
+            "nick": nick_str or (user_rec.get("nick") if user_rec else ""),
+            "expires_at": token_expiry,
+            "created_at": _t.time()
+        }
+        
         if send_magic_link_email(email_str, token, intent=intent):
             return {"status": "success"}, 200
         else:
@@ -5320,6 +5336,14 @@ def web_auth_finalize():
             add_user_session(db, u, perm_token, request)
             _invalidate_session_cache(user_id=u.get("id"))
             _SESSION_CACHE[perm_token] = (time.time(), u)
+
+            if u and u.get("email"):
+                em_clean = str(u.get("email")).strip().lower()
+                _EMAIL_AUTH_STATUS[em_clean] = {
+                    "status": "approved",
+                    "user": u,
+                    "approved_at": _t.time()
+                }
             
             status_text = "PŘIHLÁŠENO DO APLIKACE I NA WEB" if intent == 'app_login' else "PŘIHLÁŠENO NA WEB"
             
@@ -5491,6 +5515,14 @@ def api_auth_email_magic():
         add_user_session(db, u, perm_token, request)
         _invalidate_session_cache(user_id=u.get("id"))
         _SESSION_CACHE[perm_token] = (time.time(), u)
+
+        if u and u.get("email"):
+            em_clean = str(u.get("email")).strip().lower()
+            _EMAIL_AUTH_STATUS[em_clean] = {
+                "status": "approved",
+                "user": u,
+                "approved_at": _t.time()
+            }
 
         name = u.get("nick") or u.get("email") or "Uživatel"
         resp = jsonify({
@@ -7126,6 +7158,12 @@ def edit_user():
                 try:
                     with open("debug_log.txt", "a") as f: f.write(f"save result: {res.data}\n")
                 except: pass
+                backup_update = dict(updates)
+                if valid_discord_id:
+                    backup_update["discord_id"] = str(valid_discord_id)
+                if app_id and str(app_id).isdigit():
+                    backup_update["app_id"] = int(app_id)
+                _save_user_to_backup(backup_update)
                 _AUTH_CACHE.clear()
                 if valid_discord_id:
                     sync_roles_from_flask(valid_discord_id, r_str)
@@ -7711,41 +7749,115 @@ def dashboard_publish_patch():
 
 @app.route('/api/launcher/email_poll', methods=['POST'])
 def api_launcher_email_poll():
-    email = request.json.get('email') if request.is_json else None
-    if not email: return jsonify({"status": "error"})
+    data = request.get_json(silent=True) or {}
+    email = str(data.get('email', '')).strip().lower()
+    if not email:
+        return jsonify({"status": "error", "message": "Missing email"})
     try:
-        db = get_db()
-        user = db.table("users").select("web_session_token, discord_id, id, email, nick").eq("email", email).execute().data
-        if user:
+        # 1. Zkontrolovat stav v paměti (_EMAIL_AUTH_STATUS)
+        auth_state = _EMAIL_AUTH_STATUS.get(email)
+        if auth_state and auth_state.get("status") == "approved":
+            u = auth_state.get("user") or {}
+            d_id = u.get("discord_id") or f"email-{u.get('id')}"
             return jsonify({
                 "status": "success",
-                "web_session_token": user[0].get("web_session_token"),
-                "discord_id": user[0].get("discord_id") or f"email-{user[0].get('id')}",
-                "email": user[0].get("email"),
-                "nick": user[0].get("nick") or user[0].get("email")
+                "web_session_token": u.get("web_session_token") or "auth_ok",
+                "discord_id": d_id,
+                "email": u.get("email") or email,
+                "nick": u.get("nick") or u.get("email") or email
             })
-    except: pass
-    return jsonify({"status": "error"})
+        elif auth_state and auth_state.get("status") == "waiting":
+            import time as _t
+            if _t.time() > auth_state.get("expires_at", 0):
+                _EMAIL_AUTH_STATUS.pop(email, None)
+                return jsonify({"status": "timeout", "message": "Platnost kódu vypršela."})
+            return jsonify({"status": "waiting"})
+
+        # 2. Fallback na DB / backup
+        db = get_db()
+        user = None
+        if db:
+            user_data = db.table("users").select("*").eq("email", email).execute().data
+            if user_data:
+                user = user_data[0]
+        if not user:
+            for bu in _get_fallback_users():
+                if str(bu.get("email", "")).strip().lower() == email:
+                    user = bu
+                    break
+
+        if user:
+            d_id = user.get("discord_id") or f"email-{user.get('id')}"
+            return jsonify({
+                "status": "waiting",
+                "discord_id": d_id,
+                "email": user.get("email"),
+                "nick": user.get("nick") or user.get("email")
+            })
+    except Exception as e:
+        print(f"[api_launcher_email_poll error] {e}", flush=True)
+    return jsonify({"status": "waiting"})
 
 @app.route('/api/launcher/email_verify', methods=['POST'])
 def api_launcher_email_verify():
-    email = request.json.get('email') if request.is_json else None
-    code = request.json.get('code') if request.is_json else None
-    if not email or not code: return jsonify({"status": "error", "message": "Missing email or code"})
+    data = request.get_json(silent=True) or {}
+    email = str(data.get('email', '')).strip().lower()
+    code = str(data.get('code', '')).strip().upper()
+    if not email or not code:
+        return jsonify({"status": "error", "message": "Missing email or code"})
     try:
+        import time as _t
         db = get_db()
-        user = db.table("users").select("*").eq("email", email).eq("login_token", code).execute().data
-        if user:
-            u = user[0]
-            db.table("users").update({"login_token": ""}).eq("id", u.get("id")).execute()
+        u = None
+        # 1. Zkontrolovat v _PENDING_REGISTRATIONS (nová registrace přes e-mail)
+        pending = _PENDING_REGISTRATIONS.get(email)
+        if pending and str(pending.get("token", "")).strip().upper() == code:
+            if _t.time() > pending.get("expires_at", 0):
+                return jsonify({"status": "error", "message": "Platnost kódu vypršela."})
+            ok, user_rec, reason = ensure_user_in_db(email=pending["email"], nick=pending["nick"])
+            if not ok or not user_rec:
+                return jsonify({"status": "error", "message": f"Registrace selhala: {reason}"})
+            _PENDING_REGISTRATIONS.pop(email, None)
+            u = user_rec
+        else:
+            # 2. Hledat v databázi existujícího uživatele
+            if db:
+                user_res = db.table("users").select("*").eq("email", email).execute().data
+                if user_res:
+                    cand = user_res[0]
+                    cand_tok = str(cand.get("login_token", "")).strip().upper()
+                    if cand_tok == code:
+                        exp = int(cand.get('login_token_expires_at') or 0)
+                        if exp > 0 and _t.time() > exp:
+                            db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", cand.get("id")).execute()
+                            return jsonify({"status": "error", "message": "Platnost kódu vypršela."})
+                        db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", cand.get("id")).execute()
+                        u = cand
+            if not u:
+                for bu in _get_fallback_users():
+                    if str(bu.get("email", "")).strip().lower() == email:
+                        if str(bu.get("login_token", "")).strip().upper() == code:
+                            bu["login_token"] = ""
+                            _save_user_to_backup(bu)
+                            u = bu
+                            break
+
+        if u:
+            _EMAIL_AUTH_STATUS[email] = {
+                "status": "approved",
+                "user": u,
+                "approved_at": _t.time()
+            }
+            d_id = u.get("discord_id") or f"email-{u.get('id')}"
             return jsonify({
                 "status": "success",
-                "discord_id": u.get("discord_id") or f"email-{u.get('id')}",
+                "discord_id": d_id,
                 "email": u.get("email"),
                 "nick": u.get("nick") or u.get("email")
             })
-    except: pass
-    return jsonify({"status": "error", "message": "Invalid code or expired"})
+    except Exception as e:
+        print(f"[api_launcher_email_verify error] {e}", flush=True)
+    return jsonify({"status": "error", "message": "Neplatný kód nebo vypršela platnost."})
 
 @app.route('/api/launcher/user_info', methods=['POST'])
 def api_launcher_user_info():
