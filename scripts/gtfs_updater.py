@@ -256,6 +256,9 @@ def main():
             s_name = s_name.replace('Nemocnice', 'nem.')
             s_name = s_name.replace('závod', 'záv.')
             s_name = s_name.replace('Závod', 'záv.')
+            s_name = re.sub(r'(?<!\w)(h[aá]jen[kc]\w*|h[aá]jovn\w*|h[aá]j)\.?(?!\w)', 'háj.', s_name, flags=re.IGNORECASE)
+            s_name = re.sub(r'\bzdravotn[ií]\s+st[rř]edisko\b', 'zdrav. stř.', s_name, flags=re.IGNORECASE)
+            s_name = re.sub(r'\b(obecn[ií]\s+[uú][rř]ad|ob[uú])\b', 'ObÚ', s_name, flags=re.IGNORECASE)
             lat_str = row.get('stop_lat', '').strip()
             lon_str = row.get('stop_lon', '').strip()
             s_lat = float(lat_str) if lat_str else 0.0
@@ -308,6 +311,9 @@ def main():
             r_long = r_long.replace('Nemocnice', 'nem.')
             r_long = r_long.replace('závod', 'záv.')
             r_long = r_long.replace('Závod', 'záv.')
+            r_long = re.sub(r'(?<!\w)(h[aá]jen[kc]\w*|h[aá]jovn\w*|h[aá]j)\.?(?!\w)', 'háj.', r_long, flags=re.IGNORECASE)
+            r_long = re.sub(r'\bzdravotn[ií]\s+st[rř]edisko\b', 'zdrav. stř.', r_long, flags=re.IGNORECASE)
+            r_long = re.sub(r'\b(obecn[ií]\s+[uú][rř]ad|ob[uú])\b', 'ObÚ', r_long, flags=re.IGNORECASE)
             
             val = (r_id, r_short, r_long, row.get('route_type', ''))
             if r_id in routes_idpk:
