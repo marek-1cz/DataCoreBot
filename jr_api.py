@@ -512,9 +512,9 @@ def get_line(line_id):
         for dir_idx, parity in enumerate(target_parities):
             cur.execute(f"""
                 SELECT t.trip_id, t.spoj_cislo,
-                       (SELECT s.name FROM stop_times st JOIN stops s ON st.stop_id = s.stop_id WHERE st.trip_id = t.trip_id ORDER BY st.stop_sequence ASC LIMIT 1) as first_stop,
-                       (SELECT s.name FROM stop_times st JOIN stops s ON st.stop_id = s.stop_id WHERE st.trip_id = t.trip_id ORDER BY st.stop_sequence DESC LIMIT 1) as last_stop,
-                       count(st.stop_sequence) as stop_count
+                       (SELECT s.name FROM stop_times st JOIN stops s ON st.stop_id = s.stop_id WHERE st.trip_id = t.trip_id AND NOT (st.pickup_type = '1' AND (st.arrival_time = '' OR st.arrival_time IS NULL)) ORDER BY st.stop_sequence ASC LIMIT 1) as first_stop,
+                       (SELECT s.name FROM stop_times st JOIN stops s ON st.stop_id = s.stop_id WHERE st.trip_id = t.trip_id AND NOT (st.pickup_type = '1' AND (st.arrival_time = '' OR st.arrival_time IS NULL)) ORDER BY st.stop_sequence DESC LIMIT 1) as last_stop,
+                       count(CASE WHEN NOT (st.pickup_type = '1' AND (st.arrival_time = '' OR st.arrival_time IS NULL)) THEN 1 END) as stop_count
                 FROM trips t
                 JOIN stop_times st ON t.trip_id = st.trip_id
                 WHERE t.route_id IN ({q_marks}) AND (t.spoj_cislo % 2) = ?
@@ -544,6 +544,7 @@ def get_line(line_id):
                     FROM stop_times st
                     JOIN stops s ON st.stop_id = s.stop_id
                     WHERE st.trip_id = ?
+                    AND NOT (st.pickup_type = '1' AND (st.arrival_time = '' OR st.arrival_time IS NULL))
                     ORDER BY st.stop_sequence
                 """, (best_tid,))
                 v_stops = [{

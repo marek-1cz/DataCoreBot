@@ -416,6 +416,11 @@ def main():
         batch_idpk = []
         batch_fall = []
         for row in reader:
+            p_type = row.get('pickup_type', '0')
+            d_type = row.get('drop_off_type', '0')
+            arr_time = row.get('arrival_time', '')
+            if (p_type == '1' and d_type == '1') or (not arr_time and p_type == '1'):
+                continue
             try:
                 seq = int(row.get('stop_sequence') or 0)
             except ValueError:
