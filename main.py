@@ -8836,16 +8836,27 @@ def dashboard_community_routes():
                     stops = json.loads(stops_raw) if isinstance(stops_raw, str) else (stops_raw or [])
                 except Exception:
                     stops = []
+                normalized_stops = []
                 for s in stops:
-                    if isinstance(s, dict):
-                        if not s.get('name') and s.get('n'):
-                            s['name'] = s['n']
+                    if isinstance(s, list) and len(s) > 0:
+                        s_name = str(s[0] or '').strip()
+                        s_zone = str(s[1] or '1').strip() if len(s) > 1 else '1'
+                        s_req = bool(s[2]) if len(s) > 2 else False
+                        s = {'name': s_name, 'n': s_name, 'zone': s_zone, 'z': s_zone, 'na_znameni': s_req, 'req': s_req}
+                    elif isinstance(s, dict):
+                        s_name = s.get('name') or s.get('n') or s.get('orig') or ''
+                        s['name'] = s_name
+                        s['n'] = s_name
                         if not s.get('zone') and s.get('z'):
                             s['zone'] = s['z']
                         if not s.get('na_znameni') and s.get('req'):
                             s['na_znameni'] = s['req']
-                item['stops'] = stops
-                has_sound = any(bool(s.get('audio_url') or (s.get('snd') and isinstance(s.get('snd'), dict) and s.get('snd').get('url'))) for s in stops if isinstance(s, dict))
+                        if not s.get('audio_url'):
+                            if s.get('snd') and isinstance(s.get('snd'), dict):
+                                s['audio_url'] = s['snd'].get('url') or ''
+                    normalized_stops.append(s)
+                item['stops'] = normalized_stops
+                has_sound = any(bool(s.get('audio_url') or (s.get('snd') and isinstance(s.get('snd'), dict) and s.get('snd').get('url'))) for s in normalized_stops if isinstance(s, dict))
                 item['has_sound'] = has_sound
                 enriched.append(item)
             enriched.sort(key=lambda x: (1 if (not x.get('has_sound') or 'bez zvuku' in (x.get('system_tag') or '').lower()) else 0, -int(x.get('id', 0))))
@@ -9301,6 +9312,7 @@ def api_community_routes_submit():
         return _cors_jsonify({"success": False, "error": f"Chyba při zpracování linky: {e}"}), 500
 
 @app.route('/static/community_audio/<path:object_key>', methods=['GET'])
+@app.route('/api/community-audio/<path:object_key>', methods=['GET'])
 def serve_community_audio(object_key):
     import base64
     from flask import send_file
