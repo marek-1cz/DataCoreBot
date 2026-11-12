@@ -9081,17 +9081,38 @@ def api_community_routes_decision():
     if not route_id:
         return _cors_jsonify({"success": False, "error": "Chybí ID linky"}), 400
     try:
+        import re
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
-        row = d1.execute("SELECT * FROM community_routes WHERE id = ?", [int(route_id)])
+        int_id = None
+        digits_only = re.sub(r'\D', '', str(route_id))
+        if digits_only:
+            try:
+                int_id = int(digits_only)
+            except:
+                int_id = None
+
+        row = None
+        if int_id is not None:
+            row = d1.execute("SELECT * FROM community_routes WHERE id = ?", [int_id])
+
+        if not row:
+            route_num_candidate = data.get('num') or data.get('route_number') or str(route_id).replace('c', '').replace('n', '')
+            row = d1.execute("SELECT * FROM community_routes WHERE (route_number = ? OR id = ?) AND status = 'pending' ORDER BY id DESC LIMIT 1", [route_num_candidate, str(route_id)])
+
+        if not row:
+            row = d1.execute("SELECT * FROM community_routes WHERE status = 'pending' ORDER BY id DESC LIMIT 1")
+
         if not row:
             return _cors_jsonify({"success": False, "error": "Linka nenalezena"}), 404
+
         r = row[0]
+        real_id = r.get('id')
         author_id = r.get('author_id')
         route_num = r.get('route_number', '')
         route_name = r.get('route_name', '')
         if ok:
-            d1.execute("UPDATE community_routes SET status = 'approved', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
+            d1.execute("UPDATE community_routes SET status = 'approved', updated_at = datetime('now') WHERE id = ?", [real_id])
             note_part = f"\n\nPoznámka od správce: {message}" if message else ""
             _notify_user_dm_safe(
                 author_id,
@@ -9109,15 +9130,15 @@ def api_community_routes_decision():
                 except Exception as e:
                     print(f"[COMMUNITY_ANNOUNCE] {e}")
         else:
-            d1.execute("UPDATE community_routes SET status = 'rejected', reject_reason = ?, updated_at = datetime('now') WHERE id = ?", [message or 'Nespecifikováno', int(route_id)])
+            d1.execute("UPDATE community_routes SET status = 'rejected', reject_reason = ?, updated_at = datetime('now') WHERE id = ?", [message or 'Nespecifikováno', real_id])
             _notify_user_dm_safe(
                 author_id,
                 "⚠️ Informace ke schválení komunitní linky",
-                f"Tvá linka **{route_num} ({route_name})** nebyla schválena k publikaci.\\n**Důvod:** {message or 'Hlášení nesplňují pravidla nebo kvalitu.'}",
+                f"Tvá linka **{route_num} ({route_name})** nebyla schválena k publikaci.\n**Důvod:** {message or 'Hlášení nesplňují pravidla nebo kvalitu.'}",
                 0xef4444
             )
             send_log("❌ Komunitní linka zamítnuta (Launcher)", f"**Linka:** {route_num} ({route_name})\n**Autor:** <@{author_id}>\n**Důvod:** {message}", color=0xef4444)
-        return _cors_jsonify({"success": True})
+        return _cors_jsonify({"success": True, "message": "Rozhodnutí bylo úspěšně uloženo."})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
 
@@ -9267,8 +9288,12 @@ def api_community_routes_submit():
             color=0xf59e0b
         )
 
+        new_row = d1.execute("SELECT id FROM community_routes WHERE route_number = ? AND author_id = ? ORDER BY id DESC LIMIT 1", [route_number, str(author_id)])
+        new_id = new_row[0]['id'] if new_row else None
+
         return _cors_jsonify({
             "success": True,
+            "route_id": new_id,
             "message": "Linka byla úspěšně odeslána ke schválení. Jakmile ji administrátor zkontroluje, obdržíte zprávu do Discord DM."
         })
     except Exception as e:
