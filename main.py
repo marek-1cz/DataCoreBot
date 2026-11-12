@@ -9028,6 +9028,77 @@ def api_community_routes_delete():
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/api/community-routes/pending', methods=['GET', 'OPTIONS'], strict_slashes=False)
+def api_community_routes_pending():
+    if request.method == 'OPTIONS':
+        return _cors_jsonify({})
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        raw_pending = d1.execute("SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, system_tag, created_at FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0 ORDER BY id DESC") or []
+        enriched = []
+        for r in raw_pending:
+            item = dict(r)
+            stops_raw = item.get('stops_json') or '[]'
+            try:
+                item['stops'] = json.loads(stops_raw) if isinstance(stops_raw, str) else stops_raw
+            except:
+                item['stops'] = []
+            enriched.append(item)
+        return _cors_jsonify({"success": True, "queue": enriched})
+    except Exception as e:
+        return _cors_jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/community-routes/decision', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_community_routes_decision():
+    if request.method == 'OPTIONS':
+        return _cors_jsonify({})
+    data = request.json or request.form or {}
+    route_id = data.get('route_id') or data.get('id')
+    ok = bool(data.get('ok'))
+    discord_announcement = bool(data.get('discord'))
+    message = (data.get('message') or data.get('reject_reason') or '').strip()
+    if not route_id:
+        return _cors_jsonify({"success": False, "error": "Chybí ID linky"}), 400
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        row = d1.execute("SELECT * FROM community_routes WHERE id = ?", [int(route_id)])
+        if not row:
+            return _cors_jsonify({"success": False, "error": "Linka nenalezena"}), 404
+        r = row[0]
+        author_id = r.get('author_id')
+        route_num = r.get('route_number', '')
+        route_name = r.get('route_name', '')
+        if ok:
+            d1.execute("UPDATE community_routes SET status = 'approved', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
+            _notify_user_dm_safe(
+                author_id,
+                "🎉 Tvoje komunitní linka byla schválena!",
+                f"Tvá linka **{route_num} ({route_name})** úspěšně prošla kontrolou hlášení a je nyní dostupná v OIS aplikaci pro všechny hráče!{f'\\n\\nPoznámka od správce: {message}' if message else ''}\\n\\nDěkujeme za obohacení herní komunity OIS IDPK.",
+                0x10b981
+            )
+            send_log("✅ Komunitní linka schválena (Launcher)", f"**Linka:** {route_num} ({route_name})\n**Autor:** <@{author_id}>", color=0x10b981)
+            if discord_announcement and DISCORD_NOTIFY_CHANNEL_ID:
+                try:
+                    ch = bot.get_channel(int(DISCORD_NOTIFY_CHANNEL_ID))
+                    if ch:
+                        bot.loop.create_task(ch.send(f"🎉 **Nová komunitní linka v OIS IDPK!**\\nLinka **{route_num} ({route_name})** od uživatele <@{author_id}> je nyní ke stažení v Launcheru!"))
+                except Exception as e:
+                    print(f"[COMMUNITY_ANNOUNCE] {e}")
+        else:
+            d1.execute("UPDATE community_routes SET status = 'rejected', reject_reason = ?, updated_at = datetime('now') WHERE id = ?", [message or 'Nespecifikováno', int(route_id)])
+            _notify_user_dm_safe(
+                author_id,
+                "⚠️ Informace ke schválení komunitní linky",
+                f"Tvá linka **{route_num} ({route_name})** nebyla schválena k publikaci.\\n**Důvod:** {message or 'Hlášení nesplňují pravidla nebo kvalitu.'}",
+                0xef4444
+            )
+            send_log("❌ Komunitní linka zamítnuta (Launcher)", f"**Linka:** {route_num} ({route_name})\n**Autor:** <@{author_id}>\n**Důvod:** {message}", color=0xef4444)
+        return _cors_jsonify({"success": True})
+    except Exception as e:
+        return _cors_jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/api/community-routes/submit', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_community_routes_submit():
     if request.method == 'OPTIONS':
