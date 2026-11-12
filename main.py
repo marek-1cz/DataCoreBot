@@ -2450,6 +2450,14 @@ def render_dashboard(template_string, **kwargs):
         kwargs['status_section'] = HTML_STATUS_SECTION
     if 'statuses' not in kwargs:
         kwargs['statuses'] = get_system_statuses()
+    if 'pending_community_count' not in kwargs:
+        try:
+            from cloudflare_d1 import get_d1_client
+            d1 = get_d1_client()
+            p_res = d1.execute("SELECT COUNT(*) as cnt FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0")
+            kwargs['pending_community_count'] = int(p_res[0].get('cnt', 0)) if p_res else 0
+        except Exception:
+            kwargs['pending_community_count'] = 0
     return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html.replace('{{ deploy_time }}', DEPLOY_TIME)), **kwargs)
 
 # ─── Dashboard oprávnění ────────────────────────────────────────────────────

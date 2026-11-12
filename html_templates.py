@@ -280,7 +280,7 @@ DASHBOARD_LAYOUT = """
 <a href="/dashboard/interaktivni-mapa" class="sidebar-link" style="color: #38bdf8; font-weight: 600;"><i class="fas fa-map-marked-alt"></i> Interaktivní mapa</a>
 <a href="/dashboard/stats" class="sidebar-link"><i class="fas fa-chart-line"></i> Statistiky Webu & Aplikace</a>
 <a href="/dashboard/app_management" class="sidebar-link"><i class="fas fa-desktop"></i> Správa Aplikace</a>
-<a href="/dashboard/community_routes" class="sidebar-link" style="color: #38bdf8; font-weight: 600;"><i class="fas fa-route"></i> Komunitní linky</a>
+<a href="/dashboard/community_routes" class="sidebar-link" style="color: #38bdf8; font-weight: 600;"><i class="fas fa-route"></i> Komunitní linky{% if pending_community_count and pending_community_count > 0 %}<span style="background:#f59e0b; color:#000; font-size:10px; font-weight:bold; padding:2px 7px; border-radius:10px; margin-left:6px;"><i class="fas fa-clock"></i> {{ pending_community_count }}</span>{% endif %}</a>
 <a href="/dashboard/sprava-notifikaci" class="sidebar-link" style="color: #a78bfa; font-weight: 600;"><i class="fas fa-paper-plane"></i> Správa Notifikací & Zprávy</a>
 <a href="/dashboard/notifications" class="sidebar-link" style="color: #f59e0b;"><i class="fas fa-bell"></i> Oznámení</a>
 <a href="/dashboard/downloads" class="sidebar-link"><i class="fas fa-code-branch"></i> Správa Verzí a Přístupů</a>
@@ -3480,6 +3480,26 @@ HTML_DASHBOARD_MAIN = """
         <div id="refresh-timer" style="color: var(--text-muted); font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; font-weight: bold;"><i class="fas fa-sync-alt" style="color: var(--blue-main);"></i> Aktualizace za: <span id="timer-sec" style="color: white;">60</span>s</div>
     </div>
 </div>
+{% if pending_community_count and pending_community_count > 0 %}
+<div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.25)); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; padding: 18px 22px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.15);">
+    <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(245, 158, 11, 0.2); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #f59e0b;">
+            <i class="fas fa-route"></i>
+        </div>
+        <div>
+            <div style="font-size: 16px; font-weight: 700; color: #fef08a;">
+                Čekající komunitní linky ke schválení ({{ pending_community_count }})
+            </div>
+            <div style="font-size: 13px; color: #fde68a; margin-top: 2px;">
+                Hráči nahráli nové linky a hlášení. Zkontrolujte zvukové nahrávky a schvalte je pro publikaci.
+            </div>
+        </div>
+    </div>
+    <a href="/dashboard/community_routes" class="btn" style="background: #f59e0b; color: #000; font-weight: 700; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <i class="fas fa-headphones"></i> Přejít na schvalovací systém <i class="fas fa-arrow-right"></i>
+    </a>
+</div>
+{% endif %}
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
     <table id="usersTable">
         <thead><tr><th onclick="sortTable(0)">App ID ↕</th><th onclick="sortTable(1)">Nick ↕</th><th onclick="sortTable(2)">E-mail ↕</th><th onclick="sortTable(3)">Web Přihl. ↕</th><th onclick="sortTable(4)">Notify ↕</th><th onclick="sortTable(5)">Stav ↕</th><th onclick="sortTable(6)">Role ↕</th><th onclick="sortTable(7)">Poslední Aktivita ↕</th><th>Akce</th></tr></thead>
