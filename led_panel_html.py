@@ -3,7 +3,15 @@ HTML_LED_PANEL = """
 <html lang="cs">
 <head>
 <meta charset="UTF-8">
-<title>LED Panel Simulátor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LED Panel Simulátor | OIS IDPK</title>
+<meta name="description" content="Simulátor LED informačních panelů BUSE / DOT LED pro vozidla IDPK.">
+<link rel="canonical" href="https://datacorebot.koyeb.app/led-panel">
+<meta property="og:title" content="LED Panel Simulátor | OIS IDPK">
+<meta property="og:description" content="Simulátor LED informačních panelů BUSE / DOT LED pro vozidla IDPK.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://datacorebot.koyeb.app/led-panel">
+<meta property="og:image" content="https://datacorebot.koyeb.app/static/img/datacorebot_pf-lepsi.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0a0a0a;color:#ccc;font-family:monospace;font-size:12px;

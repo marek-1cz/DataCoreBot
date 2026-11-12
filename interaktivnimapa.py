@@ -13371,30 +13371,33 @@ def _full_page(title, body_html, is_map=False):
     }
 }
 </style>"""
-    canonical_tag = '<link rel="canonical" href="https://datacorebot.koyeb.app/mapa">' if is_map else ''
+    host = request.headers.get('X-Forwarded-Host') or request.host or ''
+    base = 'https://mapaidpk.net' if 'mapaidpk' in host.lower() else 'https://datacorebot.koyeb.app'
+    canonical_url = f"{base}/mapa" if is_map else f"{base}{request.path}"
+    canonical_tag = f'<link rel="canonical" href="{canonical_url}">'
     meta_desc = '<meta name="description" content="Živá interaktivní mapa autobusů IDPK v reálném čase od DataCoreBot. GPS poloha vozidel, zpoždění, linky a vozovny v Plzeňském kraji.">' if is_map else ''
     og_tags = (
-        '<meta property="og:title" content="Živá Interaktivní Mapa Autobusů IDPK | DataCoreBot">\n'
+        f'<meta property="og:title" content="{page_title}">\n'
         '<meta property="og:description" content="Sledujte autobusy IDPK v reálném čase na interaktivní mapě s GPS polohou, zpožděním a trasami spojů.">\n'
         '<meta property="og:type" content="website">\n'
-        '<meta property="og:url" content="https://datacorebot.koyeb.app/mapa">\n'
-        '<meta property="og:image" content="https://datacorebot.koyeb.app/static/img/datacorebot_pf-lepsi.png">\n'
+        f'<meta property="og:url" content="{canonical_url}">\n'
+        f'<meta property="og:image" content="{base}/static/img/datacorebot_pf-lepsi.png">\n'
         '<meta name="twitter:card" content="summary_large_image">'
     ) if is_map else ''
-    json_ld = '''<script type="application/ld+json">
-{
+    json_ld = f'''<script type="application/ld+json">
+{{
   "@context": "https://schema.org",
   "@type": "WebApplication",
   "name": "Živá Interaktivní Mapa Autobusů IDPK",
-  "url": "https://datacorebot.koyeb.app/mapa",
+  "url": "{canonical_url}",
   "applicationCategory": "MapApplication",
-  "author": {
+  "author": {{
     "@type": "Person",
     "name": "marekk_czz",
     "alternateName": "DataCoreBot"
-  },
+  }},
   "description": "Živá interaktivní mapa spojů IDPK v reálném čase od tvůrce DataCoreBot."
-}
+}}
 </script>''' if is_map else ''
     page_title = "Živá Interaktivní Mapa Autobusů IDPK | DataCoreBot" if is_map else f"{title} | OIS IDPK"
     resp = Response(

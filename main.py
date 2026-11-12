@@ -159,7 +159,7 @@ def add_security_headers(response):
     response.headers['Permissions-Policy'] = 'geolocation=(), camera=(), microphone=()'
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['Content-Security-Policy'] = "default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval';"
-    if request.path.startswith(('/dashboard', '/admin', '/debug', '/old', '/mapa_admin', '/blocked', '/login_blocked', '/ucet', '/overeni')):
+    if request.path.startswith(('/api', '/dashboard', '/admin', '/debug', '/old', '/mapa_admin', '/blocked', '/login_blocked', '/ucet', '/overeni')):
         response.headers['X-Robots-Tag'] = 'noindex, nofollow'
     return response
 
@@ -3239,6 +3239,46 @@ def home():
             path = "new_web.html"
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
+
+        req_p = (request.path or '/').rstrip('/') or '/'
+        host = request.headers.get('X-Forwarded-Host') or request.host or ''
+        base = 'https://mapaidpk.net' if 'mapaidpk' in host.lower() else 'https://datacorebot.koyeb.app'
+        canonical_url = f"{base}{req_p if req_p != '/' else '/'}"
+
+        # Dynamická úprava kanonického odkazu a og:url podle přesné podstránky (řeší GSC "Alternativní stránka se správnou značkou kanonické stránky")
+        content = content.replace('<link rel="canonical" href="https://datacorebot.koyeb.app/">', f'<link rel="canonical" href="{canonical_url}">')
+        content = content.replace('<meta property="og:url" content="https://datacorebot.koyeb.app/">', f'<meta property="og:url" content="{canonical_url}">')
+
+        PAGE_META = {
+            '/download': {
+                'title': 'Ke stažení – Launcher & Aplikace | Projekt OIS IDPK',
+                'desc': 'Stáhněte si nejnovější verzi OIS IDPK Launcheru a palubního počítače pro Windows. Automatické aktualizace a správa verzí.'
+            },
+            '/stats': {
+                'title': 'Statistiky a Přehledy | Projekt OIS IDPK',
+                'desc': 'Statistiky vozidel, aktivních spojů a provozu v Plzeňském kraji v reálném čase.'
+            },
+            '/team': {
+                'title': 'Náš Tým a Vývojáři | Projekt OIS IDPK',
+                'desc': 'Seznamte se s týmem vývojářů a přispěvatelů projektu OIS IDPK a DataCoreBot.'
+            },
+            '/supporters': {
+                'title': 'Podporovatelé a Dárci | Projekt OIS IDPK',
+                'desc': 'Poděkování všem komunitním dárcům a podporovatelům projektu OIS IDPK.'
+            },
+            '/provoz': {
+                'title': 'Aktuální Provoz IDPK | Projekt OIS IDPK',
+                'desc': 'Přehled aktuálního provozu veřejné dopravy IDPK a online sledování spojů.'
+            }
+        }
+
+        if req_p in PAGE_META:
+            meta = PAGE_META[req_p]
+            content = re.sub(r'<title>.*?</title>', f'<title>{meta["title"]}</title>', content, count=1)
+            content = re.sub(r'<meta name="description" content=".*?">', f'<meta name="description" content="{meta["desc"]}">', content, count=1)
+            content = re.sub(r'<meta property="og:title" content=".*?">', f'<meta property="og:title" content="{meta["title"]}">', content, count=1)
+            content = re.sub(r'<meta property="og:description" content=".*?">', f'<meta property="og:description" content="{meta["desc"]}">', content, count=1)
+
         if is_admin_bypass_active():
             content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
         return Response(content, mimetype="text/html; charset=utf-8")
@@ -3276,10 +3316,13 @@ def dashboard_toggle_web_bypass():
 @app.route('/supporters')
 @app.route('/stats', methods=['GET'])
 @app.route('/provoz')
-@app.route('/provoz-idpk')
 @app.route('/demo')
 def real_web_subpages():
     return home()
+
+@app.route('/provoz-idpk')
+def redirect_provoz_idpk():
+    return redirect('/provoz', code=301)
 
 @app.route('/jizni-rad')
 def redirect_jizni_rad():
@@ -3334,11 +3377,30 @@ def stranka_soukromi():
 
 @app.route('/robots.txt')
 def robots_txt():
+    host = request.headers.get('X-Forwarded-Host') or request.host or ''
+    base = 'https://mapaidpk.net' if 'mapaidpk' in host.lower() else 'https://datacorebot.koyeb.app'
     content = (
         "User-agent: *\n"
         "Allow: /\n"
-        "Disallow: /api/\n\n"
-        "Sitemap: https://datacorebot.koyeb.app/sitemap.xml\n"
+        "Allow: /mapa\n"
+        "Allow: /jizdni-rad\n"
+        "Allow: /historie\n"
+        "Allow: /led-panel\n"
+        "Allow: /pomoc\n"
+        "Allow: /podpora\n"
+        "Allow: /soukromi\n"
+        "Allow: /download\n"
+        "Allow: /stats\n"
+        "Allow: /team\n"
+        "Allow: /supporters\n"
+        "Allow: /provoz\n"
+        "Disallow: /api/\n"
+        "Disallow: /dashboard/\n"
+        "Disallow: /admin\n"
+        "Disallow: /mapa_admin\n"
+        "Disallow: /debug\n"
+        "Disallow: /old/\n\n"
+        f"Sitemap: {base}/sitemap.xml\n"
     )
     return Response(content, mimetype="text/plain; charset=utf-8")
 
@@ -3356,31 +3418,25 @@ def security_txt():
 
 @app.route('/sitemap.xml')
 def sitemap_xml():
-    # Urcit verejnou zakladni URL podle pozadavku (mapaidpk.net / datacorebot.koyeb.app)
     host = request.headers.get('X-Forwarded-Host') or request.host or ''
-    proto = request.headers.get('X-Forwarded-Proto') or ('https' if request.is_secure else 'http')
-    if 'mapaidpk' in host.lower():
-        base = 'https://mapaidpk.net'
-    elif host:
-        base = f'{proto}://{host}'
-    else:
-        base = 'https://datacorebot.koyeb.app'
+    base = 'https://mapaidpk.net' if 'mapaidpk' in host.lower() else 'https://datacorebot.koyeb.app'
+    today = datetime.now(ZoneInfo('Europe/Prague')).strftime('%Y-%m-%d')
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        f'  <url><loc>{base}/</loc><lastmod>2026-11-04</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
-        f'  <url><loc>{base}/download</loc><lastmod>2026-11-04</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>\n'
-        f'  <url><loc>{base}/mapa</loc><lastmod>2026-11-04</lastmod><changefreq>always</changefreq><priority>0.9</priority></url>\n'
-        f'  <url><loc>{base}/stats</loc><lastmod>2026-11-04</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>\n'
-        f'  <url><loc>{base}/team</loc><lastmod>2026-11-04</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>\n'
-        f'  <url><loc>{base}/supporters</loc><lastmod>2026-11-04</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>\n'
-        f'  <url><loc>{base}/provoz</loc><lastmod>2026-11-04</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
-        f'  <url><loc>{base}/jizdni-rad</loc><lastmod>2026-11-04</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
-        f'  <url><loc>{base}/historie</loc><lastmod>2026-11-04</lastmod><changefreq>hourly</changefreq><priority>0.8</priority></url>\n'
-        f'  <url><loc>{base}/led-panel</loc><lastmod>2026-11-04</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>\n'
-        f'  <url><loc>{base}/pomoc</loc><lastmod>2026-11-04</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>\n'
-        f'  <url><loc>{base}/podpora</loc><lastmod>2026-11-04</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>\n'
-        f'  <url><loc>{base}/soukromi</loc><lastmod>2026-11-04</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>\n'
+        f'  <url><loc>{base}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
+        f'  <url><loc>{base}/download</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>\n'
+        f'  <url><loc>{base}/mapa</loc><lastmod>{today}</lastmod><changefreq>always</changefreq><priority>0.9</priority></url>\n'
+        f'  <url><loc>{base}/stats</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>\n'
+        f'  <url><loc>{base}/team</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>\n'
+        f'  <url><loc>{base}/supporters</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>\n'
+        f'  <url><loc>{base}/provoz</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
+        f'  <url><loc>{base}/jizdni-rad</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
+        f'  <url><loc>{base}/historie</loc><lastmod>{today}</lastmod><changefreq>hourly</changefreq><priority>0.8</priority></url>\n'
+        f'  <url><loc>{base}/led-panel</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>\n'
+        f'  <url><loc>{base}/pomoc</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>\n'
+        f'  <url><loc>{base}/podpora</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>\n'
+        f'  <url><loc>{base}/soukromi</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>\n'
         '</urlset>'
     )
     return Response(xml, mimetype="application/xml; charset=utf-8")
@@ -3541,16 +3597,19 @@ def api_notices():
     return jsonify({"notices": notices})
 
 @app.route('/led-panel')
-def redirect_led_panel():
-    return redirect('/old/led-panel', code=302)
+def stranka_led_panel():
+    from led_panel_html import HTML_LED_PANEL
+    return Response(HTML_LED_PANEL, mimetype="text/html; charset=utf-8")
 
 @app.route('/led-panel/app')
-def redirect_led_panel_app():
-    return redirect('/old/led-panel/app', code=302)
+def stranka_led_panel_app():
+    from led_panel_html import HTML_LED_PANEL
+    return Response(HTML_LED_PANEL, mimetype="text/html; charset=utf-8")
 
 @app.route('/led-panel/view')
-def redirect_led_panel_view():
-    return redirect('/old/led-panel/view', code=302)
+def stranka_led_panel_view():
+    from led_panel_view import HTML_LED_PANEL_VIEW
+    return Response(HTML_LED_PANEL_VIEW, mimetype="text/html; charset=utf-8")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
