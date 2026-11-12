@@ -13371,6 +13371,7 @@ def _full_page(title, body_html, is_map=False):
     }
 }
 </style>"""
+    page_title = "Živá Interaktivní Mapa Autobusů IDPK | DataCoreBot" if is_map else f"{title} | OIS IDPK"
     host = request.headers.get('X-Forwarded-Host') or request.host or ''
     base = 'https://mapaidpk.net' if 'mapaidpk' in host.lower() else 'https://datacorebot.koyeb.app'
     canonical_url = f"{base}/mapa" if is_map else f"{base}{request.path}"
@@ -13399,7 +13400,6 @@ def _full_page(title, body_html, is_map=False):
   "description": "Živá interaktivní mapa spojů IDPK v reálném čase od tvůrce DataCoreBot."
 }}
 </script>''' if is_map else ''
-    page_title = "Živá Interaktivní Mapa Autobusů IDPK | DataCoreBot" if is_map else f"{title} | OIS IDPK"
     resp = Response(
         f"""<!DOCTYPE html>
 <html lang="cs" style="background:#0f172a;">
