@@ -7479,12 +7479,12 @@ HTML_COMMUNITY_ROUTES = """
               {% for s in r.get('stops', []) %}
                 <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; gap:4px;">
                   <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="color:#f8fafc; font-weight:bold; font-size:12px;">{{ loop.index }}. {{ s.get('name') }}</span>
-                    {% if s.get('na_znameni') %}<span style="font-size:10px; color:#f59e0b; font-weight:bold;">(x) Znamení</span>{% endif %}
+                    <span style="color:#f8fafc; font-weight:bold; font-size:12px;">{{ loop.index }}. {{ s.get('name') or s.get('n') or ('Zastávka ' ~ loop.index) }}</span>
+                    {% if s.get('na_znameni') or s.get('req') %}<span style="font-size:10px; color:#f59e0b; font-weight:bold;">(x) Znamení</span>{% endif %}
                   </div>
                   <div style="display:flex; justify-content:space-between; font-size:11px; color:#94a3b8;">
                     <span>Čas: {{ s.get('time') or '--:--' }}</span>
-                    <span>Zóna: {{ s.get('zone') or 'P' }}</span>
+                    <span>Zóna: {{ s.get('zone') or s.get('z') or 'P' }}</span>
                   </div>
                   {% if s.get('audio_url') %}
                     <div style="margin-top:4px;">

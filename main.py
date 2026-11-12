@@ -8833,10 +8833,22 @@ def dashboard_community_routes():
                 item = dict(r)
                 stops_raw = item.get('stops_json') or '[]'
                 try:
-                    item['stops'] = json.loads(stops_raw) if isinstance(stops_raw, str) else stops_raw
-                except:
-                    item['stops'] = []
+                    stops = json.loads(stops_raw) if isinstance(stops_raw, str) else (stops_raw or [])
+                except Exception:
+                    stops = []
+                for s in stops:
+                    if isinstance(s, dict):
+                        if not s.get('name') and s.get('n'):
+                            s['name'] = s['n']
+                        if not s.get('zone') and s.get('z'):
+                            s['zone'] = s['z']
+                        if not s.get('na_znameni') and s.get('req'):
+                            s['na_znameni'] = s['req']
+                item['stops'] = stops
+                has_sound = any(bool(s.get('audio_url') or (s.get('snd') and isinstance(s.get('snd'), dict) and s.get('snd').get('url'))) for s in stops if isinstance(s, dict))
+                item['has_sound'] = has_sound
                 enriched.append(item)
+            enriched.sort(key=lambda x: (1 if (not x.get('has_sound') or 'bez zvuku' in (x.get('system_tag') or '').lower()) else 0, -int(x.get('id', 0))))
             return enriched
 
         pending_routes = _enrich_routes(raw_pending)
@@ -8978,7 +8990,7 @@ def api_community_routes_list():
             s_param = f"%{search}%"
             params.extend([s_param, s_param, s_param, s_param])
 
-        sql += " ORDER BY id DESC"
+        sql += " ORDER BY CASE WHEN system_tag LIKE '%bez zvuku%' OR description LIKE '%bez zvuku%' THEN 1 ELSE 0 END ASC, id DESC"
 
         routes = d1.execute(sql, params) if params else d1.execute(sql) or []
         for r in routes:
@@ -9043,7 +9055,7 @@ def api_community_routes_pending():
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
-        raw_pending = d1.execute("SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, system_tag, created_at FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0 ORDER BY id DESC") or []
+        raw_pending = d1.execute("SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, system_tag, created_at FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0 ORDER BY CASE WHEN system_tag LIKE '%bez zvuku%' THEN 1 ELSE 0 END ASC, id DESC") or []
         enriched = []
         for r in raw_pending:
             item = dict(r)
@@ -9152,18 +9164,35 @@ def api_community_routes_submit():
         with zipfile.ZipFile(zip_buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
             # 1. Uložit zvukové soubory
             for idx, stop in enumerate(stops_list):
+                stop_name_raw = stop.get('name') or stop.get('n') or f"zastavka_{idx + 1}"
                 file_field = f"audio_{idx}"
                 file_obj = request.files.get(file_field)
                 if file_obj and file_obj.filename:
                     ext = os.path.splitext(file_obj.filename)[1].lower()
                     if ext in ('.mp3', '.wav', '.ogg', '.aac'):
                         content = file_obj.read()
-                        safe_filename = f"{idx + 1:02d}_{stop.get('name', 'zastavka').replace(' ', '_').replace('/', '_')}{ext}"
+                        safe_filename = f"{idx + 1:02d}_{stop_name_raw.replace(' ', '_').replace('/', '_')}{ext}"
                         object_key = f"{upload_prefix}/{safe_filename}"
-                        audio_url = r2_storage.upload_file_to_r2(content, object_key, content_type="audio/mpeg" if ext == '.mp3' else "audio/wav")
+                        mime_type = "audio/mpeg" if ext == '.mp3' else "audio/wav"
+                        audio_url = r2_storage.upload_file_to_r2(content, object_key, content_type=mime_type)
+                        stop['name'] = stop_name_raw
+                        stop['n'] = stop_name_raw
                         stop['audio_url'] = audio_url
                         stop['audio_file'] = safe_filename
                         uploaded_keys.append(object_key)
+
+                        # Trvalé uložení do Cloudflare D1 tabulky community_audio (přežije Koyeb restarty)
+                        try:
+                            import base64
+                            from cloudflare_d1 import get_d1_client
+                            d1 = get_d1_client()
+                            b64_content = base64.b64encode(content).decode('ascii')
+                            d1.execute(
+                                "INSERT OR REPLACE INTO community_audio (key, content_type, data_b64, created_at) VALUES (?, ?, ?, datetime('now'))",
+                                [object_key, mime_type, b64_content]
+                            )
+                        except Exception as e_d1_audio:
+                            print(f"[COMMUNITY_AUDIO_SAVE] {e_d1_audio}")
                         
                         # Přidat do ZIP balíčku do složky zvuky/
                         zf.writestr(f"zvuky/{safe_filename}", content)
@@ -9200,6 +9229,18 @@ def api_community_routes_submit():
         package_url = r2_storage.upload_file_to_r2(zip_bytes, package_key, content_type="application/zip")
         uploaded_keys.append(package_key)
 
+        try:
+            import base64
+            from cloudflare_d1 import get_d1_client
+            d1 = get_d1_client()
+            b64_zip = base64.b64encode(zip_bytes).decode('ascii')
+            d1.execute(
+                "INSERT OR REPLACE INTO community_audio (key, content_type, data_b64, created_at) VALUES (?, ?, ?, datetime('now'))",
+                [package_key, "application/zip", b64_zip]
+            )
+        except Exception as e_d1_zip:
+            print(f"[COMMUNITY_ZIP_SAVE] {e_d1_zip}")
+
         # Uložit do Cloudflare D1
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
@@ -9233,6 +9274,39 @@ def api_community_routes_submit():
     except Exception as e:
         print(f"[COMMUNITY_SUBMIT] Chyba: {e}")
         return _cors_jsonify({"success": False, "error": f"Chyba při zpracování linky: {e}"}), 500
+
+@app.route('/static/community_audio/<path:object_key>', methods=['GET'])
+def serve_community_audio(object_key):
+    import base64
+    from flask import send_file
+    local_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "community_audio")
+    local_path = os.path.join(local_dir, object_key)
+    ext = os.path.splitext(object_key)[1].lower()
+    mimes = {'.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.zip': 'application/zip'}
+    mime = mimes.get(ext, 'application/octet-stream')
+
+    if os.path.exists(local_path):
+        return send_file(local_path, mimetype=mime)
+
+    # Obnova z Cloudflare D1 (přežije Koyeb kontejnery)
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        res = d1.execute("SELECT content_type, data_b64 FROM community_audio WHERE key = ?", [object_key])
+        if res and len(res) > 0:
+            row = res[0]
+            raw_bytes = base64.b64decode(row['data_b64'])
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            try:
+                with open(local_path, 'wb') as f:
+                    f.write(raw_bytes)
+            except Exception:
+                pass
+            return Response(raw_bytes, mimetype=row.get('content_type') or mime)
+    except Exception as e:
+        print(f"[SERVE_COMMUNITY_AUDIO] Chyba načtení z D1: {e}")
+
+    return "Audio nenalezeno", 404
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DISCORD BOT
