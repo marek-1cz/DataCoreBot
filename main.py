@@ -9072,18 +9072,20 @@ def api_community_routes_decision():
         route_name = r.get('route_name', '')
         if ok:
             d1.execute("UPDATE community_routes SET status = 'approved', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
+            note_part = f"\n\nPoznámka od správce: {message}" if message else ""
             _notify_user_dm_safe(
                 author_id,
                 "🎉 Tvoje komunitní linka byla schválena!",
-                f"Tvá linka **{route_num} ({route_name})** úspěšně prošla kontrolou hlášení a je nyní dostupná v OIS aplikaci pro všechny hráče!{f'\\n\\nPoznámka od správce: {message}' if message else ''}\\n\\nDěkujeme za obohacení herní komunity OIS IDPK.",
+                f"Tvá linka **{route_num} ({route_name})** úspěšně prošla kontrolou hlášení a je nyní dostupná v OIS aplikaci pro všechny hráče!{note_part}\n\nDěkujeme za obohacení herní komunity OIS IDPK.",
                 0x10b981
             )
             send_log("✅ Komunitní linka schválena (Launcher)", f"**Linka:** {route_num} ({route_name})\n**Autor:** <@{author_id}>", color=0x10b981)
-            if discord_announcement and DISCORD_NOTIFY_CHANNEL_ID:
+            discord_channel_id = os.getenv('DISCORD_NOTIFY_CHANNEL_ID')
+            if discord_announcement and discord_channel_id:
                 try:
-                    ch = bot.get_channel(int(DISCORD_NOTIFY_CHANNEL_ID))
+                    ch = bot.get_channel(int(discord_channel_id))
                     if ch:
-                        bot.loop.create_task(ch.send(f"🎉 **Nová komunitní linka v OIS IDPK!**\\nLinka **{route_num} ({route_name})** od uživatele <@{author_id}> je nyní ke stažení v Launcheru!"))
+                        bot.loop.create_task(ch.send(f"🎉 **Nová komunitní linka v OIS IDPK!**\nLinka **{route_num} ({route_name})** od uživatele <@{author_id}> je nyní ke stažení v Launcheru!"))
                 except Exception as e:
                     print(f"[COMMUNITY_ANNOUNCE] {e}")
         else:
