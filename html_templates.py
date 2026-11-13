@@ -3183,7 +3183,7 @@ HTML_DOWNLOADS_MGMT = """
 <div id="modal-add-version" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;justify-content:center;align-items:center;">
   <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:32px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;">
     <h3 style="margin:0 0 24px;color:var(--text-main);"><i class="fas fa-plus-circle" style="color:var(--blue-main);"></i> Přidat novou verzi</h3>
-    <form method="POST" action="/dashboard/add_version" onsubmit="var btn=this.querySelector('button[type=submit]'); if(btn.dataset.submitted) return false; btn.dataset.submitted='1'; btn.disabled=true; btn.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Přidávám...'; return true;">
+    <form method="POST" action="/dashboard/add_version" onsubmit="var btn=this.querySelector('button[type=submit]'); if(btn.dataset.submitted) return false; btn.dataset.submitted='1'; btn.disabled=true; btn.textContent='Přidávám...'; return true;">
       <div style="display:grid;gap:16px;">
         <div>
           <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Název verze *</label>
@@ -3255,7 +3255,7 @@ HTML_DOWNLOADS_MGMT = """
 <div id="modal-edit-version" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;justify-content:center;align-items:center;">
   <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:32px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;">
     <h3 style="margin:0 0 24px;color:var(--text-main);"><i class="fas fa-edit" style="color:#f59e0b;"></i> Upravit verzi</h3>
-    <form method="POST" action="/dashboard/edit_version" id="form-edit-version" onsubmit="var btn=this.querySelector('button[type=submit]'); if(btn.dataset.submitted) return false; btn.dataset.submitted='1'; btn.disabled=true; btn.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Ukládám...'; return true;">
+    <form method="POST" action="/dashboard/edit_version" id="form-edit-version" onsubmit="var btn=this.querySelector('button[type=submit]'); if(btn.dataset.submitted) return false; btn.dataset.submitted='1'; btn.disabled=true; btn.textContent='Ukládám...'; return true;">
       <input type="hidden" name="version_id" id="edit-version-id">
       <div style="display:grid;gap:16px;">
         <div>
@@ -3333,7 +3333,7 @@ HTML_DOWNLOADS_MGMT = """
     <p style="color:var(--text-muted);font-size:13px;margin:0 0 20px;line-height:1.5;">
       Zadejte označení buildu a odkaz na stažení patch ZIPu. Hráčům v Launcheru se místo plného stahování nabídne rychlé tlačítko <b>Aktualizovat</b>.
     </p>
-    <form method="POST" action="/dashboard/publish_patch" onsubmit="var btn=this.querySelector('button[type=submit]'); if(btn.dataset.submitted) return false; btn.dataset.submitted='1'; btn.disabled=true; btn.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Publikuji...'; return true;">
+    <form method="POST" action="/dashboard/publish_patch" onsubmit="var btn=this.querySelector('button[type=submit]'); if(btn.dataset.submitted) return false; btn.dataset.submitted='1'; btn.disabled=true; btn.textContent='Publikuji...'; return true;">
       <input type="hidden" name="version_id" id="patch-version-id">
       <div style="display:grid;gap:16px;">
         <div>
