@@ -2866,6 +2866,8 @@ def api_submit_stats():
     discord_id = str(data.get("discord_id", "")).strip()
     if not raw_line:
         return _cors_jsonify({"status": "error", "message": "Chybí parametr linky."})
+    if raw_line.startswith("user_") or raw_line.startswith("comm_") or ":::" in raw_line or "1794516125535" in raw_line or "user_732" in raw_line:
+        return _cors_jsonify({"status": "ignored", "message": "Uživatelské a testovací linky se do globálních statistik nezapočítávají."})
     
     # ── Vždy normalizovat na oficiální 6místné licenční číslo (např. '734' -> '490734')
     line = normalize_line_number(raw_line)
