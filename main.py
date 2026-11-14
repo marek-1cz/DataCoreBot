@@ -2781,6 +2781,22 @@ def api_report_error():
     source = str(data.get("source", "")).strip()[:200]
     line = data.get("line")
 
+    # Ignorovat chybějící zvuky u komunitních / neoficiálních linek (patří pouze do lokálního logu)
+    msg_low = msg.lower()
+    type_low = error_type.lower()
+    sound_error_keywords = ("chybí zápis zvuku", "chybí fyzický zvukový soubor", "nelze přehrát zvuk", "nemá zvuk", "chybný formát/kodek")
+    if any(k in msg_low for k in sound_error_keywords):
+        OFFICIAL_BUILTIN_LINES = {
+            '336', '424', '464', '621', '651', '711', '722', '723', '731', '734', '735',
+            '736', '737', '738', '739', '749', '750', '752', '753', '754',
+            '755', '757', '759', '760', '769', '911', 'robo'
+        }
+        import re
+        m = re.search(r'linka\s*([a-z0-9_-]+)', type_low + " " + msg_low)
+        line_num = m.group(1).replace('_custom', '').replace('comm_', '').replace('_auto', '').strip() if m else ""
+        if "comm" in type_low or "custom" in type_low or "komunit" in type_low or (line_num and line_num not in OFFICIAL_BUILTIN_LINES):
+            return _cors_jsonify({"status": "skipped", "reason": "community_route_sound_ignored"})
+
     if not nick or not discord_id:
         try:
             tok = request.cookies.get("web_session_token") or request.cookies.get("admin_session_token")
