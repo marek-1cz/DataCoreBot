@@ -8991,7 +8991,7 @@ def api_community_routes_list():
         tag = request.args.get('tag', '').strip()
         search = request.args.get('search', '').strip()
 
-        sql = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag, COALESCE(version, 'V1') as version FROM community_routes WHERE status = 'approved' AND is_deleted_by_author = 0"
+        sql = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag, status, COALESCE(version, 'V1') as version FROM community_routes WHERE status = 'approved' AND is_deleted_by_author = 0"
         params = []
 
         if tag and tag.upper() not in ('ALL', 'VŠECHNY', 'VSECHNY', ''):
