@@ -9011,7 +9011,7 @@ def api_community_routes_list():
         tag = request.args.get('tag', '').strip()
         search = request.args.get('search', '').strip()
 
-        sql = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag, status, is_deleted_by_author, COALESCE(version, 'V1') as version FROM community_routes WHERE (status = 'approved' OR is_deleted_by_author = 1)"
+        sql = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag, status, is_deleted_by_author, COALESCE(version, 'V1') as version, COALESCE(voice_type, 'synt') as voice_type FROM community_routes WHERE (status = 'approved' OR is_deleted_by_author = 1)"
         params = []
 
         if tag and tag.upper() not in ('ALL', 'VŠECHNY', 'VSECHNY', ''):
@@ -9036,6 +9036,14 @@ def api_community_routes_list():
             if not r.get('version'):
                 r['version'] = 'V1'
             r['route_name'] = compute_auto_route_name(r['stops'], r.get('route_name'), r.get('route_number'))
+            tags_list = [t.strip() for t in r['system_tag'].split(',') if t.strip()]
+            stops = r.get('stops', [])
+            snd_cnt = sum(1 for s in stops if isinstance(s, dict) and bool(s.get('audio_url') or s.get('snd') or s.get('audio_file')))
+            if stops and ((len(stops) - snd_cnt) / len(stops)) >= 0.8:
+                if not any(t.lower() == 'bez zvuku' for t in tags_list):
+                    tags_list.append('bez zvuku')
+                r['voice_type'] = 'none'
+            r['tags'] = tags_list
         return _cors_jsonify({"success": True, "routes": routes})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
@@ -9084,11 +9092,18 @@ def api_community_routes_delete():
                 route_id = int(clean_id_str)
 
         if route_id:
-            row = d1.execute("SELECT id FROM community_routes WHERE id = ? AND (author_id = ? OR author_name = ?)", [route_id, str(author), str(author)])
+            row = d1.execute("SELECT id, status, is_deleted_by_author FROM community_routes WHERE id = ? AND (author_id = ? OR author_name = ?)", [route_id, str(author), str(author)])
             if row:
-                d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [route_id])
-                send_log("🗑️ Linka smazána z komunity", f"Uživatel `{author}` smazal linku ID {route_id} z veřejné komunity.", color=0xf59e0b)
-                return _cors_jsonify({"success": True, "message": "Linka byla smazána z veřejné nabídky."})
+                r_item = row[0]
+                is_already_del = bool(r_item.get('is_deleted_by_author') or r_item.get('status') == 'deleted_by_user')
+                if data.get('permanent') or is_already_del:
+                    d1.execute("DELETE FROM community_routes WHERE id = ?", [route_id])
+                    send_log("🗑️ Linka trvale odstraněna", f"Uživatel `{author}` trvale odstranil linku ID {route_id} z databáze.", color=0xef4444)
+                    return _cors_jsonify({"success": True, "message": "Linka byla trvale odstraněna z databáze."})
+                else:
+                    d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [route_id])
+                    send_log("🗑️ Linka smazána z komunity", f"Uživatel `{author}` smazal linku ID {route_id} z veřejné komunity.", color=0xf59e0b)
+                    return _cors_jsonify({"success": True, "message": "Linka byla smazána z veřejné nabídky."})
 
         if route_number:
             sql = "SELECT id, version FROM community_routes WHERE route_number = ? AND (author_id = ? OR author_name = ?)"
@@ -9349,37 +9364,67 @@ def api_community_routes_submit():
             except Exception:
                 route_version = "V1"
 
+        voice_type = request.form.get('voice_type', 'synt').strip()
+        tags_json = request.form.get('tags_json', '').strip()
+
+        has_audio_count = len(uploaded_keys)
+        total_stops_count = len(stops_list)
+        no_sound_ratio = (total_stops_count - has_audio_count) / total_stops_count if total_stops_count > 0 else 1.0
+        is_no_sound_80 = no_sound_ratio >= 0.8 or 'bez zvuku' in system_tag.lower() or 'bez zvuku' in tags_json.lower()
+
+        tags_list = [t.strip() for t in system_tag.split(',') if t.strip()]
+        if is_no_sound_80:
+            if not any(t.lower() == 'bez zvuku' for t in tags_list):
+                tags_list.append('bez zvuku')
+            voice_type = 'none'
+        system_tag = ", ".join(tags_list) if tags_list else 'IDPK'
+
+        route_status = 'approved' if is_no_sound_80 else 'pending'
+
         d1.execute(
             """INSERT INTO community_routes (
                 route_number, route_name, route_type, description, author_id, author_name,
-                stops_json, audio_package_url, audio_files_json, status, created_at, updated_at, system_tag, version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'), ?, ?)""",
+                stops_json, audio_package_url, audio_files_json, status, created_at, updated_at, system_tag, version, voice_type
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?, ?, ?)""",
             [
                 route_number, route_name, route_type, description, str(author_id), str(author_name),
                 json.dumps(stops_list, ensure_ascii=False), package_url, json.dumps(uploaded_keys),
-                system_tag, route_version
+                route_status, system_tag, route_version, voice_type
             ]
         )
 
-        send_log(
-            "📢 Nová komunitní linka ke schválení",
-            f"**Linka:** `{route_number}` ({route_name}) - **Verze:** `{route_version}`\n"
-            f"**Systém / Tag:** `{system_tag}`\n"
-            f"**Autor:** <@{author_id}> ({author_name})\n"
-            f"**Počet zastávek:** {len(stops_list)}\n"
-            f"**Typ:** {'Fiktivní' if route_type == 'custom' else 'Z GTFS'}\n"
-            f"**Dashboard:** https://datacorebot.koyeb.app/dashboard/community_routes",
-            color=0xf59e0b
-        )
+        if is_no_sound_80:
+            send_log(
+                "📢 Nová komunitní linka publikována (bez zvuku)",
+                f"**Linka:** `{route_number}` ({route_name}) - **Verze:** `{route_version}`\n"
+                f"**Systém / Tag:** `{system_tag}`\n"
+                f"**Autor:** <@{author_id}> ({author_name})\n"
+                f"**Počet zastávek:** {len(stops_list)} (80%+ bez zvuku - automaticky schváleno do komunitních linek)",
+                color=0x10b981
+            )
+        else:
+            send_log(
+                "📢 Nová komunitní linka ke schválení",
+                f"**Linka:** `{route_number}` ({route_name}) - **Verze:** `{route_version}`\n"
+                f"**Systém / Tag:** `{system_tag}`\n"
+                f"**Autor:** <@{author_id}> ({author_name})\n"
+                f"**Počet zastávek:** {len(stops_list)}\n"
+                f"**Typ:** {'Fiktivní' if route_type == 'custom' else 'Z GTFS'}\n"
+                f"**Dashboard:** https://datacorebot.koyeb.app/dashboard/community_routes",
+                color=0xf59e0b
+            )
 
         new_row = d1.execute("SELECT id FROM community_routes WHERE route_number = ? AND (author_id = ? OR author_name = ?) ORDER BY id DESC LIMIT 1", [route_number, str(author_id), str(author_name)])
         new_id = new_row[0]['id'] if new_row else None
+
+        msg = f"Linka {route_number} ({route_version}) bez zvuku byla automaticky schválena a publikována do komunitních linek." if is_no_sound_80 else f"Linka {route_number} ({route_version}) byla úspěšně odeslána ke schválení. Jakmile ji administrátor zkontroluje, obdržíte zprávu do Discord DM."
 
         return _cors_jsonify({
             "success": True,
             "route_id": new_id,
             "version": route_version,
-            "message": f"Linka {route_number} ({route_version}) byla úspěšně odeslána ke schválení. Jakmile ji administrátor zkontroluje, obdržíte zprávu do Discord DM."
+            "status": route_status,
+            "message": msg
         })
     except Exception as e:
         print(f"[COMMUNITY_SUBMIT] Chyba: {e}")
