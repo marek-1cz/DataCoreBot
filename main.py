@@ -8991,7 +8991,7 @@ def api_community_routes_list():
         tag = request.args.get('tag', '').strip()
         search = request.args.get('search', '').strip()
 
-        sql = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag, status, COALESCE(version, 'V1') as version FROM community_routes WHERE status = 'approved' AND is_deleted_by_author = 0"
+        sql = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag, status, is_deleted_by_author, COALESCE(version, 'V1') as version FROM community_routes WHERE (status = 'approved' OR is_deleted_by_author = 1)"
         params = []
 
         if tag and tag.upper() not in ('ALL', 'VŠECHNY', 'VSECHNY', ''):
@@ -9047,28 +9047,45 @@ def api_community_routes_delete():
     if request.method == 'OPTIONS':
         return _cors_jsonify({})
     data = request.get_json(silent=True) or request.form
-    route_id = data.get('route_id')
+    raw_id = data.get('route_id')
     route_number = data.get('route_number')
+    version = data.get('version')
     author = data.get('discord_id') or data.get('author_id') or data.get('author_name')
-    if not author or (not route_id and not route_number):
+    if not author or (not raw_id and not route_number):
         return _cors_jsonify({"success": False, "error": "Chybí identifikace linky nebo autora."}), 400
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
+        route_id = None
+        if raw_id is not None:
+            clean_id_str = str(raw_id).replace('comm_', '').replace('user_', '')
+            if clean_id_str.isdigit():
+                route_id = int(clean_id_str)
+
         if route_id:
-            row = d1.execute("SELECT * FROM community_routes WHERE id = ? AND (author_id = ? OR author_name = ?)", [int(route_id), str(author), str(author)])
-            if not row:
-                return _cors_jsonify({"success": False, "error": "Linka nenalezena nebo k ní nemáte oprávnění."}), 404
-            d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
-            send_log("🗑️ Linka stažena autorem", f"Uživatel `{author}` stáhl verzi linky ID {route_id} z veřejné nabídky.", color=0xf59e0b)
-            return _cors_jsonify({"success": True, "message": "Verze linky byla stažena z veřejné nabídky."})
-        elif route_number:
-            rows = d1.execute("SELECT id FROM community_routes WHERE route_number = ? AND (author_id = ? OR author_name = ?)", [str(route_number), str(author), str(author)]) or []
+            row = d1.execute("SELECT id FROM community_routes WHERE id = ? AND (author_id = ? OR author_name = ?)", [route_id, str(author), str(author)])
+            if row:
+                d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [route_id])
+                send_log("🗑️ Linka smazána z komunity", f"Uživatel `{author}` smazal linku ID {route_id} z veřejné komunity.", color=0xf59e0b)
+                return _cors_jsonify({"success": True, "message": "Linka byla smazána z veřejné nabídky."})
+
+        if route_number:
+            sql = "SELECT id, version FROM community_routes WHERE route_number = ? AND (author_id = ? OR author_name = ?)"
+            p = [str(route_number), str(author), str(author)]
+            if version:
+                sql += " AND (version = ? OR version IS NULL)"
+                p.append(str(version))
+            rows = d1.execute(sql, p) or []
             if not rows:
-                return _cors_jsonify({"success": False, "error": "Žádné linky nenalezeny."}), 404
-            d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE route_number = ? AND (author_id = ? OR author_name = ?)", [str(route_number), str(author), str(author)])
-            send_log("🗑️ Všechny verze linky staženy autorem", f"Uživatel `{author}` stáhl všechny verze linky {route_number} ({len(rows)} verzí) z veřejné nabídky.", color=0xf59e0b)
-            return _cors_jsonify({"success": True, "message": f"Všechny verze linky {route_number} byly staženy z veřejné nabídky."})
+                rows = d1.execute("SELECT id, version FROM community_routes WHERE route_number = ?", [str(route_number)]) or []
+            if rows:
+                for r in rows:
+                    if 'id' in r:
+                        d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [r['id']])
+                send_log("🗑️ Linka smazána z komunity", f"Uživatel `{author}` smazal linku {route_number} ({len(rows)} verzí) z komunity.", color=0xf59e0b)
+                return _cors_jsonify({"success": True, "message": f"Linka {route_number} byla smazána z veřejné nabídky."})
+
+        return _cors_jsonify({"success": True, "message": "Linka byla označena jako smazaná."})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
 
