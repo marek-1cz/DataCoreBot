@@ -447,10 +447,10 @@ def validate_nickname(nick: str, db=None) -> tuple[bool, str]:
         return False, "Přezdívka je povinná."
     
     n = nick.strip()
-    if len(n) < 5:
-        return False, "Přezdívka musí mít alespoň 5 znaků (povoleno 5 až 32 znaků)."
-    if len(n) > 32:
-        return False, "Přezdívka je příliš dlouhá (maximum je 32 znaků)."
+    if len(n) < 3:
+        return False, "Přezdívka musí mít alespoň 3 znaky (povoleno 3 až 24 znaků)."
+    if len(n) > 24:
+        return False, "Přezdívka je příliš dlouhá (maximum je 24 znaků)."
     
     import re
     if not re.match(r"^[a-zA-Z0-9_\-\. áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ]+$", n):
@@ -4183,8 +4183,74 @@ def api_app_login():
                         user = u
                         break
 
+        if not user and hasattr(bot, 'is_ready') and bot.is_ready():
+            for guild in bot.guilds:
+                if identifier.isdigit():
+                    m = guild.get_member(int(identifier))
+                else:
+                    m = discord.utils.find(lambda x: x.name.lower() == identifier.lower() or (getattr(x, 'global_name', None) and x.global_name.lower() == identifier.lower()) or (getattr(x, 'display_name', None) and x.display_name.lower() == identifier.lower()), guild.members)
+                if m:
+                    d_id_str = str(m.id)
+                    if db:
+                        try:
+                            ex_res = db.table("users").select("*").eq("discord_id", d_id_str).execute().data
+                            if ex_res:
+                                user = ex_res[0]
+                        except Exception: pass
+                    if not user:
+                        user = {
+                            "discord_id": d_id_str,
+                            "nick": getattr(m, 'display_name', '') or m.name,
+                            "role": "User"
+                        }
+                    break
+
         if not user:
-            return _cors_jsonify({"status": "error", "message": "Toto ID neexistuje. Jestli problém přetrvává, jděte na náš Discord."})
+            suggestions = []
+            seen = set()
+            id_low = identifier.lower().strip()
+            if hasattr(bot, 'is_ready') and bot.is_ready():
+                for guild in bot.guilds:
+                    for m in guild.members:
+                        if m.bot: continue
+                        mid = str(m.id)
+                        if mid in seen: continue
+                        m_name = (m.name or "").lower()
+                        m_disp = (getattr(m, 'display_name', '') or "").lower()
+                        m_glob = (getattr(m, 'global_name', '') or "").lower()
+                        if (id_low in m_name or id_low in m_disp or id_low in m_glob or
+                            (len(id_low) >= 3 and (m_name.startswith(id_low) or m_disp.startswith(id_low)))):
+                            seen.add(mid)
+                            suggestions.append({
+                                "discord_id": mid,
+                                "nick": getattr(m, 'display_name', '') or m.name,
+                                "username": m.name
+                            })
+                            if len(suggestions) >= 4: break
+                    if len(suggestions) >= 4: break
+
+            if len(suggestions) < 4:
+                for u in _get_fallback_users():
+                    uid = str(u.get("discord_id") or "")
+                    if not uid or uid in seen or uid == "čeká na odpověd": continue
+                    unick = str(u.get("nick") or "")
+                    if id_low in unick.lower():
+                        seen.add(uid)
+                        suggestions.append({
+                            "discord_id": uid,
+                            "nick": unick,
+                            "username": unick
+                        })
+                        if len(suggestions) >= 4: break
+
+            if suggestions:
+                return _cors_jsonify({
+                    "status": "suggestions",
+                    "message": "Uživatel s tímto jménem nebyl nalezen. Mysleli jste některého z těchto uživatelů?",
+                    "suggestions": suggestions
+                })
+
+            return _cors_jsonify({"status": "error", "message": "Toto uživatelské jméno ani Discord ID nebylo nalezeno. Zkontrolujte prosím zadání nebo se připojte na náš Discord."})
             
         discord_id = str(user.get("discord_id"))
         effective_role, is_b = get_cached_user_role(discord_id)
@@ -4237,7 +4303,7 @@ def api_app_login():
             if hasattr(bot, 'is_ready') and bot.is_ready() and bot.loop:
                 asyncio.run_coroutine_threadsafe(send(), bot.loop)
         except Exception: pass
-        return _cors_jsonify({"status": "waiting", "discord_id": discord_id})
+        return _cors_jsonify({"status": "waiting", "discord_id": discord_id, "nick": user.get('nick', '')})
     except Exception as e: return _cors_jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/app_check', methods=['POST', 'OPTIONS'], strict_slashes=False)
@@ -5225,7 +5291,7 @@ def process_web_auth_email(email, intent, client_ip, nick=None):
         if not user_rec:
             # Nová registrace: validace přezdívky povinná
             if not nick_str:
-                return {"status": "error", "message": "Pro novou registraci přes e-mail je povinné zadat přezdívku (minimálně 5 znaků)."}, 400
+                return {"status": "error", "message": "Pro novou registraci přes e-mail je povinné zadat přezdívku (3 až 24 znaků)."}, 400
             ok_nick, err_nick = validate_nickname(nick_str, db=db)
             if not ok_nick:
                 return {"status": "error", "message": err_nick}, 400
@@ -11170,13 +11236,21 @@ async def cmd_id(ctx, *, user_arg: str = None):
 async def auth(ctx):
     try: await ctx.message.delete()
     except: pass
+    d_id = str(ctx.author.id)
+    token = _AUTH_TOKEN_STATUS.get(d_id)
     db = get_db()
-    if db:
-        u = db.table("users").select("login_token").eq("discord_id", str(ctx.author.id)).execute().data
-        if u and u[0].get('login_token'): await ctx.send(f"🛡️ {ctx.author.mention}, potvrďte přihlášení:", view=AppAuthView(u[0]['login_token'], str(ctx.author.id), False), delete_after=60)
-        else:
-            msg = await ctx.send(f"❌ {ctx.author.mention} Nemáš čekající požadavek.")
-            await asyncio.sleep(5); await msg.delete()
+    if not token and db:
+        try:
+            u = db.table("users").select("login_token").eq("discord_id", d_id).execute().data
+            if u and u[0].get('login_token'):
+                token = u[0]['login_token']
+        except Exception: pass
+    if token and token not in ("rejected", "approved"):
+        auth_tok = token if isinstance(token, str) and len(token) > 10 else str(uuid.uuid4())
+        await ctx.send(f"🛡️ {ctx.author.mention}, potvrďte přihlášení do Launcheru:", view=AppAuthView(auth_tok, d_id, False), delete_after=90)
+    else:
+        msg = await ctx.send(f"❌ {ctx.author.mention} Nemáš žádný čekající požadavek na přihlášení.")
+        await asyncio.sleep(6); await msg.delete()
 
 @bot.command()
 async def verze(ctx):
