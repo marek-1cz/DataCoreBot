@@ -8819,6 +8819,25 @@ def _notify_user_dm_safe(discord_id, title, description, color=0x38bdf8):
     except Exception as e:
         print(f"[COMMUNITY_NOTIFY] Chyba při odesílání DM uživateli {discord_id}: {e}")
 
+def compute_auto_route_name(stops_list, current_name=None, route_number=None):
+    """Automaticky vytvoří název trasy jako v jízdním řádu (Výchozí – Cílová zastávka), pokud chybí nebo je generický."""
+    if stops_list and len(stops_list) >= 2:
+        def _get_name(s):
+            if isinstance(s, dict):
+                return str(s.get('name') or s.get('n') or s.get('orig') or '').strip()
+            if isinstance(s, list) and len(s) > 0:
+                return str(s[0] or '').strip()
+            return str(s or '').strip()
+        f_stop = _get_name(stops_list[0])
+        l_stop = _get_name(stops_list[-1])
+        if f_stop and l_stop and f_stop != l_stop:
+            auto_jr = f"{f_stop} – {l_stop}"
+            cur = str(current_name or '').strip()
+            if not cur or cur.startswith('Linka ') or (route_number and cur == str(route_number)):
+                return auto_jr
+            return cur
+    return current_name or (f"Linka {route_number}" if route_number else "")
+
 @app.route('/dashboard/community_routes', methods=['GET'], strict_slashes=False)
 @require_dash_level('admin')
 def dashboard_community_routes():
@@ -8858,6 +8877,7 @@ def dashboard_community_routes():
                                 s['audio_url'] = s['snd'].get('url') or ''
                     normalized_stops.append(s)
                 item['stops'] = normalized_stops
+                item['route_name'] = compute_auto_route_name(normalized_stops, item.get('route_name'), item.get('route_number'))
                 has_sound = any(bool(s.get('audio_url') or (s.get('snd') and isinstance(s.get('snd'), dict) and s.get('snd').get('url'))) for s in normalized_stops if isinstance(s, dict))
                 item['has_sound'] = has_sound
                 enriched.append(item)
@@ -9015,6 +9035,7 @@ def api_community_routes_list():
                 r['system_tag'] = 'IDPK'
             if not r.get('version'):
                 r['version'] = 'V1'
+            r['route_name'] = compute_auto_route_name(r['stops'], r.get('route_name'), r.get('route_number'))
         return _cors_jsonify({"success": True, "routes": routes})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
@@ -9105,6 +9126,7 @@ def api_community_routes_pending():
                 item['stops'] = json.loads(stops_raw) if isinstance(stops_raw, str) else stops_raw
             except:
                 item['stops'] = []
+            item['route_name'] = compute_auto_route_name(item['stops'], item.get('route_name'), item.get('route_number'))
             enriched.append(item)
         return _cors_jsonify({"success": True, "queue": enriched})
     except Exception as e:
@@ -9205,9 +9227,6 @@ def api_community_routes_submit():
     author_name = request.form.get('author_name', '').strip() or 'Hráč'
     stops_json_str = request.form.get('stops_json', '[]').strip()
 
-    if not route_number or not route_name or not author_id:
-        return _cors_jsonify({"success": False, "error": "Chybí povinné údaje linky (číslo, název nebo autor)."}), 400
-
     try:
         stops_list = json.loads(stops_json_str)
     except Exception as e:
@@ -9215,6 +9234,10 @@ def api_community_routes_submit():
 
     if not stops_list or len(stops_list) < 2:
         return _cors_jsonify({"success": False, "error": "Linka musí obsahovat alespoň 2 zastávky."}), 400
+
+    route_name = compute_auto_route_name(stops_list, route_name, route_number)
+    if not route_number or not route_name or not author_id:
+        return _cors_jsonify({"success": False, "error": "Chybí povinné údaje linky (číslo, název nebo autor)."}), 400
 
     try:
         timestamp_slug = int(time.time())
