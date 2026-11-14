@@ -8991,7 +8991,7 @@ def api_community_routes_list():
         tag = request.args.get('tag', '').strip()
         search = request.args.get('search', '').strip()
 
-        sql = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag FROM community_routes WHERE status = 'approved' AND is_deleted_by_author = 0"
+        sql = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag, COALESCE(version, 'V1') as version FROM community_routes WHERE status = 'approved' AND is_deleted_by_author = 0"
         params = []
 
         if tag and tag.upper() not in ('ALL', 'VŠECHNY', 'VSECHNY', ''):
@@ -9013,6 +9013,8 @@ def api_community_routes_list():
                 r['stops'] = []
             if not r.get('system_tag'):
                 r['system_tag'] = 'IDPK'
+            if not r.get('version'):
+                r['version'] = 'V1'
         return _cors_jsonify({"success": True, "routes": routes})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
@@ -9021,19 +9023,21 @@ def api_community_routes_list():
 def api_community_routes_my():
     if request.method == 'OPTIONS':
         return _cors_jsonify({})
-    discord_id = request.args.get('discord_id', '').strip()
-    if not discord_id:
-        return _cors_jsonify({"success": False, "error": "Chybí discord_id"}), 400
+    author = request.args.get('discord_id', '').strip() or request.args.get('author_id', '').strip() or request.args.get('author_name', '').strip()
+    if not author:
+        return _cors_jsonify({"success": False, "error": "Chybí discord_id nebo author_name"}), 400
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
         routes = d1.execute(
-            "SELECT id, route_number, route_name, route_type, description, status, reject_reason, is_deleted_by_author, created_at, updated_at, system_tag FROM community_routes WHERE author_id = ? ORDER BY id DESC",
-            [str(discord_id)]
+            "SELECT id, route_number, route_name, route_type, description, status, reject_reason, is_deleted_by_author, created_at, updated_at, system_tag, COALESCE(version, 'V1') as version FROM community_routes WHERE (author_id = ? OR author_name = ?) ORDER BY id DESC",
+            [str(author), str(author)]
         ) or []
         for r in routes:
             if not r.get('system_tag'):
                 r['system_tag'] = 'IDPK'
+            if not r.get('version'):
+                r['version'] = 'V1'
         return _cors_jsonify({"success": True, "routes": routes})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
@@ -9044,20 +9048,27 @@ def api_community_routes_delete():
         return _cors_jsonify({})
     data = request.get_json(silent=True) or request.form
     route_id = data.get('route_id')
-    discord_id = data.get('discord_id')
-    if not route_id or not discord_id:
-        return _cors_jsonify({"success": False, "error": "Chybí route_id nebo discord_id"}), 400
+    route_number = data.get('route_number')
+    author = data.get('discord_id') or data.get('author_id') or data.get('author_name')
+    if not author or (not route_id and not route_number):
+        return _cors_jsonify({"success": False, "error": "Chybí identifikace linky nebo autora."}), 400
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
-        row = d1.execute("SELECT * FROM community_routes WHERE id = ? AND author_id = ?", [int(route_id), str(discord_id)])
-        if not row:
-            return _cors_jsonify({"success": False, "error": "Linka nenalezena nebo k ní nemáte oprávnění."}), 404
-        
-        # Soft delete: označit smazáno autorem, zvuky zůstávají v DB pro moderaci/archiv
-        d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
-        send_log("🗑️ Linka stažena autorem", f"Uživatel <@{discord_id}> stáhl svou linku ID {route_id} z veřejné nabídky.", color=0xf59e0b)
-        return _cors_jsonify({"success": True, "message": "Linka byla stažena z veřejné nabídky."})
+        if route_id:
+            row = d1.execute("SELECT * FROM community_routes WHERE id = ? AND (author_id = ? OR author_name = ?)", [int(route_id), str(author), str(author)])
+            if not row:
+                return _cors_jsonify({"success": False, "error": "Linka nenalezena nebo k ní nemáte oprávnění."}), 404
+            d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
+            send_log("🗑️ Linka stažena autorem", f"Uživatel `{author}` stáhl verzi linky ID {route_id} z veřejné nabídky.", color=0xf59e0b)
+            return _cors_jsonify({"success": True, "message": "Verze linky byla stažena z veřejné nabídky."})
+        elif route_number:
+            rows = d1.execute("SELECT id FROM community_routes WHERE route_number = ? AND (author_id = ? OR author_name = ?)", [str(route_number), str(author), str(author)]) or []
+            if not rows:
+                return _cors_jsonify({"success": False, "error": "Žádné linky nenalezeny."}), 404
+            d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE route_number = ? AND (author_id = ? OR author_name = ?)", [str(route_number), str(author), str(author)])
+            send_log("🗑️ Všechny verze linky staženy autorem", f"Uživatel `{author}` stáhl všechny verze linky {route_number} ({len(rows)} verzí) z veřejné nabídky.", color=0xf59e0b)
+            return _cors_jsonify({"success": True, "message": f"Všechny verze linky {route_number} byly staženy z veřejné nabídky."})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
 
@@ -9068,7 +9079,7 @@ def api_community_routes_pending():
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
-        raw_pending = d1.execute("SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, system_tag, created_at FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0 ORDER BY CASE WHEN system_tag LIKE '%bez zvuku%' THEN 1 ELSE 0 END ASC, id DESC") or []
+        raw_pending = d1.execute("SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, system_tag, created_at, COALESCE(version, 'V1') as version FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0 ORDER BY CASE WHEN system_tag LIKE '%bez zvuku%' THEN 1 ELSE 0 END ASC, id DESC") or []
         enriched = []
         for r in raw_pending:
             item = dict(r)
@@ -9278,21 +9289,41 @@ def api_community_routes_submit():
         # Uložit do Cloudflare D1
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
+
+        # Automatické určení nebo převzetí verze (V1, V2, V3...)
+        route_version = request.form.get('version', '').strip().upper()
+        if not route_version:
+            try:
+                existing_rows = d1.execute(
+                    "SELECT version FROM community_routes WHERE route_number = ? AND (author_id = ? OR author_name = ?) ORDER BY id ASC",
+                    [route_number, str(author_id), str(author_name)]
+                ) or []
+                max_v = 0
+                for er in existing_rows:
+                    v_str = str(er.get('version') or 'V1').upper().replace('V', '')
+                    try:
+                        max_v = max(max_v, int(v_str))
+                    except Exception:
+                        pass
+                route_version = f"V{max_v + 1}" if max_v > 0 else "V1"
+            except Exception:
+                route_version = "V1"
+
         d1.execute(
             """INSERT INTO community_routes (
                 route_number, route_name, route_type, description, author_id, author_name,
-                stops_json, audio_package_url, audio_files_json, status, created_at, updated_at, system_tag
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'), ?)""",
+                stops_json, audio_package_url, audio_files_json, status, created_at, updated_at, system_tag, version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'), ?, ?)""",
             [
                 route_number, route_name, route_type, description, str(author_id), str(author_name),
                 json.dumps(stops_list, ensure_ascii=False), package_url, json.dumps(uploaded_keys),
-                system_tag
+                system_tag, route_version
             ]
         )
 
         send_log(
             "📢 Nová komunitní linka ke schválení",
-            f"**Linka:** `{route_number}` ({route_name})\n"
+            f"**Linka:** `{route_number}` ({route_name}) - **Verze:** `{route_version}`\n"
             f"**Systém / Tag:** `{system_tag}`\n"
             f"**Autor:** <@{author_id}> ({author_name})\n"
             f"**Počet zastávek:** {len(stops_list)}\n"
@@ -9301,13 +9332,14 @@ def api_community_routes_submit():
             color=0xf59e0b
         )
 
-        new_row = d1.execute("SELECT id FROM community_routes WHERE route_number = ? AND author_id = ? ORDER BY id DESC LIMIT 1", [route_number, str(author_id)])
+        new_row = d1.execute("SELECT id FROM community_routes WHERE route_number = ? AND (author_id = ? OR author_name = ?) ORDER BY id DESC LIMIT 1", [route_number, str(author_id), str(author_name)])
         new_id = new_row[0]['id'] if new_row else None
 
         return _cors_jsonify({
             "success": True,
             "route_id": new_id,
-            "message": "Linka byla úspěšně odeslána ke schválení. Jakmile ji administrátor zkontroluje, obdržíte zprávu do Discord DM."
+            "version": route_version,
+            "message": f"Linka {route_number} ({route_version}) byla úspěšně odeslána ke schválení. Jakmile ji administrátor zkontroluje, obdržíte zprávu do Discord DM."
         })
     except Exception as e:
         print(f"[COMMUNITY_SUBMIT] Chyba: {e}")

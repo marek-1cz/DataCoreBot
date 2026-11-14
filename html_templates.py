@@ -7437,7 +7437,7 @@ HTML_COMMUNITY_ROUTES = """
           <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px; border-bottom:1px solid #1e293b; padding-bottom:12px; margin-bottom:12px;">
             <div>
               <div style="display:flex; align-items:center; gap:8px;">
-                <span style="background:var(--blue-main); color:#000; font-weight:bold; font-size:14px; padding:3px 8px; border-radius:6px;">{{ r.get('route_number') }}</span>
+                <span style="background:var(--blue-main); color:#000; font-weight:bold; font-size:14px; padding:3px 8px; border-radius:6px;">{{ r.get('route_number') }}</span> <span style="font-size:11px; font-weight:bold; padding:2px 6px; border-radius:4px; background:rgba(56, 189, 248, 0.2); color:#38bdf8; margin-left:4px;">{{ r.get('version') or 'V1' }}</span>
                 <span style="font-size:16px; font-weight:bold; color:#fff;">{{ r.get('route_name') }}</span>
                 <span style="font-size:11px; padding:2px 8px; border-radius:4px; background:rgba(56, 189, 248, 0.15); color:#38bdf8; font-weight:bold; border:1px solid rgba(56, 189, 248, 0.3);">
                   <i class="fas fa-tag"></i> {{ r.get('system_tag', 'IDPK') }}
@@ -7538,7 +7538,7 @@ HTML_COMMUNITY_ROUTES = """
         {% for r in approved_routes %}
           <tr style="border-bottom:1px solid #1e293b;">
             <td style="padding:10px;">
-              <span style="background:var(--blue-main); color:#000; font-weight:bold; font-size:12px; padding:2px 7px; border-radius:4px;">{{ r.get('route_number') }}</span>
+              <span style="background:var(--blue-main); color:#000; font-weight:bold; font-size:12px; padding:2px 7px; border-radius:4px;">{{ r.get('route_number') }}</span> <span style="font-size:10px; font-weight:bold; padding:1px 5px; border-radius:3px; background:rgba(56, 189, 248, 0.2); color:#38bdf8; margin-left:3px;">{{ r.get('version') or 'V1' }}</span>
               <span style="font-size:10px; padding:1px 6px; border-radius:4px; background:rgba(56, 189, 248, 0.15); color:#38bdf8; font-weight:bold; margin-left:4px;"><i class="fas fa-tag"></i> {{ r.get('system_tag', 'IDPK') }}</span>
             </td>
             <td style="padding:10px; font-weight:bold; color:#fff;">
