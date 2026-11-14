@@ -9986,6 +9986,19 @@ def _legacy_stranka_podpora():
 
           <div id="box_secondary_contact" style="margin-top:12px; padding-top:10px; border-top:1px dashed #334155;">
             <label id="lbl_secondary" style="display:block; color:#64748b; font-size:11px; margin-bottom:4px;">Záložní e-mail (nepovinné, pokud vás nezastihneme na Discordu):</label>
+            <input type="text" id="sp_secondary_input" value="{secondary_initial_val}" placeholder="vas@email.cz (nepovinné)" style="width:100%; padding:8px 10px; background:rgba(0,0,0,0.3); border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:12px; outline:none; box-sizing:border-box;">
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">Popis problému nebo dotazu <span style="color:#ef4444;">*</span></label>
+          <textarea id="sp_message" rows="5" placeholder="Podrobně popište, co se stalo, jakého autobusu/linky se to týká, nebo co potřebujete vyřešit..." required style="width:100%; padding:12px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:8px; color:white; font-size:14px; outline:none; resize:vertical; box-sizing:border-box;"></textarea>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <label style="display:block; color:#94a3b8; font-size:12px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">
+            <i class="fas fa-image" style="color:#38bdf8;"></i> Snímek obrazovky / Fotografie chyby (nepovinné)
+          </label>
           <input type="file" id="sp_image_file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" onchange="handleSupportFileSelect(event)">
           
           <div id="sp_upload_dropzone" onclick="document.getElementById('sp_image_file').click()" ondragover="handleSupportDragOver(event)" ondragleave="handleSupportDragLeave(event)" ondrop="handleSupportDrop(event)" style="border:2px dashed #475569; border-radius:12px; padding:18px; text-align:center; cursor:pointer; background:rgba(15,23,42,0.4); transition:all 0.2s;">
