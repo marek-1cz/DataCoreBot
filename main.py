@@ -9001,6 +9001,18 @@ def dashboard_community_routes_purge():
 
 # ── API ENDPOINTY PRO HRÁČE (OIS & LAUNCHER) ───────────────────────────────────
 
+@app.route('/api/d1/reset-circuit-breaker', methods=['GET', 'POST', 'OPTIONS'], strict_slashes=False)
+def api_d1_reset_circuit_breaker():
+    if request.method == 'OPTIONS':
+        return _cors_jsonify({})
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        d1.budget.unblock()
+        return _cors_jsonify({"success": True, "message": "Circuit breaker resetováno, D1 odblokováno pro čtení i zápis."})
+    except Exception as e:
+        return _cors_jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/api/community-routes', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_community_routes_list():
     if request.method == 'OPTIONS':
@@ -9025,7 +9037,15 @@ def api_community_routes_list():
 
         sql += " ORDER BY CASE WHEN system_tag LIKE '%bez zvuku%' OR description LIKE '%bez zvuku%' THEN 1 ELSE 0 END ASC, id DESC"
 
-        routes = d1.execute(sql, params) if params else d1.execute(sql) or []
+        routes = d1.execute(sql, params) if params else d1.execute(sql)
+        if routes is None:
+            routes = []
+        if not routes:
+            try:
+                sql_fb = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag, status, is_deleted_by_author, COALESCE(version, 'V1') as version FROM community_routes WHERE (status = 'approved' OR is_deleted_by_author = 1) ORDER BY id DESC"
+                routes = d1.execute(sql_fb) or []
+            except Exception:
+                pass
         for r in routes:
             try:
                 r['stops'] = json.loads(r.get('stops_json', '[]'))

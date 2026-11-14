@@ -88,8 +88,11 @@ class D1BudgetTracker:
                 if saved.get("date_utc") == self._today_utc():
                     self.data.update(saved)
                     now_ts = time.time()
-                    # Pokud je aktivní blokace čtení (např. kód 7500), zajistíme že i zápisy jsou pozastaveny do lokální SQLite fronty
-                    if self.data.get("read_blocked_until", 0.0) > now_ts:
+                    if self.data.get("rows_read", 0) < 100000:
+                        self.data["read_blocked_until"] = 0.0
+                        self.data["write_blocked_until"] = 0.0
+                        self._save_unlocked()
+                    elif self.data.get("read_blocked_until", 0.0) > now_ts:
                         if self.data.get("write_blocked_until", 0.0) < self.data["read_blocked_until"]:
                             self.data["write_blocked_until"] = self.data["read_blocked_until"]
                             self._save_unlocked()
@@ -99,6 +102,12 @@ class D1BudgetTracker:
                 self._reset()
         except Exception:
             self._reset()
+
+    def unblock(self):
+        with self._lock:
+            self.data["read_blocked_until"] = 0.0
+            self.data["write_blocked_until"] = 0.0
+            self._save_unlocked()
 
     def _reset(self):
         self.data = {
@@ -393,15 +402,15 @@ class D1Client:
             except Exception:
                 err_body = str(e)
 
-            if "7500" in err_body or "row read limit" in err_body.lower():
+            if "row read limit" in err_body.lower() or "daily read quota" in err_body.lower() or "read limit exceeded" in err_body.lower():
                 sec_left = self._calc_utc_midnight_pause()
                 now_ts = time.time()
                 until_ts = now_ts + sec_left
-                self.budget.block_read_until(until_ts, reason="kód 7500 - vyčerpáno 5M čtení na Cloudflare")
-                self.budget.block_write_until(until_ts, reason="kód 7500 (Cloudflare D1 blokováno do 00:05 UTC)")
+                self.budget.block_read_until(until_ts, reason="vyčerpáno 5M čtení na Cloudflare")
+                self.budget.block_write_until(until_ts, reason="Cloudflare D1 čtení blokováno do 00:05 UTC")
                 if now_ts - self._last_cb_log > 600:
                     self._last_cb_log = now_ts
-                    print(f"[D1] Aktivován circuit breaker (kód 7500 - vyčerpáno 5M čtení). Blokuji D1 do 00:05 UTC ({sec_left//60} min). Čtení i zápisy běží z lokální SQLite DB.", flush=True)
+                    print(f"[D1] Aktivován circuit breaker (vyčerpán denní limit čtení). Blokuji D1 do 00:05 UTC ({sec_left//60} min). Čtení i zápisy běží z lokální SQLite DB.", flush=True)
             elif "row write limit" in err_body.lower() or "limit exceeded" in err_body.lower():
                 sec_left = self._calc_utc_midnight_pause()
                 now_ts = time.time()
@@ -432,15 +441,15 @@ class D1Client:
         if not parsed.get("success"):
             errors = parsed.get("errors") or parsed.get("messages") or []
             err_str = str(errors)
-            if "7500" in err_str or "row read limit" in err_str.lower():
+            if "row read limit" in err_str.lower() or "daily read quota" in err_str.lower() or "read limit exceeded" in err_str.lower():
                 sec_left = self._calc_utc_midnight_pause()
                 now_ts = time.time()
                 until_ts = now_ts + sec_left
-                self.budget.block_read_until(until_ts, reason="kód 7500 - vyčerpáno 5M čtení na Cloudflare")
-                self.budget.block_write_until(until_ts, reason="kód 7500 (Cloudflare D1 blokováno do 00:05 UTC)")
+                self.budget.block_read_until(until_ts, reason="vyčerpáno 5M čtení na Cloudflare")
+                self.budget.block_write_until(until_ts, reason="Cloudflare D1 blokováno do 00:05 UTC")
                 if now_ts - self._last_cb_log > 600:
                     self._last_cb_log = now_ts
-                    print(f"[D1] API limit 7500 - blokace D1 do 00:05 UTC.", flush=True)
+                    print(f"[D1] API limit čtení - blokace D1 do 00:05 UTC.", flush=True)
             else:
                 if time.time() - self._last_cb_log > 60:
                     self._last_cb_log = time.time()
