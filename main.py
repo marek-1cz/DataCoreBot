@@ -9424,22 +9424,22 @@ def api_community_routes_delete():
         # Trvalé smazání z DB je povoleno POUZE pokud je explicitně nastaven flag permanent (např. z administrátorského dashboardu)
         is_permanent_request = bool(data.get('permanent'))
 
+        deleted_count = 0
         if route_id:
             row = d1.execute("SELECT id, status, is_deleted_by_author, author_id, author_name FROM community_routes WHERE id = ?", [route_id])
             if row:
-                r_item = row[0]
                 if is_permanent_request:
                     d1.execute("DELETE FROM community_routes WHERE id = ?", [route_id])
-                    send_log("🗑️ Linka trvale odstraněna", f"Uživatel `{author}` trvale odstranil linku ID {route_id} z databáze.", color=0xef4444)
-                    return _cors_jsonify({"success": True, "message": "Linka byla trvale odstraněna z databáze."})
                 else:
                     d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [route_id])
-                    send_log("🗑️ Linka smazána z komunity", f"Uživatel `{author}` smazal linku ID {route_id} z veřejné komunity.", color=0xf59e0b)
-                    return _cors_jsonify({"success": True, "message": "Linka byla smazána z veřejné nabídky."})
+                deleted_count += 1
 
-        if route_number:
-            sql = "SELECT id, version FROM community_routes WHERE route_number = ? AND (author_id = ? OR author_name = ?)"
-            p = [str(route_number), str(author), str(author)]
+        if route_number and (not route_id or not version):
+            d_id = str(data.get('discord_id') or '')
+            a_id = str(data.get('author_id') or '')
+            a_name = str(data.get('author_name') or '')
+            sql = "SELECT id, version FROM community_routes WHERE route_number = ? AND (author_id = ? OR author_id = ? OR author_name = ? OR author_name = ?)"
+            p = [str(route_number), d_id, a_id, d_id, a_name]
             if version:
                 sql += " AND (version = ? OR version IS NULL)"
                 p.append(str(version))
@@ -9453,10 +9453,14 @@ def api_community_routes_delete():
                             d1.execute("DELETE FROM community_routes WHERE id = ?", [r['id']])
                         else:
                             d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [r['id']])
-                send_log("🗑️ Linka smazána z komunity", f"Uživatel `{author}` smazal linku {route_number} ({len(rows)} verzí) z komunity.", color=0xf59e0b)
-                return _cors_jsonify({"success": True, "message": f"Linka {route_number} byla smazána z veřejné nabídky."})
+                        deleted_count += 1
 
-        return _cors_jsonify({"success": True, "message": "Linka byla označena jako smazaná."})
+        if is_permanent_request:
+            send_log("🗑️ Linka trvale odstraněna", f"Uživatel `{author}` trvale odstranil linku {route_number or route_id} ({deleted_count} záznamů) z databáze.", color=0xef4444)
+            return _cors_jsonify({"success": True, "message": "Linka byla trvale odstraněna z databáze.", "deleted_count": deleted_count})
+        else:
+            send_log("🗑️ Linka smazána z komunity", f"Uživatel `{author}` smazal linku {route_number or route_id} ({deleted_count} záznamů) z veřejné komunity.", color=0xf59e0b)
+            return _cors_jsonify({"success": True, "message": "Linka byla smazána z veřejné nabídky.", "deleted_count": deleted_count})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
 
