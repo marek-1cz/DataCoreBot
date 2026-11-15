@@ -635,7 +635,7 @@ function success(email,name){
 }
 async function verify(forced){
   const my=++S.run;clearTimeout(S.leave);resetWipe();show('load');
-  const qs=new URLSearchParams(location.search),token=qs.get('token'),mail=qs.get('email')||'';
+  const qs=new URLSearchParams(location.search),token=(qs.get('token')||'').trim().toUpperCase(),mail=(qs.get('email')||'').trim();
   try{
     if(CONFIG.DEMO){
       await sleep(1700);if(my!==S.run)return;
