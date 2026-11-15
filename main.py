@@ -9718,7 +9718,7 @@ def api_community_routes_submit():
             voice_type = 'none'
         system_tag = ", ".join(tags_list) if tags_list else 'IDPK'
 
-        route_status = 'approved' if is_no_sound_80 else 'pending'
+        route_status = 'pending'
 
         d1.execute(
             """INSERT INTO community_routes (
@@ -9732,31 +9732,22 @@ def api_community_routes_submit():
             ]
         )
 
-        if is_no_sound_80:
-            send_log(
-                "📢 Nová komunitní linka publikována (bez zvuku)",
-                f"**Linka:** `{route_number}` ({route_name}) - **Verze:** `{route_version}`\n"
-                f"**Systém / Tag:** `{system_tag}`\n"
-                f"**Autor:** <@{author_id}> ({author_name})\n"
-                f"**Počet zastávek:** {len(stops_list)} (80%+ bez zvuku - automaticky schváleno do komunitních linek)",
-                color=0x10b981
-            )
-        else:
-            send_log(
-                "📢 Nová komunitní linka ke schválení",
-                f"**Linka:** `{route_number}` ({route_name}) - **Verze:** `{route_version}`\n"
-                f"**Systém / Tag:** `{system_tag}`\n"
-                f"**Autor:** <@{author_id}> ({author_name})\n"
-                f"**Počet zastávek:** {len(stops_list)}\n"
-                f"**Typ:** {'Fiktivní' if route_type == 'custom' else 'Z GTFS'}\n"
-                f"**Dashboard:** https://datacorebot.koyeb.app/dashboard/community_routes",
-                color=0xf59e0b
-            )
+        send_log(
+            "📢 Nová komunitní linka ke schválení",
+            f"**Linka:** `{route_number}` ({route_name}) - **Verze:** `{route_version}`\n"
+            f"**Systém / Tag:** `{system_tag}`\n"
+            f"**Autor:** <@{author_id}> ({author_name})\n"
+            f"**Počet zastávek:** {len(stops_list)}\n"
+            f"**Typ:** {'Fiktivní' if route_type == 'custom' else 'Z GTFS'}\n"
+            f"**Zvuk:** {'Bez zvuku' if is_no_sound_80 else 'Se zvukem'}\n"
+            f"**Dashboard:** https://datacorebot.koyeb.app/dashboard/community_routes",
+            color=0xf59e0b
+        )
 
         new_row = d1.execute("SELECT id FROM community_routes WHERE route_number = ? AND (author_id = ? OR author_name = ?) ORDER BY id DESC LIMIT 1", [route_number, str(author_id), str(author_name)])
         new_id = new_row[0]['id'] if new_row else None
 
-        msg = f"Linka {route_number} ({route_version}) bez zvuku byla automaticky schválena a publikována do komunitních linek." if is_no_sound_80 else f"Linka {route_number} ({route_version}) byla úspěšně odeslána ke schválení. Jakmile ji administrátor zkontroluje, obdržíte zprávu do Discord DM."
+        msg = f"Linka {route_number} ({route_version}) byla úspěšně odeslána ke schválení. Jakmile ji administrátor zkontroluje v dashboardu nebo launcheru, bude zveřejněna v komunitních linkách."
 
         return _cors_jsonify({
             "success": True,
