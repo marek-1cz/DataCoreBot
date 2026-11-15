@@ -685,7 +685,27 @@ def ensure_user_in_db(discord_id=None, email=None, nick=None, token=None):
     db = get_db()
     d_id_str = str(discord_id).strip() if discord_id else None
     email_str = str(email).strip().lower() if email else None
-    nick_str = str(nick).strip() if nick else ("Uživatel" if d_id_str else email_str)
+    nick_str = str(nick).strip() if nick else None
+
+    if not nick_str or nick_str == "Uživatel" or nick_str.isdigit() or (d_id_str and nick_str == d_id_str):
+        if d_id_str and d_id_str.isdigit():
+            if hasattr(bot, 'is_ready') and bot.is_ready():
+                try:
+                    for g in bot.guilds:
+                        m = g.get_member(int(d_id_str))
+                        if m:
+                            nick_str = getattr(m, 'display_name', '') or getattr(m, 'global_name', '') or m.name
+                            break
+                    if not nick_str:
+                        u_obj = bot.get_user(int(d_id_str))
+                        if u_obj:
+                            nick_str = getattr(u_obj, 'display_name', '') or getattr(u_obj, 'global_name', '') or u_obj.name
+                except Exception:
+                    pass
+        elif email_str:
+            nick_str = email_str.split('@')[0]
+    if not nick_str:
+        nick_str = ("Uživatel" if not d_id_str else f"Uživatel {d_id_str[-4:]}")
 
     existing = None
     if d_id_str:
@@ -694,14 +714,27 @@ def ensure_user_in_db(discord_id=None, email=None, nick=None, token=None):
         existing = find_user_record(email_str)
 
     if existing:
+        updated = False
+        cur_nick = str(existing.get("nick") or "").strip()
+        if nick_str and nick_str != "Uživatel" and (not cur_nick or cur_nick == "Uživatel" or cur_nick.isdigit() or cur_nick == str(existing.get("discord_id"))):
+            existing["nick"] = nick_str
+            updated = True
         if token:
             existing["download_token"] = token
+            updated = True
+        if updated:
             if db:
                 try:
-                    if d_id_str:
-                        db.table("users").update({"download_token": token}).eq("discord_id", d_id_str).execute()
-                    elif existing.get("id"):
-                        db.table("users").update({"download_token": token}).eq("id", existing["id"]).execute()
+                    up_dict = {}
+                    if nick_str and existing.get("nick") == nick_str:
+                        up_dict["nick"] = nick_str
+                    if token:
+                        up_dict["download_token"] = token
+                    if up_dict:
+                        if d_id_str:
+                            db.table("users").update(up_dict).eq("discord_id", d_id_str).execute()
+                        elif existing.get("id"):
+                            db.table("users").update(up_dict).eq("id", existing["id"]).execute()
                 except Exception:
                     pass
             _save_user_to_backup(existing)
@@ -1604,7 +1637,7 @@ def get_system_statuses():
         pass
     return {}
 
-def send_magic_link_email(to_email, token, intent='login'):
+def send_magic_link_email(to_email, token, intent='login', source='web'):
     if not SMTP_EMAIL or not SMTP_PASSWORD:
         print("[AUTH] SMTP není nastaveno!")
         return False
@@ -1643,7 +1676,8 @@ def send_magic_link_email(to_email, token, intent='login'):
                 base_url = request.url_root.rstrip('/')
         except Exception:
             pass
-        login_url = f"{base_url}/overeni?token={token}"
+        src_param = f"&source={source}" if source else ""
+        login_url = f"{base_url}/overeni?token={token}{src_param}"
         from ois_email import build_magic_link_email
         subject, html, text = build_magic_link_email(login_url, token)
         if "Subject" in msg:
@@ -1687,15 +1721,22 @@ class AppAuthView(discord.ui.View):
             return await interaction.response.send_message("Toto ověření není pro tebe!", ephemeral=True)
         _AUTH_TOKEN_STATUS[str(target_id)] = "approved"
         try:
+            user_nick = interaction.user.display_name or getattr(interaction.user, 'global_name', None) or interaction.user.name or f"Uživatel {target_id[-4:]}"
+            ensure_user_in_db(discord_id=target_id, nick=user_nick)
             db = get_db()
             if db:
-                user_nick = interaction.user.display_name or interaction.user.name
                 update_dict = {"login_token": "approved"}
                 if user_nick:
                     update_dict["nick"] = user_nick
                 db.table("users").update(update_dict).eq("discord_id", target_id).execute()
-        except Exception:
-            pass
+            ex = find_user_record(target_id)
+            if ex:
+                ex["login_token"] = "approved"
+                if user_nick:
+                    ex["nick"] = user_nick
+                _save_user_to_backup(ex)
+        except Exception as e:
+            print(f"[AppAuthView approve error] {e}", flush=True)
         await interaction.response.edit_message(content="✅ **Přihlášení úspěšně schváleno!**", embed=None, view=None)
         self.stop()
 
@@ -5133,18 +5174,22 @@ class WebAuthView(discord.ui.View):
         _AUTH_TOKEN_STATUS[str(target_id)] = "approved"
         _PENDING_DISCORD_AUTH.pop(str(target_id), None)
         try:
+            user_nick = interaction.user.display_name or getattr(interaction.user, 'global_name', None) or interaction.user.name or f"Uživatel {target_id[-4:]}"
+            ensure_user_in_db(discord_id=target_id, nick=user_nick)
             db = get_db()
             if db:
-                user_nick = interaction.user.display_name or interaction.user.name
-                user = db.table("users").select("id").eq("discord_id", target_id).execute().data
-                if not user:
-                    ensure_user_in_db(discord_id=target_id, nick=user_nick)
                 update_dict = {"login_token": "approved"}
                 if user_nick:
                     update_dict["nick"] = user_nick
                 db.table("users").update(update_dict).eq("discord_id", target_id).execute()
-        except Exception:
-            pass
+            ex = find_user_record(target_id)
+            if ex:
+                ex["login_token"] = "approved"
+                if user_nick:
+                    ex["nick"] = user_nick
+                _save_user_to_backup(ex)
+        except Exception as e:
+            print(f"[WebAuthDiscordView approve error] {e}", flush=True)
         await interaction.response.edit_message(content="✅ **Přihlášení na web OIS IDPK bylo úspěšné!** Můžete se vrátit do prohlížeče.", embed=None, view=None)
 
     @discord.ui.button(label="Zamítnout", style=discord.ButtonStyle.danger, emoji="❌", custom_id="web_auth_reject")
@@ -5267,7 +5312,7 @@ def process_web_auth_discord(discord_id, client_ip):
         print(f"[AUTH] Chyba v process_web_auth_discord: {e}")
         return {"status": "error", "message": f"Došlo k chybě: {str(e)}"}, 500
 
-def process_web_auth_email(email, intent, client_ip, nick=None):
+def process_web_auth_email(email, intent, client_ip, nick=None, source='web'):
     if not _rate_limit_check(f'auth_email:{client_ip}', 6, 120):
         return {'status': 'error', 'message': 'Příliš mnoho pokusů o zaslání e-mailu. Zkuste to za chvíli.'}, 429
     email_str = str(email or '').strip().lower()
@@ -5326,7 +5371,7 @@ def process_web_auth_email(email, intent, client_ip, nick=None):
             "created_at": _t.time()
         }
         
-        if send_magic_link_email(email_str, token, intent=intent):
+        if send_magic_link_email(email_str, token, intent=intent, source=source):
             return {"status": "success"}, 200
         else:
             return {"status": "error", "message": "E-mail se nepodařilo odeslat. Zkontrolujte prosím nastavení SMTP nebo použijte přihlášení přes Discord."}, 500
@@ -5349,7 +5394,8 @@ def web_auth_email_request():
     email = data.get('email') or request.form.get('email')
     nick = data.get('nick') or request.form.get('nick')
     intent = data.get('intent', 'login')
-    res, code = process_web_auth_email(email, intent, client_ip, nick=nick)
+    source = data.get('source', 'web')
+    res, code = process_web_auth_email(email, intent, client_ip, nick=nick, source=source)
     return jsonify(res), code
 
 @app.route('/api/auth/status')
@@ -5377,7 +5423,7 @@ def web_auth_status():
                     user_obj = bu
                     break
         if not user_obj:
-            user_obj = {"discord_id": discord_id, "role": "User", "nick": str(discord_id)}
+            user_obj = {"discord_id": discord_id, "role": "User", "nick": f"Uživatel {str(discord_id)[-4:]}"}
         _SESSION_CACHE[perm_token] = (time.time(), user_obj)
         try:
             db = get_db()
@@ -5935,10 +5981,11 @@ def api_auth_email_start():
     email = str(data.get('email') or request.form.get('email') or '').strip()
     nick = str(data.get('nick') or request.form.get('nick') or '').strip()
     mode = str(data.get('mode') or 'code')
+    source = str(data.get('source') or 'launcher')
     intent = 'code' if mode == 'code' else 'login'
     if not email:
         return jsonify({"ok": False, "error": "Chybí e-mail."}), 400
-    res, code = process_web_auth_email(email, intent, client_ip, nick=nick)
+    res, code = process_web_auth_email(email, intent, client_ip, nick=nick, source=source)
     if res.get('status') == 'success':
         return jsonify({"ok": True})
     return jsonify({"ok": False, "error": res.get('message', 'Chyba')}), code

@@ -477,7 +477,7 @@ html.lite .lg-trip .bus svg{animation:none}
 </div>
 <div id="ois-notices" aria-live="polite" role="region" aria-label="Oznámení"></div>
 
-<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol><symbol id="i-discord" viewBox="0 0 24 24"><path d="M5 6c2-1.2 4-1.8 7-1.8S17 4.8 19 6c1.8 3 2.6 6 2.4 10-1.6 1.2-3.2 2-5 2.4l-1-2c-1.2.4-2.6.4-4.8 0l-1 2c-1.8-.4-3.4-1.2-5-2.4C2.4 12 3.2 9 5 6z"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol><symbol id="i-bus" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="15" rx="3"/><path d="M4 11h16M8 21v-3M16 21v-3"/><circle cx="8" cy="15" r="1"/><circle cx="16" cy="15" r="1"/></symbol></defs></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol><symbol id="i-discord" viewBox="0 0 24 24"><path d="M5 6c2-1.2 4-1.8 7-1.8S17 4.8 19 6c1.8 3 2.6 6 2.4 10-1.6 1.2-3.2 2-5 2.4l-1-2c-1.2.4-2.6.4-4.8 0l-1 2c-1.8-.4-3.4-1.2-5-2.4C2.4 12 3.2 9 5 6z"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol><symbol id="i-bus" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="15" rx="3"/><path d="M4 11h16M8 21v-3M16 21v-3"/><circle cx="8" cy="15" r="1"/><circle cx="16" cy="15" r="1"/></symbol><symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol><symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></symbol><symbol id="i-map" viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></symbol></defs></svg>
 <main class="lg-stage">
   <div class="lg-vz" id="vz" role="note" hidden>
     <div class="top"><span class="vzor">VZOR</span><div><b>VZOROVÁ OBRAZOVKA.</b> Takhle vypadá stránka, na kterou se uživatel dostane po kliknutí na odkaz v e-mailu (<code>/overeni?token=…</code>). Po přepnutí <code>CONFIG.DEMO</code> na <code>false</code> ověří token na serveru.</div></div>
@@ -500,19 +500,40 @@ html.lite .lg-trip .bus svg{animation:none}
 
     <div class="lg-view lg-ok" id="v-ok" hidden>
       <div class="lg-mark" aria-hidden="true"><svg viewBox="0 0 140 140"><circle class="ring" cx="70" cy="70" r="52"/><path class="tick" d="M46 72 L63 89 L96 52"/></svg><span class="rp"></span><span class="rp b"></span><i class="pt" style="--a:0deg"></i><i class="pt" style="--a:30deg"></i><i class="pt" style="--a:60deg"></i><i class="pt" style="--a:90deg"></i><i class="pt" style="--a:120deg"></i><i class="pt" style="--a:150deg"></i><i class="pt" style="--a:180deg"></i><i class="pt" style="--a:210deg"></i><i class="pt" style="--a:240deg"></i><i class="pt" style="--a:270deg"></i><i class="pt" style="--a:300deg"></i><i class="pt" style="--a:330deg"></i></div>
-      <h1 class="lg-pop d1">Úspěšně ověřeno</h1>
+      <h1 class="lg-pop d1" id="ok-title">Úspěšně ověřeno</h1>
       <p class="lg-lead lg-pop d2" id="ok-p">Váš e-mail byl potvrzen a jste přihlášeni.</p>
-      <div class="lg-trip lg-pop d2" aria-hidden="true"><div class="tr"><em id="ok-bar"></em></div><i class="s s1"></i><i class="s s2"></i><i class="s s3"></i><div class="bus"><svg viewBox="0 0 36 24"><rect x="1" y="2" width="34" height="16" rx="5" fill="#2f6bff"/><rect x="5" y="5" width="7" height="6" rx="1.5" fill="#cfe6ff"/><rect x="14" y="5" width="7" height="6" rx="1.5" fill="#cfe6ff"/><rect x="23" y="5" width="9" height="6" rx="1.5" fill="#cfe6ff"/><rect x="1" y="13" width="34" height="2.5" fill="#ffc933"/><circle cx="9" cy="19" r="3.2" fill="#05070f" stroke="#eaf0ff" stroke-width="1.5"/><circle cx="27" cy="19" r="3.2" fill="#05070f" stroke="#eaf0ff" stroke-width="1.5"/></svg></div></div><div class="lg-tl lg-pop d2"><span>Přihlášení</span><span>Ověřeno</span><span>Váš účet</span></div>
-      <p class="lg-redir lg-pop d3">Přesměrováváme vás na váš účet…</p>
-      <div class="lg-row lg-pop d3"><button class="lg-ghost" id="skip" type="button">Přejít hned <svg class="lg-ic" aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
+
+      <!-- Launcher rozcestník (zobrazí se pouze při source=launcher) -->
+      <div id="launcher-hub-box" hidden class="lg-pop d2" style="width:100%;margin-top:14px;">
+        <div style="background:rgba(56,214,255,0.08);border:1px solid rgba(56,214,255,0.22);border-radius:14px;padding:12px 16px;margin-bottom:16px;font-size:13.5px;color:#cbd5e1;line-height:1.5;">
+          Zároveň jste byli přihlášeni na webu jako: <b id="hub-username" style="color:#38d6ff;">Uživatel</b>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px;width:100%;">
+          <a class="btn-main lg-go" href="/ucet" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px;padding:12px 20px;">
+            <svg class="lg-ic" aria-hidden="true"><use href="#i-user"/></svg> Váš účet
+          </a>
+          <a class="lg-ghost" href="/" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;font-size:13.5px;padding:10px 18px;border-radius:999px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);transition:.2s;">
+            <svg class="lg-ic" aria-hidden="true"><use href="#i-globe"/></svg> Web OIS IDPK
+          </a>
+          <a class="lg-ghost" href="/mapa" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;font-size:13.5px;padding:10px 18px;border-radius:999px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);transition:.2s;">
+            <svg class="lg-ic" aria-hidden="true"><use href="#i-map"/></svg> Interaktivní mapa
+          </a>
+        </div>
+      </div>
+
+      <!-- Web-only přihlášení prvky (zobrazí se pouze při source!=launcher) -->
+      <div id="web-login-box">
+        <div class="lg-trip lg-pop d2" aria-hidden="true"><div class="tr"><em id="ok-bar"></em></div><i class="s s1"></i><i class="s s2"></i><i class="s s3"></i><div class="bus"><svg viewBox="0 0 36 24"><rect x="1" y="2" width="34" height="16" rx="5" fill="#2f6bff"/><rect x="5" y="5" width="7" height="6" rx="1.5" fill="#cfe6ff"/><rect x="14" y="5" width="7" height="6" rx="1.5" fill="#cfe6ff"/><rect x="23" y="5" width="9" height="6" rx="1.5" fill="#cfe6ff"/><rect x="1" y="13" width="34" height="2.5" fill="#ffc933"/><circle cx="9" cy="19" r="3.2" fill="#05070f" stroke="#eaf0ff" stroke-width="1.5"/><circle cx="27" cy="19" r="3.2" fill="#05070f" stroke="#eaf0ff" stroke-width="1.5"/></svg></div></div><div class="lg-tl lg-pop d2"><span>Přihlášení</span><span>Ověřeno</span><span>Váš účet</span></div>
+        <p class="lg-redir lg-pop d3">Přesměrováváme vás na váš účet…</p>
+        <div class="lg-row lg-pop d3"><button class="lg-ghost" id="skip" type="button">Přejít hned <svg class="lg-ic" aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
+      </div>
     </div>
 
     <div class="lg-view" id="v-bad" hidden>
       <div class="lg-mark bad" aria-hidden="true"><svg viewBox="0 0 140 140"><circle class="ring" cx="70" cy="70" r="52"/><path class="tick" d="M52 52 L88 88 M88 52 L52 88"/></svg></div>
       <h1 class="lg-pop d1">Odkaz už neplatí</h1>
-      <p class="lg-lead lg-pop d2">Z bezpečnostních důvodů platí odkaz jen krátce a jen jednou. Vyžádejte si prosím nový.</p>
-      <div class="lg-row lg-pop d3"><a class="btn-main lg-go" id="newlink" href="/login" style="width:auto">Poslat nový odkaz</a></div>
-      <div class="lg-row lg-pop d3"><a class="lg-ghost" id="home" href="/">Zpět na web</a></div>
+      <p class="lg-lead lg-pop d2">Tento odkaz je neplatný nebo již vypršel. Zkuste se prosím přihlásit znovu na webu nebo v launcheru.</p>
+      <div class="lg-row lg-pop d3"><a class="btn-main lg-go" id="home" href="/" style="width:auto">Zpět na web</a></div>
     </div>
 
     <div class="lg-view" id="v-err" hidden>
@@ -588,11 +609,29 @@ function show(v){VIEWS.forEach(x=>{const e=$('#v-'+x);e.hidden=x!==v;if(x===v){e
   $$('#sc button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.s===v||(b.dataset.s==='load'&&v==='load')))}
 function success(email,name){
   clearTimeout(S.leave);resetWipe();
-  const who=email?'Váš e-mail <b>'+esc(email)+'</b> byl potvrzen a jste přihlášeni.':'Ověření proběhlo a jste přihlášeni.';
-  $('#ok-p').innerHTML=(name?'Vítejte, <b>'+esc(name)+'</b>. ':'')+who;
-  const total=Math.max(CONFIG.redirectDelayMs,2200);
-  $('#ok-bar').closest('.lg-trip').style.setProperty('--dur',(total-1300)+'ms');
-  show('ok');S.leave=setTimeout(redirect,total);
+  const qs=new URLSearchParams(location.search);
+  const src=(qs.get('source')||'').toLowerCase();
+  const userName=name||(email?email.split('@')[0]:'Uživatel');
+  
+  if(src==='launcher'){
+    const t=$('#ok-title');if(t)t.textContent='Ověření úspěšné!';
+    $('#ok-p').innerHTML='Můžete se vrátit zpět do launcheru.';
+    const hub=$('#launcher-hub-box');if(hub)hub.hidden=false;
+    const wb=$('#web-login-box');if(wb)wb.hidden=true;
+    const hu=$('#hub-username');if(hu)hu.textContent=userName;
+    show('ok');
+  } else {
+    const t=$('#ok-title');if(t)t.textContent='Úspěšně přihlášeno';
+    const who=email?'Váš e-mail <b>'+esc(email)+'</b> byl potvrzen a jste přihlášeni.':'Ověření proběhlo a jste přihlášeni.';
+    $('#ok-p').innerHTML=(name?'Vítejte, <b>'+esc(name)+'</b>. ':'')+who;
+    const hub=$('#launcher-hub-box');if(hub)hub.hidden=true;
+    const wb=$('#web-login-box');if(wb)wb.hidden=false;
+    const total=Math.max(CONFIG.redirectDelayMs,2200);
+    const okBar=$('#ok-bar');
+    if(okBar && okBar.closest('.lg-trip')) okBar.closest('.lg-trip').style.setProperty('--dur',(total-1300)+'ms');
+    show('ok');
+    S.leave=setTimeout(redirect,total);
+  }
 }
 async function verify(forced){
   const my=++S.run;clearTimeout(S.leave);resetWipe();show('load');
@@ -616,11 +655,11 @@ async function verify(forced){
   }
 }
 function bind(){
-  $('#skip').addEventListener('click',()=>{clearTimeout(S.leave);redirect()});
-  $('#retry').addEventListener('click',()=>verify(CONFIG.DEMO?'ok':null));
-  $('#replay').addEventListener('click',()=>{resetWipe();verify('ok')});
-  $('#sc').addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(!b)return;verify(b.dataset.s)});
-  $('#newlink').setAttribute('href',(CONFIG.site||'')+CONFIG.loginUrl);$('#home').setAttribute('href',(CONFIG.site||'')+CONFIG.homeUrl);
+  if($('#skip')) $('#skip').addEventListener('click',()=>{clearTimeout(S.leave);redirect()});
+  if($('#retry')) $('#retry').addEventListener('click',()=>verify(CONFIG.DEMO?'ok':null));
+  if($('#replay')) $('#replay').addEventListener('click',()=>{resetWipe();verify('ok')});
+  if($('#sc')) $('#sc').addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(!b)return;verify(b.dataset.s)});
+  if($('#home')) $('#home').setAttribute('href',(CONFIG.site||'')+CONFIG.homeUrl);
 }
 $('#vz').hidden=!CONFIG.DEMO;
 bind();verify('ok');
