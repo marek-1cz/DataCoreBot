@@ -442,9 +442,34 @@ def _merge_users_with_backup(res_rows, where_clauses=None, args=None, order_by=N
 
         u_copy = dict(r)
         if local_u:
-            for fld in ("role", "hwid", "ip_address", "is_banned", "is_deleted", "deleted_at", "dashboard_access", "nick", "email", "web_login_at", "login_token", "download_token"):
+            for fld in ("role", "hwid", "ip_address", "is_banned", "is_deleted", "deleted_at", "dashboard_access", "nick", "email", "web_login_at", "login_token", "download_token", "app_id", "registered_at", "avatar_url", "notify", "dashboard_level"):
                 if fld in local_u and local_u[fld] is not None:
                     u_copy[fld] = local_u[fld]
+
+        # Pojistka: pokud uživatel v cloudu neměl app_id (None), ale v záloze existuje nebo je potřeba přidělit
+        raw_aid = u_copy.get("app_id")
+        if raw_aid is None or str(raw_aid).strip() in ("", "None"):
+            if local_u and local_u.get("app_id") is not None:
+                u_copy["app_id"] = local_u["app_id"]
+            else:
+                is_discord = bool(did and did.isdigit() and did != "čeká na odpověd")
+                used_ids = set()
+                for x in backup_users:
+                    try:
+                        used_ids.add(int(x.get("app_id")))
+                    except Exception:
+                        pass
+                for x in (res_rows or []):
+                    try:
+                        used_ids.add(int(x.get("app_id")))
+                    except Exception:
+                        pass
+                if is_discord:
+                    disc_ids = [a for a in used_ids if 1000 <= a < 2000]
+                    u_copy["app_id"] = (max(disc_ids) + 1) if disc_ids else 1001
+                else:
+                    web_ids = [a for a in used_ids if a >= 2000]
+                    u_copy["app_id"] = (max(web_ids) + 1) if web_ids else 2001
 
         k = did or (f"id_{uid}" if uid else f"aid_{aid}")
         merged_dict[k] = u_copy

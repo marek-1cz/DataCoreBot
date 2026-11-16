@@ -3467,8 +3467,8 @@ HTML_TEAM_ADD = """
 HTML_IDS = """
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;"><h2 style="margin: 0; color: var(--text-main);"><i class="fas fa-id-badge" style="color:var(--blue-main);"></i> Správa Aplikačních ID</h2></div>
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
-    <table><tr><th>App ID</th><th>Nick</th><th>Discord ID</th><th>Status</th><th>Změnit ID na:</th></tr>
-    {% for user in users %}<tr style="opacity: {{ '0.6' if user.get('is_deleted') else '1' }};"><td style="font-weight: bold; color: var(--blue-main); font-size: 16px;">#{{ user.get('app_id', '') }}</td><td><strong>{{ user.get('nick', '') }}</strong></td><td style="font-size: 12px; color: var(--text-muted);">{{ user.get('discord_id', '') }}</td><td>{% if user.get('is_deleted') %}<span style="color: var(--danger); font-size: 12px; font-weight: bold;">Smazán</span>{% else %}<span style="color: var(--success); font-size: 12px; font-weight: bold;">Aktivní</span>{% endif %}</td><td style="display: flex; gap: 10px; align-items: center;"><form action="/dashboard/change_id" method="POST" style="display: flex; gap: 10px; margin: 0; width: 100%;"><input type="hidden" name="discord_id" value="{{ user.get('discord_id', '') }}"><input type="number" name="new_app_id" placeholder="Nové ID" required style="width: 100px; margin: 0; text-align: center; font-weight: bold;"><button type="submit" class="btn btn-warning" style="padding: 8px 15px; font-size: 12px;"><i class="fas fa-edit"></i> Změnit</button></form></td></tr>{% else %}<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>{% endfor %}</table>
+    <table><tr><th>App ID</th><th>Nick</th><th>Discord ID</th><th>E-mail</th><th>Status</th><th>Změnit ID na:</th></tr>
+    {% for user in users %}<tr style="opacity: {{ '0.6' if user.get('is_deleted') else '1' }};"><td style="font-weight: bold; color: var(--blue-main); font-size: 16px;">#{{ user.get('app_id', '') }}</td><td><strong>{{ user.get('nick', '') }}</strong></td><td style="font-size: 12px; color: var(--text-muted); font-family: monospace;">{{ user.get('discord_id', '') }}</td><td style="font-size: 12px; color: var(--text-muted);">{{ user.get('email', '') or '-' }}</td><td>{% if user.get('is_deleted') %}<span style="color: var(--danger); font-size: 12px; font-weight: bold;">Smazán</span>{% else %}<span style="color: var(--success); font-size: 12px; font-weight: bold;">Aktivní</span>{% endif %}</td><td style="display: flex; gap: 10px; align-items: center;"><form action="/dashboard/change_id" method="POST" style="display: flex; gap: 10px; margin: 0; width: 100%;"><input type="hidden" name="discord_id" value="{{ user.get('discord_id', '') }}"><input type="number" name="new_app_id" placeholder="Nové ID" required style="width: 100px; margin: 0; text-align: center; font-weight: bold;"><button type="submit" class="btn btn-warning" style="padding: 8px 15px; font-size: 12px;"><i class="fas fa-edit"></i> Změnit</button></form></td></tr>{% else %}<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>{% endfor %}</table>
 </div>
 """
 
@@ -3502,15 +3502,15 @@ HTML_DASHBOARD_MAIN = """
 {% endif %}
 <div style="background-color: var(--bg-panel); padding: 20px; border-radius: 10px;">
     <table id="usersTable">
-        <thead><tr><th onclick="sortTable(0)">App ID ↕</th><th onclick="sortTable(1)">Nick ↕</th><th onclick="sortTable(2)">E-mail ↕</th><th onclick="sortTable(3)">Web Přihl. ↕</th><th onclick="sortTable(4)">Notify ↕</th><th onclick="sortTable(5)">Stav ↕</th><th onclick="sortTable(6)">Role ↕</th><th onclick="sortTable(7)">Poslední Aktivita ↕</th><th>Akce</th></tr></thead>
+        <thead><tr><th onclick="sortTable(0)">App ID ↕</th><th onclick="sortTable(1)">Nick ↕</th><th onclick="sortTable(2)">Discord ID ↕</th><th onclick="sortTable(3)">E-mail ↕</th><th onclick="sortTable(4)">Web Přihl. ↕</th><th onclick="sortTable(5)">Stav ↕</th><th onclick="sortTable(6)">Role ↕</th><th onclick="sortTable(7)">Poslední Aktivita ↕</th><th>Akce</th></tr></thead>
         <tbody>
         {% for user in users %}
         <tr>
             <td style="font-weight: bold; color: var(--blue-main);">#{{ user.get('app_id', '') }}</td>
             <td><strong>{{ user.get('nick', '') }}</strong></td>
+            <td style="color: var(--text-muted); font-size: 12px; font-family: monospace;">{{ user.get('discord_id', '') or '-' }}</td>
             <td style="color: var(--text-muted); font-size: 13px;">{{ user.get('email', '') or '-' }}</td>
             <td style="color: var(--text-muted); font-size: 13px;">{{ user.get('web_login_at', '') or '-' }}</td>
-            <td style="color: var(--text-muted); font-size: 13px;">-</td>
             <td>{% if user.get('is_banned') %}<span style="color: var(--danger); font-size: 11px; font-weight:bold; border:1px solid var(--danger); padding:2px 5px; border-radius:4px;">BANNED</span>{% elif user.get('is_deleted') %}<span style="color: var(--text-muted); font-size: 11px; font-weight:bold; border:1px solid var(--text-muted); padding:2px 5px; border-radius:4px;">DELETED</span>{% elif not user.get('hwid') or user.get('hwid') == 'None' or user.get('hwid') == '' %}<span style="color: var(--warning); font-size: 11px; font-weight:bold; border:1px solid var(--warning); padding:2px 5px; border-radius:4px;">NOT ACTIVATED</span>{% else %}<span style="color: var(--success); font-size: 11px; font-weight:bold; border:1px solid var(--success); padding:2px 5px; border-radius:4px;">ACTIVATED</span>{% endif %}</td>
             {% set role_weight = 1 %}{% if 'SA' in user.get('role', '') %}{% set role_weight = 4 %}{% elif 'DEV' in user.get('role', '') %}{% set role_weight = 3 %}{% elif 'BT' in user.get('role', '') %}{% set role_weight = 2 %}{% endif %}
             <td data-sort="{{ role_weight }}">{% set role_list = user.get('role', '').split(',') %}{% for r in role_list %}{% set r_clean = r.strip() %}{% if r_clean == 'SA' %}<span class="role-tag" style="background-color: #ef4444; color: white;">SA</span>{% elif r_clean == 'DEV' %}<span class="role-tag" style="background-color: #10b981; color: white;">DEV</span>{% elif r_clean == 'BT' %}<span class="role-tag" style="background-color: #3b82f6; color: white;">BT</span>{% elif r_clean == 'User' %}<span class="role-tag" style="background-color: #64748b; color: white;">User</span>{% endif %}{% endfor %}{% if user.get('dashboard_access') %}<i class="fas fa-shield-alt" style="color:var(--blue-main); font-size:12px; margin-left:5px;"></i>{% endif %}</td>
@@ -3518,8 +3518,11 @@ HTML_DASHBOARD_MAIN = """
             <td><button class="btn btn-dark" style="padding: 5px 10px; font-size: 12px;" data-app-id="{{ user.get('app_id', '') }}" data-discord-id="{{ user.get('discord_id', '') }}" data-nick="{{ (user.get('nick') or '') | e }}" data-email="{{ (user.get('email') or '') | e }}" data-roles="{{ (user.get('role') or '') | e }}" data-hwid="{{ (user.get('hwid') or '') | e }}" data-ip="{{ (user.get('ip_address') or '') | e }}" data-banned="{{ user.get('is_banned', False) }}" data-deleted="{{ user.get('is_deleted', False) }}" data-db-access="{{ user.get('dashboard_access', False) }}" data-reg-at="{{ (user.get('registered_at') or '') | e }}" onclick="openModal(this)"><i class="fas fa-edit"></i> Upravit</button></td>
         </tr>
         {% else %}
-        <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
+        <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Žádní uživatelé nenalezeni.</td></tr>
         {% endfor %}
+        </tbody>
+    </table>
+</div>
         </tbody>
     </table>
 </div>

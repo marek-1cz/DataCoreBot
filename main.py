@@ -720,6 +720,33 @@ def ensure_user_in_db(discord_id=None, email=None, nick=None, token=None):
         if nick_str and nick_str != "Uživatel" and (not cur_nick or cur_nick == "Uživatel" or cur_nick.isdigit() or cur_nick == str(existing.get("discord_id"))):
             existing["nick"] = nick_str
             updated = True
+
+        # Zkontrolovat zda existující uživatel má platné app_id (předejít zobrazení #None)
+        cur_aid = existing.get("app_id")
+        if cur_aid is None or str(cur_aid).strip() in ("", "None"):
+            all_fallback = _get_fallback_users()
+            if d_id_str:
+                highest = 1000
+                for fb in all_fallback:
+                    try:
+                        aid = int(fb.get("app_id"))
+                        if 1000 <= aid < 2000:
+                            highest = max(highest, aid)
+                    except Exception:
+                        pass
+                existing["app_id"] = highest + 1
+            else:
+                highest = 2000
+                for fb in all_fallback:
+                    try:
+                        aid = int(fb.get("app_id"))
+                        if aid >= 2000:
+                            highest = max(highest, aid)
+                    except Exception:
+                        pass
+                existing["app_id"] = highest + 1
+            updated = True
+
         if token:
             existing["download_token"] = token
             updated = True
@@ -729,6 +756,8 @@ def ensure_user_in_db(discord_id=None, email=None, nick=None, token=None):
                     up_dict = {}
                     if nick_str and existing.get("nick") == nick_str:
                         up_dict["nick"] = nick_str
+                    if existing.get("app_id") is not None:
+                        up_dict["app_id"] = existing.get("app_id")
                     if token:
                         up_dict["download_token"] = token
                     if up_dict:
@@ -749,28 +778,34 @@ def ensure_user_in_db(discord_id=None, email=None, nick=None, token=None):
         if db:
             try:
                 h_res = db.table("users").select("app_id").lt("app_id", 2000).order("app_id", desc=True).limit(1).execute().data
-                if h_res and h_res[0].get("app_id"):
+                if h_res and h_res[0].get("app_id") is not None:
                     highest = max(highest, int(h_res[0]["app_id"]))
             except Exception:
                 pass
         for fb in all_fallback:
-            aid = fb.get("app_id")
-            if aid and isinstance(aid, int) and aid < 2000:
-                highest = max(highest, aid)
+            try:
+                aid = int(fb.get("app_id"))
+                if 1000 <= aid < 2000:
+                    highest = max(highest, aid)
+            except Exception:
+                pass
         new_app_id = highest + 1
     else:
         highest = 2000
         if db:
             try:
                 h_res = db.table("users").select("app_id").gte("app_id", 2000).order("app_id", desc=True).limit(1).execute().data
-                if h_res and h_res[0].get("app_id"):
+                if h_res and h_res[0].get("app_id") is not None:
                     highest = max(highest, int(h_res[0]["app_id"]))
             except Exception:
                 pass
         for fb in all_fallback:
-            aid = fb.get("app_id")
-            if aid and isinstance(aid, int) and aid >= 2000:
-                highest = max(highest, aid)
+            try:
+                aid = int(fb.get("app_id"))
+                if aid >= 2000:
+                    highest = max(highest, aid)
+            except Exception:
+                pass
         new_app_id = highest + 1
 
     max_db_id = max([u.get("id", 0) for u in all_fallback] + [100])
@@ -2732,28 +2767,26 @@ class DynamicDownloadView(discord.ui.View):
                 try:
                     db = get_db()
                     d_id = str(i2.user.id)
-                    n = i2.user.display_name
-                    u_role = "User"
-                    chk = db.table("users").select("*").eq("discord_id", d_id).execute()
+                    n = i2.user.display_name or getattr(i2.user, 'global_name', None) or i2.user.name or f"Uživatel {d_id[-4:]}"
                     pend_data = db.table("pending_roles").select("*").execute().data or []
                     pend = next((p for p in pend_data if p['discord_identifier'] in [d_id, n]), None)
-                    if chk.data:
-                        if chk.data[0].get('is_banned'): return await i2.followup.send("**Přístup zamítnut:** Máte BAN.", ephemeral=True)
-                        if chk.data[0].get('is_deleted'):
-                            hid = db.table("users").select("app_id").lt("app_id", 2000).order("app_id", desc=True).limit(1).execute()
-                            nid = int(hid.data[0]["app_id"]) + 1 if (hid.data and hid.data[0].get("app_id")) else 1001
-                            r = pend['roles'] if pend else "User"
-                            db.table("users").update({"app_id": nid, "nick": n, "is_deleted": False, "role": r}).eq("discord_id", d_id).execute()
-                            u_role = r
-                            if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
-                        else: u_role = chk.data[0].get('role', 'User')
-                    else:
-                        hid = db.table("users").select("app_id").lt("app_id", 2000).order("app_id", desc=True).limit(1).execute()
-                        nid = int(hid.data[0]["app_id"]) + 1 if (hid.data and hid.data[0].get("app_id")) else 1001
-                        r = pend['roles'] if pend else "User"
-                        db.table("users").insert({"app_id": nid, "discord_id": d_id, "nick": n, "role": r, "hwid": "", "ip_address": "", "is_banned": False, "is_deleted": False, "deleted_at": "", "dashboard_access": False, "login_token": "", "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M")}).execute()
-                        u_role = r
-                        if pend: db.table("pending_roles").delete().eq("id", pend['id']).execute()
+                    ok_u, u_data, _ = ensure_user_in_db(discord_id=d_id, nick=n)
+                    if not ok_u or not u_data:
+                        return await i2.followup.send("**Chyba databáze:** Nepodařilo se ověřit uživatele.", ephemeral=True)
+                    if u_data.get('is_banned'):
+                        return await i2.followup.send("**Přístup zamítnut:** Máte BAN.", ephemeral=True)
+                    if u_data.get('is_deleted'):
+                        db.table("users").update({"is_deleted": False}).eq("discord_id", d_id).execute()
+                        u_data["is_deleted"] = False
+                        _save_user_to_backup(u_data)
+                    if pend:
+                        r = pend.get('roles') or "User"
+                        db.table("users").update({"role": r}).eq("discord_id", d_id).execute()
+                        u_data["role"] = r
+                        _save_user_to_backup(u_data)
+                        try: db.table("pending_roles").delete().eq("id", pend['id']).execute()
+                        except: pass
+                    u_role = u_data.get('role', 'User')
                     if isinstance(i2.user, discord.Member):
                         try: await update_member_roles(i2.user, u_role)
                         except: pass
@@ -4254,11 +4287,26 @@ def api_app_login():
                                 user = ex_res[0]
                         except Exception: pass
                     if not user:
-                        user = {
-                            "discord_id": d_id_str,
-                            "nick": getattr(m, 'display_name', '') or m.name,
-                            "role": "User"
-                        }
+                        d_nick = getattr(m, 'display_name', '') or getattr(m, 'global_name', '') or m.name or f"Uživatel {d_id_str[-4:]}"
+                        ok_cr, cr_u, _ = ensure_user_in_db(discord_id=d_id_str, nick=d_nick)
+                        if ok_cr and cr_u:
+                            user = cr_u
+                        else:
+                            user = {
+                                "discord_id": d_id_str,
+                                "nick": d_nick,
+                                "role": "User"
+                            }
+                    else:
+                        u_nick = str(user.get("nick") or "").strip()
+                        if not u_nick or u_nick == "Uživatel" or u_nick.isdigit() or u_nick == str(user.get("discord_id")):
+                            d_nick = getattr(m, 'display_name', '') or getattr(m, 'global_name', '') or m.name
+                            if d_nick:
+                                user["nick"] = d_nick
+                                try:
+                                    if db: db.table("users").update({"nick": d_nick}).eq("discord_id", d_id_str).execute()
+                                except Exception: pass
+                                _save_user_to_backup(user)
                     break
 
         if not user:
@@ -5352,6 +5400,14 @@ def process_web_auth_email(email, intent, client_ip, nick=None, source='web'):
         token_expiry = int(_t.time()) + 600
 
         if not user_rec:
+            # Pokud šlo o přihlášení (nikoli explicitní novou registraci se zadaným nickem)
+            if intent in ('login', 'app_login', 'code') and not nick_str:
+                return {
+                    "status": "not_found",
+                    "error_type": "account_not_found",
+                    "message": "Účet s tímto e-mailem nebyl nalezen. Zkontrolujte prosím správnost vašeho e-mailu, nebo si vytvořte nový účet."
+                }, 404
+
             # Nová registrace: validace přezdívky povinná
             if not nick_str:
                 return {"status": "error", "message": "Pro novou registraci přes e-mail je povinné zadat přezdívku (3 až 24 znaků)."}, 400
