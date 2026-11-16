@@ -159,7 +159,7 @@ def add_security_headers(response):
     response.headers['Permissions-Policy'] = 'geolocation=(), camera=(), microphone=()'
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['Content-Security-Policy'] = "default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval';"
-    if request.path.startswith(('/api', '/dashboard', '/admin', '/debug', '/old', '/mapa_admin', '/blocked', '/login_blocked', '/ucet', '/overeni')):
+    if request.path.startswith(('/api', '/dashboard', '/admin', '/debug', '/old', '/mapa_admin', '/blocked', '/login_blocked', '/ucet', '/overeni', '/launcher-prihlaseni', '/Launcher-prihlaseni')):
         response.headers['X-Robots-Tag'] = 'noindex, nofollow'
     return response
 
@@ -1673,7 +1673,10 @@ def send_magic_link_email(to_email, token, intent='login', source='web'):
 
         base_url = "https://datacorebot.koyeb.app"
         src_param = f"&source={source}" if source else ""
-        login_url = f"{base_url}/overeni?token={token}{src_param}"
+        if str(source or '').lower() == 'launcher' or intent in ('app_login', 'app_signup'):
+            login_url = f"{base_url}/launcher-prihlaseni?token={token}"
+        else:
+            login_url = f"{base_url}/overeni?token={token}{src_param}"
         from ois_email import build_magic_link_email
         subject, html, text = build_magic_link_email(login_url, token)
         if "Subject" in msg:
@@ -3527,6 +3530,22 @@ def stranka_overeni():
     except Exception as e:
         return render_error_page(500, "Chyba ověření", str(e)), 500
 
+@app.route('/launcher-prihlaseni')
+@app.route('/Launcher-prihlaseni')
+def stranka_launcher_prihlaseni():
+    try:
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(curr_dir, "launcher-prihlaseni.html")
+        if not os.path.exists(path):
+            path = os.path.join(curr_dir, "overeni.html")
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
+            content = content.replace("</body>", f"{ADMIN_BYPASS_BAR}\n</body>")
+        return Response(content, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        return render_error_page(500, "Chyba ověření", str(e)), 500
+
 @app.route('/api/jr/featured', methods=['GET'])
 def api_jr_featured():
     import jr_api
@@ -5309,6 +5328,9 @@ def process_web_auth_discord(discord_id, client_ip):
         return {"status": "error", "message": f"Došlo k chybě: {str(e)}"}, 500
 
 def process_web_auth_email(email, intent, client_ip, nick=None, source='web'):
+    if not source or source == 'web':
+        if intent in ('app_login', 'app_signup'):
+            source = 'launcher'
     if not _rate_limit_check(f'auth_email:{client_ip}', 6, 120):
         return {'status': 'error', 'message': 'Příliš mnoho pokusů o zaslání e-mailu. Zkuste to za chvíli.'}, 429
     email_str = str(email or '').strip().lower()
@@ -5390,7 +5412,7 @@ def web_auth_email_request():
     email = data.get('email') or request.form.get('email')
     nick = data.get('nick') or request.form.get('nick')
     intent = data.get('intent', 'login')
-    source = data.get('source', 'web')
+    source = data.get('source') or request.form.get('source') or ('launcher' if intent in ('app_login', 'app_signup') else 'web')
     res, code = process_web_auth_email(email, intent, client_ip, nick=nick, source=source)
     return jsonify(res), code
 
