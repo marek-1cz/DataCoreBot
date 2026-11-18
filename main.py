@@ -9392,15 +9392,37 @@ def api_community_routes_list():
 def api_community_routes_my():
     if request.method == 'OPTIONS':
         return _cors_jsonify({})
-    author = request.args.get('discord_id', '').strip() or request.args.get('author_id', '').strip() or request.args.get('author_name', '').strip()
-    if not author:
+    d_id = request.args.get('discord_id', '').strip()
+    a_id = request.args.get('author_id', '').strip()
+    a_name = request.args.get('author_name', '').strip()
+
+    conds = []
+    params = []
+    if d_id:
+        conds.append("author_id = ?")
+        params.append(d_id)
+        conds.append("author_name = ?")
+        params.append(d_id)
+    if a_id and a_id != d_id:
+        conds.append("author_id = ?")
+        params.append(a_id)
+        conds.append("author_name = ?")
+        params.append(a_id)
+    if a_name and a_name != d_id and a_name != a_id:
+        conds.append("author_id = ?")
+        params.append(a_name)
+        conds.append("author_name = ?")
+        params.append(a_name)
+
+    if not conds:
         return _cors_jsonify({"success": False, "error": "Chybí discord_id nebo author_name"}), 400
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
+        where_clause = " OR ".join(conds)
         routes = d1.execute(
-            "SELECT id, route_number, route_name, route_type, description, status, reject_reason, is_deleted_by_author, created_at, updated_at, system_tag, COALESCE(version, 'V1') as version, COALESCE(download_count, 0) as download_count FROM community_routes WHERE (author_id = ? OR author_name = ?) ORDER BY id DESC",
-            [str(author), str(author)]
+            f"SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, status, reject_reason, is_deleted_by_author, created_at, updated_at, system_tag, COALESCE(version, 'V1') as version, COALESCE(voice_type, 'synt') as voice_type, COALESCE(download_count, 0) as download_count FROM community_routes WHERE ({where_clause}) ORDER BY id DESC",
+            params
         ) or []
         for r in routes:
             if not r.get('system_tag'):
