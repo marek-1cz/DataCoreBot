@@ -3871,7 +3871,7 @@ function reqEmail() {
         body: JSON.stringify({email: email, intent: 'login'})
     }).then(r=>r.json()).then(data => {
         if(data.status === 'success') {
-            showStatus('E-mail odeslán', `Na adresu <b>${email}</b> jsme odeslali e-mail s odkazem pro přihlášení. Klikněte na tlačítko v e-mailu a budete automaticky přihlášeni.<br><br><i>Ověřte si složku Spam, pokud e-mail nedorazí do 2 minut.</i><br><br><div style="margin-top:15px; text-align:center;"><p style="font-size:12px; color:#94a3b8; margin-bottom:10px;">Zkuste to zadat ručně, jen tak pro jistotu. (Zadejte 5místný kód z e-mailu)</p><div style="display:flex; gap:10px; justify-content:center;"><input type="text" id="email_code_input" placeholder="12345" maxlength="5" style="width:100px; text-align:center; padding:10px; border-radius:8px; border:1px solid #334155; background:rgba(0,0,0,0.2); color:white; margin:0;"><button onclick="submitEmailCode()" style="background:#38bdf8; color:black; font-weight:bold; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">Potvrdit kód</button></div></div>`, false);
+            showStatus('E-mail odeslán', `Na adresu <b>${email}</b> jsme odeslali e-mail s odkazem pro přihlášení. Klikněte na tlačítko v e-mailu a budete automaticky přihlášeni.<br><br><i>Ověřte si složku Spam, pokud e-mail nedorazí do 2 minut.</i><br><br><div style="margin-top:15px; text-align:center;"><p style="font-size:12px; color:#94a3b8; margin-bottom:10px;">Zkuste to zadat ručně, jen tak pro jistotu. (Zadejte 6místný kód z e-mailu)</p><div style="display:flex; gap:10px; justify-content:center;"><input type="text" id="email_code_input" inputmode="numeric" placeholder="123456" maxlength="6" style="width:110px; text-align:center; padding:10px; border-radius:8px; border:1px solid #334155; background:rgba(0,0,0,0.2); color:white; margin:0;"><button onclick="submitEmailCode()" style="background:#38bdf8; color:black; font-weight:bold; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">Potvrdit kód</button></div></div>`, false);
             document.getElementById('spinner').style.display = 'none';
         } else {
             alert('Chyba: ' + data.message);
@@ -3881,10 +3881,10 @@ function reqEmail() {
 
 function submitEmailCode() {
     const code = document.getElementById('email_code_input').value.trim();
-    if(code.length === 5) {
+    if(/^\\d{6}$/.test(code)) {
         window.location.href = `/api/auth/finalize?token=${code}&type=email&intent=login`;
     } else {
-        alert("Kód musí mít 5 znaků.");
+        alert("Kód musí mít 6 číslic.");
     }
 }
 
@@ -7467,7 +7467,7 @@ HTML_COMMUNITY_ROUTES = """
                   <i class="fas fa-check"></i> Schválit linku
                 </button>
               </form>
-              <button type="button" class="btn btn-danger" style="padding:7px 14px; font-size:12px; font-weight:bold; display:flex; align-items:center; gap:6px;" onclick="openRejectModal('{{ r.get('id') }}', '{{ r.get('route_number') }}', '{{ r.get('route_name') }}')">
+              <button type="button" class="btn btn-danger" style="padding:7px 14px; font-size:12px; font-weight:bold; display:flex; align-items:center; gap:6px;" data-id="{{ r.get('id') }}" data-num="{{ r.get('route_number') }}" data-name="{{ r.get('route_name') }}" onclick="openRejectModal(this.dataset.id, this.dataset.num, this.dataset.name)">
                 <i class="fas fa-times"></i> Zamítnout
               </button>
             </div>

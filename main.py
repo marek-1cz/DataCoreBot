@@ -96,6 +96,7 @@ except Exception as _e_ldb:
     _HAS_LOCAL_DB = False
     print(f'[LOCAL DB] Modul local_db neni dostupny: {_e_ldb}', flush=True)
 
+import html as _html
 import secrets as _secrets
 import hmac as _hmac
 import hashlib as _hashlib
@@ -146,10 +147,11 @@ _CORS_ORIGINS = {
 def add_security_headers(response):
     # CORS – pouze whitelisted origins nebo veřejné informační endpointy
     origin = request.headers.get('Origin', '')
-    if origin in _CORS_ORIGINS or request.path.startswith('/api/stats') or request.path.startswith('/api/supporters'):
+    _sensitive_null = request.path.startswith(('/dashboard', '/api/ucet', '/api/auth', '/api/admin', '/api/d1', '/api/community-routes/pending', '/api/community-routes/decision'))
+    if (origin in _CORS_ORIGINS and not (origin == 'null' and _sensitive_null)) or request.path.startswith('/api/stats') or request.path.startswith('/api/supporters'):
         response.headers['Access-Control-Allow-Origin'] = origin if origin and origin != 'null' else '*'
         response.headers['Vary'] = 'Origin'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Range'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Session-Token,Range'
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
     # Bezpečnostní hlavičky
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -434,6 +436,59 @@ _PENDING_REGISTRATIONS: dict = {}  # {email.lower(): {"email": str, "nick": str,
 _EMAIL_AUTH_STATUS: dict = {}  # {email.lower(): {"status": "waiting"|"approved", "token": str, "user": dict, "expires_at": int}}
 _RECENTLY_VERIFIED_TOKENS: dict = {}  # {token.upper(): {"time": float, "user": dict, "email": str, "perm_token": str}}
 _PENDING_DISCORD_AUTH: dict = {}  # {str(discord_id): {"token": str, "created_at": float}}
+_EMAIL_VERIFY_FAILS: dict = {}  # {email.lower(): int}
+_USER_ID_LOCK = threading.RLock()
+_RESERVED_LOGIN_TOKENS = {"", "APPROVED", "USED", "REJECTED", "WAITING", "TIMEOUT"}
+
+def _is_reserved_login_token(tok: str) -> bool:
+    return str(tok or "").strip().upper() in _RESERVED_LOGIN_TOKENS
+
+def _make_email_magic_sig(email_str: str, token: str) -> str:
+    msg = f"{str(email_str or '').strip().lower()}:{str(token or '').strip().upper()}".encode("utf-8")
+    return _hmac.new(str(app.secret_key).encode("utf-8"), msg, _hashlib.sha256).hexdigest()[:24]
+
+def _verify_email_magic_sig(email_str: str, token: str, sig: str) -> bool:
+    s = str(sig or "").strip()
+    if not s or not email_str or not token:
+        return False
+    return _hmac.compare_digest(_make_email_magic_sig(email_str, token), s)
+
+def _user_has_dash_access(u: dict) -> bool:
+    if not u or u.get("is_banned") or u.get("is_deleted"):
+        return False
+    role_tokens = {r.strip().upper() for r in re.split(r'[,;\s]+', str(u.get("role") or "")) if r.strip()}
+    if role_tokens & {'SA', 'SUPERADMIN', 'DEV', 'DEVELOPER', 'ADMIN', 'SM'}:
+        return True
+    lvl = str(u.get("dashboard_level") or "admin").strip().lower()
+    return bool(u.get("dashboard_access")) and lvl not in ("none", "")
+
+def _mint_session_for_user(db, u: dict) -> str:
+    perm_token = _secrets.token_hex(32)
+    if db and u:
+        try:
+            from session_manager import add_user_session
+            add_user_session(db, u, perm_token, request)
+            _invalidate_session_cache(user_id=u.get("id"))
+        except Exception:
+            pass
+    if u:
+        _SESSION_CACHE[perm_token] = (time.time(), u)
+    return perm_token
+
+def _apply_web_and_admin_cookies(resp, u: dict, perm_token: str, max_age: int = 30 * 86400):
+    _is_secure = bool(request.is_secure or request.headers.get('X-Forwarded-Proto', '') == 'https')
+    resp.set_cookie('web_session_token', perm_token, max_age=max_age, secure=_is_secure, httponly=True, samesite='Lax')
+    if _user_has_dash_access(u):
+        resp.set_cookie('admin_session_token', perm_token, max_age=max_age, secure=_is_secure, httponly=True, samesite='Lax')
+        session.permanent = True
+        session['logged_in'] = True
+        session['discord_id'] = str(u.get('discord_id') or f"email-{u.get('id')}")
+        session['discord_nick'] = u.get('nick') or u.get('email') or str(u.get('discord_id') or '')
+        session['nick'] = u.get('nick')
+        session['email'] = u.get('email')
+        session['role'] = u.get('role')
+        session['dashboard_level'] = u.get('dashboard_level') or 'admin'
+    return resp
 
 def validate_nickname(nick: str, db=None) -> tuple[bool, str]:
     """
@@ -724,28 +779,36 @@ def ensure_user_in_db(discord_id=None, email=None, nick=None, token=None):
         # Zkontrolovat zda existující uživatel má platné app_id (předejít zobrazení #None)
         cur_aid = existing.get("app_id")
         if cur_aid is None or str(cur_aid).strip() in ("", "None"):
-            all_fallback = _get_fallback_users()
-            if d_id_str:
-                highest = 1000
+            with _USER_ID_LOCK:
+                all_fallback = _get_fallback_users()
+                lo, hi = (1000, 2000) if d_id_str else (2000, 3000)
+                highest = lo
+                used_aids = set()
+                if db:
+                    try:
+                        q_aid = db.table("users").select("app_id").gte("app_id", lo).lt("app_id", hi).execute().data or []
+                        for row_a in q_aid:
+                            try:
+                                v_a = int(row_a.get("app_id"))
+                                used_aids.add(v_a)
+                                highest = max(highest, v_a)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                 for fb in all_fallback:
                     try:
                         aid = int(fb.get("app_id"))
-                        if 1000 <= aid < 2000:
+                        if lo <= aid < hi:
+                            used_aids.add(aid)
                             highest = max(highest, aid)
                     except Exception:
                         pass
-                existing["app_id"] = highest + 1
-            else:
-                highest = 2000
-                for fb in all_fallback:
-                    try:
-                        aid = int(fb.get("app_id"))
-                        if aid >= 2000:
-                            highest = max(highest, aid)
-                    except Exception:
-                        pass
-                existing["app_id"] = highest + 1
-            updated = True
+                cand_aid = highest + 1
+                if cand_aid >= hi:
+                    cand_aid = next((x for x in range(lo + 1, hi) if x not in used_aids), lo + 1)
+                existing["app_id"] = cand_aid
+                updated = True
 
         if token:
             existing["download_token"] = token
@@ -770,83 +833,81 @@ def ensure_user_in_db(discord_id=None, email=None, nick=None, token=None):
             _save_user_to_backup(existing)
         return True, existing, "exists"
 
-    all_fallback = _get_fallback_users()
-    new_app_id = 1001 if d_id_str else 2001
-
-    if d_id_str:
-        highest = 1000
+    with _USER_ID_LOCK:
+        all_fallback = _get_fallback_users()
+        lo, hi = (1000, 2000) if d_id_str else (2000, 3000)
+        highest = lo
+        used_aids = set()
         if db:
             try:
-                h_res = db.table("users").select("app_id").lt("app_id", 2000).order("app_id", desc=True).limit(1).execute().data
-                if h_res and h_res[0].get("app_id") is not None:
-                    highest = max(highest, int(h_res[0]["app_id"]))
+                q_aid = db.table("users").select("app_id").gte("app_id", lo).lt("app_id", hi).execute().data or []
+                for row_a in q_aid:
+                    try:
+                        v_a = int(row_a.get("app_id"))
+                        used_aids.add(v_a)
+                        highest = max(highest, v_a)
+                    except Exception:
+                        pass
             except Exception:
                 pass
         for fb in all_fallback:
             try:
                 aid = int(fb.get("app_id"))
-                if 1000 <= aid < 2000:
+                if lo <= aid < hi:
+                    used_aids.add(aid)
                     highest = max(highest, aid)
             except Exception:
                 pass
         new_app_id = highest + 1
-    else:
-        highest = 2000
+        if new_app_id >= hi:
+            new_app_id = next((x for x in range(lo + 1, hi) if x not in used_aids), lo + 1)
+
+        max_db_id = max([int(u.get("id") or 0) for u in all_fallback] + [100])
         if db:
             try:
-                h_res = db.table("users").select("app_id").gte("app_id", 2000).order("app_id", desc=True).limit(1).execute().data
-                if h_res and h_res[0].get("app_id") is not None:
-                    highest = max(highest, int(h_res[0]["app_id"]))
+                id_res = db.table("users").select("id").order("id", desc=True).limit(1).execute().data
+                if id_res and id_res[0].get("id") is not None:
+                    max_db_id = max(max_db_id, int(id_res[0]["id"]))
             except Exception:
                 pass
-        for fb in all_fallback:
+        new_user = {
+            "id": max_db_id + 1,
+            "app_id": new_app_id,
+            "discord_id": d_id_str if d_id_str else "čeká na odpověd",
+            "nick": nick_str,
+            "role": "User",
+            "hwid": "",
+            "ip_address": "",
+            "is_banned": False,
+            "is_deleted": False,
+            "deleted_at": "",
+            "dashboard_access": False,
+            "login_token": "",
+            "download_token": token or "",
+            "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M"),
+            "last_active": None,
+            "is_online": 0,
+            "launch_count": 0,
+            "total_time": 0,
+            "admin_bypass": 0,
+            "email": email_str,
+            "web_session_token": None,
+            "avatar_url": None,
+            "web_login_at": None,
+            "notify": None,
+            "dashboard_level": "",
+            "login_token_expires_at": "0"
+        }
+
+        if db:
             try:
-                aid = int(fb.get("app_id"))
-                if aid >= 2000:
-                    highest = max(highest, aid)
-            except Exception:
-                pass
-        new_app_id = highest + 1
+                ins = db.table("users").insert(new_user).execute()
+                if ins and ins.data:
+                    new_user = ins.data[0]
+            except Exception as e_ins:
+                print(f"[ENSURE USER DB INSERT] {e_ins}", flush=True)
 
-    max_db_id = max([u.get("id", 0) for u in all_fallback] + [100])
-    new_user = {
-        "id": max_db_id + 1,
-        "app_id": new_app_id,
-        "discord_id": d_id_str if d_id_str else "čeká na odpověd",
-        "nick": nick_str,
-        "role": "User",
-        "hwid": "",
-        "ip_address": "",
-        "is_banned": False,
-        "is_deleted": False,
-        "deleted_at": "",
-        "dashboard_access": False,
-        "login_token": "",
-        "download_token": token or "",
-        "registered_at": get_prague_time().strftime("%d.%m.%Y %H:%M"),
-        "last_active": None,
-        "is_online": 0,
-        "launch_count": 0,
-        "total_time": 0,
-        "admin_bypass": 0,
-        "email": email_str,
-        "web_session_token": None,
-        "avatar_url": None,
-        "web_login_at": None,
-        "notify": None,
-        "dashboard_level": "",
-        "login_token_expires_at": "0"
-    }
-
-    if db:
-        try:
-            ins = db.table("users").insert(new_user).execute()
-            if ins and ins.data:
-                new_user = ins.data[0]
-        except Exception as e_ins:
-            print(f"[ENSURE USER DB INSERT] {e_ins}", flush=True)
-
-    _save_user_to_backup(new_user)
+        _save_user_to_backup(new_user)
 
     verify = find_user_record(d_id_str or email_str)
     if verify:
@@ -1029,6 +1090,14 @@ def _get_fallback_summary():
     except Exception as e:
         print(f"[FALLBACK] Chyba cteni summary_backup.json: {e}", flush=True)
     return None
+
+def _get_client_ip() -> str:
+    xff = (request.headers.get('X-Forwarded-For') or '').strip()
+    if xff:
+        parts = [p.strip() for p in xff.split(',') if p.strip()]
+        if parts:
+            return parts[-1]
+    return request.remote_addr or 'Neznámá'
 
 # ── In-memory rate limiter (jednoduchý, bez externí závislosti) ──
 _rl_store: dict = defaultdict(list)
@@ -1706,12 +1775,15 @@ def send_magic_link_email(to_email, token, intent='login', source='web'):
         except Exception as e_l:
             print(f"[AUTH LOGO ERR] {e_l}", flush=True)
 
+        from urllib.parse import quote as _uquote
         base_url = "https://datacorebot.koyeb.app"
-        src_param = f"&source={source}" if source else ""
+        _sig = _make_email_magic_sig(to_email, token)
+        _q_email = _uquote(to_email)
+        src_param = f"&source={_uquote(str(source))}" if source else ""
         if str(source or '').lower() == 'launcher' or intent in ('app_login', 'app_signup'):
-            login_url = f"{base_url}/launcher-prihlaseni?token={token}"
+            login_url = f"{base_url}/launcher-prihlaseni?token={token}&email={_q_email}&sig={_sig}"
         else:
-            login_url = f"{base_url}/overeni?token={token}{src_param}"
+            login_url = f"{base_url}/overeni?token={token}&email={_q_email}&sig={_sig}{src_param}"
         from ois_email import build_magic_link_email
         subject, html, text = build_magic_link_email(login_url, token)
         if "Subject" in msg:
@@ -2420,10 +2492,12 @@ def _get_avatar_html(req):
             u = get_cached_session_user(cookie_token)
             if u:
 
-                avatar_src = u.get('avatar_url')
-                img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>'
-                display_name = u.get('nick') or u.get('email') or 'Uživatel'
-                discord_id_text = f"<br>Discord ID: {u.get('discord_id')}" if u.get('discord_id') else ""
+                raw_av = str(u.get('avatar_url') or '').strip()
+                avatar_src = raw_av if raw_av.startswith(('https://', 'http://', '/', 'data:image/')) else ''
+                img_tag = f'<img src="{_html.escape(avatar_src, quote=True)}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>'
+                display_name = _html.escape(str(u.get('nick') or u.get('email') or 'Uživatel'), quote=True)
+                raw_did = str(u.get('discord_id') or '').strip()
+                discord_id_text = f"<br>Discord ID: {_html.escape(raw_did, quote=True)}" if raw_did and raw_did != "čeká na odpověd" else ""
                 
                 role_str = u.get('role') or ''
                 if 'SA' in role_str:
@@ -2613,7 +2687,7 @@ def check_session_validity():
                 return redirect('/blocked')
 
         web_login_enabled = str(get_cached_setting('web_login_enabled', 'True', ttl=60)).lower() != 'false'
-        LOGIN_PATHS = ['/register', '/login', '/api/auth/discord/request', '/api/auth/email/request']
+        LOGIN_PATHS = ['/register', '/login', '/api/auth/discord/request', '/api/auth/email/request', '/api/auth/discord/start', '/api/auth/email/start', '/api/auth/email/verify', '/api/auth/email/magic', '/api/auth/finalize', '/api/launcher/email_verify']
         if not web_login_enabled and path in LOGIN_PATHS:
             if request.is_json or path.startswith('/api/'):
                 return jsonify({'status': 'error', 'message': 'Přihlašování je z bezpečnostních důvodů dočasně nedostupné.'}), 503
@@ -3403,6 +3477,7 @@ def dashboard_exit_new_web():
     return redirect('/old')
 
 @app.route('/dashboard/toggle_web_bypass')
+@require_dash_level('admin')
 def dashboard_toggle_web_bypass():
     cur = session.get('admin_web_bypass', False)
     session['admin_web_bypass'] = not cur
@@ -4086,14 +4161,22 @@ def claim_role():
 @app.route('/webhook/bmac', methods=['POST', 'OPTIONS'])
 def bmac_webhook():
     if request.method == 'OPTIONS': return _cors_jsonify({})
+    _bmac_verified = False
     if BMAC_WEBHOOK_SECRET:
         sig_header = request.headers.get('X-Signature-Sha256', '')
         expected = 'sha256=' + _hmac.new(BMAC_WEBHOOK_SECRET.encode(), request.data, _hashlib.sha256).hexdigest()
         if not _hmac.compare_digest(expected, sig_header):
             return jsonify({'status': 'error', 'message': 'Invalid signature'}), 401
+        _bmac_verified = True
+    else:
+        print("[SECURITY] VAROVÁNÍ: BMAC_WEBHOOK_SECRET není nastaven – podpora bude uložena jen jako čekající bez auto-udělení rolí.", flush=True)
     try:
-        payload = request.get_json(silent=True) or {}
-        data = payload.get('data', payload) if isinstance(payload, dict) else {}
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({'status': 'error', 'message': 'Invalid payload'}), 400
+        data = payload.get('data', payload)
+        if not isinstance(data, dict):
+            data = {}
         name = data.get('supporter_name') or data.get('payer_name') or data.get('name') or 'Anonymní dárce'
         message = data.get('support_note') or data.get('message') or ''
         amount_val = data.get('amount') or data.get('support_coffees') or 1
@@ -4109,7 +4192,9 @@ def bmac_webhook():
         db = get_db()
         if db:
             status = 'pending'; sys_note = "Čeká na spárování."
-            if discord_identifier and user_exists_sync(discord_identifier):
+            if not _bmac_verified:
+                sys_note = "Vyžaduje ruční ověření (BMAC secret nenastaven)."
+            elif discord_identifier and user_exists_sync(discord_identifier):
                 status = 'completed'; sys_note = "Automaticky spárováno."
             db.table("supporters").insert({"name": str(name), "message": str(message), "amount": str(amount_str), "created_at": get_prague_time().strftime("%d.%m.%Y %H:%M"), "status": status, "sys_note": sys_note, "discord_nick": discord_identifier or ""}).execute()
             send_log("🍕 Nová platba zaznamenána!", f"Uživatel **{name}** poslal **{amount_str}**.\nStatus: `{status}`", 0xF4CC17)
@@ -4131,16 +4216,23 @@ def secure_download(token):
         if not resp.data: return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Neplatný odkaz, nebo již vypršel!</h2></div>")
         user = resp.data[0]
         if user.get("is_banned") or user.get("is_deleted"): return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--danger);'>Přístup zamítnut</h2></div>")
-        version_id = request.args.get('v')
-        v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
+        version_id = str(request.args.get('v') or '').strip()
+        if not version_id.isdigit():
+            return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--warning);'>Neplatná verze</h2></div>")
+        v_resp = db.table("software_versions").select("*").eq("id", int(version_id)).execute()
         if not v_resp.data: return render_public("<div style='text-align: center; padding: 50px;'><h2 style='color: var(--warning);'>Chyba verze</h2></div>")
         v_data = v_resp.data[0]
+        safe_nick = _html.escape(str(user.get('nick', '')), quote=True)
+        safe_vname = _html.escape(str(v_data.get('version_name', '')), quote=True)
+        from urllib.parse import quote as _uquote
+        safe_tok_url = _uquote(str(token), safe='')
+        safe_vid_url = int(version_id)
         html = f"""<div style="background-color: var(--bg-panel); padding: 40px; border-radius: 10px; text-align: center; max-width: 600px; margin: 0 auto; border-top: 4px solid var(--success);">
             <h2 style="color: var(--success); margin-top: 0;"><i class="fas fa-check-circle"></i> Ověření úspěšné</h2>
-            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Přihlášen jako: <strong>{user.get('nick', '')}</strong></p>
+            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 30px;">Přihlášen jako: <strong>{safe_nick}</strong></p>
             <div style="background-color: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #334155;">
                 <h3 style="margin: 0 0 10px 0; color: var(--blue-main);">Projekt OIS IDPK</h3>
-                <p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{v_data.get('version_name', '')}</strong></p>
+                <p style="margin: 0; color: var(--text-main);">Instalátor: <strong>{safe_vname}</strong></p>
             </div>
             <div id="download-area">
                 <a href="#" onclick="startDownload()" class="btn btn-success" style="font-size: 18px; padding: 15px 30px; display: inline-block;" id="dl-btn">
@@ -4155,10 +4247,10 @@ def secure_download(token):
                 document.getElementById('download-area').style.display='none';
                 document.getElementById('loading-area').style.display='block';
                 try {{
-                    let response = await fetch("/api/pre_download/{token}?v={version_id}");
+                    let response = await fetch("/api/pre_download/{safe_tok_url}?v={safe_vid_url}");
                     let data = await response.json();
                     if (data.status === 'ok') {{
-                        window.location.href = "/api/stream_download/{token}?v={version_id}";
+                        window.location.href = "/api/stream_download/{safe_tok_url}?v={safe_vid_url}";
                         setTimeout(() => {{ document.getElementById('loading-area').style.display='none'; document.getElementById('success-area').style.display='block'; }}, 2000);
                     }} else {{
                         document.getElementById('loading-area').style.display='none';
@@ -4201,18 +4293,36 @@ def api_pre_download(token):
 @app.route('/api/stream_download/<token>')
 def api_stream_download(token):
     db = get_db()
-    if not db: return "Chyba databáze."
+    if not db or not token: return "Chyba databáze.", 500
     resp = db.table("users").select("*").eq("download_token", token).execute()
-    if not resp.data: return "Neplatný odkaz."
+    if not resp.data: return "Neplatný odkaz.", 404
     user = resp.data[0]
-    version_id = request.args.get('v')
-    v_resp = db.table("software_versions").select("*").eq("id", version_id).execute()
-    if not v_resp.data: return "Verze nenalezena."
+    if user.get("is_banned") or user.get("is_deleted"):
+        return "Přístup zamítnut.", 403
+    version_id = str(request.args.get('v') or '').strip()
+    if not version_id.isdigit():
+        return "Neplatná verze.", 400
+    v_resp = db.table("software_versions").select("*").eq("id", int(version_id)).execute()
+    if not v_resp.data: return "Verze nenalezena.", 404
     v_data = v_resp.data[0]
-    db.table("users").update({"download_token": ""}).eq("discord_id", user['discord_id']).execute()
-    try: db.table("download_logs").insert({"discord_id": user['discord_id'], "version_name": v_data['version_name'], "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")}).execute()
+    if not v_data.get('is_active', True):
+        return "Tato verze není aktivní.", 403
+    can_dl = v_data.get('can_download', 1)
+    if str(can_dl).lower() in ('0', 'false', 'none', ''):
+        return "Stahování této verze je zakázáno.", 403
+    ROLE_HIERARCHY = {'User': 1, 'BT': 2, 'DEV': 3, 'SA': 4}
+    u_role = normalize_role_string(user.get('role') or 'User')
+    t_role = normalize_role_string(v_data.get('target_role') or 'User')
+    if ROLE_HIERARCHY.get(u_role, 1) < ROLE_HIERARCHY.get(t_role, 1) and u_role not in ('SA', 'DEV'):
+        return "Nemáte oprávnění ke stažení této verze.", 403
+    if user.get("id") is not None:
+        db.table("users").update({"download_token": ""}).eq("id", user["id"]).execute()
+    elif user.get("discord_id") and user.get("discord_id") != "čeká na odpověd":
+        db.table("users").update({"download_token": ""}).eq("discord_id", user["discord_id"]).execute()
+    dl_ident = user.get('discord_id') if (user.get('discord_id') and user.get('discord_id') != "čeká na odpověd") else f"email-{user.get('id')}"
+    try: db.table("download_logs").insert({"discord_id": dl_ident, "version_name": v_data['version_name'], "downloaded_at": get_prague_time().strftime("%d.%m.%Y %H:%M:%S")}).execute()
     except: pass
-    return stream_proxy_file(v_data['file_url'], v_data['version_name'], user['discord_id'], user.get('nick', 'Neznámý'))
+    return stream_proxy_file(v_data['file_url'], v_data['version_name'], dl_ident, user.get('nick', 'Neznámý'))
 
 @app.route('/api/status', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_status():
@@ -4243,8 +4353,7 @@ def api_app_login():
         except Exception:
             pass
 
-        client_ip_raw = request.headers.get('X-Forwarded-For', request.remote_addr)
-        client_ip = client_ip_raw.split(',')[0].strip() if client_ip_raw else "Neznámá"
+        client_ip = _get_client_ip()
         
         user = None
         if db:
@@ -4371,7 +4480,8 @@ def api_app_login():
         db_hwid = user.get("hwid")
         db_ip = user.get("ip_address")
         if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
-            if req_hwid and req_hwid.startswith("PC-"):
+            _clean_hwid = req_hwid.strip()
+            if _clean_hwid and len(_clean_hwid) >= 8 and not _clean_hwid.upper().startswith(("UNKNOWN", "FALLBACK", "NONE", "NULL")):
                 try:
                     if db: db.table("users").update({"hwid": req_hwid, "ip_address": client_ip}).eq("discord_id", discord_id).execute()
                 except Exception: pass
@@ -4435,13 +4545,18 @@ def api_app_check():
                 break
 
     if not user: return _cors_jsonify({"status": "error"})
+    if user.get("is_banned"):
+        return _cors_jsonify({"status": "error", "message": "Tento účet má BAN."})
+    if user.get("is_deleted"):
+        return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."})
     
     if mem_status == "approved":
         _AUTH_TOKEN_STATUS.pop(discord_id, None)
         try:
-            if db: db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
+            if db: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("discord_id", discord_id).execute()
         except Exception: pass
-        return _cors_jsonify({"status": "success", "display_name": user.get("nick"), "app_id": str(user.get("app_id", "")), "roles": [user.get("role", "User")]})
+        perm_token = _mint_session_for_user(db, user)
+        return _cors_jsonify({"status": "success", "display_name": user.get("nick"), "app_id": str(user.get("app_id", "")), "roles": [user.get("role", "User")], "web_session_token": perm_token})
     elif mem_status == "rejected":
         _AUTH_TOKEN_STATUS.pop(discord_id, None)
         try:
@@ -4458,9 +4573,10 @@ def api_app_check():
     t = user.get("login_token")
     if t == "approved":
         try:
-            if db: db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
+            if db: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("discord_id", discord_id).execute()
         except Exception: pass
-        return _cors_jsonify({"status": "success", "display_name": user.get("nick"), "app_id": str(user.get("app_id", "")), "roles": [user.get("role", "User")]})
+        perm_token = _mint_session_for_user(db, user)
+        return _cors_jsonify({"status": "success", "display_name": user.get("nick"), "app_id": str(user.get("app_id", "")), "roles": [user.get("role", "User")], "web_session_token": perm_token})
     elif t == "rejected":
         try:
             if db: db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
@@ -4491,8 +4607,7 @@ def api_silent_check():
         except Exception:
             pass
 
-        client_ip_raw = request.headers.get('X-Forwarded-For', request.remote_addr)
-        client_ip = client_ip_raw.split(',')[0].strip() if client_ip_raw else "Neznámá"
+        client_ip = _get_client_ip()
         
         user = None
         if db:
@@ -4522,7 +4637,8 @@ def api_silent_check():
         db_hwid = user.get("hwid")
         db_ip = user.get("ip_address")
         if not db_hwid or str(db_hwid) == "None" or str(db_hwid).strip() == "":
-            if req_hwid and req_hwid.startswith("PC-"):
+            _clean_hwid = req_hwid.strip()
+            if _clean_hwid and len(_clean_hwid) >= 8 and not _clean_hwid.upper().startswith(("UNKNOWN", "FALLBACK", "NONE", "NULL")):
                 try:
                     if db: db.table("users").update({"hwid": req_hwid, "ip_address": client_ip}).eq("discord_id", discord_id).execute()
                 except Exception: pass
@@ -5147,11 +5263,12 @@ def login_finalize():
 
         if user:
             u = user[0]
-            # Ověřit: token, expiry a dashboard_access
+            if u.get("is_banned") or u.get("is_deleted"):
+                return "CHYBA: Tento účet je zablokován nebo smazán.", 403
             token_exp = int(u.get('login_token_expires_at') or 0)
-            token_val = u.get("login_token")
-            has_acc = bool(u.get("dashboard_access"))
-            
+            token_val = str(u.get("login_token") or "")
+            has_acc = _user_has_dash_access(u)
+
             # 1. Okamžitá kontrola in-memory schválení z Discordu
             mem_approved = (_AUTH_TOKEN_STATUS.get(str(discord_id)) == "approved")
             if mem_approved:
@@ -5159,17 +5276,7 @@ def login_finalize():
                 token_exp = 0
                 _AUTH_TOKEN_STATUS.pop(str(discord_id), None)
 
-            # 2. Ignorovat zastaralou expiraci ze starých JSON záloh (starší než 1 hodina)
-            if token_exp > 0 and token_exp < (_t.time() - 3600):
-                token_exp = 0
-
-            # 3. Záchranný přístup pro Superadmina
-            is_sa = (u.get("role") in ["SA", "Superadmin"] or u.get("dashboard_level") == "superadmin")
-            if is_sa and token_val == "approved":
-                token_exp = 0
-                has_acc = True
-
-            if (token_val in ["approved", "used"]
+            if (token_val == "approved"
                     and has_acc
                     and (token_exp == 0 or _t.time() <= token_exp)):
                 session.permanent = True
@@ -5180,18 +5287,13 @@ def login_finalize():
                 session['email'] = u.get('email')
                 session['role'] = u.get('role')
                 session['dashboard_level'] = u.get('dashboard_level') or 'admin'
-                
-                import uuid
-                admin_token = str(uuid.uuid4())
+
+                admin_token = _mint_session_for_user(db, u)
                 try:
-                    from session_manager import add_user_session
-                    add_user_session(db, u, admin_token, request)
                     db.table("users").update({
-                        "login_token": "used",
-                        "login_token_expires_at": int(_t.time()) + 10
+                        "login_token": "",
+                        "login_token_expires_at": 0
                     }).eq("discord_id", discord_id).execute()
-                    _invalidate_session_cache(user_id=u.get("id"))
-                    _SESSION_CACHE[admin_token] = (time.time(), u)
                 except Exception:
                     pass
                 
@@ -5216,9 +5318,9 @@ def login_finalize():
                 return resp
             elif token_exp > 0 and _t.time() > token_exp:
                 db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("discord_id", discord_id).execute()
-                return f"CHYBA: Platnost ověření vypršela. Zkuste to znovu od začátku. (Aktuální: {_t.time()}, Expirace: {token_exp})"
+                return "CHYBA: Platnost ověření vypršela. Zkuste se prosím přihlásit znovu.", 403
             else:
-                return f"CHYBA: Něco je špatně s přístupem.<br>Token_v_DB: '{token_val}' (musí být 'approved')<br>Přístup_povolen: {has_acc}<br>Expirovalo: {_t.time() > token_exp}<br>Máte ve svém mobilu zapnuté Cookies?"
+                return "CHYBA: Neplatné nebo nevyřízené ověření pro vstup do administrace. Zkuste se přihlásit znovu a zkontrolujte povolené cookies.", 403
         else:
             return "CHYBA: Uživatel nebyl nalezen v databázi!"
     return "CHYBA: Nelze se připojit k databázi."
@@ -5394,47 +5496,66 @@ def process_web_auth_email(email, intent, client_ip, nick=None, source='web'):
     try:
         user_rec = find_user_record(email_str)
         import time as _t
-        import random
-        import string
-        token = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+        token = f"{_secrets.randbelow(1000000):06d}"
         token_expiry = int(_t.time()) + 600
+        _EMAIL_VERIFY_FAILS[email_str] = 0
+
+        curr_auth_u = get_current_authenticated_user(db) if intent == 'link' else None
+        if intent == 'link' and not curr_auth_u:
+            return {"status": "error", "message": "Pro propojení e-mailu musíte být nejprve přihlášen."}, 401
+
+        if user_rec and (user_rec.get("is_banned") or user_rec.get("is_deleted")):
+            return {"status": "error", "message": "Tento účet je zablokován nebo smazán."}, 403
 
         if not user_rec:
-            # Pokud šlo o přihlášení (nikoli explicitní novou registraci se zadaným nickem)
-            if intent in ('login', 'app_login', 'code') and not nick_str:
-                return {
-                    "status": "not_found",
-                    "error_type": "account_not_found",
-                    "message": "Účet s tímto e-mailem nebyl nalezen. Zkontrolujte prosím správnost vašeho e-mailu, nebo si vytvořte nový účet."
-                }, 404
+            if intent == 'link' and curr_auth_u:
+                _PENDING_REGISTRATIONS[email_str] = {
+                    "email": email_str,
+                    "nick": curr_auth_u.get("nick") or "Uživatel",
+                    "token": token,
+                    "expires_at": token_expiry,
+                    "intent": "link",
+                    "link_user_id": curr_auth_u.get("id"),
+                    "created_at": _t.time()
+                }
+            else:
+                # Pokud šlo o přihlášení (nikoli explicitní novou registraci se zadaným nickem)
+                if intent in ('login', 'app_login', 'code') and not nick_str:
+                    return {
+                        "status": "not_found",
+                        "error_type": "account_not_found",
+                        "message": "Účet s tímto e-mailem nebyl nalezen. Zkontrolujte prosím správnost vašeho e-mailu, nebo si vytvořte nový účet."
+                    }, 404
 
-            # Nová registrace: validace přezdívky povinná
-            if not nick_str:
-                return {"status": "error", "message": "Pro novou registraci přes e-mail je povinné zadat přezdívku (3 až 24 znaků)."}, 400
-            ok_nick, err_nick = validate_nickname(nick_str, db=db)
-            if not ok_nick:
-                return {"status": "error", "message": err_nick}, 400
-            
-            # Bezpečné: dočasně uložit do in-memory fronty, do DB se zapíše až po úspěšném ověření!
-            _PENDING_REGISTRATIONS[email_str] = {
-                "email": email_str,
-                "nick": nick_str,
-                "token": token,
-                "expires_at": token_expiry,
-                "intent": intent,
-                "created_at": _t.time()
-            }
+                # Nová registrace: validace přezdívky povinná
+                if not nick_str:
+                    return {"status": "error", "message": "Pro novou registraci přes e-mail je povinné zadat přezdívku (3 až 24 znaků)."}, 400
+                ok_nick, err_nick = validate_nickname(nick_str, db=db)
+                if not ok_nick:
+                    return {"status": "error", "message": err_nick}, 400
+
+                # Bezpečné: dočasně uložit do in-memory fronty, do DB se zapíše až po úspěšném ověření!
+                _PENDING_REGISTRATIONS[email_str] = {
+                    "email": email_str,
+                    "nick": nick_str,
+                    "token": token,
+                    "expires_at": token_expiry,
+                    "intent": intent,
+                    "created_at": _t.time()
+                }
         else:
             # Existující uživatel - přihlašovací kód
             if nick_str and not user_rec.get("nick"):
                 ok_nick, err_nick = validate_nickname(nick_str, db=db)
                 if ok_nick:
                     user_rec["nick"] = nick_str
-                    _save_user_to_backup(user_rec)
                     try:
                         db.table("users").update({"nick": nick_str}).eq("email", email_str).execute()
                     except Exception:
                         pass
+            user_rec["login_token"] = token
+            user_rec["login_token_expires_at"] = token_expiry
+            _save_user_to_backup(user_rec)
             db.table("users").update({"login_token": token, "login_token_expires_at": token_expiry}).eq("email", email_str).execute()
         
         _EMAIL_AUTH_STATUS[email_str] = {
@@ -5455,7 +5576,7 @@ def process_web_auth_email(email, intent, client_ip, nick=None, source='web'):
 
 @app.route('/api/auth/discord/request', methods=['POST'])
 def web_auth_discord_request():
-    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+    client_ip = _get_client_ip()
     data = request.get_json(silent=True) or {}
     discord_id = data.get('discord_id') or data.get('discordId') or request.form.get('discord_id')
     res, code = process_web_auth_discord(discord_id, client_ip)
@@ -5463,7 +5584,7 @@ def web_auth_discord_request():
 
 @app.route('/api/auth/email/request', methods=['POST'])
 def web_auth_email_request():
-    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+    client_ip = _get_client_ip()
     data = request.get_json(silent=True) or {}
     email = data.get('email') or request.form.get('email')
     nick = data.get('nick') or request.form.get('nick')
@@ -5472,88 +5593,74 @@ def web_auth_email_request():
     res, code = process_web_auth_email(email, intent, client_ip, nick=nick, source=source)
     return jsonify(res), code
 
+def _complete_discord_web_auth(db, discord_id: str, u: dict, cookie_token: str | None):
+    if not u or u.get("is_banned") or u.get("is_deleted"):
+        return jsonify({"status": "rejected", "message": "Účet je zablokován nebo smazán."}), 403
+    if db and u.get("id") is not None:
+        try:
+            db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+        except Exception:
+            pass
+    if cookie_token and db:
+        try:
+            from session_manager import find_user_by_session_token, add_user_session
+            c_u = get_cached_session_user(cookie_token) or find_user_by_session_token(db, cookie_token)
+            if c_u and not c_u.get("is_banned") and not c_u.get("is_deleted"):
+                if c_u.get("id") != u.get("id"):
+                    app_id_c = int(c_u.get("app_id") or 999999)
+                    app_id_u = int(u.get("app_id") or 999999)
+                    id_to_keep = c_u.get("id") if app_id_c <= app_id_u else u.get("id")
+                    id_to_del = u.get("id") if app_id_c <= app_id_u else c_u.get("id")
+                    new_email = c_u.get("email") or u.get("email")
+                    new_discord = c_u.get("discord_id")
+                    if not new_discord or new_discord == "čeká na odpověd":
+                        new_discord = u.get("discord_id") or str(discord_id)
+                    db.table("users").delete().eq("id", id_to_del).execute()
+                    db.table("users").update({"discord_id": new_discord, "email": new_email, "login_token": ""}).eq("id", id_to_keep).execute()
+                    kept = db.table("users").select("*").eq("id", id_to_keep).execute().data
+                    if kept:
+                        add_user_session(db, kept[0], cookie_token, request)
+                        _SESSION_CACHE[cookie_token] = (time.time(), kept[0])
+                        _save_user_to_backup(kept[0])
+                    _invalidate_session_cache(user_id=id_to_keep)
+                    return jsonify({"status": "approved", "linked": True})
+                else:
+                    # Same user row (or discord user updating current web account)
+                    cur_did = str(c_u.get("discord_id") or "").strip()
+                    if not cur_did or cur_did in ("None", "čeká na odpověd"):
+                        db.table("users").update({"discord_id": str(discord_id), "login_token": ""}).eq("id", c_u.get("id")).execute()
+                        _invalidate_session_cache(user_id=c_u.get("id"))
+                    return jsonify({"status": "approved", "linked": True})
+        except Exception:
+            pass
+    perm_token = _mint_session_for_user(db, u)
+    return jsonify({"status": "approved", "token": perm_token})
+
 @app.route('/api/auth/status')
 def web_auth_status():
-    discord_id = request.args.get('discord_id')
-    cookie_token = request.cookies.get('web_session_token')
-    
-    # Check in-memory status first
-    mem_status = _AUTH_TOKEN_STATUS.get(str(discord_id)) if discord_id else None
+    discord_id = str(request.args.get('discord_id') or '').strip()
+    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
+    db = get_db()
+
+    mem_status = _AUTH_TOKEN_STATUS.get(discord_id) if discord_id else None
     if mem_status == "approved":
-        _AUTH_TOKEN_STATUS.pop(str(discord_id), None)
-        perm_token = str(uuid.uuid4())
-        user_obj = None
-        db = get_db()
-        if db and discord_id:
-            try:
-                u_res = db.table("users").select("*").eq("discord_id", str(discord_id)).execute().data
-                if u_res:
-                    user_obj = u_res[0]
-            except Exception:
-                pass
+        _AUTH_TOKEN_STATUS.pop(discord_id, None)
+        user_obj = find_user_record(discord_id)
         if not user_obj:
-            for bu in _get_fallback_users():
-                if str(bu.get("discord_id")) == str(discord_id):
-                    user_obj = bu
-                    break
-        if not user_obj:
-            user_obj = {"discord_id": discord_id, "role": "User", "nick": f"Uživatel {str(discord_id)[-4:]}"}
-        _SESSION_CACHE[perm_token] = (time.time(), user_obj)
-        try:
-            db = get_db()
-            if db:
-                from session_manager import add_user_session
-                add_user_session(db, user_obj, perm_token, request)
-                _invalidate_session_cache(user_id=user_obj.get("id"))
-        except Exception: pass
-        return jsonify({"status": "approved", "token": perm_token})
+            user_obj = {"discord_id": discord_id, "role": "User", "nick": f"Uživatel {discord_id[-4:]}"}
+        return _complete_discord_web_auth(db, discord_id, user_obj, cookie_token)
     elif mem_status == "rejected":
-        _AUTH_TOKEN_STATUS.pop(str(discord_id), None)
+        _AUTH_TOKEN_STATUS.pop(discord_id, None)
         return jsonify({"status": "rejected"})
 
-    db = get_db()
     if db and discord_id:
         try:
             user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
             if user:
                 u = user[0]
                 t = u.get("login_token")
-                if t == "approved": 
-                    if cookie_token:
-                        try:
-                            # Link k aktualnimu uctu misto vytvoreni noveho
-                            curr_user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
-                            if curr_user and curr_user[0].get('id') != u.get('id'):
-                                c_u = curr_user[0]
-                                app_id_c = int(c_u.get('app_id') or 999999)
-                                app_id_u = int(u.get('app_id') or 999999)
-                                if app_id_c <= app_id_u:
-                                    id_to_keep = c_u.get("id")
-                                    id_to_del = u.get("id")
-                                else:
-                                    id_to_keep = u.get("id")
-                                    id_to_del = c_u.get("id")
-                                new_email = c_u.get('email') or u.get('email')
-                                new_discord = c_u.get('discord_id')
-                                if not new_discord or new_discord == "čeká na odpověd":
-                                    new_discord = u.get('discord_id') or discord_id
-                                db.table("users").delete().eq("id", id_to_del).execute()
-                                db.table("users").update({
-                                    "discord_id": new_discord,
-                                    "email": new_email,
-                                    "web_session_token": cookie_token,
-                                    "login_token": ""
-                                }).eq("id", id_to_keep).execute()
-                                return jsonify({"status": "approved", "linked": True})
-                        except Exception: pass
-                    perm_token = str(uuid.uuid4())
-                    try:
-                        from session_manager import add_user_session
-                        add_user_session(db, u, perm_token, request)
-                        _invalidate_session_cache(user_id=u.get("id"))
-                    except Exception: pass
-                    _SESSION_CACHE[perm_token] = (time.time(), u)
-                    return jsonify({"status": "approved", "token": perm_token})
+                if t == "approved":
+                    return _complete_discord_web_auth(db, discord_id, u, cookie_token)
                 elif t == "rejected":
                     try: db.table("users").update({"login_token": ""}).eq("discord_id", discord_id).execute()
                     except Exception: pass
@@ -5566,13 +5673,15 @@ def web_auth_finalize():
     token = request.args.get('token')
     auth_type = request.args.get('type')
     intent = request.args.get('intent', 'login')
-    cookie_token = request.cookies.get('web_session_token')
+    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
     db = get_db()
     if db and token and auth_type == "email":
+        token_upper = str(token).strip().upper()
+        if _is_reserved_login_token(token_upper):
+            return "Neplatný nebo expirovaný odkaz.", 400
         import time as _t
         u = None
         pending_key = None
-        token_upper = str(token).strip().upper()
         for k, p in list(_PENDING_REGISTRATIONS.items()):
             if str(p.get("token", "")).strip().upper() == token_upper:
                 pending_key = k
@@ -5581,38 +5690,45 @@ def web_auth_finalize():
             pending = _PENDING_REGISTRATIONS.pop(pending_key)
             if _t.time() > pending.get("expires_at", 0):
                 return "Odkaz vypršel (platnost 10 minut). Požádejte o nový odkaz.", 400
+            if pending.get("intent") == "link" and pending.get("link_user_id"):
+                db.table("users").update({"email": pending["email"]}).eq("id", pending["link_user_id"]).execute()
+                _invalidate_session_cache(user_id=pending["link_user_id"])
+                return redirect('/ucet')
             ok, user_rec, reason = ensure_user_in_db(email=pending["email"], nick=pending["nick"])
             if not ok or not user_rec:
                 return f"Registrace selhala: {reason}", 500
             u = user_rec
         else:
-            user = db.table("users").select("*").eq("login_token", token).execute().data
+            user = db.table("users").select("*").eq("login_token", token_upper).execute().data
             if user:
                 u = user[0]
                 token_exp = int(u.get('login_token_expires_at') or 0)
-                if token_exp > 0 and _t.time() > token_exp:
+                if token_exp <= 0 or _t.time() > token_exp:
                     db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
                     return "Odkaz vypršel (platnost 10 minut). Požádejte o nový odkaz.", 400
                 db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
         if u:
+            if u.get("is_banned") or u.get("is_deleted"):
+                return "Tento účet je zablokován nebo smazán.", 403
             email = u.get("email")
             if cookie_token and intent == 'link':
-                curr_user = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
-                if curr_user and curr_user[0].get('id') != u.get('id'):
-                    db.table("users").delete().eq("id", u.get("id")).execute()
-                    db.table("users").update({"email": email}).eq("web_session_token", cookie_token).execute()
+                from session_manager import find_user_by_session_token
+                curr_u = get_cached_session_user(cookie_token) or find_user_by_session_token(db, cookie_token)
+                if curr_u and curr_u.get('id') != u.get('id'):
+                    c_did = str(u.get('discord_id') or '').strip()
+                    if not c_did or c_did in ('None', 'čeká na odpověd'):
+                        db.table("users").delete().eq("id", u.get("id")).execute()
+                    db.table("users").update({"email": email}).eq("id", curr_u.get("id")).execute()
+                    _invalidate_session_cache(user_id=curr_u.get("id"))
                     return redirect('/ucet')
-            perm_token = _secrets.token_hex(32)
-            from session_manager import add_user_session
-            add_user_session(db, u, perm_token, request)
-            _invalidate_session_cache(user_id=u.get("id"))
-            _SESSION_CACHE[perm_token] = (time.time(), u)
+            perm_token = _mint_session_for_user(db, u)
 
             if u and u.get("email"):
                 em_clean = str(u.get("email")).strip().lower()
                 _EMAIL_AUTH_STATUS[em_clean] = {
                     "status": "approved",
                     "user": u,
+                    "perm_token": perm_token,
                     "approved_at": _t.time()
                 }
             
@@ -5676,10 +5792,31 @@ def web_auth_logout():
     resp.set_cookie('web_session_token', '', expires=0, secure=True, httponly=True, samesite='Strict')
     return resp
 
+def _extract_request_session_token(allow_body: bool = True) -> str:
+    auth_hdr = (request.headers.get('Authorization') or '').strip()
+    if auth_hdr.lower().startswith('bearer '):
+        tok = auth_hdr[7:].strip()
+        if tok:
+            return tok
+    hdr_tok = (request.headers.get('X-Session-Token') or '').strip()
+    if hdr_tok:
+        return hdr_tok
+    cookie_tok = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token') or ''
+    if cookie_tok:
+        return str(cookie_tok).strip()
+    if allow_body and request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+        body_data = request.get_json(silent=True)
+        if isinstance(body_data, dict) and body_data.get('web_session_token'):
+            return str(body_data.get('web_session_token')).strip()
+        form_tok = request.form.get('web_session_token')
+        if form_tok:
+            return str(form_tok).strip()
+    return ''
+
 def get_current_authenticated_user(db=None):
     if db is None:
         db = get_db()
-    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
+    cookie_token = _extract_request_session_token(allow_body=True)
     u = None
     if cookie_token:
         u = get_cached_session_user(cookie_token)
@@ -5689,7 +5826,7 @@ def get_current_authenticated_user(db=None):
                 u = find_user_by_session_token(db, cookie_token)
             except Exception:
                 pass
-            if not u:
+            if not u and len(cookie_token) >= 16:
                 try:
                     u_data = db.table("users").select("*").eq("web_session_token", cookie_token).execute().data
                     if u_data:
@@ -5699,13 +5836,15 @@ def get_current_authenticated_user(db=None):
         if u and cookie_token:
             _SESSION_CACHE[cookie_token] = (time.time(), u)
 
-    if not u and session.get('discord_id') and db:
-        try:
-            u_data = db.table("users").select("*").eq("discord_id", str(session.get('discord_id'))).execute().data
-            if u_data:
-                u = u_data[0]
-        except Exception:
-            pass
+    if not u and session.get('logged_in') and session.get('discord_id') and db:
+        did_s = str(session.get('discord_id')).strip()
+        if did_s and did_s != 'čeká na odpověd':
+            try:
+                u_data = db.table("users").select("*").eq("discord_id", did_s).execute().data
+                if u_data:
+                    u = u_data[0]
+            except Exception:
+                pass
 
     if not u and session.get('offline_mode'):
         u = {
@@ -5714,9 +5853,33 @@ def get_current_authenticated_user(db=None):
             "email": "admin@datacore.cz",
             "role": session.get('role', 'DEV'),
             "discord_id": str(session.get('discord_id', '100000000000000000')),
-            "app_id": "OFFLINE_ADMIN"
+            "app_id": "OFFLINE_ADMIN",
+            "dashboard_access": True,
+            "dashboard_level": session.get('dashboard_level', 'superadmin')
         }
+    if u and (u.get("is_banned") or u.get("is_deleted")):
+        return None
     return u
+
+def _is_user_admin(u, min_level: str = 'admin') -> bool:
+    if not u or u.get('is_banned') or u.get('is_deleted'):
+        return False
+    if u.get('app_id') == 'OFFLINE_ADMIN':
+        lvl = str(u.get('dashboard_level') or 'superadmin').lower()
+        return DASH_LEVEL_ORDER.get(lvl, 0) >= DASH_LEVEL_ORDER.get(min_level, 2)
+    did = str(u.get('discord_id') or '').strip()
+    if did in ("714856037042585641", "1219661445763661854"):
+        return True
+    role_tokens = {r.strip().upper() for r in re.split(r'[,;\s]+', str(u.get('role') or '')) if r.strip()}
+    if role_tokens & {'SA', 'SUPERADMIN', 'DEV', 'DEVELOPER', 'ADMIN', 'SM'}:
+        if min_level == 'superadmin' and not (role_tokens & {'SA', 'SUPERADMIN', 'DEV'}):
+            pass
+        else:
+            return True
+    if u.get('dashboard_access'):
+        lvl = str(u.get('dashboard_level') or 'admin').lower()
+        return DASH_LEVEL_ORDER.get(lvl, 0) >= DASH_LEVEL_ORDER.get(min_level, 2)
+    return False
 
 @app.route('/api/auth/me')
 def web_auth_me():
@@ -5746,71 +5909,79 @@ def web_auth_me():
 
 @app.route('/api/auth/email/magic', methods=['POST'])
 def api_auth_email_magic():
+    client_ip = _get_client_ip()
+    if not _rate_limit_check(f'email_magic:{client_ip}', 12, 120):
+        return jsonify({"ok": False, "status": "error", "message": "Příliš mnoho pokusů. Zkuste to za chvíli."}), 429
     data = request.get_json(silent=True) or {}
     token = str(data.get('token') or request.args.get('token') or '').strip().upper()
-    if not token:
-        return jsonify({"ok": False, "status": "error", "message": "Chybí ověřovací kód."}), 400
+    email = str(data.get('email') or request.args.get('email') or '').strip().lower()
+    sig = str(data.get('sig') or request.args.get('sig') or '').strip()
+    if not token or _is_reserved_login_token(token):
+        return jsonify({"ok": False, "status": "error", "message": "Neplatný ověřovací kód."}), 400
+    if not email or not _verify_email_magic_sig(email, token, sig):
+        return jsonify({"ok": False, "status": "error", "message": "Neplatný nebo poškozený ověřovací odkaz."}), 403
     try:
         import time as _t
+        db = get_db()
         u = None
         perm_token = None
+        _cache_key = f"{email}:{token}"
 
         # 0. Zkontrolovat v cache nedávno ověřených tokenů (do 15 minut)
-        cached = _RECENTLY_VERIFIED_TOKENS.get(token)
+        cached = _RECENTLY_VERIFIED_TOKENS.get(_cache_key)
         if cached and (_t.time() - cached.get("time", 0)) < 900:
             u = cached.get("user")
-            perm_token = cached.get("perm_token") or str(uuid.uuid4())
+            perm_token = cached.get("perm_token")
 
         if not u:
             # 1. Hledat v _PENDING_REGISTRATIONS
-            pending_key = None
-            for k, p in list(_PENDING_REGISTRATIONS.items()):
-                if str(p.get("token", "")).strip().upper() == token:
-                    pending_key = k
-                    break
-            
-            if pending_key:
-                pending = _PENDING_REGISTRATIONS.pop(pending_key)
+            p = _PENDING_REGISTRATIONS.get(email)
+            if p and str(p.get("token", "")).strip().upper() == token:
+                pending = _PENDING_REGISTRATIONS.pop(email)
                 if _t.time() > pending.get("expires_at", 0):
                     return jsonify({"ok": False, "status": "error", "message": "Platnost ověření vypršela."}), 410
-                ok, user_rec, reason = ensure_user_in_db(email=pending["email"], nick=pending["nick"])
-                if not ok or not user_rec:
-                    return jsonify({"ok": False, "status": "error", "message": f"Registrace selhala: {reason}"}), 500
-                u = user_rec
+                if pending.get("intent") == "link" and pending.get("link_user_id") and db:
+                    db.table("users").update({"email": pending["email"]}).eq("id", pending["link_user_id"]).execute()
+                    linked_rows = db.table("users").select("*").eq("id", pending["link_user_id"]).execute().data
+                    u = linked_rows[0] if linked_rows else None
+                else:
+                    ok, user_rec, reason = ensure_user_in_db(email=pending["email"], nick=pending["nick"])
+                    if not ok or not user_rec:
+                        return jsonify({"ok": False, "status": "error", "message": f"Registrace selhala: {reason}"}), 500
+                    u = user_rec
             else:
-                db = get_db()
                 if db:
-                    user = db.table("users").select("*").eq("login_token", token).execute().data
-                    if user:
-                        u = user[0]
-                        exp = int(u.get('login_token_expires_at') or 0)
-                        if exp > 0 and _t.time() > exp:
-                            try: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+                    user = db.table("users").select("*").eq("email", email).execute().data
+                    if user and str(user[0].get("login_token") or "").strip().upper() == token:
+                        cand = user[0]
+                        exp = int(cand.get('login_token_expires_at') or 0)
+                        if exp <= 0 or _t.time() > exp:
+                            try: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", cand.get("id")).execute()
                             except: pass
                             return jsonify({"ok": False, "status": "error", "message": "Platnost ověření vypršela."}), 410
-                        try: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+                        try: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", cand.get("id")).execute()
                         except: pass
+                        u = cand
                 if not u:
                     for bu in _get_fallback_users():
-                        if str(bu.get("login_token", "")).strip().upper() == token:
-                            bu["login_token"] = ""
-                            _save_user_to_backup(bu)
-                            u = bu
+                        if str(bu.get("email") or "").strip().lower() == email and str(bu.get("login_token", "")).strip().upper() == token:
+                            exp = int(bu.get('login_token_expires_at') or 0)
+                            if exp > 0 and _t.time() <= exp:
+                                bu["login_token"] = ""
+                                bu["login_token_expires_at"] = 0
+                                _save_user_to_backup(bu)
+                                u = bu
                             break
                 if not u:
                     return jsonify({"ok": False, "status": "error", "message": "Odkaz nebo kód vypršel nebo je neplatný."}), 404
 
-        if not perm_token:
-            perm_token = str(uuid.uuid4())
-            db = get_db()
-            if db:
-                from session_manager import add_user_session
-                add_user_session(db, u, perm_token, request)
-                _invalidate_session_cache(user_id=u.get("id"))
-            _SESSION_CACHE[perm_token] = (time.time(), u)
+        if u.get("is_banned") or u.get("is_deleted"):
+            return jsonify({"ok": False, "status": "error", "message": "Tento účet je zablokován nebo smazán."}), 403
 
-        # Uložit do cache nedávno ověřených tokenů
-        _RECENTLY_VERIFIED_TOKENS[token] = {
+        if not perm_token:
+            perm_token = _mint_session_for_user(db, u)
+
+        _RECENTLY_VERIFIED_TOKENS[_cache_key] = {
             "time": _t.time(),
             "user": u,
             "perm_token": perm_token,
@@ -5822,6 +5993,7 @@ def api_auth_email_magic():
             _EMAIL_AUTH_STATUS[em_clean] = {
                 "status": "approved",
                 "user": u,
+                "perm_token": perm_token,
                 "approved_at": _t.time()
             }
 
@@ -5832,17 +6004,7 @@ def api_auth_email_magic():
             "name": name,
             "email": u.get("email")
         })
-        resp.set_cookie('web_session_token', perm_token, max_age=30*86400, httponly=True, samesite='Lax')
-        if u.get('dashboard_access') == True or u.get('role') in ['Superadmin', 'Admin', 'DEV', 'SA']:
-            resp.set_cookie('admin_session_token', perm_token, max_age=30*86400, httponly=True, samesite='Lax')
-            session.permanent = True
-            session['logged_in'] = True
-            session['discord_id'] = str(u.get('discord_id'))
-            session['discord_nick'] = u.get('nick') or str(u.get('discord_id'))
-            session['nick'] = u.get('nick')
-            session['role'] = u.get('role')
-            session['dashboard_level'] = u.get('dashboard_level') or 'admin'
-        return resp
+        return _apply_web_and_admin_cookies(resp, u, perm_token)
     except Exception as e:
         return jsonify({"ok": False, "status": "error", "message": str(e)}), 500
 
@@ -6035,7 +6197,7 @@ def api_stats_summary():
 
 @app.route('/api/auth/discord/start', methods=['POST'])
 def api_auth_discord_start():
-    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+    client_ip = _get_client_ip()
     data = request.get_json(silent=True) or {}
     discord_id = str(data.get('discordId') or data.get('discord_id') or '').strip()
     if not discord_id:
@@ -6052,35 +6214,32 @@ def api_auth_discord_status():
     db = get_db()
     if not db or not discord_id:
         return jsonify({"confirmed": False})
+    mem = _AUTH_TOKEN_STATUS.get(discord_id)
     user = db.table("users").select("*").eq("discord_id", discord_id).execute().data
-    if user and user[0].get('login_token') == 'approved':
-        u = user[0]
-        new_token = str(uuid.uuid4())
-        from session_manager import add_user_session
-        add_user_session(db, u, new_token, request)
-        _invalidate_session_cache(user_id=u.get("id"))
-        _SESSION_CACHE[new_token] = (time.time(), u)
+    u = user[0] if user else None
+    if mem == "rejected":
+        _AUTH_TOKEN_STATUS.pop(discord_id, None)
+        return jsonify({"confirmed": False, "rejected": True})
+    if u and (mem == "approved" or u.get('login_token') == 'approved'):
+        _AUTH_TOKEN_STATUS.pop(discord_id, None)
+        if u.get("is_banned") or u.get("is_deleted"):
+            return jsonify({"confirmed": False, "error": "Účet je zablokován nebo smazán."}), 403
+        try:
+            db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+        except Exception:
+            pass
+        new_token = _mint_session_for_user(db, u)
         resp = jsonify({
             "confirmed": True,
             "name": u.get('nick') or f"Discord {discord_id}",
             "avatar": u.get('avatar_url')
         })
-        resp.set_cookie('web_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
-        if u.get('dashboard_access') == True or u.get('role') in ['Superadmin', 'Admin', 'DEV', 'SA']:
-            resp.set_cookie('admin_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
-            session.permanent = True
-            session['logged_in'] = True
-            session['discord_id'] = str(u.get('discord_id'))
-            session['discord_nick'] = u.get('nick') or str(u.get('discord_id'))
-            session['nick'] = u.get('nick')
-            session['role'] = u.get('role')
-            session['dashboard_level'] = u.get('dashboard_level') or 'admin'
-        return resp
+        return _apply_web_and_admin_cookies(resp, u, new_token)
     return jsonify({"confirmed": False})
 
 @app.route('/api/auth/email/start', methods=['POST'])
 def api_auth_email_start():
-    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+    client_ip = _get_client_ip()
     data = request.get_json(silent=True) or {}
     email = str(data.get('email') or request.form.get('email') or '').strip()
     nick = str(data.get('nick') or request.form.get('nick') or '').strip()
@@ -6099,142 +6258,160 @@ def api_auth_email_verify():
     data = request.get_json(silent=True) or {}
     email = str(data.get('email') or '').strip().lower()
     code = str(data.get('code') or '').strip().upper()
-    if not code:
-        return jsonify({"ok": False, "error": "Chybí ověřovací kód."})
-    
+    intent = str(data.get('intent') or '').strip().lower()
+    if not email or not code or _is_reserved_login_token(code):
+        return jsonify({"ok": False, "error": "Chybí e-mail nebo platný ověřovací kód."}), 400
+    client_ip = _get_client_ip()
+    if not _rate_limit_check(f'email_verify:{client_ip}:{email}', 10, 300):
+        return jsonify({"ok": False, "error": "Příliš mnoho pokusů. Zkuste to prosím za chvíli."}), 429
+
     import time as _t
+    db = get_db()
     u = None
 
-    # 0. Zkontrolovat nedávno ověřené tokeny
-    cached = _RECENTLY_VERIFIED_TOKENS.get(code)
-    if cached and (_t.time() - cached.get("time", 0)) < 900:
-        u = cached.get("user")
-
-    if not u:
-        # 1. Zkontrolovat čekající registraci nového uživatele
-        pending = _PENDING_REGISTRATIONS.get(email)
-        if not pending and not email:
-            for k, p in list(_PENDING_REGISTRATIONS.items()):
-                if str(p.get("token", "")).strip().upper() == code:
-                    pending = p
-                    email = k
-                    break
-        if pending:
-            if _t.time() > pending.get("expires_at", 0):
-                _PENDING_REGISTRATIONS.pop(email, None)
-                return jsonify({"ok": False, "error": "Platnost kódu vypršela. Zaregistrujte se prosím znovu."})
-            if code != str(pending.get("token", "")).strip().upper():
-                return jsonify({"ok": False, "error": "Zadaný kód nesouhlasí."})
-            
-            # Ověření proběhlo úspěšně -> TEPRVE NYNÍ vytvoříme uživatele v DB!
-            ok, user_rec, reason = ensure_user_in_db(email=pending["email"], nick=pending["nick"])
+    pending = _PENDING_REGISTRATIONS.get(email)
+    if pending:
+        if _t.time() > pending.get("expires_at", 0):
             _PENDING_REGISTRATIONS.pop(email, None)
+            return jsonify({"ok": False, "error": "Platnost kódu vypršela. Požádejte o nový kód."})
+        if code != str(pending.get("token", "")).strip().upper():
+            fails = _EMAIL_VERIFY_FAILS.get(email, 0) + 1
+            _EMAIL_VERIFY_FAILS[email] = fails
+            if fails >= 5:
+                _PENDING_REGISTRATIONS.pop(email, None)
+                _EMAIL_AUTH_STATUS.pop(email, None)
+                return jsonify({"ok": False, "error": "Příliš mnoho neplatných pokusů. Nechte si poslat nový kód."}), 429
+            return jsonify({"ok": False, "error": "Zadaný kód nesouhlasí."})
+        _PENDING_REGISTRATIONS.pop(email, None)
+        _EMAIL_VERIFY_FAILS.pop(email, None)
+        if pending.get("intent") == "link" and pending.get("link_user_id") and db:
+            db.table("users").update({"email": pending["email"]}).eq("id", pending["link_user_id"]).execute()
+            linked_rows = db.table("users").select("*").eq("id", pending["link_user_id"]).execute().data
+            u = linked_rows[0] if linked_rows else None
+        else:
+            ok, user_rec, reason = ensure_user_in_db(email=pending["email"], nick=pending["nick"])
             if not ok or not user_rec:
                 return jsonify({"ok": False, "error": f"Vytvoření účtu selhalo: {reason}"})
             u = user_rec
-        else:
-            # 2. Existující uživatel v databázi
-            db = get_db()
-            if db:
-                if email:
-                    user = db.table("users").select("*").eq("email", email).execute().data
-                else:
-                    user = db.table("users").select("*").eq("login_token", code).execute().data
-                if user:
-                    cand = user[0]
-                    expected_token = str(cand.get("login_token") or "").strip().upper()
-                    exp = cand.get("login_token_expires_at") or 0
-                    if exp and _t.time() > exp:
-                        return jsonify({"ok": False, "error": "Platnost kódu vypršela. Nechte si poslat nový."})
-                    if code == expected_token:
-                        try:
-                            db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", cand.get("id")).execute()
-                        except Exception:
-                            pass
-                        u = cand
-            if not u:
-                for bu in _get_fallback_users():
-                    if str(bu.get("login_token", "")).strip().upper() == code:
-                        bu["login_token"] = ""
-                        _save_user_to_backup(bu)
-                        u = bu
-                        break
+    else:
+        if db:
+            user = db.table("users").select("*").eq("email", email).execute().data
+            if user:
+                cand = user[0]
+                expected_token = str(cand.get("login_token") or "").strip().upper()
+                exp = int(cand.get("login_token_expires_at") or 0)
+                if exp and _t.time() > exp:
+                    try: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", cand.get("id")).execute()
+                    except Exception: pass
+                    return jsonify({"ok": False, "error": "Platnost kódu vypršela. Nechte si poslat nový."})
+                if not _is_reserved_login_token(expected_token) and code == expected_token and (exp == 0 or _t.time() <= exp):
+                    _EMAIL_VERIFY_FAILS.pop(email, None)
+                    try:
+                        db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", cand.get("id")).execute()
+                    except Exception:
+                        pass
+                    u = cand
+        if not u:
+            for bu in _get_fallback_users():
+                if str(bu.get("email") or "").strip().lower() == email and str(bu.get("login_token", "")).strip().upper() == code:
+                    exp = int(bu.get("login_token_expires_at") or 0)
+                    if exp > 0 and _t.time() > exp:
+                        continue
+                    bu["login_token"] = ""
+                    bu["login_token_expires_at"] = 0
+                    _save_user_to_backup(bu)
+                    _EMAIL_VERIFY_FAILS.pop(email, None)
+                    u = bu
+                    break
 
     if not u:
+        fails = _EMAIL_VERIFY_FAILS.get(email, 0) + 1
+        _EMAIL_VERIFY_FAILS[email] = fails
+        if fails >= 5:
+            if db:
+                try: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("email", email).execute()
+                except Exception: pass
+            _EMAIL_AUTH_STATUS.pop(email, None)
+            return jsonify({"ok": False, "error": "Příliš mnoho neplatných pokusů. Nechte si poslat nový kód."}), 429
         return jsonify({"ok": False, "error": "Zadaný kód je neplatný nebo již vypršel."})
 
-    new_token = str(uuid.uuid4())
-    db = get_db()
-    if db:
-        from session_manager import add_user_session
-        add_user_session(db, u, new_token, request)
-        _invalidate_session_cache(user_id=u.get("id"))
-    _SESSION_CACHE[new_token] = (time.time(), u)
+    if u.get("is_banned") or u.get("is_deleted"):
+        return jsonify({"ok": False, "error": "Tento účet je zablokován nebo smazán."}), 403
 
-    _RECENTLY_VERIFIED_TOKENS[code] = {
+    if intent == 'link' and db:
+        curr_u = get_current_authenticated_user(db)
+        if curr_u and curr_u.get("id") != u.get("id"):
+            u_did = str(u.get("discord_id") or "").strip()
+            if not u_did or u_did in ("None", "čeká na odpověd"):
+                db.table("users").delete().eq("id", u.get("id")).execute()
+            db.table("users").update({"email": email}).eq("id", curr_u.get("id")).execute()
+            refreshed = db.table("users").select("*").eq("id", curr_u.get("id")).execute().data
+            if refreshed:
+                u = refreshed[0]
+                _save_user_to_backup(u)
+            _invalidate_session_cache(user_id=curr_u.get("id"))
+
+    new_token = _mint_session_for_user(db, u)
+    _RECENTLY_VERIFIED_TOKENS[f"{email}:{code}"] = {
         "time": _t.time(),
         "user": u,
         "perm_token": new_token,
-        "email": u.get("email")
+        "email": email
     }
-
-    if u and u.get("email"):
-        em_clean = str(u.get("email")).strip().lower()
-        _EMAIL_AUTH_STATUS[em_clean] = {
-            "status": "approved",
-            "user": u,
-            "approved_at": _t.time()
-        }
+    _EMAIL_AUTH_STATUS[email] = {
+        "status": "approved",
+        "user": u,
+        "perm_token": new_token,
+        "approved_at": _t.time()
+    }
 
     resp = jsonify({
         "ok": True,
         "name": u.get("nick") or email,
         "avatar": u.get("avatar_url")
     })
-    resp.set_cookie('web_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
-    if u.get('dashboard_access') == True or u.get('role') in ['Superadmin', 'Admin', 'DEV', 'SA']:
-        resp.set_cookie('admin_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
-        session.permanent = True
-        session['logged_in'] = True
-        session['discord_id'] = str(u.get('discord_id'))
-        session['discord_nick'] = u.get('nick') or str(u.get('discord_id'))
-        session['nick'] = u.get('nick')
-        session['role'] = u.get('role')
-        session['dashboard_level'] = u.get('dashboard_level') or 'admin'
-    return resp
+    return _apply_web_and_admin_cookies(resp, u, new_token)
 
 @app.route('/api/auth/email/status', methods=['POST', 'GET'])
 def api_auth_email_status():
     data = request.get_json(silent=True) or {}
-    email = str(data.get('email') or request.args.get('email') or '').strip()
+    email = str(data.get('email') or request.args.get('email') or '').strip().lower()
     db = get_db()
-    if not db or not email:
+    if not email:
         return jsonify({"confirmed": False})
-    user = db.table("users").select("*").eq("email", email).execute().data
-    if user:
-        u = user[0]
-        if u.get('login_token') == 'approved':
-            new_token = str(uuid.uuid4())
-            from session_manager import add_user_session
-            add_user_session(db, u, new_token, request)
-            _invalidate_session_cache(user_id=u.get("id"))
-            _SESSION_CACHE[new_token] = (time.time(), u)
-            resp = jsonify({
-                "confirmed": True,
-                "name": u.get("nick") or email,
-                "avatar": u.get("avatar_url")
-            })
-            resp.set_cookie('web_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
-            if u.get('dashboard_access') == True or u.get('role') in ['Superadmin', 'Admin', 'DEV', 'SA']:
-                resp.set_cookie('admin_session_token', new_token, max_age=30*86400, httponly=True, samesite='Lax')
-                session.permanent = True
-                session['logged_in'] = True
-                session['discord_id'] = str(u.get('discord_id'))
-                session['discord_nick'] = u.get('nick') or str(u.get('discord_id'))
-                session['nick'] = u.get('nick')
-                session['role'] = u.get('role')
-                session['dashboard_level'] = u.get('dashboard_level') or 'admin'
-            return resp
+
+    auth_state = _EMAIL_AUTH_STATUS.get(email)
+    if auth_state and auth_state.get("status") == "approved":
+        _EMAIL_AUTH_STATUS.pop(email, None)
+        u = auth_state.get("user") or {}
+        if u.get("is_banned") or u.get("is_deleted"):
+            return jsonify({"confirmed": False, "error": "Účet je zablokován nebo smazán."}), 403
+        new_token = auth_state.get("perm_token") or _mint_session_for_user(db, u)
+        resp = jsonify({
+            "confirmed": True,
+            "name": u.get("nick") or email,
+            "avatar": u.get("avatar_url")
+        })
+        return _apply_web_and_admin_cookies(resp, u, new_token)
+
+    if db:
+        user = db.table("users").select("*").eq("email", email).execute().data
+        if user:
+            u = user[0]
+            if u.get('login_token') == 'approved':
+                if u.get("is_banned") or u.get("is_deleted"):
+                    return jsonify({"confirmed": False, "error": "Účet je zablokován nebo smazán."}), 403
+                try:
+                    db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", u.get("id")).execute()
+                except Exception:
+                    pass
+                new_token = _mint_session_for_user(db, u)
+                resp = jsonify({
+                    "confirmed": True,
+                    "name": u.get("nick") or email,
+                    "avatar": u.get("avatar_url")
+                })
+                return _apply_web_and_admin_cookies(resp, u, new_token)
     return jsonify({"confirmed": False})
 
 @app.route('/api/stats/user', methods=['POST', 'OPTIONS'])
@@ -6401,10 +6578,15 @@ def api_stats_user():
         "launchesRank": launches_rank
     })
 
-@app.route('/api/admin/clean_reset_lines_stops', methods=['POST', 'GET'])
+@app.route('/api/admin/clean_reset_lines_stops', methods=['POST'])
 def admin_clean_reset_lines_stops():
     """Ruční vymazání statistik linek a zastávek pro čistý začátek."""
     db = get_db()
+    u = get_current_authenticated_user(db)
+    if not u:
+        return jsonify({"status": "error", "message": "Neautorizováno"}), 401
+    if not _is_user_admin(u, 'superadmin'):
+        return jsonify({"status": "error", "message": "Vyžadována role superadmin"}), 403
     deleted_tables = []
     if db:
         for tbl in ["user_stats_stops", "user_stats_lines", "stats_stops", "stats_lines"]:
@@ -6526,8 +6708,10 @@ def _legacy_stranka_ucet():
         nick = u.get('nick') or ""
         avatar_url = u.get('avatar_url') or ""
         
-        if avatar_url:
-            avatar_img_html = f'<img src="{avatar_url}">'
+        raw_av = str(avatar_url or '').strip()
+        safe_av = raw_av if raw_av.startswith(('https://', 'http://', '/', 'data:image/')) else ''
+        if safe_av:
+            avatar_img_html = f'<img src="{_html.escape(safe_av, quote=True)}">'
         else:
             avatar_img_html = '<i class="fas fa-user-circle" style="color:#94a3b8;"></i>'
             
@@ -6586,8 +6770,8 @@ def _legacy_stranka_ucet():
                 body: JSON.stringify({email: e, intent: 'link'})
             }).then(r=>r.json()).then(data => {
                 if(data.status === 'success') {
-                    const code = prompt('Odeslán e-mail s odkazem k propojení. Zadejte 5místný kód z e-mailu:');
-                    if(code && code.trim().length === 5) {
+                    const code = prompt('Odeslán e-mail s odkazem k propojení. Zadejte 6místný kód z e-mailu:');
+                    if(code && /^\\d{6}$/.test(code.trim())) {
                         window.location.href = `/api/auth/finalize?token=${code.trim()}&type=email&intent=link`;
                     } else if(code) {
                         alert('Neplatný kód.');
@@ -6623,11 +6807,12 @@ def _legacy_stranka_ucet():
             s_id = s.get("id", "")
             s_token = s.get("token", "")
             is_curr = (s_token == cookie_token)
-            dev_name = s.get("device", "Neznámé zařízení")
-            icon = s.get("icon", "fa-desktop")
-            ip = s.get("ip", "Neznámá")
-            created_at = s.get("created_at", "Neznámé")
-            last_active = s.get("last_active", "Neznámé")
+            dev_name = _html.escape(str(s.get("device", "Neznámé zařízení")), quote=True)
+            icon = _html.escape(str(s.get("icon", "fa-desktop")), quote=True)
+            ip = _html.escape(str(s.get("ip", "Neznámá")), quote=True)
+            created_at = _html.escape(str(s.get("created_at", "Neznámé")), quote=True)
+            last_active = _html.escape(str(s.get("last_active", "Neznámé")), quote=True)
+            s_id = _html.escape(str(s_id), quote=True)
             
             curr_badge = '<span style="background:rgba(16,185,129,0.2); border:1px solid #10b981; color:#10b981; font-size:10px; padding:2px 8px; border-radius:12px; font-weight:bold; letter-spacing:0.5px;">TOTO ZAŘÍZENÍ</span>' if is_curr else ''
             
@@ -6733,20 +6918,25 @@ def _legacy_stranka_ucet():
             if triggers.get("delay_change"): t_texts.append("Skok zpoždění")
             trig_str = ", ".join(t_texts) or "Událost"
             cnt = r.get("fired_count") or r.get("fire_count") or 0
-            unsub_btn = f'<a href="/api/notifications/unsubscribe?id={n_id}" target="_blank" style="text-decoration:none;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);color:#ef4444;font-size:11px;padding:4px 8px;border-radius:6px;margin-right:8px;font-weight:bold;" title="Vypnout toto pravidlo">🔕 Vypnout</a>' if not is_once else ''
+            from ois_email import make_unsubscribe_sig
+            _sig = make_unsubscribe_sig(n_id)
+            safe_nid = _html.escape(str(n_id), quote=True)
+            safe_label = _html.escape(str(label), quote=True)
+            safe_trig = _html.escape(str(trig_str), quote=True)
+            unsub_btn = f'<a href="/api/notifications/unsubscribe?id={safe_nid}&sig={_sig}" target="_blank" style="text-decoration:none;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);color:#ef4444;font-size:11px;padding:4px 8px;border-radius:6px;margin-right:8px;font-weight:bold;" title="Vypnout toto pravidlo">🔕 Vypnout</a>' if not is_once else ''
             return f"""
             <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
               <div>
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
-                  <span style="color:white; font-weight:bold; font-size:14px;">{label}</span>
+                  <span style="color:white; font-weight:bold; font-size:14px;">{safe_label}</span>
                   {typ_badge}
                 </div>
-                <div style="color:#94a3b8; font-size:12px; margin-bottom:4px;">Události: <span style="color:#e2e8f0;">{trig_str}</span></div>
+                <div style="color:#94a3b8; font-size:12px; margin-bottom:4px;">Události: <span style="color:#e2e8f0;">{safe_trig}</span></div>
                 <div style="color:#64748b; font-size:11px;">Odesláno: {cnt}x</div>
               </div>
               <div style="display:flex; align-items:center;">
                 {unsub_btn}
-                <button onclick="deleteNotificationRule('{n_id}')" style="background:transparent; border:none; color:#ef4444; font-size:18px; cursor:pointer; padding:8px;" title="Smazat upozornění"><i class="fas fa-trash"></i></button>
+                <button data-rule-id="{safe_nid}" onclick="deleteNotificationRule(this.dataset.ruleId)" style="background:transparent; border:none; color:#ef4444; font-size:18px; cursor:pointer; padding:8px;" title="Smazat upozornění"><i class="fas fa-trash"></i></button>
               </div>
             </div>
             """
@@ -6774,8 +6964,8 @@ def _legacy_stranka_ucet():
                 notif_html += f"""
                 <div style="background:rgba(15,23,42,0.6);border:1px solid #334155;border-radius:6px;padding:8px 12px;font-size:11px;display:flex;justify-content:space-between;align-items:center;">
                   <div>
-                    <div style="color:#e2e8f0;font-weight:600;">{h.get('message') or h.get('trigger')}</div>
-                    <div style="color:#64748b;font-size:10px;">{h.get('fired_at', '')} &bull; Kanál: {h.get('channel', 'DM')}</div>
+                    <div style="color:#e2e8f0;font-weight:600;">{_html.escape(str(h.get('message') or h.get('trigger') or ''), quote=True)}</div>
+                    <div style="color:#64748b;font-size:10px;">{_html.escape(str(h.get('fired_at', '')), quote=True)} &bull; Kanál: {_html.escape(str(h.get('channel', 'DM')), quote=True)}</div>
                   </div>
                   <span style="background:rgba(16,185,129,0.15);color:#10b981;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold;">Odesláno</span>
                 </div>
@@ -6785,9 +6975,10 @@ def _legacy_stranka_ucet():
             notif_html += '<div style="color:#64748b; font-size:12px; text-align:center; padding:10px;">Zatím žádná proběhlá upozornění.</div>'
     
         revoke_btn_display = "inline-flex" if sessions_count > 1 else "none"
+        safe_avatar_js = json.dumps(str(avatar_url or ''))[1:-1].replace('</', '<\\/')
         html = HTML_UCET.replace('__AVATAR_IMG__', avatar_img_html)
-        html = html.replace('__NICK__', nick)
-        html = html.replace('__AVATAR_URL__', avatar_url)
+        html = html.replace('__NICK__', _html.escape(str(nick or ''), quote=True))
+        html = html.replace('__AVATAR_URL__', safe_avatar_js)
         html = html.replace('__DISCORD_STATUS__', discord_status)
         html = html.replace('__DISCORD_BTN__', discord_btn)
         html = html.replace('__EMAIL_STATUS__', email_status)
@@ -6903,31 +7094,37 @@ def api_ucet_sessions_revoke_others():
 
 @app.route('/api/ucet/update', methods=['POST'])
 def api_ucet_update():
-    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
     db = get_db()
-    if not cookie_token or not db:
+    u = get_current_authenticated_user(db)
+    if not u or not db:
         return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
-        
+    if u.get("is_banned") or u.get("is_deleted"):
+        return jsonify({"status": "error", "message": "Účet je zablokován nebo smazán."}), 403
+
     data = request.get_json(silent=True) or {}
-    nick = data.get('nick', '').strip()
-    avatar_url = data.get('avatar_url', '').strip()
-    
+    nick = str(data.get('nick') or '').strip()
+    avatar_url = str(data.get('avatar_url') or '').strip()
+
     if not nick:
         return jsonify({"status": "error", "message": "Přezdívka nesmí být prázdná"})
-        
-    if avatar_url and not avatar_url.startswith('data:image/'):
-        return jsonify({"status": "error", "message": "Avatar musí být obrázek."})
-        
-    u = get_cached_session_user(cookie_token)
-    if not u:
-        from session_manager import find_user_by_session_token
-        u = find_user_by_session_token(db, cookie_token)
-    if not u:
-        return jsonify({"status": "error", "message": "Uživatel nenalezen"}), 401
-        
+
+    cur_nick = str(u.get("nick") or "").strip()
+    if nick.lower() != cur_nick.lower():
+        ok_nick, err_nick = validate_nickname(nick, db=db)
+        if not ok_nick:
+            return jsonify({"status": "error", "message": err_nick})
+
+    if avatar_url:
+        if len(avatar_url) > 512000 or not avatar_url.startswith('data:image/'):
+            return jsonify({"status": "error", "message": "Avatar musí být obrázek (do 500 KB)."})
+
     try:
         db.table("users").update({"nick": nick, "avatar_url": avatar_url}).eq("id", u["id"]).execute()
-        _invalidate_session_cache(cookie_token)
+        u["nick"] = nick
+        u["avatar_url"] = avatar_url
+        _save_user_to_backup(u)
+        cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
+        _invalidate_session_cache(token=cookie_token, user_id=u.get("id"))
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
@@ -6939,7 +7136,8 @@ def api_ucet_playlog():
     if not u:
         return jsonify({"status": "error", "message": "Nepřihlášen"}), 401
 
-    discord_id = str(u.get("discord_id") or "")
+    raw_did = str(u.get("discord_id") or "").strip()
+    discord_id = raw_did if raw_did not in ("", "None", "čeká na odpověd") else f"email-{u.get('id')}" 
     sessions_out = []
     total_minutes = 0
     if db:
@@ -7035,7 +7233,33 @@ def api_ucet_rule_delete():
 
     if db:
         try:
-            db.table("bus_notifications").delete().eq("id", rule_id).execute()
+            valid_sessions = [str(u.get("id") or "")]
+            if u.get("app_id"):
+                valid_sessions.append(str(u.get("app_id")))
+            did_u = str(u.get("discord_id") or "").strip()
+            if did_u and did_u != "čeká na odpověd":
+                valid_sessions.append(did_u)
+            valid_sessions = [v for v in valid_sessions if v]
+            if _is_user_admin(u, 'admin'):
+                db.table("bus_notifications").delete().eq("id", rule_id).execute()
+            else:
+                existing_r = db.table("bus_notifications").select("id,user_session").eq("id", rule_id).execute().data
+                if not existing_r:
+                    return jsonify({"status": "error", "message": "Pravidlo nenalezeno"}), 404
+                if str(existing_r[0].get("user_session") or "") not in valid_sessions:
+                    return jsonify({"status": "error", "message": "Nemáte oprávnění smazat toto pravidlo"}), 403
+                db.table("bus_notifications").delete().eq("id", rule_id).in_("user_session", valid_sessions).execute()
+            try:
+                from local_db import local_bus_notification_delete
+                local_bus_notification_delete(rule_id)
+            except Exception:
+                pass
+            try:
+                import interaktivnimapa as _im
+                _im._CACHED_NOTIF_RULES = [r for r in _im._CACHED_NOTIF_RULES if str(r.get("id")) != str(rule_id)]
+                _im._CACHED_NOTIF_RULES_TS = 0
+            except Exception:
+                pass
             return jsonify({"status": "success"})
         except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 500
@@ -7074,9 +7298,8 @@ def api_ucet_history():
     return jsonify({"status": "success", "history": history_out})
 
 @app.route('/dashboard/stats/clear_web', methods=['POST'])
+@require_dash_level('superadmin')
 def dashboard_stats_clear_web():
-    if not session.get('logged_in'):
-        return redirect(url_for('dashboard_main'))
     try:
         try:
             from local_db import local_clear_web_visits
@@ -7448,10 +7671,11 @@ def dashboard_main():
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů", deploy_time=DEPLOY_TIME)
 
 @app.route('/debug_log')
+@require_dash_level('superadmin')
 def view_debug_log():
     try:
-        with open("debug_log.txt", "r") as f:
-            return f"<pre>{f.read()}</pre>"
+        with open("debug_log.txt", "r", encoding="utf-8", errors="replace") as f:
+            return f"<pre>{_html.escape(f.read())}</pre>"
     except Exception as e:
         return str(e)
 
@@ -7469,14 +7693,15 @@ def edit_user():
     if not email: email = None  # Prevents unique constraint violation for empty strings
 
     if discord_id: discord_id = discord_id.strip()
-    
-    if (not discord_id or discord_id == "None") and not app_id:
+    valid_discord_id = discord_id if (discord_id and discord_id not in ("None", "čeká na odpověd")) else None
+
+    if not valid_discord_id and not app_id:
         flash(f"Chyba: Nebylo předáno discord_id ani app_id! (Akce: {action})", "error")
         return redirect(url_for('dashboard_main'))
     if not action:
         flash("Chyba: Nebyla předána žádná akce z tlačítka!", "error")
         return redirect(url_for('dashboard_main'))
-        
+
     try:
         with open("debug_log.txt", "a") as f: f.write(f"edit_user called: discord_id={discord_id}, app_id={app_id}, action={action}\n")
     except: pass
@@ -7484,15 +7709,14 @@ def edit_user():
     if db:
         # Helper pro stavbu query
         def build_query(updates):
-            if discord_id and discord_id != "None": return db.table("users").update(updates).eq("discord_id", discord_id)
+            if valid_discord_id: return db.table("users").update(updates).eq("discord_id", valid_discord_id)
             else: return db.table("users").update(updates).eq("app_id", app_id)
 
         def build_delete_query(table):
-            if discord_id and discord_id != "None": return db.table(table).delete().eq("discord_id", discord_id)
+            if valid_discord_id: return db.table(table).delete().eq("discord_id", valid_discord_id)
             else: return db.table(table).delete().eq("app_id", app_id)
 
-        target_identifier = f"discord_id '{discord_id}'" if (discord_id and discord_id != "None") else f"app_id #{app_id}"
-        valid_discord_id = discord_id if (discord_id and discord_id != "None") else None
+        target_identifier = f"discord_id '{valid_discord_id}'" if valid_discord_id else f"app_id #{app_id}" 
 
         try:
             if action == 'save':
@@ -7528,8 +7752,9 @@ def edit_user():
                     except: pass
                 if valid_discord_id and str(session.get('discord_id')) == str(valid_discord_id): session.clear()
             elif action == 'unban':
-                res = build_query({"is_banned": False, "dashboard_access": True}).execute()
+                res = build_query({"is_banned": False}).execute()
                 _AUTH_CACHE.clear()
+                _invalidate_session_cache()
                 if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl v databázi nalezen.", "error")
                 else: flash('BAN zrušen.', 'success')
                 if bot.loop and bot.loop.is_running() and bot.is_ready() and valid_discord_id:
@@ -7542,12 +7767,14 @@ def edit_user():
                 now_str = get_prague_time().strftime("%d.%m.%Y %H:%M")
                 res = build_query({"is_deleted": True, "deleted_at": now_str, "dashboard_access": False}).execute()
                 _AUTH_CACHE.clear()
+                _invalidate_session_cache()
                 if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl v databázi nalezen pro smazání.", "error")
                 else: flash('Účet smazán (Soft Delete).', 'danger')
                 if valid_discord_id and str(session.get('discord_id')) == str(valid_discord_id): session.clear()
             elif action == 'restore':
-                res = build_query({"is_deleted": False, "deleted_at": "", "dashboard_access": True}).execute()
+                res = build_query({"is_deleted": False, "deleted_at": ""}).execute()
                 _AUTH_CACHE.clear()
+                _invalidate_session_cache()
                 if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl v databázi nalezen.", "error")
                 else: flash('Účet obnoven!', 'success')
             elif action == 'hard_delete':
@@ -7555,7 +7782,12 @@ def edit_user():
                     try: build_delete_query(t).execute()
                     except: pass
                 res = build_delete_query("users").execute()
-                _add_deleted_tombstone({"discord_id": valid_discord_id, "app_id": app_id})
+                try:
+                    from turso_db import _add_deleted_tombstone
+                    _add_deleted_tombstone({"discord_id": valid_discord_id, "app_id": app_id})
+                except Exception:
+                    pass
+                _invalidate_session_cache()
                 _AUTH_CACHE.clear()
                 if not res.data: flash(f"Chyba: Uživatel ({target_identifier}) nebyl nalezen pro permanentní smazání.", "error")
                 else: flash('Účet a všechna jeho data byla trvale smazána.', 'dark')
@@ -8100,17 +8332,23 @@ def api_launcher_email_poll():
     if not email:
         return jsonify({"status": "error", "message": "Missing email"})
     try:
-        # 1. Zkontrolovat stav v paměti (_EMAIL_AUTH_STATUS)
+        db = get_db()
         auth_state = _EMAIL_AUTH_STATUS.get(email)
         if auth_state and auth_state.get("status") == "approved":
+            _EMAIL_AUTH_STATUS.pop(email, None)
             u = auth_state.get("user") or {}
-            d_id = u.get("discord_id") or f"email-{u.get('id')}"
+            if u.get("is_banned") or u.get("is_deleted"):
+                return jsonify({"status": "error", "message": "Tento účet je zablokován nebo smazán."}), 403
+            perm_token = auth_state.get("perm_token") or _mint_session_for_user(db, u)
+            raw_did = str(u.get("discord_id") or "").strip()
+            d_id = raw_did if raw_did not in ("", "None", "čeká na odpověd") else f"email-{u.get('id')}"
             return jsonify({
                 "status": "success",
-                "web_session_token": u.get("web_session_token") or "auth_ok",
+                "web_session_token": perm_token,
                 "discord_id": d_id,
                 "email": u.get("email") or email,
-                "nick": u.get("nick") or u.get("email") or email
+                "nick": u.get("nick") or u.get("email") or email,
+                "role": u.get("role") or "User"
             })
         elif auth_state and auth_state.get("status") == "waiting":
             import time as _t
@@ -8118,28 +8356,6 @@ def api_launcher_email_poll():
                 _EMAIL_AUTH_STATUS.pop(email, None)
                 return jsonify({"status": "timeout", "message": "Platnost kódu vypršela."})
             return jsonify({"status": "waiting"})
-
-        # 2. Fallback na DB / backup
-        db = get_db()
-        user = None
-        if db:
-            user_data = db.table("users").select("*").eq("email", email).execute().data
-            if user_data:
-                user = user_data[0]
-        if not user:
-            for bu in _get_fallback_users():
-                if str(bu.get("email", "")).strip().lower() == email:
-                    user = bu
-                    break
-
-        if user:
-            d_id = user.get("discord_id") or f"email-{user.get('id')}"
-            return jsonify({
-                "status": "waiting",
-                "discord_id": d_id,
-                "email": user.get("email"),
-                "nick": user.get("nick") or user.get("email")
-            })
     except Exception as e:
         print(f"[api_launcher_email_poll error] {e}", flush=True)
     return jsonify({"status": "waiting"})
@@ -8149,101 +8365,91 @@ def api_launcher_email_verify():
     data = request.get_json(silent=True) or {}
     email = str(data.get('email', '')).strip().lower()
     code = str(data.get('code', '')).strip().upper()
-    if not code:
-        return jsonify({"status": "error", "message": "Chybí ověřovací kód."})
+    if not email or not code or _is_reserved_login_token(code):
+        return jsonify({"status": "error", "message": "Chybí e-mail nebo platný ověřovací kód."})
+    client_ip = _get_client_ip()
+    if not _rate_limit_check(f'launcher_email_verify:{client_ip}:{email}', 10, 300):
+        return jsonify({"status": "error", "message": "Příliš mnoho pokusů. Zkuste to za chvíli."}), 429
     try:
         import time as _t
         db = get_db()
         u = None
-        
-        # 0. Zkontrolovat v cache nedávno ověřených tokenů (pokud už byl ověřen např. přes odkaz)
-        cached = _RECENTLY_VERIFIED_TOKENS.get(code)
-        if cached and (_t.time() - cached.get("time", 0)) < 900:
-            u = cached.get("user")
 
-        if not u:
-            # 1. Zkontrolovat v _PENDING_REGISTRATIONS (nová registrace přes e-mail)
-            pending_key = None
-            if email and email in _PENDING_REGISTRATIONS:
-                p = _PENDING_REGISTRATIONS[email]
-                if str(p.get("token", "")).strip().upper() == code:
-                    pending_key = email
-            if not pending_key:
-                for k, p in list(_PENDING_REGISTRATIONS.items()):
-                    if str(p.get("token", "")).strip().upper() == code:
-                        pending_key = k
-                        break
-            if pending_key:
-                pending = _PENDING_REGISTRATIONS.pop(pending_key)
-                if _t.time() > pending.get("expires_at", 0):
-                    return jsonify({"status": "error", "message": "Platnost kódu vypršela."})
-                ok, user_rec, reason = ensure_user_in_db(email=pending["email"], nick=pending["nick"])
-                if not ok or not user_rec:
-                    return jsonify({"status": "error", "message": f"Registrace selhala: {reason}"})
-                u = user_rec
+        p = _PENDING_REGISTRATIONS.get(email)
+        if p and str(p.get("token", "")).strip().upper() == code:
+            pending = _PENDING_REGISTRATIONS.pop(email)
+            if _t.time() > pending.get("expires_at", 0):
+                return jsonify({"status": "error", "message": "Platnost kódu vypršela."})
+            ok, user_rec, reason = ensure_user_in_db(email=pending["email"], nick=pending["nick"])
+            if not ok or not user_rec:
+                return jsonify({"status": "error", "message": f"Registrace selhala: {reason}"})
+            _EMAIL_VERIFY_FAILS.pop(email, None)
+            u = user_rec
 
-        if not u:
-            # 2. Hledat v databázi existujícího uživatele podle kódu nebo e-mailu
-            if db:
-                if email:
-                    user_res = db.table("users").select("*").eq("email", email).execute().data
-                    if user_res:
-                        cand = user_res[0]
-                        cand_tok = str(cand.get("login_token", "")).strip().upper()
-                        if cand_tok == code:
-                            exp = int(cand.get('login_token_expires_at') or 0)
-                            if exp > 0 and _t.time() > exp:
-                                try: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", cand.get("id")).execute()
-                                except: pass
-                                return jsonify({"status": "error", "message": "Platnost kódu vypršela."})
-                            try: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", cand.get("id")).execute()
-                            except: pass
-                            u = cand
-                if not u:
-                    user_res = db.table("users").select("*").eq("login_token", code).execute().data
-                    if user_res:
-                        cand = user_res[0]
-                        exp = int(cand.get('login_token_expires_at') or 0)
-                        if exp > 0 and _t.time() > exp:
-                            try: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", cand.get("id")).execute()
-                            except: pass
-                            return jsonify({"status": "error", "message": "Platnost kódu vypršela."})
+        if not u and db:
+            user_res = db.table("users").select("*").eq("email", email).execute().data
+            if user_res:
+                cand = user_res[0]
+                cand_tok = str(cand.get("login_token", "")).strip().upper()
+                if not _is_reserved_login_token(cand_tok) and cand_tok == code:
+                    exp = int(cand.get('login_token_expires_at') or 0)
+                    if exp > 0 and _t.time() > exp:
                         try: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", cand.get("id")).execute()
                         except: pass
-                        u = cand
+                        return jsonify({"status": "error", "message": "Platnost kódu vypršela."})
+                    try: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("id", cand.get("id")).execute()
+                    except: pass
+                    _EMAIL_VERIFY_FAILS.pop(email, None)
+                    u = cand
 
         if not u:
-            # 3. Fallback users
             for bu in _get_fallback_users():
-                if str(bu.get("login_token", "")).strip().upper() == code:
+                if str(bu.get("email") or "").strip().lower() == email and str(bu.get("login_token", "")).strip().upper() == code:
+                    exp = int(bu.get("login_token_expires_at") or 0)
+                    if exp > 0 and _t.time() > exp:
+                        continue
                     bu["login_token"] = ""
+                    bu["login_token_expires_at"] = 0
                     _save_user_to_backup(bu)
+                    _EMAIL_VERIFY_FAILS.pop(email, None)
                     u = bu
                     break
 
         if u:
-            perm_token = str(uuid.uuid4())
-            _RECENTLY_VERIFIED_TOKENS[code] = {
+            if u.get("is_banned") or u.get("is_deleted"):
+                return jsonify({"status": "error", "message": "Tento účet je zablokován nebo smazán."}), 403
+            perm_token = _mint_session_for_user(db, u)
+            _RECENTLY_VERIFIED_TOKENS[f"{email}:{code}"] = {
                 "time": _t.time(),
                 "user": u,
                 "perm_token": perm_token,
-                "email": u.get("email")
+                "email": email
             }
-            user_email = str(u.get("email") or email).strip().lower()
-            if user_email:
-                _EMAIL_AUTH_STATUS[user_email] = {
-                    "status": "approved",
-                    "user": u,
-                    "approved_at": _t.time()
-                }
-            d_id = u.get("discord_id") or f"email-{u.get('id')}"
+            _EMAIL_AUTH_STATUS[email] = {
+                "status": "approved",
+                "user": u,
+                "perm_token": perm_token,
+                "approved_at": _t.time()
+            }
+            raw_did = str(u.get("discord_id") or "").strip()
+            d_id = raw_did if raw_did not in ("", "None", "čeká na odpověd") else f"email-{u.get('id')}"
             return jsonify({
                 "status": "success",
+                "web_session_token": perm_token,
                 "discord_id": d_id,
                 "email": u.get("email") or email,
                 "nick": u.get("nick") or u.get("email") or email,
-                "role": u.get("role") or "public"
+                "role": u.get("role") or "User"
             })
+        fails = _EMAIL_VERIFY_FAILS.get(email, 0) + 1
+        _EMAIL_VERIFY_FAILS[email] = fails
+        if fails >= 5:
+            if db:
+                try: db.table("users").update({"login_token": "", "login_token_expires_at": 0}).eq("email", email).execute()
+                except: pass
+            _PENDING_REGISTRATIONS.pop(email, None)
+            _EMAIL_AUTH_STATUS.pop(email, None)
+            return jsonify({"status": "error", "message": "Příliš mnoho neplatných pokusů. Nechte si poslat nový kód."}), 429
     except Exception as e:
         print(f"[api_launcher_email_verify error] {e}", flush=True)
     return jsonify({"status": "error", "message": "Neplatný kód nebo vypršela platnost."})
@@ -9321,10 +9527,15 @@ def dashboard_community_routes_purge():
 
 # ── API ENDPOINTY PRO HRÁČE (OIS & LAUNCHER) ───────────────────────────────────
 
-@app.route('/api/d1/reset-circuit-breaker', methods=['GET', 'POST', 'OPTIONS'], strict_slashes=False)
+@app.route('/api/d1/reset-circuit-breaker', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_d1_reset_circuit_breaker():
     if request.method == 'OPTIONS':
         return _cors_jsonify({})
+    u = get_current_authenticated_user()
+    if not u:
+        return _cors_jsonify({"success": False, "error": "Neautorizováno"}), 401
+    if not _is_user_admin(u, 'admin'):
+        return _cors_jsonify({"success": False, "error": "Vyžadována role administrátora"}), 403
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
@@ -9505,13 +9716,38 @@ def api_community_routes_download():
 def api_community_routes_delete():
     if request.method == 'OPTIONS':
         return _cors_jsonify({})
+    db = get_db()
+    auth_u = get_current_authenticated_user(db)
+    if not auth_u:
+        return _cors_jsonify({"success": False, "error": "Neautorizováno (chybí nebo vypršel web_session_token). Zkuste se znovu přihlásit."}), 401
+    is_admin = _is_user_admin(auth_u, 'admin')
+
     data = request.get_json(silent=True) or request.form
     raw_id = data.get('route_id')
     route_number = data.get('route_number')
     version = data.get('version')
-    author = data.get('discord_id') or data.get('author_id') or data.get('author_name')
-    if not author or (not raw_id and not route_number):
-        return _cors_jsonify({"success": False, "error": "Chybí identifikace linky nebo autora."}), 400
+    if not raw_id and not route_number:
+        return _cors_jsonify({"success": False, "error": "Chybí identifikace linky."}), 400
+
+    # Derive trusted author identifiers from authenticated user record (never trust request body spoofing)
+    auth_idents = set()
+    for val in (
+        auth_u.get('discord_id'),
+        auth_u.get('id'),
+        f"email-{auth_u.get('id')}" if auth_u.get('id') is not None else None,
+        auth_u.get('app_id'),
+        f"#{auth_u.get('app_id')}" if auth_u.get('app_id') is not None else None,
+        auth_u.get('nick'),
+    ):
+        s_val = str(val or '').strip()
+        if s_val and s_val not in ('None', 'čeká na odpověd'):
+            auth_idents.add(s_val.lower())
+    author_label = auth_u.get('nick') or auth_u.get('discord_id') or f"#{auth_u.get('app_id') or auth_u.get('id')}"
+
+    is_permanent_request = bool(data.get('permanent'))
+    if is_permanent_request and not is_admin:
+        return _cors_jsonify({"success": False, "error": "Trvalé smazání vyžaduje práva administrátora."}), 403
+
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
@@ -9521,45 +9757,43 @@ def api_community_routes_delete():
             if clean_id_str.isdigit():
                 route_id = int(clean_id_str)
 
-        # Trvalé smazání z DB je povoleno POUZE pokud je explicitně nastaven flag permanent (např. z administrátorského dashboardu)
-        is_permanent_request = bool(data.get('permanent'))
-
         deleted_count = 0
         if route_id:
             row = d1.execute("SELECT id, status, is_deleted_by_author, author_id, author_name FROM community_routes WHERE id = ?", [route_id])
             if row:
+                r0 = row[0]
+                row_owners = {str(r0.get('author_id') or '').strip().lower(), str(r0.get('author_name') or '').strip().lower()}
+                if not is_admin and not (row_owners & auth_idents):
+                    return _cors_jsonify({"success": False, "error": "Nemáte oprávnění smazat cizí komunitní linku."}), 403
                 if is_permanent_request:
                     d1.execute("DELETE FROM community_routes WHERE id = ?", [route_id])
                 else:
                     d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [route_id])
                 deleted_count += 1
 
-        if route_number and (not route_id or not version):
-            d_id = str(data.get('discord_id') or '')
-            a_id = str(data.get('author_id') or '')
-            a_name = str(data.get('author_name') or '')
-            sql = "SELECT id, version FROM community_routes WHERE route_number = ? AND (author_id = ? OR author_id = ? OR author_name = ? OR author_name = ?)"
-            p = [str(route_number), d_id, a_id, d_id, a_name]
-            if version:
-                sql += " AND (version = ? OR version IS NULL)"
-                p.append(str(version))
-            rows = d1.execute(sql, p) or []
-            if not rows:
-                rows = d1.execute("SELECT id, version FROM community_routes WHERE route_number = ?", [str(route_number)]) or []
-            if rows:
-                for r in rows:
-                    if 'id' in r:
-                        if is_permanent_request:
-                            d1.execute("DELETE FROM community_routes WHERE id = ?", [r['id']])
-                        else:
-                            d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [r['id']])
-                        deleted_count += 1
+        if route_number and not route_id:
+            # Scope strictly to authenticated author (or all versions of route if admin explicitly requests)
+            rows = d1.execute("SELECT id, version, author_id, author_name FROM community_routes WHERE route_number = ?", [str(route_number)]) or []
+            matched_rows = []
+            for r in rows:
+                row_owners = {str(r.get('author_id') or '').strip().lower(), str(r.get('author_name') or '').strip().lower()}
+                if is_admin or (row_owners & auth_idents):
+                    if version and r.get('version') and str(r.get('version')).strip().upper() != str(version).strip().upper():
+                        continue
+                    matched_rows.append(r)
+            for r in matched_rows:
+                if 'id' in r:
+                    if is_permanent_request:
+                        d1.execute("DELETE FROM community_routes WHERE id = ?", [r['id']])
+                    else:
+                        d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [r['id']])
+                    deleted_count += 1
 
         if is_permanent_request:
-            send_log("🗑️ Linka trvale odstraněna", f"Uživatel `{author}` trvale odstranil linku {route_number or route_id} ({deleted_count} záznamů) z databáze.", color=0xef4444)
+            send_log("🗑️ Linka trvale odstraněna", f"Správce `{author_label}` trvale odstranil linku {route_number or route_id} ({deleted_count} záznamů) z databáze.", color=0xef4444)
             return _cors_jsonify({"success": True, "message": "Linka byla trvale odstraněna z databáze.", "deleted_count": deleted_count})
         else:
-            send_log("🗑️ Linka smazána z komunity", f"Uživatel `{author}` smazal linku {route_number or route_id} ({deleted_count} záznamů) z veřejné komunity.", color=0xf59e0b)
+            send_log("🗑️ Linka smazána z komunity", f"Uživatel `{author_label}` smazal linku {route_number or route_id} ({deleted_count} záznamů) z veřejné komunity.", color=0xf59e0b)
             return _cors_jsonify({"success": True, "message": "Linka byla smazána z veřejné nabídky.", "deleted_count": deleted_count})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
@@ -9568,10 +9802,15 @@ def api_community_routes_delete():
 def api_community_routes_pending():
     if request.method == 'OPTIONS':
         return _cors_jsonify({})
+    auth_u = get_current_authenticated_user()
+    if not auth_u:
+        return _cors_jsonify({"success": False, "error": "Neautorizováno (vyžadováno přihlášení)."}), 401
+    if not _is_user_admin(auth_u, 'admin'):
+        return _cors_jsonify({"success": False, "error": "Přístup pouze pro administrátory."}), 403
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
-        raw_pending = d1.execute("SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, system_tag, created_at, COALESCE(version, 'V1') as version FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0 ORDER BY CASE WHEN system_tag LIKE '%bez zvuku%' THEN 1 ELSE 0 END ASC, id DESC") or []
+        raw_pending = d1.execute("SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, system_tag, created_at, COALESCE(version, 'V1') as version, COALESCE(voice_type, 'synt') as voice_type FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0 ORDER BY CASE WHEN system_tag LIKE '%bez zvuku%' THEN 1 ELSE 0 END ASC, id DESC") or []
         enriched = []
         for r in raw_pending:
             item = dict(r)
@@ -9590,6 +9829,11 @@ def api_community_routes_pending():
 def api_community_routes_decision():
     if request.method == 'OPTIONS':
         return _cors_jsonify({})
+    auth_u = get_current_authenticated_user()
+    if not auth_u:
+        return _cors_jsonify({"success": False, "error": "Neautorizováno (vyžadováno přihlášení)."}), 401
+    if not _is_user_admin(auth_u, 'admin'):
+        return _cors_jsonify({"success": False, "error": "Přístup pouze pro administrátory."}), 403
     data = request.json or request.form or {}
     route_id = data.get('route_id') or data.get('id')
     ok = bool(data.get('ok'))
@@ -9602,23 +9846,18 @@ def api_community_routes_decision():
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
         int_id = None
-        digits_only = re.sub(r'\D', '', str(route_id))
-        if digits_only:
-            try:
-                int_id = int(digits_only)
-            except:
-                int_id = None
+        clean_route_id = str(route_id).replace('comm_', '').replace('user_', '').strip()
+        if clean_route_id.isdigit():
+            int_id = int(clean_route_id)
 
         row = None
         if int_id is not None:
             row = d1.execute("SELECT * FROM community_routes WHERE id = ?", [int_id])
 
         if not row:
-            route_num_candidate = data.get('num') or data.get('route_number') or str(route_id).replace('c', '').replace('n', '')
-            row = d1.execute("SELECT * FROM community_routes WHERE (route_number = ? OR id = ?) AND status = 'pending' ORDER BY id DESC LIMIT 1", [route_num_candidate, str(route_id)])
-
-        if not row:
-            row = d1.execute("SELECT * FROM community_routes WHERE status = 'pending' ORDER BY id DESC LIMIT 1")
+            route_num_candidate = data.get('num') or data.get('route_number')
+            if route_num_candidate:
+                row = d1.execute("SELECT * FROM community_routes WHERE route_number = ? AND status = 'pending' ORDER BY id DESC LIMIT 1", [str(route_num_candidate)])
 
         if not row:
             return _cors_jsonify({"success": False, "error": "Linka nenalezena"}), 404
@@ -9663,6 +9902,10 @@ def api_community_routes_decision():
 def api_community_routes_submit():
     if request.method == 'OPTIONS':
         return _cors_jsonify({})
+    db = get_db()
+    auth_u = get_current_authenticated_user(db)
+    if not auth_u:
+        return _cors_jsonify({"success": False, "error": "Neautorizováno (chybí nebo vypršel web_session_token). Zkuste se prosím odhlásit a znovu přihlásit."}), 401
     
     # Kontrola právního potvrzení (Legal requirement)
     legal_confirmed = request.form.get('legal_confirmed')
@@ -9677,8 +9920,15 @@ def api_community_routes_submit():
     route_type = request.form.get('route_type', 'gtfs').strip()
     system_tag = request.form.get('system_tag', 'IDPK').strip() or 'IDPK'
     description = request.form.get('description', '').strip()
-    author_id = request.form.get('author_id', '').strip()
-    author_name = request.form.get('author_name', '').strip() or 'Hráč'
+    canonical_aid = str(auth_u.get('discord_id') or '').strip()
+    if not canonical_aid or canonical_aid in ('None', 'čeká na odpověd'):
+        if auth_u.get('id') is not None:
+            canonical_aid = f"email-{auth_u.get('id')}"
+        elif auth_u.get('app_id') is not None:
+            canonical_aid = f"#{auth_u.get('app_id')}"
+    author_id = canonical_aid or request.form.get('author_id', '').strip()
+    auth_nick = str(auth_u.get('nick') or '').strip()
+    author_name = (auth_nick if auth_nick not in ('', 'None', 'čeká na odpověd') else '') or request.form.get('author_name', '').strip() or 'Hráč'
     stops_json_str = request.form.get('stops_json', '[]').strip()
 
     try:
@@ -9865,8 +10115,11 @@ def api_community_routes_submit():
 def serve_community_audio(object_key):
     import base64
     from flask import send_file
-    local_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "community_audio")
-    local_path = os.path.join(local_dir, object_key)
+    local_dir = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "community_audio"))
+    safe_key = str(object_key or "").replace("\\", "/").lstrip("/")
+    local_path = os.path.realpath(os.path.join(local_dir, safe_key))
+    if not (local_path == local_dir or local_path.startswith(local_dir + os.sep)):
+        return jsonify({"error": "Invalid path"}), 400
     ext = os.path.splitext(object_key)[1].lower()
     mimes = {'.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.zip': 'application/zip'}
     mime = mimes.get(ext, 'application/octet-stream')
@@ -10015,21 +10268,25 @@ async def check_notification_queue():
                                         import base64
                                         import io
                                         header, b64_data = img_str.split(",", 1)
-                                        ext = "png"
-                                        if "jpeg" in header or "jpg" in header: ext = "jpg"
-                                        elif "webp" in header: ext = "webp"
-                                        elif "gif" in header: ext = "gif"
-                                        img_bytes = base64.b64decode(b64_data)
-                                        fname = f"notification_image.{ext}"
-                                        discord_file = discord.File(io.BytesIO(img_bytes), filename=fname)
-                                        em.set_image(url=f"attachment://{fname}")
+                                        if len(b64_data) <= 12 * 1024 * 1024:
+                                            ext = "png"
+                                            if "jpeg" in header or "jpg" in header: ext = "jpg"
+                                            elif "webp" in header: ext = "webp"
+                                            elif "gif" in header: ext = "gif"
+                                            img_bytes = base64.b64decode(b64_data)
+                                            if len(img_bytes) <= 8 * 1024 * 1024:
+                                                fname = f"notification_image.{ext}"
+                                                discord_file = discord.File(io.BytesIO(img_bytes), filename=fname)
+                                                em.set_image(url=f"attachment://{fname}")
                                     elif img_str.startswith("http://") or img_str.startswith("https://"):
                                         try:
                                             import urllib.request
                                             import io
                                             req = urllib.request.Request(img_str, headers={'User-Agent': 'Mozilla/5.0'})
                                             with urllib.request.urlopen(req, timeout=5) as resp:
-                                                img_bytes = resp.read()
+                                                img_bytes = resp.read(8 * 1024 * 1024 + 1)
+                                            if len(img_bytes) > 8 * 1024 * 1024:
+                                                raise ValueError("Image exceeds 8MB limit")
                                             ext = "png"
                                             if ".jpg" in img_str.lower() or ".jpeg" in img_str.lower(): ext = "jpg"
                                             elif ".webp" in img_str.lower(): ext = "webp"
@@ -12456,6 +12713,11 @@ async def cmd_dailyreport(ctx):
 
 @app.route('/api/admin/daily_report', methods=['GET'])
 def api_admin_daily_report_main():
+    auth_u = get_current_authenticated_user()
+    if not auth_u:
+        return jsonify({"status": "error", "message": "Neautorizováno"}), 401
+    if not _is_user_admin(auth_u, 'admin'):
+        return jsonify({"status": "error", "message": "Přístup pouze pro administrátory"}), 403
     try:
         from daily_reporter import generate_ai_daily_report
         rep = generate_ai_daily_report()
@@ -12559,14 +12821,12 @@ def mirror_pc_sync():
     
     allowed = False
     if discord_id:
-        if discord_id == 'VSC-DEV':
+        role, is_banned = get_cached_user_role(discord_id)
+        role_tokens = {r.strip().upper() for r in re.split(r'[,;\s]+', str(role or '')) if r.strip()}
+        if (role_tokens & {'BT', 'DEV', 'SA', 'ADMIN', 'SUPERADMIN'}) and not is_banned:
             allowed = True
-        else:
-            role, is_banned = get_cached_user_role(discord_id)
-            if any(x in role for x in ['BT', 'DEV', 'SA']) and not is_banned:
-                allowed = True
 
-    if not allowed and discord_id != 'VSC-DEV':
+    if not allowed:
         return jsonify({"error": "Nemas opravneni (Vyžadována Premium role)"}), 403
 
     # Aktualizace stavu
@@ -12673,13 +12933,17 @@ def mirror_mobile_action(session_id):
     """
     if session_id not in MIRROR_STATES:
         return jsonify({"error": "Offline"}), 404
+    if MIRROR_STATES[session_id].get("approved") is not True:
+        return jsonify({"error": "Relace zrcadlení není schválena"}), 403
         
-    data = request.json
+    data = request.get_json(silent=True) or {}
     action = data.get("action")
     if action:
-        if action in ["eval", "input"] or data.get("code") or data.get("id"):
-            MIRROR_STATES[session_id]["pending_actions"].append(data)
-        else:
+        if str(action).lower() == "eval" or data.get("code"):
+            return jsonify({"error": "Akce eval je z bezpečnostních důvodů zakázána"}), 403
+        if action == "input" and data.get("id"):
+            MIRROR_STATES[session_id]["pending_actions"].append({"action": "input", "id": str(data.get("id")), "value": str(data.get("value") or "")})
+        elif isinstance(action, str):
             MIRROR_STATES[session_id]["pending_actions"].append(action)
         
     return jsonify({"status": "ok"})

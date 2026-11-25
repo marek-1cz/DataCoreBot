@@ -46,11 +46,11 @@ _TURSO_STATE = {
     "month": _get_current_month_key(),
     "row_reads": 0,
     "queries_count": 0,
-    "blocked": True,   # Default True pokud jsme právě dostali blocked notifikaci
-    "blocked_reason": "Reads blocked by Turso plan limit (awaiting reset/unblock)",
-    "last_blocked_ts": time.time(),
-    "saving_mode": True,
-    "circuit_breaker": True,
+    "blocked": False,
+    "blocked_reason": "",
+    "last_blocked_ts": 0.0,
+    "saving_mode": False,
+    "circuit_breaker": False,
     "last_probe_ts": 0.0,
     "last_save_ts": 0.0
 }
@@ -370,7 +370,10 @@ def _match_user_dict(u, where_clauses, args):
                     return False
             else:
                 u_val_str = str(u.get(col) or "").strip()
-                if u_val_str.lower() != val_str.lower():
+                if col in ("login_token", "web_session_token", "download_token", "session_id", "discord_id", "app_id"):
+                    if u_val_str != val_str:
+                        return False
+                elif u_val_str.lower() != val_str.lower():
                     return False
 
         elif " != ?" in w:
@@ -381,7 +384,10 @@ def _match_user_dict(u, where_clauses, args):
                     return False
             else:
                 u_val_str = str(u.get(col) or "").strip()
-                if u_val_str.lower() == val_str.lower():
+                if col in ("login_token", "web_session_token", "download_token", "session_id", "discord_id", "app_id"):
+                    if u_val_str == val_str:
+                        return False
+                elif u_val_str.lower() == val_str.lower():
                     return False
 
         elif "LIKE" in w.upper():

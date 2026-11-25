@@ -2493,6 +2493,9 @@ function setGraphicsLevel(level, isInit=false) {
   if(sld1 && Math.round(parseFloat(sld1.value)) !== level) { sld1.value = level; gfxSliderInput(sld1, 'settings-gfx-desc'); }
   if(sld2 && Math.round(parseFloat(sld2.value)) !== level) { sld2.value = level; gfxSliderInput(sld2, 'sw-gfx-desc'); }
   
+  localStorage.setItem('low_graphics_mode', level === 1 ? '1' : '0');
+  let lgCb = document.getElementById('settings-low-graphics');
+  if (lgCb) lgCb.checked = (level === 1);
   updateGfxDesc(level, document.getElementById('settings-gfx-desc'));
   updateGfxDesc(level, document.getElementById('sw-gfx-desc'));
 
@@ -3131,6 +3134,26 @@ let isRefreshing=false;
 // === LOG ===
 let logEntries=[],logErrEntries=[],logSpzEntries=[],logMissingStops={};
 let logCurrentTab='all';
+function _isRealSpz(s){return !!(s&&!['Neznama','Neznámá','Aktivní hledání','Aktivni hledani','?','None',''].includes(String(s).trim()));}
+function renderConflictLog(){
+  let body=document.getElementById('log-conflict-body');
+  if(!body)return;
+  body.innerHTML='';
+  let conflicts=(lastArr||[]).filter(b=>b&&(b.spz_conflict_warn||b.admin_spz_conflict));
+  if(!conflicts.length){body.innerHTML='<div style="color:#64748b;padding:8px;">Žádné aktivní konflikty SPZ</div>';return;}
+  conflicts.forEach(b=>{
+    let div=document.createElement('div');
+    div.style.cssText='padding:6px 0;border-bottom:1px solid #1e293b;display:flex;align-items:center;justify-content:space-between;gap:6px;';
+    let spzTxt=_isRealSpz(b.spz)?b.spz:'Bez SPZ';
+    div.innerHTML=`<div><b style="color:#f87171;">⚔️ ${spzTxt}</b> <span style="color:#94a3b8;">#${b.id} · L${b.line||'?'}</span><br><span style="color:#64748b;font-size:10px;">${b.destination||''}</span></div>`;
+    let btn=document.createElement('button');
+    btn.style.cssText='background:#334155;color:#38bdf8;border:none;border-radius:4px;padding:4px 8px;font-size:10px;cursor:pointer;';
+    btn.textContent='Najít';
+    btn.onclick=()=>{if(b.lat&&b.lng)zoomToSpz(b.lat,b.lng,String(b.id));};
+    div.appendChild(btn);
+    body.appendChild(div);
+  });
+}
 function appLog(msg,level){
   level=level||'info';
   let t=new Date().toLocaleTimeString('cs-CZ');
@@ -3258,9 +3281,10 @@ async function _saveMissingFix(missingName, lat, lng, sourceName){
 
 function setLogTab(tab){
   logCurrentTab=tab;
-  let tabIds=['all','err','spz','missing','report','approx','system'];
+  let tabIds=['all','err','spz','missing','conflict','report','approx','system'];
+  const tabBodyMap={'all':'log-body','err':'log-errors-body','spz':'log-spz-body','missing':'log-missing-body','conflict':'log-conflict-body','report':'log-report-body','approx':'log-approx-body','system':'log-system-body'};
   tabIds.forEach(id=>{
-    let body=document.getElementById(id==='all'?'log-body':id==='err'?'log-errors-body':id==='spz'?'log-spz-body':id==='missing'?'log-missing-body':id==='report'?'log-report-body':id==='system'?'log-system-body':'log-approx-body');
+    let body=document.getElementById(tabBodyMap[id]);
     if(body)body.style.display=(tab===id?'':'none');
     let btn=document.getElementById(`log-tab-${id}`);
     if(btn){btn.style.background=(tab===id?'#334155':'transparent');btn.style.color='';}
@@ -3268,6 +3292,7 @@ function setLogTab(tab){
   if(tab==='err'){let b=document.getElementById('log-errors-body');b.innerHTML='';logErrEntries.forEach(e=>{let l=document.createElement('div');l.className='lg-err';l.textContent=`[${e.t}] ${e.msg}`;b.appendChild(l);});b.scrollTop=b.scrollHeight;}
   if(tab==='spz')renderSpzLog();
   if(tab==='missing')renderMissingLog();
+  if(tab==='conflict')renderConflictLog();
   if(tab==='report')loadReportSituace();
   if(tab==='approx')renderApproxLog();
   if(tab==='system')loadSystemLogs();
@@ -3379,7 +3404,7 @@ async function loadReportSituace(){
 }
 function clearLog(){
   logEntries=[];logErrEntries=[];logSpzEntries=[];logMissingStops={};
-  ['log-body','log-errors-body','log-spz-body','log-missing-body','log-report-body','log-approx-body'].forEach(id=>{let el=document.getElementById(id);if(el)el.innerHTML='';});
+  ['log-body','log-errors-body','log-spz-body','log-missing-body','log-conflict-body','log-report-body','log-approx-body'].forEach(id=>{let el=document.getElementById(id);if(el)el.innerHTML='';});
 }
 window.addEventListener('error',e=>{appLog('JS chyba: '+(e.message||e)+(e.filename?` (${e.filename}:${e.lineno})`:''),'error');});
 window.addEventListener('unhandledrejection',e=>{appLog('Promise chyba: '+(e.reason&&(e.reason.message||e.reason)),'error');});
@@ -3895,7 +3920,7 @@ window.shareBus = function(busId) {
   let now = new Date();
   let timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
   let delay = (typeof bus.delay !== 'undefined') ? bus.delay : '?';
-  let spzText = (bus.spz !== 'Neznama' && bus.spz) ? bus.spz : bus.id;
+  let spzText = _isRealSpz(bus.spz) ? bus.spz : bus.id;
   let stopName = bus.real_zastavka || bus.nearest_stop || bus.last_stop_name || 'Neznámá';
   if (stopName === 'Jízda' || stopName.includes('Ceka na data')) stopName = 'Neznámá';
   let real_spoj = bus.real_linka_spoj || bus.line || 'Neznámá linka';
@@ -4025,7 +4050,7 @@ function updateHud(b){
   }
   document.getElementById('h-dest').innerHTML='-> '+(b.destination||'Neznamy cil');
   let se=document.getElementById('h-spz');
-  if(b.spz&&b.spz!=='Neznama'){
+  if(_isRealSpz(b.spz)){
     if(b.spz_verified){se.innerHTML=`<span style="background:#f59e0b;color:#0f172a;padding:1px 7px;border-radius:4px;font-weight:bold;">${b.spz} <i class="fas fa-check"></i></span>`;}
     else{se.innerHTML=`<span style="background:#f97316;color:#fff;padding:1px 7px;border-radius:4px;font-weight:bold;">${b.spz} <i class="fas fa-clock"></i></span>`;}
   }
@@ -4724,7 +4749,7 @@ function _renderRoute(busId,data,btn){
 let leLayer=null,leStops=[],leLineName='',leAddActive=false;
 function leInit(){if(!leLayer)leLayer=L.layerGroup().addTo(map);}
 function lineEditorOff(){if(leLayer)leLayer.clearLayers();leAddActive=false;document.body.classList.remove('nt-add-active');let b=document.getElementById('le-add-btn');if(b){b.style.background='#334155';b.style.color='#a855f7';}}
-function toggleLineEditor(){leInit();let p=document.getElementById('le-editor-panel');if(!p)return;p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='none')lineEditorOff();}
+function toggleLineEditor(){leInit();let p=document.getElementById('line-editor-panel');if(!p)return;p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='none')lineEditorOff();}
 async function leLoadLine(){
   leInit();leLayer.clearLayers();leStops=[];
   let inp=document.getElementById('le-line-inp');
@@ -5031,15 +5056,19 @@ function toggleSettingsPanel(e) {
   }
 }
 function toggleLowGraphics(enabled) {
-  localStorage.setItem('low_graphics_mode', enabled ? '1' : '0');
-  if (enabled) document.body.classList.add('low-graphics');
-  else document.body.classList.remove('low-graphics');
+  if (typeof setGraphicsLevel === 'function') {
+    setGraphicsLevel(enabled ? 1 : 2);
+  } else {
+    localStorage.setItem('low_graphics_mode', enabled ? '1' : '0');
+    document.body.classList.toggle('low-graphics', !!enabled);
+  }
 }
 document.addEventListener('DOMContentLoaded', () => {
-  let lgm = localStorage.getItem('low_graphics_mode') === '1';
+  let gLvl = localStorage.getItem('graphics_level');
+  let lgm = gLvl !== null ? (parseInt(gLvl, 10) === 1) : (localStorage.getItem('low_graphics_mode') === '1');
   let cb = document.getElementById('settings-low-graphics');
   if(cb) cb.checked = lgm;
-  if(lgm) document.body.classList.add('low-graphics');
+  if(lgm && gLvl === null && typeof setGraphicsLevel === 'function') setGraphicsLevel(1, true);
 });
 function _lineColor(line){
   if(!_lineColors[line]){
@@ -5135,7 +5164,6 @@ function clearLinesOverlay(){
 }
 // Backward compat - loadLineStops still works if called elsewhere
 function loadLineStops(){loadLinesOverlay();}
-function toggleLineEditor(){toggleLinesPanel();}
 
 // === Veřejné "Zobrazit zastávky" + stop info popup ===
 let pubStopsMode=false;
@@ -5270,7 +5298,7 @@ map.on('moveend',()=>{
 function spzSearch(val){
   let box=document.getElementById('spz-results');val=val.trim().toUpperCase();
   if(val.length<2){box.innerHTML='';return;}
-  let matches=lastArr.filter(b=>b.spz&&b.spz!=='Neznama'&&b.spz.toUpperCase().includes(val));
+  let matches=lastArr.filter(b=>_isRealSpz(b.spz)&&b.spz.toUpperCase().includes(val));
   if(matches.length===0){box.innerHTML='<div style="padding:10px;color:#64748b;font-size:12px;text-align:center;">Zadne vysledky</div>';return;}
   const cM={'bg-green':'#10b981','bg-red':'#ef4444','bg-blue':'#3b82f6','bg-darkblue':'#1e3a8a','bg-gray':'#64748b','bg-purple':'#a855f7','bg-orange':'#f59e0b','bg-yellow':'#facc15','bg-bug':'#374151','bg-lastpos':'#f472b6'};
   box.innerHTML=matches.slice(0,8).map(b=>`<div class="sr-item" onclick="zoomToSpz(${b.lat},${b.lng},'${b.id}')"><div style="width:10px;height:10px;border-radius:50%;background:${cM[b.color_class]||'#64748b'};flex-shrink:0;"></div><div><strong style="color:#f59e0b;">${b.spz}</strong><span style="color:#94a3b8;margin-left:5px;">L${b.line||'?'}</span><br><span style="color:#64748b;font-size:10px;">${b.status||''}</span></div></div>`).join('');
@@ -5676,7 +5704,7 @@ async function fetchBuses(){
         }
       }
       let bugW='';
-      if(mc==='bg-bug'){let bS=(bus.spz&&bus.spz!=='Neznama')?bus.spz:'Neznama SPZ';bugW=`<div style="background:#3f0000;border:2px solid #ef4444;border-radius:5px;padding:8px;margin:5px 0;font-size:11px;text-align:center;"><b style="color:#ef4444;font-size:13px;letter-spacing:.5px;">⛔ NENÍ REÁLNÁ POLOHA</b><br><span style="color:#fca5a5;font-weight:bold;">PRAVDĚPODOBNĚ BUG NEBO POSLEDNÍ ZNÁMÁ POZICE</span><br><span style="color:#94a3b8;font-size:10px;">Pravděpodobně SPZ <b style="color:#fbbf24;">${bS}</b> – pozice nemusí odpovídat realitě</span></div>`;}
+      if(mc==='bg-bug'){let bS=_isRealSpz(bus.spz)?bus.spz:'Neznámá SPZ';bugW=`<div style="background:#3f0000;border:2px solid #ef4444;border-radius:5px;padding:8px;margin:5px 0;font-size:11px;text-align:center;"><b style="color:#ef4444;font-size:13px;letter-spacing:.5px;">⛔ NENÍ REÁLNÁ POLOHA</b><br><span style="color:#fca5a5;font-weight:bold;">PRAVDĚPODOBNĚ BUG NEBO POSLEDNÍ ZNÁMÁ POZICE</span><br><span style="color:#94a3b8;font-size:10px;">Pravděpodobně SPZ <b style="color:#fbbf24;">${bS}</b> – pozice nemusí odpovídat realitě</span></div>`;}
       let orangeW='';
       if(mc==='bg-orange')orangeW=`<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:5px;padding:7px;margin:5px 0;font-size:11px;text-align:center;color:#f59e0b;"><b>🔍 Vyzkum - bus byl zasekly, nyni jede</b></div>`;
       let depotW='';
@@ -5834,7 +5862,7 @@ async function fetchBuses(){
 
 
       if(IS_ADMIN){
-        let oSpz=bus.spz==='Neznama'?'':bus.spz;
+        let oSpz=_isRealSpz(bus.spz)?bus.spz:'';
         let cSpz=restoreAdminInput(bus.id,'spz')??oSpz;
         let cSt=restoreAdminInput(bus.id,'st')??bus.status;
         let cNote=restoreAdminInput(bus.id,'note')??(bus.admin_note||'');
@@ -5847,7 +5875,7 @@ async function fetchBuses(){
         let adminVerifyColor=adminIsVerified?'#bfdbfe':'#94a3b8';
         let adminVerifyBorder=adminIsVerified?'#3b82f6':'#334155';
         let adminVerifyText=adminIsVerified?'🔒 SPZ UZAMČENA ADMINEM (klikni pro odemčení)':'🔓 Ověřit SPZ adminem (Admin Lock)';
-        let hasSPZ=bus.spz&&bus.spz!=='Neznama';
+        let hasSPZ=_isRealSpz(bus.spz);
         // Predstav tlacitko jako hotovy HTML string (bez vnorenych backticks - JS to neumi parsovat)
         let adminLockBtn='';
         if(hasSPZ){
@@ -6126,7 +6154,7 @@ async function fetchBuses(){
     if(IS_ADMIN){
       let onlyBuses=data.buses.filter(b=>!isTrainVehicle(b));
       let total=onlyBuses.length;
-      let noSpz=onlyBuses.filter(b=>!b.spz||b.spz==='Neznama'||b.spz==='Neznámá').length;
+      let noSpz=onlyBuses.filter(b=>!_isRealSpz(b.spz)).length;
       let verified=onlyBuses.filter(b=>b.spz_verified).length;
       let bug=onlyBuses.filter(b=>b.color_class==='bg-bug').length;
       let trainCnt=data.buses.length - total;
@@ -6139,7 +6167,7 @@ async function fetchBuses(){
         if(!prev){window._spzPrev=window._spzPrev||{};window._spzPrev[b.id]=cur;return;}
         if(prev!==cur){
           window._spzPrev[b.id]=cur;
-          if(b.spz&&b.spz!=='Neznama'){
+          if(_isRealSpz(b.spz)){
             appLogSpz(b.id,b.spz,b.spz_verified?'ok':'pending',b.spz_verified?`✅ Ověřeno (L${b.line})`:`⏳ Čeká na ověření (L${b.line})`);
           }else{
             appLogSpz(b.id,'Neznámá','err',`❓ Bez SPZ (L${b.line}, stav: ${b.status})`);
@@ -6642,66 +6670,46 @@ ROUTE_STOP_OVERRIDES = {}
 DEPOT_ZONES = []  # list dict: {id, name, polygon [[lat,lng],...], color}
 DEPOT_ZONES_INITIAL_LOADED = False
 
+_BUS_CACHE_LOCK = threading.RLock()
+_FILE_SAVE_LOCK = threading.RLock()
+
+def _atomic_json_dump(path: str, payload, **json_kwargs):
+    tmp_path = f"{path}.tmp.{os.getpid()}.{threading.get_ident()}"
+    with _FILE_SAVE_LOCK:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, **json_kwargs)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except Exception:
+                pass
+        os.replace(tmp_path, path)
+
 # === BEZPEČNÝ PŘÍSTUP KE GLOBAL_BUS_CACHE (OCHRANA PŘED RuntimeError: dictionary changed size) ===
 def safe_bus_cache_items():
     """Vrací bezpečný snapshot (list položek) z GLOBAL_BUS_CACHE odolný proti RuntimeError."""
-    for _ in range(5):
-        try:
-            return list(GLOBAL_BUS_CACHE.items())
-        except RuntimeError:
-            time.sleep(0.005)
-    try:
-        return list(GLOBAL_BUS_CACHE.copy().items())
-    except Exception:
-        return []
+    with _BUS_CACHE_LOCK:
+        return list(GLOBAL_BUS_CACHE.items())
 
 def safe_bus_cache_values():
     """Vrací bezpečný snapshot hodnot z GLOBAL_BUS_CACHE."""
-    for _ in range(5):
-        try:
-            return list(GLOBAL_BUS_CACHE.values())
-        except RuntimeError:
-            time.sleep(0.005)
-    try:
-        return list(GLOBAL_BUS_CACHE.copy().values())
-    except Exception:
-        return []
+    with _BUS_CACHE_LOCK:
+        return list(GLOBAL_BUS_CACHE.values())
 
 def safe_bus_cache_keys():
     """Vrací bezpečný snapshot klíčů z GLOBAL_BUS_CACHE."""
-    for _ in range(5):
-        try:
-            return list(GLOBAL_BUS_CACHE.keys())
-        except RuntimeError:
-            time.sleep(0.005)
-    try:
-        return list(GLOBAL_BUS_CACHE.copy().keys())
-    except Exception:
-        return []
+    with _BUS_CACHE_LOCK:
+        return list(GLOBAL_BUS_CACHE.keys())
 
 def safe_bus_cache_dict():
     """Vrací bezpečný snapshot celého slovníku GLOBAL_BUS_CACHE."""
-    for _ in range(5):
-        try:
-            return dict(list(GLOBAL_BUS_CACHE.items()))
-        except RuntimeError:
-            time.sleep(0.005)
-    try:
+    with _BUS_CACHE_LOCK:
         return dict(GLOBAL_BUS_CACHE)
-    except Exception:
-        return {}
 
 def safe_admin_locks_items():
     """Vrací bezpečný snapshot (list položek) z ADMIN_SPZ_LOCKS odolný proti RuntimeError."""
-    for _ in range(5):
-        try:
-            return list(ADMIN_SPZ_LOCKS.items())
-        except RuntimeError:
-            time.sleep(0.005)
-    try:
-        return list(ADMIN_SPZ_LOCKS.copy().items())
-    except Exception:
-        return []
+    with _BUS_CACHE_LOCK:
+        return list(ADMIN_SPZ_LOCKS.items())
 
 # === SPZ DEBUG LOG: podrobný rotující buffer pro diagnostiku SPZ matching ===
 # Každý záznam: {ts, bus_id, spz, event, detail, gate_3f_cnt, gate_pass_cnt}
@@ -6848,8 +6856,7 @@ def _save_automation_log():
         return
     _last_automation_save = now_t
     try:
-        with open(_AUTOMATION_LOG_PATH, "w", encoding="utf-8") as f:
-            json.dump(AUTOMATION_ACTIVITY_LOG[:_AUTOMATION_ACTIVITY_LOG_MAX], f, ensure_ascii=False, indent=2)
+        _atomic_json_dump(_AUTOMATION_LOG_PATH, AUTOMATION_ACTIVITY_LOG[:_AUTOMATION_ACTIVITY_LOG_MAX], ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[AUTOMATION-LOG] Chyba zápisu historie: {e}", flush=True)
 
@@ -7097,18 +7104,57 @@ def _load_spz_settings(db_client=None):
             pass
 
 
-def _save_spz_settings(db_client=None):
-    safe_locks = {str(k): v for k, v in ADMIN_SPZ_LOCKS.items() if isinstance(v, dict) and v.get("spz")}
+def _persist_bus_admin_state(bus_id, c: dict):
+    """Synchronizuje okamžitě úpravy vozu z admin akce do SQLite spz_cache_local a invaliduje historii cache."""
+    if not c:
+        return
     try:
-        with open(_SPZ_SETTINGS_PATH, "w", encoding="utf-8") as f:
-            json.dump({
-                "position_source_mode": POSITION_SOURCE_MODE,
-                "auto_resolve": AUTO_RESOLVE_SPZ,
-                "watched_buses": list(WATCHED_SPZ_BUSES),
-                "ignored_errors": list(IGNORED_SPZ_ERRORS),
-                "spz_metadata": SPZ_METADATA,
-                "admin_locks": safe_locks
-            }, f, indent=2, ensure_ascii=False)
+        _HISTORIE_RECORDS_CACHE["ts"] = 0
+        _HISTORIE_VEHICLES_CACHE["ts"] = 0
+    except Exception:
+        pass
+    try:
+        from local_db import local_spz_upsert
+        local_spz_upsert([{
+            "bus_id": str(bus_id),
+            "spz": str(c.get("spz") or "Aktivní hledání"),
+            "linka": str(c.get("line") or ""),
+            "lat": c.get("lat"),
+            "lng": c.get("lng"),
+            "spz_verified": 1 if c.get("spz_verified") else 0,
+            "admin_verified": 1 if c.get("admin_spz_verified") else 0,
+            "admin_flag": 1 if c.get("admin_flag") else 0,
+            "manual_spz": 1 if c.get("manual_spz") else 0,
+            "is_locked_by_admin": 1 if c.get("is_locked_by_admin") else 0,
+            "trip_id": c.get("trip_id") or "",
+            "color_class": c.get("color_class") or "",
+            "status_text": c.get("status") or "",
+            "admin_note": c.get("admin_note") or "",
+            "admin_driver": c.get("admin_driver") or "",
+            "updated_at": datetime.now(ZoneInfo("Europe/Prague")).isoformat(),
+            "vehicle_type": c.get("vehicle_type") or "",
+            "real_linka_spoj": c.get("real_linka_spoj") or "",
+            "spoj_num": c.get("spoj_num") or "",
+            "offline_since_time": c.get("offline_since_time") or "",
+            "parked_since": c.get("parked_since") or 0
+        }])
+    except Exception:
+        pass
+    _save_spz_settings()
+
+def _save_spz_settings(db_client=None):
+    with _BUS_CACHE_LOCK:
+        safe_locks = {str(k): v for k, v in ADMIN_SPZ_LOCKS.items() if isinstance(v, dict) and v.get("spz")}
+        payload = {
+            "position_source_mode": POSITION_SOURCE_MODE,
+            "auto_resolve": AUTO_RESOLVE_SPZ,
+            "watched_buses": list(WATCHED_SPZ_BUSES),
+            "ignored_errors": list(IGNORED_SPZ_ERRORS),
+            "spz_metadata": dict(SPZ_METADATA),
+            "admin_locks": safe_locks
+        }
+    try:
+        _atomic_json_dump(_SPZ_SETTINGS_PATH, payload, indent=2, ensure_ascii=False)
     except Exception as e:
         print(f"[SPZ-SETTINGS] Save err: {e}", flush=True)
 
@@ -7530,8 +7576,7 @@ class BusFusionEngine:
         }
         for path in [self.state_file, self.alt_state_file]:
             try:
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(payload, f, ensure_ascii=False)
+                _atomic_json_dump(path, payload, ensure_ascii=False)
             except Exception as e:
                 print(f"[WARN] Nepodařilo se uložit stav do {path}: {e}", flush=True)
 
@@ -8650,7 +8695,7 @@ def _process_depot_tracking(bus_id, c, now):
                         "arrived_at": arr_time,
                         "pvvd_lost_at": pvvd_lost_iso,
                         "status": "IN_DEPOT"
-                    })
+                    }, return_id=True)
                 except Exception as e_d1:
                     print(f"[D1] Chyba zapisu prijezdu pro spz={db_spz}: {e_d1}", flush=True)
 
@@ -8750,7 +8795,7 @@ def _process_depot_tracking(bus_id, c, now):
                             "depot_name": depot_name,
                             "arrived_at": switch_time,
                             "status": "IN_DEPOT"
-                        })
+                        }, return_id=True)
                     except Exception:
                         new_id = None
                     try:
@@ -12058,8 +12103,14 @@ def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
     is_one_time = bool(rule.get("is_one_time", True))
     rule_id = str(rule.get("id") or "")
     actions_field = []
+    _unsub_qs = ""
     if not is_one_time and rule_id:
-        actions_field.append(f"[🔕 Vypnout pravidelné notifikace]({base_url}/api/notifications/unsubscribe?id={rule_id})")
+        try:
+            from ois_email import make_unsubscribe_sig
+            _unsub_qs = f"&sig={make_unsubscribe_sig(rule_id)}"
+        except Exception:
+            _unsub_qs = ""
+        actions_field.append(f"[🔕 Vypnout pravidelné notifikace]({base_url}/api/notifications/unsubscribe?id={rule_id}{_unsub_qs})")
     actions_field.append(f"[ℹ️ Proč mi chodí upozornění?]({base_url}/proc-notifikace)")
     embed["fields"].append({"name": "Možnosti", "value": " • ".join(actions_field), "inline": False})
 
@@ -12075,7 +12126,7 @@ def _build_notification_message(rule, trigger_name, bus_data, context_text=""):
         f"🔗 Sledovat na mapě: {track_url}\n"
     )
     if not is_one_time and rule_id:
-        dm_text += f"\n🔕 Vypnout pravidelné notifikace: {base_url}/api/notifications/unsubscribe?id={rule_id}"
+        dm_text += f"\n🔕 Vypnout pravidelné notifikace: {base_url}/api/notifications/unsubscribe?id={rule_id}{_unsub_qs}"
     dm_text += f"\nℹ️ Proč mi chodí upozornění?: {base_url}/proc-notifikace"
     return embed, dm_text
 
@@ -12652,25 +12703,26 @@ def api_notif_create():
 
     try:
         if admin_discord_id:
-            adm_res = db.table("users").select("id, app_id, role, discord_id, email").eq("discord_id", admin_discord_id).execute()
+            adm_res = db.table("users").select("id, app_id, role, discord_id, email, is_banned, is_deleted").eq("discord_id", admin_discord_id).execute()
             if adm_res.data:
                 a_u = adm_res.data[0]
-                role = a_u.get("role") or ""
-                if 'SA' in role or 'DEV' in role or 'ADMIN' in role:
-                    is_admin = True
-                if not cookie_token:
-                    user_session_val = str(a_u.get("app_id") or a_u["id"])
-                    discord_id = a_u.get("discord_id")
-                    email = a_u.get("email")
+                if not a_u.get("is_banned") and not a_u.get("is_deleted"):
+                    role_tokens = {r.strip().upper() for r in re.split(r'[,;\s]+', str(a_u.get("role") or "")) if r.strip()}
+                    if role_tokens & {'SA', 'DEV', 'ADMIN', 'SUPERADMIN'}:
+                        is_admin = True
+                    if not cookie_token:
+                        user_session_val = str(a_u.get("app_id") or a_u["id"])
+                        discord_id = a_u.get("discord_id")
+                        email = a_u.get("email")
                     
         if cookie_token:
             u = find_user_by_session_token(db, cookie_token)
-            if u:
+            if u and not u.get("is_banned") and not u.get("is_deleted"):
                 user_session_val = str(u.get("app_id") or u["id"])
                 discord_id = u.get("discord_id")
                 email = u.get("email")
-                role = u.get("role") or ""
-                if 'SA' in role or 'DEV' in role or 'ADMIN' in role:
+                role_tokens = {r.strip().upper() for r in re.split(r'[,;\s]+', str(u.get("role") or "")) if r.strip()}
+                if role_tokens & {'SA', 'DEV', 'ADMIN', 'SUPERADMIN'}:
                     is_admin = True
     except Exception as e:
         pass
@@ -12890,13 +12942,14 @@ def api_notif_list():
             adm_res = db.table("users").select("*").eq("discord_id", str(admin_discord_id).strip()).execute()
             if adm_res.data: u = adm_res.data[0]
 
-        if u:
+        if u and not u.get("is_banned") and not u.get("is_deleted"):
             user_session_val = str(u.get("app_id") or u["id"])
             user_db_id = str(u["id"])
             user_app_id = str(u.get("app_id") or "").strip()
-            user_discord_id = str(u.get("discord_id") or "").strip()
-            role = u.get("role") or ""
-            if 'SA' in role or 'DEV' in role:
+            raw_did = str(u.get("discord_id") or "").strip()
+            user_discord_id = raw_did if raw_did not in ("", "None", "čeká na odpověd") else ""
+            role_tokens = {r.strip().upper() for r in re.split(r'[,;\s]+', str(u.get("role") or "")) if r.strip()}
+            if role_tokens & {'SA', 'DEV', 'ADMIN', 'SUPERADMIN'}:
                 is_admin = True
                 
         if not user_session_val and not is_admin:
@@ -12910,7 +12963,7 @@ def api_notif_list():
         merged_rules = []
         try:
             from local_db import local_bus_notifications_get_for_user
-            merged_rules.extend(local_bus_notifications_get_for_user(keys, discord_id=user_discord_id))
+            merged_rules.extend(local_bus_notifications_get_for_user(keys, discord_id=user_discord_id or None))
         except Exception:
             pass
 
@@ -12958,11 +13011,14 @@ def api_notif_delete():
             adm_res = db.table("users").select("*").eq("discord_id", str(admin_discord_id).strip()).execute()
             if adm_res.data: u = adm_res.data[0]
 
-        if u:
+        user_app_id = ""
+        if u and not u.get("is_banned") and not u.get("is_deleted"):
             user_session_val = str(u["id"])
-            user_discord_id = str(u.get("discord_id") or "").strip()
-            role = u.get("role") or ""
-            if 'SA' in role or 'DEV' in role:
+            user_app_id = str(u.get("app_id") or "").strip()
+            raw_did = str(u.get("discord_id") or "").strip()
+            user_discord_id = raw_did if raw_did not in ("", "None", "čeká na odpověd") else ""
+            role_tokens = {r.strip().upper() for r in re.split(r'[,;\s]+', str(u.get("role") or "")) if r.strip()}
+            if role_tokens & {'SA', 'DEV', 'ADMIN', 'SUPERADMIN'}:
                 is_admin = True
 
         if not user_session_val and not is_admin:
@@ -12971,22 +13027,40 @@ def api_notif_delete():
         return jsonify({"status": "error", "message": str(e)}), 500
         
     data = request.get_json(silent=True) or {}
-    rule_id = str(data.get("id", ""))
+    rule_id = str(data.get("id", "")).strip()
     if not rule_id:
         return jsonify({"status": "error", "message": "Chybí ID pravidla"}), 400
+    valid_sessions = [v for v in (user_session_val, user_app_id, user_discord_id) if v]
     try:
-        try:
-            from local_db import local_bus_notification_delete
-            local_bus_notification_delete(rule_id)
-        except Exception:
-            pass
+        if not is_admin:
+            owned = False
+            try:
+                existing_r = db.table("bus_notifications").select("id,user_session").eq("id", rule_id).execute().data
+                if existing_r and str(existing_r[0].get("user_session") or "") in valid_sessions:
+                    owned = True
+            except Exception:
+                pass
+            if not owned:
+                try:
+                    from local_db import local_bus_notifications_get_for_user
+                    loc_rules = local_bus_notifications_get_for_user(valid_sessions, discord_id=user_discord_id or None)
+                    if any(str(r.get("id")) == rule_id for r in loc_rules):
+                        owned = True
+                except Exception:
+                    pass
+            if not owned:
+                return jsonify({"status": "error", "message": "Nemáte oprávnění smazat toto pravidlo"}), 403
+
         try:
             q = db.table("bus_notifications").delete().eq("id", rule_id)
             if not is_admin:
-                valid_sessions = [user_session_val]
-                if user_discord_id: valid_sessions.append(user_discord_id)
                 q = q.in_("user_session", valid_sessions)
             q.execute()
+        except Exception:
+            pass
+        try:
+            from local_db import local_bus_notification_delete
+            local_bus_notification_delete(rule_id)
         except Exception:
             pass
         
@@ -13002,14 +13076,51 @@ def api_notif_delete():
 def api_notif_unsubscribe():
     """Umožňuje uživateli jedním kliknutím vypnout pravidelnou notifikaci z e-mailu nebo Discordu."""
     rule_id = str(request.args.get("id") or (request.get_json(silent=True) or {}).get("id") or "").strip()
+    sig = str(request.args.get("sig") or (request.get_json(silent=True) or {}).get("sig") or "").strip()
     if not rule_id:
         try:
             from main import render_error_page
             return render_error_page(400, "Chybějící parametr", "Nebylo zadáno ID pravidla k odhlášení."), 400
         except Exception:
             return "Chybí ID pravidla", 400
-        
+
     db = get_db_client()
+    authorized = False
+    try:
+        from ois_email import verify_unsubscribe_sig
+        if verify_unsubscribe_sig(rule_id, sig):
+            authorized = True
+    except Exception:
+        pass
+
+    if not authorized:
+        # Fallback: povolit přihlášenému vlastníkovi nebo adminovi
+        try:
+            from main import get_current_authenticated_user, _is_user_admin
+            u_curr = get_current_authenticated_user(db)
+            if u_curr:
+                if _is_user_admin(u_curr, 'admin'):
+                    authorized = True
+                elif db:
+                    v_keys = [str(u_curr.get("id") or ""), str(u_curr.get("app_id") or "")]
+                    did_c = str(u_curr.get("discord_id") or "").strip()
+                    if did_c and did_c != "čeká na odpověd":
+                        v_keys.append(did_c)
+                    v_keys = [k for k in v_keys if k]
+                    ex_r = db.table("bus_notifications").select("id,user_session").eq("id", rule_id).execute().data
+                    if ex_r and str(ex_r[0].get("user_session") or "") in v_keys:
+                        authorized = True
+        except Exception:
+            pass
+
+    if not authorized:
+        return "Neplatný nebo chybějící bezpečnostní podpis pro odhlášení notifikace.", 403
+
+    try:
+        from local_db import local_bus_notification_delete
+        local_bus_notification_delete(rule_id)
+    except Exception:
+        pass
     if db:
         try:
             db.table("bus_notifications").delete().eq("id", rule_id).execute()
@@ -13042,8 +13153,16 @@ def api_notif_unsubscribe():
 @mapa_bp.route('/api/notifications/check_webhook', methods=['POST'])
 def api_notif_check_webhook():
     """Otestuje Discord Webhook URL odesláním testovací zprávy."""
-    cookie_token = request.cookies.get('web_session_token')
-    if not cookie_token:
+    cookie_token = request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
+    authed = False
+    db = get_db_client()
+    if cookie_token and db:
+        u = find_user_by_session_token(db, cookie_token)
+        if u and not u.get("is_banned") and not u.get("is_deleted"):
+            authed = True
+    if not authed and session.get('logged_in'):
+        authed = True
+    if not authed:
         return jsonify({"status": "error", "message": "Musíš být přihlášen/a"}), 401
     data = request.get_json(silent=True) or {}
     webhook_url = str(data.get("webhook_url", "")).strip()
@@ -13480,10 +13599,13 @@ def _get_avatar_html(req):
 
     if u:
         try:
-            avatar_src = u.get('avatar_url')
-            img_tag = f'<img src="{avatar_src}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>'
-            display_name = u.get('nick') or u.get('email') or 'Uživatel'
-            discord_id_text = f"<br>Discord ID: {u.get('discord_id')}" if u.get('discord_id') else ""
+            raw_av = str(u.get('avatar_url') or '').strip()
+            avatar_src = raw_av if raw_av.startswith(('https://', 'http://', '/', 'data:image/')) else ''
+            img_tag = f'<img src="{html.escape(avatar_src, quote=True)}" style="width:100%; height:100%; object-fit:cover;">' if avatar_src else '<i class="fas fa-user-circle" style="color:#94a3b8; font-size:44px;"></i>'
+            display_name = html.escape(str(u.get('nick') or u.get('email') or 'Uživatel'), quote=True)
+            safe_email = html.escape(str(u.get('email') or 'Neznámý e-mail'), quote=True)
+            raw_did = str(u.get('discord_id') or '').strip()
+            discord_id_text = f"<br>Discord ID: {html.escape(raw_did, quote=True)}" if raw_did and raw_did != 'čeká na odpověd' else ""
             
             return f"""
             <div class="user-avatar-wrap" style="position:relative; margin-left:15px; cursor:pointer; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); padding:5px 15px 5px 5px; border-radius:30px; border:1px solid #334155; transition:0.3s;" onclick="toggleUserDropdown(this, event);" onmouseover="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 10px rgba(56,189,248,0.5)';" onmouseout="this.style.borderColor='#334155'; this.style.boxShadow='none';">
@@ -13494,7 +13616,7 @@ def _get_avatar_html(req):
               
               <div class="user-dropdown-menu" onclick="event.stopPropagation();" style="display:none; position:absolute; top:calc(100% + 10px); right:0; background:rgba(15,23,42,0.95); backdrop-filter:blur(10px); border:1px solid #334155; border-radius:10px; width:220px; box-shadow: 0 5px 20px rgba(0,0,0,0.8); z-index:9000; padding:15px; text-align:left; box-sizing:border-box;">
                 <div style="color:white; font-size:14px; font-weight:bold; margin-bottom:5px;">{display_name}</div>
-                <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{u.get('email') or 'Neznámý e-mail'}{discord_id_text}</div>
+                <div style="color:#94a3b8; font-size:11px; margin-bottom:15px; word-break:break-all;">{safe_email}{discord_id_text}</div>
                 <a href="/ucet" style="display:block; width:100%; box-sizing:border-box; background:#38bdf8; color:black; text-align:center; padding:8px; border-radius:6px; text-decoration:none; font-weight:bold; margin: 0 0 8px 0; white-space:nowrap;"><i class="fas fa-cog"></i> Můj Účet</a>
                 <button onclick="fetch('/api/auth/logout', {{method:'POST'}}).then(()=>location.reload())" style="display:block; width:100%; box-sizing:border-box; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-weight:bold; transition:0.2s; margin:0; white-space:nowrap;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239,68,68,0.2)'; this.style.color='#ef4444';"><i class="fas fa-sign-out-alt"></i> Odhlásit se</button>
               </div>
@@ -13560,7 +13682,8 @@ def stranka_mapa():
         pass
 
     avatar_html = _get_avatar_html(request)
-    is_admin_logged = bool(session.get('logged_in') or is_admin_bypass_active())
+    _is_adm, _ = _check_admin_request('admin')
+    is_admin_logged = bool(_is_adm or is_admin_bypass_active())
     ad_btn = _AD_BTN_NORMAL if is_admin_logged else ''
     html = HTML_MAPA.replace('__ADMIN_BANNER__', '').replace('__IS_ADMIN__', 'false').replace('__AD_BTN__', ad_btn).replace('__AVATAR__', avatar_html)
     return _full_page("Mapa", html, is_map=True)
@@ -13568,7 +13691,8 @@ def stranka_mapa():
 
 @mapa_bp.route('/mapa_admin')
 def stranka_mapa_admin():
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return redirect('/dashboard')
     mode_label = "PVVD IDPK" if POSITION_SOURCE_MODE == "pvvd" else "Arriva Live"
     mode_color = "#38bdf8" if POSITION_SOURCE_MODE == "pvvd" else "#34d399"
@@ -13896,7 +14020,7 @@ def api_admin_map_action():
                 ADMIN_SPZ_LOCKS[k_bid]["admin_driver"] = new_driver
                 if new_col and new_col not in ("", "\u2500\u2500"):
                     ADMIN_SPZ_LOCKS[k_bid]["color_class"] = new_col
-        _save_spz_settings()
+        _persist_bus_admin_state(bus_id, c)
 
         # Záznam do logu dashboardu (Bod 7)
         if new_driver:
@@ -13936,6 +14060,7 @@ def api_admin_map_action():
             c["spz_frozen"] = False
             c["color_class"] = "bg-green"
             c["status"] = "Jízda"
+            _persist_bus_admin_state(bus_id, c)
             msg = f"Vůz #{bus_id}: Označení BUG bylo zrušeno adminem {admin_name}."
             log_automation_action("unmark_bug", bus_id, f"Admin {admin_name} zrušil BUG u #{bus_id}", msg, line=c.get("line"))
             return jsonify({"status": "success", "message": msg, "status_text": c.get("status"), "color_class": c.get("color_class")})
@@ -13948,12 +14073,14 @@ def api_admin_map_action():
             c["status"] = "BUG / Nereálná poloha (označeno adminem)"
             c["spz_frozen"] = True  # zamraz SPZ aby se nesmazala
             c["spz_conflict_warn"] = False  # admin to vědomě označil, už není potřeba duplikát alert
-            if c.get("admin_spz_verified") or bus_id in ADMIN_SPZ_LOCKS:
+            if c.get("admin_spz_verified") or str(bus_id) in ADMIN_SPZ_LOCKS or bus_id in ADMIN_SPZ_LOCKS:
                 c["admin_spz_verified"] = False
                 c["is_locked_by_admin"] = False
                 c["admin_spz_bug"] = True
                 ADMIN_SPZ_LOCKS.pop(bus_id, None)
+                ADMIN_SPZ_LOCKS.pop(str(bus_id), None)
 
+            _persist_bus_admin_state(bus_id, c)
             msg = f"Vůz #{bus_id} byl označen jako BUG (nereálná poloha). Zůstane jako BUG, dokud se reálně nerozjede."
             log_automation_action("mark_bug", bus_id, f"Admin {admin_name} označil vůz #{bus_id} jako BUG", msg, line=c.get("line"))
             return jsonify({"status": "success", "message": msg, "status_text": c.get("status"), "color_class": c.get("color_class")})
@@ -14396,13 +14523,16 @@ def api_system_status():
 
 @mapa_bp.route('/api/admin/system_status', methods=['GET'])
 def api_admin_system_status():
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
     return jsonify(get_system_health_status())
 
 
 @mapa_bp.route('/api/admin/spz_control_data', methods=['GET'])
 def api_admin_spz_control_data():
-    is_admin, admin_name = _check_admin_request()
-    if not is_admin and not session.get('logged_in'):
+    is_admin, admin_name = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
     return jsonify(get_spz_control_dashboard_data())
 
@@ -14410,8 +14540,8 @@ def api_admin_spz_control_data():
 @mapa_bp.route('/api/admin/set_position_source_mode', methods=['POST'])
 def api_admin_set_position_source_mode():
     global POSITION_SOURCE_MODE
-    is_admin, admin_name = _check_admin_request()
-    if not is_admin and not session.get('logged_in'):
+    is_admin, admin_name = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
     admin_name = admin_name or session.get("nick") or "Admin"
     data = request.json or {}
@@ -14438,6 +14568,9 @@ def api_admin_set_position_source_mode():
 
 @mapa_bp.route('/api/admin/position_source_mode', methods=['GET'])
 def api_admin_get_position_source_mode():
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
+        return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
     return jsonify({
         "status": "success",
         "position_source_mode": POSITION_SOURCE_MODE
@@ -14462,8 +14595,8 @@ def api_get_disappearances_history():
 
 @mapa_bp.route('/api/admin/spz_resolve_proposal', methods=['POST'])
 def api_admin_spz_resolve_proposal():
-    is_admin, admin_name = _check_admin_request()
-    if not is_admin and not session.get('logged_in'):
+    is_admin, admin_name = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
     admin_name = admin_name or session.get("nick") or "Admin"
 
@@ -14477,7 +14610,7 @@ def api_admin_spz_resolve_proposal():
     prop = SPZ_CONFLICT_PROPOSALS[proposal_id]
     bus_id = prop.get("bus_id")
 
-    if prop.get("type") == "admin_duplicate_conflict":
+    if prop.get("type") in ("admin_duplicate_conflict", "duplicate") and not (prop.get("type") == "duplicate" and action == "accept" and prop.get("has_candidate")):
         conflict_with_id = prop.get("conflict_with_id")
         spz_val = prop.get("spz")
 
@@ -14491,6 +14624,8 @@ def api_admin_spz_resolve_proposal():
                 bc["manual_spz"] = False
                 bc["spz_locked"] = False
                 bc["spz_frozen"] = False
+                bc["spz_conflict_warn"] = False
+                bc["admin_spz_conflict"] = False
                 bc["investigating"] = True
             ADMIN_SPZ_LOCKS.pop(b_id, None)
             ADMIN_SPZ_LOCKS.pop(str(b_id), None)
@@ -14499,6 +14634,8 @@ def api_admin_spz_resolve_proposal():
                 local_spz_purge_invalid_admin(b_id)
             except Exception:
                 pass
+            if b_id in GLOBAL_BUS_CACHE:
+                _persist_bus_admin_state(b_id, GLOBAL_BUS_CACHE[b_id])
 
         def _confirm_bus_lock(b_id):
             if b_id in GLOBAL_BUS_CACHE:
@@ -14511,15 +14648,18 @@ def api_admin_spz_resolve_proposal():
                 bc["manual_spz"] = True
                 bc["spz_locked"] = True
                 bc["spz_frozen"] = True
-                ADMIN_SPZ_LOCKS[b_id] = {
+                bc["spz_conflict_warn"] = False
+                bc["admin_spz_conflict"] = False
+                ADMIN_SPZ_LOCKS[str(b_id)] = {
                     "spz": spz_val,
                     "admin_note": bc.get("admin_note", ""),
                     "admin_driver": bc.get("admin_driver", ""),
                     "is_locked_by_admin": True,
                     "timestamp": datetime.now(ZoneInfo("Europe/Prague")).strftime("%d.%m.%Y %H:%M")
                 }
+                _persist_bus_admin_state(b_id, bc)
 
-        if action in ("keep_bus", "accept"):
+        if action in ("keep_first", "keep_bus", "assign_thief") or (action == "accept" and prop.get("type") == "admin_duplicate_conflict"):
             _confirm_bus_lock(bus_id)
             _purge_bus_lock(conflict_with_id)
             prop["status"] = "resolved"
@@ -14529,7 +14669,7 @@ def api_admin_spz_resolve_proposal():
             log_automation_action("admin_dup_resolved", bus_id, f"Admin {admin_name} schválil SPZ {spz_val} pro #{bus_id}", msg, spz=spz_val, line=prop.get("line"))
             return jsonify({"status": "success", "message": msg})
 
-        elif action in ("keep_conflict", "reject"):
+        elif action in ("keep_legit", "keep_second", "keep_conflict") or (action == "reject" and prop.get("type") == "admin_duplicate_conflict"):
             _confirm_bus_lock(conflict_with_id)
             _purge_bus_lock(bus_id)
             prop["status"] = "resolved"
@@ -14537,6 +14677,19 @@ def api_admin_spz_resolve_proposal():
             prop["resolved_at"] = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M:%S")
             msg = f"Konflikt vyřešen: SPZ '{spz_val}' ponechána vozu #{conflict_with_id}. Vůz #{bus_id} byl uvolněn na Aktivní hledání."
             log_automation_action("admin_dup_resolved", conflict_with_id, f"Admin {admin_name} schválil SPZ {spz_val} pro #{conflict_with_id}", msg, spz=spz_val, line=prop.get("conflict_with_line"))
+            return jsonify({"status": "success", "message": msg})
+
+        elif action == "keep_both":
+            for b_k in (bus_id, conflict_with_id):
+                if b_k in GLOBAL_BUS_CACHE:
+                    GLOBAL_BUS_CACHE[b_k]["spz_conflict_warn"] = False
+                    GLOBAL_BUS_CACHE[b_k]["admin_spz_conflict"] = False
+            prop["status"] = "resolved"
+            prop["resolved_by"] = admin_name
+            prop["resolved_at"] = datetime.now(ZoneInfo("Europe/Prague")).strftime("%H:%M:%S")
+            _save_spz_settings()
+            msg = f"Konflikt vyřešen (výjimka): SPZ '{spz_val}' ponechána oběma vozům (#{bus_id} i #{conflict_with_id})."
+            log_automation_action("admin_dup_resolved", bus_id, f"Admin {admin_name} ponechal SPZ {spz_val} oběma vozům", msg, spz=spz_val)
             return jsonify({"status": "success", "message": msg})
 
         elif action == "release_both":
@@ -14624,8 +14777,8 @@ def api_admin_spz_resolve_proposal():
 
 @mapa_bp.route('/api/admin/spz_quick_edit', methods=['POST'])
 def api_admin_spz_quick_edit():
-    is_admin, admin_name = _check_admin_request()
-    if not is_admin and not session.get('logged_in'):
+    is_admin, admin_name = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
     admin_name = admin_name or session.get("nick") or "Admin"
 
@@ -14653,6 +14806,8 @@ def api_admin_spz_quick_edit():
         c["manual_spz"] = False
         c["spz_locked"] = False
         ADMIN_SPZ_LOCKS.pop(bus_id, None)
+        ADMIN_SPZ_LOCKS.pop(str(bus_id), None)
+        _persist_bus_admin_state(bus_id, c)
         msg = f"Vůz #{bus_id} nastaven na 'Aktivní hledání'."
         log_automation_action("admin_edit", bus_id, f"Admin {admin_name} uvolnil vůz #{bus_id}", "Nastaveno na Aktivní hledání", spz="Aktivní hledání", line=c.get("line"))
     else:
@@ -14665,13 +14820,14 @@ def api_admin_spz_quick_edit():
             c["manual_spz"] = True
             c["spz_locked"] = True
             c["spz_frozen"] = True
-            ADMIN_SPZ_LOCKS[bus_id] = {
+            ADMIN_SPZ_LOCKS[str(bus_id)] = {
                 "spz": new_spz,
                 "admin_note": c.get("admin_note", ""),
                 "admin_driver": c.get("admin_driver", ""),
                 "is_locked_by_admin": True,
                 "timestamp": datetime.now(ZoneInfo("Europe/Prague")).strftime("%d.%m.%Y %H:%M")
             }
+            _persist_bus_admin_state(bus_id, c)
             msg = f"Vůz #{bus_id} úspěšně změněn na SPZ '{new_spz}' s admin-ověřením."
             log_automation_action("admin_edit", bus_id, f"Admin {admin_name} ověřil SPZ {new_spz}", f"Vůz #{bus_id} na lince {c.get('line')}", spz=new_spz, line=c.get("line"))
         else:
@@ -14681,6 +14837,8 @@ def api_admin_spz_quick_edit():
             c["is_locked_by_admin"] = False
             c["spz_verified"] = False
             ADMIN_SPZ_LOCKS.pop(bus_id, None)
+            ADMIN_SPZ_LOCKS.pop(str(bus_id), None)
+            _persist_bus_admin_state(bus_id, c)
             msg = f"Vůz #{bus_id} změněn na SPZ '{new_spz}' (neověřeno)."
 
     if new_spz and new_spz.upper() not in ("NEZNÁMÁ", "NEZNAMA", "?", ""):
@@ -14722,8 +14880,8 @@ def api_admin_spz_quick_edit():
 @mapa_bp.route('/api/admin/toggle_auto_resolve', methods=['POST'])
 def api_admin_toggle_auto_resolve():
     global AUTO_RESOLVE_SPZ
-    is_admin, admin_name = _check_admin_request()
-    if not is_admin and not session.get('logged_in'):
+    is_admin, admin_name = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
 
     AUTO_RESOLVE_SPZ = not AUTO_RESOLVE_SPZ
@@ -14742,8 +14900,8 @@ def api_admin_toggle_auto_resolve():
 
 @mapa_bp.route('/api/admin/trigger_spz_analysis', methods=['POST'])
 def api_admin_trigger_spz_analysis():
-    is_admin, admin_name = _check_admin_request()
-    if not is_admin and not session.get('logged_in'):
+    is_admin, admin_name = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
 
     analyze_spz_anomalies_and_conflicts(auto_resolve=AUTO_RESOLVE_SPZ)
@@ -14757,8 +14915,8 @@ def api_admin_trigger_spz_analysis():
 @mapa_bp.route('/api/admin/spz_watch_bus', methods=['POST'])
 def api_admin_spz_watch_bus():
     global WATCHED_SPZ_BUSES
-    is_admin, admin_name = _check_admin_request()
-    if not is_admin and not session.get('logged_in'):
+    is_admin, admin_name = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
     admin_name = admin_name or session.get("nick") or "Admin"
 
@@ -14788,8 +14946,8 @@ def api_admin_spz_watch_bus():
 @mapa_bp.route('/api/admin/spz_reset_and_watch', methods=['POST'])
 def api_admin_spz_reset_and_watch():
     global WATCHED_SPZ_BUSES, IGNORED_SPZ_ERRORS
-    is_admin, admin_name = _check_admin_request()
-    if not is_admin and not session.get('logged_in'):
+    is_admin, admin_name = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
     admin_name = admin_name or session.get("nick") or "Admin"
 
@@ -14833,8 +14991,8 @@ def api_admin_spz_reset_and_watch():
 @mapa_bp.route('/api/admin/spz_ignore_bus', methods=['POST'])
 def api_admin_spz_ignore_bus():
     global IGNORED_SPZ_ERRORS
-    is_admin, admin_name = _check_admin_request()
-    if not is_admin and not session.get('logged_in'):
+    is_admin, admin_name = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
     admin_name = admin_name or session.get("nick") or "Admin"
 
@@ -14861,8 +15019,8 @@ def api_admin_spz_ignore_bus():
 
 @mapa_bp.route('/api/admin/spz_meta/delete', methods=['POST'])
 def api_admin_spz_meta_delete():
-    is_admin, admin_name = _check_admin_request()
-    if not is_admin and not session.get('logged_in'):
+    is_admin, admin_name = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
     admin_name = admin_name or session.get("nick") or "Admin"
 
@@ -14882,8 +15040,8 @@ def api_admin_spz_meta_delete():
 
 @mapa_bp.route('/api/admin/spz_meta/save', methods=['POST'])
 def api_admin_spz_meta_save():
-    is_admin, admin_name = _check_admin_request()
-    if not is_admin and not session.get('logged_in'):
+    is_admin, admin_name = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neoprávněný přístup"}), 401
     admin_name = admin_name or session.get("nick") or "Admin"
 
@@ -14923,7 +15081,7 @@ def stranka_historie_index(spz=None):
         with open(template_path, "r", encoding="utf-8") as f:
             content = f.read()
         if spz:
-            content = content.replace("__PAGE_SPZ__", spz.strip())
+            content = content.replace("__PAGE_SPZ__", html.escape(spz.strip(), quote=True))
         try:
             from main import is_admin_bypass_active, ADMIN_BYPASS_BAR
             if is_admin_bypass_active() and ADMIN_BYPASS_BAR and "</body>" in content:
@@ -14973,7 +15131,8 @@ def stranka_soukromi_bp():
 def stranka_historie_detail_old(spz):
     if not session.get('logged_in') and not is_admin_bypass_active():
         return redirect('/', code=302)
-    return _full_page(f"V\u016fz {spz}", HTML_HISTORIE_DETAIL.replace('__SPZ__', spz))
+    safe_spz = html.escape(str(spz or '').strip(), quote=True)
+    return _full_page(f"V\u016fz {safe_spz}", HTML_HISTORIE_DETAIL.replace('__SPZ__', safe_spz))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -15147,12 +15306,13 @@ def api_historie_vehicles():
         return jsonify(_HISTORIE_VEHICLES_CACHE["data"])
     vehicles_dict = {}
 
+    _skip_spz = ("Neznámá", "Neznama", "Neznamy", "Aktivní hledání", "Aktivni hledani", "?", "", "None")
     # 1. Nejprve z živé cache mapy
     for bid, bc in safe_bus_cache_items():
         if bc.get("is_train") or bc.get("color_class") == "bg-bug":
             continue
         spz = str(bc.get("spz") or "").strip()
-        if not spz or spz in ("Neznámá", "Neznama", "?", "", "None") or spz.startswith("[ID:"):
+        if not spz or spz in _skip_spz or spz.startswith("[ID:"):
             continue
 
         in_depot = bool(bc.get("_in_depot") or bc.get("in_depot"))
@@ -15185,7 +15345,7 @@ def api_historie_vehicles():
 
     # 2. Doplníme z paměti SPZ_MEMORY
     for spz, mem in SPZ_MEMORY.items():
-        if not spz or spz in ("Neznámá", "Neznama", "?", "", "None") or spz.startswith("[ID:") or spz in vehicles_dict:
+        if not spz or spz in _skip_spz or spz.startswith("[ID:") or spz in vehicles_dict:
             continue
         v_type = mem.get("vehicle_type") or "Autobus IDPK"
         vehicles_dict[spz] = {
@@ -15238,7 +15398,7 @@ def api_historie_vehicles():
     seen_v_trips = set()
     for row in all_recent_trips:
         s = str(row.get("spz") or "").strip()
-        if not s or s in ("Neznámá", "Neznama", "?", "", "None") or s.startswith("[ID:"):
+        if not s or s in _skip_spz or s.startswith("[ID:"):
             continue
         clean_s = s.replace(" ", "").upper()
         if len(clean_s) >= 3 and clean_s[1] == 'T':
@@ -15489,7 +15649,8 @@ def _parse_bbox_args():
 def api_admin_route_stops():
     """NT rezim: vrati zastavky v aktualnim vyrezu, kazda s efektivni
     polohou, mode (bus/train/mixed), lines, manual/flagged/approx/substitute."""
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
     bbox = _parse_bbox_args()
     if not bbox:
@@ -15653,7 +15814,8 @@ def api_stops_in_view():
 
 @mapa_bp.route('/api/admin/save_custom_route', methods=['POST'])
 def api_admin_save_custom_route():
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizováno"}), 401
     data = request.get_json(silent=True) or {}
     route_key = str(data.get("route_key", "")).strip()
@@ -15678,7 +15840,8 @@ def api_admin_save_custom_route():
 
 @mapa_bp.route('/api/admin/save_route_stop_override', methods=['POST'])
 def api_admin_save_route_stop_override():
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizováno"}), 401
     data = request.get_json(silent=True) or {}
     prev_stop = str(data.get("prev_stop", "")).strip()
@@ -15711,7 +15874,8 @@ def api_admin_save_stop_override():
     """NT rezim: ulozi rucne opravenou zastavku natrvalo i do pameti.
     lat/lng jsou povinne jen pro novou zastavku (existujici lze updatovat
     jen flags/display_name/lines bez zmeny polohy)."""
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()
@@ -15777,7 +15941,8 @@ def api_admin_save_stop_override():
 @mapa_bp.route('/api/admin/delete_stop_override', methods=['POST'])
 def api_admin_delete_stop_override():
     """NT rezim: vrati zastavku zpet na automaticky urcenou polohu (GTFS/Nominatim)."""
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()
@@ -15801,7 +15966,8 @@ def api_admin_assign_line_to_stop():
     ('760') nebo plny ('490760') - ulozi se jako custom_lines.
     Pokud zastavka jeste nema override zaznam, vytvori se s aktualnimi
     GTFS souradnicemi (nebo chyba pokud zastavka v GTFS neni)."""
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
     data = request.get_json(silent=True) or {}
     stop_name = str(data.get("stop_name", "")).strip()
@@ -15882,8 +16048,9 @@ def api_admin_report_missing_stop():
     """Backend-side logging of stops that route-builder couldn't locate.
     Frontend also logs these; this endpoint allows the worker to report them
     server-side so they persist across page reloads."""
-    if not session.get('logged_in'):
-        return jsonify({"status": "ok"})  # ticha chyba - neni kriticke
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
+        return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
     data = request.get_json(silent=True) or {}
     stop_name = str(data.get("stop_name", "")).strip()
     bus_id = str(data.get("bus_id", "")).strip()
@@ -15892,7 +16059,6 @@ def api_admin_report_missing_stop():
     return jsonify({"status": "ok"})
 
 
-@mapa_bp.route('/api/admin/report_situace')
 @mapa_bp.route('/api/lines_map')
 def api_lines_map():
     """Verejny endpoint: vrati zastávky (s pořadím) pro filtrovane linky.
@@ -15973,10 +16139,12 @@ def api_lines_map():
     return jsonify({'status': 'success', 'lines': result, 'count': len(result)})
 
 
+@mapa_bp.route('/api/admin/report_situace')
 def api_admin_report_situace():
     """Vrati posledni zaznamy z REPORT SITUACE bufferu (anomalie, duplikaty SPZ atd.)
     Volano frontendem pro zobrazeni v logu — založka REPORT SITUACE."""
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
     limit = min(int(request.args.get("limit", 100)), 200)
     return jsonify({
@@ -15989,11 +16157,17 @@ def api_admin_report_situace():
 @mapa_bp.route('/api/admin/system_logs')
 def api_admin_system_logs():
     """Vrati zaznamy o kritickych chybach a padech ze systemu."""
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
+        return jsonify({"status": "error", "message": "Neautorizováno"}), 401
     return jsonify({"status": "success", "logs": list(SYSTEM_LOGS)})
 
 @mapa_bp.route('/api/admin/daily_report')
 def api_admin_daily_report_mapa():
     """Vrati denni AI report a procentualni zhodnoceni systemu."""
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
+        return jsonify({"status": "error", "message": "Neautorizováno"}), 401
     try:
         from daily_reporter import generate_ai_daily_report
         rep = generate_ai_daily_report()
@@ -16010,7 +16184,8 @@ def api_admin_spz_debug():
       ?event=X   - filtr na typ eventu (napr. DUP_SPZ_DETECTED, SPZ_NO_MATCH, ...)
       ?spz=X     - filtr na konkretni SPZ
     """
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizováno"}), 401
     limit = min(int(request.args.get("limit", 200)), 500)
     bus_id_filter = request.args.get("bus_id", "").strip()
@@ -16039,7 +16214,8 @@ def api_admin_spz_debug():
 def api_admin_arriva_stats():
     """Vrati statistiky Arriva API fetche (OK/fail/empty pocty, posledni chyba).
     Pomaha zjistit zda Arriva API blokuje nebo vraci prazdne odpovedi."""
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizováno"}), 401
     total = _arriva_fetch_stats["ok"] + _arriva_fetch_stats["fail"] + _arriva_fetch_stats["empty"]
     ok_pct = round(_arriva_fetch_stats["ok"] / total * 100, 1) if total > 0 else 0
@@ -16059,16 +16235,14 @@ def api_admin_arriva_stats():
     })
 
 
-@mapa_bp.route('/api/admin/clean_trains', methods=['GET'])
+@mapa_bp.route('/api/admin/clean_trains', methods=['POST'])
 def admin_clean_trains():
-    cookie_token = request.cookies.get('web_session_token')
-    if not cookie_token or not HAS_SUPABASE:
+    is_admin, _ = _check_admin_request('superadmin')
+    if not is_admin:
         return jsonify({"error": "unauthorized"}), 401
-    
     db = get_db_client()
-    u = find_user_by_session_token(db, cookie_token)
-    if not u or u.get("role") not in ["DEV", "SA"]:
-        return jsonify({"error": "unauthorized"}), 401
+    if not db or not HAS_SUPABASE:
+        return jsonify({"error": "DB nedostupna"}), 503
 
     try:
         _purge_trains_everywhere(db)
@@ -16084,7 +16258,8 @@ def api_admin_line_stops():
 
     Hledani je flexibilni: '722' najde zastavky kde je linka '722', '490722'
     i '722' se berou jako ekvivalentni — porovna se suffix i cele cislo."""
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizov\u00e1no"}), 401
     line_q = (request.args.get("line") or "").strip()
     if not line_q:
@@ -16167,12 +16342,17 @@ def api_bus_detail(bus_id):
         if not tt_html or "nepodařilo načíst" in tt_html:
              tt_html = "<p style='color:#94a3b8;'>Jízdní řád není momentálně pro tento spoj dostupný (ani v paměti bota).</p>"
 
+        # Strip active script/event handlers from upstream timetable HTML
+        tt_html = re.sub(r'(?is)<script[^>]*>.*?</script>', '', tt_html)
+        tt_html = re.sub(r'(?is)<(iframe|object|embed)[^>]*>.*?</\1>', '', tt_html)
+        tt_html = re.sub(r"""(?i)\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", '', tt_html)
+        tt_html = re.sub(r"""(?i)(href|src)\s*=\s*(['"]?)\s*javascript:""", r'\1=\2#blocked:', tt_html)
         return f"""<div style="background:#0f172a;color:white;font-family:sans-serif;">
         <div style="background:#1e293b;padding:12px;border-radius:6px;margin-bottom:12px;">{info_html}</div>
         <div style="overflow-x:auto;"><style>table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #334155;padding:6px 10px;text-align:left}}th{{background:#0f172a;color:#38bdf8}}tr:hover td{{background:#1e293b}}.current{{background:#166534!important;font-weight:bold}}
         </style>{tt_html}</div></div>"""
     except Exception as e:
-        return f"<p style='color:#ef4444;padding:20px;'>Chyba: {e}</p>"
+        return f"<p style='color:#ef4444;padding:20px;'>Chyba: {html.escape(str(e))}</p>"
 
 
 
@@ -17019,32 +17199,60 @@ def api_depot_history():
 
 @mapa_bp.route('/api/admin/delete_depot_history', methods=['POST'])
 def api_admin_delete_depot_history():
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizovano"}), 401
     
     data = request.get_json(silent=True) or {}
     record_id = data.get("id")
     if not record_id:
         return jsonify({"status": "error", "message": "Chybi ID"}), 400
-        
+
+    rid_str = str(record_id).strip()
     db = get_db_client()
-    if not db:
-        return jsonify({"status": "error", "message": "DB nedostupna"}), 500
-        
     try:
+        if rid_str.startswith("act_"):
+            act_key = rid_str[4:]
+            removed_sess = []
+            for s_k, s_data in list(DEPOT_ACTIVE_SESSIONS.items()):
+                if str(s_k) == act_key or f"act_{s_k}" == rid_str or str(s_data.get("bus_id") or "") == act_key:
+                    removed_sess.append(s_data)
+                    DEPOT_ACTIVE_SESSIONS.pop(s_k, None)
+            for rs in removed_sess:
+                if rs.get("local_id"):
+                    try:
+                        from local_db import local_depot_history_delete
+                        local_depot_history_delete(rs["local_id"])
+                    except Exception:
+                        pass
+                if rs.get("id") and str(rs.get("id")).isdigit():
+                    try:
+                        from cloudflare_d1 import get_d1_client as _get_d1
+                        _get_d1().execute("DELETE FROM depot_history WHERE id = ?", [int(rs["id"])])
+                    except Exception:
+                        pass
+            return jsonify({"status": "success"})
+
+        if rid_str.isdigit():
+            try:
+                from cloudflare_d1 import get_d1_client as _get_d1
+                _get_d1().execute("DELETE FROM depot_history WHERE id = ?", [int(rid_str)])
+            except Exception as e_d1_del:
+                print(f"[D1-DEL-DEPOT] Chyba smazání z D1: {e_d1_del}", flush=True)
+        if db:
+            try:
+                db.table("depot_history").delete().eq("id", record_id).execute()
+            except Exception:
+                pass
         try:
-            from cloudflare_d1 import get_d1_client as _get_d1
-            _get_d1().execute("DELETE FROM depot_history WHERE id = ?", [int(record_id)])
-        except Exception as e_d1_del:
-            print(f"[D1-DEL-DEPOT] Chyba smazání z D1: {e_d1_del}", flush=True)
-        try:
-            db.table("depot_history").delete().eq("id", record_id).execute()
+            from local_db import local_depot_history_delete
+            local_depot_history_delete(rid_str)
         except Exception:
             pass
-        # Take to zmaz z pameti pokud je to aktivni
+        # Smaz z pameti pokud je to aktivni
         for s_spz, s_data in list(DEPOT_ACTIVE_SESSIONS.items()):
-            if s_data["id"] == record_id:
-                del DEPOT_ACTIVE_SESSIONS[s_spz]
+            if str(s_data.get("id") or "") == rid_str or str(s_data.get("local_id") or "") == rid_str:
+                DEPOT_ACTIVE_SESSIONS.pop(s_spz, None)
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -17053,7 +17261,8 @@ def api_admin_delete_depot_history():
 @mapa_bp.route('/api/admin/save_depot_zone', methods=['POST'])
 def api_admin_save_depot_zone():
     """Admin: ulozi nebo aktualizuje vozovnu (depot zone)."""
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizováno"}), 401
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()
@@ -17121,7 +17330,8 @@ def api_admin_save_depot_zone():
 @mapa_bp.route('/api/admin/delete_depot_zone', methods=['POST'])
 def api_admin_delete_depot_zone():
     """Admin: smaze vozovnu podle id."""
-    if not session.get('logged_in'):
+    is_admin, _ = _check_admin_request('admin')
+    if not is_admin:
         return jsonify({"status": "error", "message": "Neautorizováno"}), 401
     data = request.get_json(silent=True) or {}
     zone_id = data.get("id")
@@ -17158,8 +17368,11 @@ def api_notif_user_history():
             u = find_user_by_session_token(db, cookie_token)
             if u: user_session_val = str(u["id"])
         except Exception: pass
-    if not user_session_val and admin_discord_id:
+    if not user_session_val and admin_discord_id and str(admin_discord_id).strip() not in ("", "None", "čeká na odpověd"):
         user_session_val = str(admin_discord_id)
+
+    if not user_session_val:
+        return jsonify({"status": "error", "history": [], "message": "Neautorizováno"}), 401
 
     try:
         from local_db import local_notif_get_history
@@ -17171,54 +17384,65 @@ def api_notif_user_history():
 
 # === ADMIN PANEL NOTIFIKACÍ (OD NULY) ===
 
-def _check_admin_request():
+def _check_admin_request(min_level: str = 'admin'):
     """Ověří administrátorská práva napříč všemi přihlašovacími metodami a vrátí (is_admin, admin_name)."""
+    LEVEL_ORDER = {'superadmin': 3, 'admin': 2, 'viewer': 1}
     admin_name = None
-    # 1. Zkus session nick/username
     for k in ('discord_nick', 'nick', 'username', 'admin_user'):
         val = session.get(k)
         if val and str(val).strip() and str(val).lower() not in ('none', 'unknown', 'neznámý', 'map_admin'):
             admin_name = str(val).strip()
             break
 
-    # 2. Web session token
-    cookie_token = request.cookies.get('web_session_token')
+    # 1. Offline superadmin / admin session
+    if session.get('logged_in') and session.get('offline_mode'):
+        lvl = str(session.get('dashboard_level') or 'superadmin').lower()
+        if LEVEL_ORDER.get(lvl, 0) >= LEVEL_ORDER.get(min_level, 2):
+            return True, admin_name or "Admin"
+        return False, None
+
+    # 2. Bearer / cookie session token (web_session_token / admin_session_token)
+    auth_hdr = (request.headers.get('Authorization') or '').strip()
+    hdr_tok = auth_hdr[7:].strip() if auth_hdr.lower().startswith('bearer ') else (request.headers.get('X-Session-Token') or '').strip()
+    cookie_token = hdr_tok or request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
     if cookie_token:
         try:
             db = get_db_client()
             if db:
                 u = find_user_by_session_token(db, cookie_token)
-                if u:
-                    role = str(u.get("role") or "").upper()
-                    if "SA" in role or "DEV" in role or "ADMIN" in role or u.get("dashboard_access"):
-                        resolved_name = u.get("nick") or u.get("username") or u.get("email") or admin_name or "marekk_czz"
+                if u and not u.get("is_banned") and not u.get("is_deleted"):
+                    role_tokens = {r.strip().upper() for r in re.split(r'[,;\s]+', str(u.get("role") or "")) if r.strip()}
+                    has_role = bool(role_tokens & ({'SA', 'SUPERADMIN', 'DEV'} if min_level == 'superadmin' else {'SA', 'SUPERADMIN', 'DEV', 'DEVELOPER', 'ADMIN', 'SM'}))
+                    lvl = str(u.get("dashboard_level") or ("admin" if u.get("dashboard_access") else "")).lower()
+                    has_dash = bool(u.get("dashboard_access")) and (LEVEL_ORDER.get(lvl, 0) >= LEVEL_ORDER.get(min_level, 2))
+                    if has_role or has_dash:
+                        resolved_name = u.get("nick") or u.get("username") or u.get("email") or admin_name or "Admin"
                         return True, resolved_name
-        except Exception: pass
+        except Exception:
+            pass
 
-    # 3. Superadmin discord
-    did = str(session.get('discord_id') or "")
-    if did in ("714856037042585641", "1219661445763661854") or session.get('is_superadmin'):
-        if not admin_name and did:
-            try:
-                db = get_db_client()
-                if db:
-                    u_res = db.table("users").select("nick, email").eq("discord_id", did).execute().data
-                    if u_res:
-                        admin_name = u_res[0].get("nick") or u_res[0].get("username") or u_res[0].get("email")
-            except Exception: pass
+    # 3. Flask dashboard session (verify DB record & level — never accept unprivileged viewer/User)
+    did = str(session.get('discord_id') or "").strip()
+    if did in ("714856037042585641", "1219661445763661854") and session.get('logged_in'):
         return True, admin_name or "marekk_czz"
 
-    # 4. Map admin heslo nebo dashboard session
-    if session.get('logged_in'):
-        if not admin_name and did:
-            try:
-                db = get_db_client()
-                if db:
-                    u_res = db.table("users").select("nick, email").eq("discord_id", did).execute().data
-                    if u_res:
-                        admin_name = u_res[0].get("nick") or u_res[0].get("username") or u_res[0].get("email")
-            except Exception: pass
-        return True, admin_name or "marekk_czz"
+    if session.get('logged_in') and did and did not in ("", "None", "čeká na odpověd"):
+        try:
+            db = get_db_client()
+            if db:
+                u_res = db.table("users").select("nick, username, email, role, dashboard_access, dashboard_level, is_banned, is_deleted").eq("discord_id", did).execute().data
+                if u_res:
+                    u = u_res[0]
+                    if not u.get("is_banned") and not u.get("is_deleted"):
+                        role_tokens = {r.strip().upper() for r in re.split(r'[,;\s]+', str(u.get("role") or "")) if r.strip()}
+                        has_role = bool(role_tokens & ({'SA', 'SUPERADMIN', 'DEV'} if min_level == 'superadmin' else {'SA', 'SUPERADMIN', 'DEV', 'DEVELOPER', 'ADMIN', 'SM'}))
+                        lvl = str(u.get("dashboard_level") or ("admin" if u.get("dashboard_access") else "")).lower()
+                        has_dash = bool(u.get("dashboard_access")) and (LEVEL_ORDER.get(lvl, 0) >= LEVEL_ORDER.get(min_level, 2))
+                        if has_role or has_dash:
+                            resolved_name = u.get("nick") or u.get("username") or u.get("email") or admin_name or "Admin"
+                            return True, resolved_name
+        except Exception:
+            pass
 
     return False, None
 
@@ -18252,6 +18476,7 @@ def api_admin_buses_search():
     results = []
     seen = set()
 
+    _skip_spz_q = ("Neznámá", "Neznama", "Neznamy", "Aktivní hledání", "Aktivni hledani", "?", "", "None")
     # 1. Hledání v živých vozech (GLOBAL_BUS_CACHE)
     for bid, bc in safe_bus_cache_items():
         if bc.get("is_train") or bc.get("color_class") == "bg-bug":
@@ -18259,7 +18484,7 @@ def api_admin_buses_search():
         spz = str(bc.get("spz") or "").strip()
         bid_str = str(bid).strip()
         line = str(bc.get("line") or "").strip()
-        if not spz or spz in ("Neznámá", "Neznama", "?", "", "None") or spz.startswith("[ID:"):
+        if not spz or spz in _skip_spz_q or spz.startswith("[ID:"):
             continue
         key = spz.replace(" ", "").upper()
         if key in seen:
@@ -18285,7 +18510,7 @@ def api_admin_buses_search():
     # 2. Hledání v paměti SPZ_MEMORY pokud je málo výsledků
     if len(results) < 25:
         for spz, mem in SPZ_MEMORY.items():
-            if not spz or spz in ("Neznámá", "Neznama", "?", "", "None") or spz.startswith("[ID:"):
+            if not spz or spz in _skip_spz_q or spz.startswith("[ID:"):
                 continue
             key = spz.replace(" ", "").upper()
             if key in seen:
@@ -18310,7 +18535,7 @@ def api_admin_buses_search():
             from local_db import local_spz_get_all
             for r in local_spz_get_all():
                 spz = str(r.get("spz") or "").strip()
-                if not spz or spz in ("Neznámá", "Neznama", "?", "", "None") or spz.startswith("[ID:"):
+                if not spz or spz in _skip_spz_q or spz.startswith("[ID:"):
                     continue
                 key = spz.replace(" ", "").upper()
                 if key in seen:

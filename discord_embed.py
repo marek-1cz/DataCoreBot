@@ -105,8 +105,13 @@ def build_view(rule_id=None, is_one_time=False, base_url=BASE_URL):
     import discord
     view = discord.ui.View()
     if not is_one_time and rule_id and not str(rule_id).startswith("admin_direct"):
+        try:
+            from ois_email import make_unsubscribe_sig
+            unsub_url = "%s/api/notifications/unsubscribe?id=%s&sig=%s" % (base_url, rule_id, make_unsubscribe_sig(rule_id))
+        except Exception:
+            unsub_url = "%s/api/notifications/unsubscribe?id=%s" % (base_url, rule_id)
         view.add_item(discord.ui.Button(label="Vypnout notifikace", emoji="🔕", style=discord.ButtonStyle.link,
-                                        url="%s/api/notifications/unsubscribe?id=%s" % (base_url, rule_id)))
+                                        url=unsub_url))
     view.add_item(discord.ui.Button(label="Proč mi chodí upozornění?", emoji="ℹ️", style=discord.ButtonStyle.link,
                                     url=base_url + "/proc-notifikace"))
     view.add_item(discord.ui.Button(label="Podpora", emoji="💬", style=discord.ButtonStyle.link, url=base_url + "/podpora"))

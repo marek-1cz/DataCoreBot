@@ -35,8 +35,24 @@ Barva pruhu: embed_data["color"] (celé číslo jako na Discordu) nebo parametr 
 Hodnoty jsou vždy escapované. Povolená značka v textu: **tučně**, `kód`, [text](url).
 =====================================================================
 """
+import hmac as _hmac
+import hashlib as _hashlib
 import html as _h
+import os as _os
 import re
+
+def _unsub_secret() -> bytes:
+    sec = _os.environ.get("FLASK_SECRET_KEY") or "datacorebot_fallback_secret_key_998877665544332211"
+    return str(sec).encode("utf-8")
+
+def make_unsubscribe_sig(rule_id) -> str:
+    return _hmac.new(_unsub_secret(), f"unsub:{rule_id}".encode("utf-8"), _hashlib.sha256).hexdigest()[:24]
+
+def verify_unsubscribe_sig(rule_id, sig: str) -> bool:
+    if not rule_id or not sig:
+        return False
+    expected = make_unsubscribe_sig(rule_id)
+    return _hmac.compare_digest(expected, str(sig).strip())
 
 BASE_URL = "https://datacorebot.koyeb.app"
 BRAND = "PROJEKT OIS IDPK"
@@ -195,7 +211,7 @@ def build_notification_email(embed_data, dm_text="", rule_id=None, is_one_time=F
     why = (base_url + "/proc-notifikace?typ=admin") if is_admin else (base_url + "/proc-notifikace")
     why_label = "Proč mi přišla zpráva od administrátora?" if is_admin else "Proč mi chodí upozornění?"
     if not is_one_time and rule_id and not is_admin:
-        unsub = "%s/api/notifications/unsubscribe?id=%s" % (base_url, _h.escape(str(rule_id), quote=True))
+        unsub = "%s/api/notifications/unsubscribe?id=%s&sig=%s" % (base_url, _h.escape(str(rule_id), quote=True), make_unsubscribe_sig(rule_id))
         links.append(("Vypnout pravidelné notifikace", unsub))
     links.append((why_label, why))
     links.append(("Podpora", base_url + "/podpora"))
@@ -222,7 +238,7 @@ def build_magic_link_email(login_url, token, base_url=BASE_URL):
     subject = "Přihlášení do aplikace OIS IDPK"
     intro = ('<p style="margin:0 0 14px 0;">Dobrý den,</p>'
              '<p style="margin:0 0 18px 0;">posíláme odkaz pro přístup do aplikace OIS IDPK. Pro dokončení přihlášení stačí kliknout na tlačítko níže. '
-             'Případně můžete ručně zadat tento 5místný kód:</p>')
+             'Případně můžete ručně zadat tento 6místný kód:</p>')
     note = "Pokud se právě do aplikace nepřihlašujete, nic se neděje a e-mail můžete v klidu smazat. Váš účet je v bezpečí."
     html = wrap_email(label="PŘIHLÁŠENÍ", title="Potvrďte své přihlášení", intro_html=intro, code=token,
                       buttons=[("Potvrdit přihlášení", login_url, True)], accent=C_CYAN,

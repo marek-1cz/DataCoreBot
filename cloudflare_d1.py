@@ -514,11 +514,20 @@ class D1Client:
                 else:
                     ttl = 60
                 with self._cache_lock:
-                    self._cache[cache_key] = (time.time() + ttl, list(res))
+                    now_c = time.time()
+                    if len(self._cache) >= 256:
+                        expired_k = [k for k, v in self._cache.items() if now_c >= v[0]]
+                        for k in expired_k:
+                            self._cache.pop(k, None)
+                        while len(self._cache) >= 256:
+                            oldest_k = min(self._cache.items(), key=lambda kv: kv[1][0])[0]
+                            self._cache.pop(oldest_k, None)
+                    self._cache[cache_key] = (now_c + ttl, list(res))
             return res
 
         else:
             # Zápisový příkaz (INSERT, UPDATE, DELETE)
+            self._invalidate_cache()
             if not self.budget.can_write():
                 # Zápis přesměrujeme do vyrovnávací SQLite fronty
                 self._enqueue_write("", "execute", {"sql": sql_clean, "params": p_list})
@@ -529,7 +538,12 @@ class D1Client:
                 res = self._request(payload, is_write=True)
             return res
 
+    def _invalidate_cache(self):
+        with self._cache_lock:
+            self._cache.clear()
+
     def _enqueue_write(self, table: str, action: str, payload: dict):
+        self._invalidate_cache()
         try:
             from local_db import local_d1_queue_push
             local_d1_queue_push(table, action, payload)
@@ -538,6 +552,7 @@ class D1Client:
 
     def insert(self, table: str, row_dict: dict, return_id: bool = False):
         """Vloží jeden řádek do D1 nebo zařadí do SQLite fronty."""
+        self._invalidate_cache()
         if not self.budget.can_write():
             self._enqueue_write(table, "insert", {"data": row_dict})
             return None
@@ -709,6 +724,7 @@ class D1Client:
                         failed_ids.append(qid)
 
                 if success_ids:
+                    self._invalidate_cache()
                     local_d1_queue_delete(success_ids)
                 if failed_ids:
                     local_d1_queue_inc_retry(failed_ids)

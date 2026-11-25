@@ -609,15 +609,18 @@ def local_bus_notifications_get_for_user(keys: list = None, discord_id: str = No
         with _local_db_lock:
             with _get_local_conn() as conn:
                 all_rows = conn.execute("SELECT * FROM bus_notifications_local ORDER BY id DESC").fetchall()
-                search_keys = set(str(k).strip() for k in (keys or []) if k)
-                if discord_id:
+                search_keys = set(str(k).strip() for k in (keys or []) if k and str(k).strip())
+                if discord_id and str(discord_id).strip():
                     search_keys.add(str(discord_id).strip())
+                if not search_keys:
+                    return []
                 res = []
                 for r in all_rows:
                     row_dict = dict(r)
                     u_sess = str(row_dict.get("user_session") or "").strip()
                     d_id = str(row_dict.get("discord_id") or "").strip()
-                    if not search_keys or u_sess in search_keys or d_id in search_keys or any(k in u_sess for k in search_keys):
+                    allow_admin_direct = ("admin_direct_" in search_keys and u_sess.startswith("admin_direct_"))
+                    if (u_sess and u_sess in search_keys) or (d_id and d_id != "čeká na odpověd" and d_id in search_keys) or allow_admin_direct:
                         for fld in ["triggers", "delivery_channels"]:
                             raw_val = row_dict.get(fld)
                             if raw_val and isinstance(raw_val, str):
@@ -1673,6 +1676,27 @@ def local_depot_history_get(depot_name: str = None, spz: str = None, limit: int 
     except Exception as e:
         print(f"[LOCAL DB] Chyba cteni depot_history_local: {e}", flush=True)
         return []
+
+def local_depot_history_delete(record_id) -> bool:
+    try:
+        rid_str = str(record_id or "").strip()
+        if not rid_str:
+            return False
+        with _local_db_lock:
+            with _get_local_conn() as conn:
+                if rid_str.isdigit():
+                    rid_int = int(rid_str)
+                    cur = conn.execute(
+                        "DELETE FROM depot_history_local WHERE id = ?",
+                        (rid_int,)
+                    )
+                else:
+                    cur = conn.execute("DELETE FROM depot_history_local WHERE bus_id = ?", (rid_str,))
+                conn.commit()
+                return (cur.rowcount or 0) > 0
+    except Exception as e:
+        print(f"[LOCAL DB] Chyba mazani depot_history_local: {e}", flush=True)
+        return False
 
 def local_setting_set(key: str, value: str):
     try:

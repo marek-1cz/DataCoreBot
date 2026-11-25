@@ -164,6 +164,7 @@ def _init_caches():
         _CACHE_STOPS = []
         return
 
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -246,11 +247,16 @@ def _init_caches():
                 "_norm": _norm(s_name)
             })
         _CACHE_STOPS = stops_list
-        conn.close()
     except Exception as e:
         print(f"[JR API CACHE ERROR] {e}", flush=True)
         _CACHE_ROUTES = _CACHE_ROUTES or []
         _CACHE_STOPS = _CACHE_STOPS or []
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 def get_featured(count=9):
     _init_caches()
@@ -480,6 +486,7 @@ def get_line(line_id):
     db_path = _get_db_path()
     if not os.path.exists(db_path):
         return None
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -488,7 +495,6 @@ def get_line(line_id):
 
         raw_sn, sn, route_long_name, all_rids = _resolve_line_route_ids(cur, line_id)
         if not all_rids:
-            conn.close()
             return None
 
         color = _get_color(sn)
@@ -591,7 +597,6 @@ def get_line(line_id):
         # Pokud linka reálně jezdí jen v jednom směru (např. okružní linka), nesyntetizujeme
         # fiktivní opačný směr, který by v databázi neměl žádné spoje.
 
-        conn.close()
         res = {
             "id": all_rids[0],
             "short": sn,
@@ -605,6 +610,12 @@ def get_line(line_id):
     except Exception as e:
         print(f"[JR API LINE ERROR] {e}", flush=True)
         return None
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
     try:
@@ -633,6 +644,7 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
                 break
 
     db_path = _get_db_path()
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -839,7 +851,7 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
                 # Příjezd na konečnou: přesný čas příjezdu z posledního záznamu
                 arr_t = (rows[-1]["arrival_time"] or rows[-1]["departure_time"] or served_stops[-1]["time"]).strip()[:5]
 
-                aligned_times = [stop_time_map.get(s_name, None) for s_name in target_stops]
+                aligned_times = align_trip_times([(s["name"], s["time"]) for s in served_stops], target_stops) if (served_stops and target_stops) else [stop_time_map.get(s_name, None) for s_name in target_stops]
 
                 sid = trip_services.get(tid)
                 scal = cal_info_map.get(sid)
@@ -879,8 +891,13 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
                     if len(sd) == 8 and len(ed) == 8:
                         note_parts.append(f"Platí {sd[6:8]}.{sd[4:6]}. – {ed[6:8]}.{ed[4:6]}.{ed[:4]}")
 
-                # Příznak zda spoj jede DNES podle reálného dne v týdnu
-                if day == "weekday":
+                # Příznak zda spoj jede DNES s ohledem na výjimky calendar_dates
+                exc_today = today_exceptions.get(sid)
+                if exc_today == 2:
+                    runs_today = False
+                elif exc_today == 1:
+                    runs_today = True
+                elif day == "weekday":
                     runs_today = is_today_weekday
                 elif day == "saturday":
                     runs_today = is_today_saturday
@@ -905,11 +922,16 @@ def get_trips(line_id, dir_idx=0, day="weekday", variant_id=None):
                 })
 
         res_trips.sort(key=lambda x: x["dep_time"])
-        conn.close()
         out = {"trips": res_trips}
         _TRIPS_CACHE[cache_key] = out
         return out
     except Exception as e:
         print(f"[JR API TRIPS ERROR] {e}", flush=True)
         return {"trips": []}
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 

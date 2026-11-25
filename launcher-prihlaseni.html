@@ -283,6 +283,8 @@ html.lite .lg-card{-webkit-backdrop-filter:none;backdrop-filter:none;background:
     show('load');
     const qs = new URLSearchParams(location.search);
     const token = (qs.get('token') || '').trim().toUpperCase();
+    const email = (qs.get('email') || '').trim();
+    const sig = (qs.get('sig') || '').trim();
 
     if (!token) {
       show('bad');
@@ -294,7 +296,7 @@ html.lite .lg-card{-webkit-backdrop-filter:none;backdrop-filter:none;background:
         method: 'POST',
         credentials: 'include',
         headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: token })
+        body: JSON.stringify({ token: token, email: email, sig: sig })
       });
       const data = await res.json().catch(() => ({}));
 
@@ -303,7 +305,7 @@ html.lite .lg-card{-webkit-backdrop-filter:none;backdrop-filter:none;background:
         const nameEl = $('#user-display-name');
         if (nameEl) nameEl.textContent = userName;
         show('ok');
-      } else if ([400, 401, 404, 410].includes(res.status)) {
+      } else if ([400, 401, 403, 404, 410].includes(res.status)) {
         show('bad');
       } else {
         const errEl = $('#err-text');

@@ -15,7 +15,6 @@ __pycache__/
 daily_metrics.json
 *.bak
 *_backup*
-!users_backup.json
 !summary_backup.json
 !spz_cache_backup.json
 !supporters_backup.json

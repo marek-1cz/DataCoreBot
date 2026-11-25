@@ -481,7 +481,7 @@ html.lite .lg-trip .bus svg{animation:none}
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol><symbol id="i-discord" viewBox="0 0 24 24"><path d="M5 6c2-1.2 4-1.8 7-1.8S17 4.8 19 6c1.8 3 2.6 6 2.4 10-1.6 1.2-3.2 2-5 2.4l-1-2c-1.2.4-2.6.4-4.8 0l-1 2c-1.8-.4-3.4-1.2-5-2.4C2.4 12 3.2 9 5 6z"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol><symbol id="i-bus" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="15" rx="3"/><path d="M4 11h16M8 21v-3M16 21v-3"/><circle cx="8" cy="15" r="1"/><circle cx="16" cy="15" r="1"/></symbol></defs></svg>
 <main class="lg-stage">
   <div class="lg-vz" id="vz" role="note" hidden>
-    <div class="top"><span class="vzor">VZOR</span><div><b>VZOROVÁ OBRAZOVKA.</b> Nic se neposílá. V ukázce projde jakýkoli 5místný kód kromě <code>00000</code>. Po přepnutí <code>CONFIG.DEMO</code> na <code>false</code> se stránka napojí na server.</div></div>
+    <div class="top"><span class="vzor">VZOR</span><div><b>VZOROVÁ OBRAZOVKA.</b> Nic se neposílá. V ukázce projde jakýkoli 6místný kód kromě <code>000000</code>. Po přepnutí <code>CONFIG.DEMO</code> na <code>false</code> se stránka napojí na server.</div></div>
     <div class="sc" id="sc"><span>Rychle zobrazit:</span>
       <button type="button" data-v="form" aria-pressed="true">Přihlášení</button>
       <button type="button" data-v="discord" aria-pressed="false">Čekání na Discord</button>
@@ -514,12 +514,12 @@ html.lite .lg-trip .bus svg{animation:none}
 
       <form id="f-email" role="tabpanel" aria-labelledby="t-email" novalidate hidden>
         <div class="lg-fld"><label for="in-nick">Vaše přezdívka</label>
-          <input class="lg-inp" id="in-nick" type="text" autocomplete="nickname" spellcheck="false" placeholder="Např. Honza123" required></div>
+          <input class="lg-inp" id="in-nick" type="text" autocomplete="nickname" spellcheck="false" placeholder="Např. Honza123" maxlength="24" required></div>
         <div class="lg-fld"><label for="in-ml">E-mail</label>
           <input class="lg-inp" id="in-ml" type="email" inputmode="email" autocomplete="email" spellcheck="false" placeholder="vas@email.cz" required></div>
         <div class="lg-err" id="e-ml" role="alert"></div>
         <button class="btn-main lg-go" id="go-ml" type="submit">Poslat přihlašovací odkaz <svg class="lg-ic" aria-hidden="true"><use href="#i-arrow"/></svg></button>
-        <p class="lg-fine">Pošleme vám odkaz a 5místný kód. Žádné heslo si nemusíte pamatovat.</p>
+        <p class="lg-fine">Pošleme vám odkaz a 6místný kód. Žádné heslo si nemusíte pamatovat.</p>
       </form>
     </div>
 
@@ -543,8 +543,8 @@ html.lite .lg-trip .bus svg{animation:none}
       <p class="lg-lead">Poslali jsme přihlašovací odkaz na <b id="m-addr"></b>. Klikněte na něj a budete přihlášeni. Odkaz platí krátce.</p>
       <div class="lg-sep">nebo zadejte kód</div>
       <form id="f-code" novalidate>
-        <label class="sr" for="in-code">5místný kód z e-mailu</label>
-        <input class="lg-inp lg-code" id="in-code" type="text" inputmode="numeric" maxlength="5" autocomplete="one-time-code" placeholder="•••••">
+        <label class="sr" for="in-code">6místný kód z e-mailu</label>
+        <input class="lg-inp lg-code" id="in-code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••">
         <div class="lg-err" id="e-code" role="alert"></div>
         <button class="btn-main lg-go" id="go-code" type="submit">Potvrdit kód</button>
       </form>
@@ -664,7 +664,7 @@ async function emailSubmit(e){
   const n=($('#in-nick')?.value||'').trim();
   const m=$('#in-ml').value.trim();
   if(!n)return err('#e-ml','#in-nick','Zadejte prosím svou přezdívku.');
-  if(n.length<2)return err('#e-ml','#in-nick','Přezdívka musí mít alespoň 2 znaky.');
+  if(n.length<3||n.length>24)return err('#e-ml','#in-nick','Přezdívka musí mít 3 až 24 znaků.');
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(m))return err('#e-ml','#in-ml','Zadejte platný e-mail.');
   err('#e-ml','#in-ml','');busy($('#go-ml'),true,'Odesílám…');
   try{
@@ -689,11 +689,11 @@ async function resend(){
 async function codeSubmit(e){
   e.preventDefault();if(S.busy)return;
   const c=$('#in-code').value.trim();
-  if(!/^\d{5}$/.test(c))return err('#e-code','#in-code','Kód má 5 číslic.');
+  if(!/^\d{6}$/.test(c))return err('#e-code','#in-code','Kód má 6 číslic.');
   err('#e-code','#in-code','');busy($('#go-code'),true,'Ověřuji…');
   try{
     let j;
-    if(CONFIG.DEMO){await sleep(700);if(c==='00000')throw new Error('Kód nesouhlasí. Zkuste to znovu.');j={name:'Vzorový uživatel'}}
+    if(CONFIG.DEMO){await sleep(700);if(c==='000000')throw new Error('Kód nesouhlasí. Zkuste to znovu.');j={name:'Vzorový uživatel'}}
     else j=await call(CONFIG.api.emailVerify,{email:S.email,code:c});
     busy($('#go-code'),false);clearInterval(S.cd);success(j.name);
   }catch(x){busy($('#go-code'),false);err('#e-code','#in-code',x.message||'Kód se nepodařilo ověřit.')}
