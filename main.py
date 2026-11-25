@@ -1706,8 +1706,11 @@ def get_cached_user_role(discord_id):
     if db and discord_id:
         try:
             if str(discord_id).startswith('email-'):
-                uid = str(discord_id).split('-')[1]
-                resp = db.table('users').select('role, is_banned').eq('id', uid).execute()
+                uid = str(discord_id).split('-', 1)[1].strip()
+                if uid.isdigit():
+                    resp = db.table('users').select('role, is_banned').eq('id', uid).execute()
+                else:
+                    resp = db.table('users').select('role, is_banned').eq('email', uid.lower()).execute()
             else:
                 resp = db.table('users').select('role, is_banned').eq('discord_id', str(discord_id)).execute()
             if resp and resp.data:

@@ -434,7 +434,8 @@ def _merge_users_with_backup(res_rows, where_clauses=None, args=None, order_by=N
         if aid: backup_by_aid[aid] = bu
 
     merged_dict = {}
-    for r in (res_rows or []):
+    cloud_keys = set()
+    for idx, r in enumerate(res_rows or []):
         if _is_tombstoned_user(r, tombstones):
             continue
         did = str(r.get("discord_id") or "").strip()
@@ -477,22 +478,25 @@ def _merge_users_with_backup(res_rows, where_clauses=None, args=None, order_by=N
                     web_ids = [a for a in used_ids if a >= 2000]
                     u_copy["app_id"] = (max(web_ids) + 1) if web_ids else 2001
 
-        k = did or (f"id_{uid}" if uid else f"aid_{aid}")
+        k = did or (f"id_{uid}" if uid else (f"aid_{aid}" if aid else f"_cloud_{idx}"))
         merged_dict[k] = u_copy
+        cloud_keys.add(k)
 
-    for bu in backup_users:
-        if _is_tombstoned_user(bu, tombstones):
-            continue
-        did = str(bu.get("discord_id") or "").strip()
-        uid = str(bu.get("id") or "").strip()
-        aid = str(bu.get("app_id") or "").strip()
-        k = did or (f"id_{uid}" if uid else f"aid_{aid}")
-        if k not in merged_dict:
-            merged_dict[k] = dict(bu)
+    has_partial_cloud = any(ck.startswith("_cloud_") for ck in cloud_keys)
+    if not has_partial_cloud:
+        for bu in backup_users:
+            if _is_tombstoned_user(bu, tombstones):
+                continue
+            did = str(bu.get("discord_id") or "").strip()
+            uid = str(bu.get("id") or "").strip()
+            aid = str(bu.get("app_id") or "").strip()
+            k = did or (f"id_{uid}" if uid else f"aid_{aid}")
+            if k not in merged_dict:
+                merged_dict[k] = dict(bu)
 
     result = []
-    for u in merged_dict.values():
-        if _match_user_dict(u, where_clauses or [], args or []):
+    for k, u in merged_dict.items():
+        if k in cloud_keys or _match_user_dict(u, where_clauses or [], args or []):
             result.append(u)
 
     if order_by:
