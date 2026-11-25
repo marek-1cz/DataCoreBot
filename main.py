@@ -9367,6 +9367,249 @@ def compute_auto_route_name(stops_list, current_name=None, route_number=None):
             return cur
     return current_name or (f"Linka {route_number}" if route_number else "")
 
+def _require_admin_web_or_api(min_level: str = 'admin'):
+    """Ověří admin práva buď přes web dashboard session, nebo přes Launcher/API token."""
+    if session.get('logged_in'):
+        if session.get('offline_mode'):
+            lvl = str(session.get('dashboard_level') or 'superadmin').lower()
+            if DASH_LEVEL_ORDER.get(lvl, 0) >= DASH_LEVEL_ORDER.get(min_level, 2):
+                return True, None
+        else:
+            lvl = _get_dash_level(str(session.get('discord_id') or ''))
+            if DASH_LEVEL_ORDER.get(lvl, 0) >= DASH_LEVEL_ORDER.get(min_level, 2):
+                return True, None
+    auth_u = get_current_authenticated_user()
+    if auth_u and _is_user_admin(auth_u, min_level):
+        return True, None
+    if not session.get('logged_in') and not auth_u:
+        return False, _cors_jsonify({"success": False, "error": "Neautorizováno (vyžadováno přihlášení správce)."}), 401
+    return False, _cors_jsonify({"success": False, "error": "Přístup pouze pro administrátory."}), 403
+
+
+def _enrich_community_route_row(r: dict) -> dict:
+    item = dict(r)
+    stops_raw = item.get('stops_json') or '[]'
+    try:
+        stops = json.loads(stops_raw) if isinstance(stops_raw, str) else (stops_raw or [])
+    except Exception:
+        stops = []
+    normalized_stops = []
+    for s in stops:
+        if isinstance(s, list) and len(s) > 0:
+            s_name = str(s[0] or '').strip()
+            s_zone = str(s[1] or '1').strip() if len(s) > 1 else '1'
+            s_req = bool(s[2]) if len(s) > 2 else False
+            s = {'name': s_name, 'n': s_name, 'zone': s_zone, 'z': s_zone, 'na_znameni': s_req, 'req': s_req}
+        elif isinstance(s, dict):
+            s = dict(s)
+            s_name = s.get('name') or s.get('n') or s.get('orig') or ''
+            s['name'] = s_name
+            s['n'] = s_name
+            if not s.get('zone') and s.get('z'):
+                s['zone'] = s['z']
+            if not s.get('na_znameni') and s.get('req'):
+                s['na_znameni'] = s['req']
+            if not s.get('audio_url'):
+                if s.get('snd') and isinstance(s.get('snd'), dict):
+                    s['audio_url'] = s['snd'].get('url') or ''
+        normalized_stops.append(s)
+    item['stops'] = normalized_stops
+    item['route_name'] = compute_auto_route_name(normalized_stops, item.get('route_name'), item.get('route_number'))
+    sound_count = sum(
+        1 for s in normalized_stops
+        if isinstance(s, dict) and bool(s.get('audio_url') or s.get('audio_file') or (s.get('snd') and isinstance(s.get('snd'), dict) and (s.get('snd').get('url') or s.get('snd').get('name'))))
+    )
+    item['sound_count'] = sound_count
+    item['has_sound'] = sound_count > 0
+    raw_status = str(item.get('status') or 'pending').lower()
+    if item.get('is_deleted_by_author') or raw_status in ('rejected', 'deleted_by_user'):
+        item['status_bucket'] = 'archived'
+    elif raw_status == 'approved':
+        item['status_bucket'] = 'approved'
+    else:
+        item['status_bucket'] = 'pending'
+    return item
+
+
+def _extract_community_object_key(raw_ref: str) -> str:
+    s = str(raw_ref or '').strip().replace('\\', '/')
+    if not s:
+        return ''
+    for marker in ('/api/community-audio/', '/static/community_audio/'):
+        if marker in s:
+            s = s.split(marker, 1)[1]
+            break
+    if '?' in s:
+        s = s.split('?', 1)[0]
+    return s.lstrip('/')
+
+
+def _fetch_community_audio_bytes(d1, key_or_url: str, pkg_zip_bytes: bytes | None = None) -> bytes | None:
+    import base64
+    raw = str(key_or_url or '').strip()
+    obj_key = _extract_community_object_key(raw)
+    if obj_key:
+        local_dir = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "community_audio"))
+        local_path = os.path.realpath(os.path.join(local_dir, obj_key))
+        if (local_path == local_dir or local_path.startswith(local_dir + os.sep)) and os.path.isfile(local_path):
+            try:
+                with open(local_path, 'rb') as f:
+                    return f.read()
+            except Exception:
+                pass
+        if d1 and '://' not in obj_key:
+            try:
+                res = d1.execute("SELECT data_b64 FROM community_audio WHERE key = ? LIMIT 1", [obj_key])
+                if res and res[0].get('data_b64'):
+                    return base64.b64decode(res[0]['data_b64'])
+            except Exception:
+                pass
+    if pkg_zip_bytes and raw:
+        target_base = os.path.basename(_extract_community_object_key(raw) or raw).lower()
+        if target_base:
+            try:
+                with zipfile.ZipFile(io.BytesIO(pkg_zip_bytes), 'r') as zf:
+                    for name in zf.namelist():
+                        if name.endswith('/'):
+                            continue
+                        if os.path.basename(name).lower() == target_base:
+                            return zf.read(name)
+            except Exception:
+                pass
+    if raw.startswith(('https://', 'http://')) and not any(h in raw.lower() for h in ('127.0.0.1', 'localhost', '0.0.0.0', '169.254.', 'datacorebot.koyeb.app/api/community-audio/')):
+        try:
+            req = urllib.request.Request(raw, headers={'User-Agent': 'DataCoreBot-AdminExport/1.0'})
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                return resp.read()
+        except Exception:
+            pass
+    return None
+
+
+def _slug_audio_stem(text: str, fallback: str = 'zastavka') -> str:
+    import unicodedata as _ud
+    norm = _ud.normalize('NFKD', str(text or '')).encode('ascii', 'ignore').decode('ascii').lower()
+    norm = re.sub(r'[^a-z0-9]+', '_', norm).strip('_')
+    return (norm[:40].strip('_')) or fallback
+
+
+def _build_official_route_export(d1, r: dict):
+    """Vytvoří <cislo>_auto.txt v oficiálním formátu (GTSF-DATA) a dict {filename: bytes} pro zvuky/zastavky/."""
+    item = _enrich_community_route_row(r)
+    raw_num = str(item.get('route_number') or 'custom').strip()
+    safe_num = re.sub(r'[^a-zA-Z0-9_-]', '', raw_num) or 'custom'
+    author_name = str(item.get('author_name') or 'Komunita').strip()
+
+    pkg_zip_bytes = None
+    pkg_url = str(item.get('audio_package_url') or '').strip()
+    if pkg_url:
+        pkg_zip_bytes = _fetch_community_audio_bytes(d1, pkg_url)
+
+    txt_lines = [
+        "GTSF-DATA",
+        f"MADE BY: {author_name}",
+        f"Linka: {raw_num}",
+        "",
+        "Zastávky:",
+    ]
+
+    audio_map = {}       # ref_key -> (audio_ref_in_txt, full_filename)
+    used_filenames = set()
+    audio_files = {}     # filename_in_zvuky_zastavky -> bytes
+
+    for idx, s in enumerate(item.get('stops') or []):
+        if not isinstance(s, dict):
+            continue
+        stop_name = str(s.get('name') or s.get('n') or f"Zastávka {idx + 1}").strip()
+        display_name = str(s.get('display') or s.get('disp') or '').strip()
+        if display_name == stop_name:
+            display_name = ''
+        zone = str(s.get('zone') or s.get('z') or '').strip()
+        time_val = str(s.get('time') or '').strip()
+        is_req = bool(s.get('na_znameni') or s.get('req'))
+        signs = "ZZ" if is_req else ""
+
+        snd_obj = s.get('snd') if isinstance(s.get('snd'), dict) else {}
+        aud_url = str(s.get('audio_url') or snd_obj.get('url') or '').strip()
+        aud_file = str(s.get('audio_file') or snd_obj.get('name') or '').strip()
+        lookup_ref = aud_url or aud_file
+
+        audio_ref_txt = ''
+        if lookup_ref:
+            if lookup_ref in audio_map:
+                audio_ref_txt = audio_map[lookup_ref][0]
+            else:
+                raw_bytes = _fetch_community_audio_bytes(d1, lookup_ref, pkg_zip_bytes=pkg_zip_bytes)
+                ext = os.path.splitext(aud_file or _extract_community_object_key(aud_url))[1].lower()
+                if ext not in ('.wav', '.mp3', '.ogg', '.m4a', '.aac', '.flac'):
+                    ext = '.wav'
+                stem_base = _slug_audio_stem(os.path.splitext(aud_file)[0] if aud_file else stop_name, f"stop_{idx + 1:02d}")
+                # Odstranit případný prefix čísla pořadí (např. "01_") pokud byl vygenerován při uploadu
+                stem_clean = re.sub(r'^\d{2}_', '', stem_base) or stem_base
+                candidate_stem = stem_clean
+                suffix = 2
+                while f"{candidate_stem}{ext}".lower() in used_filenames:
+                    candidate_stem = f"{stem_clean}_{suffix}"
+                    suffix += 1
+                full_filename = f"{candidate_stem}{ext}"
+                used_filenames.add(full_filename.lower())
+                audio_ref_txt = candidate_stem if ext in ('.wav', '.mp3', '.m4a') else full_filename
+                audio_map[lookup_ref] = (audio_ref_txt, full_filename)
+                if raw_bytes:
+                    audio_files[full_filename] = raw_bytes
+
+        if not audio_ref_txt:
+            audio_ref_txt = _slug_audio_stem(stop_name, f"stop_{idx + 1:02d}")
+
+        txt_lines.append(
+            f"{stop_name} = {audio_ref_txt} | Display: {display_name} | Tarifní zona: {zone} | Čas: {time_val} | Další znaky: {signs}".rstrip()
+        )
+
+    auto_txt = "\r\n".join(txt_lines) + "\r\n"
+    return safe_num, auto_txt, audio_files
+
+
+def _purge_community_route_row(d1, route_id: int) -> bool:
+    row = d1.execute("SELECT * FROM community_routes WHERE id = ?", [int(route_id)])
+    if not row:
+        return False
+    r = row[0]
+    keys_to_delete = []
+    audio_files_raw = r.get('audio_files_json') or '[]'
+    try:
+        files_list = json.loads(audio_files_raw) if isinstance(audio_files_raw, str) else (audio_files_raw or [])
+        for fkey in files_list:
+            if fkey:
+                keys_to_delete.append(str(fkey))
+    except Exception:
+        pass
+    if r.get('audio_package_url'):
+        pkg_extracted = _extract_community_object_key(r.get('audio_package_url'))
+        if pkg_extracted:
+            keys_to_delete.append(pkg_extracted)
+        pkg_key = str(r.get('audio_package_url')).split('/')[-1]
+        if pkg_key:
+            keys_to_delete.append(f"community_routes/{pkg_key}")
+    local_dir = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "community_audio"))
+    for k in set(keys_to_delete):
+        try:
+            r2_storage.delete_file_from_storage(k)
+        except Exception:
+            pass
+        try:
+            d1.execute("DELETE FROM community_audio WHERE key = ?", [k])
+        except Exception:
+            pass
+        try:
+            lp = os.path.realpath(os.path.join(local_dir, str(k).lstrip('/')))
+            if (lp == local_dir or lp.startswith(local_dir + os.sep)) and os.path.isfile(lp):
+                os.remove(lp)
+        except Exception:
+            pass
+    d1.execute("DELETE FROM community_routes WHERE id = ?", [int(route_id)])
+    return True
+
+
 @app.route('/dashboard/community_routes', methods=['GET'], strict_slashes=False)
 @require_dash_level('admin')
 def dashboard_community_routes():
@@ -9378,38 +9621,7 @@ def dashboard_community_routes():
         raw_deleted = d1.execute("SELECT * FROM community_routes WHERE is_deleted_by_author = 1 OR status IN ('rejected', 'deleted_by_user') ORDER BY id DESC") or []
 
         def _enrich_routes(route_list):
-            enriched = []
-            for r in route_list:
-                item = dict(r)
-                stops_raw = item.get('stops_json') or '[]'
-                try:
-                    stops = json.loads(stops_raw) if isinstance(stops_raw, str) else (stops_raw or [])
-                except Exception:
-                    stops = []
-                normalized_stops = []
-                for s in stops:
-                    if isinstance(s, list) and len(s) > 0:
-                        s_name = str(s[0] or '').strip()
-                        s_zone = str(s[1] or '1').strip() if len(s) > 1 else '1'
-                        s_req = bool(s[2]) if len(s) > 2 else False
-                        s = {'name': s_name, 'n': s_name, 'zone': s_zone, 'z': s_zone, 'na_znameni': s_req, 'req': s_req}
-                    elif isinstance(s, dict):
-                        s_name = s.get('name') or s.get('n') or s.get('orig') or ''
-                        s['name'] = s_name
-                        s['n'] = s_name
-                        if not s.get('zone') and s.get('z'):
-                            s['zone'] = s['z']
-                        if not s.get('na_znameni') and s.get('req'):
-                            s['na_znameni'] = s['req']
-                        if not s.get('audio_url'):
-                            if s.get('snd') and isinstance(s.get('snd'), dict):
-                                s['audio_url'] = s['snd'].get('url') or ''
-                    normalized_stops.append(s)
-                item['stops'] = normalized_stops
-                item['route_name'] = compute_auto_route_name(normalized_stops, item.get('route_name'), item.get('route_number'))
-                has_sound = any(bool(s.get('audio_url') or (s.get('snd') and isinstance(s.get('snd'), dict) and s.get('snd').get('url'))) for s in normalized_stops if isinstance(s, dict))
-                item['has_sound'] = has_sound
-                enriched.append(item)
+            enriched = [_enrich_community_route_row(r) for r in route_list]
             enriched.sort(key=lambda x: (1 if (not x.get('has_sound') or 'bez zvuku' in (x.get('system_tag') or '').lower()) else 0, -int(x.get('id', 0))))
             return enriched
 
@@ -9443,7 +9655,7 @@ def dashboard_community_routes_approve():
             return redirect(url_for('dashboard_community_routes'))
         
         r = row[0]
-        d1.execute("UPDATE community_routes SET status = 'approved', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
+        d1.execute("UPDATE community_routes SET status = 'approved', is_deleted_by_author = 0, reject_reason = '', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
         
         # Odeslání DM autorovi
         author_id = r.get('author_id')
@@ -9506,27 +9718,83 @@ def dashboard_community_routes_purge():
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
-        row = d1.execute("SELECT * FROM community_routes WHERE id = ?", [int(route_id)])
-        if row:
-            r = row[0]
-            # Smazání audio souborů ze storage
-            audio_files_raw = r.get('audio_files_json') or '[]'
-            try:
-                files_to_delete = json.loads(audio_files_raw) if isinstance(audio_files_raw, str) else audio_files_raw
-                for fkey in files_to_delete:
-                    r2_storage.delete_file_from_storage(fkey)
-            except:
-                pass
-            if r.get('audio_package_url'):
-                pkg_key = r.get('audio_package_url').split('/')[-1]
-                r2_storage.delete_file_from_storage(f"community_routes/{pkg_key}")
-            
-            d1.execute("DELETE FROM community_routes WHERE id = ?", [int(route_id)])
+        if _purge_community_route_row(d1, int(route_id)):
             flash("Linka a veškeré audio nahrávky byly trvale smazány.", "success")
             send_log("🗑️ Komunitní linka trvale smazána", f"**Správce:** {get_current_admin_name()}\nLinka ID: {route_id}", color=0x64748b)
     except Exception as e:
         flash(f"Chyba při mazání linky: {e}", "error")
     return redirect(url_for('dashboard_community_routes'))
+
+
+@app.route('/api/admin/community-routes/all', methods=['GET', 'OPTIONS'], strict_slashes=False)
+def api_admin_community_routes_all():
+    if request.method == 'OPTIONS':
+        return _cors_jsonify({})
+    auth_res = _require_admin_web_or_api('admin')
+    if not auth_res[0]:
+        return auth_res[1], auth_res[2]
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        raw_all = d1.execute(
+            "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, system_tag, status, reject_reason, is_deleted_by_author, created_at, COALESCE(version, 'V1') as version, COALESCE(voice_type, 'synt') as voice_type, COALESCE(download_count, 0) as download_count FROM community_routes ORDER BY id DESC"
+        ) or []
+        routes = [_enrich_community_route_row(r) for r in raw_all]
+        return _cors_jsonify({"success": True, "routes": routes})
+    except Exception as e:
+        return _cors_jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/community-routes/<int:route_id>/export-official', methods=['GET', 'OPTIONS'], strict_slashes=False)
+def api_admin_community_route_export_official(route_id):
+    if request.method == 'OPTIONS':
+        return _cors_jsonify({})
+    auth_res = _require_admin_web_or_api('admin')
+    if not auth_res[0]:
+        return auth_res[1], auth_res[2]
+    fmt = str(request.args.get('format') or 'zip').strip().lower()
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        rows = d1.execute("SELECT * FROM community_routes WHERE id = ?", [int(route_id)]) or []
+        if not rows:
+            return _cors_jsonify({"success": False, "error": "Linka nenalezena."}), 404
+        safe_num, auto_txt, audio_files = _build_official_route_export(d1, rows[0])
+        if fmt == 'txt':
+            resp = Response(auto_txt.encode('utf-8'), mimetype='text/plain; charset=utf-8')
+            resp.headers['Content-Disposition'] = f'attachment; filename="{safe_num}_auto.txt"'
+            return resp
+        zbuf = io.BytesIO()
+        with zipfile.ZipFile(zbuf, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(f"linky/{safe_num}_auto.txt", auto_txt.encode('utf-8'))
+            for fname, fbytes in audio_files.items():
+                zf.writestr(f"zvuky/zastavky/{fname}", fbytes)
+        resp = Response(zbuf.getvalue(), mimetype='application/zip')
+        resp.headers['Content-Disposition'] = f'attachment; filename="linka_{safe_num}_oficialni_export.zip"'
+        return resp
+    except Exception as e:
+        return _cors_jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/community-routes/purge', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_admin_community_route_purge():
+    if request.method == 'OPTIONS':
+        return _cors_jsonify({})
+    auth_res = _require_admin_web_or_api('admin')
+    if not auth_res[0]:
+        return auth_res[1], auth_res[2]
+    data = request.get_json(silent=True) or request.form or {}
+    raw_id = str(data.get('route_id') or data.get('id') or '').replace('comm_', '').replace('user_', '').strip()
+    if not raw_id.isdigit():
+        return _cors_jsonify({"success": False, "error": "Chybí platné ID linky."}), 400
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        if not _purge_community_route_row(d1, int(raw_id)):
+            return _cors_jsonify({"success": False, "error": "Linka nenalezena."}), 404
+        return _cors_jsonify({"success": True, "message": "Linka a všechny audio soubory byly trvale smazány."})
+    except Exception as e:
+        return _cors_jsonify({"success": False, "error": str(e)}), 500
 
 # ── API ENDPOINTY PRO HRÁČE (OIS & LAUNCHER) ───────────────────────────────────
 
@@ -9871,7 +10139,7 @@ def api_community_routes_decision():
         route_num = r.get('route_number', '')
         route_name = r.get('route_name', '')
         if ok:
-            d1.execute("UPDATE community_routes SET status = 'approved', updated_at = datetime('now') WHERE id = ?", [real_id])
+            d1.execute("UPDATE community_routes SET status = 'approved', is_deleted_by_author = 0, reject_reason = '', updated_at = datetime('now') WHERE id = ?", [real_id])
             note_part = f"\n\nPoznámka od správce: {message}" if message else ""
             _notify_user_dm_safe(
                 author_id,
