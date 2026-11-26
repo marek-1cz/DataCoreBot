@@ -1799,11 +1799,9 @@ def get_cached_user_role(discord_id):
 
 def get_system_statuses():
     try:
-        db = get_db()
-        if db:
-            s_resp = db.table("settings").select("setting_value").eq("setting_key", "system_statuses").execute().data
-            if s_resp:
-                return json.loads(s_resp[0]['setting_value'])
+        raw = get_cached_setting("system_statuses", "{}", ttl=30)
+        if raw:
+            return json.loads(raw)
     except:
         pass
     return {}
@@ -2680,6 +2678,11 @@ def render_public(template_string, **kwargs):
         kwargs['statuses'] = get_system_statuses()
     return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html), **kwargs)
 
+_PENDING_COMMUNITY_CACHE = [0.0, 0]
+
+def invalidate_pending_community_cache():
+    _PENDING_COMMUNITY_CACHE[0] = 0.0
+
 def render_dashboard(template_string, **kwargs):
     html = DASHBOARD_LAYOUT.replace('{% block content %}{% endblock %}', template_string)
     if 'status_section' not in kwargs:
@@ -2687,13 +2690,20 @@ def render_dashboard(template_string, **kwargs):
     if 'statuses' not in kwargs:
         kwargs['statuses'] = get_system_statuses()
     if 'pending_community_count' not in kwargs:
-        try:
-            from cloudflare_d1 import get_d1_client
-            d1 = get_d1_client()
-            p_res = d1.execute("SELECT COUNT(*) as cnt FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0")
-            kwargs['pending_community_count'] = int(p_res[0].get('cnt', 0)) if p_res else 0
-        except Exception:
-            kwargs['pending_community_count'] = 0
+        now_t = time.time()
+        if now_t - _PENDING_COMMUNITY_CACHE[0] < 30:
+            kwargs['pending_community_count'] = _PENDING_COMMUNITY_CACHE[1]
+        else:
+            try:
+                from cloudflare_d1 import get_d1_client
+                d1 = get_d1_client()
+                p_res = d1.execute("SELECT COUNT(*) as cnt FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0")
+                cnt = int(p_res[0].get('cnt', 0)) if p_res else 0
+                _PENDING_COMMUNITY_CACHE[0] = now_t
+                _PENDING_COMMUNITY_CACHE[1] = cnt
+                kwargs['pending_community_count'] = cnt
+            except Exception:
+                kwargs['pending_community_count'] = _PENDING_COMMUNITY_CACHE[1]
     return render_template_string(BASE_HTML.replace('{% block layout %}{% endblock %}', html.replace('{{ deploy_time }}', DEPLOY_TIME)), **kwargs)
 
 # ─── Dashboard oprávnění ────────────────────────────────────────────────────
@@ -2702,36 +2712,54 @@ def render_dashboard(template_string, **kwargs):
 # Pokud sloupec neexistuje, fallback = 'admin' pro starý dashboard_access=True.
 
 DASH_LEVEL_ORDER = {'superadmin': 3, 'admin': 2, 'viewer': 1}
+_DASH_ADMIN_CACHE = {}
+
+def invalidate_dash_admin_cache(discord_id=None):
+    if discord_id:
+        _DASH_ADMIN_CACHE.pop(str(discord_id).strip(), None)
+    else:
+        _DASH_ADMIN_CACHE.clear()
+
+def _get_cached_dash_user(discord_id: str, ttl: int = 30):
+    did_str = str(discord_id or '').strip()
+    if not did_str:
+        return None
+    now_t = time.time()
+    cached = _DASH_ADMIN_CACHE.get(did_str)
+    if cached and (now_t - cached[0]) < ttl:
+        return cached[1]
+    try:
+        db = get_db()
+        if not db:
+            return None
+        cols = 'dashboard_access, dashboard_level, is_banned, is_deleted, nick, email, role'
+        if did_str.startswith('email-'):
+            uid = did_str.split('-', 1)[1].strip()
+            if uid.isdigit():
+                user = db.table('users').select(cols).eq('id', uid).execute().data
+            else:
+                user = db.table('users').select(cols).eq('email', uid.lower()).execute().data
+        else:
+            user = db.table('users').select(cols).eq('discord_id', did_str).execute().data
+        u = user[0] if user else None
+        _DASH_ADMIN_CACHE[did_str] = (now_t, u)
+        return u
+    except Exception:
+        return None
 
 def _get_dash_level(discord_id: str) -> str:
     """Vrátí dashboard_level uživatele nebo '' pokud nemá přístup."""
     from flask import session
     if session.get('offline_mode'):
         return session.get('dashboard_level', 'superadmin')
-    try:
-        db = get_db()
-        if not db or not discord_id:
-            return ''
-        did_str = str(discord_id).strip()
-        if did_str.startswith('email-'):
-            uid = did_str.split('-', 1)[1].strip()
-            if uid.isdigit():
-                user = db.table('users').select('dashboard_access, dashboard_level, is_banned, is_deleted').eq('id', uid).execute().data
-            else:
-                user = db.table('users').select('dashboard_access, dashboard_level, is_banned, is_deleted').eq('email', uid.lower()).execute().data
-        else:
-            user = db.table('users').select('dashboard_access, dashboard_level, is_banned, is_deleted').eq('discord_id', did_str).execute().data
-        if not user:
-            return ''
-        u = user[0]
-        if u.get('is_banned') or u.get('is_deleted'):
-            return ''
-        if not u.get('dashboard_access'):
-            return ''
-        # Fallback: pokud nemá nastaven dashboard_level, považujeme ho za 'admin'
-        return str(u.get('dashboard_level') or 'admin').lower()
-    except:
+    u = _get_cached_dash_user(discord_id)
+    if not u:
         return ''
+    if u.get('is_banned') or u.get('is_deleted'):
+        return ''
+    if not u.get('dashboard_access'):
+        return ''
+    return str(u.get('dashboard_level') or 'admin').lower()
 
 def require_dash_level(min_level: str = 'viewer'):
     """Dekorátor – vyžaduje minimální dashboard_level. Přesměruje nebo vrátí 403."""
@@ -2801,27 +2829,17 @@ def check_session_validity():
             if discord_id:
                 try:
                     did_str = str(discord_id).strip()
-                    role, is_banned = get_cached_user_role(did_str)
-                    db = get_db()
-                    if db:
-                        if did_str.startswith('email-'):
-                            uid = did_str.split('-', 1)[1].strip()
-                            if uid.isdigit():
-                                users_data = db.table("users").select("dashboard_access, is_deleted, nick, email, role, dashboard_level").eq("id", uid).execute().data
-                            else:
-                                users_data = db.table("users").select("dashboard_access, is_deleted, nick, email, role, dashboard_level").eq("email", uid.lower()).execute().data
-                        else:
-                            users_data = db.table("users").select("dashboard_access, is_deleted, nick, email, role, dashboard_level").eq("discord_id", did_str).execute().data
-                        if users_data:
-                            user = users_data[0]
-                            if not user.get("dashboard_access") or is_banned or user.get("is_deleted"):
-                                session.clear()
-                                flash('Váš přístup byl zablokován.', 'error')
-                                return redirect(url_for('dashboard_main'))
-                            if not session.get('discord_nick'):
-                                session['discord_nick'] = user.get('nick') or user.get('email') or did_str
-                                session['nick'] = user.get('nick')
-                                session['dashboard_level'] = user.get('dashboard_level') or 'admin'
+                    _, is_banned = get_cached_user_role(did_str)
+                    user = _get_cached_dash_user(did_str)
+                    if user:
+                        if not user.get("dashboard_access") or is_banned or user.get("is_banned") or user.get("is_deleted"):
+                            session.clear()
+                            flash('Váš přístup byl zablokován.', 'error')
+                            return redirect(url_for('dashboard_main'))
+                        if not session.get('discord_nick'):
+                            session['discord_nick'] = user.get('nick') or user.get('email') or did_str
+                            session['nick'] = user.get('nick')
+                            session['dashboard_level'] = user.get('dashboard_level') or 'admin'
                 except:
                     pass
 
@@ -7762,6 +7780,7 @@ def dashboard_main():
             users_data = query.execute().data or []
             users_data = [u for u in users_data if not _is_tombstoned_user(u)]
             now = get_prague_time().replace(tzinfo=None)
+            stale_online_ids = []
             for u in users_data:
                 if u.get("is_online"):
                     la_str = u.get("last_active")
@@ -7770,15 +7789,25 @@ def dashboard_main():
                             last_dt = datetime.strptime(la_str, "%d.%m.%Y %H:%M:%S")
                             if (now - last_dt).total_seconds() > 90:
                                 u["is_online"] = False
-                                db.table("users").update({"is_online": False}).eq("discord_id", u["discord_id"]).execute()
+                                if u.get("discord_id"):
+                                    stale_online_ids.append(u["discord_id"])
                         except: pass
+            if stale_online_ids:
+                def _bg_clear_stale(ids_to_clear):
+                    try:
+                        bg_db = get_db()
+                        if bg_db:
+                            for s_did in ids_to_clear:
+                                try: bg_db.table("users").update({"is_online": False}).eq("discord_id", s_did).execute()
+                                except: pass
+                    except: pass
+                Thread(target=_bg_clear_stale, args=(stale_online_ids,), daemon=True).start()
     except Exception as e:
         err_str = str(e)
         if "402" in err_str or "egress" in err_str:
             flash("Nepodařilo se načíst data z databáze (limit vyčerpán). Jste v nouzovém režimu.", "warning")
         else:
             flash(f"Chyba při načítání dat: {e}", "error")
-    gc.collect()
     return render_dashboard(HTML_DASHBOARD_MAIN, users=users_data, title="Přehled uživatelů", deploy_time=DEPLOY_TIME)
 
 @app.route('/debug_log')
@@ -9354,6 +9383,7 @@ def update_statuses():
             check = db.table("settings").select("*").eq("setting_key", "system_statuses").execute().data
             if check: db.table("settings").update({"setting_value": json.dumps(statuses)}).eq("setting_key", "system_statuses").execute()
             else: db.table("settings").insert({"setting_key": "system_statuses", "setting_value": json.dumps(statuses)}).execute()
+            _SETTINGS_CACHE.pop("system_statuses", None)
             flash('Statusy uloženy!', 'success')
             adm = get_current_admin_name()
             send_log("📡 Změna Systémových Statusů", f"**Uživatel:** {adm}\nByly upraveny statusy systému.", 0x38bdf8)
@@ -10052,6 +10082,7 @@ def dashboard_community_routes_approve():
             flash(f"Linka {route_num} byla schválena — existující verze {final_ver} byla aktualizována.", "success")
         else:
             flash(f"Linka {route_num} ({final_ver}) byla úspěšně schválena a publikována.", "success")
+        invalidate_pending_community_cache()
     except Exception as e:
         flash(f"Chyba při schvalování linky: {e}", "error")
     return redirect(url_for('dashboard_community_routes'))
@@ -10086,6 +10117,7 @@ def dashboard_community_routes_reject():
             0xef4444
         )
         send_log("⚠️ Komunitní linka zamítnuta", f"**Správce:** {get_current_admin_name()}\n**Linka:** {route_num} ({route_name})\n**Autor:** <@{author_id}>\n**Důvod:** {reject_reason}", color=0xef4444)
+        invalidate_pending_community_cache()
         flash(f"Linka {route_num} byla zamítnuta a autor byl informován přes Discord DM.", "info")
     except Exception as e:
         flash(f"Chyba při zamítání linky: {e}", "error")
