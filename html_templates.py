@@ -7557,6 +7557,11 @@ HTML_COMMUNITY_ROUTES = """
                 <span style="font-size:10px; font-weight:bold; padding:2px 6px; border-radius:4px; background:rgba(56, 189, 248, 0.2); color:#38bdf8;">{{ r.get('version') or 'V1' }}</span>
                 <b style="color:#fff; font-size:15px;">{{ r.get('route_name') }}</b>
                 <span style="font-size:11px; padding:2px 7px; border-radius:4px; background:rgba(56, 189, 248, 0.15); color:#38bdf8; font-weight:bold;"><i class="fas fa-tag"></i> {{ r.get('system_tag', 'IDPK') }}</span>
+                {% if r.get('downloads_enabled', 1) == 0 %}
+                  <span style="font-size:11px; padding:2px 8px; border-radius:4px; background:rgba(245, 158, 11, 0.2); color:#fbbf24; border:1px solid rgba(245, 158, 11, 0.45); font-weight:bold;"><i class="fas fa-pause-circle"></i> Stahování vypnuto</span>
+                {% else %}
+                  <span style="font-size:11px; padding:2px 8px; border-radius:4px; background:rgba(16, 185, 129, 0.16); color:#34d399; border:1px solid rgba(16, 185, 129, 0.35); font-weight:bold;"><i class="fas fa-download"></i> Stahování zapnuto</span>
+                {% endif %}
               </div>
               <div style="font-size:12px; color:#94a3b8; margin-top:4px;">
                 Autor: <b style="color:#cbd5e1;">{{ r.get('author_name', 'Hráč') }}</b> • {{ r.get('stops', [])|length }} zastávek ({{ r.get('sound_count', 0) }} se zvukem) • Stažení: <b>{{ r.get('download_count') or 0 }}×</b> • {{ r.get('created_at') }}
@@ -7569,12 +7574,18 @@ HTML_COMMUNITY_ROUTES = """
               <a href="/api/admin/community-routes/{{ r.get('id') }}/export-official?format=zip" class="btn" style="background:#0f766e; color:#fff; padding:6px 10px; font-size:11px; text-decoration:none;" title="Stáhnout ZIP (linky/{{ r.get('route_number') }}_auto.txt + zvuky/zastavky/)">
                 <i class="fas fa-file-archive"></i> Zvuky + .txt (ZIP)
               </a>
-              <form action="/dashboard/community_routes/reject" method="POST" style="margin:0; display:inline;">
+              <form action="/dashboard/community_routes/toggle-download" method="POST" style="margin:0; display:inline;">
                 <input type="hidden" name="route_id" value="{{ r.get('id') }}">
-                <input type="hidden" name="reject_reason" value="Pozastaveno administrátorem pro kontrolu">
-                <button type="submit" class="btn btn-warning" style="padding:6px 10px; font-size:11px;" title="Pozastavit / zrušit schválení" onclick="return confirm('Pozastavit tuto linku?')">
-                  <i class="fas fa-pause"></i> Pozastavit
-                </button>
+                <input type="hidden" name="downloads_enabled" value="{{ 0 if r.get('downloads_enabled', 1) == 1 else 1 }}">
+                {% if r.get('downloads_enabled', 1) == 1 %}
+                  <button type="submit" class="btn btn-warning" style="padding:6px 10px; font-size:11px;" title="Vypnout stahování pro nové hráče (bez zamítnutí linky)">
+                    <i class="fas fa-pause"></i> Vypnout stahování
+                  </button>
+                {% else %}
+                  <button type="submit" class="btn btn-success" style="padding:6px 10px; font-size:11px;" title="Znovu povolit stahování pro hráče">
+                    <i class="fas fa-play"></i> Zapnout stahování
+                  </button>
+                {% endif %}
               </form>
               <form action="/dashboard/community_routes/purge" method="POST" style="margin:0; display:inline;">
                 <input type="hidden" name="route_id" value="{{ r.get('id') }}">

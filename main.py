@@ -9395,6 +9395,29 @@ def _require_admin_web_or_api(min_level: str = 'admin'):
     return False, _cors_jsonify({"success": False, "error": "Přístup pouze pro administrátory."}), 403
 
 
+_COMMUNITY_ROUTE_COLS_READY = False
+
+def _ensure_community_route_columns(d1):
+    """Zajistí existenci dodatečných sloupců (downloads_enabled) v tabulce community_routes."""
+    global _COMMUNITY_ROUTE_COLS_READY
+    if _COMMUNITY_ROUTE_COLS_READY or not d1:
+        return
+    try:
+        cols = d1.execute("PRAGMA table_info(community_routes)") or []
+        col_names = {str(c.get('name') or '').strip().lower() for c in cols}
+        if 'downloads_enabled' not in col_names:
+            d1.execute("ALTER TABLE community_routes ADD COLUMN downloads_enabled INTEGER DEFAULT 1")
+        _COMMUNITY_ROUTE_COLS_READY = True
+    except Exception:
+        pass
+
+
+def _parse_downloads_enabled(val) -> int:
+    if val is None or val == '':
+        return 1
+    return 0 if str(val).strip().lower() in ('0', 'false', 'no', 'off') else 1
+
+
 def _enrich_community_route_row(r: dict) -> dict:
     item = dict(r)
     stops_raw = item.get('stops_json') or '[]'
@@ -9430,9 +9453,16 @@ def _enrich_community_route_row(r: dict) -> dict:
     )
     item['sound_count'] = sound_count
     item['has_sound'] = sound_count > 0
+    item['downloads_enabled'] = _parse_downloads_enabled(item.get('downloads_enabled', 1))
     raw_status = str(item.get('status') or 'pending').lower()
-    if item.get('is_deleted_by_author') or raw_status in ('rejected', 'deleted_by_user'):
-        item['status_bucket'] = 'archived'
+    is_author_del = bool(item.get('is_deleted_by_author')) or raw_status == 'deleted_by_user'
+    item['is_deleted_by_author'] = 1 if is_author_del else 0
+    if is_author_del:
+        item['status'] = 'deleted_by_user'
+        item['status_bucket'] = 'deleted_by_user'
+        item['reject_reason'] = ''
+    elif raw_status == 'rejected':
+        item['status_bucket'] = 'rejected'
     elif raw_status == 'approved':
         item['status_bucket'] = 'approved'
     else:
@@ -9625,6 +9655,7 @@ def dashboard_community_routes():
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
+        _ensure_community_route_columns(d1)
         raw_pending = d1.execute("SELECT * FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0 ORDER BY id DESC") or []
         raw_approved = d1.execute("SELECT * FROM community_routes WHERE status = 'approved' AND is_deleted_by_author = 0 ORDER BY id DESC") or []
         raw_deleted = d1.execute("SELECT * FROM community_routes WHERE is_deleted_by_author = 1 OR status IN ('rejected', 'deleted_by_user') ORDER BY id DESC") or []
@@ -9664,7 +9695,8 @@ def dashboard_community_routes_approve():
             return redirect(url_for('dashboard_community_routes'))
         
         r = row[0]
-        d1.execute("UPDATE community_routes SET status = 'approved', is_deleted_by_author = 0, reject_reason = '', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
+        _ensure_community_route_columns(d1)
+        d1.execute("UPDATE community_routes SET status = 'approved', is_deleted_by_author = 0, downloads_enabled = 1, reject_reason = '', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
         
         # Odeslání DM autorovi
         author_id = r.get('author_id')
@@ -9735,6 +9767,40 @@ def dashboard_community_routes_purge():
     return redirect(url_for('dashboard_community_routes'))
 
 
+@app.route('/dashboard/community_routes/toggle-download', methods=['POST'])
+@require_dash_level('admin')
+def dashboard_community_routes_toggle_download():
+    route_id = request.form.get('route_id')
+    if not route_id or not str(route_id).strip().isdigit():
+        flash("Chybí platné ID linky.", "error")
+        return redirect(url_for('dashboard_community_routes'))
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        _ensure_community_route_columns(d1)
+        row = d1.execute("SELECT id, route_number, route_name, COALESCE(downloads_enabled, 1) as downloads_enabled FROM community_routes WHERE id = ?", [int(route_id)]) or []
+        if not row:
+            flash("Linka nenalezena.", "error")
+            return redirect(url_for('dashboard_community_routes'))
+        r = row[0]
+        target_raw = request.form.get('downloads_enabled')
+        if target_raw is not None and str(target_raw).strip() != '':
+            new_val = _parse_downloads_enabled(target_raw)
+        else:
+            new_val = 0 if _parse_downloads_enabled(r.get('downloads_enabled', 1)) == 1 else 1
+        d1.execute("UPDATE community_routes SET downloads_enabled = ?, updated_at = datetime('now') WHERE id = ?", [new_val, int(route_id)])
+        state_txt = "zapnuto" if new_val == 1 else "vypnuto"
+        send_log(
+            f"{'▶️' if new_val == 1 else '⏸️'} Stahování komunitní linky {state_txt}",
+            f"**Správce:** {get_current_admin_name()}\n**Linka:** {r.get('route_number', '')} ({r.get('route_name', '')})",
+            color=0x10b981 if new_val == 1 else 0xf59e0b
+        )
+        flash(f"Stahování linky {r.get('route_number', '')} bylo {state_txt}.", "success" if new_val == 1 else "warning")
+    except Exception as e:
+        flash(f"Chyba při změně stahování linky: {e}", "error")
+    return redirect(url_for('dashboard_community_routes'))
+
+
 @app.route('/api/admin/community-routes/all', methods=['GET', 'OPTIONS'], strict_slashes=False)
 def api_admin_community_routes_all():
     if request.method == 'OPTIONS':
@@ -9745,11 +9811,50 @@ def api_admin_community_routes_all():
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
+        _ensure_community_route_columns(d1)
         raw_all = d1.execute(
-            "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, system_tag, status, reject_reason, is_deleted_by_author, created_at, COALESCE(version, 'V1') as version, COALESCE(voice_type, 'synt') as voice_type, COALESCE(download_count, 0) as download_count FROM community_routes ORDER BY id DESC"
+            "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, system_tag, status, reject_reason, is_deleted_by_author, created_at, updated_at, COALESCE(version, 'V1') as version, COALESCE(voice_type, 'synt') as voice_type, COALESCE(download_count, 0) as download_count, COALESCE(downloads_enabled, 1) as downloads_enabled FROM community_routes ORDER BY id DESC"
         ) or []
         routes = [_enrich_community_route_row(r) for r in raw_all]
         return _cors_jsonify({"success": True, "routes": routes})
+    except Exception as e:
+        return _cors_jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/community-routes/toggle-download', methods=['POST', 'OPTIONS'], strict_slashes=False)
+def api_admin_community_route_toggle_download():
+    if request.method == 'OPTIONS':
+        return _cors_jsonify({})
+    auth_res = _require_admin_web_or_api('admin')
+    if not auth_res[0]:
+        return auth_res[1], auth_res[2]
+    data = request.get_json(silent=True) or request.form or {}
+    raw_id = str(data.get('route_id') or data.get('id') or '').replace('comm_', '').replace('user_', '').strip()
+    if not raw_id.isdigit():
+        return _cors_jsonify({"success": False, "error": "Chybí platné ID linky."}), 400
+    rid = int(raw_id)
+    try:
+        from cloudflare_d1 import get_d1_client
+        d1 = get_d1_client()
+        _ensure_community_route_columns(d1)
+        rows = d1.execute("SELECT id, route_number, route_name, COALESCE(downloads_enabled, 1) as downloads_enabled FROM community_routes WHERE id = ?", [rid]) or []
+        if not rows:
+            return _cors_jsonify({"success": False, "error": "Linka nenalezena."}), 404
+        r = rows[0]
+        if 'downloads_enabled' in data and data.get('downloads_enabled') is not None:
+            new_val = _parse_downloads_enabled(data.get('downloads_enabled'))
+        else:
+            new_val = 0 if _parse_downloads_enabled(r.get('downloads_enabled', 1)) == 1 else 1
+        d1.execute("UPDATE community_routes SET downloads_enabled = ?, updated_at = datetime('now') WHERE id = ?", [new_val, rid])
+        state_txt = "zapnuto" if new_val == 1 else "vypnuto"
+        auth_u = get_current_authenticated_user()
+        adm_label = (auth_u.get('nick') if auth_u else None) or get_current_admin_name()
+        send_log(
+            f"{'▶️' if new_val == 1 else '⏸️'} Stahování komunitní linky {state_txt} (Launcher)",
+            f"**Správce:** {adm_label}\n**Linka:** {r.get('route_number', '')} ({r.get('route_name', '')})",
+            color=0x10b981 if new_val == 1 else 0xf59e0b
+        )
+        return _cors_jsonify({"success": True, "route_id": rid, "downloads_enabled": new_val})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
 
@@ -9831,10 +9936,11 @@ def api_community_routes_list():
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
+        _ensure_community_route_columns(d1)
         tag = request.args.get('tag', '').strip()
         search = request.args.get('search', '').strip()
 
-        sql = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag, status, is_deleted_by_author, COALESCE(version, 'V1') as version, COALESCE(voice_type, 'synt') as voice_type, COALESCE(download_count, 0) as download_count FROM community_routes WHERE (status = 'approved' OR is_deleted_by_author = 1)"
+        sql = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag, status, is_deleted_by_author, COALESCE(version, 'V1') as version, COALESCE(voice_type, 'synt') as voice_type, COALESCE(download_count, 0) as download_count, COALESCE(downloads_enabled, 1) as downloads_enabled FROM community_routes WHERE (status = 'approved' OR is_deleted_by_author = 1)"
         params = []
 
         if tag and tag.upper() not in ('ALL', 'VŠECHNY', 'VSECHNY', ''):
@@ -9853,7 +9959,7 @@ def api_community_routes_list():
             routes = []
         if not routes:
             try:
-                sql_fb = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag, status, is_deleted_by_author, COALESCE(version, 'V1') as version, COALESCE(download_count, 0) as download_count FROM community_routes WHERE (status = 'approved' OR is_deleted_by_author = 1) ORDER BY id DESC"
+                sql_fb = "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, created_at, system_tag, status, is_deleted_by_author, COALESCE(version, 'V1') as version, COALESCE(download_count, 0) as download_count, COALESCE(downloads_enabled, 1) as downloads_enabled FROM community_routes WHERE (status = 'approved' OR is_deleted_by_author = 1) ORDER BY id DESC"
                 routes = d1.execute(sql_fb) or []
             except Exception:
                 pass
@@ -9862,6 +9968,7 @@ def api_community_routes_list():
                 r['stops'] = json.loads(r.get('stops_json', '[]'))
             except:
                 r['stops'] = []
+            r['downloads_enabled'] = _parse_downloads_enabled(r.get('downloads_enabled', 1))
             if not r.get('system_tag'):
                 r['system_tag'] = 'IDPK'
             if not r.get('version'):
@@ -9910,9 +10017,10 @@ def api_community_routes_my():
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
+        _ensure_community_route_columns(d1)
         where_clause = " OR ".join(conds)
         routes = d1.execute(
-            f"SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, status, reject_reason, is_deleted_by_author, created_at, updated_at, system_tag, COALESCE(version, 'V1') as version, COALESCE(voice_type, 'synt') as voice_type, COALESCE(download_count, 0) as download_count FROM community_routes WHERE ({where_clause}) ORDER BY id DESC",
+            f"SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, status, reject_reason, is_deleted_by_author, created_at, updated_at, system_tag, COALESCE(version, 'V1') as version, COALESCE(voice_type, 'synt') as voice_type, COALESCE(download_count, 0) as download_count, COALESCE(downloads_enabled, 1) as downloads_enabled FROM community_routes WHERE ({where_clause}) ORDER BY id DESC",
             params
         ) or []
         for r in routes:
@@ -9920,6 +10028,9 @@ def api_community_routes_my():
                 r['system_tag'] = 'IDPK'
             if not r.get('version'):
                 r['version'] = 'V1'
+            r['downloads_enabled'] = _parse_downloads_enabled(r.get('downloads_enabled', 1))
+            if r.get('is_deleted_by_author') or str(r.get('status') or '').lower() == 'deleted_by_user':
+                r['reject_reason'] = ''
         return _cors_jsonify({"success": True, "routes": routes})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
@@ -9939,16 +10050,19 @@ def api_community_routes_download():
     try:
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
+        _ensure_community_route_columns(d1)
         clean_id_str = str(raw_id).replace('comm_', '').replace('user_', '')
         if not clean_id_str.isdigit():
             return _cors_jsonify({"success": False, "error": "Neplatné route_id"}), 400
         route_id = int(clean_id_str)
 
-        rows = d1.execute("SELECT id, author_id, author_name, route_number, COALESCE(download_count, 0) as download_count FROM community_routes WHERE id = ?", [route_id])
+        rows = d1.execute("SELECT id, author_id, author_name, route_number, status, is_deleted_by_author, COALESCE(download_count, 0) as download_count, COALESCE(downloads_enabled, 1) as downloads_enabled FROM community_routes WHERE id = ?", [route_id])
         if not rows:
             return _cors_jsonify({"success": False, "error": "Linka nenalezena"}), 404
 
         r = rows[0]
+        if _parse_downloads_enabled(r.get('downloads_enabled', 1)) == 0 or r.get('is_deleted_by_author') or str(r.get('status') or '').lower() != 'approved':
+            return _cors_jsonify({"success": False, "error": "Stahování této komunitní linky je momentálně vypnuto."}), 403
         cur_count = int(r.get('download_count') or 0)
         a_id = str(r.get('author_id') or '').strip().lower()
         a_name = str(r.get('author_name') or '').strip().lower()
@@ -10048,7 +10162,7 @@ def api_community_routes_delete():
                 if is_permanent_request:
                     d1.execute("DELETE FROM community_routes WHERE id = ?", [route_id])
                 else:
-                    d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [route_id])
+                    d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', reject_reason = '', updated_at = datetime('now') WHERE id = ?", [route_id])
                 deleted_count += 1
 
         if route_number and not route_id:
@@ -10066,7 +10180,7 @@ def api_community_routes_delete():
                     if is_permanent_request:
                         d1.execute("DELETE FROM community_routes WHERE id = ?", [r['id']])
                     else:
-                        d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', updated_at = datetime('now') WHERE id = ?", [r['id']])
+                        d1.execute("UPDATE community_routes SET is_deleted_by_author = 1, status = 'deleted_by_user', reject_reason = '', updated_at = datetime('now') WHERE id = ?", [r['id']])
                     deleted_count += 1
 
         if is_permanent_request:
@@ -10148,7 +10262,8 @@ def api_community_routes_decision():
         route_num = r.get('route_number', '')
         route_name = r.get('route_name', '')
         if ok:
-            d1.execute("UPDATE community_routes SET status = 'approved', is_deleted_by_author = 0, reject_reason = '', updated_at = datetime('now') WHERE id = ?", [real_id])
+            _ensure_community_route_columns(d1)
+            d1.execute("UPDATE community_routes SET status = 'approved', is_deleted_by_author = 0, downloads_enabled = 1, reject_reason = '', updated_at = datetime('now') WHERE id = ?", [real_id])
             note_part = f"\n\nPoznámka od správce: {message}" if message else ""
             _notify_user_dm_safe(
                 author_id,
