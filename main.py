@@ -453,6 +453,56 @@ def _verify_email_magic_sig(email_str: str, token: str, sig: str) -> bool:
         return False
     return _hmac.compare_digest(_make_email_magic_sig(email_str, token), s)
 
+def _launcher_token_salt(u: dict) -> str:
+    base = f"{str(u.get('discord_id') or '').strip()}|{str(u.get('email') or '').strip().lower()}"
+    return _hashlib.sha256(base.encode("utf-8")).hexdigest()[:12]
+
+def _make_launcher_session_token(u: dict, ttl_days: int = 30) -> str:
+    uid = str(u.get("id") or "").strip()
+    if not uid.isdigit():
+        return _secrets.token_hex(32)
+    exp_ts = int(time.time()) + (ttl_days * 86400)
+    salt = _launcher_token_salt(u)
+    msg = f"lt1:{uid}:{exp_ts}:{salt}".encode("utf-8")
+    sig = _hmac.new(str(app.secret_key).encode("utf-8"), msg, _hashlib.sha256).hexdigest()[:32]
+    return f"lt1.{uid}.{exp_ts}.{sig}"
+
+def _verify_launcher_session_token(token: str, db=None):
+    raw = str(token or "").strip()
+    if not raw.startswith("lt1."):
+        return None
+    parts = raw.split(".")
+    if len(parts) != 4:
+        return None
+    _, uid_str, exp_str, sig = parts
+    if not uid_str.isdigit() or not exp_str.isdigit() or len(sig) != 32:
+        return None
+    if int(time.time()) > int(exp_str):
+        return None
+    if db is None:
+        db = get_db()
+    u = None
+    if db:
+        try:
+            res = db.table("users").select("*").eq("id", int(uid_str)).execute().data
+            if res:
+                u = res[0]
+        except Exception:
+            pass
+    if not u:
+        for bu in _get_fallback_users():
+            if str(bu.get("id") or "") == uid_str:
+                u = bu
+                break
+    if not u or u.get("is_banned") or u.get("is_deleted"):
+        return None
+    salt = _launcher_token_salt(u)
+    msg = f"lt1:{uid_str}:{exp_str}:{salt}".encode("utf-8")
+    expected_sig = _hmac.new(str(app.secret_key).encode("utf-8"), msg, _hashlib.sha256).hexdigest()[:32]
+    if not _hmac.compare_digest(expected_sig, sig):
+        return None
+    return u
+
 def _user_has_dash_access(u: dict) -> bool:
     if not u or u.get("is_banned") or u.get("is_deleted"):
         return False
@@ -462,15 +512,28 @@ def _user_has_dash_access(u: dict) -> bool:
     lvl = str(u.get("dashboard_level") or "admin").strip().lower()
     return bool(u.get("dashboard_access")) and lvl not in ("none", "")
 
-def _mint_session_for_user(db, u: dict) -> str:
-    perm_token = _secrets.token_hex(32)
-    if db and u:
+def _mint_session_for_user(db, u: dict, prefer_signed: bool = False) -> str:
+    writes_blocked = False
+    try:
+        from turso_db import is_turso_write_blocked
+        writes_blocked = is_turso_write_blocked()
+    except Exception:
+        pass
+    if prefer_signed or (writes_blocked and u and str(u.get("id") or "").isdigit()):
+        perm_token = _make_launcher_session_token(u)
+    else:
+        perm_token = _secrets.token_hex(32)
+    db_saved = False
+    if db and u and not perm_token.startswith("lt1."):
         try:
             from session_manager import add_user_session
-            add_user_session(db, u, perm_token, request)
+            res_s = add_user_session(db, u, perm_token, request)
             _invalidate_session_cache(user_id=u.get("id"))
+            db_saved = bool(res_s)
         except Exception:
             pass
+    if not db_saved and not perm_token.startswith("lt1.") and u and str(u.get("id") or "").isdigit():
+        perm_token = _make_launcher_session_token(u)
     if u:
         _SESSION_CACHE[perm_token] = (time.time(), u)
     return perm_token
@@ -5838,6 +5901,14 @@ def get_current_authenticated_user(db=None):
     cookie_token = _extract_request_session_token(allow_body=True)
     u = None
     if cookie_token:
+        if cookie_token.startswith("lt1."):
+            u = _verify_launcher_session_token(cookie_token, db)
+            if u:
+                _SESSION_CACHE[cookie_token] = (time.time(), u)
+                return u
+            _SESSION_CACHE.pop(cookie_token, None)
+            cookie_token = ''
+    if cookie_token:
         u = get_cached_session_user(cookie_token)
         if not u and db:
             try:
@@ -8466,53 +8537,99 @@ def api_launcher_email_verify():
         print(f"[api_launcher_email_verify error] {e}", flush=True)
     return jsonify({"status": "error", "message": "Neplatný kód nebo vypršela platnost."})
 
-@app.route('/api/launcher/user_info', methods=['POST'])
+@app.route('/api/launcher/user_info', methods=['POST', 'OPTIONS'], strict_slashes=False)
+@app.route('/api/launcher/session_refresh', methods=['POST', 'OPTIONS'], strict_slashes=False)
 def api_launcher_user_info():
-    discord_id = request.json.get('discord_id') if request.is_json else None
-    if not discord_id: return jsonify({"status": "error", "message": "Missing discord_id"}), 400
-    user_record = find_user_record(str(discord_id))
+    if request.method == 'OPTIONS':
+        return _cors_jsonify({})
+    payload = request.get_json(silent=True) or {}
+    discord_id = str(payload.get('discord_id') or '').strip()
+    req_hwid = str(payload.get('hwid') or '').strip()
+    db = get_db()
+
+    tok_user = get_current_authenticated_user(db)
+    user_record = None
+    if discord_id:
+        user_record = find_user_record(discord_id)
+    if not user_record and tok_user:
+        user_record = tok_user
     if not user_record:
-        return jsonify({
+        if not discord_id:
+            return _cors_jsonify({"status": "error", "message": "Missing discord_id"}), 400
+        return _cors_jsonify({
             "status": "error",
             "can_contact": True,
             "message": "Účet nebyl v databázi nalezen (byl smazán nebo ještě nebyl vytvořen). Pokud si myslíte, že jde o chybu, zašlete zprávu administrátorům na Discordu nebo přes formulář se svým Discord ID nebo přezdívkou."
         }), 403
     if user_record.get("is_banned"):
-        return jsonify({"status": "banned", "message": "Tento účet má BAN."}), 403
+        return _cors_jsonify({"status": "banned", "message": "Tento účet má BAN."}), 403
+    if user_record.get("is_deleted"):
+        return _cors_jsonify({"status": "error", "message": "Tento účet byl smazán."}), 403
+
     try:
-        role, is_banned = get_cached_user_role(discord_id)
-        avatar_url = ""
-        db = get_db()
-        if db:
+        lookup_id = discord_id or str(user_record.get("discord_id") or f"email-{user_record.get('id')}")
+        role, is_banned = get_cached_user_role(lookup_id)
+        if not role and user_record.get("role"):
+            role = user_record.get("role")
+        user_for_check = dict(user_record)
+        if role:
+            user_for_check["role"] = role
+        is_admin = _is_user_admin(user_for_check, 'admin')
+
+        avatar_url = user_record.get("avatar_url") or ""
+        if db and not avatar_url:
             try:
-                if str(discord_id).startswith('email-'):
-                    u_data = db.table("users").select("avatar_url").eq("id", str(discord_id).split('-')[1]).execute().data
+                if lookup_id.startswith('email-'):
+                    uid_part = lookup_id.split('-', 1)[1]
+                    u_data = db.table("users").select("avatar_url").eq("id", uid_part).execute().data
                 else:
-                    u_data = db.table("users").select("avatar_url").eq("discord_id", str(discord_id)).execute().data
+                    u_data = db.table("users").select("avatar_url").eq("discord_id", lookup_id).execute().data
                 if u_data:
                     avatar_url = u_data[0].get("avatar_url") or ""
             except Exception:
                 pass
 
-        if not avatar_url and str(discord_id).isdigit() and hasattr(bot, 'is_ready') and bot.is_ready():
+        if not avatar_url and lookup_id.isdigit() and hasattr(bot, 'is_ready') and bot.is_ready():
             try:
                 for guild in bot.guilds:
-                    m = guild.get_member(int(discord_id))
+                    m = guild.get_member(int(lookup_id))
                     if m and getattr(m, 'display_avatar', None):
                         avatar_url = str(m.display_avatar.url)
                         break
             except Exception:
                 pass
 
-        return jsonify({
+        # Ověřit vazbu na PC/relaci před automatickým vydáním čerstvého session tokenu
+        client_ip = _get_client_ip()
+        db_hwid = str(user_record.get("hwid") or "").strip()
+        db_ip = str(user_record.get("ip_address") or "").strip()
+        tok_same_user = bool(tok_user and str(tok_user.get("id") or "") == str(user_record.get("id") or ""))
+        hwid_clean = req_hwid if (len(req_hwid) >= 8 and not req_hwid.upper().startswith(("UNKNOWN", "FALLBACK", "NONE", "NULL"))) else ""
+        hwid_matches = bool(db_hwid and db_hwid not in ("None", "") and hwid_clean and db_hwid == hwid_clean)
+        ip_matches = bool(db_ip and client_ip and db_ip == client_ip)
+        can_issue_token = tok_same_user or hwid_matches or (ip_matches and (not db_hwid or db_hwid in ("None", "") or not is_admin))
+
+        issued_token = None
+        if can_issue_token:
+            issued_token = _make_launcher_session_token(user_for_check)
+            _SESSION_CACHE[issued_token] = (time.time(), user_for_check)
+
+        resp_payload = {
             "status": "success",
             "role": role,
+            "is_admin": bool(is_admin),
+            "can_manage_community": bool(is_admin),
+            "nick": user_record.get("nick") or "",
             "avatar_url": avatar_url,
-            "is_banned": is_banned
-        })
+            "is_banned": is_banned,
+            "session_valid": bool(issued_token)
+        }
+        if issued_token:
+            resp_payload["web_session_token"] = issued_token
+        return _cors_jsonify(resp_payload)
     except Exception as e:
         print(f"[api_launcher_user_info error] {e}", flush=True)
-        return jsonify({"status": "error", "message": str(e)})
+        return _cors_jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/launcher/versions')
 def api_launcher_versions():
