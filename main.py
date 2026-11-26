@@ -2628,7 +2628,15 @@ def _get_dash_level(discord_id: str) -> str:
         db = get_db()
         if not db or not discord_id:
             return ''
-        user = db.table('users').select('dashboard_access, dashboard_level, is_banned, is_deleted').eq('discord_id', discord_id).execute().data
+        did_str = str(discord_id).strip()
+        if did_str.startswith('email-'):
+            uid = did_str.split('-', 1)[1].strip()
+            if uid.isdigit():
+                user = db.table('users').select('dashboard_access, dashboard_level, is_banned, is_deleted').eq('id', uid).execute().data
+            else:
+                user = db.table('users').select('dashboard_access, dashboard_level, is_banned, is_deleted').eq('email', uid.lower()).execute().data
+        else:
+            user = db.table('users').select('dashboard_access, dashboard_level, is_banned, is_deleted').eq('discord_id', did_str).execute().data
         if not user:
             return ''
         u = user[0]

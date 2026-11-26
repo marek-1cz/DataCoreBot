@@ -7406,7 +7406,13 @@ STOP_OVERRIDES = {}           # norm_name -> {"lat":, "lng":, "name": puvodni zo
 CONFIDENCE_LOG = {}           # norm_name -> {"confidence":, "name":}
 
 cj     = http.cookiejar.CookieJar()
-opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+_pvvd_ssl_ctx = ssl.create_default_context()
+_pvvd_ssl_ctx.check_hostname = False
+_pvvd_ssl_ctx.verify_mode = ssl.CERT_NONE
+opener = urllib.request.build_opener(
+    urllib.request.HTTPCookieProcessor(cj),
+    urllib.request.HTTPSHandler(context=_pvvd_ssl_ctx),
+)
 
 
 def get_prague_time():
@@ -10751,6 +10757,7 @@ def background_map_worker():
     last_arriva_fetch_ts = 0.0
     TRIP_COUNTER = int(time.time())
     last_successful_pvvd = []
+    last_successful_pvvd_ts = 0.0
     _bg_flush_in_progress = False
     _notif_check_in_progress = False
 
@@ -10805,25 +10812,33 @@ def background_map_worker():
             ssl_ctx.check_hostname = False
             ssl_ctx.verify_mode = ssl.CERT_NONE
 
-            # PVVD: Master primární zdroj pravdy (timeout 4s pro bleskovou live odezvu, ošetření SSL)
+            # PVVD: Master primární zdroj pravdy (timeout 8s + session opener cookies)
             pvvd_err = None
+            pvvd_feed_degraded = False
+            pvvd_outage = False
             try:
                 req_inflow = urllib.request.Request(url_inflow, headers=inflow_headers)
-                with urllib.request.urlopen(req_inflow, context=ssl_ctx, timeout=4) as r:
+                with opener.open(req_inflow, timeout=8) as r:
                     data_inflow = json.loads(r.read().decode('utf-8'))
             except Exception as e_pvvd1:
                 pvvd_err = e_pvvd1
                 try:
                     req1p = urllib.request.Request(url_inflow, data=b"{}", headers=inflow_headers, method='POST')
-                    with urllib.request.urlopen(req1p, context=ssl_ctx, timeout=4) as r:
+                    with opener.open(req1p, timeout=8) as r:
                         data_inflow = json.loads(r.read().decode('utf-8'))
                     pvvd_err = None
                 except Exception as e_pvvd2:
                     pvvd_err = e_pvvd2
                     print(f"[PVVD-ERR] Chyba při stahování dat z PVVD: {e_pvvd2}", flush=True)
 
-            if data_inflow and isinstance(data_inflow, list):
+            is_glitch_drop = bool(
+                isinstance(data_inflow, list)
+                and len(last_successful_pvvd) >= 50
+                and len(data_inflow) < 10
+            )
+            if data_inflow and isinstance(data_inflow, list) and not is_glitch_drop:
                 last_successful_pvvd = list(data_inflow)
+                last_successful_pvvd_ts = time.time()
                 _pvvd_fetch_stats["ok"] += 1
                 _pvvd_fetch_stats["last_ok_cnt"] = len(data_inflow)
                 _pvvd_fetch_stats["last_ok_time"] = now.strftime('%H:%M:%S')
@@ -10836,12 +10851,26 @@ def background_map_worker():
                 _pvvd_fetch_stats["consecutive_fails"] += 1
                 if pvvd_err:
                     _pvvd_fetch_stats["last_fail_reason"] = str(pvvd_err)
+                elif is_glitch_drop:
+                    _pvvd_fetch_stats["last_fail_reason"] = f"Glitch drop ({len(data_inflow)} vs {len(last_successful_pvvd)})"
                 _pvvd_fetch_stats["history"].append(False)
                 if len(_pvvd_fetch_stats["history"]) > 30:
                     _pvvd_fetch_stats["history"].pop(0)
-                if last_successful_pvvd:
-                    print("[PVVD-WARN] Data PVVD jsou prázdná/výpadek, zachovávám data z předchozího tiku", flush=True)
+                if _pvvd_fetch_stats["consecutive_fails"] % 3 == 0:
+                    try:
+                        opener.open(urllib.request.Request("https://pvvd.idpk.cz/", headers={'User-Agent': 'Mozilla/5.0'}), timeout=6)
+                    except Exception:
+                        pass
+                age_prev_pvvd = (time.time() - last_successful_pvvd_ts) if last_successful_pvvd_ts else 9999.0
+                if last_successful_pvvd and age_prev_pvvd <= 45.0:
+                    pvvd_feed_degraded = True
+                    print(f"[PVVD-WARN] Data PVVD dočasně nedostupná ({int(age_prev_pvvd)}s), krátce držím poslední tik", flush=True)
                     data_inflow = list(last_successful_pvvd)
+                else:
+                    pvvd_outage = True
+                    data_inflow = []
+                    if _pvvd_fetch_stats["consecutive_fails"] in (1, 5) or _pvvd_fetch_stats["consecutive_fails"] % 20 == 0:
+                        print("[PVVD-OUTAGE] PVVD feed nedostupný >45s, aktivuji ochranu před falešným zmizením + záložní Arriva polohy", flush=True)
 
             # Arriva: Načteno asynchronně v daemon vlákně - NIKDY neblokuje PVVD GPS smyčku
             start_arriva_bg_worker()
@@ -11360,79 +11389,111 @@ def background_map_worker():
 
                 else:
                     # NENÍ V TELEMETRII PVVD ANI NA ARRIVA MAPĚ (bid not in current_inflow_ids and not fallback)
-                    c["is_arriva_fallback"] = False
-                    c["position_source"] = "pvvd"
-                    missing = c.get("pvvd_missing_ticks", 0) + 1
-                    c["pvvd_missing_ticks"] = missing
-                    if missing < 3 and c.get("status"):
-                        # Grace period: 1-2 tiky chrání před chvilkovým vynecháním PVVD
-                        display_line = normalize_line(c.get("line")) or c.get("line") or ""
-                    else:
-                        # Vůz prokazatelně zmizel z PVVD
-                        was_offline = bool(c.get("is_offline"))
-                        c["is_offline"] = True
-                        c["is_withdrawn"] = True
-                        p_since = v.get("parked_since") or int(time.time())
-                        exact_now = datetime.now()
-                        disappeared_str = datetime.fromtimestamp(p_since).strftime('%d.%m.%Y %H:%M:%S') if p_since else exact_now.strftime('%d.%m.%Y %H:%M:%S')
-
-                        if not c.get("offline_since_datetime"):
-                            c["offline_since_datetime"] = disappeared_str
-                        try:
-                            c["offline_since_time"] = datetime.fromtimestamp(p_since).strftime('%H:%M:%S')
-                        except Exception:
-                            if not c.get("offline_since_time"):
-                                c["offline_since_time"] = exact_now.strftime('%H:%M:%S')
-
-                        c["offline_lat"] = lat
-                        c["offline_lng"] = lng
-                        c["offline_stop"] = c.get("nearest_stop") or c.get("real_zastavka") or ""
-
-                        if in_depot_zone:
-                            c["color_class"] = "bg-yellow"
-                            c["status"] = f"Vozovna: {depot_zone_name}"
+                    if pvvd_feed_degraded or pvvd_outage:
+                        # Během výpadku PVVD NIKDY neoznačovat vozy jako zmizelé ani neuzavírat jízdy!
+                        norm_k_out = normalize_spz_key(spz or c.get("spz"))
+                        a_bus_out = arriva_by_spz.get(norm_k_out) if (pvvd_outage and norm_k_out) else None
+                        if a_bus_out and a_bus_out.get("lat") and a_bus_out.get("lng"):
+                            lat = float(a_bus_out["lat"])
+                            lng = float(a_bus_out["lng"])
+                            c["lat"] = lat
+                            c["lng"] = lng
+                            c["is_offline"] = False
                             c["is_withdrawn"] = False
+                            is_arriva_fallback = True
+                            c["is_arriva_fallback"] = True
+                            c["position_source"] = "arriva"
+                            c["last_seen"] = now
+                            c["last_seen_epoch"] = now.timestamp()
+                            a_d_raw = int(a_bus_out.get("delay") or 0)
+                            delay = 0 if abs(a_d_raw) >= 10000 else a_d_raw
+                            c["delay"] = delay
+                            if a_bus_out.get("bearing") is not None:
+                                c["bearing"] = a_bus_out["bearing"]
+                            a_ln = normalize_line(a_bus_out.get("line") or "") or a_bus_out.get("line") or ""
+                            display_line = a_ln or normalize_line(c.get("line")) or c.get("line") or ""
+                            c["line"] = display_line
+                            if a_bus_out.get("finalStopName"):
+                                dest = a_bus_out["finalStopName"]
+                                c["destination"] = dest
+                            c["color_class"] = "bg-red" if delay >= 10 else ("bg-darkblue" if delay <= -1 else "bg-green")
+                            c["status"] = f"Jízda (+{delay} min)" if delay > 0 else (f"Jízda (Náskok {abs(delay)} min)" if delay <= -1 else "Jízda (Načas)")
                         else:
-                            c["color_class"] = "bg-lastpos"
-                            c["status"] = "Zmizel z mapy PVVD"
+                            display_line = normalize_line(c.get("line")) or c.get("line") or ""
+                    else:
+                        c["is_arriva_fallback"] = False
+                        c["position_source"] = "pvvd"
+                        missing = c.get("pvvd_missing_ticks", 0) + 1
+                        c["pvvd_missing_ticks"] = missing
+                        if missing < 3 and c.get("status"):
+                            # Grace period: 1-2 tiky chrání před chvilkovým vynecháním PVVD
+                            display_line = normalize_line(c.get("line")) or c.get("line") or ""
+                        else:
+                            # Vůz prokazatelně zmizel z PVVD
+                            was_offline = bool(c.get("is_offline"))
+                            c["is_offline"] = True
                             c["is_withdrawn"] = True
+                            p_since = v.get("parked_since") or int(time.time())
+                            exact_now = datetime.now()
+                            disappeared_str = datetime.fromtimestamp(p_since).strftime('%d.%m.%Y %H:%M:%S') if p_since else exact_now.strftime('%d.%m.%Y %H:%M:%S')
 
-                        clean_last = normalize_line(last_valid_line) or last_valid_line
-                        display_line = clean_last or ""
+                            if not c.get("offline_since_datetime"):
+                                c["offline_since_datetime"] = disappeared_str
+                            try:
+                                c["offline_since_time"] = datetime.fromtimestamp(p_since).strftime('%H:%M:%S')
+                            except Exception:
+                                if not c.get("offline_since_time"):
+                                    c["offline_since_time"] = exact_now.strftime('%H:%M:%S')
 
-                        # Zaznamenat zmizení vozu z PVVD mapy do lokální persistentní DB
-                        if not was_offline and not in_depot_zone and not (str(bid).startswith('-') and not (spz or c.get('spz'))):
-                            try:
-                                from local_db import local_log_pvvd_disappearance
-                                local_log_pvvd_disappearance(
-                                    bus_id=str(bid),
-                                    spz=spz or c.get("spz") or "",
-                                    vehicle_type=sanitize_vehicle_type(c.get("vehicle_type")),
-                                    line=display_line,
-                                    destination=dest or c.get("destination") or "",
-                                    driver=c.get("admin_driver") or "",
-                                    lat=lat,
-                                    lng=lng,
-                                    nearest_stop=c.get("nearest_stop") or c.get("real_zastavka") or "",
-                                    disappeared_at=c["offline_since_datetime"],
-                                    status_reason="Zmizel z mapy PVVD"
-                                )
-                                print(f"[PVVD-DISAPPEAR] Vůz {bid} (SPZ: {spz or c.get('spz')}) zmizel z PVVD v {c['offline_since_datetime']}", flush=True)
-                            except Exception as e_dis:
-                                print(f"[PVVD-DISAPPEAR] Log err: {e_dis}", flush=True)
-                            # ── Uzavření bus_history záznamu při zmizení vozu z PVVD ──
-                            # Nastaví end_actual + finální GPS polohu, aby jízda nebyla otevřená navždy
-                            try:
-                                disappear_end_time = exact_now.strftime('%H:%M')
-                                close_trip_on_disappear(
-                                    db_client, c,
-                                    end_time_str=disappear_end_time,
-                                    end_lat=lat,
-                                    end_lng=lng,
-                                    reason=f"Ukončeno (Zmizel z PVVD, posl. zast.: {c.get('nearest_stop') or c.get('real_zastavka') or '?'})"
-                                )
-                            except Exception as e_close:
-                                print(f"[HISTORY-CLOSE] Chyba uzavírání při zmizení {bid}: {e_close}", flush=True)
+                            c["offline_lat"] = lat
+                            c["offline_lng"] = lng
+                            c["offline_stop"] = c.get("nearest_stop") or c.get("real_zastavka") or ""
+
+                            if in_depot_zone:
+                                c["color_class"] = "bg-yellow"
+                                c["status"] = f"Vozovna: {depot_zone_name}"
+                                c["is_withdrawn"] = False
+                            else:
+                                c["color_class"] = "bg-lastpos"
+                                c["status"] = "Zmizel z mapy PVVD"
+                                c["is_withdrawn"] = True
+
+                            clean_last = normalize_line(last_valid_line) or last_valid_line
+                            display_line = clean_last or ""
+
+                            # Zaznamenat zmizení vozu z PVVD mapy do lokální persistentní DB
+                            if not was_offline and not in_depot_zone and not (str(bid).startswith('-') and not (spz or c.get('spz'))):
+                                try:
+                                    from local_db import local_log_pvvd_disappearance
+                                    local_log_pvvd_disappearance(
+                                        bus_id=str(bid),
+                                        spz=spz or c.get("spz") or "",
+                                        vehicle_type=sanitize_vehicle_type(c.get("vehicle_type")),
+                                        line=display_line,
+                                        destination=dest or c.get("destination") or "",
+                                        driver=c.get("admin_driver") or "",
+                                        lat=lat,
+                                        lng=lng,
+                                        nearest_stop=c.get("nearest_stop") or c.get("real_zastavka") or "",
+                                        disappeared_at=c["offline_since_datetime"],
+                                        status_reason="Zmizel z mapy PVVD"
+                                    )
+                                    print(f"[PVVD-DISAPPEAR] Vůz {bid} (SPZ: {spz or c.get('spz')}) zmizel z PVVD v {c['offline_since_datetime']}", flush=True)
+                                except Exception as e_dis:
+                                    print(f"[PVVD-DISAPPEAR] Log err: {e_dis}", flush=True)
+                                # ── Uzavření bus_history záznamu při zmizení vozu z PVVD ──
+                                # Nastaví end_actual + finální GPS polohu, aby jízda nebyla otevřená navždy
+                                try:
+                                    disappear_end_time = exact_now.strftime('%H:%M')
+                                    close_trip_on_disappear(
+                                        db_client, c,
+                                        end_time_str=disappear_end_time,
+                                        end_lat=lat,
+                                        end_lng=lng,
+                                        reason=f"Ukončeno (Zmizel z PVVD, posl. zast.: {c.get('nearest_stop') or c.get('real_zastavka') or '?'})"
+                                    )
+                                except Exception as e_close:
+                                    print(f"[HISTORY-CLOSE] Chyba uzavírání při zmizení {bid}: {e_close}", flush=True)
 
 
                 # Kontrola pohybu pro BUG
@@ -11535,11 +11596,10 @@ def background_map_worker():
                 lat_c = float(c_cached.get("lat") or 0)
                 lng_c = float(c_cached.get("lng") or 0)
 
-                # ZÁCHRANA Z ARRIVA MAPY: Pouze pokud NENÍ aktivní striktní režim PVVD!
-                # V režimu PVVD nesmí Arriva polohy vytvářet falešné duplicitní vozy jedoucí za sebou.
+                # ZÁCHRANA Z ARRIVA MAPY: Při režimu Arriva Live nebo při výpadku PVVD >45s!
                 cached_spz = c_cached.get("spz")
                 norm_c_spz = normalize_spz_key(cached_spz)
-                if POSITION_SOURCE_MODE != "pvvd" and norm_c_spz and norm_c_spz in arriva_by_spz:
+                if (POSITION_SOURCE_MODE != "pvvd" or pvvd_outage) and norm_c_spz and norm_c_spz in arriva_by_spz:
                     a_bus = arriva_by_spz[norm_c_spz]
                     lat_c = float(a_bus.get("lat") or 0)
                     lng_c = float(a_bus.get("lng") or 0)
@@ -11692,7 +11752,7 @@ def background_map_worker():
 
                 clean_last = normalize_line(c_cached.get("line")) or c_cached.get("line") or ""
 
-                if not was_cached_offline and not in_depot_zone:
+                if not was_cached_offline and not in_depot_zone and not pvvd_feed_degraded and not pvvd_outage:
                     try:
                         from local_db import local_log_pvvd_disappearance
                         local_log_pvvd_disappearance(
@@ -13690,6 +13750,7 @@ def stranka_mapa():
 
 
 @mapa_bp.route('/mapa_admin')
+@mapa_bp.route('/admin_mapa')
 def stranka_mapa_admin():
     is_admin, _ = _check_admin_request('admin')
     if not is_admin:
@@ -15501,7 +15562,7 @@ def api_live_buses():
     now = get_prague_time()
     uptime = (now - WORKER_START_TIME).total_seconds() if WORKER_START_TIME else 9999
     
-    is_admin = bool(session.get('logged_in'))
+    is_admin, _ = _check_admin_request('admin')
     buses_to_send = []
     now_ts = now.timestamp()
     for b in LIVE_BUSES_DATA:
@@ -17423,14 +17484,21 @@ def _check_admin_request(min_level: str = 'admin'):
 
     # 3. Flask dashboard session (verify DB record & level — never accept unprivileged viewer/User)
     did = str(session.get('discord_id') or "").strip()
-    if did in ("714856037042585641", "1219661445763661854") and session.get('logged_in'):
+    if did in ("714856037042585641", "1219661445763661854", "719896287301992449") and session.get('logged_in'):
         return True, admin_name or "marekk_czz"
 
     if session.get('logged_in') and did and did not in ("", "None", "čeká na odpověd"):
         try:
             db = get_db_client()
             if db:
-                u_res = db.table("users").select("nick, username, email, role, dashboard_access, dashboard_level, is_banned, is_deleted").eq("discord_id", did).execute().data
+                if did.startswith("email-"):
+                    uid = did.split("-", 1)[1].strip()
+                    if uid.isdigit():
+                        u_res = db.table("users").select("nick, email, role, dashboard_access, dashboard_level, is_banned, is_deleted").eq("id", uid).execute().data
+                    else:
+                        u_res = db.table("users").select("nick, email, role, dashboard_access, dashboard_level, is_banned, is_deleted").eq("email", uid.lower()).execute().data
+                else:
+                    u_res = db.table("users").select("nick, email, role, dashboard_access, dashboard_level, is_banned, is_deleted").eq("discord_id", did).execute().data
                 if u_res:
                     u = u_res[0]
                     if not u.get("is_banned") and not u.get("is_deleted"):
@@ -17439,10 +17507,10 @@ def _check_admin_request(min_level: str = 'admin'):
                         lvl = str(u.get("dashboard_level") or ("admin" if u.get("dashboard_access") else "")).lower()
                         has_dash = bool(u.get("dashboard_access")) and (LEVEL_ORDER.get(lvl, 0) >= LEVEL_ORDER.get(min_level, 2))
                         if has_role or has_dash:
-                            resolved_name = u.get("nick") or u.get("username") or u.get("email") or admin_name or "Admin"
+                            resolved_name = u.get("nick") or u.get("email") or admin_name or "Admin"
                             return True, resolved_name
-        except Exception:
-            pass
+        except Exception as e_adm:
+            print(f"[_check_admin_request error] {e_adm}", flush=True)
 
     return False, None
 
