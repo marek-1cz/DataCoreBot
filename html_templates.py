@@ -7466,10 +7466,20 @@ HTML_COMMUNITY_ROUTES = """
                 <span style="font-size:11px; padding:2px 6px; border-radius:4px; background:#1e293b; color:#94a3b8;">
                   {% if r.get('route_type') == 'custom' %}<i class="fas fa-magic"></i> Fiktivní{% else %}<i class="fas fa-database"></i> Z GTFS dat{% endif %}
                 </span>
+                {% if r.get('is_version_update') and r.get('existing_approved') %}
+                  <span style="font-size:11px; padding:2px 8px; border-radius:4px; background:rgba(139,92,246,0.22); color:#ddd6fe; border:1px solid rgba(167,139,250,0.45); font-weight:bold;">
+                    <i class="fas fa-code-branch"></i> Upravená verze (existuje {{ r.get('existing_approved').get('version') }})
+                  </span>
+                {% endif %}
               </div>
               <div style="font-size:12px; color:var(--text-muted); margin-top:5px;">
                 Autor: <b style="color:#e2e8f0;">{{ r.get('author_name', 'Hráč') }}</b> (ID: <code>{{ r.get('author_id') }}</code>) • Odesláno: {{ r.get('created_at') }}
               </div>
+              {% if r.get('is_version_update') and r.get('existing_approved') %}
+                <div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:rgba(139,92,246,0.1); border:1px solid rgba(167,139,250,0.3); font-size:12px; color:#e9d5ff;">
+                  <b>Změny oproti {{ r.get('existing_approved').get('version') }}:</b> {{ r.get('existing_approved').get('diffs', []) | join(' • ') }}
+                </div>
+              {% endif %}
               {% if r.get('description') %}
                 <div style="font-size:12px; color:#cbd5e1; margin-top:5px; font-style:italic;">
                   "{{ r.get('description') }}"
@@ -7484,12 +7494,32 @@ HTML_COMMUNITY_ROUTES = """
               <a href="/api/admin/community-routes/{{ r.get('id') }}/export-official?format=zip" class="btn" style="background:#0f766e; color:#fff; padding:7px 11px; font-size:12px; text-decoration:none; display:inline-flex; align-items:center; gap:5px;" title="Stáhnout ZIP s linky/{{ r.get('route_number') }}_auto.txt a zvuky/zastavky/">
                 <i class="fas fa-file-archive"></i> Zvuky + .txt (ZIP)
               </a>
-              <form action="/dashboard/community_routes/approve" method="POST" style="margin:0;">
-                <input type="hidden" name="route_id" value="{{ r.get('id') }}">
-                <button type="submit" class="btn btn-success" style="padding:7px 14px; font-size:12px; font-weight:bold; display:flex; align-items:center; gap:6px;" onclick="return confirm('Opravdu schválit tuto linku pro všechny hráče?')">
-                  <i class="fas fa-check"></i> Schválit linku
-                </button>
-              </form>
+              {% if r.get('is_version_update') and r.get('existing_approved') %}
+                {% set ex = r.get('existing_approved') %}
+                <form action="/dashboard/community_routes/approve" method="POST" style="margin:0;">
+                  <input type="hidden" name="route_id" value="{{ r.get('id') }}">
+                  <input type="hidden" name="version_mode" value="new_version">
+                  <input type="hidden" name="target_version" value="{{ ex.get('next_version') }}">
+                  <button type="submit" class="btn btn-success" style="padding:7px 12px; font-size:12px; font-weight:bold; display:flex; align-items:center; gap:6px;" onclick="return confirm('Zachovat {{ ex.get('version') }} a vydat úpravu jako novou verzi {{ ex.get('next_version') }}?')">
+                    <i class="fas fa-code-branch"></i> Zachovat {{ ex.get('version') }} + vydat {{ ex.get('next_version') }}
+                  </button>
+                </form>
+                <form action="/dashboard/community_routes/approve" method="POST" style="margin:0;">
+                  <input type="hidden" name="route_id" value="{{ r.get('id') }}">
+                  <input type="hidden" name="version_mode" value="replace_existing">
+                  <button type="submit" class="btn" style="background:#7c3aed; color:#fff; padding:7px 12px; font-size:12px; font-weight:bold; display:flex; align-items:center; gap:6px;" onclick="return confirm('Nahradit stávající {{ ex.get('version') }} těmito úpravami (nevydávat {{ ex.get('next_version') }})?')">
+                    <i class="fas fa-sync-alt"></i> Nahradit {{ ex.get('version') }}
+                  </button>
+                </form>
+              {% else %}
+                <form action="/dashboard/community_routes/approve" method="POST" style="margin:0;">
+                  <input type="hidden" name="route_id" value="{{ r.get('id') }}">
+                  <input type="hidden" name="version_mode" value="new_version">
+                  <button type="submit" class="btn btn-success" style="padding:7px 14px; font-size:12px; font-weight:bold; display:flex; align-items:center; gap:6px;" onclick="return confirm('Opravdu schválit tuto linku pro všechny hráče?')">
+                    <i class="fas fa-check"></i> Schválit linku
+                  </button>
+                </form>
+              {% endif %}
               <button type="button" class="btn btn-danger" style="padding:7px 14px; font-size:12px; font-weight:bold; display:flex; align-items:center; gap:6px;" data-id="{{ r.get('id') }}" data-num="{{ r.get('route_number') }}" data-name="{{ r.get('route_name') }}" onclick="openRejectModal(this.dataset.id, this.dataset.num, this.dataset.name)">
                 <i class="fas fa-times"></i> Zamítnout
               </button>

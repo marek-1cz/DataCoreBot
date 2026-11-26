@@ -9587,6 +9587,178 @@ def _enrich_community_route_row(r: dict) -> dict:
     return item
 
 
+_VOICE_LABELS_CS = {
+    'synt': 'Syntéza (AI)',
+    'own': 'Vlastní hlas',
+    'real': 'Nahrávka z reality',
+    'none': 'Bez zvuku',
+}
+
+def _parse_ver_num(ver_str) -> int:
+    m = re.search(r'(\d+)', str(ver_str or '1'))
+    return int(m.group(1)) if m else 1
+
+
+def _find_matching_approved_routes(d1, pending_row: dict, approved_pool: list | None = None) -> list:
+    p_num = str(pending_row.get('route_number') or '').strip()
+    p_id = str(pending_row.get('id') or '')
+    p_aid = str(pending_row.get('author_id') or '').strip().lower()
+    p_aname = str(pending_row.get('author_name') or '').strip().lower()
+    if not p_num:
+        return []
+    if approved_pool is None:
+        raw_app = d1.execute(
+            "SELECT * FROM community_routes WHERE route_number = ? AND status = 'approved' AND is_deleted_by_author = 0 ORDER BY id DESC",
+            [p_num]
+        ) or []
+        approved_pool = [_enrich_community_route_row(x) for x in raw_app]
+    same_num = [
+        a for a in approved_pool
+        if str(a.get('route_number') or '').strip() == p_num
+        and str(a.get('id') or '') != p_id
+        and str(a.get('status') or '').lower() == 'approved'
+        and not a.get('is_deleted_by_author')
+    ]
+    same_author = [
+        a for a in same_num
+        if (p_aid and str(a.get('author_id') or '').strip().lower() == p_aid)
+        or (p_aname and str(a.get('author_name') or '').strip().lower() == p_aname)
+    ]
+    matches = same_author or same_num
+    matches.sort(key=lambda x: (_parse_ver_num(x.get('version')), int(x.get('id') or 0)), reverse=True)
+    return matches
+
+
+def _attach_existing_approved_info(d1, enriched_rows: list, approved_pool: list | None = None) -> list:
+    if approved_pool is None:
+        app_in_list = [r for r in enriched_rows if str(r.get('status') or '').lower() == 'approved' and not r.get('is_deleted_by_author')]
+        if app_in_list:
+            approved_pool = app_in_list
+    for item in enriched_rows:
+        if str(item.get('status') or '').lower() != 'pending' or item.get('is_deleted_by_author'):
+            continue
+        matches = _find_matching_approved_routes(d1, item, approved_pool=approved_pool)
+        if not matches:
+            continue
+        latest = matches[0]
+        max_ver = max(_parse_ver_num(m.get('version')) for m in matches)
+        ex_voice = str(latest.get('voice_type') or 'synt').strip().lower()
+        new_voice = str(item.get('voice_type') or 'synt').strip().lower()
+        ex_stops = len(latest.get('stops') or [])
+        new_stops = len(item.get('stops') or [])
+        ex_snd = int(latest.get('sound_count') or 0)
+        new_snd = int(item.get('sound_count') or 0)
+        ex_name = str(latest.get('route_name') or '').strip()
+        new_name = str(item.get('route_name') or '').strip()
+
+        diffs = []
+        if ex_voice != new_voice:
+            diffs.append(f"Hlas: {_VOICE_LABELS_CS.get(ex_voice, ex_voice)} → {_VOICE_LABELS_CS.get(new_voice, new_voice)}")
+        if ex_name and new_name and ex_name != new_name:
+            diffs.append(f"Název: {ex_name} → {new_name}")
+        if ex_stops != new_stops:
+            diffs.append(f"Zastávky: {ex_stops} → {new_stops}")
+        if ex_snd != new_snd:
+            diffs.append(f"Hlášení: {ex_snd} → {new_snd}")
+        if not diffs:
+            diffs.append("Upravené soubory / text / hlášení linky")
+
+        ex_ver_str = str(latest.get('version') or 'V1').upper()
+        cur_p_ver = str(item.get('version') or 'V1').upper()
+        next_ver = cur_p_ver if _parse_ver_num(cur_p_ver) > max_ver else f"V{max_ver + 1}"
+
+        item['is_version_update'] = True
+        item['existing_approved'] = {
+            "id": latest.get("id"),
+            "version": ex_ver_str,
+            "route_name": ex_name,
+            "voice_type": ex_voice,
+            "voice_label": _VOICE_LABELS_CS.get(ex_voice, ex_voice),
+            "system_tag": latest.get("system_tag") or "IDPK",
+            "stops_count": ex_stops,
+            "sound_count": ex_snd,
+            "download_count": int(latest.get("download_count") or 0),
+            "next_version": next_ver,
+            "diffs": diffs,
+        }
+    return enriched_rows
+
+
+def _approve_community_route_with_mode(d1, pending_row: dict, version_mode: str = 'new_version', target_version: str = '', admin_note: str = '', via_label: str = ''):
+    """Schválí čekající komunitní linku buď jako novou verzi (zachová V1), nebo nahradí existující verzi."""
+    _ensure_community_route_columns(d1)
+    real_id = int(pending_row['id'])
+    route_num = pending_row.get('route_number', '')
+    route_name = pending_row.get('route_name', '')
+    author_id = pending_row.get('author_id')
+    mode = str(version_mode or 'new_version').strip().lower()
+    enriched_p = _enrich_community_route_row(pending_row)
+    matches = _find_matching_approved_routes(d1, enriched_p)
+
+    if mode == 'replace_existing' and matches:
+        target = matches[0]
+        target_id = int(target['id'])
+        kept_ver = str(target.get('version') or 'V1').upper()
+        d1.execute(
+            """UPDATE community_routes SET
+                route_name = ?, route_type = ?, description = ?,
+                stops_json = ?, audio_package_url = ?, audio_files_json = ?,
+                system_tag = ?, voice_type = ?,
+                status = 'approved', is_deleted_by_author = 0, downloads_enabled = 1,
+                reject_reason = '', updated_at = datetime('now')
+               WHERE id = ?""",
+            [
+                pending_row.get('route_name') or target.get('route_name'),
+                pending_row.get('route_type') or target.get('route_type'),
+                pending_row.get('description') if pending_row.get('description') is not None else target.get('description'),
+                pending_row.get('stops_json') or target.get('stops_json'),
+                pending_row.get('audio_package_url') or target.get('audio_package_url'),
+                pending_row.get('audio_files_json') or target.get('audio_files_json'),
+                pending_row.get('system_tag') or target.get('system_tag'),
+                pending_row.get('voice_type') or target.get('voice_type'),
+                target_id
+            ]
+        )
+        d1.execute("DELETE FROM community_routes WHERE id = ?", [real_id])
+        note_part = f"\n\nPoznámka od správce: {admin_note}" if admin_note else ""
+        _notify_user_dm_safe(
+            author_id,
+            "🔄 Tvoje úprava komunitní linky byla schválena!",
+            f"Úprava linky **{route_num} ({route_name})** byla schválena a aktualizovala existující verzi **{kept_ver}** v OIS aplikaci.{note_part}",
+            0x10b981
+        )
+        send_log(
+            f"🔄 Komunitní linka aktualizována ({kept_ver}){via_label}",
+            f"**Linka:** {route_num} ({route_name}) · nahrazena stávající verze `{kept_ver}`\n**Autor:** <@{author_id}>",
+            color=0x10b981
+        )
+        return kept_ver, True
+
+    max_ver = max((_parse_ver_num(m.get('version')) for m in matches), default=0)
+    req_ver = str(target_version or pending_row.get('version') or 'V1').strip().upper()
+    if matches:
+        if _parse_ver_num(req_ver) <= max_ver:
+            req_ver = f"V{max_ver + 1}"
+    d1.execute(
+        "UPDATE community_routes SET status = 'approved', is_deleted_by_author = 0, downloads_enabled = 1, reject_reason = '', version = ?, updated_at = datetime('now') WHERE id = ?",
+        [req_ver, real_id]
+    )
+    note_part = f"\n\nPoznámka od správce: {admin_note}" if admin_note else ""
+    extra_ver_txt = f" jako nová verze **{req_ver}** (původní verze zůstala zachována)" if matches else ""
+    _notify_user_dm_safe(
+        author_id,
+        "🎉 Tvoje komunitní linka byla schválena!",
+        f"Tvá linka **{route_num} ({route_name})** úspěšně prošla kontrolou a byla vydána{extra_ver_txt}!{note_part}\n\nDěkujeme za obohacení herní komunity OIS IDPK.",
+        0x10b981
+    )
+    send_log(
+        f"✅ Komunitní linka schválena ({req_ver}){via_label}",
+        f"**Linka:** {route_num} ({route_name}) · **Verze:** `{req_ver}`\n**Autor:** <@{author_id}>",
+        color=0x10b981
+    )
+    return req_ver, False
+
+
 def _extract_community_object_key(raw_ref: str) -> str:
     s = str(raw_ref or '').strip().replace('\\', '/')
     if not s:
@@ -9782,7 +9954,7 @@ def dashboard_community_routes():
             enriched.sort(key=lambda x: (1 if (not x.get('has_sound') or 'bez zvuku' in (x.get('system_tag') or '').lower()) else 0, -int(x.get('id', 0))))
             return enriched
 
-        pending_routes = _enrich_routes(raw_pending)
+        pending_routes = _attach_existing_approved_info(d1, _enrich_routes(raw_pending), approved_pool=_enrich_routes(raw_approved))
         approved_routes = _enrich_routes(raw_approved)
         deleted_routes = _enrich_routes(raw_deleted)
 
@@ -9800,6 +9972,8 @@ def dashboard_community_routes():
 @require_dash_level('admin')
 def dashboard_community_routes_approve():
     route_id = request.form.get('route_id')
+    version_mode = request.form.get('version_mode', 'new_version')
+    target_version = request.form.get('target_version', '')
     if not route_id:
         flash("Chybí ID linky.", "error")
         return redirect(url_for('dashboard_community_routes'))
@@ -9810,23 +9984,19 @@ def dashboard_community_routes_approve():
         if not row:
             flash("Linka nenalezena.", "error")
             return redirect(url_for('dashboard_community_routes'))
-        
+
         r = row[0]
-        _ensure_community_route_columns(d1)
-        d1.execute("UPDATE community_routes SET status = 'approved', is_deleted_by_author = 0, downloads_enabled = 1, reject_reason = '', updated_at = datetime('now') WHERE id = ?", [int(route_id)])
-        
-        # Odeslání DM autorovi
-        author_id = r.get('author_id')
         route_num = r.get('route_number', '')
-        route_name = r.get('route_name', '')
-        _notify_user_dm_safe(
-            author_id,
-            "🎉 Tvoje komunitní linka byla schválena!",
-            f"Tvá linka **{route_num} ({route_name})** úspěšně prošla kontrolou hlášení a je nyní dostupná v OIS aplikaci pro všechny hráče!\n\nDěkujeme za obohacení herní komunity OIS IDPK.",
-            0x10b981
+        final_ver, replaced = _approve_community_route_with_mode(
+            d1, r,
+            version_mode=version_mode,
+            target_version=target_version,
+            via_label=f" (Dashboard: {get_current_admin_name()})"
         )
-        send_log("✅ Komunitní linka schválena", f"**Správce:** {get_current_admin_name()}\n**Linka:** {route_num} ({route_name})\n**Autor:** <@{author_id}>", color=0x10b981)
-        flash(f"Linka {route_num} byla úspěšně schválena a publikována.", "success")
+        if replaced:
+            flash(f"Linka {route_num} byla schválena — existující verze {final_ver} byla aktualizována.", "success")
+        else:
+            flash(f"Linka {route_num} ({final_ver}) byla úspěšně schválena a publikována.", "success")
     except Exception as e:
         flash(f"Chyba při schvalování linky: {e}", "error")
     return redirect(url_for('dashboard_community_routes'))
@@ -9933,6 +10103,7 @@ def api_admin_community_routes_all():
             "SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, system_tag, status, reject_reason, is_deleted_by_author, created_at, updated_at, COALESCE(version, 'V1') as version, COALESCE(voice_type, 'synt') as voice_type, COALESCE(download_count, 0) as download_count, COALESCE(downloads_enabled, 1) as downloads_enabled FROM community_routes ORDER BY id DESC"
         ) or []
         routes = [_enrich_community_route_row(r) for r in raw_all]
+        _attach_existing_approved_info(d1, routes)
         return _cors_jsonify({"success": True, "routes": routes})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
@@ -10322,16 +10493,8 @@ def api_community_routes_pending():
         from cloudflare_d1 import get_d1_client
         d1 = get_d1_client()
         raw_pending = d1.execute("SELECT id, route_number, route_name, route_type, description, author_id, author_name, stops_json, audio_package_url, system_tag, created_at, COALESCE(version, 'V1') as version, COALESCE(voice_type, 'synt') as voice_type FROM community_routes WHERE status = 'pending' AND is_deleted_by_author = 0 ORDER BY CASE WHEN system_tag LIKE '%bez zvuku%' THEN 1 ELSE 0 END ASC, id DESC") or []
-        enriched = []
-        for r in raw_pending:
-            item = dict(r)
-            stops_raw = item.get('stops_json') or '[]'
-            try:
-                item['stops'] = json.loads(stops_raw) if isinstance(stops_raw, str) else stops_raw
-            except:
-                item['stops'] = []
-            item['route_name'] = compute_auto_route_name(item['stops'], item.get('route_name'), item.get('route_number'))
-            enriched.append(item)
+        enriched = [_enrich_community_route_row(r) for r in raw_pending]
+        _attach_existing_approved_info(d1, enriched)
         return _cors_jsonify({"success": True, "queue": enriched})
     except Exception as e:
         return _cors_jsonify({"success": False, "error": str(e)}), 500
@@ -10379,24 +10542,25 @@ def api_community_routes_decision():
         route_num = r.get('route_number', '')
         route_name = r.get('route_name', '')
         if ok:
-            _ensure_community_route_columns(d1)
-            d1.execute("UPDATE community_routes SET status = 'approved', is_deleted_by_author = 0, downloads_enabled = 1, reject_reason = '', updated_at = datetime('now') WHERE id = ?", [real_id])
-            note_part = f"\n\nPoznámka od správce: {message}" if message else ""
-            _notify_user_dm_safe(
-                author_id,
-                "🎉 Tvoje komunitní linka byla schválena!",
-                f"Tvá linka **{route_num} ({route_name})** úspěšně prošla kontrolou hlášení a je nyní dostupná v OIS aplikaci pro všechny hráče!{note_part}\n\nDěkujeme za obohacení herní komunity OIS IDPK.",
-                0x10b981
+            version_mode = data.get('version_mode') or 'new_version'
+            target_version = data.get('target_version') or ''
+            final_ver, replaced = _approve_community_route_with_mode(
+                d1, r,
+                version_mode=version_mode,
+                target_version=target_version,
+                admin_note=message,
+                via_label=" (Launcher)"
             )
-            send_log("✅ Komunitní linka schválena (Launcher)", f"**Linka:** {route_num} ({route_name})\n**Autor:** <@{author_id}>", color=0x10b981)
             discord_channel_id = os.getenv('DISCORD_NOTIFY_CHANNEL_ID')
             if discord_announcement and discord_channel_id:
                 try:
                     ch = bot.get_channel(int(discord_channel_id))
                     if ch:
-                        bot.loop.create_task(ch.send(f"🎉 **Nová komunitní linka v OIS IDPK!**\nLinka **{route_num} ({route_name})** od uživatele <@{author_id}> je nyní ke stažení v Launcheru!"))
+                        verb = f"aktualizována ({final_ver})" if replaced else f"vydána ({final_ver})"
+                        bot.loop.create_task(ch.send(f"🎉 **Komunitní linka v OIS IDPK {verb}!**\nLinka **{route_num} ({route_name})** od uživatele <@{author_id}> je nyní ke stažení v Launcheru!"))
                 except Exception as e:
                     print(f"[COMMUNITY_ANNOUNCE] {e}")
+            return _cors_jsonify({"success": True, "version": final_ver, "replaced_existing": replaced, "message": "Rozhodnutí bylo úspěšně uloženo."})
         else:
             d1.execute("UPDATE community_routes SET status = 'rejected', reject_reason = ?, updated_at = datetime('now') WHERE id = ?", [message or 'Nespecifikováno', real_id])
             _notify_user_dm_safe(
