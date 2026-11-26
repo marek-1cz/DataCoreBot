@@ -2435,7 +2435,7 @@ def send_log(title, description, color=0x38bdf8, channel_name="🖥️・datacor
     except Exception:
         pass
 
-async def async_send_discord_update_announcement(version_name, current_build, changelog="", target_role="User", patch_url=""):
+async def async_send_discord_update_announcement(version_name, current_build, changelog="", target_role="User", patch_url="", update_type="patch", file_url=""):
     if not bot.is_ready():
         print("[ANNOUNCEMENT ERR] Discord bot neni online!", flush=True)
         return False
@@ -2454,41 +2454,62 @@ async def async_send_discord_update_announcement(version_name, current_build, ch
         return False
 
     is_supporter = str(target_role).upper() in ("BT", "DEV", "SA")
-    embed_color = 0xf59e0b if is_supporter else 0x10b981
+    is_new_version = (update_type == "version")
+
+    if is_new_version:
+        embed_color = 0xf59e0b if is_supporter else 0x10b981
+        title_text = f"🚀 Nová verze OIS IDPK – {version_name}"
+        desc_text = f"Právě byla vydána **nová verze** aplikace: **`{version_name}`**"
+        if current_build and current_build != version_name:
+            desc_text += f" (Build: **`{current_build}`**)"
+        how_to_title = "📥 Jak nainstalovat"
+        how_to_text = "Spusťte **IDPK Launcher**, zvolte novou verzi ze seznamu a klikněte na **Stáhnout**."
+    else:
+        embed_color = 0xf59e0b if is_supporter else 0x38bdf8
+        title_text = f"🔧 Opravný patch {version_name} – Build {current_build}"
+        desc_text = (
+            f"Pro verzi **{version_name}** byl vydán opravný patch / build: **`{current_build}`**\n"
+            f"*Jedná se o opravu a aktualizaci stávající verze, nikoliv o novou hlavní verzi.*"
+        )
+        how_to_title = "⚡ Jak aktualizovat"
+        how_to_text = "Spusťte **IDPK Launcher**, vyberte tuto verzi a klikněte na **Aktualizovat** (rychlá aktualizace bez stahování celé hry)."
 
     embed = discord.Embed(
-        title=f"🚀 Nová aktualizace OIS IDPK – {version_name}",
-        description=f"Právě byl vydán nový build: **`{current_build}`**",
+        title=title_text,
+        description=desc_text,
         color=embed_color,
         timestamp=get_prague_time()
     )
 
     if changelog and changelog.strip():
-        embed.add_field(name="📋 Přehled změn a novinek:", value=changelog.strip()[:1024], inline=False)
+        embed.add_field(name="📋 Přehled změn a oprav:", value=changelog.strip()[:1024], inline=False)
 
     role_desc = "🌍 Všichni uživatelé" if not is_supporter else f"⭐ **{target_role}** (Předplatitelé / Beta Testeři)"
     embed.add_field(name="🎯 Určeno pro", value=role_desc, inline=True)
-    embed.add_field(name="⚡ Jak aktualizovat", value="Spusťte Launcher OIS IDPK, zvolte verzi a klikněte na **Aktualizovat**.", inline=False)
+    embed.add_field(name="🏷️ Typ vydání", value="🆕 Nová verze" if is_new_version else "🔧 Build / Patch (oprava)", inline=True)
+    embed.add_field(name=how_to_title, value=how_to_text, inline=False)
 
-    if patch_url and patch_url.strip():
+    if is_new_version and file_url and file_url.strip():
+        embed.add_field(name="📦 Instalační balíček", value=f"[Přímý odkaz ke stažení ZIPu]({file_url.strip()})", inline=False)
+    elif patch_url and patch_url.strip():
         embed.add_field(name="📦 Patch balíček", value=f"[Přímý odkaz ke stažení ZIPu]({patch_url.strip()})", inline=False)
 
     embed.set_footer(text="IDPK Palubní Počítač • Automatický aktualizační systém")
 
     try:
         await target_channel.send(embed=embed)
-        print(f"[ANNOUNCEMENT SUCCESS] Zprava o buildu {current_build} odeslana do #{target_channel.name}", flush=True)
+        print(f"[ANNOUNCEMENT SUCCESS] Zprava ({update_type}) o {version_name} / {current_build} odeslana do #{target_channel.name}", flush=True)
         return True
     except Exception as e_send:
         print(f"[ANNOUNCEMENT SEND ERR] {e_send}", flush=True)
         return False
 
-def send_discord_update_announcement(version_name, current_build, changelog="", target_role="User", patch_url=""):
+def send_discord_update_announcement(version_name, current_build, changelog="", target_role="User", patch_url="", update_type="patch", file_url=""):
     try:
         b_loop = get_bot_loop()
         if bot.is_ready() and b_loop and b_loop.is_running():
             asyncio.run_coroutine_threadsafe(
-                async_send_discord_update_announcement(version_name, current_build, changelog, target_role, patch_url),
+                async_send_discord_update_announcement(version_name, current_build, changelog, target_role, patch_url, update_type=update_type, file_url=file_url),
                 b_loop
             )
             return True
@@ -8288,6 +8309,8 @@ def add_version():
         flash('Nová verze vydána!', 'success')
         adm = get_current_admin_name()
         send_log("🚀 Vydána nová verze", f"**Uživatel:** {adm}\n**Název:** {row['version_name']}\n**Build:** `{build_val}`\n**Role:** {row['target_role']}", 0x10b981)
+        if request.form.get("send_discord"):
+            send_discord_update_announcement(row['version_name'], build_val, changelog_val, row['target_role'], "", update_type="version", file_url=row['file_url'])
         trigger_setup_messages_update()
     except Exception as e: flash(f'Chyba: {e}', 'error')
     return redirect(url_for('dashboard_downloads'))
@@ -8342,6 +8365,9 @@ def dashboard_publish_patch():
     try:
         db = get_db()
         vid = request.form.get("version_id")
+        form_vname = request.form.get("version_name", "").strip()
+        form_dbver = request.form.get("db_version", "").strip()
+        form_role = request.form.get("target_role", "").strip()
         current_build = request.form.get("current_build", "").strip()
         patch_url = request.form.get("patch_url", "").strip()
         changelog = request.form.get("changelog", "").strip()
@@ -8351,22 +8377,49 @@ def dashboard_publish_patch():
         if db and vid:
             try:
                 v_data = db.table("software_versions").select("*").eq("id", int(vid) if str(vid).isdigit() else vid).execute().data
-                if v_data: existing_version = v_data[0]
+                if v_data:
+                    candidate = v_data[0]
+                    if not form_dbver or str(candidate.get("db_version", "")).strip().lower() == form_dbver.lower():
+                        existing_version = candidate
             except Exception as e:
                 print(f"[publish_patch read err] {e}", flush=True)
 
+        if not existing_version and db and form_dbver:
+            try:
+                v_data2 = db.table("software_versions").select("*").eq("db_version", form_dbver).execute().data
+                if v_data2:
+                    existing_version = v_data2[0]
+            except Exception as e:
+                print(f"[publish_patch dbver read err] {e}", flush=True)
+
         if not existing_version:
-            for fv in _get_fallback_versions():
-                if str(fv.get("id")) == str(vid):
-                    existing_version = fv
-                    break
+            fallback_list = _get_fallback_versions()
+            if form_dbver:
+                for fv in fallback_list:
+                    if str(fv.get("db_version", "")).strip().lower() == form_dbver.lower():
+                        existing_version = fv
+                        break
+            if not existing_version and not form_dbver:
+                for fv in fallback_list:
+                    if str(fv.get("id")) == str(vid):
+                        existing_version = fv
+                        break
+
+        if not existing_version and form_vname:
+            existing_version = {
+                "id": int(vid) if str(vid).isdigit() else vid,
+                "version_name": form_vname,
+                "db_version": form_dbver,
+                "target_role": form_role or "User"
+            }
 
         if not existing_version:
             flash("Chyba: Verze nebyla nalezena.", "error")
             return redirect(url_for('dashboard_downloads'))
 
-        v_name = existing_version.get("version_name", "")
-        t_role = existing_version.get("target_role", "User")
+        target_vid = existing_version.get("id") or vid
+        v_name = form_vname or existing_version.get("version_name", "")
+        t_role = form_role or existing_version.get("target_role", "User")
 
         notes_dict = {
             "build": current_build or existing_version.get("db_version", ""),
@@ -8380,20 +8433,22 @@ def dashboard_publish_patch():
             "notes": notes_str
         }
 
-        if db and vid:
+        if db and target_vid:
             try:
-                db.table("software_versions").update(update_data).eq("id", int(vid) if str(vid).isdigit() else vid).execute()
+                db.table("software_versions").update(update_data).eq("id", int(target_vid) if str(target_vid).isdigit() else target_vid).execute()
             except Exception as e:
                 print(f"[publish_patch update err] {e}", flush=True)
 
-        sync_version_to_backup("edit", update_data, vid)
+        merged_backup_data = dict(existing_version)
+        merged_backup_data.update(update_data)
+        sync_version_to_backup("edit", merged_backup_data, target_vid)
 
         adm = get_current_admin_name()
         send_log("🚀 Vydán nový build / patch", f"**Uživatel:** {adm}\n**Verze:** {v_name}\n**Build:** `{current_build}`\n**Patch:** {patch_url or 'Nezadáno'}", 0x10b981)
 
         # Odeslání do Discord kanálu 👷‍♂️・aktulizace
         if send_discord:
-            sent = send_discord_update_announcement(v_name, current_build, changelog, t_role, patch_url)
+            sent = send_discord_update_announcement(v_name, current_build, changelog, t_role, patch_url, update_type="patch")
             if sent:
                 flash(f"Build {current_build} byl úspěšně nastaven a oznámení bylo odesláno na Discord do kanálu 👷‍♂️・aktulizace!", "success")
             else:

@@ -3237,6 +3237,19 @@ HTML_DOWNLOADS_MGMT = """
             <input type="checkbox" name="can_launch" checked style="width:20px;height:20px;cursor:pointer;accent-color:var(--blue-main);flex-shrink:0;margin-top:2px;">
           </label>
         </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Co je nového (Changelog pro Discord)</label>
+          <textarea name="changelog" rows="3" placeholder="- Nové funkce v aplikaci&#10;- Přepracované rozhraní" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;box-sizing:border-box;resize:vertical;"></textarea>
+        </div>
+        <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:10px;padding:14px;">
+          <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;">
+            <input type="checkbox" name="send_discord" value="1" checked style="width:20px;height:20px;accent-color:#10b981;cursor:pointer;flex-shrink:0;margin-top:2px;">
+            <div>
+              <div style="color:#fff;font-weight:600;font-size:14px;">Oznámit novou verzi na Discordu (👷‍♂️・aktulizace)</div>
+              <div style="color:var(--text-muted);font-size:12px;margin-top:2px;">Bot pošle oznámení o vydání nové hlavní verze aplikace (odlišené od opravného patche).</div>
+            </div>
+          </label>
+        </div>
       </div>
       <div style="display:flex;gap:12px;margin-top:24px;">
         <button type="submit" style="flex:1;background:var(--blue-main);color:#fff;border:none;padding:12px;border-radius:8px;cursor:pointer;font-weight:600;font-size:15px;">
@@ -3335,6 +3348,9 @@ HTML_DOWNLOADS_MGMT = """
     </p>
     <form method="POST" action="/dashboard/publish_patch" onsubmit="var btn=this.querySelector('button[type=submit]'); if(btn.dataset.submitted) return false; btn.dataset.submitted='1'; btn.disabled=true; btn.textContent='Publikuji...'; return true;">
       <input type="hidden" name="version_id" id="patch-version-id">
+      <input type="hidden" name="version_name" id="patch-vname-hidden">
+      <input type="hidden" name="db_version" id="patch-dbver-hidden">
+      <input type="hidden" name="target_role" id="patch-role-hidden">
       <div style="display:grid;gap:16px;">
         <div>
           <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px;">Verze</label>
@@ -3404,6 +3420,9 @@ document.addEventListener('DOMContentLoaded', function() {
     btn.addEventListener('click', function() {
       var tr = this.closest('tr');
       document.getElementById('patch-version-id').value = tr.dataset.vid || '';
+      document.getElementById('patch-vname-hidden').value = tr.dataset.vname || '';
+      document.getElementById('patch-dbver-hidden').value = tr.dataset.dbver || '';
+      document.getElementById('patch-role-hidden').value = tr.dataset.role || 'User';
       document.getElementById('patch-version-name').value = (tr.dataset.vname || '') + ' [' + (tr.dataset.dbver || '') + ']';
       document.getElementById('patch-current-build').value = tr.dataset.build || tr.dataset.dbver || '';
       document.getElementById('patch-url').value = tr.dataset.patchurl || '';
