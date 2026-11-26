@@ -2716,10 +2716,18 @@ def check_session_validity():
             discord_id = session.get('discord_id')
             if discord_id:
                 try:
-                    role, is_banned = get_cached_user_role(discord_id)
+                    did_str = str(discord_id).strip()
+                    role, is_banned = get_cached_user_role(did_str)
                     db = get_db()
                     if db:
-                        users_data = db.table("users").select("dashboard_access, is_deleted, nick, email, role, dashboard_level").eq("discord_id", discord_id).execute().data
+                        if did_str.startswith('email-'):
+                            uid = did_str.split('-', 1)[1].strip()
+                            if uid.isdigit():
+                                users_data = db.table("users").select("dashboard_access, is_deleted, nick, email, role, dashboard_level").eq("id", uid).execute().data
+                            else:
+                                users_data = db.table("users").select("dashboard_access, is_deleted, nick, email, role, dashboard_level").eq("email", uid.lower()).execute().data
+                        else:
+                            users_data = db.table("users").select("dashboard_access, is_deleted, nick, email, role, dashboard_level").eq("discord_id", did_str).execute().data
                         if users_data:
                             user = users_data[0]
                             if not user.get("dashboard_access") or is_banned or user.get("is_deleted"):
@@ -2727,7 +2735,7 @@ def check_session_validity():
                                 flash('Váš přístup byl zablokován.', 'error')
                                 return redirect(url_for('dashboard_main'))
                             if not session.get('discord_nick'):
-                                session['discord_nick'] = user.get('nick') or user.get('email') or str(discord_id)
+                                session['discord_nick'] = user.get('nick') or user.get('email') or did_str
                                 session['nick'] = user.get('nick')
                                 session['dashboard_level'] = user.get('dashboard_level') or 'admin'
                 except:
@@ -5218,16 +5226,17 @@ def check_persistent_admin_session():
                                 break
                     except Exception:
                         pass
-                if u:
-                    if u.get('dashboard_access') == True and not u.get('is_banned') and not u.get('is_deleted'):
-                        session.permanent = True
-                        session['logged_in'] = True
-                        session['discord_id'] = str(u.get('discord_id'))
-                        session['discord_nick'] = u.get('nick') or u.get('email') or str(u.get('discord_id'))
-                        session['nick'] = u.get('nick')
-                        session['email'] = u.get('email')
-                        session['role'] = u.get('role')
-                        session['dashboard_level'] = u.get('dashboard_level') or 'admin'
+                if u and _user_has_dash_access(u):
+                    raw_did = str(u.get('discord_id') or '').strip()
+                    resolved_did = raw_did if raw_did and raw_did not in ('None', 'čeká na odpověd') else f"email-{u.get('id')}"
+                    session.permanent = True
+                    session['logged_in'] = True
+                    session['discord_id'] = resolved_did
+                    session['discord_nick'] = u.get('nick') or u.get('email') or resolved_did
+                    session['nick'] = u.get('nick')
+                    session['email'] = u.get('email')
+                    session['role'] = u.get('role')
+                    session['dashboard_level'] = u.get('dashboard_level') or 'admin'
             except Exception:
                 pass
 
@@ -5645,7 +5654,8 @@ def _complete_discord_web_auth(db, discord_id: str, u: dict, cookie_token: str |
         except Exception:
             pass
     perm_token = _mint_session_for_user(db, u)
-    return jsonify({"status": "approved", "token": perm_token})
+    resp = jsonify({"status": "approved", "token": perm_token})
+    return _apply_web_and_admin_cookies(resp, u, perm_token)
 
 @app.route('/api/auth/status')
 def web_auth_status():
@@ -5786,9 +5796,7 @@ def web_auth_finalize():
             </html>
             """
             resp = make_response(html_content)
-            resp.set_cookie('web_session_token', perm_token, max_age=60*60*24*30,
-                            secure=True, httponly=True, samesite='Lax')
-            return resp
+            return _apply_web_and_admin_cookies(resp, u, perm_token)
     return "Neplatný nebo expirovaný odkaz.", 400
 
 @app.route('/api/auth/logout', methods=['POST'])
@@ -7998,13 +8006,6 @@ def blocked_page():
 def api_admin_check():
     """Quick endpoint for frontend to check if admin dashboard session is active."""
     return jsonify({"logged_in": bool(session.get('logged_in'))})
-
-@app.route('/mapa_admin')
-def mapa_admin_redirect():
-    """Admin map access — always available for logged-in dashboard users."""
-    if not session.get('logged_in'):
-        return redirect(url_for('dashboard_main'))
-    return redirect('/mapa')
 
 
 @app.route('/dashboard/notifications', methods=['GET'], strict_slashes=False)

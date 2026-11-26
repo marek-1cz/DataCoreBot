@@ -5808,8 +5808,11 @@ HTML_INTERAKTIVNI_MAPA_DASHBOARD = """
       <button onclick="loadSpzControlData()" class="btn" style="background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 10px 14px; border-radius: 8px; cursor: pointer;" title="Obnovit data">
         <i class="fas fa-sync-alt" id="refresh-icon"></i>
       </button>
-      <a href="https://datacorebot.koyeb.app/mapa" target="_blank" class="btn btn-success" style="padding: 10px 16px; border-radius: 8px; display: flex; align-items: center; gap: 8px; text-decoration: none; font-weight: bold;">
+      <a href="/mapa" target="_blank" class="btn btn-success" style="padding: 10px 16px; border-radius: 8px; display: flex; align-items: center; gap: 8px; text-decoration: none; font-weight: bold;">
         <i class="fas fa-external-link-alt"></i> Otevřít živou mapu
+      </a>
+      <a href="/admin_mapa" target="_blank" class="btn" style="background: rgba(56,189,248,0.18); color: #38bdf8; border: 1px solid #0284c7; padding: 10px 16px; border-radius: 8px; display: flex; align-items: center; gap: 8px; text-decoration: none; font-weight: bold;">
+        <i class="fas fa-tools"></i> Admin Mapa
       </a>
     </div>
   </div>

@@ -17455,6 +17455,23 @@ def _check_admin_request(min_level: str = 'admin'):
             admin_name = str(val).strip()
             break
 
+    def _check_user_dict(u):
+        if not u or u.get("is_banned") or u.get("is_deleted"):
+            return False, None
+        u_did = str(u.get("discord_id") or "").strip()
+        if u_did in ("714856037042585641", "1219661445763661854", "719896287301992449"):
+            return True, (u.get("nick") or u.get("email") or admin_name or "marekk_czz")
+        role_tokens = {r.strip().upper() for r in re.split(r'[,;\s]+', str(u.get("role") or "")) if r.strip()}
+        has_role = bool(role_tokens & ({'SA', 'SUPERADMIN', 'DEV'} if min_level == 'superadmin' else {'SA', 'SUPERADMIN', 'DEV', 'DEVELOPER', 'ADMIN', 'SM'}))
+        raw_dash = u.get("dashboard_access")
+        dash_enabled = raw_dash in (True, 1, '1', 'true', 'True', 'yes')
+        lvl = str(u.get("dashboard_level") or ("admin" if dash_enabled else "")).strip().lower()
+        has_dash = dash_enabled and (LEVEL_ORDER.get(lvl, 0) >= LEVEL_ORDER.get(min_level, 2))
+        if has_role or has_dash:
+            resolved_name = u.get("nick") or u.get("email") or admin_name or "Admin"
+            return True, resolved_name
+        return False, None
+
     # 1. Offline superadmin / admin session
     if session.get('logged_in') and session.get('offline_mode'):
         lvl = str(session.get('dashboard_level') or 'superadmin').lower()
@@ -17468,49 +17485,61 @@ def _check_admin_request(min_level: str = 'admin'):
     cookie_token = hdr_tok or request.cookies.get('web_session_token') or request.cookies.get('admin_session_token')
     if cookie_token:
         try:
-            db = get_db_client()
-            if db:
-                u = find_user_by_session_token(db, cookie_token)
-                if u and not u.get("is_banned") and not u.get("is_deleted"):
-                    role_tokens = {r.strip().upper() for r in re.split(r'[,;\s]+', str(u.get("role") or "")) if r.strip()}
-                    has_role = bool(role_tokens & ({'SA', 'SUPERADMIN', 'DEV'} if min_level == 'superadmin' else {'SA', 'SUPERADMIN', 'DEV', 'DEVELOPER', 'ADMIN', 'SM'}))
-                    lvl = str(u.get("dashboard_level") or ("admin" if u.get("dashboard_access") else "")).lower()
-                    has_dash = bool(u.get("dashboard_access")) and (LEVEL_ORDER.get(lvl, 0) >= LEVEL_ORDER.get(min_level, 2))
-                    if has_role or has_dash:
-                        resolved_name = u.get("nick") or u.get("username") or u.get("email") or admin_name or "Admin"
-                        return True, resolved_name
-        except Exception:
-            pass
+            u = None
+            try:
+                from main import get_cached_session_user
+                u = get_cached_session_user(cookie_token)
+            except Exception:
+                pass
+            if not u:
+                db = get_db_client()
+                if db:
+                    u = find_user_by_session_token(db, cookie_token)
+            ok, resolved_name = _check_user_dict(u)
+            if ok:
+                return True, resolved_name
+        except Exception as e_tok:
+            print(f"[_check_admin_request token error] {e_tok}", flush=True)
 
-    # 3. Flask dashboard session (verify DB record & level — never accept unprivileged viewer/User)
+    # 3. Flask dashboard session (verify DB or backup user record & level)
     did = str(session.get('discord_id') or "").strip()
     if did in ("714856037042585641", "1219661445763661854", "719896287301992449") and session.get('logged_in'):
         return True, admin_name or "marekk_czz"
 
     if session.get('logged_in') and did and did not in ("", "None", "čeká na odpověd"):
+        u = None
         try:
             db = get_db_client()
             if db:
                 if did.startswith("email-"):
                     uid = did.split("-", 1)[1].strip()
                     if uid.isdigit():
-                        u_res = db.table("users").select("nick, email, role, dashboard_access, dashboard_level, is_banned, is_deleted").eq("id", uid).execute().data
+                        u_res = db.table("users").select("nick, email, discord_id, role, dashboard_access, dashboard_level, is_banned, is_deleted").eq("id", uid).execute().data
                     else:
-                        u_res = db.table("users").select("nick, email, role, dashboard_access, dashboard_level, is_banned, is_deleted").eq("email", uid.lower()).execute().data
+                        u_res = db.table("users").select("nick, email, discord_id, role, dashboard_access, dashboard_level, is_banned, is_deleted").eq("email", uid.lower()).execute().data
                 else:
-                    u_res = db.table("users").select("nick, email, role, dashboard_access, dashboard_level, is_banned, is_deleted").eq("discord_id", did).execute().data
+                    u_res = db.table("users").select("nick, email, discord_id, role, dashboard_access, dashboard_level, is_banned, is_deleted").eq("discord_id", did).execute().data
                 if u_res:
                     u = u_res[0]
-                    if not u.get("is_banned") and not u.get("is_deleted"):
-                        role_tokens = {r.strip().upper() for r in re.split(r'[,;\s]+', str(u.get("role") or "")) if r.strip()}
-                        has_role = bool(role_tokens & ({'SA', 'SUPERADMIN', 'DEV'} if min_level == 'superadmin' else {'SA', 'SUPERADMIN', 'DEV', 'DEVELOPER', 'ADMIN', 'SM'}))
-                        lvl = str(u.get("dashboard_level") or ("admin" if u.get("dashboard_access") else "")).lower()
-                        has_dash = bool(u.get("dashboard_access")) and (LEVEL_ORDER.get(lvl, 0) >= LEVEL_ORDER.get(min_level, 2))
-                        if has_role or has_dash:
-                            resolved_name = u.get("nick") or u.get("email") or admin_name or "Admin"
-                            return True, resolved_name
         except Exception as e_adm:
             print(f"[_check_admin_request error] {e_adm}", flush=True)
+        if not u:
+            try:
+                from main import _get_fallback_users
+                for bu in _get_fallback_users():
+                    if did.startswith("email-"):
+                        uid = did.split("-", 1)[1].strip()
+                        if (uid.isdigit() and str(bu.get("id")) == uid) or str(bu.get("email") or "").strip().lower() == uid.lower():
+                            u = bu
+                            break
+                    elif str(bu.get("discord_id") or "").strip() == did:
+                        u = bu
+                        break
+            except Exception:
+                pass
+        ok, resolved_name = _check_user_dict(u)
+        if ok:
+            return True, resolved_name
 
     return False, None
 
