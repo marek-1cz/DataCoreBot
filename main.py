@@ -8915,11 +8915,13 @@ def api_launcher_check_update():
             ver_s = db.table("settings").select("setting_value").eq("setting_key", "launcher_version").execute().data
             if ver_s and ver_s[0].get('setting_value'):
                 launcher_ver = str(ver_s[0]['setting_value']).strip()
+            else:
+                launcher_ver = get_cached_setting("launcher_version", launcher_ver)
             url_s = db.table("settings").select("setting_value").eq("setting_key", "launcher_download_url").execute().data
             if url_s and url_s[0].get('setting_value'):
                 launcher_url = str(url_s[0]['setting_value']).strip()
-            launcher_ver = get_cached_setting("launcher_version", launcher_ver)
-            launcher_url = get_cached_setting("launcher_download_url", launcher_url)
+            else:
+                launcher_url = get_cached_setting("launcher_download_url", launcher_url)
     except Exception:
         pass
         
