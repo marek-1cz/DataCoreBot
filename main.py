@@ -1986,7 +1986,7 @@ bot.invites_cache = {}
 
 _github_url_cache = {}
 
-def resolve_github_release_url(url, timeout=5):
+def resolve_github_release_url(url, timeout=5, prefer_setup_exe=False):
     """
     Pokud je URL odkaz na GitHub Release download (https://github.com/.../releases/download/...),
     dotáže se GitHub API na asset a vrátí přímou Azure CDN URL s tokenem, čímž eliminuje
@@ -1997,8 +1997,9 @@ def resolve_github_release_url(url, timeout=5):
         return url
     
     url_str = str(url).strip()
+    cache_key = f"{url_str}|setup={1 if prefer_setup_exe else 0}"
     now = time.time()
-    cached = _github_url_cache.get(url_str)
+    cached = _github_url_cache.get(cache_key)
     if cached and (now - cached['time'] < 180):
         return cached['resolved']
         
@@ -2017,27 +2018,39 @@ def resolve_github_release_url(url, timeout=5):
         })
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode('utf-8'))
-            for asset in data.get('assets', []):
-                a_name = asset.get('name')
-                if a_name in (filename, raw_filename):
-                    asset_api_url = asset.get('url')
-                    if asset_api_url:
-                        class NoRedirect(urllib.request.HTTPRedirectHandler):
-                            def redirect_request(self, req, fp, code, msg, headers, newurl):
-                                return None
-                        opener = urllib.request.build_opener(NoRedirect)
-                        areq = urllib.request.Request(asset_api_url, headers={
-                            'User-Agent': 'IDPK-Launcher-Updater/1.0',
-                            'Accept': 'application/octet-stream'
-                        })
-                        try:
-                            opener.open(areq)
-                        except urllib.error.HTTPError as he:
-                            if he.code in (301, 302, 307, 308):
-                                loc = he.headers.get('Location')
-                                if loc:
-                                    _github_url_cache[url_str] = {'resolved': loc, 'time': now}
-                                    return loc
+            assets = data.get('assets', [])
+            chosen_asset = None
+            if prefer_setup_exe and filename.lower().endswith('.exe') and 'setup' not in filename.lower():
+                for asset in assets:
+                    a_name = str(asset.get('name') or '')
+                    if 'setup' in a_name.lower() and a_name.lower().endswith('.exe'):
+                        chosen_asset = asset
+                        break
+            if not chosen_asset:
+                for asset in assets:
+                    a_name = asset.get('name')
+                    if a_name in (filename, raw_filename):
+                        chosen_asset = asset
+                        break
+            if chosen_asset:
+                asset_api_url = chosen_asset.get('url')
+                if asset_api_url:
+                    class NoRedirect(urllib.request.HTTPRedirectHandler):
+                        def redirect_request(self, req, fp, code, msg, headers, newurl):
+                            return None
+                    opener = urllib.request.build_opener(NoRedirect)
+                    areq = urllib.request.Request(asset_api_url, headers={
+                        'User-Agent': 'IDPK-Launcher-Updater/1.0',
+                        'Accept': 'application/octet-stream'
+                    })
+                    try:
+                        opener.open(areq)
+                    except urllib.error.HTTPError as he:
+                        if he.code in (301, 302, 307, 308):
+                            loc = he.headers.get('Location')
+                            if loc:
+                                _github_url_cache[cache_key] = {'resolved': loc, 'time': now}
+                                return loc
     except Exception as e:
         print(f"[resolve_github_release_url] Error resolving {url_str}: {e}", flush=True)
         
@@ -8925,7 +8938,7 @@ def api_launcher_check_update():
         "has_update": has_update,
         "latest_version": launcher_ver,
         "current_version": current_ver,
-        "download_url": resolve_github_release_url(launcher_url)
+        "download_url": resolve_github_release_url(launcher_url, prefer_setup_exe=True)
     })
 
 @app.route('/dashboard/delete_version', methods=['POST'])

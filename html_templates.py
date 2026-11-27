@@ -3057,7 +3057,7 @@ HTML_DOWNLOADS_MGMT = """
   <p style="color:var(--text-muted);font-size:13px;margin-bottom:15px;">Tento odkaz a verze se použijí pro stahování nového instalačního souboru a pro automatické aktualizace Launcheru.</p>
   <form action="/dashboard/update_launcher_url" method="POST" style="display:flex;gap:15px;flex-wrap:wrap;align-items:flex-end;">
     <div style="flex:3;min-width:280px;">
-      <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">Přímý odkaz na .exe instalátor:</label>
+      <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">Přímý odkaz na Setup instalátor (.exe) — <span style="color:#fbbf24;">vždy vložte „IDPK Launcher Setup X.Y.Z.exe“, ne Portable!</span></label>
       <input type="text" name="launcher_url" value="{{ launcher_url | e }}" style="width:100%;box-sizing:border-box;padding:10px;background:rgba(0,0,0,0.2);border:1px solid #334155;color:#fff;border-radius:6px;" placeholder="https://github.com/marek-1cz/IDPK-Palubni-Pocitac/releases/download/.../IDPK.Launcher.Setup.exe">
     </div>
     <div style="flex:1;min-width:140px;">
